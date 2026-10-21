@@ -43,7 +43,7 @@ import { algiersTime } from '@/features/orders/logic';
 import { Link, useRouter } from '@/i18n/navigation';
 import { actionState, reasonText } from '@/lib/actions';
 import { useLocaleCode, useT } from '@/lib/i18n';
-import { downloadUrl, trackJob } from '@/lib/jobs';
+import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
 import { filterList, filterText, listQueryString, patchListState } from '@/lib/list-state';
 import { useSession } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
@@ -272,9 +272,10 @@ export function DeliveryOverviewPage() {
           const { jobId } = await deliveryApi.exportShipments({ ...filters, ids: chosen.map((x) => x.id), format: 'csv' });
           trackJob({
             jobId,
+            download: true,
             started: t('toast.jobStarted'),
             progress: (j) => t('toast.export.progress', { entity: t('delivery.export.entity'), pct: j.progress, rows: formatNumber(j.total ?? 0) }),
-            done: (j) => ({ message: t('toast.export.done', { file: t('delivery.export.file') }), action: j.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(j.resultUrl!) } : undefined }),
+            done: (j) => ({ message: t('toast.export.done', { file: t('delivery.export.file') }), action: j.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(j.resultUrl!, jobFileName(j)) } : undefined }),
             failed: (j, e) => (j?.error ? `${j.error.message} (${j.error.code})` : refusal(e, t)),
           });
         } catch (e) {

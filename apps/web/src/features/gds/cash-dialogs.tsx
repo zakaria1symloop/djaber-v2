@@ -10,19 +10,17 @@ import { useState } from 'react';
 import { useCloseGuard, useTypedFlag } from '@/components/close-guard';
 import { algiersDay } from '@/features/catalog/stock/logic';
 import { DialogFooter, RadioList, useDialogSubmit, useOnOpen } from '@/features/orders/dialogs/common';
+import { algiersTime } from '@/features/orders/logic';
 import { ApiError } from '@/lib/api';
 import { useT } from '@/lib/i18n';
 import { digitsToInt, moneyDigits } from '@/lib/money';
 import { uploadWithProgress } from '@/lib/upload';
 import { gdsApi, useGdsRefresh } from './api';
 import { CASH_MANUAL_IN, CASH_MANUAL_OUT, PAYMENT_METHODS, type CashCategory, type CashMethod, type CashRow, type CashType } from './contracts';
-import { closingGap } from './logic';
+import { cashDateIso, closingGap } from './logic';
 import { useDayLabel } from './ui';
 
 export type ManualMode = { kind: 'new' } | { kind: 'edit'; row: CashRow } | { kind: 'duplicate'; row: CashRow } | { kind: 'correct'; row: CashRow };
-
-/** Time of day kept when the date of a row changes (Africa/Algiers noon when the row is new). */
-const dateIso = (day: string, keep?: string) => (keep && algiersDay(keep) === day ? keep : new Date(`${day}T${day === algiersDay() ? new Date().toISOString().slice(11, 19) : '12:00:00'}Z`).toISOString());
 
 export function ManualEntryDialog({ mode, onClose, defaultDay }: { mode: ManualMode | null; onClose: () => void; defaultDay: string }) {
   const t = useT();
@@ -35,6 +33,7 @@ export function ManualEntryDialog({ mode, onClose, defaultDay }: { mode: ManualM
   const [method, setMethod] = useState<CashMethod>('cash');
   const [category, setCategory] = useState<CashCategory>('shipping');
   const [day, setDay] = useState(defaultDay);
+  const [time, setTime] = useState('12:00');
   const [label, setLabel] = useState('');
   const [proof, setProof] = useState<{ id: string; name: string } | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -54,6 +53,8 @@ export function ManualEntryDialog({ mode, onClose, defaultDay }: { mode: ManualM
     setAmount(r ? moneyDigits(r.amount) : '');
     setMethod(r?.method ?? 'cash');
     setDay(mode?.kind === 'edit' && r ? algiersDay(r.date) : defaultDay);
+    // edit: the row's own time; new / duplicate / correction: now (noon for an earlier day)
+    setTime(mode?.kind === 'edit' && r ? algiersTime(r.date) : defaultDay === algiersDay() ? algiersTime(new Date()) : '12:00');
     setProof(null);
     setTouched(false);
   });
@@ -66,7 +67,7 @@ export function ManualEntryDialog({ mode, onClose, defaultDay }: { mode: ManualM
     category,
     method,
     description: label.trim(),
-    date: dateIso(day, mode?.kind === 'edit' ? row?.date : undefined),
+    date: cashDateIso(day, time),
     proofUploadId: proof?.id ?? undefined,
   };
   const s = useDialogSubmit((key) =>
@@ -152,9 +153,14 @@ export function ManualEntryDialog({ mode, onClose, defaultDay }: { mode: ManualM
               ))}
             </Select>
           </Field>
-          <Field label={t('common.date')} htmlFor="cm-date" error={s.fieldError('date')}>
-            <Input id="cm-date" type="date" value={day} max={algiersDay()} onChange={(e) => setDay(e.target.value || defaultDay)} className="[color-scheme:dark]" />
-          </Field>
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <Field label={t('common.date')} htmlFor="cm-date" error={s.fieldError('date')}>
+              <Input id="cm-date" type="date" value={day} max={algiersDay()} onChange={(e) => setDay(e.target.value || defaultDay)} className="[color-scheme:dark]" />
+            </Field>
+            <Field label={t('cash.col.time')} htmlFor="cm-time">
+              <Input id="cm-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-28 [color-scheme:dark]" />
+            </Field>
+          </div>
         </div>
         <Field label={t('cash.manual.label')} htmlFor="cm-label" required error={touched ? errs.label : s.fieldError('description')}>
           <Input id="cm-label" value={label} maxLength={500} onChange={(e) => setLabel(e.target.value)} placeholder={t('cash.manual.labelPlaceholder')} />
@@ -162,6 +168,11 @@ export function ManualEntryDialog({ mode, onClose, defaultDay }: { mode: ManualM
         <Field label={t('cash.manual.proof')} htmlFor="cm-proof" hint={proof ? proof.name : t('cash.manual.proofHint')}>
           <Input id="cm-proof" type="file" accept="image/jpeg,image/png,image/webp" disabled={uploading} onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
         </Field>
+        {mode?.kind === 'edit' && row?.proofUrl && !proof ? (
+          <a href={row.proofUrl} target="_blank" rel="noopener noreferrer" className="-mt-2 w-fit text-[12px] text-text-secondary underline hover:text-text-primary" data-testid="cash-proof-current">
+            {t('cash.proof.current')}
+          </a>
+        ) : null}
         {s.error ? <FormAlert>{closedError ? `${t('error.CASH_DAY_CLOSED', { date: dayLabel(day) })} (CASH_DAY_CLOSED)` : s.error}</FormAlert> : null}
       </div>
     </Dialog>

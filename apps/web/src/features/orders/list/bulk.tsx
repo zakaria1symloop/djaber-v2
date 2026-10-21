@@ -6,7 +6,7 @@ import { formatNumber } from '@djaber/shared';
 import { BulkBar, Button, Checkbox, Dialog, Field, FormAlert, Pill, Select, toast, type BulkAction } from '@djaber/ui';
 import { useMemo, useRef, useState } from 'react';
 import { useLocaleCode, useT } from '@/lib/i18n';
-import { downloadUrl, trackJob } from '@/lib/jobs';
+import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
 import type { ApiQuery } from '@/lib/list-state';
 import { useSession } from '@/lib/session';
 import { uuid } from '@/lib/uuid';
@@ -31,11 +31,12 @@ export function useOrdersJob() {
       const entity = t('orders.export.entity');
       trackJob({
         jobId,
+        download: kind === 'export',
         started: t('toast.jobStarted'),
         progress: (job) => (kind === 'export' ? t('toast.export.progress', { entity, pct: job.progress, rows: formatNumber(job.total ?? 0) }) : t('orders.print.progress', { pct: job.progress })),
         done: (job) => ({
           message: kind === 'export' ? t('toast.export.done', { file: t('orders.export.file') }) : t('orders.print.done'),
-          action: job.resultUrl ? { label: kind === 'export' ? t('action.download') : t('action.open'), onClick: () => downloadUrl(job.resultUrl!) } : undefined,
+          action: job.resultUrl ? { label: kind === 'export' ? t('action.download') : t('action.open'), onClick: () => downloadUrl(job.resultUrl!, jobFileName(job)) } : undefined,
         }),
         failed: (job, error) => (job?.error ? `${job.error.message} (${job.error.code})` : refusal(error, t)),
       });

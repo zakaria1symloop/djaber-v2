@@ -208,6 +208,7 @@ function Ledger() {
       const r = await billingApi.exportLedger({ ...rest, ...(actions.length ? { action: actions } : {}) });
       trackJob({
         jobId: r.jobId,
+        download: true,
         started: t('credits.export.started'),
         progress: (j) => t('toast.export.progress', { entity: t('credits.export.entity'), pct: j.progress, rows: j.total ?? 0 }),
         done: (j) => {

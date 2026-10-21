@@ -8,7 +8,7 @@ import { ChevronDown } from 'lucide-react';
 import { refusal } from '@/features/orders/dialogs/common';
 import { api } from '@/lib/api';
 import { useT } from '@/lib/i18n';
-import { downloadUrl, trackJob, type JobRef } from '@/lib/jobs';
+import { downloadUrl, jobFileName, type JobRef, trackJob } from '@/lib/jobs';
 import type { ApiQuery } from '@/lib/list-state';
 
 export function ListExportMenu({ path, filters, entity, file, disabledReason }: { path: '/purchases/export' | '/sales/export'; filters: ApiQuery; entity: string; file: string; disabledReason?: string }) {
@@ -18,9 +18,10 @@ export function ListExportMenu({ path, filters, entity, file, disabledReason }: 
       const { jobId } = await api<JobRef>(path, { query: { ...filters, format } });
       trackJob({
         jobId,
+        download: true,
         started: t('toast.jobStarted'),
         progress: (j) => t('toast.export.progress', { entity, pct: j.progress, rows: formatNumber(j.total ?? 0) }),
-        done: (j) => ({ message: t('toast.export.done', { file: `${file} · ${format.toUpperCase()}` }), action: j.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(j.resultUrl!) } : undefined }),
+        done: (j) => ({ message: t('toast.export.done', { file: `${file} · ${format.toUpperCase()}` }), action: j.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(j.resultUrl!, jobFileName(j)) } : undefined }),
         failed: (j, e) => (j?.error ? `${j.error.message} (${j.error.code})` : refusal(e, t)),
       });
     } catch (e) {

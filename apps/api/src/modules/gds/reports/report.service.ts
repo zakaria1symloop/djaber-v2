@@ -34,6 +34,7 @@ import { REPORT_PRODUCERS, type ReportCtx } from './definitions';
 import { ReportScheduleService } from './report-schedule.service';
 
 const FILE_URL_TTL_S = 24 * 3600;
+const FILE_LINK_TTL_S = 3600;
 const FILTER_KEYS: ReportFilterKey[] = ['categoryId', 'productId', 'supplierId', 'clientId', 'days', 'q', 'source', 'channelId', 'groupBy'];
 /** Export job filters: the period is stored resolved, so a retry exports the same days. */
 export type ReportExportFilters = { key: ReportKey; from: string | null; to: string | null; sort?: string; filters: Partial<Record<ReportFilterKey, string | number>> };
@@ -213,7 +214,7 @@ export class ReportService implements OnModuleInit {
         };
       }),
       chart: this.chart(run, locale),
-      rows: run.rows.slice(start, start + q.pageSize),
+      rows: this.signFiles(run.def, run.rows.slice(start, start + q.pageSize)),
       totals: this.totals(run.def, run.rows),
       totalRows: run.rows.length,
       csvMode: run.rows.length <= REPORT_CSV_IMMEDIATE_MAX_ROWS ? 'immediate' : 'job',
@@ -223,10 +224,18 @@ export class ReportService implements OnModuleInit {
     return { data: view, page: q.page, pageSize: q.pageSize, total: run.rows.length };
   }
 
+  /** `file` cells hold a storage key: the page gets a signed link (1 h), never the key. */
+  private signFiles(def: ReportDefinition, rows: ReportRow[]): ReportRow[] {
+    const files = def.columns.filter((c) => c.type === 'file').map((c) => c.key);
+    if (!files.length) return rows;
+    return rows.map((r) => ({ ...r, ...Object.fromEntries(files.map((k) => [k, typeof r[k] === 'string' ? this.storage.signedUrl(r[k] as string, FILE_LINK_TTL_S) : null])) }));
+  }
+
   // --- files --------------------------------------------------------------------------------------------------------------
+  /** Columns of the exported files: the stock mode's columns, without the attached-file links. */
   private columnsFor(def: ReportDefinition) {
     const advanced = TenantContext.get().stockMode === 'advanced';
-    return def.columns.filter((c) => advanced || !c.advanced);
+    return def.columns.filter((c) => (advanced || !c.advanced) && c.type !== 'file');
   }
 
   private table(run: ReportRun, rows: ReportRow[], locale: Lang): ExportTable<ReportRow> {

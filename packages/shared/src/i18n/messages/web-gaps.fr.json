@@ -1,4 +1,7 @@
 {
+ "cash.action.viewProof": "Voir le justificatif",
+ "cash.proof.current": "Justificatif joint — voir",
+ "cash.proof.newTab": "NOUVEL ONGLET",
  "gaps.agents.activate.blocked": "À corriger avant d'activer : {items}.",
  "gaps.agents.activate.unschedule": "Annuler la programmation",
  "gaps.agents.activate.unscheduled": "Activation de « {name} » annulée : l'agent reste en brouillon.",
@@ -51,5 +54,7 @@
  "gaps.job.partial": "{kind} terminé en partie : certaines lignes n'ont pas abouti.",
  "gaps.job.progress": "Progression : {kind}",
  "gaps.job.running": "{kind} en cours : {pct} %",
- "gaps.orders.notify.noConversation": "Commande sans conversation : le client ne peut pas être prévenu par message."
+ "gaps.orders.notify.noConversation": "Commande sans conversation : le client ne peut pas être prévenu par message.",
+ "report.col.proof": "Justificatif",
+ "report.file.view": "Voir"
 }

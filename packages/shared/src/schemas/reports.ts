@@ -48,7 +48,8 @@ export const REPORT_CSV_IMMEDIATE_MAX_ROWS = 5000;
 export const REPORT_EXPORT_FORMATS = ['csv', 'xlsx', 'pdf'] as const;
 export type ReportExportFormat = (typeof REPORT_EXPORT_FORMATS)[number];
 
-export type ReportColumnType = 'text' | 'int' | 'money' | 'pct' | 'date' | 'datetime' | 'days' | 'enum';
+/** `file`: signed link to an attached file (cash proof) — "Voir" on screen, left out of the exported files */
+export type ReportColumnType = 'text' | 'int' | 'money' | 'pct' | 'date' | 'datetime' | 'days' | 'enum' | 'file';
 /** Row links of the template ("tout tableau est cliquable"): the row carries the id in `_ref`. */
 export type ReportLink = 'product' | 'order' | 'sale' | 'purchase' | 'client' | 'supplier' | 'category';
 export type ReportColumnDef = {
@@ -304,7 +305,7 @@ export const REPORT_DEFINITIONS: Record<ReportKey, ReportDefinition> = {
     group: 'purchases_cash',
     simple: false,
     period: 'range',
-    columns: [c('date', 'datetime'), c('description', 'text', { sortable: false }), c('reference', 'text', { sortable: false }), c('category', 'enum', { enumKey: 'enum.Cash.category' }), c('method', 'enum', { enumKey: 'enum.Order.paymentMethod' }), c('income', 'money', { sum: true }), c('expense', 'money', { sum: true }), c('balance', 'money', { sortable: false })],
+    columns: [c('date', 'datetime'), c('description', 'text', { sortable: false }), c('reference', 'text', { sortable: false }), c('category', 'enum', { enumKey: 'enum.Cash.category' }), c('method', 'enum', { enumKey: 'enum.Order.paymentMethod' }), c('income', 'money', { sum: true }), c('expense', 'money', { sum: true }), c('balance', 'money', { sortable: false }), c('proof', 'file', { sortable: false })],
     kpis: [k('openingBalance', 'money'), k('income', 'money'), k('expense', 'money'), k('closingBalance', 'money')],
     chart: null,
     filters: ['q'],

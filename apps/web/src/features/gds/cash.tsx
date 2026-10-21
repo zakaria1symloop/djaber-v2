@@ -26,6 +26,7 @@ import {
   toast,
   type Column,
 } from '@djaber/ui';
+import { Paperclip } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AppPage } from '@/components/app-page';
 import { ListEmpty, ListFilteredEmpty, ListLoading, OfflineBanner, QueryError } from '@/components/global-states';
@@ -36,9 +37,10 @@ import { useOffline } from '@/features/orders/offline';
 import { useMembers } from '@/features/workspace/api';
 import { useRouter } from '@/i18n/navigation';
 import { actionState, toMenuActions } from '@/lib/actions';
+import { useHere, withBack } from '@/lib/back';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
-import { downloadUrl, trackJob } from '@/lib/jobs';
+import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
 import { filterList, filterText, type ApiQuery, type ListSpec } from '@/lib/list-state';
 import { useSession } from '@/lib/session';
 import { useListState } from '@/lib/use-list-state';
@@ -70,6 +72,7 @@ function CashLedger() {
   const router = useRouter();
   const { can } = useSession();
   const list = useListState(CASH_SPEC);
+  const here = useHere();
   const s = list.state;
   const offline = useOffline();
   const refresh = useGdsRefresh();
@@ -116,21 +119,27 @@ function CashLedger() {
   const panelFiltered = chips.length > 0 || s.q.trim().length > 0;
   const clearPanel = () => list.set({ q: '', filters: { direction: null, category: null, method: null, createdById: null, source: null } });
 
-  // closing gap / reopening rows open their day; a correction row finds the row it corrects (same reference)
+  // closing gap / reopening rows open their day; a correction opens the document of the row it corrects (its
+  // reference), else finds that row (same label). The document page's "Retour" comes back here, filters kept.
   const openReference = (r: CashRow) => {
     const ref = r.reference;
     if (!ref) return;
-    if (ref.type === 'order') router.push(`/orders/${ref.id}`);
-    else if (ref.type === 'sale') router.push(`/sales/${ref.id}`);
-    else if (ref.type === 'purchase') router.push(`/purchases/${ref.id}`);
+    if (ref.type === 'order') router.push(withBack(`/orders/${ref.id}`, here));
+    else if (ref.type === 'sale') router.push(withBack(`/sales/${ref.id}`, here));
+    else if (ref.type === 'purchase') router.push(withBack(`/purchases/${ref.id}`, here));
     else if (ref.type === 'closing') list.set({ q: '', filters: { day: ref.label, period: null, from: null, to: null } });
     else if (ref.type === 'cash' && ref.label) list.set({ q: ref.label });
+  };
+  // the receipt photo of a row ("Justificatif" of the manual / correction dialog), in a new tab
+  const openProof = (r: CashRow) => {
+    if (r.proofUrl) window.open(r.proofUrl, '_blank', 'noopener');
   };
   const menu = (r: CashRow) =>
     toMenuActions(
       r.actions,
       {
         open_reference: { label: t('cash.action.openReference'), hint: r.reference?.type === 'closing' || r.reference?.type === 'cash' ? undefined : t('gds.hint.page'), onSelect: () => openReference(r), hidden: !r.reference || (r.reference.type === 'cash' && !r.reference.label) },
+        view_proof: { label: t('cash.action.viewProof'), hint: t('cash.proof.newTab'), onSelect: () => openProof(r), hidden: !r.proofUrl },
         edit: { label: t('action.edit'), hint: t('gds.hint.dialog'), onSelect: () => setManual({ kind: 'edit', row: r }) },
         duplicate: { label: t('action.duplicate'), onSelect: () => setManual({ kind: 'duplicate', row: r }) },
         correct: { label: t('cash.action.correct'), hint: t('gds.hint.dialog'), onSelect: () => setManual({ kind: 'correct', row: r }) },
@@ -145,9 +154,10 @@ function CashLedger() {
       const { jobId } = await gdsApi.exportCash({ ...shared, format: 'xlsx' });
       trackJob({
         jobId,
+        download: true,
         started: t('toast.jobStarted'),
         progress: (job) => t('toast.export.progress', { entity: t('cash.export.entity'), pct: job.progress, rows: formatNumber(job.total ?? 0) }),
-        done: (job) => ({ message: t('toast.export.done', { file: t('cash.export.file') }), action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!) } : undefined }),
+        done: (job) => ({ message: t('toast.export.done', { file: t('cash.export.file') }), action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!, jobFileName(job)) } : undefined }),
         failed: (job, error) => (job?.error?.message ? `${job.error.message} (${job.error.code})` : errorMessage(error, t)),
       });
     } catch (e) {
@@ -171,8 +181,18 @@ function CashLedger() {
       header: t('cash.col.label'),
       className: 'max-w-[320px]',
       cell: (r) => (
-        <span className="block truncate" title={r.description ?? undefined}>
-          {r.description ?? r.reference?.label ?? '—'}
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate" title={r.description ?? undefined}>
+            {r.description ?? r.reference?.label ?? '—'}
+          </span>
+          {r.proofUrl ? (
+            <button type="button" className="shrink-0 text-text-muted hover:text-text-primary" onClick={(e) => {
+                e.stopPropagation();
+                openProof(r);
+              }} aria-label={t('cash.action.viewProof')} title={t('cash.action.viewProof')} data-testid="cash-proof">
+              <Paperclip className="size-3.5" aria-hidden />
+            </button>
+          ) : null}
         </span>
       ),
     },

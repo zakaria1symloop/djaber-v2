@@ -64,6 +64,8 @@ type Tracked = {
   progress: (job: JobDto) => string;
   done: (job: JobDto) => Pick<ToastInput, 'message' | 'action' | 'tone'>;
   failed: (job: JobDto | null, error: unknown) => string;
+  /** exports: the finished file is saved at once (the toast keeps its "Télécharger" button to get it again) */
+  download?: boolean;
 };
 let tracked: Tracked[] = [];
 const listeners = new Set<() => void>();
@@ -72,9 +74,15 @@ const emit = () => listeners.forEach((l) => l());
 /** Starts following a job with a progress toast ("Export des produits : 40 % (512 lignes)" → "Export terminé · …"). */
 export function trackJob(o: Omit<Tracked, 'toastId'> & { started: string }) {
   const toastId = toast({ tone: 'info', message: o.started, progress: null, durationMs: 0 });
-  tracked = [...tracked, { jobId: o.jobId, progress: o.progress, done: o.done, failed: o.failed, toastId }];
+  tracked = [...tracked, { jobId: o.jobId, progress: o.progress, done: o.done, failed: o.failed, download: o.download, toastId }];
   emit();
 }
+
+/** File name recorded on an export job's result (`{ fileName }`), if any. */
+export const jobFileName = (job: Pick<JobDto, 'result'>): string | undefined => {
+  const name = (job.result as { fileName?: unknown } | null)?.fileName;
+  return typeof name === 'string' && name ? name : undefined;
+};
 
 function Watcher({ item }: { item: Tracked }) {
   const q = useJob(item.jobId);
@@ -94,6 +102,7 @@ function Watcher({ item }: { item: Tracked }) {
       updateToast(item.toastId, { message: item.progress(job), progress: job.progress });
     } else if (job.status === 'done' || job.status === 'partial') {
       updateToast(item.toastId, { tone: job.status === 'done' ? 'success' : 'warning', ...item.done(job), progress: undefined, durationMs: 12_000 });
+      if (item.download && job.resultUrl) void downloadUrl(job.resultUrl, jobFileName(job));
       stop();
     } else {
       updateToast(item.toastId, { tone: 'danger', message: item.failed(job, null), progress: undefined, durationMs: 8_000 });
@@ -122,14 +131,47 @@ export function JobToaster() {
   );
 }
 
-/** Opens a signed result file (export, error report) without leaving the page. */
-export function downloadUrl(url: string, fileName?: string) {
+/** Last path segment of a signed link (`…/exports/<id>.xlsx?exp=…` → `<id>.xlsx`). */
+export const fileNameOf = (url: string): string => {
+  try {
+    return decodeURIComponent(new URL(url, 'http://x').pathname.split('/').pop() ?? '') || 'download';
+  } catch {
+    return 'download';
+  }
+};
+
+/** `?dl=<name>` on an API file link: the API answers `Content-Disposition: attachment` (saved, not opened). */
+export const withDownloadName = (url: string, fileName: string): string => (url.includes('/api/v1/files/') ? `${url}${url.includes('?') ? '&' : '?'}dl=${encodeURIComponent(fileName)}` : url);
+
+function clickLink(href: string, fileName?: string) {
   const a = document.createElement('a');
-  a.href = url;
+  a.href = href;
   if (fileName) a.download = fileName;
-  a.rel = 'noopener';
-  a.target = '_blank';
+  else {
+    a.rel = 'noopener';
+    a.target = '_blank';
+  }
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+/**
+ * Saves a signed result file (export, receipt, print, label, error report) without leaving the page. The file is read
+ * and handed to the browser as a download: no new tab is opened, so a pop-up blocker cannot swallow the click (the
+ * API and the web are two sites, where `<a download>` alone is ignored). When the file cannot be read (offline, link
+ * expired), the link opens in a new tab so the browser shows why.
+ */
+export async function downloadUrl(url: string, fileName?: string): Promise<void> {
+  const name = fileName || fileNameOf(url);
+  const link = withDownloadName(url, name);
+  try {
+    const res = await fetch(link, { credentials: 'omit' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const href = URL.createObjectURL(await res.blob());
+    clickLink(href, name);
+    setTimeout(() => URL.revokeObjectURL(href), 60_000);
+  } catch {
+    clickLink(link);
+  }
 }

@@ -6,7 +6,7 @@ import { useCallback } from 'react';
 import { api, ApiError, apiRaw, type Meta } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
-import { downloadUrl, trackJob, type JobRef } from '@/lib/jobs';
+import { downloadUrl, jobFileName, type JobRef, trackJob } from '@/lib/jobs';
 import type { ApiQuery } from '@/lib/list-state';
 import { useWorkspaceId } from '@/lib/session';
 import type { BulkClientTagsInput, Client, ClientListItem, CreateClientInput, MergeClientsInput, UpdateClientInput } from './contracts';
@@ -92,11 +92,12 @@ export function useClientsExport() {
       const entity = t('clients.export.entity');
       trackJob({
         jobId,
+        download: true,
         started: t('toast.jobStarted'),
         progress: (job) => t('toast.export.progress', { entity, pct: job.progress, rows: formatNumber(job.total ?? 0) }),
         done: (job) => ({
           message: t('toast.export.done', { file: t('clients.export.file') }),
-          action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!) } : undefined,
+          action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!, jobFileName(job)) } : undefined,
         }),
         failed: (job, error) => (job?.error ? `${job.error.message} (${job.error.code})` : errorMessage(error, t)),
       });

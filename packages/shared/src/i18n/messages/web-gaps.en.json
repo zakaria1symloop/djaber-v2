@@ -1,4 +1,7 @@
 {
+ "cash.action.viewProof": "View receipt",
+ "cash.proof.current": "Attached receipt — view",
+ "cash.proof.newTab": "NEW TAB",
  "gaps.agents.activate.blocked": "Fix before activating: {items}.",
  "gaps.agents.activate.unschedule": "Cancel the schedule",
  "gaps.agents.activate.unscheduled": "Activation of \"{name}\" cancelled: the agent stays a draft.",
@@ -51,5 +54,7 @@
  "gaps.job.partial": "{kind} partly finished: some lines did not go through.",
  "gaps.job.progress": "Progress: {kind}",
  "gaps.job.running": "{kind} in progress: {pct} %",
- "gaps.orders.notify.noConversation": "Order without a conversation: the customer cannot be notified by message."
+ "gaps.orders.notify.noConversation": "Order without a conversation: the customer cannot be notified by message.",
+ "report.col.proof": "Receipt",
+ "report.file.view": "View"
 }

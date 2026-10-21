@@ -92,13 +92,18 @@ export class CashService implements OnModuleInit {
 
   // --- presenting ---------------------------------------------------------------------------------------------------------
   private async references(rows: CashRow[]) {
-    const entryIds = rows.filter((r) => r.sourceType === 'payment_entry' && r.sourceId).map((r) => r.sourceId!);
+    // a manual correction opens what the corrected automatic row opens (its sale / purchase / order), not the row itself
+    const correctedIds = [...new Set(rows.filter((r) => r.correctsTransactionId && r.sourceType !== 'closing').map((r) => r.correctsTransactionId!))];
+    const corrected = correctedIds.length ? await prisma.cashTransaction.findMany({ where: { id: { in: correctedIds } }, select: { id: true, sourceType: true, sourceId: true, reference: true, date: true } }) : [];
+    const byCorrected = new Map(corrected.map((c) => [c.id, c]));
+    const all = [...rows, ...corrected];
+    const entryIds = all.filter((r) => r.sourceType === 'payment_entry' && r.sourceId).map((r) => r.sourceId!);
     const entries = entryIds.length ? await prisma.paymentEntry.findMany({ where: { id: { in: entryIds } }, select: { id: true, sourceType: true, sourceId: true } }) : [];
     const byEntry = new Map(entries.map((e) => [e.id, e]));
     const docs = (type: 'order' | 'sale' | 'purchase') => [
       ...new Set([
         ...entries.filter((e) => e.sourceType === type).map((e) => e.sourceId),
-        ...rows.filter((r) => r.sourceType === type && r.sourceId).map((r) => r.sourceId!),
+        ...all.filter((r) => r.sourceType === type && r.sourceId).map((r) => r.sourceId!),
       ]),
     ];
     const [orders, sales, purchases] = await Promise.all([
@@ -107,22 +112,30 @@ export class CashService implements OnModuleInit {
       docs('purchase').length ? prisma.purchase.findMany({ where: { id: { in: docs('purchase') } }, select: { id: true, number: true } }) : [],
     ]);
     const numbers = new Map([...orders, ...sales, ...purchases].map((d) => [d.id, d.number]));
-    return (r: CashRow): CashTransactionView['reference'] => {
+    type Source = Pick<CashRow, 'sourceType' | 'sourceId' | 'reference' | 'date'>;
+    const own = (r: Source): CashTransactionView['reference'] => {
       if (r.sourceType === 'payment_entry' && r.sourceId) {
         const e = byEntry.get(r.sourceId);
         return e ? { type: e.sourceType, id: e.sourceId, label: numbers.get(e.sourceId) ?? r.reference ?? '' } : null;
       }
       if ((r.sourceType === 'order' || r.sourceType === 'sale' || r.sourceType === 'purchase') && r.sourceId) return { type: r.sourceType, id: r.sourceId, label: numbers.get(r.sourceId) ?? r.reference ?? '' };
       if (r.sourceType === 'closing' && r.sourceId) return { type: 'closing', id: r.sourceId, label: algiersDay(r.date) };
-      if (r.correctsTransactionId) return { type: 'cash', id: r.correctsTransactionId, label: r.reference ?? '' };
       return null;
+    };
+    return (r: CashRow): CashTransactionView['reference'] => {
+      const mine = own(r);
+      if (mine || !r.correctsTransactionId) return mine;
+      const c = byCorrected.get(r.correctsTransactionId);
+      return (c && own(c)) ?? { type: 'cash', id: r.correctsTransactionId, label: c?.reference ?? r.reference ?? '' };
     };
   }
 
   private rowActions(r: CashRow, closed: boolean) {
+    const proof = r.proofUploadId ? [action('view_proof', 'gds.read')] : [];
     if (r.isAutomatic) {
       return [
         ...(r.sourceType && r.sourceType !== 'closing' ? [action('open_reference', 'gds.read', { primary: true })] : []),
+        ...proof,
         action('edit', 'gds.write', { reasonCode: 'CAISSE_EDIT_AUTOMATIC' }),
         action('delete', 'gds.write', { reasonCode: 'CAISSE_DELETE_AUTOMATIC' }),
         action('correct', 'gds.write'),
@@ -130,7 +143,13 @@ export class CashService implements OnModuleInit {
     }
     const expired = Date.now() - r.createdAt.getTime() > CASH_EDIT_WINDOW_HOURS * HOUR_MS;
     const reasonCode = closed ? 'CASH_DAY_CLOSED' : expired ? 'CASH_ENTRY_EDIT_WINDOW_EXPIRED' : undefined;
-    return [action('edit', 'gds.write', { reasonCode, primary: !reasonCode }), action('delete', 'gds.write', { reasonCode }), action('duplicate', 'gds.write')];
+    return [
+      ...(r.correctsTransactionId ? [action('open_reference', 'gds.read')] : []),
+      ...proof,
+      action('edit', 'gds.write', { reasonCode, primary: !reasonCode }),
+      action('delete', 'gds.write', { reasonCode }),
+      action('duplicate', 'gds.write'),
+    ];
   }
 
   private async views(rows: CashRow[], balances?: Map<string, number>): Promise<CashTransactionView[]> {

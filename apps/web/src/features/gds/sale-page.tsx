@@ -12,6 +12,7 @@ import { withoutYear } from '@/features/catalog/stock/logic';
 import { useOffline } from '@/features/orders/offline';
 import { Link, useRouter } from '@/i18n/navigation';
 import { actionState } from '@/lib/actions';
+import { useBack } from '@/lib/back';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSale } from './api';
 import { ActionButton } from './purchase-dialogs';
@@ -35,17 +36,18 @@ function SaleDetail({ id }: { id: string }) {
   const offline = useOffline();
   const actions = useSaleActions({ onDeleted: () => router.push('/sales'), onEditDraft: (x) => router.push(`/sales/new?draft=${x}`) });
   const day = useDayLabel();
+  const back = useBack({ href: '/sales', label: t('sales.title') });
   const s = q.data;
   if (q.isPending)
     return (
-      <AppPage title={t('sales.title')} back={{ href: '/sales', label: t('sales.title') }} permission="gds.read">
+      <AppPage title={t('sales.title')} back={back} permission="gds.read">
         <Skeleton className="h-80" />
       </AppPage>
     );
   if (q.isError || !s)
     return (
-      <AppPage title={t('sales.title')} back={{ href: '/sales', label: t('sales.title') }} permission="gds.read">
-        <QueryError error={q.error} onRetry={() => q.refetch()} backHref="/sales" />
+      <AppPage title={t('sales.title')} back={back} permission="gds.read">
+        <QueryError error={q.error} onRetry={() => q.refetch()} backHref={back.href} />
       </AppPage>
     );
   // offline: the actions this document offers are greyed with the offline reason (absent ones stay absent)
@@ -56,7 +58,7 @@ function SaleDetail({ id }: { id: string }) {
   return (
     <AppPage
       title={t('sales.page.title', { number: s.number })}
-      back={{ href: '/sales', label: t('sales.title') }}
+      back={back}
       permission="gds.read"
       badges={
         <span className="flex items-center gap-1.5" data-testid="sale-pills">

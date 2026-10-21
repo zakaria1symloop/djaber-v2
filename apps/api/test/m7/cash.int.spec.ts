@@ -1,5 +1,8 @@
 // M7 — cash register (GDS-08, CSH-01…04, 04 §20 D56): manual rows, locks of automatic rows, 24 h window, day closing with
-// correction row, reopen (Admin+, audited), period selection ↔ table ↔ KPIs in sync (09 §4 regression), export.
+// correction row, reopen (Admin+, audited), period selection ↔ table ↔ KPIs in sync (09 §4 regression), export; proof
+// photos readable from the ledger and Reports › Caisse (tester report 2026-10-19 UX-001).
+import request from 'supertest';
+import sharp from 'sharp';
 import { algiersDay, algiersDayEnd, algiersDayStart } from '../../src/core/time/algiers';
 import { asAdmin, asOperator, asOwner } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
@@ -18,6 +21,7 @@ afterAll(async () => {
 
 const yesterday = () => algiersDay(new Date(Date.now() - DAY));
 const at = (day: string, hour: number) => new Date(algiersDayStart(day).getTime() + hour * 3_600_000).toISOString();
+const SIGNED = /\/api\/v1\/files\/.+\?exp=\d+&sig=/;
 const entry = (over: Record<string, unknown> = {}) => ({ type: 'income', amount: 1000, category: 'deposit', method: 'cash', description: 'Apport ouverture', ...over });
 
 describe('manual rows (CSH-03)', () => {
@@ -48,7 +52,9 @@ describe('manual rows (CSH-03)', () => {
     expect((await owner.patch(`/cash/${auto.id}`, { amount: 1 }).expect(403)).body.error.code).toBe('CAISSE_EDIT_AUTOMATIC');
     expect((await owner.delete(`/cash/${auto.id}`).expect(403)).body.error.code).toBe('CAISSE_DELETE_AUTOMATIC');
     const corr = await owner.post('/cash', entry({ type: 'expense', amount: 100, category: 'correction', correctsTransactionId: auto.id, description: 'Erreur de rendu' })).set(idem()).expect(201);
-    expect(corr.body.data).toMatchObject({ category: 'correction', correctsTransactionId: auto.id, reference: { type: 'cash', id: auto.id } });
+    // the correction opens the document of the row it corrects (tester report 2026-10-20: no « Ouvrir la référence »)
+    expect(corr.body.data).toMatchObject({ category: 'correction', correctsTransactionId: auto.id, reference: { type: 'sale', id: s.id, label: s.number } });
+    expect(corr.body.data.actions.map((a: any) => a.key)).toEqual(['open_reference', 'edit', 'delete', 'duplicate']);
     // a correction only points at an automatic row
     expect((await owner.post('/cash', entry({ category: 'correction', correctsTransactionId: corr.body.data.id })).set(idem()).expect(422)).body.error.fields).toEqual({ correctsTransactionId: 'validation.invalid' });
     const fresh = await owner.post('/cash', entry({ type: 'expense', amount: 200, category: 'utilities' })).set(idem()).expect(201);
@@ -157,12 +163,45 @@ describe('09 §4 regression: period selection ↔ table ↔ KPIs', () => {
     await owner.get('/cash?sort=amount').expect(400);
   });
 
+  it('UX-001: the proof photo of a correction is readable (signed link, any driver), offered as « Voir le justificatif » and in Reports › Caisse with the sale it corrects', async () => {
+    const owner = await advancedShop(app);
+    const p = await product(owner, { price: 3000, stock: 5 });
+    const s = await sale(owner, { items: [{ productId: p.id, quantity: 1 }], amountPaid: 3000 });
+    const auto = (await owner.get('/cash?source=auto').expect(200)).body.data[0];
+    const png = await sharp({ create: { width: 40, height: 40, channels: 3, background: { r: 10, g: 120, b: 60 } } }).png().toBuffer();
+    const up = await request(app.http()).post('/api/v1/uploads').set(owner.headers).field('kind', 'cash_proof').attach('file', png, { filename: 'recu.png', contentType: 'image/png' }).expect(201);
+    const corr = (await owner.post('/cash', entry({ type: 'expense', amount: 100, category: 'correction', correctsTransactionId: auto.id, description: 'Erreur de rendu', proofUploadId: up.body.data.id })).set(idem()).expect(201)).body.data;
+    expect(corr.proofUrl).toMatch(SIGNED);
+    expect(corr.actions.map((a: any) => a.key)).toEqual(['open_reference', 'view_proof', 'edit', 'delete', 'duplicate']);
+    const path = new URL(corr.proofUrl).pathname + new URL(corr.proofUrl).search;
+    const img = await request(app.http()).get(path).expect(200);
+    expect(img.headers['content-type']).toMatch(/^image\//);
+    expect(img.headers['content-disposition']).toBeUndefined();
+    const dl = await request(app.http()).get(`${path}&dl=${encodeURIComponent('reçu VNT.webp')}`).expect(200);
+    expect(dl.headers['content-disposition']).toBe(`attachment; filename="re_u VNT.webp"; filename*=UTF-8''${encodeURIComponent('reçu VNT.webp')}`);
+    const report = (await owner.get(`/reports/cash_register?period=7d`).expect(200)).body.data;
+    const rows = report.rows.filter((r: any) => r._ref?.id === s.id);
+    expect(rows.map((r: any) => [r.category, r.reference, typeof r.proof])).toEqual([
+      ['sale', s.number, 'object'],
+      ['correction', s.number, 'string'],
+    ]);
+    expect(rows[1].proof).toMatch(SIGNED);
+    expect(report.definition.columns.at(-1)).toMatchObject({ key: 'proof', type: 'file' });
+  });
+
   it('export job (CSV), roles and tenancy', async () => {
     const owner = await advancedShop(app);
     const row = await owner.post('/cash', entry()).set(idem()).expect(201);
     const job = await owner.get('/cash/export?format=csv').expect(202);
     await drain(app, owner.workspaceId, ['job']);
-    expect(await jobOf(owner, job.body.data.jobId)).toMatchObject({ status: 'done', result: { kind: 'cash', rows: 1, format: 'csv' } });
+    const done = await jobOf(owner, job.body.data.jobId);
+    expect(done).toMatchObject({ status: 'done', result: { kind: 'cash', rows: 1, format: 'csv' } });
+    // the private file: saved as an attachment with `dl`, refused with a tampered or expired signature
+    const link = new URL(done.resultUrl);
+    const file = await request(app.http()).get(`${link.pathname}${link.search}&dl=caisse.csv`).expect(200);
+    expect(file.headers['content-disposition']).toBe(`attachment; filename="caisse.csv"; filename*=UTF-8''caisse.csv`);
+    await request(app.http()).get(`${link.pathname}${link.search.replace(/sig=[^&]+/, 'sig=nope')}`).expect(404);
+    await request(app.http()).get(`${link.pathname}${link.search.replace(/exp=\d+/, 'exp=1')}`).expect(404);
     const op = await asOperator(app, owner.workspaceId);
     await op.get('/cash').expect(403);
     await op.post('/cash', entry()).set(idem()).expect(403);

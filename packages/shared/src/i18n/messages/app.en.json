@@ -5722,7 +5722,7 @@
  "sales.action.collect": "Collect the rest",
  "sales.action.editPayment": "Edit the payment",
  "sales.action.linkClient": "Link to a client",
- "sales.action.receipt": "Receipt PDF",
+ "sales.action.receipt": "Sale ticket (PDF)",
  "sales.action.validate": "Validate the sale",
  "sales.cancel.note": "> 7 d: SALE_CANNOT_CANCEL_AFTER_7D",
  "sales.cancel.reason.customer_return": "Customer return",

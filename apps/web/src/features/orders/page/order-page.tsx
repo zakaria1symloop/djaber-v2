@@ -15,6 +15,7 @@ import { useLeaveGuard } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
+import { useBack } from '@/lib/back';
 import { ORDER_ACTION } from '../action-keys';
 import { ordersApi, useOrder, useOrdersRefresh } from '../api';
 import type { Order } from '../contracts';
@@ -61,6 +62,7 @@ export function OrderPage({ id }: { id: string }) {
   const { guard } = useLeaveGuard(dirty, q.data ? `#${q.data.number}` : '');
   // `/orders/:id#delivery|#payment|#calls` (notifications, Home queue): the block is brought into view once loaded
   const loaded = !!q.data;
+  const back = useBack({ href: '/orders', label: t('nav.orders') });
   useEffect(() => {
     if (!loaded) return;
     const anchor = orderAnchor(window.location.hash);
@@ -69,15 +71,15 @@ export function OrderPage({ id }: { id: string }) {
 
   if (q.isPending) {
     return (
-      <AppPage permission="orders.read" back={{ href: '/orders', label: t('nav.orders') }} title={t('common.loading')}>
+      <AppPage permission="orders.read" back={back} title={t('common.loading')}>
         <PageSkeleton />
       </AppPage>
     );
   }
   if (q.isError || !q.data) {
     return (
-      <AppPage permission="orders.read" back={{ href: '/orders', label: t('nav.orders') }} title={t('nav.orders')}>
-        <QueryError error={q.error} onRetry={() => q.refetch()} backHref={`/${locale}/orders`} />
+      <AppPage permission="orders.read" back={back} title={t('nav.orders')}>
+        <QueryError error={q.error} onRetry={() => q.refetch()} backHref={`/${locale}${back.href}`} />
       </AppPage>
     );
   }
@@ -124,7 +126,7 @@ export function OrderPage({ id }: { id: string }) {
   return (
     <AppPage
       permission="orders.read"
-      back={{ href: '/orders', label: t('nav.orders') }}
+      back={back}
       title={`#${order.number}`}
       description={subtitle}
       badges={

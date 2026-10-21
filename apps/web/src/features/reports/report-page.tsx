@@ -54,8 +54,9 @@ import { refusal } from '@/features/orders/dialogs/common';
 import { useOffline } from '@/features/orders/offline';
 import { Link, useRouter } from '@/i18n/navigation';
 import { ApiError } from '@/lib/api';
+import { useHere, withBack } from '@/lib/back';
 import { useLocaleCode, useT } from '@/lib/i18n';
-import { downloadUrl, isJobRunning, trackJob, useJob } from '@/lib/jobs';
+import { downloadUrl, isJobRunning, jobFileName, trackJob, useJob } from '@/lib/jobs';
 import { filterText, type ListSpec } from '@/lib/list-state';
 import { useSession } from '@/lib/session';
 import { useListState } from '@/lib/use-list-state';
@@ -77,6 +78,7 @@ function ReportView({ reportKey }: { reportKey: ReportKey }) {
   const t = useT();
   const locale = useLocaleCode();
   const router = useRouter();
+  const here = useHere();
   const { workspace, can } = useSession();
   const offline = useOffline();
   const hub = useReportsHub(can('reports.read'));
@@ -123,9 +125,10 @@ function ReportView({ reportKey }: { reportKey: ReportKey }) {
         setJobId(r.jobId);
         trackJob({
           jobId: r.jobId,
+          download: true,
           started: t('reports.export.started', { format: format.toUpperCase() }),
           progress: (job) => t('toast.export.progress', { entity: t(`report.${reportKey}.title`), pct: job.progress, rows: formatNumber(job.total ?? 0) }),
-          done: (job) => ({ message: t('toast.export.done', { file: `${t(`report.${reportKey}.title`)} · ${format.toUpperCase()}` }), action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!) } : undefined }),
+          done: (job) => ({ message: t('toast.export.done', { file: `${t(`report.${reportKey}.title`)} · ${format.toUpperCase()}` }), action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!, jobFileName(job)) } : undefined }),
           failed: (job, error) => (job?.error ? `${job.error.message} (${job.error.code})` : refusal(error, t)),
         });
       }
@@ -293,7 +296,7 @@ function ReportView({ reportKey }: { reportKey: ReportKey }) {
             onPage={(p) => list.set(p)}
             filtered={list.filtered}
             onClear={() => list.clear()}
-            onRow={(href) => router.push(href)}
+            onRow={(href) => router.push(withBack(href, here))}
           />
         </div>
       )}
@@ -449,7 +452,7 @@ function ExportJobBanner({ jobId, onClose }: { jobId: string | null; onClose: ()
         action={
           <div className="flex gap-2">
             {j.resultUrl ? (
-              <Button size="sm" onClick={() => downloadUrl(j.resultUrl!)}>
+              <Button size="sm" onClick={() => downloadUrl(j.resultUrl!, jobFileName(j))}>
                 {t('action.download')}
               </Button>
             ) : null}
@@ -566,6 +569,17 @@ function ReportTable({
   const hasTotals = cols.some((c) => c.sum);
   const firstText = cols.findIndex((c) => !numeric(c));
   const cell = (c: ReportColumnDef, r: ReportRow) => {
+    // attached file (cash proof): a signed link opened in a new tab, without opening the row's document
+    if (c.type === 'file') {
+      const url = r[c.key];
+      return typeof url === 'string' ? (
+        <a href={url} target="_blank" rel="noopener noreferrer" className="whitespace-nowrap underline hover:text-text-primary" onClick={(e) => e.stopPropagation()} data-testid="report-file">
+          {t('report.file.view')}
+        </a>
+      ) : (
+        '—'
+      );
+    }
     const text = cellText(c, r[c.key], t, locale);
     if (c.type === 'date' || c.type === 'datetime') return <span className="whitespace-nowrap">{text}</span>;
     return numeric(c) || c.key === 'sku' || c.key === 'phone' || c.key === 'number' || c.key === 'reference' ? <Ltr className="whitespace-nowrap tabular-nums">{text}</Ltr> : text;

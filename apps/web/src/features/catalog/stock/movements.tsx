@@ -13,7 +13,7 @@ import { Link, useRouter } from '@/i18n/navigation';
 import { toMenuActions } from '@/lib/actions';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
-import { downloadUrl, trackJob } from '@/lib/jobs';
+import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
 import { useSession } from '@/lib/session';
 import { useListState } from '@/lib/use-list-state';
 import { useMovementStats } from '@/features/gds/api';
@@ -88,11 +88,12 @@ function Journal() {
       const entity = t('movements.export.entity');
       trackJob({
         jobId,
+        download: true,
         started: t('toast.jobStarted'),
         progress: (job) => t('toast.export.progress', { entity, pct: job.progress, rows: formatNumber(job.total ?? 0) }),
         done: (job) => ({
           message: t('toast.export.done', { file: t('movements.export.file') }),
-          action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!) } : undefined,
+          action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!, jobFileName(job)) } : undefined,
         }),
         failed: (job, error) => (job?.error?.message ? `${job.error.message} (${job.error.code})` : errorMessage(error, t)),
       });

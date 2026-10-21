@@ -2,7 +2,7 @@
 // rule (> 10 % ⇒ note), expense margin preview, cash selection (pills ↔ table ↔ KPIs use the same parameters).
 import { describe, expect, it } from 'vitest';
 import { orderImportPhase } from '@/features/orders/import/order-import';
-import { cashSelection, cashSelectionQuery, closingGap, daysList, defaultReceiveQty, int, inventoryTotals, lineVariants, marginPreview, periodDays, priceEdited, purchaseTotals, receiveSummary, saleClientBody, saleSheetSnapshot, saleTotals, selectionDay, unitsLabel, variance } from './logic';
+import { cashDateIso, cashSelection, cashSelectionQuery, closingGap, daysList, defaultReceiveQty, int, inventoryTotals, lineVariants, marginPreview, periodDays, priceEdited, purchaseTotals, receiveSummary, saleClientBody, saleSheetSnapshot, saleTotals, selectionDay, unitsLabel, variance } from './logic';
 
 describe('money input', () => {
   it('reads digits only, never NaN', () => {
@@ -191,5 +191,16 @@ describe('new sale sheet: client body, leave guard snapshot, variants of an edit
     expect(lineVariants(saved, undefined)).toEqual(saved);
     expect(lineVariants(saved, [{ id: 'v-old', name: 'M (fresh)' }, { id: 'v2', name: 'L' }])).toEqual([{ id: 'v-old', name: 'M (fresh)' }, { id: 'v2', name: 'L' }]);
     expect(lineVariants(saved, [{ id: 'v2', name: 'L' }])).toEqual([{ id: 'v2', name: 'L' }, { id: 'v-old', name: 'M' }]);
+  });
+});
+
+describe('cash row date (tester report 2026-10-20: the time of an edited row)', () => {
+  it('day + time of the dialog are Africa/Algiers wall-clock (UTC+1)', () => {
+    expect(cashDateIso('2026-10-19', '09:45')).toBe('2026-10-19T08:45:00.000Z');
+    expect(cashDateIso('2026-10-20', '00:30')).toBe('2026-10-19T23:30:00.000Z');
+  });
+  it('an empty or partial time means noon', () => {
+    expect(cashDateIso('2026-10-19', '')).toBe('2026-10-19T11:00:00.000Z');
+    expect(cashDateIso('2026-10-19', '9:5')).toBe('2026-10-19T11:00:00.000Z');
   });
 });

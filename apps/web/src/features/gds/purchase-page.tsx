@@ -11,6 +11,7 @@ import { QueryError } from '@/components/global-states';
 import { useOffline } from '@/features/orders/offline';
 import { Link, useRouter } from '@/i18n/navigation';
 import { actionState } from '@/lib/actions';
+import { useBack } from '@/lib/back';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { usePurchase } from './api';
 import { ActionButton, usePurchaseActions } from './purchase-dialogs';
@@ -33,17 +34,18 @@ function PurchaseDetail({ id }: { id: string }) {
   const offline = useOffline();
   const actions = usePurchaseActions({ onDeleted: () => router.push('/purchases') });
   const day = useDayLabel();
+  const back = useBack({ href: '/purchases', label: t('nav.purchases') });
   const p = q.data;
   if (q.isPending)
     return (
-      <AppPage title={t('nav.purchases')} back={{ href: '/purchases', label: t('nav.purchases') }} permission="gds.read">
+      <AppPage title={t('nav.purchases')} back={back} permission="gds.read">
         <Skeleton className="h-80" />
       </AppPage>
     );
   if (q.isError || !p)
     return (
-      <AppPage title={t('nav.purchases')} back={{ href: '/purchases', label: t('nav.purchases') }} permission="gds.read">
-        <QueryError error={q.error} onRetry={() => q.refetch()} backHref="/purchases" />
+      <AppPage title={t('nav.purchases')} back={back} permission="gds.read">
+        <QueryError error={q.error} onRetry={() => q.refetch()} backHref={back.href} />
       </AppPage>
     );
   const receive = actionState(p.actions, 'receive', t);
@@ -62,7 +64,7 @@ function PurchaseDetail({ id }: { id: string }) {
   return (
     <AppPage
       title={t('purchases.page.title', { number: p.number })}
-      back={{ href: '/purchases', label: t('nav.purchases') }}
+      back={back}
       permission="gds.read"
       badges={
         <span className="flex flex-wrap items-center gap-1.5" data-testid="purchase-pills">

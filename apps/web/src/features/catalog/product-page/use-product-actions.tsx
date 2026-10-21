@@ -9,7 +9,7 @@ import { useRouter } from '@/i18n/navigation';
 import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
-import { downloadUrl, trackJob } from '@/lib/jobs';
+import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
 import { useSession } from '@/lib/session';
 import { AdjustStockDialog } from '../adjust-stock-dialog';
 import { catalogApi, useCatalogRefresh } from '../api';
@@ -57,11 +57,12 @@ export function useProductActions(o: {
       const { jobId } = await catalogApi.bulkExport([p.id]);
       trackJob({
         jobId,
+        download: true,
         started: t('toast.jobStarted'),
         progress: (job) => t('toast.export.progress', { entity: t('products.page.export.entity'), pct: job.progress, rows: job.total ?? 1 }),
         done: (job) => ({
           message: t('toast.export.done', { file: p.sku }),
-          action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!) } : undefined,
+          action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!, jobFileName(job)) } : undefined,
         }),
         failed: (job, error) => job?.error?.message || errorMessage(error, t),
       });

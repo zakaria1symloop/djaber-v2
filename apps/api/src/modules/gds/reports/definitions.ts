@@ -66,6 +66,43 @@ async function soldLines(ctx: ReportCtx, f: { categoryId?: string; productId?: s
   return rows.map((x) => ({ pid: x.pid, vid: x.vid, product: x.product, variant: x.variant, sku: x.sku, cid: x.cid, category: x.category, qty: n(x.qty), revenue: n(x.rev), cogs: n(x.cogs), docs: x.docs }));
 }
 
+type CashSource = { id: string; sourceType: string | null; sourceId: string | null; correctsTransactionId: string | null };
+type CashDoc = { type: 'order' | 'sale' | 'purchase'; id: string; number: string };
+/**
+ * Document behind each cash row: its order / sale / purchase, through the payment entry of an automatic payment row, and
+ * for a manual correction the document of the row it corrects (same rule as `GET /cash` `reference`).
+ */
+async function cashDocuments(txs: CashSource[]): Promise<(t: CashSource) => CashDoc | null> {
+  const correctedIds = [...new Set(txs.filter((t) => t.correctsTransactionId && t.sourceType !== 'closing').map((t) => t.correctsTransactionId!))];
+  const corrected = correctedIds.length ? await prisma.cashTransaction.findMany({ where: { id: { in: correctedIds } }, select: { id: true, sourceType: true, sourceId: true, correctsTransactionId: true } }) : [];
+  const byId = new Map(corrected.map((c) => [c.id, c]));
+  const all = [...txs, ...corrected];
+  const entryIds = all.filter((t) => t.sourceType === 'payment_entry' && t.sourceId).map((t) => t.sourceId!);
+  const entries = entryIds.length ? await prisma.paymentEntry.findMany({ where: { id: { in: entryIds } }, select: { id: true, sourceType: true, sourceId: true } }) : [];
+  const byEntry = new Map(entries.map((e) => [e.id, e]));
+  const target = (t: CashSource): { type: CashDoc['type']; id: string } | null => {
+    if (t.sourceType === 'payment_entry' && t.sourceId) {
+      const e = byEntry.get(t.sourceId);
+      return e && (e.sourceType === 'order' || e.sourceType === 'sale' || e.sourceType === 'purchase') ? { type: e.sourceType, id: e.sourceId } : null;
+    }
+    return (t.sourceType === 'order' || t.sourceType === 'sale' || t.sourceType === 'purchase') && t.sourceId ? { type: t.sourceType, id: t.sourceId } : null;
+  };
+  const targets = all.map(target).filter((x): x is NonNullable<typeof x> => !!x);
+  const ids = (type: CashDoc['type']) => [...new Set(targets.filter((x) => x.type === type).map((x) => x.id))];
+  const [orders, sales, purchases] = await Promise.all([
+    ids('order').length ? prisma.order.findMany({ where: { id: { in: ids('order') } }, select: { id: true, number: true } }) : [],
+    ids('sale').length ? prisma.sale.findMany({ where: { id: { in: ids('sale') } }, select: { id: true, number: true } }) : [],
+    ids('purchase').length ? prisma.purchase.findMany({ where: { id: { in: ids('purchase') } }, select: { id: true, number: true } }) : [],
+  ]);
+  const numbers = new Map([...orders, ...sales, ...purchases].map((d) => [d.id, d.number]));
+  return (t) => {
+    const own = target(t);
+    const c = own ? null : t.correctsTransactionId ? byId.get(t.correctsTransactionId) : undefined;
+    const x = own ?? (c ? target(c) : null);
+    return x && numbers.has(x.id) ? { ...x, number: numbers.get(x.id)! } : null;
+  };
+}
+
 /** `source` / `channelId` of the report filters (M11, ANA-04). */
 const sourceFilters = (ctx: ReportCtx) => ({ source: str(ctx, 'source'), channelId: str(ctx, 'channelId') });
 
@@ -447,14 +484,17 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     const { gte, lt } = r(ctx);
     const [before, txs] = await Promise.all([
       prisma.$queryRaw<{ b: bigint }[]>`SELECT coalesce(sum(CASE WHEN "type" = 'income' THEN "amount" ELSE -"amount" END), 0)::bigint b FROM "CashTransaction" WHERE "workspaceId" = ${ws(ctx)} AND "date" < ${gte}`,
-      prisma.cashTransaction.findMany({ where: { date: { gte, lt } }, orderBy: [{ date: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }] }),
+      prisma.cashTransaction.findMany({ where: { date: { gte, lt } }, orderBy: [{ date: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }], include: { proof: { select: { storageKey: true } } } }),
     ]);
+    const docOf = await cashDocuments(txs);
     const opening = n(before[0]?.b);
     let balance = opening;
     const q = str(ctx, 'q')?.toLowerCase();
+    // `proof` carries the storage key; the report service turns it into a signed link (file column)
     const all: ReportRow[] = txs.map((t) => {
       balance += t.type === 'income' ? t.amount : -t.amount;
-      return { date: iso(t.date), description: t.description, reference: t.reference, category: t.category, method: t.method, income: t.type === 'income' ? t.amount : 0, expense: t.type === 'expense' ? t.amount : 0, balance, _ref: t.sourceType === 'order' || t.sourceType === 'sale' || t.sourceType === 'purchase' ? { type: t.sourceType, id: t.sourceId! } : null };
+      const doc = docOf(t);
+      return { date: iso(t.date), description: t.description, reference: doc?.number ?? t.reference, category: t.category, method: t.method, income: t.type === 'income' ? t.amount : 0, expense: t.type === 'expense' ? t.amount : 0, balance, proof: t.proof?.storageKey ?? null, _ref: doc ? { type: doc.type, id: doc.id } : null };
     });
     const rows = q ? all.filter((x) => [x.description, x.reference].some((v) => typeof v === 'string' && v.toLowerCase().includes(q))) : all;
     const income = sumOf(all, 'income');

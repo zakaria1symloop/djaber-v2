@@ -17,7 +17,7 @@ import { refusal } from '@/features/orders/dialogs/common';
 import { useOffline } from '@/features/orders/offline';
 import { Link } from '@/i18n/navigation';
 import { useLocaleCode, useT } from '@/lib/i18n';
-import { downloadUrl, type JobDto } from '@/lib/jobs';
+import { downloadUrl, type JobDto, jobFileName } from '@/lib/jobs';
 import { useWorkspaceId } from '@/lib/session';
 import { jobView } from './logic';
 import { reportsApi, reportsKeys, useExportJobs, useReportsHub } from './api';
@@ -177,7 +177,7 @@ export function ExportJobs() {
                   {t('action.cancel')}
                 </Button>
               ) : v.state === 'ready' && job.resultUrl ? (
-                <Button variant="ghost" onClick={() => downloadUrl(job.resultUrl!)} data-testid="job-download">
+                <Button variant="ghost" onClick={() => downloadUrl(job.resultUrl!, jobFileName(job))} data-testid="job-download">
                   {t('action.download')}
                 </Button>
               ) : v.state === 'failed' ? (

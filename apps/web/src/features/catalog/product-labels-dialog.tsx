@@ -8,7 +8,7 @@ import { useRef, useState } from 'react';
 import { DialogFooter, refusal, useOnOpen } from '@/features/orders/dialogs/common';
 import { deliveryApi } from '@/features/delivery/api';
 import { useT } from '@/lib/i18n';
-import { downloadUrl, trackJob } from '@/lib/jobs';
+import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
 import { uuid } from '@/lib/uuid';
 
 export function ProductLabelsDialog({ open, ids, onClose, onStarted }: { open: boolean; ids: string[]; onClose: () => void; onStarted?: () => void }) {
@@ -39,7 +39,7 @@ export function ProductLabelsDialog({ open, ids, onClose, onStarted }: { open: b
         jobId,
         started: t('toast.jobStarted'),
         progress: (job) => t('products.labels.progress', { pct: job.progress }),
-        done: (job) => ({ message: t('products.labels.done'), action: job.resultUrl ? { label: t('action.open'), onClick: () => downloadUrl(job.resultUrl!) } : undefined }),
+        done: (job) => ({ message: t('products.labels.done'), action: job.resultUrl ? { label: t('action.open'), onClick: () => downloadUrl(job.resultUrl!, jobFileName(job)) } : undefined }),
         failed: (job, e) => (job?.error ? `${job.error.message} (${job.error.code})` : refusal(e, t)),
       });
       onStarted?.();

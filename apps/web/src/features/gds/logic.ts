@@ -3,6 +3,7 @@
 // period selection (09 §4: pills, table and KPIs read the same parameters) and small labels.
 import { inventoryNeedsNote, inventoryVariancePct, roundHalfUp } from '@djaber/shared';
 import { addDays, algiersDay } from '@/features/catalog/stock/logic';
+import { algiersInstant } from '@/features/orders/logic';
 import type { GdsPeriodKey } from './contracts';
 
 /* ---------- money ---------- */
@@ -179,3 +180,10 @@ export const unitsLabel = (u: { ordered: number; received: number }) => `${u.rec
 
 /** Theoretical vs counted: the gap of the close dialog (counted − theoretical); a note is required when ≠ 0. */
 export const closingGap = (theoretical: number, counted: string) => (counted.trim() === '' ? null : int(counted) * (counted.trim().startsWith('-') ? -1 : 1) - theoretical);
+
+/* ---------- cash row date (manual / correction dialog) ---------- */
+/**
+ * Instant of the row: the day and the time of the dialog, both Africa/Algiers (the time column of the ledger shows that
+ * time — tester report 2026-10-20: an edited row kept a time nobody could see or change). An empty time means noon.
+ */
+export const cashDateIso = (day: string, time: string) => algiersInstant(day, /^\d{2}:\d{2}$/.test(time) ? time : '12:00').toISOString();

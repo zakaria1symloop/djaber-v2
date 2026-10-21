@@ -11,7 +11,7 @@ import { Link } from '@/i18n/navigation';
 import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
-import { downloadUrl, trackJob } from '@/lib/jobs';
+import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
 import { useSession } from '@/lib/session';
 import { catalogApi, useCatalogRefresh, useCategories } from '../api';
 import { flattenCategories, type BulkResponse, type ProductListItem } from '../contracts';
@@ -30,11 +30,12 @@ export function useProductsExport() {
       const entity = t('products.export.entity');
       trackJob({
         jobId,
+        download: true,
         started: t('toast.jobStarted'),
         progress: (job) => t('toast.export.progress', { entity, pct: job.progress, rows: formatNumber(job.total ?? 0) }),
         done: (job) => ({
           message: t('toast.export.done', { file: t('products.export.file') }),
-          action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!) } : undefined,
+          action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!, jobFileName(job)) } : undefined,
         }),
         failed: (job, error) => (job?.error ? `${job.error.message} (${job.error.code})` : errorMessage(error, t)),
       });

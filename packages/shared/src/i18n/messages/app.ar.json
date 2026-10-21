@@ -5722,7 +5722,7 @@
  "sales.action.collect": "تحصيل الباقي",
  "sales.action.editPayment": "تعديل الدفع",
  "sales.action.linkClient": "ربط بزبون",
- "sales.action.receipt": "وصل PDF",
+ "sales.action.receipt": "وصل البيع (PDF)",
  "sales.action.validate": "تأكيد البيع",
  "sales.cancel.note": "> 7 أيام: SALE_CANNOT_CANCEL_AFTER_7D",
  "sales.cancel.reason.customer_return": "إرجاع من الزبون",

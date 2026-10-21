@@ -7,7 +7,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { JOB_BANNER_TONE, jobBannerState, withoutJobParam } from '@/lib/job-banner';
-import { useJob } from '@/lib/jobs';
+import { downloadUrl, jobFileName, useJob } from '@/lib/jobs';
 
 export function JobParamBanner({ className }: { className?: string }) {
   const params = useSearchParams();
@@ -38,7 +38,7 @@ function JobBanner({ jobId, className }: { jobId: string; className?: string }) 
       dismissLabel={t('action.close')}
       action={
         job?.resultUrl && (state === 'done' || state === 'partial')
-          ? { label: t('gaps.job.download'), href: job.resultUrl }
+          ? { label: t('gaps.job.download'), onClick: () => void downloadUrl(job.resultUrl!, jobFileName(job)) }
           : undefined
       }
     >
