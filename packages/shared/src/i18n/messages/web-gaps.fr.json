@@ -60,6 +60,7 @@
  "gaps.orders.notify.noConversation": "Commande sans conversation : le client ne peut pas être prévenu par message.",
  "import.template.download": "Télécharger un exemple (CSV)",
  "import.template.fileName": "exemple-import-produits.csv",
+ "orderForm.client.completePhone": "Ce client n'a pas de téléphone : saisissez-le, sa fiche sera complétée avec la commande.",
  "report.col.ordersRevenue": "Revenus commandes",
  "report.col.proof": "Justificatif",
  "report.col.salesRevenue": "Revenus ventes",

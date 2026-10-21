@@ -465,11 +465,16 @@ export class ClientService implements OnModuleInit {
    * the conversation's placeholder completed with the collected identity, else a new client. A placeholder of the
    * conversation that differs from the phone owner is merged into the owner (identity re-pointed, conversation re-linked).
    */
-  async resolveForOrder(tx: Tx, input: { id: string } | { name: string; phone: string; phone2?: string | null; email?: string | null }, o: { source: 'manual' | 'ai' | 'api' | 'import'; conversationClientId?: string | null }): Promise<{ client: Client; created: boolean }> {
+  async resolveForOrder(tx: Tx, input: { id: string; phone?: string } | { name: string; phone: string; phone2?: string | null; email?: string | null }, o: { source: 'manual' | 'ai' | 'api' | 'import'; conversationClientId?: string | null }): Promise<{ client: Client; created: boolean }> {
     if ('id' in input) {
       const c = await tx.client.findFirst({ where: { id: input.id, deletedAt: null } });
       if (!c) throw new AppException('VALIDATION_ERROR', {}, { 'client.id': 'validation.invalid' });
-      return { client: c, created: false };
+      if (c.phone) return { client: c, created: false };
+      // no order without a phone to call / deliver (tester report 2026-10-20): the order form gives it, the client is completed
+      if (!input.phone) throw new AppException('VALIDATION_ERROR', {}, { 'client.phone': 'validation.required' });
+      const owner = await tx.client.findFirst({ where: { phone: input.phone, deletedAt: null, id: { not: c.id } }, select: { id: true, name: true } });
+      if (owner) throw new AppException('CLIENT_PHONE_EXISTS', { clientName: owner.name }, { 'client.phone': 'validation.phone_taken' }, { clientId: owner.id });
+      return { client: await tx.client.update({ where: { id: c.id }, data: { phone: input.phone, isPlaceholder: false } }), created: false };
     }
     const convClient = o.conversationClientId ? await tx.client.findFirst({ where: { id: o.conversationClientId } }) : null;
     const owner = await tx.client.findFirst({ where: { phone: input.phone, deletedAt: null } });

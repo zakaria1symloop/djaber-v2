@@ -31,7 +31,8 @@ type FormState = { name: string; phone: string; phone2: string; email: string; t
 const blank: FormState = { name: '', phone: '', phone2: '', email: '', tags: [], wilayaId: null, communeId: null, address: '', notes: '' };
 const fromClient = (c: Client): FormState => {
   const a = c.addresses.find((x) => x.isDefault) ?? c.addresses[0];
-  return { name: c.isPlaceholder ? '' : c.name, phone: c.phone ?? '', phone2: c.phone2 ?? '', email: c.email ?? '', tags: c.tags, wilayaId: a?.wilayaId ?? null, communeId: a?.communeId ?? null, address: a?.address ?? '', notes: c.notes ?? '' };
+  // « Compléter la fiche »: what is known is kept (a name the AI collected); only the generic « FB User ·123456 » is cleared
+  return { name: c.isPlaceholder && /^(FB|IG) User ·/.test(c.name) ? '' : c.name, phone: c.phone ?? '', phone2: c.phone2 ?? '', email: c.email ?? '', tags: c.tags, wilayaId: a?.wilayaId ?? null, communeId: a?.communeId ?? null, address: a?.address ?? '', notes: c.notes ?? '' };
 };
 const FIELDS = ['name', 'phone', 'phone2', 'email', 'tags', 'notes', 'address', 'wilayaId', 'communeId'] as const;
 

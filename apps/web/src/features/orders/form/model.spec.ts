@@ -101,6 +101,16 @@ describe('validation', () => {
     expect(e['client.phone']?.key).toBe('validation.phone');
     expect(validateOrderForm(filled({ client: { id: 'c1', name: '', phone: '', phone2: '' } }))['client.name']).toBeUndefined();
   });
+  it('a picked client without a phone (« À compléter ») is ordered for once its phone is given — sent with the client id (tester report 2026-10-20)', () => {
+    const noPhone = { id: 'c1', name: 'Amina', phone: '', phone2: '', hasPhone: false };
+    expect(validateOrderForm(filled({ client: noPhone }))['client.phone']?.key).toBe('validation.required');
+    expect(validateOrderForm(filled({ client: { ...noPhone, phone: '12' } }))['client.phone']?.key).toBe('validation.phone');
+    const ok = filled({ client: { ...noPhone, phone: '0555 12 34 56' } });
+    expect(validateOrderForm(ok)['client.phone']).toBeUndefined();
+    expect(toCreatePayload(ok, { status: 'new', canMoney: false }).client).toEqual({ id: 'c1', phone: '0555123456' });
+    // a client with a phone on record is sent by id only
+    expect(toCreatePayload(filled({ client: { id: 'c1', name: 'A', phone: '0555123456', phone2: '', hasPhone: true } }), { status: 'new', canMoney: false }).client).toEqual({ id: 'c1' });
+  });
   it('at least one line, variant required, quantity and price', () => {
     expect(validateOrderForm(filled({ lines: [] })).lines?.key).toBe('orderForm.error.noItems');
     const e = validateOrderForm(filled({ lines: [line({ hasVariants: true, variants, variantId: null, unitPrice: '' })] }));

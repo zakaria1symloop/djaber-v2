@@ -150,6 +150,22 @@ describe('creation (ORD-01 / ORD-02, 04 §3 "Order created")', () => {
     expect(refused.body.error).toMatchObject({ code: 'CUSTOMER_BLOCKED' });
     await postOrder(owner, orderBody(p.id, { client: { name: 'Client bloqué', phone: number }, confirm: true })).expect(201);
   });
+
+  it('tester report 2026-10-20: no order for a client without a phone — the order gives the phone and completes the « À compléter » client; a phone of another client is refused', async () => {
+    const owner = await shop();
+    const p = await createProduct(owner, { price: 1000, stock: 5 });
+    const placeholder = await db.client.create({ data: { workspaceId: owner.workspaceId, name: 'Amina Benali', isPlaceholder: true, source: 'ai' } });
+    const refused = await postOrder(owner, orderBody(p.id, { client: { id: placeholder.id } })).expect(422);
+    expect(refused.body.error.fields).toEqual({ 'client.phone': 'validation.required' });
+    const taken = phone();
+    await postOrder(owner, orderBody(p.id, { client: { name: 'Autre client', phone: taken } })).expect(201);
+    const conflict = await postOrder(owner, orderBody(p.id, { client: { id: placeholder.id, phone: taken } })).expect(409);
+    expect(conflict.body.error).toMatchObject({ code: 'CLIENT_PHONE_EXISTS', fields: { 'client.phone': 'validation.phone_taken' } });
+    const number = phone();
+    const ok = await postOrder(owner, orderBody(p.id, { client: { id: placeholder.id, phone: number } })).expect(201);
+    expect(ok.body.data.client).toMatchObject({ id: placeholder.id, phone: number });
+    expect(await db.client.findUniqueOrThrow({ where: { id: placeholder.id } })).toMatchObject({ phone: number, isPlaceholder: false, name: 'Amina Benali' });
+  });
 });
 
 describe('status machine and effects (04 §1.2, §3)', () => {

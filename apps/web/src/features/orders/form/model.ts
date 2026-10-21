@@ -15,6 +15,8 @@ export type FormClient = {
   isPlaceholder?: boolean;
   blocked?: boolean;
   orderCount?: number;
+  /** false: the picked client has no phone on record — the form asks for it and the order completes the client */
+  hasPhone?: boolean;
 };
 export type VariantOption = {
   id: string;
@@ -146,6 +148,8 @@ export const validPhone = (s: string) => isPhoneDz(normalizePhoneDz(s.trim()));
 export function validateOrderForm(v: OrderFormValues, o: { status?: 'new' | 'confirmed'; quotedFee?: number | null } = {}): FormErrors {
   const status = o.status ?? v.status;
   const e: FormErrors = {};
+  // a picked client without a phone (« À compléter ») is ordered for once its phone is given here
+  if (v.client.id && v.client.hasPhone === false && !validPhone(v.client.phone)) e['client.phone'] = { key: v.client.phone.trim() ? 'validation.phone' : 'validation.required' };
   if (!v.client.id) {
     if (!validName(v.client.name)) e['client.name'] = { key: v.client.name.trim() ? 'validation.name' : 'validation.required' };
     if (!validPhone(v.client.phone))
@@ -180,7 +184,7 @@ export type CheckItem = {
   params?: Record<string, string | number>;
 };
 export function validationChecklist(v: OrderFormValues, quote: { wilayaServed: boolean } | null): CheckItem[] {
-  const clientOk = !!v.client.id || (validName(v.client.name) && validPhone(v.client.phone));
+  const clientOk = v.client.id ? v.client.hasPhone !== false || validPhone(v.client.phone) : validName(v.client.name) && validPhone(v.client.phone);
   const stockOk = v.lines.length > 0 && v.lines.every((l) => lineStockWarning(l) !== 'insufficient');
   const addressOk = !!v.wilayaId && !!v.communeId && (v.isStopdesk || v.address.trim().length >= ADDRESS_MIN);
   const withVariants = v.lines.filter((l) => l.hasVariants);
@@ -210,7 +214,7 @@ export function validationChecklist(v: OrderFormValues, quote: { wilayaServed: b
 /* ---------- payload ---------- */
 export function toCreatePayload(v: OrderFormValues, o: { status: 'new' | 'confirmed'; canMoney: boolean; confirm?: boolean }): CreateOrderInput {
   const client: CreateOrderInput['client'] = v.client.id
-    ? { id: v.client.id }
+    ? { id: v.client.id, ...(v.client.hasPhone === false ? { phone: normalizePhoneDz(v.client.phone.trim()) } : {}) }
     : {
         name: v.client.name.trim(),
         phone: normalizePhoneDz(v.client.phone.trim()),

@@ -60,6 +60,7 @@
  "gaps.orders.notify.noConversation": "Order without a conversation: the customer cannot be notified by message.",
  "import.template.download": "Download a sample file (CSV)",
  "import.template.fileName": "product-import-sample.csv",
+ "orderForm.client.completePhone": "This client has no phone: enter it, the client record is completed with the order.",
  "report.col.ordersRevenue": "Orders revenue",
  "report.col.proof": "Receipt",
  "report.col.salesRevenue": "Sales revenue",

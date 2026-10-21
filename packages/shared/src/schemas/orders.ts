@@ -95,9 +95,12 @@ const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'validation.date');
 const int = z.coerce.number().int('validation.range').min(0, 'validation.range');
 
 // --- inputs -----------------------------------------------------------------------------------------------------------
-/** An existing client, or a new one (found by normalised phone first — CLI-02). */
+/**
+ * An existing client, or a new one (found by normalised phone first — CLI-02). An existing client without a phone (a
+ * conversation's « À compléter » record) needs `phone` to be ordered for: the order completes the client with it.
+ */
 export const OrderClientInputSchema = z.union([
-  z.object({ id }).strict(),
+  z.object({ id, phone: phone.optional() }).strict(),
   z.object({ name: fullName, phone, phone2: emptyToNull(phone), email: emptyToNull(email) }).strict(),
 ]);
 export const OrderItemInputSchema = z

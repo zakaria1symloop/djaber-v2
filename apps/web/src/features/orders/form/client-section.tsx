@@ -93,6 +93,7 @@ export function ClientSection({
     errors[k] ? fieldError(t, t.has(errors[k]!.key) ? errors[k]!.key : errors[k]!.key, errors[k]!.params as Record<string, string | number>) : undefined;
   const conflictName = conflict?.name ?? owner?.name ?? null;
 
+  const phoneFixed = !!client.id && client.hasPhone !== false;
   return (
     <OrderFormCard index={1} title={t('orderForm.client.title')} badge={t('orderForm.client.badge')} data-section="client">
       {client.id ? (
@@ -206,16 +207,24 @@ export function ClientSection({
             onChange={(e) => onChange({ ...client, name: e.target.value })}
           />
         </Field>
-        <Field label={t('orderForm.client.phone')} htmlFor="client-phone" required error={client.id ? undefined : err('client.phone')}>
+        {/* a picked client without a phone (« À compléter », often created by the AI) gives it here: no order without a
+            phone, and the client's record is completed with it (tester report 2026-10-20) */}
+        <Field
+          label={t('orderForm.client.phone')}
+          htmlFor="client-phone"
+          required
+          error={phoneFixed ? undefined : err('client.phone')}
+          hint={client.id && !phoneFixed ? t('orderForm.client.completePhone') : undefined}
+        >
           <PhoneInput
             id="client-phone"
             maxLength={20}
-            disabled={locked || !!client.id}
-            aria-invalid={!client.id && !!errors['client.phone']}
-            value={client.id ? formatPhoneDz(client.phone) : client.phone}
-            format={client.id ? undefined : formatPhoneOnBlur}
+            disabled={locked || phoneFixed}
+            aria-invalid={!phoneFixed && !!errors['client.phone']}
+            value={phoneFixed ? formatPhoneDz(client.phone) : client.phone}
+            format={phoneFixed ? undefined : formatPhoneOnBlur}
             onChange={(e) => onChange({ ...client, phone: e.target.value })}
-            preview={client.id ? null : phonePreviewLine(t, client.phone)}
+            preview={phoneFixed ? null : phonePreviewLine(t, client.phone)}
           />
         </Field>
       </div>
