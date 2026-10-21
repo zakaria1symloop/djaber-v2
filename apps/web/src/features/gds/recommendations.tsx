@@ -198,6 +198,12 @@ function Cards({ list, offline, simple }: { list: ReturnType<typeof useListState
       router.push(`/purchases/new?${qs.toString()}`);
       return;
     }
+    // a price or promo change is applied by the product form once a price is really saved (tester report 2026-10-20:
+    // the card turned APPLIQUÉE and left the list as soon as the form opened, saved or not)
+    if ((a.kind === 'update_price' || a.kind === 'create_promo') && r.product) {
+      router.push(`/products/${r.product.id}/edit?reco=${r.id}&recoRef=${a.kind === 'create_promo' ? 'promo' : 'product'}`);
+      return;
+    }
     const target =
       a.kind === 'open_supplier' && r.supplier
         ? { href: `/suppliers?sheet=${r.supplier.id}`, refType: 'supplier', refId: r.supplier.id }

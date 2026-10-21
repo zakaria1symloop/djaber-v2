@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Controller, useFieldArray, useForm, type FieldErrors, type Path } from 'react-hook-form';
 import { AppPage } from '@/components/app-page';
 import { ConflictDialog } from '@/components/global-states';
+import { gdsApi } from '@/features/gds/api';
 import { Link, useRouter } from '@/i18n/navigation';
 import { actionState } from '@/lib/actions';
 import { ApiError, apiSession } from '@/lib/api';
@@ -281,10 +282,13 @@ export function ProductForm(props: Props) {
     const from = baseRef.current;
     setSaving(true);
     setFormError(null);
+    // `?reco=` (stock recommendation "Modifier le prix" / "Créer une promo"): applied once a price is really saved
+    let priceSaved = false;
     try {
       const patch = toUpdatePayload(from, v, version, { advanced });
       if (Object.keys(patch).length > 1) {
         const r = await catalogApi.updateProduct(product.id, patch);
+        priceSaved = 'price' in patch || 'oldPrice' in patch;
         versionRef.current = r.data.version;
         qc.setQueryData<Product>(key, r.data);
         afterSave(r.warnings);
@@ -306,13 +310,18 @@ export function ProductForm(props: Props) {
         } else {
           const before = saved.get(row.key);
           const body = before ? variantUpdatePayload(before, row, { advanced }) : {};
-          if (Object.keys(body).length) await catalogApi.updateVariant(product.id, row.id, body);
+          if (Object.keys(body).length) {
+            await catalogApi.updateVariant(product.id, row.id, body);
+            if ('price' in body) priceSaved = true;
+          }
         }
       } catch (e) {
         refused.push({ key: row.key, error: e });
       }
     }
     const failed = refused.length;
+    const reco = search.get('reco');
+    if (reco && priceSaved) await gdsApi.applyStockReco(reco, { refType: search.get('recoRef') === 'promo' ? 'promo' : 'product', refId: product.id }).catch(() => undefined);
     await refresh({ productId: product.id });
     // The saved version becomes the baseline right here (not only through the WS / own-write heuristics of the effect
     // above): after a successful save the form is clean — no "unsaved" note, "Enregistrer" disabled, no leave guard.

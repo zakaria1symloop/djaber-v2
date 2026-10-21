@@ -184,9 +184,10 @@ function PurchaseForm({ purchase }: { purchase?: Purchase }) {
       } else {
         saved = await gdsApi.createPurchase({ ...common, status, amountPaid: totals.paid || undefined }, key.current);
         key.current = uuid();
-        // opened from a restock recommendation: the card turns APPLIQUÉE, linked to this purchase
+        // opened from a restock recommendation: the card turns APPLIQUÉE, linked to this purchase, once it is ordered (a
+        // draft orders nothing yet — the card stays)
         const reco = params.get('reco');
-        if (reco) await gdsApi.applyStockReco(reco, { refType: 'purchase', refId: saved.id }).catch(() => undefined);
+        if (reco && saved.status !== 'draft') await gdsApi.applyStockReco(reco, { refType: 'purchase', refId: saved.id }).catch(() => undefined);
       }
       setDirty(false);
       await refresh();
