@@ -31,10 +31,10 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 ## Catalog, stock, orders
 | # | Issue | Status |
 |---|---|---|
-| P1 | UX-002 (20/10) — deleting images of an approved product sends it back to moderation and blocks sales | todo |
-| P2 | Margin in the products table does not change after an expense is added | todo |
+| P1 | UX-002 (20/10) — deleting images of an approved product sends it back to moderation and blocks sales | done |
+| P2 | Margin in the products table does not change after an expense is added | done |
 | P3 | A product gets a stock movement (order) before the order is confirmed by the merchant | todo |
-| P4 | Product with variants: listed with the base price and stock = sum of variants; the chatbot sells the base product as if it were purchasable | todo |
+| P4 | Product with variants: listed with the base price and stock = sum of variants; the chatbot sells the base product as if it were purchasable | done |
 | P5 | UX-003 (20/10) — duplicate suppliers allowed (same phone / email / name); purchase supplier picker shows names only | todo |
 | P6 | Recommendations: the main action (purchase, change price) marks the recommendation applied and hides it even if the action was not completed | todo |
 | P7 | Client created by the AI without phone: an order can still be created; "Compléter" opens an empty form instead of the known data | todo |

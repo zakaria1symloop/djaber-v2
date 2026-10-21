@@ -177,7 +177,11 @@ export class ToolRegistry {
   }
 
   private view(p: CatalogueProduct) {
-    return { id: p.id, name: p.name, sku: p.sku, price: p.price, oldPrice: p.oldPrice, stock: p.stock, hasVariants: p.hasVariants, variants: p.variants, imageUrl: p.imageUrl, category: p.category };
+    // a product with variants is quoted at its variants' prices only (VARIANT_REQUIRED at create_order)
+    const prices = p.variants.map((v) => v.price);
+    const price = p.hasVariants ? (prices.length ? Math.min(...prices) : null) : p.price;
+    const extra = p.hasVariants ? { priceMax: prices.length ? Math.max(...prices) : null, variantRequired: true } : { oldPrice: p.oldPrice };
+    return { id: p.id, name: p.name, sku: p.sku, price, ...extra, stock: p.stock, hasVariants: p.hasVariants, variants: p.variants, imageUrl: p.imageUrl, category: p.category };
   }
 
   private async search(args: Record<string, unknown>, ctx: ToolRunContext): Promise<ToolResult> {

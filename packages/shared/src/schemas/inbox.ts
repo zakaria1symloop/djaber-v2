@@ -428,7 +428,8 @@ export type MessageAttachmentView = {
   /** set when the download failed for good: the thread shows "média indisponible" */
   error?: string;
 };
-export type MessageCardView = { productId: string; name: string; price: number; imageUrl: string | null; variants?: string };
+/** `price` … `priceMax`: the price range of a product with variants (lowest / highest active variant). */
+export type MessageCardView = { productId: string; name: string; price: number; priceMax?: number; imageUrl: string | null; variants?: string };
 export type MessagePayloadView = {
   cards?: MessageCardView[];
   postback?: string;

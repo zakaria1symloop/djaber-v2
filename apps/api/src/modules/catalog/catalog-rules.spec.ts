@@ -1,9 +1,12 @@
 // Pure rules of the catalogue: low-stock crossing (CAT-09), margins (GDS-09 / EXP-02), moderation trigger and SLA (04 §12),
 // stock state and margin helpers.
+import { formatMoney } from '@djaber/shared';
+import { OutboundSendService } from '../messaging/outbound-send.service';
 import { marginPct, productStockState, stockStateOf } from './catalog.util';
 import { crossing } from './low-stock.evaluator';
 import { computeMargins } from './margin.calculator';
 import { moderationSlaDueAt, needsReview } from './moderation-hook.service';
+import { priceRangeOf } from './product.presenter';
 
 describe('CAT-09 low-stock crossing (quantity ≤ minStock, alerts on the way down only)', () => {
   it.each([
@@ -91,5 +94,17 @@ describe('AT-MOD-08 SLA: 2 business hours, Sun–Thu 09:00–18:00 Africa/Algier
     ['2026-10-16T10:00:00Z', '2026-10-18T10:00:00.000Z'], // Friday → Sunday 11:00
   ])('%s → %s', (from, due) => {
     expect(moderationSlaDueAt(new Date(from)).toISOString()).toBe(due);
+  });
+});
+
+describe('products with variants are sold at their variants\' prices (tester report 2026-10-20)', () => {
+  it('list price range of the active variants; none without variants', () => {
+    expect(priceRangeOf({ hasVariants: true, variants: [{ price: 4500, isActive: true }, { price: 5200, isActive: true }, { price: 9000, isActive: false }] })).toEqual({ min: 4500, max: 5200 });
+    expect(priceRangeOf({ hasVariants: false, variants: [] })).toBeNull();
+    expect(priceRangeOf({ hasVariants: true, variants: [{ price: 4500, isActive: false }] })).toBeNull();
+  });
+  it('a product card shows the variants and their price range', () => {
+    const parts = OutboundSendService.partsOf({ text: null, attachments: null, type: 'product_cards', payload: { cards: [{ productId: 'p', name: 'Robe', price: 4500, priceMax: 5200, variants: 'S · M · L', imageUrl: null }] } } as never);
+    expect(parts).toEqual([{ kind: 'text', text: `Robe\nS · M · L\n${formatMoney(4500)} – ${formatMoney(5200)}` }]);
   });
 });

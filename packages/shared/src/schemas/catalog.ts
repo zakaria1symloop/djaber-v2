@@ -291,6 +291,8 @@ export type ProductListItemView = {
   stockState: StockState;
   hasVariants: boolean;
   variantSummary: string | null;
+  /** products with variants: lowest and highest price of the active variants (the base price is not sold on its own) */
+  priceRange: { min: number; max: number } | null;
   isActive: boolean;
   archived: boolean;
   primaryImageUrl: string | null;

@@ -4,10 +4,15 @@ import { systemLocale } from '../../language';
 import type { PromptContext } from '../prompt.types';
 
 export const productBlock = (p: CatalogueProduct, n: number, descriptionMax: number): string => {
-  const lines = [`#${n} ${p.name} [ID:${p.id}] SKU:${p.sku} PRICE:${p.price} DA${p.oldPrice ? ` (was ${p.oldPrice} DA)` : ''} STOCK:${p.stock === null ? 'service' : p.stock}`];
+  // a product with variants is sold through one of them only: its price is the variants' range, never the base price
+  const prices = p.variants.map((v) => v.price);
+  const [min, max] = [Math.min(...prices), Math.max(...prices)];
+  const price = !p.hasVariants ? `${p.price} DA${p.oldPrice ? ` (was ${p.oldPrice} DA)` : ''}` : !prices.length ? 'no variant available' : min === max ? `${min} DA` : `${min}-${max} DA by variant`;
+  const lines = [`#${n} ${p.name} [ID:${p.id}] SKU:${p.sku} PRICE:${price} STOCK:${p.stock === null ? 'service' : p.stock}`];
   const description = (p.description ?? '').replace(/\s+/g, ' ').trim().slice(0, descriptionMax);
   if (description) lines.push(description);
   if (p.variants.length) lines.push(`VARIANTS: ${p.variants.map((v) => `${v.name} [VID:${v.id}] ${v.price} DA stock ${v.stock}`).join('; ')}`);
+  if (p.hasVariants) lines.push('VARIANT REQUIRED: the customer chooses one of the VARIANTS; never offer this product without a variant or at another price.');
   for (const a of p.also) lines.push(`ALSO: ${a.name} [ID:${a.id}] ${a.price} DA — ${a.reason?.trim() || 'often bought together'}`);
   return lines.join('\n');
 };

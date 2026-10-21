@@ -306,6 +306,12 @@ describe('expenses & margins (GDS-09)', () => {
     const margins = (await owner.get(`/products/${p.id}/margins`).expect(200)).body.data;
     expect(margins).toMatchObject({ expensesPerUnit: 300, trueCost: 3300, marginDzd: 2700, marginPct: 45, sales30d: { units: 10, revenue: 60000 } });
     expect((await owner.get(`/products/${p.id}`).expect(200)).body.data.pricing).toEqual(margins);
+    // tester report 2026-10-20: the list shows (and filters on) the same margin as the product page, expenses included
+    const listed = (await owner.get(`/products?ids=${p.id}`).expect(200)).body.data[0];
+    expect(listed.marginPct).toBe(45);
+    expect((await owner.get(`/products/${p.id}`).expect(200)).body.data.marginPct).toBe(45);
+    expect((await owner.get(`/products?ids=${p.id}&minMargin=46`).expect(200)).body.data).toHaveLength(0);
+    expect((await owner.get(`/products?ids=${p.id}&minMargin=44&maxMargin=46`).expect(200)).body.data).toHaveLength(1);
 
     expect((await owner.patch(`/products/${p.id}/expenses/${ads.body.data.id}`, { amount: 500, date: algiersDay() }).expect(200)).body.data).toMatchObject({ amount: 500 });
     expect((await owner.get(`/products/${p.id}/margins`).expect(200)).body.data.expensesPerUnit).toBe(350);

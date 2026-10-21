@@ -8,7 +8,7 @@ import { ModerationService } from '../../src/modules/admin-ops/moderation/modera
 import { TrustLevelService } from '../../src/modules/admin-ops/moderation/trust-level.service';
 import { asAdmin, asOperator, asOwner, type Actor } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
-import { createProduct, testAgent } from '../support/m2';
+import { createProduct, image, testAgent, upload } from '../support/m2';
 import { auditRows, drainAll, PLATFORM_ROLES, platformUser, roomEvents, setTrust, type PlatformActorT } from '../support/m10-ops';
 
 let app: TestApp;
@@ -90,6 +90,28 @@ describe('pre-screen and auto-approval', () => {
     // approval puts the new price live
     await mod.post(`/admin/moderation/items/${(await itemOf(p.id)).id}/approve`, {}).expect(200);
     expect(await catalogueSees(owner.workspaceId, p.id)).toMatchObject({ price: 1800 });
+  });
+
+  it('tester report 2026-10-20 (UX-002): deleting a picture of an approved product keeps it approved and selling — no new review item, the live snapshot drops the picture', async () => {
+    const owner = await merchant('standard');
+    const p = await createProduct(owner, { name: 'Sac cabas osier', description: 'Osier tressé main.', price: 2500 });
+    const pic = async (name: string) => ({ buffer: await image(800, 800), name, type: 'image/jpeg' });
+    const a = (await upload(owner, app, `/products/${p.id}/images`, 'file', [await pic('a.jpg')]).expect(201)).body.data;
+    await upload(owner, app, `/products/${p.id}/images`, 'file', [await pic('b.jpg')]).expect(201);
+    let row = await db.product.findUniqueOrThrow({ where: { id: p.id } });
+    expect(row.moderationStatus).toBe('approved');
+    expect((row.approvedSnapshot as { images: string[] }).images).toHaveLength(2);
+    await setTrust(owner.workspaceId, 'new'); // any new submission would wait for a human
+    const items = await db.moderationItem.count({ where: { productId: p.id } });
+    await owner.delete(`/products/${p.id}/images/${a.id}`).expect(204);
+    row = await db.product.findUniqueOrThrow({ where: { id: p.id } });
+    expect(row.moderationStatus).toBe('approved');
+    expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(items);
+    expect((row.approvedSnapshot as { images: string[] }).images).toEqual([expect.not.stringContaining(a.url)]);
+    expect(await catalogueSees(owner.workspaceId, p.id)).toMatchObject({ id: p.id });
+    // adding a picture is still reviewed
+    await upload(owner, app, `/products/${p.id}/images`, 'file', [await pic('c.jpg')]).expect(201);
+    expect((await db.product.findUniqueOrThrow({ where: { id: p.id } })).moderationStatus).toBe('pending');
   });
 
   it('AT-MOD-10 the inline pre-screen fails ⇒ pending, aiScore null, flag prescreen_unavailable; the moderation-prescreen job scores it later', async () => {

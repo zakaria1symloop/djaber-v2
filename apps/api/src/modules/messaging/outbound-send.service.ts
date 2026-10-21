@@ -173,7 +173,7 @@ export class OutboundSendService implements OnModuleInit {
   async sendCards(conversationId: string, productIds: string[], o: { author?: 'ai' | 'human' | 'system'; kind?: SendKind; aiRunId?: string | null; authorUserId?: string | null; tx?: Tx } = {}): Promise<MessageRow | null> {
     const run = async (tx: Tx) => {
       const wanted = [...new Set(productIds)];
-      const products = await tx.product.findMany({ where: { id: { in: wanted }, deletedAt: null, isActive: true }, select: { id: true, name: true, price: true } });
+      const products = await tx.product.findMany({ where: { id: { in: wanted }, deletedAt: null, isActive: true }, select: { id: true, name: true, price: true, hasVariants: true, variants: { where: { deletedAt: null, isActive: true }, select: { name: true, price: true }, orderBy: { createdAt: 'asc' } } } });
       const images = await tx.productImage.findMany({ where: { productId: { in: products.map((p) => p.id) }, isPrimary: true }, select: { productId: true, url: true } });
       const imageBy = new Map(images.map((i) => [i.productId, i.url]));
       const byId = new Map(products.map((p) => [p.id, p]));
@@ -181,7 +181,13 @@ export class OutboundSendService implements OnModuleInit {
         .map((id) => byId.get(id))
         .filter((p): p is NonNullable<typeof p> => !!p)
         .slice(0, PRODUCT_CARDS_MAX)
-        .map((p) => ({ productId: p.id, name: p.name, price: p.price, imageUrl: imageBy.get(p.id) ?? null }));
+        .map((p): MessageCardView => {
+          // a product with variants shows its variants and their price range, never the base price (tester report 2026-10-20)
+          if (!p.hasVariants || !p.variants.length) return { productId: p.id, name: p.name, price: p.price, imageUrl: imageBy.get(p.id) ?? null };
+          const prices = p.variants.map((v) => v.price);
+          const [min, max] = [Math.min(...prices), Math.max(...prices)];
+          return { productId: p.id, name: p.name, price: min, ...(max !== min ? { priceMax: max } : {}), variants: p.variants.map((v) => v.name).slice(0, 8).join(' · '), imageUrl: imageBy.get(p.id) ?? null };
+        });
       if (!cards.length) return null;
       const { message } = await this.store(tx, conversationId, { author: o.author ?? 'ai', kind: o.kind ?? 'ai', type: 'product_cards', payload: { cards }, aiRunId: o.aiRunId ?? null, authorUserId: o.authorUserId ?? null });
       return message;
@@ -202,7 +208,7 @@ export class OutboundSendService implements OnModuleInit {
     const cards = ((m.payload as { cards?: MessageCardView[] } | null)?.cards ?? []).slice(0, PRODUCT_CARDS_MAX);
     for (const c of cards) {
       if (c.imageUrl) parts.push({ kind: 'attachment', type: 'image', url: c.imageUrl });
-      parts.push({ kind: 'text', text: `${c.name}\n${c.variants ? `${c.variants}\n` : ''}${formatMoney(c.price)}` });
+      parts.push({ kind: 'text', text: `${c.name}\n${c.variants ? `${c.variants}\n` : ''}${formatMoney(c.price)}${c.priceMax && c.priceMax !== c.price ? ` – ${formatMoney(c.priceMax)}` : ''}` });
     }
     return parts;
   }

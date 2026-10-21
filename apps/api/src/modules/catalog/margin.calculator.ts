@@ -4,6 +4,8 @@
 import { roundHalfUp } from '@djaber/shared';
 
 export const MARGIN_PERIOD_DAYS = 30;
+/** Orders whose units count as sold for the fixed-expense share (not cancelled / returned). */
+export const MARGIN_SOLD_STATUSES = ['new', 'confirmed', 'preparing', 'shipped', 'delivered'] as const;
 
 export type MarginInput = {
   price: number;

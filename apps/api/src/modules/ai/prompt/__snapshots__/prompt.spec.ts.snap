@@ -16,9 +16,10 @@ Q: Peut-on échanger ?
 A: Oui, sous 7 jours.
 
 CATALOGUE (2 products — the complete list; never mention a product, a price or a stock that is not below)
-#1 Robe satin bordeaux [ID:11111111-1111-7111-8111-111111111111] SKU:ROB-001 PRICE:4500 DA (was 5200 DA) STOCK:7
+#1 Robe satin bordeaux [ID:11111111-1111-7111-8111-111111111111] SKU:ROB-001 PRICE:4500 DA STOCK:7
 Robe longue en satin, coupe droite.
 VARIANTS: S [VID:33333333-3333-7333-8333-333333333333] 4500 DA stock 4; M [VID:44444444-4444-7444-8444-444444444444] 4500 DA stock 3
+VARIANT REQUIRED: the customer chooses one of the VARIANTS; never offer this product without a variant or at another price.
 ALSO: Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] 900 DA — assortie à la robe
 #2 Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] SKU:CEI-002 PRICE:900 DA STOCK:service
 OUT_OF_STOCK_SENTENCE: "Désolé, {product} est en rupture de stock pour le moment."
@@ -120,17 +121,19 @@ A: Oui, sous 7 jours."
 `;
 
 exports[`prompt sections (04-ai-pipeline §3) §3.5 catalogue: product block, full list, retrieval mode, out-of-stock rules 1`] = `
-"#1 Robe satin bordeaux [ID:11111111-1111-7111-8111-111111111111] SKU:ROB-001 PRICE:4500 DA (was 5200 DA) STOCK:7
+"#1 Robe satin bordeaux [ID:11111111-1111-7111-8111-111111111111] SKU:ROB-001 PRICE:4500 DA STOCK:7
 Robe longue en satin, coupe droite.
 VARIANTS: S [VID:33333333-3333-7333-8333-333333333333] 4500 DA stock 4; M [VID:44444444-4444-7444-8444-444444444444] 4500 DA stock 3
+VARIANT REQUIRED: the customer chooses one of the VARIANTS; never offer this product without a variant or at another price.
 ALSO: Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] 900 DA — assortie à la robe"
 `;
 
 exports[`prompt sections (04-ai-pipeline §3) §3.5 catalogue: product block, full list, retrieval mode, out-of-stock rules 2`] = `
 "CATALOGUE (2 products — the complete list; never mention a product, a price or a stock that is not below)
-#1 Robe satin bordeaux [ID:11111111-1111-7111-8111-111111111111] SKU:ROB-001 PRICE:4500 DA (was 5200 DA) STOCK:7
+#1 Robe satin bordeaux [ID:11111111-1111-7111-8111-111111111111] SKU:ROB-001 PRICE:4500 DA STOCK:7
 Robe longue en satin, coupe droite.
 VARIANTS: S [VID:33333333-3333-7333-8333-333333333333] 4500 DA stock 4; M [VID:44444444-4444-7444-8444-444444444444] 4500 DA stock 3
+VARIANT REQUIRED: the customer chooses one of the VARIANTS; never offer this product without a variant or at another price.
 ALSO: Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] 900 DA — assortie à la robe
 #2 Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] SKU:CEI-002 PRICE:900 DA STOCK:service
 OUT_OF_STOCK_SENTENCE: "Désolé, {product} est en rupture de stock pour le moment."

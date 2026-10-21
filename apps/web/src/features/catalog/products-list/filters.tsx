@@ -166,7 +166,7 @@ export function ProductsFilterPanel({ open, onClose, list, categories, total, ad
           <FilterGroup label={t('products.filter.cost')} source="Product.costPrice">
             <FilterRange {...rangeOf('minCost', 'maxCost')} unit={t('common.currency')} />
           </FilterGroup>
-          <FilterGroup label={t('products.filter.margin')} source="(price − cost) / price">
+          <FilterGroup label={t('products.filter.margin')} source="(price − true cost) / price · EXP-02">
             <FilterRange {...rangeOf('minMargin', 'maxMargin')} unit="%" />
           </FilterGroup>
         </>

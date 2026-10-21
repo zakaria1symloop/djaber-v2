@@ -153,7 +153,17 @@ export class ProductImageService implements OnModuleInit {
         const next = (await this.list(tx, productId))[0];
         if (next) await tx.productImage.update({ where: { id: next.id }, data: { isPrimary: true } });
       }
-      await this.moderation.submit(tx, productId, 'update');
+      // 04 §12: removing a picture adds nothing to review (tester report 2026-10-20) — an approved product stays approved
+      // and its live snapshot loses the picture; a pending / refused one is (re)submitted with its remaining pictures
+      const p = await tx.product.findUniqueOrThrow({ where: { id: productId }, select: { moderationStatus: true, approvedSnapshot: true } });
+      if (p.moderationStatus === 'approved') {
+        const snap = p.approvedSnapshot as { images?: unknown } | null;
+        if (snap && Array.isArray(snap.images)) {
+          const folder = `${folderOf(img.storageKey)}/`;
+          const images = snap.images.filter((u) => typeof u === 'string' && u !== img.url && !u.includes(folder));
+          await tx.product.update({ where: { id: productId }, data: { approvedSnapshot: { ...snap, images } as Prisma.InputJsonValue } });
+        }
+      } else await this.moderation.submit(tx, productId, 'update');
       await this.stock.emitProductUpdated(tx, productId);
       return img.storageKey;
     });

@@ -8,7 +8,7 @@ export const LIST_INCLUDE = {
   category: { select: { id: true, name: true, color: true } },
   unit: { select: { id: true, abbreviation: true } },
   images: { where: { isPrimary: true }, take: 1, select: { url: true } },
-  variants: { where: { deletedAt: null }, select: { name: true, stock: true, minStock: true, isActive: true }, orderBy: { createdAt: 'asc' } },
+  variants: { where: { deletedAt: null }, select: { name: true, price: true, stock: true, minStock: true, isActive: true }, orderBy: { createdAt: 'asc' } },
   currentModeration: { select: { status: true, decision: true, merchantMessage: true, slaDueAt: true } },
   _count: { select: { orderItems: true, saleItems: true } },
 } satisfies Prisma.ProductInclude;
@@ -41,6 +41,12 @@ export const productActions = (p: { trackStock: boolean; isActive: boolean; dele
   ];
 };
 
+/** Lowest / highest price of the active variants of a product with variants (tester report 2026-10-20: the base price was listed as if it were sold). */
+export const priceRangeOf = (p: { hasVariants: boolean; variants: { price: number; isActive: boolean }[] }): { min: number; max: number } | null => {
+  const prices = p.hasVariants ? p.variants.filter((v) => v.isActive).map((v) => v.price) : [];
+  return prices.length ? { min: Math.min(...prices), max: Math.max(...prices) } : null;
+};
+
 export const toListItem = (p: ProductListRow): ProductListItemView => ({
   id: p.id,
   sku: p.sku,
@@ -57,6 +63,7 @@ export const toListItem = (p: ProductListRow): ProductListItemView => ({
   stockState: productStockState(p),
   hasVariants: p.hasVariants,
   variantSummary: p.hasVariants ? variantSummary(p.variants.map((v) => v.name)) : null,
+  priceRange: priceRangeOf(p),
   isActive: p.isActive,
   archived: !!p.deletedAt,
   primaryImageUrl: p.images[0] ? thumbUrlOf(p.images[0].url) : null,

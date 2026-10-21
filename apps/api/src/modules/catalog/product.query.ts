@@ -4,6 +4,7 @@ import { prisma, Prisma, TenantContext } from '@djaber/db';
 import { AppException } from '../../core/errors/app.exception';
 import { algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
 import { likePattern } from './catalog.util';
+import { MARGIN_PERIOD_DAYS, MARGIN_SOLD_STATUSES } from './margin.calculator';
 import type { ProductsQuery } from './dto';
 
 const VARIANT_LOW = Prisma.sql`EXISTS (SELECT 1 FROM "ProductVariant" v WHERE v."productId" = p."id" AND v."deletedAt" IS NULL AND v."isActive" AND v."stock" <= v."minStock")`;
@@ -68,7 +69,14 @@ export const productWhere = (q: Partial<ProductsQuery>): Prisma.Sql => {
   if (q.maxPrice !== undefined) and.push(Prisma.sql`p."price" <= ${q.maxPrice}`);
   if (q.minCost !== undefined) and.push(Prisma.sql`p."costPrice" >= ${q.minCost}`);
   if (q.maxCost !== undefined) and.push(Prisma.sql`p."costPrice" <= ${q.maxCost}`);
-  const margin = Prisma.sql`((p."price" - p."costPrice") * 100.0 / p."price")`;
+  // the margin of the list and of the product page: true cost = cost + per-unit expenses + the 30-day fixed expenses
+  // shared over the units sold in 30 days (margin.calculator, EXP-02)
+  const since = new Date(Date.now() - MARGIN_PERIOD_DAYS * 86_400_000);
+  const perUnit = Prisma.sql`COALESCE((SELECT sum(e."amount") FROM "ProductExpense" e WHERE e."productId" = p."id" AND e."isPerUnit"), 0)`;
+  const fixed = Prisma.sql`COALESCE((SELECT sum(e."amount") FROM "ProductExpense" e WHERE e."productId" = p."id" AND NOT e."isPerUnit" AND e."date" >= ${since}), 0)`;
+  const sold = Prisma.sql`((SELECT COALESCE(sum(i."quantity"), 0) FROM "OrderItem" i JOIN "Order" o ON o."id" = i."orderId" WHERE i."productId" = p."id" AND o."status"::text = ANY(${[...MARGIN_SOLD_STATUSES]}::text[]) AND o."orderedAt" >= ${since})
+    + (SELECT COALESCE(sum(i."quantity"), 0) FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId" WHERE i."productId" = p."id" AND s."status" = 'completed' AND s."soldAt" >= ${since}))`;
+  const margin = Prisma.sql`((p."price" - (p."costPrice" + ${perUnit} + round(${fixed}::numeric / GREATEST(${sold}, 1)))) * 100.0 / NULLIF(p."price", 0))`;
   if (q.minMargin !== undefined) and.push(Prisma.sql`(p."costPrice" IS NOT NULL AND ${margin} >= ${q.minMargin})`);
   if (q.maxMargin !== undefined) and.push(Prisma.sql`(p."costPrice" IS NOT NULL AND ${margin} <= ${q.maxMargin})`);
 

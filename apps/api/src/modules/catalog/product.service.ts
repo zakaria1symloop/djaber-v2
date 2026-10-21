@@ -13,7 +13,7 @@ import { algiersDay } from '../../core/time/algiers';
 import { ExportService } from '../jobs/export.service';
 import { isForeignKey, isUnique, skuTaken, type Warning, type WithWarnings } from './catalog.util';
 import type { ProductsQuery } from './dto';
-import { computeMargins, MARGIN_PERIOD_DAYS } from './margin.calculator';
+import { computeMargins, MARGIN_PERIOD_DAYS, MARGIN_SOLD_STATUSES } from './margin.calculator';
 import { ModerationHookService, needsReview } from './moderation-hook.service';
 import { PlanLimitService } from './plan-limit.service';
 import { folderOf, IMAGE_FILE, isProcessed, THUMB_FILE, thumbUrlOf } from './product-image.util';
@@ -26,7 +26,7 @@ import { VariantService } from './variant.service';
 const DAY_MS = 24 * 3600 * 1000;
 /** MOD-01: a restored product is re-submitted when its last validation is older than 90 days. */
 const RESUBMIT_AFTER_MS = 90 * DAY_MS;
-const SOLD_STATUSES = ['new', 'confirmed', 'preparing', 'shipped', 'delivered'] as const;
+const SOLD_STATUSES = MARGIN_SOLD_STATUSES;
 const RESERVED_STATUSES = ['confirmed', 'preparing'] as const;
 
 const belowCost = (price: number, cost: number | null | undefined): Warning[] =>
@@ -60,7 +60,7 @@ export class ProductService implements OnModuleInit {
   /** `GET /products` */
   async list(q: ProductsQuery): Promise<Page<ProductListItemView>> {
     const { ids, total } = await findProductIds(q, toSkipTake(q));
-    return page((await this.rows(ids)).map(toListItem), total, q);
+    return page(await this.withTrueMargins((await this.rows(ids)).map(toListItem)), total, q);
   }
 
   /** `GET /products/search?q` — what an order form or the AI may sell: active, live, validated products. */
@@ -99,6 +99,32 @@ export class ProductService implements OnModuleInit {
     return { units: (orders._sum.quantity ?? 0) + (sales._sum.quantity ?? 0), revenue: (orders._sum.total ?? 0) + (sales._sum.total ?? 0) };
   }
 
+  /**
+   * The list shows the same margin as the product page — expenses included (tester report 2026-10-20: adding an expense
+   * left the list margin unchanged). Per-unit expenses and the 30-day fixed share are read for the whole page at once.
+   */
+  private async withTrueMargins(items: ProductListItemView[]): Promise<ProductListItemView[]> {
+    const ids = items.filter((i) => i.costPrice !== null).map((i) => i.id);
+    if (!ids.length) return items;
+    const since = new Date(Date.now() - MARGIN_PERIOD_DAYS * DAY_MS);
+    const expenses = await prisma.productExpense.findMany({ where: { productId: { in: ids }, OR: [{ isPerUnit: true }, { date: { gte: since } }] }, select: { productId: true, amount: true, isPerUnit: true } });
+    if (!expenses.length) return items;
+    const withFixed = [...new Set(expenses.filter((e) => !e.isPerUnit).map((e) => e.productId))];
+    const [orders, sales] = withFixed.length
+      ? await Promise.all([
+          prisma.orderItem.groupBy({ by: ['productId'], where: { productId: { in: withFixed }, order: { status: { in: [...SOLD_STATUSES] }, orderedAt: { gte: since } } }, _sum: { quantity: true } }),
+          prisma.saleItem.groupBy({ by: ['productId'], where: { productId: { in: withFixed }, sale: { status: 'completed', soldAt: { gte: since } } }, _sum: { quantity: true } }),
+        ])
+      : [[], []];
+    const units = new Map<string, number>();
+    for (const g of [...orders, ...sales]) units.set(g.productId, (units.get(g.productId) ?? 0) + (g._sum.quantity ?? 0));
+    return items.map((i) => {
+      const own = expenses.filter((e) => e.productId === i.id);
+      if (!own.length) return i;
+      return { ...i, marginPct: computeMargins({ price: i.price, weightedCost: i.costPrice, expenses: own, unitsSold: units.get(i.id) ?? 0 }).marginPct };
+    });
+  }
+
   /** `GET /products/:id/margins` and the "Prix & marge" block of the product page (GDS-09, EXP-02). */
   async margins(productId: string, product?: { price: number; costPrice: number | null }) {
     const p = product ?? (await this.rowOrNotFound(productId));
@@ -128,6 +154,7 @@ export class ProductService implements OnModuleInit {
     const reservedQty = reserved._sum.quantity ?? 0;
     return {
       ...base,
+      marginPct: pricing.marginPct,
       primaryImageUrl: base.primaryImageUrl,
       description: row.description,
       weightGrams: row.weightGrams,

@@ -123,7 +123,20 @@ export default function ProductsPage() {
     { key: 'name', header: t('products.col.product'), sortKey: 'name', hideable: false, cell: nameCell, className: 'max-w-[320px]' },
     { key: 'sku', header: t('products.col.sku'), sortKey: 'sku', hideBelow: 'lg', cell: (r) => <Ltr className="whitespace-nowrap ts-label-meta text-text-secondary">{r.sku}</Ltr> },
     { key: 'category', header: t('products.col.category'), hideBelow: 'lg', cell: (r) => <CategoryPill category={r.category} /> },
-    { key: 'price', header: t('common.price'), sortKey: 'price', cell: (r) => <Money value={r.price} className="ts-numeral-m" /> },
+    // a product with variants is sold at its variants' prices: their range, not the base price (tester report 2026-10-20)
+    {
+      key: 'price',
+      header: t('common.price'),
+      sortKey: 'price',
+      cell: (r) =>
+        r.priceRange && r.priceRange.min !== r.priceRange.max ? (
+          <span className="whitespace-nowrap">
+            <Money value={r.priceRange.min} className="ts-numeral-m" /> – <Money value={r.priceRange.max} className="ts-numeral-m" />
+          </span>
+        ) : (
+          <Money value={r.priceRange?.min ?? r.price} className="ts-numeral-m" />
+        ),
+    },
     ...(advanced
       ? ([
           { key: 'cost', header: t('products.col.cost'), sortKey: 'cost', hideBelow: 'xl', cell: (r) => <Money value={r.costPrice} muted /> },

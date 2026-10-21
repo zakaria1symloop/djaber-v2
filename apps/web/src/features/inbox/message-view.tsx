@@ -177,7 +177,7 @@ export const MessageView = memo(function MessageView({ message: m, grouped, unre
         {cards.length ? (
           <ProductCards
             label={t('inbox.cards.label')}
-            cards={cards.map((c) => ({ id: c.productId, name: c.name, price: formatMoney(c.price), imageUrl: c.imageUrl, variants: c.variants }))}
+            cards={cards.map((c) => ({ id: c.productId, name: c.name, price: c.priceMax && c.priceMax !== c.price ? `${formatMoney(c.price)} – ${formatMoney(c.priceMax)}` : formatMoney(c.price), imageUrl: c.imageUrl, variants: c.variants }))}
           />
         ) : null}
         {m.attachments.map((a, i) => (
