@@ -130,26 +130,49 @@ export class SupplierService {
     };
   }
 
+  /**
+   * One supplier per phone and per e-mail (case-insensitive) among the live suppliers of the workspace — tester report
+   * 2026-10-20 UX-003: the same supplier could be created several times and the purchases split between the copies.
+   * The workspace's supplier writes are serialised so two simultaneous submissions cannot both pass the check.
+   */
+  private async assertUnique(tx: Tx, v: { phone?: string | null; email?: string | null }, exceptId?: string) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`supplier:${TenantContext.workspaceId()}`}))`;
+    const others = { deletedAt: null, ...(exceptId ? { NOT: { id: exceptId } } : {}) };
+    const byPhone = v.phone ? await tx.supplier.findFirst({ where: { ...others, phone: v.phone }, select: { id: true, name: true } }) : null;
+    if (byPhone) throw new AppException('SUPPLIER_ALREADY_EXISTS', { name: byPhone.name }, { phone: 'validation.supplier_taken' }, { supplierId: byPhone.id });
+    const byEmail = v.email ? await tx.supplier.findFirst({ where: { ...others, email: { equals: v.email, mode: 'insensitive' } }, select: { id: true, name: true } }) : null;
+    if (byEmail) throw new AppException('SUPPLIER_ALREADY_EXISTS', { name: byEmail.name }, { email: 'validation.supplier_taken' }, { supplierId: byEmail.id });
+  }
+
   async create(input: CreateSupplierInput): Promise<SupplierView> {
-    const s = await prisma.supplier.create({
-      data: {
-        name: input.name,
-        email: input.email ?? null,
-        phone: input.phone ?? null,
-        address: input.address ?? null,
-        notes: input.notes ?? null,
-        terms: input.terms ?? null,
-        paymentTermsDays: input.paymentTermsDays ?? null,
-        avgLeadDays: input.avgLeadDays ?? null,
-        isActive: input.isActive ?? true,
-      } as Prisma.SupplierUncheckedCreateInput,
+    const id = await prisma.$transaction(async (db) => {
+      const tx = db as Tx;
+      await this.assertUnique(tx, input);
+      const s = await tx.supplier.create({
+        data: {
+          name: input.name,
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          address: input.address ?? null,
+          notes: input.notes ?? null,
+          terms: input.terms ?? null,
+          paymentTermsDays: input.paymentTermsDays ?? null,
+          avgLeadDays: input.avgLeadDays ?? null,
+          isActive: input.isActive ?? true,
+        } as Prisma.SupplierUncheckedCreateInput,
+      });
+      return s.id;
     });
-    return this.get(s.id);
+    return this.get(id);
   }
 
   async update(id: string, input: UpdateSupplierInput): Promise<SupplierView> {
     await this.row(id);
-    await prisma.supplier.update({ where: { id }, data: input as Prisma.SupplierUpdateInput });
+    await prisma.$transaction(async (db) => {
+      const tx = db as Tx;
+      if (input.phone || input.email) await this.assertUnique(tx, { phone: input.phone, email: input.email }, id);
+      await tx.supplier.update({ where: { id }, data: input as Prisma.SupplierUpdateInput });
+    });
     return this.get(id);
   }
 

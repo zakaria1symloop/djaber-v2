@@ -16,6 +16,7 @@ import { filterBool, filterList, filterText, type ListSpec } from '@/lib/list-st
 import { useSession } from '@/lib/session';
 import { useListState } from '@/lib/use-list-state';
 import { usePurchases, usePurchaseStats, useSuppliers } from './api';
+import { supplierLabel } from './suppliers';
 import { GDS_PAYMENT_STATUSES, PURCHASE_STATUSES, type PurchaseRow } from './contracts';
 import { usePurchaseActions } from './purchase-dialogs';
 import { ListExportMenu } from './export-menu';
@@ -145,7 +146,7 @@ function PurchasesList() {
           <FilterChips label={t('purchases.filter.status')} multiple options={PURCHASE_STATUSES.map((v) => ({ value: v, label: t(`enum.Purchase.status.${v}`) }))} value={statuses} onChange={(v) => list.setFilter('status', v)} />
         </FilterDropdown>
         <FilterDropdown label={t('purchases.filter.supplier')} count={supplierIds.length}>
-          <FilterCheckList options={(suppliers.data?.rows ?? []).map((x) => ({ value: x.id, label: x.name }))} value={supplierIds} onChange={(v) => list.setFilter('supplierId', v)} searchPlaceholder={t('purchases.filter.supplierSearch')} emptyLabel={t('suppliers.empty.title')} />
+          <FilterCheckList options={(suppliers.data?.rows ?? []).map((x) => ({ value: x.id, label: supplierLabel(x) }))} value={supplierIds} onChange={(v) => list.setFilter('supplierId', v)} searchPlaceholder={t('purchases.filter.supplierSearch')} emptyLabel={t('suppliers.empty.title')} />
         </FilterDropdown>
         <FilterDropdown label={t('purchases.filter.payment')} count={payments.length}>
           <FilterChips label={t('purchases.filter.payment')} multiple options={GDS_PAYMENT_STATUSES.map((v) => ({ value: v, label: t(`enum.Purchase.paymentStatus.${v}`) }))} value={payments} onChange={(v) => list.setFilter('paymentStatus', v)} />

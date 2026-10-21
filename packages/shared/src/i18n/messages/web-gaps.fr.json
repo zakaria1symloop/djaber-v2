@@ -63,5 +63,8 @@
  "report.col.ordersRevenue": "Revenus commandes",
  "report.col.proof": "Justificatif",
  "report.col.salesRevenue": "Revenus ventes",
- "report.file.view": "Voir"
+ "report.file.view": "Voir",
+ "suppliers.dialog.sameName": "Un fournisseur porte déjà ce nom : {list}. Vérifiez qu'il ne s'agit pas du même avant de créer.",
+ "suppliers.dialog.seeExisting": "Voir",
+ "validation.supplier_taken": "Déjà utilisé par un autre fournisseur"
 }

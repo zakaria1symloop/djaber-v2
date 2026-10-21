@@ -19,7 +19,8 @@ export const advancedShop = async (app: TestApp, o: { fees?: boolean } = {}) => 
 };
 
 export const supplier = async (actor: Actor, over: Record<string, unknown> = {}) => {
-  const r = await actor.post('/suppliers', { name: `Fournisseur ${randomUUID().slice(0, 4)}`, phone: '0550123456', ...over });
+  // one phone per supplier: the same phone twice in a workspace is SUPPLIER_ALREADY_EXISTS
+  const r = await actor.post('/suppliers', { name: `Fournisseur ${randomUUID().slice(0, 4)}`, phone: `05${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`, ...over });
   if (r.status !== 201) throw new Error(`supplier: ${r.status} ${JSON.stringify(r.body)}`);
   return r.body.data as Record<string, any>;
 };

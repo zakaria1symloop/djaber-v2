@@ -442,6 +442,9 @@ const toForm = (s: Supplier | SupplierRow | null): SupplierForm => ({
   notes: (s && 'notes' in s ? s.notes : null) ?? '',
 });
 
+/** "Pedro · 0550 11 22 33 · pedro@example.com": a supplier told apart from the others of the same name. */
+export const supplierLabel = (s: { name: string; phone: string | null; email: string | null }) => [s.name, s.phone ? formatPhoneDz(s.phone) : null, s.email].filter(Boolean).join(' · ');
+
 export function SupplierDialog({ open, supplier, onClose, onCreated }: { open: boolean; supplier: Supplier | SupplierRow | null; onClose: () => void; onCreated?: (s: Supplier) => void }) {
   const t = useT();
   const refresh = useGdsRefresh();
@@ -453,10 +456,16 @@ export function SupplierDialog({ open, supplier, onClose, onCreated }: { open: b
   const [touched, setTouched] = useState(false);
   const [emailTouched, setEmailTouched] = useState(false);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  // tester report 2026-10-20 (UX-003): a supplier with the same name is pointed out (allowed: two suppliers may share a
+  // name); the same phone or e-mail is refused by the API (SUPPLIER_ALREADY_EXISTS)
+  const [nameChecked, setNameChecked] = useState('');
+  const twins = useSuppliers({ q: nameChecked, pageSize: 5 }, open && nameChecked.length >= 2);
+  const sameName = (twins.data?.rows ?? []).filter((x) => x.id !== supplier?.id && x.name.trim().toLowerCase() === f.name.trim().toLowerCase());
   useOnOpen(open, () => {
     setF(toForm(source));
     setTouched(false);
     setEmailTouched(false);
+    setNameChecked('');
     setLoadedFor(source && 'notes' in source ? source.id : null);
   });
   if (open && source && 'notes' in source && loadedFor !== source.id) {
@@ -498,8 +507,18 @@ export function SupplierDialog({ open, supplier, onClose, onCreated }: { open: b
     >
       <div className="flex flex-col gap-4" data-testid="supplier-dialog">
         <Field label={t('common.name')} htmlFor="sup-name" required error={nameError ?? s.fieldError('name')}>
-          <Input id="sup-name" value={f.name} maxLength={120} onChange={(e) => set('name')(e.target.value)} placeholder="Textile Sétif" />
+          <Input id="sup-name" value={f.name} maxLength={120} onChange={(e) => set('name')(e.target.value)} onBlur={() => setNameChecked(f.name.trim())} placeholder="Textile Sétif" />
         </Field>
+        {sameName.length ? (
+          <Banner tone="warning">
+            <span data-testid="supplier-same-name">
+              {t('suppliers.dialog.sameName', { list: sameName.map(supplierLabel).join(' ; ') })}{' '}
+              <Link href={`/suppliers?sheet=${sameName[0]!.id}`} target="_blank" rel="noopener noreferrer" className="underline">
+                {t('suppliers.dialog.seeExisting')}
+              </Link>
+            </span>
+          </Banner>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t('common.phone')} htmlFor="sup-phone" error={s.fieldError('phone')}>
             <PhoneInput

@@ -199,6 +199,7 @@
   "STOCK_INSUFFICIENT": "Insufficient stock (available: {available}).",
   "STOCK_QUANTITY_ZERO": "Zero quantity.",
   "SUBSCRIPTION_ALREADY_ACTIVE": "An active subscription already exists.",
+  "SUPPLIER_ALREADY_EXISTS": "This supplier already exists: {name} (same phone or e-mail).",
   "SUPPLIER_HAS_PURCHASES": "{count} linked purchases: deactivate the supplier.",
   "TICKET_CLOSED": "Ticket closed: open a new one.",
   "TRACKING_NOT_FOUND": "Tracking not found at the courier.",

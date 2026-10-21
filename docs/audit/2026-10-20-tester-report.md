@@ -35,7 +35,7 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 | P2 | Margin in the products table does not change after an expense is added | done |
 | P3 | A product gets a stock movement (order) before the order is confirmed by the merchant | todo |
 | P4 | Product with variants: listed with the base price and stock = sum of variants; the chatbot sells the base product as if it were purchasable | done |
-| P5 | UX-003 (20/10) — duplicate suppliers allowed (same phone / email / name); purchase supplier picker shows names only | todo |
+| P5 | UX-003 (20/10) — duplicate suppliers allowed (same phone / email / name); purchase supplier picker shows names only | done |
 | P6 | Recommendations: the main action (purchase, change price) marks the recommendation applied and hides it even if the action was not completed | todo |
 | P7 | Client created by the AI without phone: an order can still be created; "Compléter" opens an empty form instead of the known data | todo |
 

@@ -199,6 +199,7 @@
   "STOCK_INSUFFICIENT": "المخزون غير كافٍ (المتاح: {available}).",
   "STOCK_QUANTITY_ZERO": "الكمية صفر.",
   "SUBSCRIPTION_ALREADY_ACTIVE": "يوجد اشتراك نشط بالفعل.",
+  "SUPPLIER_ALREADY_EXISTS": "هذا المورّد موجود مسبقًا: {name} (نفس الهاتف أو البريد).",
   "SUPPLIER_HAS_PURCHASES": "{count} مشتريات مرتبطة: عطّل المورّد.",
   "TICKET_CLOSED": "الطلب مغلق: افتح طلبًا جديدًا.",
   "TRACKING_NOT_FOUND": "التتبع غير موجود لدى الناقل.",

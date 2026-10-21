@@ -196,6 +196,7 @@ export const ERROR_CODES = {
   STOCK_INSUFFICIENT: { status: 422, params: ["available"] },
   STOCK_QUANTITY_ZERO: { status: 422, params: [] },
   SUBSCRIPTION_ALREADY_ACTIVE: { status: 409, params: [] },
+  SUPPLIER_ALREADY_EXISTS: { status: 409, params: ["name"] },
   SUPPLIER_HAS_PURCHASES: { status: 409, params: ["count"] },
   TICKET_CLOSED: { status: 409, params: [] },
   TRACKING_NOT_FOUND: { status: 404, params: [] },

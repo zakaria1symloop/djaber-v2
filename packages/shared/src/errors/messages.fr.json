@@ -199,6 +199,7 @@
   "STOCK_INSUFFICIENT": "Stock insuffisant (disponible : {available}).",
   "STOCK_QUANTITY_ZERO": "Quantité nulle.",
   "SUBSCRIPTION_ALREADY_ACTIVE": "Un abonnement actif existe déjà.",
+  "SUPPLIER_ALREADY_EXISTS": "Ce fournisseur existe déjà : {name} (même téléphone ou e-mail).",
   "SUPPLIER_HAS_PURCHASES": "{count} achats liés : désactivez le fournisseur.",
   "TICKET_CLOSED": "Demande clôturée : ouvrez-en une nouvelle.",
   "TRACKING_NOT_FOUND": "Suivi introuvable chez le transporteur.",

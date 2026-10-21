@@ -63,5 +63,8 @@
  "report.col.ordersRevenue": "إيرادات الطلبات",
  "report.col.proof": "الوصل",
  "report.col.salesRevenue": "إيرادات المبيعات",
- "report.file.view": "عرض"
+ "report.file.view": "عرض",
+ "suppliers.dialog.sameName": "يوجد مورّد بنفس الاسم: {list}. تأكّد أنه ليس نفسه قبل الإنشاء.",
+ "suppliers.dialog.seeExisting": "عرض",
+ "validation.supplier_taken": "مستخدم لدى مورّد آخر"
 }

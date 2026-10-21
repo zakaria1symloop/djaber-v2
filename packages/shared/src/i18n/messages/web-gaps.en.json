@@ -63,5 +63,8 @@
  "report.col.ordersRevenue": "Orders revenue",
  "report.col.proof": "Receipt",
  "report.col.salesRevenue": "Sales revenue",
- "report.file.view": "View"
+ "report.file.view": "View",
+ "suppliers.dialog.sameName": "A supplier already has this name: {list}. Check it is not the same one before creating.",
+ "suppliers.dialog.seeExisting": "View",
+ "validation.supplier_taken": "Already used by another supplier"
 }

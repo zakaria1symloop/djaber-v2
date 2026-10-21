@@ -27,7 +27,7 @@ import { gdsApi, useGdsRefresh, usePurchase, useSupplier, useSuppliers } from '.
 import { PAYMENT_METHODS, type CashMethod, type Purchase } from './contracts';
 import { int, lineVariants, purchaseTotals } from './logic';
 import { ProductPicker, toPicked, useProductVariants, type PickedProduct } from './product-picker';
-import { SupplierDialog } from './suppliers';
+import { SupplierDialog, supplierLabel } from './suppliers';
 import { AdvancedOnly } from './ui';
 
 type Line = { key: string; productId: string; name: string; sku: string; trackStock: boolean; hasVariants: boolean; variants: PickedProduct['variants']; variantId: string | null; quantity: number; unitCost: string };
@@ -215,9 +215,10 @@ function PurchaseForm({ purchase }: { purchase?: Purchase }) {
             <div className="flex gap-2">
               <Select id="pf-supplier" value={f.supplierId} onChange={(e) => (e.target.value === '__new' ? setNewSupplier(true) : set({ supplierId: e.target.value }))} aria-invalid={!!shown('supplierId') || undefined}>
                 <option value="">{t('purchases.form.pickSupplier')}</option>
+                {/* name + phone + e-mail: suppliers of the same name are told apart (tester report 2026-10-20 UX-003) */}
                 {supplierOptions.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}
+                    {supplierLabel(s)}
                   </option>
                 ))}
                 {purchase?.supplier && !supplierOptions.some((s) => s.id === purchase.supplier!.id) ? <option value={purchase.supplier.id}>{purchase.supplier.name}</option> : null}

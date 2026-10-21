@@ -33,6 +33,24 @@ describe('suppliers (GDS-05)', () => {
     await admin.get(`/suppliers/${s.id}`).expect(200);
   });
 
+  it('UX-003 (tester report 2026-10-20): one supplier per phone and per e-mail (case-insensitive) — create and edit, concurrent submissions too; same name allowed; other workspace / deleted supplier ignored', async () => {
+    const owner = await advancedShop(app);
+    const pedro = await supplier(owner, { name: 'Pedro', phone: '0550112233', email: 'Pedro1@Example.com' });
+    const samePhone = await owner.post('/suppliers', { name: 'Pedro Bis', phone: '0550112233' }).expect(409);
+    expect(samePhone.body.error).toMatchObject({ code: 'SUPPLIER_ALREADY_EXISTS', params: { name: 'Pedro' }, fields: { phone: 'validation.supplier_taken' }, details: { supplierId: pedro.id } });
+    const sameEmail = await owner.post('/suppliers', { name: 'Autre', phone: '0660445566', email: 'pedro1@example.com' }).expect(409);
+    expect(sameEmail.body.error).toMatchObject({ code: 'SUPPLIER_ALREADY_EXISTS', fields: { email: 'validation.supplier_taken' } });
+    // the same name with other contacts is a legitimate second supplier
+    const pedro2 = await supplier(owner, { name: 'Pedro', phone: '0660445566', email: 'pedro2@example.com' });
+    expect((await owner.patch(`/suppliers/${pedro2.id}`, { phone: '0550112233' }).expect(409)).body.error.code).toBe('SUPPLIER_ALREADY_EXISTS');
+    await owner.patch(`/suppliers/${pedro.id}`, { phone: '0550112233', notes: 'inchangé' }).expect(200); // its own phone
+    // two simultaneous creations with one phone: exactly one passes
+    const race = await Promise.all([owner.post('/suppliers', { name: 'Course A', phone: '0770778899' }), owner.post('/suppliers', { name: 'Course B', phone: '0770778899' })]);
+    expect(race.map((r) => r.status).sort()).toEqual([201, 409]);
+    // another workspace may have the same supplier
+    await supplier(await advancedShop(app), { name: 'Pedro', phone: '0550112233' });
+  });
+
   it('AT-GDS-13 delete with purchases ⇒ SUPPLIER_HAS_PURCHASES ⇒ deactivate; payment allocated to the oldest purchase, locked cash row, amountPaid updated', async () => {
     const owner = await advancedShop(app);
     const s = await supplier(owner, { name: 'Textile Sétif' });
