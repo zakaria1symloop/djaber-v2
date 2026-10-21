@@ -2,6 +2,9 @@
  "cash.action.viewProof": "View receipt",
  "cash.proof.current": "Attached receipt — view",
  "cash.proof.newTab": "NEW TAB",
+ "clients.sheet.allSales": "See all {count}",
+ "clients.sheet.salesTitle": "COUNTER SALES",
+ "clients.sheet.spentSplit": "Delivered orders {orders} + counter sales {sales}",
  "gaps.agents.activate.blocked": "Fix before activating: {items}.",
  "gaps.agents.activate.unschedule": "Cancel the schedule",
  "gaps.agents.activate.unscheduled": "Activation of \"{name}\" cancelled: the agent stays a draft.",
@@ -55,6 +58,8 @@
  "gaps.job.progress": "Progress: {kind}",
  "gaps.job.running": "{kind} in progress: {pct} %",
  "gaps.orders.notify.noConversation": "Order without a conversation: the customer cannot be notified by message.",
+ "report.col.ordersRevenue": "Orders revenue",
  "report.col.proof": "Receipt",
+ "report.col.salesRevenue": "Sales revenue",
  "report.file.view": "View"
 }

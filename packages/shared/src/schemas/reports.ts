@@ -338,7 +338,7 @@ export const REPORT_DEFINITIONS: Record<ReportKey, ReportDefinition> = {
     group: 'clients',
     simple: true,
     period: 'range',
-    columns: [c('rank', 'int'), c('client', 'text', { link: 'client' }), c('phone', 'text', { sortable: false }), c('orders', 'int', { sum: true }), c('sales', 'int', { sum: true }), c('revenue', 'money', { sum: true }), c('lastOrderAt', 'date')],
+    columns: [c('rank', 'int'), c('client', 'text', { link: 'client' }), c('phone', 'text', { sortable: false }), c('orders', 'int', { sum: true }), c('sales', 'int', { sum: true }), c('ordersRevenue', 'money', { sum: true }), c('salesRevenue', 'money', { sum: true }), c('revenue', 'money', { sum: true }), c('lastOrderAt', 'date')],
     kpis: [k('clients', 'count'), k('revenue', 'money', { figure: 'revenue' })],
     chart: { type: 'bar', x: 'client', y: ['revenue'] },
     filters: ['q'],

@@ -549,8 +549,9 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
   async top_customers(ctx) {
     const { gte, lt } = r(ctx);
     const q = like(ctx);
-    const rows0 = await prisma.$queryRaw<{ cid: string; name: string; phone: string | null; last: Date | null; orders: number; sales: number; rev: bigint }[]>`
-      SELECT c."id" cid, c."name" name, c."phone" phone, c."lastOrderAt" last, sum(x.orders)::int orders, sum(x.sales)::int sales, sum(x.rev)::bigint rev
+    const rows0 = await prisma.$queryRaw<{ cid: string; name: string; phone: string | null; last: Date | null; orders: number; sales: number; orev: bigint; srev: bigint; rev: bigint }[]>`
+      SELECT c."id" cid, c."name" name, c."phone" phone, c."lastOrderAt" last, sum(x.orders)::int orders, sum(x.sales)::int sales,
+             sum(x.rev * x.orders)::bigint orev, sum(x.rev * x.sales)::bigint srev, sum(x.rev)::bigint rev
       FROM (
         SELECT o."clientId" cid, 1 orders, 0 sales, o."total" rev FROM "Order" o
         WHERE o."workspaceId" = ${ws(ctx)} AND o."status" = 'delivered' AND o."deliveredAt" >= ${gte} AND o."deliveredAt" < ${lt}
@@ -562,7 +563,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
       GROUP BY 1,2,3,4`;
     const rows: ReportRow[] = rows0
       .sort((a, b) => n(b.rev) - n(a.rev))
-      .map((x, i) => ({ rank: i + 1, client: x.name, phone: x.phone, orders: x.orders, sales: x.sales, revenue: n(x.rev), lastOrderAt: day(x.last), _ref: { type: 'client', id: x.cid } }));
+      .map((x, i) => ({ rank: i + 1, client: x.name, phone: x.phone, orders: x.orders, sales: x.sales, ordersRevenue: n(x.orev), salesRevenue: n(x.srev), revenue: n(x.rev), lastOrderAt: day(x.last), _ref: { type: 'client', id: x.cid } }));
     return { rows, kpis: { clients: rows.length, revenue: sumOf(rows, 'revenue') } };
   },
 

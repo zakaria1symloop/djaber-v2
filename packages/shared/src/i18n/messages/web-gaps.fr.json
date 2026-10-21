@@ -2,6 +2,9 @@
  "cash.action.viewProof": "Voir le justificatif",
  "cash.proof.current": "Justificatif joint — voir",
  "cash.proof.newTab": "NOUVEL ONGLET",
+ "clients.sheet.allSales": "Voir les {count}",
+ "clients.sheet.salesTitle": "VENTES COMPTOIR",
+ "clients.sheet.spentSplit": "Commandes livrées {orders} + ventes comptoir {sales}",
  "gaps.agents.activate.blocked": "À corriger avant d'activer : {items}.",
  "gaps.agents.activate.unschedule": "Annuler la programmation",
  "gaps.agents.activate.unscheduled": "Activation de « {name} » annulée : l'agent reste en brouillon.",
@@ -55,6 +58,8 @@
  "gaps.job.progress": "Progression : {kind}",
  "gaps.job.running": "{kind} en cours : {pct} %",
  "gaps.orders.notify.noConversation": "Commande sans conversation : le client ne peut pas être prévenu par message.",
+ "report.col.ordersRevenue": "Revenus commandes",
  "report.col.proof": "Justificatif",
+ "report.col.salesRevenue": "Revenus ventes",
  "report.file.view": "Voir"
 }

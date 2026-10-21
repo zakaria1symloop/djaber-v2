@@ -230,13 +230,17 @@ export class ClientService implements OnModuleInit {
     const index = await this.safety.index();
     const c = await this.row(id);
     const [item] = await this.listViews([c], index);
-    const [addresses, mergedFrom, recent, conversations, counts, block] = await Promise.all([
+    const [addresses, mergedFrom, recent, conversations, counts, block, sales, ordersSum, salesSum] = await Promise.all([
       prisma.clientAddress.findMany({ where: { clientId: id }, include: { wilaya: true, commune: true }, orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }] }),
       prisma.client.findMany({ where: { mergedIntoId: id }, select: { id: true, name: true, deletedAt: true, updatedAt: true } }),
       prisma.order.findMany({ where: { clientId: id }, include: ORDER_LIST_INCLUDE, orderBy: [{ orderedAt: 'desc' }, { id: 'desc' }], take: 10 }),
       prisma.conversation.findMany({ where: { clientId: id, deletedAt: null }, include: conversationInclude, orderBy: { lastMessageAt: 'desc' }, take: 10 }),
       prisma.order.groupBy({ by: ['status'], where: { clientId: id }, _count: { _all: true } }),
       prisma.customerBlock.findFirst({ where: { unblockedAt: null, OR: [{ clientId: id }, ...(c.phone ? [{ phone: c.phone }] : [])] }, orderBy: { blockedAt: 'desc' } }),
+      // counter sales: "DA dépensés" counts them, so the sheet lists them next to the orders (tester report 2026-10-19 UX-003)
+      prisma.sale.findMany({ where: { clientId: id, status: { not: 'draft' } }, select: { id: true, number: true, soldAt: true, total: true, status: true, paymentStatus: true }, orderBy: [{ soldAt: 'desc' }, { id: 'desc' }], take: 10 }),
+      prisma.order.aggregate({ where: { clientId: id, status: 'delivered' }, _sum: { total: true } }),
+      prisma.sale.aggregate({ where: { clientId: id, status: 'completed' }, _sum: { total: true }, _count: { _all: true } }),
     ]);
     const n = (s: string) => counts.find((x) => x.status === s)?._count._all ?? 0;
     const delivered = n('delivered');
@@ -260,9 +264,10 @@ export class ClientService implements OnModuleInit {
         isStopdesk: a.isStopdesk,
         stopdeskId: a.stopdeskId,
       })),
-      metrics: { orders: totalOrders, delivered, spent: c.totalSpent, returns, returnPct: delivered + returns ? Math.round((returns * 1000) / (delivered + returns)) / 10 : 0, cancels: n('cancelled'), conversations: c._count.conversations, lastOrderAt: c.lastOrderAt?.toISOString() ?? null },
+      metrics: { orders: totalOrders, delivered, spent: c.totalSpent, ordersSpent: ordersSum._sum.total ?? 0, sales: salesSum._count._all, salesSpent: salesSum._sum.total ?? 0, returns, returnPct: delivered + returns ? Math.round((returns * 1000) / (delivered + returns)) / 10 : 0, cancels: n('cancelled'), conversations: c._count.conversations, lastOrderAt: c.lastOrderAt?.toISOString() ?? null },
       mergedFrom: mergedFrom.map((m) => ({ id: m.id, name: m.name, at: (m.deletedAt ?? m.updatedAt).toISOString() })),
       recentOrders: recent.map((o) => presentOrderListItem(o, ctx)),
+      recentSales: sales.map((s) => ({ id: s.id, number: s.number, soldAt: s.soldAt.toISOString(), total: s.total, status: s.status as 'completed' | 'cancelled', paymentStatus: s.paymentStatus })),
       conversations: conversations.map((cv) => presentConversation(cv, index.has(cv, cv.client?.phone))),
       block: block ? { id: block.id, source: block.source, reason: block.reason, blockedAt: block.blockedAt.toISOString(), unblockable: block.source !== 'platform' } : null,
     };

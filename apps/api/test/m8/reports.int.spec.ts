@@ -83,6 +83,17 @@ describe('report template (ANA-04)', () => {
     expect(disc.kpis.find((k: any) => k.key === 'discount').value).toBe(500);
   });
 
+  it('UX-003 (tester report 2026-10-19): Top clients splits the revenue between delivered orders and counter sales', async () => {
+    const owner = await advancedShop(app);
+    const c = await client(owner.workspaceId, { name: 'Lina Haddad' });
+    await order(owner.workspaceId, { total: 4000, status: 'delivered', orderedAt: at(daysAgo(3)), deliveredAt: at(daysAgo(2)), clientId: c.id });
+    const p = await product(owner, { price: 3000, stock: 5 });
+    await sale(owner, { clientId: c.id, items: [{ productId: p.id, quantity: 1 }], amountPaid: 3000 });
+    const top = (await get(owner, '/reports/top_customers?period=30d')).data;
+    expect(top.rows[0]).toMatchObject({ client: 'Lina Haddad', orders: 1, sales: 1, ordersRevenue: 4000, salesRevenue: 3000, revenue: 7000, _ref: { type: 'client', id: c.id } });
+    expect(top.totals).toMatchObject({ ordersRevenue: 4000, salesRevenue: 3000, revenue: 7000 });
+  });
+
   it('AT-ORD-11 on the P&L report: purchases paid 800 are listed, COGS 600 is subtracted, never both', async () => {
     const owner = await advancedShop(app);
     const p = await product(owner, { price: 2000, costPrice: 300, stock: 0 });

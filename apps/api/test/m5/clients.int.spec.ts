@@ -100,8 +100,10 @@ describe('clients', () => {
     c = await db.client.findUniqueOrThrow({ where: { id } });
     expect(c).toMatchObject({ orderCount: 2, cancelCount: 1, totalSpent: order.total + 1000 });
     const view = (await owner.get(`/clients/${id}`).expect(200)).body.data;
-    expect(view.metrics).toMatchObject({ orders: 2, delivered: 1, cancels: 1, spent: order.total + 1000 });
+    // UX-003 (tester report 2026-10-19): « DA dépensés » = delivered orders + counter sales, both shown in the sheet
+    expect(view.metrics).toMatchObject({ orders: 2, delivered: 1, cancels: 1, spent: order.total + 1000, ordersSpent: order.total, sales: 1, salesSpent: 1000 });
     expect(view.recentOrders.map((o: any) => o.id)).toEqual([second.order.id, order.id]);
+    expect(view.recentSales).toEqual([expect.objectContaining({ number: 'VNT-T-1', total: 1000, status: 'completed', paymentStatus: 'paid' })]);
     expect(view.actions[0]).toMatchObject({ key: 'open', primary: true });
   });
 

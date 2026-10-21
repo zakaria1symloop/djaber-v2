@@ -173,7 +173,10 @@ export type ClientListItemView = ClientRefView & {
   actions: ActionDescriptor[];
 };
 export type ClientAddressView = AddressView & { id: string; isDefault: boolean };
-export type ClientMetricsView = { orders: number; delivered: number; spent: number; returns: number; returnPct: number; cancels: number; conversations: number; lastOrderAt: string | null };
+/** `spent` = `ordersSpent` (Σ delivered orders) + `salesSpent` (Σ completed counter sales, `sales` of them) — CLI-04. */
+export type ClientMetricsView = { orders: number; delivered: number; spent: number; ordersSpent: number; sales: number; salesSpent: number; returns: number; returnPct: number; cancels: number; conversations: number; lastOrderAt: string | null };
+/** Counter sale of a client (drafts left out), latest first. */
+export type ClientSaleItemView = { id: string; number: string; soldAt: string; total: number; status: 'completed' | 'cancelled'; paymentStatus: 'unpaid' | 'partial' | 'paid' };
 export type ClientView = ClientListItemView & {
   email: string | null;
   notes: string | null;
@@ -183,6 +186,7 @@ export type ClientView = ClientListItemView & {
   metrics: ClientMetricsView;
   mergedFrom: { id: string; name: string; at: string }[];
   recentOrders: OrderListItemView[];
+  recentSales: ClientSaleItemView[];
   conversations: ConversationListItemView[];
   block: { id: string; source: 'manual' | 'auto_rule' | 'platform'; reason: string | null; blockedAt: string; unblockable: boolean } | null;
 };

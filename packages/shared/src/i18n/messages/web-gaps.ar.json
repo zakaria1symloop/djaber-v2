@@ -2,6 +2,9 @@
  "cash.action.viewProof": "عرض الوصل",
  "cash.proof.current": "الوصل المرفق — عرض",
  "cash.proof.newTab": "علامة تبويب جديدة",
+ "clients.sheet.allSales": "عرض {count}",
+ "clients.sheet.salesTitle": "مبيعات المحل",
+ "clients.sheet.spentSplit": "طلبات مسلَّمة {orders} + مبيعات المحل {sales}",
  "gaps.agents.activate.blocked": "يجب تصحيحه قبل التفعيل: {items}.",
  "gaps.agents.activate.unschedule": "إلغاء الجدولة",
  "gaps.agents.activate.unscheduled": "أُلغي تفعيل «{name}»: يبقى الوكيل مسودة.",
@@ -55,6 +58,8 @@
  "gaps.job.progress": "التقدم: {kind}",
  "gaps.job.running": "{kind} قيد التنفيذ: {pct} %",
  "gaps.orders.notify.noConversation": "طلب بدون محادثة: لا يمكن إبلاغ العميل برسالة.",
+ "report.col.ordersRevenue": "إيرادات الطلبات",
  "report.col.proof": "الوصل",
+ "report.col.salesRevenue": "إيرادات المبيعات",
  "report.file.view": "عرض"
 }

@@ -1,14 +1,18 @@
 'use client';
 // Client detail — Figma "CLI-03 — Clients — list with detail sheet": side sheet over the list (`?sheet=<id>`, ‹ › rows)
 // and the same body on the full page `/clients/[id]`. Metrics tiles, merged / placeholder / blocked notices, contact,
-// default address, channels, recent orders, conversations, "Nouvelle commande pour {prénom}".
+// default address, channels, recent orders, counter sales ("DA dépensés" counts them too — tester report 2026-10-19
+// UX-003), conversations, "Nouvelle commande pour {prénom}".
 import { formatDate, formatMoney, formatNumber, formatPhoneDz, type AppLocale } from '@djaber/shared';
 import { ActionsMenu, Banner, Button, buttonClass, MetricTile, SheetSection, SideSheet, Skeleton, StatusPill, TagChips, type MenuAction } from '@djaber/ui';
 import { Ltr } from '@djaber/ui';
 import type { ReactNode } from 'react';
 import { QueryError } from '@/components/global-states';
+import { SaleStatusPill } from '@/features/gds/ui';
 import { Link } from '@/i18n/navigation';
+import { useHere, withBack } from '@/lib/back';
 import { useLocaleCode, useT } from '@/lib/i18n';
+import { useSession } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
 import { useClient } from './api';
 import type { Client } from './contracts';
@@ -23,6 +27,8 @@ const monthYear = (iso: string, locale: AppLocale) => {
 export function ClientDetailBody({ client: c }: { client: Client }) {
   const t = useT();
   const locale = useLocaleCode() as AppLocale;
+  const { can } = useSession();
+  const here = useHere();
   const address = c.addresses.find((a) => a.isDefault) ?? c.addresses[0] ?? null;
   const merged = c.mergedFrom[0];
   const addressText = address
@@ -41,6 +47,11 @@ export function ClientDetailBody({ client: c }: { client: Client }) {
         <MetricTile label={t('clients.sheet.spent')} value={formatNumber(c.metrics.spent)} data-metric="spent" />
         <MetricTile label={t('clients.sheet.returns')} value={`${formatNumber(c.metrics.returnPct)} %`} tone={c.metrics.returns > 0 ? 'warning' : undefined} data-metric="returns" />
       </div>
+      {c.metrics.sales > 0 ? (
+        <p className="-mt-3 ts-label-meta text-text-muted" data-testid="client-spent-split">
+          {t('clients.sheet.spentSplit', { orders: formatMoney(c.metrics.ordersSpent), sales: formatMoney(c.metrics.salesSpent) })}
+        </p>
+      ) : null}
 
       {merged ? <Banner tone="info">{t('clients.sheet.merged', { date: formatDate(merged.at, locale), name: merged.name })}</Banner> : null}
       {c.isPlaceholder ? <Banner tone="warning">{t('clients.sheet.placeholder')}</Banner> : null}
@@ -104,6 +115,35 @@ export function ClientDetailBody({ client: c }: { client: Client }) {
           <p className="ts-label-meta text-text-muted">{t('clients.sheet.noOrders')}</p>
         )}
       </SheetSection>
+
+      {c.recentSales.length ? (
+        <SheetSection label={t('clients.sheet.salesTitle')} note={c.metrics.sales > c.recentSales.length && can('gds.read') ? <Link href={`/sales?clientId=${c.id}`} className="hover:text-text-primary">{t('clients.sheet.allSales', { count: c.metrics.sales })}</Link> : undefined}>
+          <ul className="flex flex-col gap-2" data-testid="client-sales">
+            {c.recentSales.map((x) => {
+              const line = (
+                <>
+                  <span className="min-w-0 flex-1 truncate">
+                    <Ltr>#{x.number}</Ltr> · {formatDate(x.soldAt, locale).split(' ').slice(0, 2).join(' ')}
+                  </span>
+                  <Ltr className={`whitespace-nowrap font-medium tabular-nums ${x.status === 'cancelled' ? 'text-text-muted line-through' : ''}`}>{formatMoney(x.total)}</Ltr>
+                  <SaleStatusPill status={x.status} paymentStatus={x.paymentStatus} />
+                </>
+              );
+              return (
+                <li key={x.id}>
+                  {can('gds.read') ? (
+                    <Link href={withBack(`/sales/${x.id}`, here)} className="flex items-center gap-3 text-[14px] hover:text-text-primary">
+                      {line}
+                    </Link>
+                  ) : (
+                    <span className="flex items-center gap-3 text-[14px]">{line}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </SheetSection>
+      ) : null}
 
       <SheetSection label={t('clients.sheet.conversations')}>
         {c.conversations.length ? (

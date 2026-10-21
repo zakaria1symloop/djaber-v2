@@ -18,7 +18,7 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 |---|---|---|
 | R1 | UX-006 — download button at the bottom of /reports does nothing | done |
 | R2 | CSV / XLSX exports do not download directly: a toast with a "Télécharger" button must be clicked | done |
-| R3 | UX-003 — client drawer and Reports › Top clients show orders only, while "DA dépensés" counts orders + sales | todo |
+| R3 | UX-003 — client drawer and Reports › Top clients show orders only, while "DA dépensés" counts orders + sales | done |
 
 ## Filters, forms, i18n
 | # | Issue | Status |
