@@ -29,6 +29,7 @@ import { ListEmpty, ListLoading, QueryError } from '@/components/global-states';
 import { SettingsPage } from '@/features/settings/common';
 import { Link } from '@/i18n/navigation';
 import { invitationsKey, membersKey, useInvitations, useMembers, workspaceApi } from '@/features/workspace/api';
+import { SectionAccess } from '@/features/workspace/section-access';
 import { ApiError } from '@/lib/api';
 import type { InvitationDto, MemberDto } from '@/lib/contracts';
 import { formatClock, retryAfterSeconds, secondsUntilIso, useCountdown } from '@/lib/countdown';
@@ -156,6 +157,8 @@ export default function MembersPage() {
           </ul>
         </Card>
       )}
+
+      {members.data?.length ? <SectionAccess members={members.data} canWrite={canWrite} onSaved={() => Promise.all([refresh(), qc.invalidateQueries({ queryKey: meKey })])} /> : null}
 
       <SectionLabel className="mt-3">{t('settings.members.pending')}</SectionLabel>
       {invitations.isPending ? (

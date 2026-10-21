@@ -135,6 +135,7 @@ export class TenantResolver {
         userId: u.id,
         role: membership.role as MembershipRole,
         readOnly: membership.readOnly,
+        hiddenSections: membership.role === 'owner' ? [] : membership.hiddenSections,
         platformRole: u.platformRole === 'none' ? undefined : u.platformRole,
         emailVerified: !!u.emailVerifiedAt,
       });

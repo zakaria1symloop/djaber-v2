@@ -73,6 +73,7 @@ export class MeService {
           logoUrl: m.workspace.logoUrl,
           role: m.role,
           readOnly: m.readOnly,
+          hiddenSections: m.role === 'owner' ? [] : m.hiddenSections,
         })),
         pendingLegal,
         deletionScheduledAt: deletion?.scheduledAt ? deletion.scheduledAt.toISOString() : null,

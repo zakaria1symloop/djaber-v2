@@ -14,6 +14,7 @@ export const toMemberDto = (m: Membership & { user: User }) => ({
   user: { id: m.user.id, firstName: m.user.firstName, lastName: m.user.lastName, avatarUrl: m.user.avatarUrl, email: m.user.email },
   role: m.role,
   readOnly: m.readOnly,
+  hiddenSections: m.role === 'owner' ? [] : m.hiddenSections,
   joinedAt: m.createdAt.toISOString(),
   lastSeenAt: m.user.lastLoginAt ? m.user.lastLoginAt.toISOString() : null,
 });
@@ -62,10 +63,35 @@ export class MembershipService {
     return m;
   }
 
-  /** `PATCH /workspace/members/:id { role }` */
-  async changeRole(id: string, role: 'owner' | 'admin' | 'operator', client: ClientInfo) {
+  /** `PATCH /workspace/members/:id { role?, hiddenSections? }` */
+  async update(id: string, input: { role?: 'owner' | 'admin' | 'operator'; hiddenSections?: string[] }, client: ClientInfo) {
+    let member = await this.byId(id);
+    if (input.hiddenSections !== undefined) member = await this.setSections(member, input.hiddenSections, client);
+    return input.role !== undefined ? this.changeRole(member, input.role, client) : toMemberDto(member);
+  }
+
+  /**
+   * Sections the Owner hides from a member (owner decision 2026-10-21): the member's menu and the API refuse them at once
+   * (tenant cache dropped). The Owner sees everything (OWNER_IMMUTABLE).
+   */
+  private async setSections(member: Membership & { user: User }, sections: string[], client: ClientInfo) {
     const t = TenantContext.get();
-    const member = await this.byId(id);
+    if (member.role === 'owner') throw new AppException('OWNER_IMMUTABLE');
+    const next = [...new Set(sections)].sort();
+    if (next.join(',') === [...member.hiddenSections].sort().join(',')) return member;
+    const row = await prisma.$transaction(async (tx) => {
+      const r = await tx.membership.update({ where: { id: member.id }, data: { hiddenSections: next }, include: { user: true } });
+      await this.outbox.ws(tx, `ws:${t.workspaceId}`, 'member.updated', { id: r.id, membership: { userId: r.userId, role: r.role, readOnly: r.readOnly, hiddenSections: r.hiddenSections } });
+      return r;
+    });
+    await this.tenants.invalidate(t.workspaceId);
+    await this.audit.write({ workspaceId: t.workspaceId, actorType: 'user', actorId: t.userId, actorRole: t.role, action: 'member.sections_change', entity: 'Membership', entityId: member.id, before: { hiddenSections: member.hiddenSections }, after: { hiddenSections: next, userId: member.userId }, ip: client.ip, userAgent: client.userAgent });
+    return row;
+  }
+
+  private async changeRole(member: Membership & { user: User }, role: 'owner' | 'admin' | 'operator', client: ClientInfo) {
+    const t = TenantContext.get();
+    const id = member.id;
     // the only way to change the Owner is the ownership transfer (D51)
     if (member.role === 'owner' || role === 'owner') throw new AppException('OWNER_IMMUTABLE');
     if (member.role === role) return toMemberDto(member);

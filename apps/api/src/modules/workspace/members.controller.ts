@@ -21,8 +21,8 @@ export class MembersController {
 
   @Patch('members/:id')
   @RequirePermission('members.write')
-  changeRole(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ChangeRoleDto, @Req() req: any) {
-    return this.members.changeRole(id, dto.role, clientOf(req));
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ChangeRoleDto, @Req() req: any) {
+    return this.members.update(id, dto, clientOf(req));
   }
 
   @Delete('members/:id')

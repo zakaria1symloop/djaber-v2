@@ -1,7 +1,7 @@
 // Request DTOs of the workspace module (zod → nestjs-zod). Shapes follow api-contract §3.2 and 06-api "Workspace & team".
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
-import { email, localeSchema, phoneDz, WILAYA_COUNT } from '@djaber/shared';
+import { email, localeSchema, phoneDz, WILAYA_COUNT, MEMBER_SECTIONS } from '@djaber/shared';
 
 const name = z.string().trim().min(1, 'validation.required').max(120, 'validation.length');
 const currentPassword = z.string().min(1, 'validation.required').max(128, 'validation.length');
@@ -81,7 +81,14 @@ export const InviteSchema = z.object({ email, role: invitableRole }).strict();
 export class InviteDto extends createZodDto(InviteSchema) {}
 
 /** `owner` is accepted by the schema so the service can answer OWNER_IMMUTABLE instead of a bare validation error. */
-export const ChangeRoleSchema = z.object({ role: z.enum(['owner', 'admin', 'operator'], { errorMap: () => ({ message: 'validation.invalid' }) }) }).strict();
+/** `PATCH /workspace/members/:id` — the role and / or the sections hidden from the member (owner decision 2026-10-21). */
+export const ChangeRoleSchema = z
+  .object({
+    role: z.enum(['owner', 'admin', 'operator'], { errorMap: () => ({ message: 'validation.invalid' }) }).optional(),
+    hiddenSections: z.array(z.enum(MEMBER_SECTIONS, { errorMap: () => ({ message: 'validation.invalid' }) })).max(MEMBER_SECTIONS.length).optional(),
+  })
+  .strict()
+  .refine((v) => v.role !== undefined || v.hiddenSections !== undefined, { message: 'validation.required', path: ['role'] });
 export class ChangeRoleDto extends createZodDto(ChangeRoleSchema) {}
 
 // --- quick replies (09-code-conventions §3) ------------------------------------------------------------------------------

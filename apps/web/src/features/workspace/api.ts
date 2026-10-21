@@ -36,7 +36,7 @@ export const workspaceApi = {
 
   members: () => api<MemberDto[]>('/workspace/members'),
   invitations: () => api<InvitationDto[]>('/workspace/invitations'),
-  updateMember: (id: string, b: { role: 'admin' | 'operator' }) => api<MemberDto>(`/workspace/members/${id}`, { method: 'PATCH', body: b }),
+  updateMember: (id: string, b: { role?: 'admin' | 'operator'; hiddenSections?: string[] }) => api<MemberDto>(`/workspace/members/${id}`, { method: 'PATCH', body: b }),
   removeMember: (id: string) => api<null>(`/workspace/members/${id}`, { method: 'DELETE' }),
   invite: (b: { email: string; role: 'admin' | 'operator' }) => api<InvitationDto>('/workspace/invitations', { method: 'POST', body: b }),
   resendInvitation: (id: string) => api<InvitationDto | null>(`/workspace/invitations/${id}/resend`, { method: 'POST', body: {} }),

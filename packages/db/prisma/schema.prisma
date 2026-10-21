@@ -1472,6 +1472,8 @@ model Membership {
   userId      String     @db.Uuid
   role        MemberRole
   readOnly    Boolean    @default(false)
+  /// sections hidden from this member by the Owner (MEMBER_SECTIONS) — every key of a hidden section is refused
+  hiddenSections String[] @default([])
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 

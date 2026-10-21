@@ -19,6 +19,8 @@ export type TenantInfo = {
   apiKeyId?: string;
   role?: MembershipRole;
   readOnly: boolean;
+  /** sections the Owner hid from this member (`MEMBER_SECTIONS`): every key of them is refused */
+  hiddenSections?: string[];
   platformRole?: string;
   locale: 'fr' | 'ar' | 'en';
   /** language of the request (`?lang` / `Accept-Language`); `locale` becomes the account's or workspace's once resolved */

@@ -6,7 +6,8 @@ export type Locale = AppLocale;
 export type LocalizedText = { fr: string; ar?: string; en?: string };
 export type LegalDocKey = 'terms' | 'privacy' | 'account_deletion' | 'content_rules';
 
-export type Membership = { workspaceId: string; name: string; logoUrl: string | null; role: MemberRole; readOnly: boolean };
+/** `hiddenSections`: sections the Owner hid from this member (`MEMBER_SECTIONS`) — `can()` refuses their keys */
+export type Membership = { workspaceId: string; name: string; logoUrl: string | null; role: MemberRole; readOnly: boolean; hiddenSections?: string[] };
 export type LegalPending = { key: LegalDocKey; version: number; url: string };
 export type UserPrefs = { listDensity: 'compact' | 'comfortable'; soundOnMessage: boolean; dismissedAnnouncementIds: string[]; reportFavorites: string[] };
 
@@ -77,7 +78,7 @@ export type WorkspaceDto = {
 };
 
 export type UserRef = { id: string; firstName: string; lastName: string; avatarUrl: string | null };
-export type MemberDto = { id: string; user: UserRef & { email: string }; role: MemberRole; readOnly: boolean; joinedAt: string; lastSeenAt: string | null };
+export type MemberDto = { id: string; user: UserRef & { email: string }; role: MemberRole; readOnly: boolean; hiddenSections: string[]; joinedAt: string; lastSeenAt: string | null };
 export type InvitationDto = { id: string; email: string; role: MemberRole; sentAt: string; expiresAt: string; resendAvailableAt: string };
 
 /** `GET /invitations/:token` (public) — 06 §8.1. */

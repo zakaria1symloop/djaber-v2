@@ -256,6 +256,36 @@ describe('members', () => {
     expect(audit).toMatchObject({ actorId: owner.userId, before: { role: 'operator' }, after: { role: 'admin', userId: operator.userId } });
   });
 
+  it('owner decision 2026-10-21 (tester report): the Owner hides sections from a member — every key of them refused at once, menu data in /me, audited; the Owner is immutable', async () => {
+    const owner = await asOwner(app);
+    const admin = await asAdmin(app, owner.workspaceId);
+    const operator = await asOperator(app, owner.workspaceId);
+    const rows = await db.membership.findMany({ where: { workspaceId: owner.workspaceId } });
+    const idOf = (userId: string) => rows.find((r) => r.userId === userId)!.id;
+    await operator.get('/orders').expect(200);
+    await operator.get('/clients').expect(200);
+    const hidden = await owner.patch(`/workspace/members/${idOf(operator.userId)}`, { hiddenSections: ['orders', 'orders', 'clients'] }).expect(200);
+    expect(hidden.body.data).toMatchObject({ role: 'operator', hiddenSections: ['clients', 'orders'] });
+    // refused at once (tenant cache dropped), read and write alike; other sections and the account keep working
+    expect((await operator.get('/orders').expect(403)).body.error.code).toBe('FORBIDDEN');
+    await operator.get('/clients').expect(403);
+    await operator.get('/products').expect(200);
+    await operator.get('/workspace/members').expect(200);
+    const me = (await operator.get('/me').expect(200)).body.data;
+    expect(me.memberships.find((m: any) => m.workspaceId === owner.workspaceId)).toMatchObject({ hiddenSections: ['clients', 'orders'] });
+    const audit = await eventually(() => db.auditLog.findFirst({ where: { workspaceId: owner.workspaceId, action: 'member.sections_change' } }));
+    expect(audit).toMatchObject({ actorId: owner.userId, before: { hiddenSections: [] }, after: { hiddenSections: ['clients', 'orders'], userId: operator.userId } });
+    // shown again
+    await owner.patch(`/workspace/members/${idOf(operator.userId)}`, { hiddenSections: ['clients'] }).expect(200);
+    await operator.get('/orders').expect(200);
+    // rules: unknown section 422, empty body 422, the Owner immutable, only the Owner writes
+    expect((await owner.patch(`/workspace/members/${idOf(operator.userId)}`, { hiddenSections: ['members'] }).expect(422)).body.error.fields).toMatchObject({ 'hiddenSections.0': 'validation.invalid' });
+    await owner.patch(`/workspace/members/${idOf(operator.userId)}`, {}).expect(422);
+    expect((await owner.patch(`/workspace/members/${idOf(owner.userId)}`, { hiddenSections: ['orders'] }).expect(422)).body.error.code).toBe('OWNER_IMMUTABLE');
+    await admin.patch(`/workspace/members/${idOf(operator.userId)}`, { hiddenSections: [] }).expect(403);
+    expect((await owner.get('/workspace/members').expect(200)).body.data.find((m: any) => m.id === idOf(operator.userId)).hiddenSections).toEqual(['clients']);
+  });
+
   it('remove a member: membership gone, sessions revoked, access lost, audited', async () => {
     const owner = await asOwner(app);
     const admin = await asAdmin(app, owner.workspaceId);

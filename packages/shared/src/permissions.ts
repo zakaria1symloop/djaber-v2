@@ -65,11 +65,41 @@ export const roleCan = (role: MemberRole | null | undefined, key: MerchantPermis
 export const isReadPermission = (key: MerchantPermission): boolean => /\.(read|read_credits|read_all|own)$/.test(key);
 
 /**
- * UI helper mirroring the API: the role must hold the key, and a `readOnly` member (plan `maxMembers`,
- * `READ_ONLY_MEMBER`) keeps only the read keys.
+ * Sections an Owner can hide from one member (owner decision 2026-10-21, tester report: "choose what each member sees").
+ * A hidden section refuses every key of its prefixes (API guard, `FORBIDDEN`) and leaves the member's menu and screens.
+ * Members, workspace, notifications, billing and support keys belong to no section: they follow the role only.
  */
-export const memberCan = (m: { role: MemberRole | null | undefined; readOnly?: boolean }, key: MerchantPermission): boolean =>
-  roleCan(m.role, key) && (!m.readOnly || isReadPermission(key));
+export const MEMBER_SECTIONS = ['inbox', 'orders', 'delivery', 'clients', 'catalog', 'stock', 'gds', 'reports', 'analytics', 'agents', 'channels'] as const;
+export type MemberSection = (typeof MEMBER_SECTIONS)[number];
+const SECTION_PREFIXES: Record<MemberSection, readonly string[]> = {
+  inbox: ['inbox'],
+  orders: ['orders'],
+  delivery: ['delivery'],
+  clients: ['clients'],
+  catalog: ['catalog'],
+  stock: ['stock'],
+  gds: ['gds'],
+  reports: ['reports'],
+  analytics: ['analytics'],
+  agents: ['agents', 'insights'],
+  channels: ['channels'],
+};
+/** Section of a permission key (`orders.write` → `orders`), null for the keys no section can hide. */
+export const sectionOf = (key: string): MemberSection | null => {
+  const prefix = key.split('.')[0] ?? '';
+  return MEMBER_SECTIONS.find((s) => SECTION_PREFIXES[s].includes(prefix)) ?? null;
+};
+export const isHidden = (hiddenSections: readonly string[] | null | undefined, key: string): boolean => {
+  const s = sectionOf(key);
+  return !!s && !!hiddenSections?.includes(s);
+};
+
+/**
+ * UI helper mirroring the API: the role must hold the key, a `readOnly` member (plan `maxMembers`,
+ * `READ_ONLY_MEMBER`) keeps only the read keys, and a section the Owner hid from the member is refused.
+ */
+export const memberCan = (m: { role: MemberRole | null | undefined; readOnly?: boolean; hiddenSections?: readonly string[] }, key: MerchantPermission): boolean =>
+  roleCan(m.role, key) && (!m.readOnly || isReadPermission(key)) && !isHidden(m.hiddenSections, key);
 
 // 01-nest-module-map §3.2 — platform keys `admin.<area>.read` / `admin.<area>.write` (+ extension keys), mirrored from
 // apps/api/src/core/rbac/permission-matrix.ts (PLATFORM_PERMISSIONS) for the admin shell. The API enforces every key.

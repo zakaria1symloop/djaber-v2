@@ -1,5 +1,5 @@
 // Pure logic of the M1 screens: permissions, countdowns, session workspace, checklist, relative time, reorder, nav filtering.
-import { memberCan, MERCHANT_PERMISSIONS, passwordStrength, roleCan, type MerchantPermission } from '@djaber/shared';
+import { memberCan, MERCHANT_PERMISSIONS, passwordStrength, roleCan, sectionOf, type MerchantPermission } from '@djaber/shared';
 import { describe, expect, it } from 'vitest';
 import { filterNav, FOOTER_NAV, MAIN_NAV } from '@/components/shell/nav';
 import { greetingKey } from '@/features/home/greeting';
@@ -34,6 +34,15 @@ describe('permissions (01-nest-module-map §3.2 mirror)', () => {
     expect(memberCan({ role: 'operator', readOnly: true }, 'orders.write')).toBe(false);
     expect(memberCan({ role: 'operator', readOnly: true }, 'orders.read')).toBe(true);
     expect(memberCan({ role: 'owner', readOnly: false }, 'workspace.delete')).toBe(true);
+  });
+  it('refuses the sections the Owner hid from the member (owner decision 2026-10-21)', () => {
+    expect(memberCan({ role: 'operator', hiddenSections: ['orders'] }, 'orders.read')).toBe(false);
+    expect(memberCan({ role: 'operator', hiddenSections: ['orders'] }, 'orders.write')).toBe(false);
+    expect(memberCan({ role: 'operator', hiddenSections: ['orders'] }, 'clients.read')).toBe(true);
+    expect(memberCan({ role: 'admin', hiddenSections: ['agents'] }, 'insights.manage')).toBe(false);
+    expect(memberCan({ role: 'admin', hiddenSections: ['orders'] }, 'members.read')).toBe(true);
+    expect(sectionOf('gds.write')).toBe('gds');
+    expect(sectionOf('workspace.settings')).toBeNull();
   });
   it('has the same keys as the API table', async () => {
     const src = await import('node:fs').then((fs) => fs.readFileSync(new URL('../../../api/src/core/rbac/permission-matrix.ts', import.meta.url), 'utf8'));

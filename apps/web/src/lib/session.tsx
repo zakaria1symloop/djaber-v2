@@ -100,6 +100,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
   const role = membership?.role ?? null;
   const readOnly = membership?.readOnly ?? false;
+  const hiddenSections = membership?.hiddenSections;
 
   const status: SessionStatus = expired
     ? 'expired'
@@ -170,7 +171,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       role,
       readOnly,
       impersonating: !!imp,
-      can: (key) => memberCan({ role, readOnly }, key),
+      can: (key) => memberCan({ role, readOnly, hiddenSections }, key),
       signIn,
       logout,
       logoutAll,
@@ -179,7 +180,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       refetchWorkspace: () => wsQ.refetch(),
       bootError: meQ.error,
     }),
-    [status, me, membership, workspaceId, wsQ, role, readOnly, imp, signIn, logout, logoutAll, switchWorkspace, meQ],
+    [status, me, membership, workspaceId, wsQ, role, readOnly, hiddenSections, imp, signIn, logout, logoutAll, switchWorkspace, meQ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -60,5 +60,5 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 ## Workspace
 | # | Issue | Status |
 |---|---|---|
-| W1 | Members: a clear table to choose what each member can see | todo |
+| W1 | Members: a clear table to choose what each member can see | done |
 | W2 | Improvement — search bar at the top of the dashboard | todo |
