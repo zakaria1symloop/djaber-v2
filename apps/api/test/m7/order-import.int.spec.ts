@@ -19,7 +19,7 @@ afterAll(async () => {
 const file = (rows: (string | number)[][]) => [{ buffer: csv(rows), name: 'commandes.csv', type: 'text/csv' }];
 
 describe('order import (carry-over M5, D69)', () => {
-  it('preview with row errors → commit job ⇒ orders source=import, client found or created, stock taken; second commit writes nothing; SOURCE badge = file name', async () => {
+  it('preview with row errors → commit job ⇒ orders source=import, client found or created, stock held; second commit writes nothing; SOURCE badge = file name', async () => {
     const owner = await asOwner(app);
     await seedFees(app, owner.workspaceId);
     const robe = await product(owner, { name: 'Robe', sku: 'ROBE-01', price: 4500, stock: 3 });
@@ -58,7 +58,9 @@ describe('order import (carry-over M5, D69)', () => {
       ['import', 'new', jobId, '0770112233'],
     ]);
     expect(orders[0]!.notes).toBe('appeler le soir');
-    expect((await db.product.findUniqueOrThrow({ where: { id: robe.id } })).stock).toBe(0);
+    // imported orders are `new`: their 3 units are held (no movement) until they are confirmed (owner decision 2026-10-21)
+    expect((await db.product.findUniqueOrThrow({ where: { id: robe.id } })).stock).toBe(3);
+    expect((await owner.get(`/products/${robe.id}`).expect(200)).body.data.stockDetail.reserved).toBe(3);
     expect(await db.client.count({ where: { workspaceId: owner.workspaceId } })).toBe(2);
     const view = (await owner.get(`/orders/${orders[0]!.id}`).expect(200)).body.data;
     expect(view.source).toMatchObject({ source: 'import', importFileName: 'commandes.csv' });

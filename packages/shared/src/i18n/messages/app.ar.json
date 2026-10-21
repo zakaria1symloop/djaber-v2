@@ -5025,7 +5025,7 @@
  "products.page.stock.lastInventory": "آخر جرد",
  "products.page.stock.noInventory": "لا يوجد جرد",
  "products.page.stock.reserved": "محجوز",
- "products.page.stock.reservedHint": "(طلبات مؤكدة لم تُشحن بعد)",
+ "products.page.stock.reservedHint": "(طلبات لم تُؤكَّد بعد)",
  "products.page.stock.service": "لا — خدمة، بلا مخزون",
  "products.page.stock.title": "المخزون",
  "products.page.stock.tracked": "نعم (منتج مادي)",

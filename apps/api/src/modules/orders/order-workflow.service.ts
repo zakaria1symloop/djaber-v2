@@ -102,7 +102,8 @@ export class OrderWorkflowService implements OnModuleInit {
       await tx.shipment.update({ where: { id: active.id }, data: { status: 'cancelled', cancelledAt: new Date() } });
     }
 
-    // stock (04 §3: given back on cancel / return; a return without restock leaves a loss trail)
+    // stock (04 §3: taken when a new order is confirmed, given back on cancel / return; a return without restock leaves a loss trail)
+    if (plan.stock === 'commit') await this.effects.syncStock(tx, o, lines, 'order_cancelled', actorUserId);
     if (plan.stock === 'restore_cancel') await this.effects.syncStock(tx, o, [], 'order_cancelled', actorUserId);
     if (plan.stock === 'restore_return') await this.effects.syncStock(tx, o, [], 'order_returned', actorUserId);
     if (plan.stock === 'loss_trail') await this.effects.lossTrail(tx, o, lines, actorUserId);

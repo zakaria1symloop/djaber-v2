@@ -261,7 +261,7 @@ export class OrderService implements OnModuleInit {
 
   /** Effects common to every creation path (04 §3 "Order created"). */
   private async afterCreate(tx: Tx, order: Order, lines: StockLine[], actor: Actor, o: { amountPaid: number; clientCreated: boolean }) {
-    await this.effects.syncStock(tx, order, lines, 'order_cancelled', actor.type === 'user' ? actor.id : null);
+    await this.effects.holdStock(tx, order, lines, actor.type === 'user' ? actor.id : null);
     let current = order;
     if (o.amountPaid > 0) {
       await this.effects.addPayment(tx, order, { amount: o.amountPaid, method: order.paymentMethod, description: `Commande #${order.number} (acompte)` }, actor);
@@ -437,7 +437,7 @@ export class OrderService implements OnModuleInit {
         const totals = orderTotals(lines, { discount, tax, deliveryFee });
         await tx.orderItem.deleteMany({ where: { orderId: id } });
         await tx.orderItem.createMany({ data: lines.map((l, i) => ({ orderId: id, productId: l.productId, variantId: l.variantId, productName: l.productName, variantName: l.variantName, sku: l.sku, unitPrice: l.unitPrice, costPrice: l.costPrice, quantity: l.quantity, discount: l.discount, total: totals.lineTotals[i]! })) });
-        await this.effects.syncStock(tx, o, this.stockLines(lines), 'order_cancelled', actor.id);
+        await this.effects.holdStock(tx, o, this.stockLines(lines), actor.id);
       }
       // 04 §3 "amount paid changed": the order's automatic rows are replaced by one row for the new amount
       if (input.amountPaid !== undefined && input.amountPaid !== o.amountPaid) {

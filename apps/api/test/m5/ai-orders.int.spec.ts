@@ -10,6 +10,8 @@ import { connectedPage, fakeMeta, forbidNetwork, instagramChild, newSender, rece
 import { answer, closeOutbox, fakeAi, ledger, linkedAgent, outMessages, replyJob, runReply, runsOf, textRoute } from '../support/m4';
 import { db, phone, productStock, seedFees } from '../support/m5';
 
+/** Units of the test product held by unconfirmed orders (product page « RÉSERVÉ »). */
+const held = async (s: { owner: { get: (u: string) => any }; robe: { id: string } }) => (await s.owner.get(`/products/${s.robe.id}`).expect(200)).body.data.stockDetail.reserved as number;
 let app: TestApp;
 let net: ReturnType<typeof forbidNetwork>;
 type Shop = { owner: Actor; page: Awaited<ReturnType<typeof connectedPage>>; agent: Awaited<ReturnType<typeof linkedAgent>>; robe: Record<string, any> };
@@ -53,7 +55,7 @@ afterAll(async () => {
 beforeEach(resetAi);
 
 describe('create_order (04-ai-pipeline §4.2)', () => {
-  it('AT-AI-04 / AT-CLI-01 recap confirmed ⇒ order `new` source ai, stock decremented, placeholder merged into the phone owner, notification + WS, 1 credit for the text, 0 for the order', async () => {
+  it('AT-AI-04 / AT-CLI-01 recap confirmed ⇒ order `new` source ai, stock held (no movement until confirmed), placeholder merged into the phone owner, notification + WS, 1 credit for the text, 0 for the order', async () => {
     const s = await shop();
     // the phone already belongs to a client of the shop (an earlier manual order)
     const existing = await db.client.create({ data: { workspaceId: s.owner.workspaceId, name: 'Amine B.', phone: '0555123456', source: 'manual' } });
@@ -65,7 +67,9 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const order = await db.order.findUniqueOrThrow({ where: { id: r.orderId }, include: { items: true } });
     expect(order).toMatchObject({ status: 'new', source: 'ai', agentId: s.agent.id, channelId: s.page.id, conversationId: t.conversationId, paymentMethod: 'cash', clientPhone: '0555123456', clientId: existing.id, communeText: null });
     expect(order.communeId).not.toBeNull(); // "Bab Ezzouar" matched the seeded commune of wilaya 16
-    expect(await productStock(s.robe.id)).toBe(4);
+    // a new order holds its unit, the stock moves when the merchant confirms (owner decision 2026-10-21)
+    expect(await productStock(s.robe.id)).toBe(5);
+    expect(await held(s)).toBe(1);
     // CLI-02: the placeholder of the conversation is merged into the phone owner, the conversation re-linked
     expect(t.conversation.clientId).toBe(existing.id);
     const placeholder = await db.client.findFirstOrThrow({ where: { mergedIntoId: existing.id } });
@@ -98,7 +102,7 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     await runReply(app, conversation.id, { attempt: 2, attempts: 3, data });
     await work(app, [s.owner.workspaceId]);
     expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(1);
-    expect(await productStock(s.robe.id)).toBe(4);
+    expect(await held(s)).toBe(1);
     expect(fakeMeta(app).callsOf('send').filter((c) => (c.args as any).recipientId === sender && String((c.args as any).message.text).includes('CMD-1001'))).toHaveLength(1);
     // the port itself is idempotent on runId:callId too (api-contract §1.7)
     const port = app.app.get<OrderTools>(ORDER_TOOLS);
@@ -118,22 +122,23 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const t = await turn(s, sender, 'oui je confirme encore');
     expect(lastResult(t.runs)).toMatchObject({ ok: true, number: 'CMD-1001', duplicateOf: 'CMD-1001' });
     expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(1);
-    expect(await productStock(s.robe.id)).toBe(4);
+    expect(await held(s)).toBe(1);
   });
 
-  it('AT-AI-07 "annuler ma commande": confirmed ⇒ cancelled through OrderEffects (stock restored); a shipped order ⇒ handoff', async () => {
+  it('AT-AI-07 "annuler ma commande": a new order ⇒ cancelled through OrderEffects (its hold released); a shipped order ⇒ handoff', async () => {
     const s = await shop();
     const sender = newSender();
     fakeAi(app).script('reply', { toolCalls: [createCall(s)] }, { reply: 'OK', intent: 'SALE' });
     const first = await turn(s, sender, 'oui');
     const orderId = lastResult(first.runs).orderId;
-    expect(await productStock(s.robe.id)).toBe(4);
+    expect(await held(s)).toBe(1);
     await resetAi();
     fakeAi(app).script('reply', { toolCalls: [{ name: 'cancel_order', args: { orderNumber: 'CMD-1001', customerConfirmed: true, reason: 'changed mind' } }] }, { reply: 'Commande annulée.', intent: 'OTHER' });
     const cancel = await turn(s, sender, 'oui annulez la');
     expect(lastResult(cancel.runs)).toEqual({ ok: true, cancelled: { number: 'CMD-1001' } });
     expect(await db.order.findUniqueOrThrow({ where: { id: orderId } })).toMatchObject({ status: 'cancelled', cancelReason: 'changed_mind' });
     expect(await productStock(s.robe.id)).toBe(5);
+    expect(await held(s)).toBe(0);
     const history = await db.orderStatusHistory.findFirstOrThrow({ where: { orderId, to: 'cancelled' } });
     expect(history).toMatchObject({ actorType: 'ai', actorId: s.agent.id });
     expect(cancel.conversation.status).toBe('active');

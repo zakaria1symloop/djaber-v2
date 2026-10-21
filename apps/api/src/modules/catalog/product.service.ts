@@ -20,14 +20,13 @@ import { folderOf, IMAGE_FILE, isProcessed, THUMB_FILE, thumbUrlOf } from './pro
 import { isProposed, LIST_INCLUDE, toImageView, toListItem, toVariantView, type ProductListRow } from './product.presenter';
 import { findProductIds } from './product.query';
 import { SkuService } from './sku.service';
-import { StockService } from './stock.service';
+import { StockService, reservedQuantities } from './stock.service';
 import { VariantService } from './variant.service';
 
 const DAY_MS = 24 * 3600 * 1000;
 /** MOD-01: a restored product is re-submitted when its last validation is older than 90 days. */
 const RESUBMIT_AFTER_MS = 90 * DAY_MS;
 const SOLD_STATUSES = MARGIN_SOLD_STATUSES;
-const RESERVED_STATUSES = ['confirmed', 'preparing'] as const;
 
 const belowCost = (price: number, cost: number | null | undefined): Warning[] =>
   cost !== null && cost !== undefined && price < cost ? [{ code: 'SELLING_BELOW_COST', field: 'price' }] : [];
@@ -144,14 +143,15 @@ export class ProductService implements OnModuleInit {
       prisma.productImage.findMany({ where: { productId: id }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }),
       prisma.productVariant.findMany({ where: { productId: id, deletedAt: row.deletedAt }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }),
       prisma.agentProduct.findMany({ where: { productId: id, agent: { deletedAt: null } }, select: { agent: { select: { id: true, name: true, status: true } } } }),
-      prisma.orderItem.aggregate({ where: { productId: id, order: { status: { in: [...RESERVED_STATUSES] } } }, _sum: { quantity: true } }),
+      // held by the orders not confirmed yet (no movement until they are — owner decision 2026-10-21)
+      reservedQuantities(prisma, [id]),
       this.margins(id, row),
       prisma.order.findMany({ where: { orderedAt: { gte: since }, items: { some: { productId: id } } }, select: { id: true, conversationId: true } }),
       this.moderation.detail(id),
     ]);
     const base = toListItem({ ...row, variants });
     const total = base.stock;
-    const reservedQty = reserved._sum.quantity ?? 0;
+    const reservedQty = [...reserved.values()].reduce((n, q) => n + q, 0);
     return {
       ...base,
       marginPct: pricing.marginPct,

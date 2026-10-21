@@ -42,15 +42,20 @@ describe('creation (ORD-01 / ORD-02, 04 §3 "Order created")', () => {
     expect(future.body.error).toMatchObject({ code: 'VALIDATION_ERROR', fields: { orderedAt: 'validation.date' } });
   });
 
-  it('decrements stock with an `out` movement, snapshots prices, recomputes the client, emits WS + webhook + Sheets rows', async () => {
+  it('a new order reserves its stock (no movement); confirming it writes the `out` movement; snapshots prices, recomputes the client, emits WS + webhook + Sheets rows', async () => {
     const owner = await shop();
     const p = await createProduct(owner, { price: 4500, stock: 5, costPrice: 3000 });
     const res = await postOrder(owner, orderBody(p.id, { items: [{ productId: p.id, quantity: 2 }] })).expect(201);
     const o = res.body.data;
     expect(o).toMatchObject({ status: 'new', source: { source: 'manual', user: { id: owner.userId } }, subtotal: 9000, deliveryFee: 400, total: 9400, paymentStatus: 'unpaid', confirmationStatus: 'pending', feeExplanation: 'GRILLE ALGER · DOMICILE 400' });
     expect(o.items[0]).toMatchObject({ productName: p.name, unitPrice: 4500, costPrice: 3000, quantity: 2, total: 9000 });
-    expect(await productStock(p.id)).toBe(3);
-    expect((await movementsOf(o.id)).map((m) => [m.type, m.reason, m.quantity])).toEqual([['out', 'order_created', -2]]);
+    // owner decision 2026-10-21 (tester report): held, not moved, until the merchant confirms
+    expect(await productStock(p.id)).toBe(5);
+    expect(await movementsOf(o.id)).toHaveLength(0);
+    expect((await owner.get(`/products/${p.id}`).expect(200)).body.data.stockDetail).toMatchObject({ total: 5, reserved: 2 });
+    // a second order cannot take the held units: 5 − 2 held = 3 available
+    const over = await postOrder(owner, orderBody(p.id, { items: [{ productId: p.id, quantity: 4 }] })).expect(422);
+    expect(over.body.error).toMatchObject({ code: 'ORDER_INSUFFICIENT_STOCK', params: { available: 3 } });
     const client = await db.client.findUniqueOrThrow({ where: { id: o.client.id } });
     expect(client).toMatchObject({ orderCount: 1, totalSpent: 0, source: 'manual' });
     expect((await wsOf(`ws:${owner.workspaceId}`, 'order.created')).some((e) => e.payload.order.id === o.id)).toBe(true);
@@ -58,6 +63,11 @@ describe('creation (ORD-01 / ORD-02, 04 §3 "Order created")', () => {
     expect(await db.outbox.count({ where: { topic: 'sheets', key: { startsWith: `sheets:${o.id}` } } })).toBe(1);
     expect(o.history).toEqual([expect.objectContaining({ field: 'status', from: null, to: 'new', actor: expect.objectContaining({ type: 'user' }) })]);
     expect(o.actions[0]).toMatchObject({ key: 'confirm', primary: true, enabled: true });
+    // confirmed: the held units leave the stock with their `out` movement
+    await status(owner, o, 'confirmed').expect(200);
+    expect(await productStock(p.id)).toBe(3);
+    expect((await movementsOf(o.id)).map((m) => [m.type, m.reason, m.quantity])).toEqual([['out', 'order_created', -2]]);
+    expect((await owner.get(`/products/${p.id}`).expect(200)).body.data.stockDetail).toMatchObject({ total: 3, reserved: 0 });
   });
 
   it('AT-CAT-02 a service product (trackStock=false) never decrements; AT-CAT-03 a variant product needs its variant', async () => {
@@ -72,9 +82,10 @@ describe('creation (ORD-01 / ORD-02, 04 §3 "Order created")', () => {
     const l = robe.variants.find((v: any) => v.name === 'L');
     const ok = await postOrder(owner, orderBody(robe.id, { items: [{ productId: robe.id, variantId: l.id, quantity: 2 }] })).expect(201);
     expect(ok.body.data.items[0]).toMatchObject({ variantName: 'L', unitPrice: 5200 });
-    expect((await db.productVariant.findUniqueOrThrow({ where: { id: l.id } })).stock).toBe(0);
-    expect(await productStock(robe.id)).toBe(4); // product stock = Σ active variants
-    // stock is a conditional decrement: ORDER_INSUFFICIENT_STOCK on the line, nothing written
+    // held by the new order (no movement yet): the variant keeps its 2 units, none available
+    expect((await db.productVariant.findUniqueOrThrow({ where: { id: l.id } })).stock).toBe(2);
+    expect(await productStock(robe.id)).toBe(6); // product stock = Σ active variants
+    // availability = stock − what the unconfirmed orders hold: ORDER_INSUFFICIENT_STOCK on the line, nothing written
     const short = await postOrder(owner, orderBody(robe.id, { items: [{ productId: robe.id, variantId: l.id, quantity: 1 }] })).expect(422);
     expect(short.body.error).toMatchObject({ code: 'ORDER_INSUFFICIENT_STOCK', params: { product: 'Robe kabyle · L', available: 0 } });
     expect(await db.order.count({ where: { workspaceId: owner.workspaceId } })).toBe(2);
@@ -128,7 +139,8 @@ describe('creation (ORD-01 / ORD-02, 04 §3 "Order created")', () => {
     expect(b.headers['idempotent-replayed']).toBe('true');
     expect(b.body.data.id).toBe(a.body.data.id);
     expect(await db.order.count({ where: { workspaceId: owner.workspaceId } })).toBe(1);
-    expect(await productStock(p.id)).toBe(4);
+    expect(await productStock(p.id)).toBe(5); // held by the new order, not moved
+    expect((await owner.get(`/products/${p.id}`).expect(200)).body.data.stockDetail.reserved).toBe(1);
     expect((await owner.post('/orders', { ...body, notes: 'autre' }).set(key).expect(422)).body.error.code).toBe('IDEMPOTENCY_MISMATCH');
   });
 
@@ -186,7 +198,7 @@ describe('status machine and effects (04 §1.2, §3)', () => {
 
   it('AT-ORD-05 cancel after a partial payment ⇒ amountPaid 0, automatic rows removed, manual rows kept, stock restored', async () => {
     const owner = await shop();
-    const { order, product } = await newOrder(owner);
+    const { order, product } = await newOrder(owner, { status: 'confirmed' });
     const paid = await owner.post(`/orders/${order.id}/payments`, { amount: 1000, method: 'ccp' }).set(idem()).expect(200);
     expect(paid.body.data).toMatchObject({ amountPaid: 1000, paymentStatus: 'partial' });
     const manual = await db.cashTransaction.create({ data: { workspaceId: owner.workspaceId, type: 'income', amount: 50, category: 'other', description: 'pourboire', isAutomatic: false } });
@@ -199,6 +211,11 @@ describe('status machine and effects (04 §1.2, §3)', () => {
     expect((await movementsOf(order.id)).map((m) => [m.type, m.reason, m.quantity])).toEqual([['out', 'order_created', -1], ['return', 'order_cancelled', 1]]);
     expect((await owner.post(`/orders/${order.id}/cancel`, { reason: 'other' }).expect(422)).body.error.code).toBe('ORDER_TERMINAL');
     expect((await owner.post(`/orders/${order.id}/payments`, { amount: 100 }).set(idem()).expect(422)).body.error.code).toBe('ORDER_PAYMENT_LOCKED');
+    // a new order cancelled only releases what it held: no movement at all
+    const fresh = (await newOrder(owner, {}, product)).order;
+    await owner.post(`/orders/${fresh.id}/cancel`, { reason: 'other' }).expect(200);
+    expect(await movementsOf(fresh.id)).toHaveLength(0);
+    expect(await productStock(product.id)).toBe(10);
   });
 
   it('AT-ORD-06 returned ⇒ stock back with the return, income rows removed, expense `shipping` = grid returnPrice (D27); client returnCount', async () => {
@@ -294,7 +311,7 @@ describe('status machine and effects (04 §1.2, §3)', () => {
   it('AT-ORD-08 two users change the status with the same version ⇒ one 409 CONFLICT, no double side effect', async () => {
     const owner = await shop();
     const admin = await asAdmin(app, owner.workspaceId);
-    const { order, product } = await newOrder(owner);
+    const { order, product } = await newOrder(owner, { status: 'confirmed' });
     const [r1, r2] = await Promise.all([status(owner, order, 'cancelled', { reason: 'other' }), status(admin, order, 'cancelled', { reason: 'duplicate' })]);
     expect([r1.status, r2.status].sort()).toEqual([200, 409]);
     const conflict = [r1, r2].find((r) => r.status === 409)!;
@@ -425,13 +442,18 @@ describe('calls, callback, address, assignment, payments (04 §1.3, §1.4, §21)
     expect(await db.notification.count({ where: { userId: op.userId, type: 'order_status_changed' } })).toBe(1);
   });
 
-  it('notes and item edits (stock re-synced)', async () => {
+  it('notes and item edits (stock re-synced once confirmed, only held while new)', async () => {
     const owner = await shop();
     const { order, product } = await newOrder(owner);
     await owner.post(`/orders/${order.id}/notes`, { body: 'client préfère le matin' }).expect(201);
     const edited = await owner.patch(`/orders/${order.id}`, { items: [{ productId: product.id, quantity: 3 }], version: order.version }).expect(200);
     expect(edited.body.data).toMatchObject({ subtotal: 13500, total: 13900 });
+    expect(await productStock(product.id)).toBe(10); // new: held, not moved
+    expect((await owner.patch(`/orders/${order.id}`, { items: [{ productId: product.id, quantity: 11 }], version: edited.body.data.version }).expect(422)).body.error.code).toBe('ORDER_INSUFFICIENT_STOCK');
+    const confirmed = await status(owner, edited.body.data, 'confirmed').expect(200);
     expect(await productStock(product.id)).toBe(7);
+    await owner.patch(`/orders/${order.id}`, { items: [{ productId: product.id, quantity: 1 }], version: confirmed.body.data.version }).expect(200);
+    expect(await productStock(product.id)).toBe(9);
     expect((await owner.get(`/orders/${order.id}/notes`).expect(200)).body.data[0]).toMatchObject({ body: 'client préfère le matin' });
   });
 });

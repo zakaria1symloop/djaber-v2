@@ -2,6 +2,7 @@
 // the vision candidates: products in the agent's scope that are active, not archived and approved by moderation (AI-14, D36).
 import { Injectable } from '@nestjs/common';
 import { prisma, Prisma, TenantContext, type Agent } from '@djaber/db';
+import { reservedQuantities } from '../catalog/stock.service';
 import { FULL_CATALOGUE_MAX, RETRIEVAL_TOP } from './ai.constants';
 
 export type AgentScope = Pick<Agent, 'id' | 'sellAllProducts' | 'catalogScope' | 'scopeCategoryIds'>;
@@ -71,14 +72,17 @@ export class CatalogueService {
         also.set(r.productId, list);
       }
     }
+    // what the AI may sell: the stock less what the unconfirmed orders hold (owner decision 2026-10-21)
+    const held = await reservedQuantities(prisma, rows.filter((r) => r.trackStock).map((r) => r.id));
+    const free = (productId: string, variantId: string | null, stock: number) => Math.max(0, stock - (held.get(`${productId}:${variantId ?? ''}`) ?? 0));
     return rows.map((p) => ({
       id: p.id,
       ...live(p),
       sku: p.sku,
       oldPrice: p.oldPrice,
-      stock: !p.trackStock ? null : p.hasVariants ? p.variants.reduce((n, v) => n + v.stock, 0) : (p.stock ?? 0),
+      stock: !p.trackStock ? null : p.hasVariants ? p.variants.reduce((n, v) => n + free(p.id, v.id, v.stock), 0) : free(p.id, null, p.stock ?? 0),
       hasVariants: p.hasVariants,
-      variants: p.hasVariants ? p.variants.map((v) => ({ id: v.id, name: v.name, price: v.price, stock: v.stock })) : [],
+      variants: p.hasVariants ? p.variants.map((v) => ({ id: v.id, name: v.name, price: v.price, stock: p.trackStock ? free(p.id, v.id, v.stock) : v.stock })) : [],
       imageUrl: p.images[0]?.url ?? null,
       imageKey: p.images[0]?.storageKey ?? null,
       category: p.category?.name ?? null,

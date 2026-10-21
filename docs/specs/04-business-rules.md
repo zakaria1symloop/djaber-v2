@@ -62,10 +62,11 @@ Create: ≥ 1 item, client name, phone (validated). Confirm: + wilaya, commune, 
 
 | Action | Stock | Cash register (cash actually moved) | Client aggregates | Outbox |
 |---|---|---|---|---|
-| Order created | − qty per item/variant if `trackStock` (conditional `quantity ≥ qty`, else `422 ORDER_INSUFFICIENT_STOCK`), movement `out` reason `order_created` | + income `order` for `amountPaid` if > 0 | recompute | notification, WS, Sheets, webhook `order.created` |
+| Order created | status `new`: qty **reserved** per item/variant if `trackStock` — no movement; available = stock − what the other `new` orders hold, else `422 ORDER_INSUFFICIENT_STOCK {available}` (owner decision 2026-10-21, tester report). Created directly `confirmed`: − qty with movement `out` reason `order_created` | + income `order` for `amountPaid` if > 0 | recompute | notification, WS, Sheets, webhook `order.created` |
+| Order `new` → confirmed / preparing / shipped / delivered | the reserved qty leaves the stock: − qty (conditional `quantity ≥ qty`, else `422 ORDER_INSUFFICIENT_STOCK`), movement `out` reason `order_created`; item edits of a `new` order only re-check the reservation | — | — | — |
 | Order amount paid changed | — | auto `order` rows for this order replaced by one row for `amountPaid` | — | `order.paid` when paid |
 | Order → delivered (COD unpaid) | — | + income = total "(COD - delivered)" | recompute | customer msg, `order.delivered` |
-| Order → cancelled (any path) | + qty restored, movement `return` reason `order_cancelled` | auto rows removed; `amountPaid=0`, unpaid | recompute | customer msg, `order.status_changed` |
+| Order → cancelled (any path) | + qty restored when it was taken (movement `return` reason `order_cancelled`); a `new` order only releases its reservation | auto rows removed; `amountPaid=0`, unpaid | recompute | customer msg, `order.status_changed` |
 | Order → returned | + qty restored when "return received" confirmed, movement `return` reason `order_returned` | auto income rows removed; + expense `shipping` = grid `returnPrice` (D27) | recompute | alert |
 | Order deleted (not `delivered`) | restore if not already (movement `return` reason `order_cancelled`) | **auto** rows removed only (**fix**) | recompute | — |
 | Sale created / payment changed / deleted (unpaid only) | − (`out`, reason `sale`; conditional `quantity ≥ qty`, else `422 SALE_INSUFFICIENT_STOCK`) / — / + (`return`, reason `sale_cancelled`) | + income `sale` for paid; replaced; removed | recompute | — |

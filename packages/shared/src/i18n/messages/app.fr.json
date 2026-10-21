@@ -5025,7 +5025,7 @@
  "products.page.stock.lastInventory": "DERNIER INVENTAIRE",
  "products.page.stock.noInventory": "Aucun inventaire",
  "products.page.stock.reserved": "RÉSERVÉ",
- "products.page.stock.reservedHint": "(commandes confirmées non expédiées)",
+ "products.page.stock.reservedHint": "(commandes pas encore confirmées)",
  "products.page.stock.service": "Non — service, pas de stock",
  "products.page.stock.title": "Stock",
  "products.page.stock.tracked": "Oui (produit physique)",

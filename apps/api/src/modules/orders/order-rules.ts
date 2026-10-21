@@ -46,7 +46,8 @@ export const allowedTargets = (o: OrderState, role: Role): OrderStatusName[] =>
     return !r;
   });
 
-export type StockPlan = 'restore_cancel' | 'restore_return' | 'loss_trail' | null;
+/** `commit`: a `new` order leaves `new` — its reserved quantities become `out` movements (owner decision 2026-10-21). */
+export type StockPlan = 'commit' | 'restore_cancel' | 'restore_return' | 'loss_trail' | null;
 export type CashPlan = 'cod' | 'clear' | 'clear_and_return_fee' | null;
 export type ShipmentPlan = 'create_manual' | 'mark_delivered' | 'mark_returned' | 'cancel_manual' | null;
 export type TransitionPlan = {
@@ -66,7 +67,8 @@ export type TransitionPlan = {
 };
 
 /**
- * 04 §3 — what a status change does. Stock is decremented at creation, so only cancel / return give it back
+ * 04 §3 — what a status change does. A `new` order only reserves its stock: leaving `new` for a live status takes it
+ * (`commit`); cancel / return give back what was taken
  * (`restoreStock=false` on a return writes the loss trail instead). Cash: COD on delivery, auto rows removed on
  * cancel, removed + return fee (D27) on return.
  */
@@ -127,6 +129,8 @@ export const transitionPlan = (from: OrderStatusName, to: OrderStatusName, o: { 
     default:
       break;
   }
+  // a new order confirmed (or prepared / shipped / delivered straight away) takes its reserved stock now
+  if (from === 'new' && (to === 'confirmed' || to === 'preparing' || to === 'shipped' || to === 'delivered')) plan.stock = 'commit';
   return plan;
 };
 

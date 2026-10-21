@@ -39,7 +39,7 @@ export class OrderEffects implements OnModuleInit {
     if (!this.registry.outbox.has('sheets')) this.registry.onOutbox('sheets', async () => undefined);
   }
 
-  // --- stock (04 §3: taken at creation, given back on cancel / return / delete) -------------------------------------------
+  // --- stock (04 §3: reserved while new, taken when confirmed, given back on cancel / return / delete) ---------------------
   /** Net quantity this order took per product / variant (Σ of its movements, ≤ 0). */
   async netMovements(tx: Tx, orderId: string): Promise<Map<string, number>> {
     const rows = await tx.stockMovement.groupBy({ by: ['productId', 'variantId'], where: { refType: 'order', refId: orderId }, _sum: { quantity: true } });
@@ -68,6 +68,21 @@ export class OrderEffects implements OnModuleInit {
         insufficient: (available, p) => new AppException('ORDER_INSUFFICIENT_STOCK', { product: p.name, available }, {}, { productId: d.productId, variantId: d.variantId, available }),
       });
     }
+  }
+
+  /**
+   * Stock of an order being created or edited (owner decision 2026-10-21): still `new` ⇒ the quantities are only
+   * reserved (checked against stock − the other unconfirmed orders, no movement); confirmed and later ⇒ moved now.
+   * The movements of a `new` order are written by `syncStock` when it is confirmed (transition plan `commit`).
+   */
+  async holdStock(tx: Tx, order: Pick<Order, 'id' | 'number' | 'status'>, lines: StockLine[], actorId?: string | null) {
+    if (order.status !== 'new') return this.syncStock(tx, order, lines, 'order_cancelled', actorId);
+    await this.stock.reserve(
+      tx,
+      order.id,
+      lines.filter((l) => l.trackStock),
+      (available, p) => new AppException('ORDER_INSUFFICIENT_STOCK', { product: p.name, available }, {}, { productId: p.productId, variantId: p.variantId, available }),
+    );
   }
 
   /** Return without restock (04 §21): no `return` movement, one `adjustment_out` / `loss` line per tracked item for the audit trail. */

@@ -479,7 +479,8 @@ describe('archive, restore, hard delete, duplicate', () => {
     expect(pinned.body.error).toMatchObject({ code: 'PRODUCT_HAS_ORDERS', params: { count: 1 } });
     const detail = (await owner.get(`/products/${p.id}`).expect(200)).body.data;
     expect(detail.actions.find((a: any) => a.key === 'delete')).toEqual({ key: 'delete', enabled: false, reasonCode: 'PRODUCT_HAS_ORDERS' });
-    expect(detail).toMatchObject({ stockDetail: { total: 4, reserved: 2, availableForAi: 2 }, pricing: { sales30d: { units: 2, revenue: 6200 } }, mentions30d: { orders: 1 } });
+    // « RÉSERVÉ » = units held by unconfirmed (`new`) orders; this confirmed order holds nothing (owner decision 2026-10-21)
+    expect(detail).toMatchObject({ stockDetail: { total: 4, reserved: 0, availableForAi: 4 }, pricing: { sales30d: { units: 2, revenue: 6200 } }, mentions30d: { orders: 1 } });
     expect((await owner.get(`/products/${p.id}/relations`).expect(200)).body.data.orders).toMatchObject({ count: 1, last: [{ number: 'CMD-TEST-1', quantity: 2 }] });
     await owner.delete(`/products/${p.id}`).expect(204);
     expect(await db.orderItem.count({ where: { productId: p.id } })).toBe(1);

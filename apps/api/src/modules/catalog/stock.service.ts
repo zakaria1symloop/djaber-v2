@@ -54,6 +54,33 @@ type MovementRow = Prisma.StockMovementGetPayload<{ include: typeof MOVEMENT_INC
 const REVERSIBLE_REF: (MovementRefType | null)[] = [null, 'manual', 'import'];
 const SORTS = ['createdAt'] as const;
 
+/**
+ * Units held by orders still `new` (owner decision 2026-10-21, tester report 2026-10-20): an unconfirmed order reserves
+ * its quantities without a movement, its `out` movement is written when it is confirmed. Orders created before that
+ * rule already moved their stock: what they moved is subtracted, so nothing is counted twice. Key `productId:variantId`.
+ */
+export async function reservedQuantities(db: Tx | typeof prisma, productIds: string[], exceptOrderId?: string | null): Promise<Map<string, number>> {
+  if (!productIds.length) return new Map();
+  const ws = TenantContext.workspaceId();
+  const except = exceptOrderId ? Prisma.sql`AND o."id" <> ${exceptOrderId}::uuid` : Prisma.empty;
+  const rows = await (db as typeof prisma).$queryRaw<{ productId: string; variantId: string | null; reserved: number }[]>`
+    SELECT x."productId", x."variantId", sum(GREATEST(x.qty + COALESCE(m.moved, 0), 0))::int AS reserved
+    FROM (
+      SELECT i."orderId", i."productId", i."variantId", sum(i."quantity")::int AS qty
+      FROM "OrderItem" i JOIN "Order" o ON o."id" = i."orderId"
+      WHERE o."workspaceId" = ${ws}::uuid AND o."status" = 'new' AND i."productId" = ANY(${productIds}::uuid[]) ${except}
+      GROUP BY 1, 2, 3
+    ) x
+    LEFT JOIN (
+      SELECT "refId" AS "orderId", "productId", "variantId", sum("quantity")::int AS moved
+      FROM "StockMovement" WHERE "refType" = 'order' AND "productId" = ANY(${productIds}::uuid[])
+      GROUP BY 1, 2, 3
+    ) m ON m."orderId" = x."orderId" AND m."productId" = x."productId" AND m."variantId" IS NOT DISTINCT FROM x."variantId"
+    GROUP BY 1, 2`;
+  return new Map(rows.filter((r) => r.reserved > 0).map((r) => [`${r.productId}:${r.variantId ?? ''}`, r.reserved]));
+}
+
+
 @Injectable()
 export class StockService implements OnModuleInit {
   constructor(
@@ -123,6 +150,49 @@ export class StockService implements OnModuleInit {
       await this.emitProductUpdated(tx, product.id);
     }
     return { movement, before, after, productStock };
+  }
+
+  /** Units held by unconfirmed orders (see `reservedQuantities`). */
+  reservedQty(db: Tx | typeof prisma, productIds: string[], exceptOrderId?: string | null) {
+    return reservedQuantities(db, productIds, exceptOrderId);
+  }
+
+  /**
+   * Checks that an order still `new` can hold `lines` (quantity ≤ stock − what the other unconfirmed orders hold), the
+   * product / variant rows locked in a stable order so two orders cannot take the same last unit. Nothing is written.
+   */
+  async reserve(tx: Tx, orderId: string, lines: { productId: string; variantId: string | null; quantity: number }[], insufficient: (available: number, p: { name: string; productId: string; variantId: string | null }) => Error) {
+    const want = new Map<string, { productId: string; variantId: string | null; qty: number }>();
+    for (const l of lines) {
+      const k = `${l.productId}:${l.variantId ?? ''}`;
+      const cur = want.get(k);
+      want.set(k, { productId: l.productId, variantId: l.variantId, qty: (cur?.qty ?? 0) + l.quantity });
+    }
+    if (!want.size) return;
+    const ws = TenantContext.workspaceId();
+    const keys = [...want.values()].sort((a, b) => a.productId.localeCompare(b.productId) || (a.variantId ?? '').localeCompare(b.variantId ?? ''));
+    // what this order already moved (an order of before the rule): only the rest needs to be available
+    const moved = await tx.stockMovement.groupBy({ by: ['productId', 'variantId'], where: { refType: 'order', refId: orderId }, _sum: { quantity: true } });
+    const own = new Map(moved.map((m) => [`${m.productId}:${m.variantId ?? ''}`, -(m._sum.quantity ?? 0)]));
+    const held = await this.reservedQty(tx, [...new Set(keys.map((k) => k.productId))], orderId);
+    for (const k of keys) {
+      const [product] = await tx.$queryRaw<ProductLock[]>`
+        SELECT "id","name","sku","trackStock","hasVariants","stock","minStock","isActive","moderationStatus"::text AS "moderationStatus"
+        FROM "Product" WHERE "id" = ${k.productId}::uuid AND "workspaceId" = ${ws}::uuid FOR UPDATE`;
+      if (!product || !product.trackStock) continue;
+      let stock = product.stock ?? 0;
+      let name = product.name;
+      if (k.variantId) {
+        const [variant] = await tx.$queryRaw<VariantLock[]>`SELECT "id","name","sku","stock","minStock" FROM "ProductVariant" WHERE "id" = ${k.variantId}::uuid AND "productId" = ${product.id}::uuid AND "deletedAt" IS NULL FOR UPDATE`;
+        if (!variant) throw new AppException('VARIANT_NOT_FOUND');
+        stock = variant.stock;
+        name = `${product.name} · ${variant.name}`;
+      }
+      const key = `${k.productId}:${k.variantId ?? ''}`;
+      const need = k.qty - (own.get(key) ?? 0);
+      const available = stock - (held.get(key) ?? 0);
+      if (need > 0 && need > available) throw insufficient(Math.max(0, available), { name, productId: k.productId, variantId: k.variantId });
+    }
   }
 
   /**

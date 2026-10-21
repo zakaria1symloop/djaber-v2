@@ -67,8 +67,9 @@ describe('04 §3 effects plan of every allowed transition', () => {
   const allowed = pairs.filter(([f, t]) => SPEC[f].includes(t));
   it.each(allowed)('%s → %s', (from, to) => {
     const unpaid = transitionPlan(from, to, { paymentStatus: 'unpaid', hasActiveShipment: from === 'shipped' });
-    // stock is taken at creation: only cancel / return give it back
-    expect(unpaid.stock).toBe(to === 'cancelled' ? 'restore_cancel' : to === 'returned' ? 'restore_return' : null);
+    // a new order only reserves: leaving `new` for a live status takes the stock (`commit`, owner decision 2026-10-21);
+    // cancel / return give back what was taken
+    expect(unpaid.stock).toBe(to === 'cancelled' ? 'restore_cancel' : to === 'returned' ? 'restore_return' : from === 'new' ? 'commit' : null);
     expect(unpaid.cash).toBe(to === 'delivered' ? 'cod' : to === 'cancelled' ? 'clear' : to === 'returned' ? 'clear_and_return_fee' : null);
     expect(unpaid.aggregates).toBe(['delivered', 'cancelled', 'returned'].includes(to));
     if (to === 'shipped') expect(unpaid.shipment).toBe(from === 'shipped' ? null : 'create_manual');
