@@ -15,6 +15,7 @@ import {
   cn,
   ConfirmDialog,
   DataTable,
+  DateInput,
   FilterChips,
   FilterDateRange,
   FilterDropdown,
@@ -307,7 +308,7 @@ function CashLedger() {
             </div>
             <label className="flex flex-col gap-1 text-[12px] text-text-muted">
               {t('cash.filter.oneDay')}
-              <input type="date" value={sel.kind === 'day' ? sel.day : ''} max={today} onChange={(e) => list.setFilters({ day: e.target.value || null, period: null, from: null, to: null })} className="h-9 rounded-[6px] border border-line-edge bg-ink-surface px-2 text-[13px] text-text-primary [color-scheme:dark]" aria-label={t('cash.filter.oneDay')} />
+              <DateInput value={sel.kind === 'day' ? sel.day : ''} max={today} onValueChange={(v) => list.setFilters({ day: v || null, period: null, from: null, to: null })} className="!h-9 text-[13px]" aria-label={t('cash.filter.oneDay')} />
             </label>
             <FilterDateRange from={sel.kind === 'range' ? sel.from : ''} to={sel.kind === 'range' ? sel.to : ''} onChange={(r) => list.setFilters({ from: r.from || null, to: r.to || null, day: null, period: null })} labels={{ from: t('common.from'), to: t('common.to'), presets: t('gds.period.custom') }} />
           </div>

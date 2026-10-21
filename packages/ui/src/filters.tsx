@@ -5,7 +5,7 @@
 import * as Popover from '@radix-ui/react-popover';
 import { ChevronDown, X } from 'lucide-react';
 import * as React from 'react';
-import { NumberInput } from './inputs';
+import { DateInput, NumberInput } from './inputs';
 import { Button, Checkbox, cn, Input } from './primitives';
 import { SideSheet } from './sheet';
 
@@ -180,11 +180,11 @@ export function FilterDateRange({
         </div>
       ) : null}
       <div className="flex items-center gap-2">
-        <Input type="date" aria-label={labels.from} value={from} max={to || undefined} onChange={(e) => onChange({ from: e.target.value, to })} className="!h-9 text-[13px] [color-scheme:dark]" />
+        <DateInput aria-label={labels.from} value={from} max={to || undefined} onValueChange={(v) => onChange({ from: v, to })} className="!h-9 text-[13px]" />
         <span aria-hidden className="text-text-muted">
           →
         </span>
-        <Input type="date" aria-label={labels.to} value={to} min={from || undefined} onChange={(e) => onChange({ from, to: e.target.value })} className="!h-9 text-[13px] [color-scheme:dark]" />
+        <DateInput aria-label={labels.to} value={to} min={from || undefined} onValueChange={(v) => onChange({ from, to: v })} className="!h-9 text-[13px]" />
       </div>
     </div>
   );

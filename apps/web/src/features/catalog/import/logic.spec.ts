@@ -10,6 +10,7 @@ import {
   formatFileSize,
   importableCount,
   importPhase,
+  importTemplateCsv,
   mappingPayload,
   missingRequiredFields,
   newCategoryNames,
@@ -162,5 +163,18 @@ describe('buildErrorsCsv', () => {
   });
   it('neutralises formula cells', () => {
     expect(lines[3]).toBe("98;'=SUM(A1);'-12;1900;X");
+  });
+});
+
+describe('example file (tester report 2026-10-20)', () => {
+  it('one header per import field, two example rows, Excel-friendly', () => {
+    const csv = importTemplateCsv('fr');
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
+    const lines = csv.slice(1).trimEnd().split(/\r\n/);
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toBe('SKU;Nom;Description;Catégorie;Unité;Prix;Ancien prix;Coût;Stock;Seuil;Poids;Mots-clés;Actif');
+    expect(lines[1]).toContain(';robe, kabyle, fête;');
+    expect(importTemplateCsv('en').split(/\r\n/)[0]).toContain('Name;Description');
+    expect(importTemplateCsv('ar').split(/\r\n/)[0]).toContain('الاسم');
   });
 });

@@ -58,6 +58,8 @@
  "gaps.job.progress": "التقدم: {kind}",
  "gaps.job.running": "{kind} قيد التنفيذ: {pct} %",
  "gaps.orders.notify.noConversation": "طلب بدون محادثة: لا يمكن إبلاغ العميل برسالة.",
+ "import.template.download": "تنزيل ملف نموذجي (CSV)",
+ "import.template.fileName": "نموذج-استيراد-المنتجات.csv",
  "report.col.ordersRevenue": "إيرادات الطلبات",
  "report.col.proof": "الوصل",
  "report.col.salesRevenue": "إيرادات المبيعات",

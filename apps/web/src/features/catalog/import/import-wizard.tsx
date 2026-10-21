@@ -19,7 +19,7 @@ import { useSession, useWorkspaceId } from '@/lib/session';
 import { catalogApi, catalogKeys, useCatalogRefresh, useCategories, useModerationSummary } from '../api';
 import { flattenCategories } from '../contracts';
 import { Num } from '../ui';
-import { buildErrorsCsv, checkImportFile, IMPORT_ACCEPT, IMPORT_TABS, importableCount, importPhase, invalidRows, stepOfPhase, type ImportTab } from './logic';
+import { buildErrorsCsv, checkImportFile, IMPORT_ACCEPT, IMPORT_TABS, importableCount, importPhase, type ImportTab, importTemplateCsv, invalidRows, stepOfPhase } from './logic';
 import { MappingDialog } from './mapping-dialog';
 import { describeRowError, FileCard, PreviewRows, PreviewTiles } from './preview';
 import { uuid } from '@/lib/uuid';
@@ -279,6 +279,7 @@ export function ImportWizard() {
 /* ---------- step 1: dropzone, client checks, upload progress ---------- */
 function UploadStep({ failure, onUploaded }: { failure: { code: string; message: string; params?: Record<string, string | number> } | null; onUploaded: (jobId: string, file: File) => void }) {
   const t = useT();
+  const locale = useLocaleCode();
   const input = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
   const [over, setOver] = useState(false);
@@ -350,7 +351,20 @@ function UploadStep({ failure, onUploaded }: { failure: { code: string; message:
           <FormAlert>{shown.code ? `${shown.message} (${shown.code})` : shown.message}</FormAlert>
         </div>
       ) : null}
-      <p className="ts-label-meta text-text-muted">{t('import.upload.note')}</p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p className="ts-label-meta text-text-muted">{t('import.upload.note')}</p>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            const url = URL.createObjectURL(new Blob([importTemplateCsv(locale)], { type: 'text/csv;charset=utf-8' }));
+            void downloadUrl(url, t('import.template.fileName')).finally(() => window.setTimeout(() => URL.revokeObjectURL(url), 10_000));
+          }}
+          data-testid="import-template"
+        >
+          {t('import.template.download')}
+        </Button>
+      </div>
     </div>
   );
 }

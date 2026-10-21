@@ -23,10 +23,10 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 ## Filters, forms, i18n
 | # | Issue | Status |
 |---|---|---|
-| F1 | UX-002 (19/10) — /en/agents "Origine" filter options have no label in English | todo |
-| F2 | Date filter inputs reset while typing the year (every date filter) | todo |
-| F3 | Category image does not show after upload | todo |
-| F4 | Product CSV import: give a CSV example so the client knows the columns | todo |
+| F1 | UX-002 (19/10) — /en/agents "Origine" filter options have no label in English | done |
+| F2 | Date filter inputs reset while typing the year (every date filter) | done |
+| F3 | Category image does not show after upload | done |
+| F4 | Product CSV import: give a CSV example so the client knows the columns | done |
 
 ## Catalog, stock, orders
 | # | Issue | Status |

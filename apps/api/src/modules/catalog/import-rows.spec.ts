@@ -14,6 +14,16 @@ const preview = (headers: string[], rows: string[][], over: Partial<ImportContex
   buildPreview({ fileName: 'f.csv', headers, rows, mapping: autoMap(headers), updateExisting, ctx: ctx(over) });
 
 describe('headers (FR / EN / AR aliases as V1)', () => {
+  // the example file of the import wizard (web `importTemplateCsv`): every column is recognised in the three languages
+  it.each([
+    ['fr', ['SKU', 'Nom', 'Description', 'Catégorie', 'Unité', 'Prix', 'Ancien prix', 'Coût', 'Stock', 'Seuil', 'Poids', 'Mots-clés', 'Actif']],
+    ['en', ['SKU', 'Name', 'Description', 'Category', 'Unit', 'Price', 'Old price', 'Cost price', 'Stock', 'Min stock', 'Weight', 'Keywords', 'Active']],
+    ['ar', ['الرمز', 'الاسم', 'الوصف', 'الفئة', 'الوحدة', 'السعر', 'السعر القديم', 'التكلفة', 'المخزون', 'الحد الادنى', 'الوزن', 'الكلمات المفتاحية', 'نشط']],
+  ])('example file headers (%s) map every field', (_l, headers) => {
+    const m = autoMap(headers as string[]);
+    expect(Object.keys(m).filter((k) => m[k as keyof typeof m]).sort()).toEqual(['costPrice', 'category', 'description', 'isActive', 'keywords', 'minStock', 'name', 'oldPrice', 'price', 'sku', 'stock', 'unit', 'weightGrams'].sort());
+  });
+
   it('normalises accents, case and punctuation', () => {
     expect(normalizeHeader(' Prix d’achat ')).toBe('prixdachat');
     expect(normalizeHeader('Quantité (stock)')).toBe('quantitestock');

@@ -68,7 +68,7 @@ export function AgentsList() {
   const statusOptions = STATUSES.map((v) => ({ value: v, label: t(`agents.filter.status.${v}`) }));
   const channelOptions = (channels.data?.rows ?? []).map((c) => ({ value: c.id, label: c.name }));
   const capOptions = CAPABILITIES.map((v) => ({ value: v, label: t(`agents.filter.capability.${v}`) }));
-  const presetOptions = (presets.data ?? []).map((p) => ({ value: p.key, label: p.name }));
+  const presetOptions = (presets.data ?? []).map((p) => ({ value: p.key, label: p.name || p.key }));
   const activityOptions = [
     { value: '7', label: t('agents.filter.activity.7') },
     { value: '30', label: t('agents.filter.activity.30') },

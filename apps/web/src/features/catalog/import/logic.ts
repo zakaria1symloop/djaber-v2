@@ -171,3 +171,35 @@ export function buildErrorsCsv(
   }
   return `${BOM}${lines.join('\r\n')}\r\n`;
 }
+
+/* ---------- example file (tester report 2026-10-20: "a CSV example so the client knows the columns") ---------- */
+/** Column headers of the example file, in the interface language — each one is a header alias the import recognises. */
+const TEMPLATE_HEADERS: Record<'fr' | 'ar' | 'en', Record<ImportField, string>> = {
+  fr: { sku: 'SKU', name: 'Nom', description: 'Description', category: 'Catégorie', unit: 'Unité', price: 'Prix', oldPrice: 'Ancien prix', costPrice: 'Coût', stock: 'Stock', minStock: 'Seuil', weightGrams: 'Poids', keywords: 'Mots-clés', isActive: 'Actif' },
+  en: { sku: 'SKU', name: 'Name', description: 'Description', category: 'Category', unit: 'Unit', price: 'Price', oldPrice: 'Old price', costPrice: 'Cost price', stock: 'Stock', minStock: 'Min stock', weightGrams: 'Weight', keywords: 'Keywords', isActive: 'Active' },
+  ar: { sku: 'الرمز', name: 'الاسم', description: 'الوصف', category: 'الفئة', unit: 'الوحدة', price: 'السعر', oldPrice: 'السعر القديم', costPrice: 'التكلفة', stock: 'المخزون', minStock: 'الحد الادنى', weightGrams: 'الوزن', keywords: 'الكلمات المفتاحية', isActive: 'نشط' },
+};
+const TEMPLATE_ROWS: Record<'fr' | 'ar' | 'en', Partial<Record<ImportField, string>>[]> = {
+  fr: [
+    { sku: 'ROBE-001', name: 'Robe kabyle brodée', description: 'Robe traditionnelle brodée main, tailles S à XL', category: 'Robes', unit: 'pc', price: '6500', oldPrice: '7500', costPrice: '3500', stock: '12', minStock: '3', weightGrams: '800', keywords: 'robe, kabyle, fête', isActive: 'oui' },
+    { sku: 'ARGAN-100', name: "Huile d'argan 100 ml", description: 'Huile pure pressée à froid', category: 'Cosmétiques', unit: 'pc', price: '1800', costPrice: '900', stock: '40', minStock: '10', weightGrams: '150', keywords: 'argan, soin', isActive: 'oui' },
+  ],
+  en: [
+    { sku: 'DRESS-001', name: 'Embroidered Kabyle dress', description: 'Hand-embroidered traditional dress, sizes S to XL', category: 'Dresses', unit: 'pc', price: '6500', oldPrice: '7500', costPrice: '3500', stock: '12', minStock: '3', weightGrams: '800', keywords: 'dress, kabyle, party', isActive: 'yes' },
+    { sku: 'ARGAN-100', name: 'Argan oil 100 ml', description: 'Pure cold-pressed oil', category: 'Cosmetics', unit: 'pc', price: '1800', costPrice: '900', stock: '40', minStock: '10', weightGrams: '150', keywords: 'argan, care', isActive: 'yes' },
+  ],
+  ar: [
+    { sku: 'ROBE-001', name: 'فستان قبائلي مطرز', description: 'فستان تقليدي مطرز يدويًا، المقاسات من S إلى XL', category: 'فساتين', unit: 'pc', price: '6500', oldPrice: '7500', costPrice: '3500', stock: '12', minStock: '3', weightGrams: '800', keywords: 'فستان, قبائلي, حفلة', isActive: 'نعم' },
+    { sku: 'ARGAN-100', name: 'زيت الأرغان 100 مل', description: 'زيت نقي معصور على البارد', category: 'مستحضرات التجميل', unit: 'pc', price: '1800', costPrice: '900', stock: '40', minStock: '10', weightGrams: '150', keywords: 'أرغان, عناية', isActive: 'نعم' },
+  ],
+};
+
+/**
+ * Example CSV of the import (every column, two filled rows), `;`-separated with a UTF-8 BOM so Excel opens it with its
+ * accents and Arabic intact. Prices in whole dinars, weight in grams, unit = an abbreviation of the shop's units.
+ */
+export function importTemplateCsv(locale: string): string {
+  const l = locale === 'ar' || locale === 'en' ? locale : 'fr';
+  const lines = [IMPORT_FIELDS.map((f) => csvCell(TEMPLATE_HEADERS[l][f])).join(';'), ...TEMPLATE_ROWS[l].map((r) => IMPORT_FIELDS.map((f) => csvCell(r[f] ?? '')).join(';'))];
+  return `${BOM}${lines.join('\r\n')}\r\n`;
+}

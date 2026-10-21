@@ -6,7 +6,8 @@
 import * as Popover from '@radix-ui/react-popover';
 import { ChevronDown, ChevronRight, Star } from 'lucide-react';
 import * as React from 'react';
-import { Button, Card, cn, Input } from './primitives';
+import { DateInput } from './inputs';
+import { Button, Card, cn } from './primitives';
 import { choroplethStep, wilayaGeometry } from './wilaya-geo';
 
 /* ---------- tones of the series (design tokens; validated CVD-safe pairs, see assumptions-log M8 web) ---------- */
@@ -826,25 +827,23 @@ export function DateRangeForm({
       <div className="grid grid-cols-2 gap-2">
         <label className="flex flex-col gap-1">
           <span className="ts-label-micro text-text-muted">{labels.from}</span>
-          <Input
-            type="date"
+          <DateInput
             name="from"
             value={from}
             max={max}
-            onChange={(e) => onChange({ from: e.target.value, to })}
-            className="!h-9 text-[13px] [color-scheme:dark]"
+            onValueChange={(v) => onChange({ from: v, to })}
+            className="!h-9 text-[13px]"
             aria-invalid={!!error || undefined}
           />
         </label>
         <label className="flex flex-col gap-1">
           <span className="ts-label-micro text-text-muted">{labels.to}</span>
-          <Input
-            type="date"
+          <DateInput
             name="to"
             value={to}
             max={max}
-            onChange={(e) => onChange({ from, to: e.target.value })}
-            className="!h-9 text-[13px] [color-scheme:dark]"
+            onValueChange={(v) => onChange({ from, to: v })}
+            className="!h-9 text-[13px]"
             aria-invalid={!!error || undefined}
           />
         </label>

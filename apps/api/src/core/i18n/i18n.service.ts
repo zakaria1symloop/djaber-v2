@@ -17,11 +17,18 @@ export class I18nService {
     return formatMessage(deck ?? key, params);
   }
 
-  /** Picks the value of a localized JSON column `{ fr, ar, en }`. */
+  /**
+   * Picks the value of a localized JSON column `{ fr, ar, en }`: the locale, else French, else the first filled one. A
+   * blank translation counts as missing (an admin preset saved in French only showed empty names in English).
+   */
   pick(value: unknown, locale: string): string {
     if (value && typeof value === 'object') {
-      const o = value as Record<string, string>;
-      return o[locale] ?? o.fr ?? Object.values(o)[0] ?? '';
+      const o = value as Record<string, unknown>;
+      const filled = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
+      const own = o[locale];
+      if (filled(own)) return own;
+      if (filled(o.fr)) return o.fr;
+      return Object.values(o).find(filled) ?? '';
     }
     return typeof value === 'string' ? value : '';
   }

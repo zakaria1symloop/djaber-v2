@@ -132,6 +132,8 @@ export function CategoriesView() {
                   <td className={cn('px-3 py-3', depth === 1 && 'ps-9')}>
                     <span className="flex items-center gap-2.5">
                       <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: /^#[0-9a-fA-F]{6}$/.test(c.color) ? c.color : '#888888' }} />
+                      {/* the category image (sheet « IMAGE ») is shown in the list too — tester report 2026-10-20 */}
+                      {c.imageUrl ? <img src={c.imageUrl} alt="" className="size-8 shrink-0 rounded-[6px] border border-line-edge object-cover" data-testid="category-thumb" /> : null}
                       <span className="min-w-0 truncate font-medium">{c.name}</span>
                     </span>
                   </td>

@@ -27,13 +27,15 @@ export const HEADER_ALIASES: Record<ImportField, string[]> = {
 };
 
 export type ImportMapping = Partial<Record<ImportField, string | null>>;
+/** The aliases in their normalised form (an Arabic alias with a hamza letter, `الفئة`, decomposes like the file header). */
+const NORMALISED_ALIASES = Object.fromEntries(IMPORT_FIELDS.map((f) => [f, HEADER_ALIASES[f].map(normalizeHeader)])) as Record<ImportField, string[]>;
 
 /** Each target field takes the first header of the file whose normalised form is one of its aliases. */
 export const autoMap = (headers: string[]): ImportMapping => {
   const mapping: ImportMapping = {};
   const used = new Set<string>();
   for (const field of IMPORT_FIELDS) {
-    const header = headers.find((h) => h && !used.has(h) && HEADER_ALIASES[field].includes(normalizeHeader(h)));
+    const header = headers.find((h) => h && !used.has(h) && NORMALISED_ALIASES[field].includes(normalizeHeader(h)));
     if (header) {
       mapping[field] = header;
       used.add(header);

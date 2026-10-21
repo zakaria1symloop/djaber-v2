@@ -27,6 +27,51 @@ export function commitInputValue(el: HTMLInputElement, value: string) {
   el.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+/* ---------- Date field: typing the year does not reset it ---------- */
+/**
+ * A value a date field may hand over: empty (cleared) or a whole date with a 4-digit year from 1900 — while the year is
+ * typed the browser reports `0002-10-21`, `0020-10-21`, `0202-10-21` before `2026-10-21`.
+ */
+export const isCommittableDate = (v: string) => v === '' || /^(19|20)\d{2}-\d{2}-\d{2}$/.test(v);
+
+export type DateInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' | 'onChange'> & { value: string; onValueChange: (value: string) => void };
+
+/**
+ * `<input type="date">` whose value lives in the URL (filters) or any store that answers later: it keeps what is being
+ * typed and hands over whole dates only (tester report 2026-10-20: every date filter reset when the year was typed —
+ * the half-typed year was refused, the field went back to its old value and lost the typing).
+ */
+export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(function DateInput({ value, onValueChange, onBlur, className, ...rest }, ref) {
+  const [draft, setDraft] = React.useState(value);
+  const committed = React.useRef(value);
+  React.useEffect(() => {
+    if (value === committed.current) return;
+    committed.current = value;
+    setDraft(value);
+  }, [value]);
+  return (
+    <Input
+      ref={ref}
+      type="date"
+      value={draft}
+      onChange={(e) => {
+        const v = e.target.value;
+        setDraft(v);
+        if (!isCommittableDate(v) || v === committed.current) return;
+        committed.current = v;
+        onValueChange(v);
+      }}
+      onBlur={(e) => {
+        // a year left half-typed goes back to the last whole date
+        if (!isCommittableDate(draft)) setDraft(committed.current);
+        onBlur?.(e);
+      }}
+      className={cn('[color-scheme:dark]', className)}
+      {...rest}
+    />
+  );
+});
+
 /* ---------- Email field: email keyboard + autocomplete, LTR, trimmed and lower-cased on blur ---------- */
 export type EmailInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'>;
 /** `type="email"`, `inputMode="email"`, `autoComplete="email"` (overridable), left-to-right, no spell check or

@@ -58,6 +58,8 @@
  "gaps.job.progress": "Progression : {kind}",
  "gaps.job.running": "{kind} en cours : {pct} %",
  "gaps.orders.notify.noConversation": "Commande sans conversation : le client ne peut pas être prévenu par message.",
+ "import.template.download": "Télécharger un exemple (CSV)",
+ "import.template.fileName": "exemple-import-produits.csv",
  "report.col.ordersRevenue": "Revenus commandes",
  "report.col.proof": "Justificatif",
  "report.col.salesRevenue": "Revenus ventes",
