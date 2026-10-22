@@ -173,7 +173,7 @@ describe('checkout → Chargily → activation (BIL-02, FL-28)', () => {
     await payFake(app, ren.checkoutUrl, 'paid');
     const r = await db.promoRedemption.findFirstOrThrow({ where: { promoCodeId: promo.id, workspaceId: owner.workspaceId } });
     expect(await currentSubOf(owner.workspaceId)).toMatchObject({ id: sub.id, promoRedemptionId: r.id, discountPct: 20 });
-    expect((await owner.post('/billing/promo/validate', { code: promo.code }).expect(422)).body.error.code).toBe('PROMO_ALREADY_USED');
+    expect((await owner.post('/billing/promo/validate', { code: promo.code }).expect(409)).body.error.code).toBe('PROMO_ALREADY_USED');
   });
 
   it('AT-MOB-05 subscriptions are web-only: checkout / preview / cancel from the app ⇒ 403; a subscription promo from mobile ⇒ PROMO_MOBILE_SUBSCRIPTION_FORBIDDEN; credit codes accepted', async () => {
