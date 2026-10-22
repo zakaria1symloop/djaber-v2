@@ -28,11 +28,15 @@ echo "   branch now: $(git rev-parse --abbrev-ref HEAD) ($(git rev-parse --short
 read -r -p "Update these to $BRANCH? (y/N) " OK
 [ "$OK" = "y" ] || [ "$OK" = "Y" ] || { echo "Stopped, nothing changed."; exit 1; }
 
-echo "== 2/7 Reading DATABASE_URL from $APP_DIR/.env (not printed)"
-[ -f .env ] || { echo ".env not found in $APP_DIR — stop."; exit 1; }
+# the server .env sits at the repo root or next to the API
+ENV_FILE=""
+for f in "$APP_DIR/.env" "$APP_DIR/apps/api/.env"; do [ -f "$f" ] && { ENV_FILE="$f"; break; }; done
+[ -n "$ENV_FILE" ] || { echo ".env not found in $APP_DIR or $APP_DIR/apps/api — stop."; exit 1; }
+echo "== 2/7 Reading DATABASE_URL from $ENV_FILE (not printed)"
+export ENV_FILE
 DATABASE_URL="$(node -e '
 const fs = require("fs");
-const line = fs.readFileSync(".env", "utf8").split(/\r?\n/).find((l) => /^\s*DATABASE_URL\s*=/.test(l));
+const line = fs.readFileSync(process.env.ENV_FILE, "utf8").split(/\r?\n/).find((l) => /^\s*DATABASE_URL\s*=/.test(l));
 if (!line) process.exit(1);
 console.log(line.replace(/^\s*DATABASE_URL\s*=\s*/, "").replace(/^["\x27]|["\x27]$/g, ""));')" || { echo "DATABASE_URL missing in .env — stop."; exit 1; }
 export DATABASE_URL
