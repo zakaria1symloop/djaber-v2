@@ -54,9 +54,9 @@ echo "   backup: $BACKUP ($(du -h "$BACKUP" | cut -f1)) from container $PG_CONTA
 
 echo "== 4/7 Getting the branch"
 PREV="$(git rev-parse HEAD)"
-git fetch origin "$BRANCH"
-git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
-git pull --ff-only origin "$BRANCH"
+# the server clone may track main only: fetch the branch into its own remote ref
+git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+git checkout -B "$BRANCH" "origin/$BRANCH"
 echo "   now at $(git rev-parse --short HEAD) (was ${PREV:0:7})"
 
 echo "== 5/7 Installing and building"
