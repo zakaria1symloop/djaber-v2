@@ -6344,5 +6344,7 @@
  "adminSafety.blocks.description": "حظر قام به التجار (يدويًا أو بقاعدتهم التلقائية) ولا يزال ساريًا. ليست بلاغات: لا تظهر في «للمعالجة».",
  "adminSafety.blocks.empty": "لا يوجد حظر من التجار خلال آخر 7 أيام.",
  "adminSafety.blocks.source.manual": "يدوي",
- "adminSafety.blocks.source.auto_rule": "قاعدة تلقائية"
+ "adminSafety.blocks.source.auto_rule": "قاعدة تلقائية",
+ "clients.action.block": "حظر العميل",
+ "clients.action.unblock": "إلغاء حظر العميل"
 }

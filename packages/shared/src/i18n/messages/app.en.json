@@ -6344,5 +6344,7 @@
  "adminSafety.blocks.description": "Blocks made by merchants (by hand or by their automatic rule) still in force. They are not reports: they do not show in « To process ».",
  "adminSafety.blocks.empty": "No block by merchants in the last 7 days.",
  "adminSafety.blocks.source.manual": "Manual",
- "adminSafety.blocks.source.auto_rule": "Auto rule"
+ "adminSafety.blocks.source.auto_rule": "Auto rule",
+ "clients.action.block": "Block the customer",
+ "clients.action.unblock": "Unblock the customer"
 }

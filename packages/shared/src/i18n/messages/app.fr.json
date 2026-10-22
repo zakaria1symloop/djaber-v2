@@ -6344,5 +6344,7 @@
  "adminSafety.blocks.description": "Blocages faits par les marchands (à la main ou par leur règle automatique) encore en vigueur. Ce ne sont pas des signalements : ils n'apparaissent pas dans « À traiter ».",
  "adminSafety.blocks.empty": "Aucun blocage par les marchands ces 7 derniers jours.",
  "adminSafety.blocks.source.manual": "Manuel",
- "adminSafety.blocks.source.auto_rule": "Règle auto"
+ "adminSafety.blocks.source.auto_rule": "Règle auto",
+ "clients.action.block": "Bloquer le client",
+ "clients.action.unblock": "Débloquer le client"
 }

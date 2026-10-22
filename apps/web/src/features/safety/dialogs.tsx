@@ -31,17 +31,22 @@ function ReasonSelect({ id, value, onChange, disabled }: { id: string; value: Bl
   );
 }
 
-/** "Bloquer ce client" from the conversation menu: `POST /conversations/:id/block { reason, note? }`. */
+/**
+ * "Bloquer ce client" from the conversation menu (`POST /conversations/:id/block { reason, note? }`) or from the clients
+ * list / client sheet (`clientId`: `POST /safety/blocks { clientId, reason?, note? }`, tester report 2026-10-21 UX-015).
+ */
 export function BlockCustomerDialog({
   open,
   onClose,
   conversationId,
+  clientId,
   clientName,
   onDone,
 }: {
   open: boolean;
   onClose: () => void;
-  conversationId: string;
+  conversationId?: string;
+  clientId?: string;
   clientName: string;
   onDone?: () => void;
 }) {
@@ -51,14 +56,17 @@ export function BlockCustomerDialog({
   const [reason, setReason] = useState<BlockReason | ''>('');
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const block = useMutation({ mutationFn: () => safetyApi.blockConversation(conversationId, { reason: reason || 'other', note: note.trim() || undefined }) });
+  const block = useMutation({
+    mutationFn: () =>
+      clientId ? safetyApi.createBlock({ clientId, ...(reason ? { reason } : {}), ...(note.trim() ? { note: note.trim() } : {}) }) : safetyApi.blockConversation(conversationId!, { reason: reason || 'other', note: note.trim() || undefined }),
+  });
   useEffect(() => {
     if (open) {
       setReason('');
       setNote('');
       setError(null);
     }
-  }, [open, conversationId]);
+  }, [open, conversationId, clientId]);
 
   const submit = async () => {
     setError(null);

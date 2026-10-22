@@ -37,4 +37,4 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 ## Merchant — clients
 | # | Issue | Status |
 |---|---|---|
-| UX-015 | « Bloquer le client » missing from the clients list actions (only Settings › Sécurité with an identifier) | todo |
+| UX-015 | « Bloquer le client » missing from the clients list actions (only Settings › Sécurité with an identifier) | done |
