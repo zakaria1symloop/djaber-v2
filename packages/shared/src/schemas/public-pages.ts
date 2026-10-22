@@ -42,6 +42,30 @@ export type CmsEntryDto = {
 };
 export type CmsListItemDto = Pick<CmsEntryDto, 'key' | 'type' | 'category' | 'locale' | 'requestedLocale' | 'fallback' | 'title' | 'body' | 'version' | 'publishedAt'> & { sortOrder: number };
 
+// --- announcements (ADM-08 type `announcement`, 06 §8.1, route map §2 layout hooks) -----------------------------------------
+/**
+ * A live announcement in the reader's locale (French when not translated). Merchant app: `GET /announcements` (channel
+ * `banner`, the workspace's plan / workspace targeted, not dismissed by the user) — one dismissible banner each;
+ * `GET /announcements/:id` (notification `platform.announcement`) also answers an ended / withdrawn one with its `state`.
+ * Public site: `GET /cms/announcements` (channel `web`, announcements for every workspace).
+ */
+export type AnnouncementView = {
+  id: string;
+  key: string;
+  title: string;
+  body: string;
+  /** "En savoir plus" target (http(s) URL or an app path) */
+  link: string | null;
+  locale: 'fr' | 'ar' | 'en';
+  fallback: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  publishedAt: string;
+  /** `live` · `ended` (window over) · `withdrawn` (unpublished / archived) · `scheduled` (not started yet) */
+  state: 'live' | 'ended' | 'withdrawn' | 'scheduled';
+  dismissed: boolean;
+};
+
 // --- captcha (public forms) ---------------------------------------------------------------------------------------------
 /**
  * `GET /captcha/config` → which widget the public forms render. `none` = no widget; `fake` (dev / test) = a plain checkbox

@@ -11,6 +11,7 @@ import { asOwner, asPlatform } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
 import { forbidNetwork } from '../support/m3';
 import { drainAll } from '../support/m10-ops';
+import { pub } from '../support/m11';
 
 let app: TestApp;
 let net: ReturnType<typeof forbidNetwork>;
@@ -170,6 +171,50 @@ describe('ADM-07 presets', () => {
     // a never-published preset can be deleted
     const tmp = (await sa.post('/admin/agent-presets', { key: `${key}-tmp`, name: { fr: 'Tmp' } }).expect(201)).body.data;
     await sa.delete(`/admin/agent-presets/${tmp.id}`).expect(204);
+  });
+});
+
+describe('ADM-08 CMS — announcements reach the merchant app and the public site (tester report 2026-10-21 UX-005)', () => {
+  it('banner for the targeted workspaces (dismissible, per user), public site for « web » + everyone, notification opens it; other targets stay out', async () => {
+    const sa = await asPlatform(app);
+    const owner = await asOwner(app);
+    const make = async (target: Record<string, unknown>, channels: string[]) => {
+      const key = `ux005-${randomUUID().slice(0, 8)}`;
+      createdCms.push(key);
+      const e = (await sa.post('/admin/cms', { key, type: 'announcement', target, channels, link: '/billing', locales: { fr: { title: `Annonce ${key}`, body: 'Nouvelle grille\nDétails…' } } }).expect(201)).body.data;
+      await sa.post(`/admin/cms/${e.id}/publish`, { fallbackToFr: true }).expect(200);
+      return e.id as string;
+    };
+    const forAll = await make({ scope: 'all' }, ['banner', 'web', 'in_app']);
+    const elsewhere = await make({ workspaceIds: [randomUUID()] }, ['banner', 'in_app']);
+    const notWeb = await make({ scope: 'all' }, ['in_app']);
+
+    const mine = (await owner.get('/announcements').expect(200)).body.data.map((a: any) => a.id);
+    expect(mine).toContain(forAll);
+    expect(mine).not.toContain(elsewhere);
+    expect(mine).not.toContain(notWeb); // no banner channel
+    const one = (await owner.get(`/announcements/${forAll}?lang=en`).expect(200)).body.data;
+    expect(one).toMatchObject({ title: expect.stringContaining('Annonce'), link: '/billing', state: 'live', locale: 'fr', fallback: true, dismissed: false });
+    await owner.get(`/announcements/${elsewhere}`).expect(404);
+
+    // the publication notification of the owner opens the announcement
+    await drainAll(app, ['notification']);
+    const n = (await owner.get('/notifications').expect(200)).body.data.find((x: any) => x.type === 'platform_announcement' && x.deepLink?.web?.includes(forAll));
+    expect(n?.deepLink.web).toBe(`/notifications?announcement=${forAll}`);
+
+    await owner.post(`/announcements/${forAll}/dismiss`).expect(204);
+    await owner.post(`/announcements/${forAll}/dismiss`).expect(204);
+    expect((await owner.get('/announcements').expect(200)).body.data.map((a: any) => a.id)).not.toContain(forAll);
+    expect((await owner.get(`/announcements/${forAll}`).expect(200)).body.data.dismissed).toBe(true);
+
+    const site = (await pub(app).get('/api/v1/cms/announcements?lang=fr').expect(200)).body.data.map((a: any) => a.id);
+    expect(site).toContain(forAll);
+    expect(site).not.toContain(elsewhere);
+
+    // withdrawn ⇒ out of the banner and the site; the notification still opens it with the reason
+    await sa.post(`/admin/cms/${forAll}/unpublish`, {}).expect(200);
+    expect((await pub(app).get('/api/v1/cms/announcements').expect(200)).body.data.map((a: any) => a.id)).not.toContain(forAll);
+    expect((await owner.get(`/announcements/${forAll}`).expect(200)).body.data.state).toBe('withdrawn');
   });
 });
 

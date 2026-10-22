@@ -259,7 +259,7 @@ One row per value of the Prisma enum `NotificationType` (56 values). The `type` 
 | `app.update_required` | Mobile version below `AppVersion.minVersion` (mobile only) | — | — | ● | — | `AppVersion.storeUrl` |
 | `app.update_recommended` | Mobile version below `AppVersion.recommendedVersion` (mobile only) | — | — | ● | — | `AppVersion.storeUrl` |
 | `legal.reacceptance_required` | Major version of a legal document published (PFS-04) | ● | ● | — | — | `/legal/:key` |
-| `platform.announcement` | CMS announcement published (ADM-06) | ● | pref | pref | — | `/notifications` |
+| `platform.announcement` | CMS announcement published (ADM-06) | ● | pref | pref | — | `/notifications?announcement=:id` |
 | `job.failed` | Background job failed (`Job.status=failed`, `data.error` = error code) | ● | — | — | — | same targets as `job.finished` |
 
 NTF-01 list with filter by **every** type (**fix**), grouped by family (§37 NTF), unread count from server (**fix**), mark read / all read, deep links per the table. NTF-02 per-member preferences (email/push per family) + web sound on new message (`User.prefs.soundOnMessage`, V1 beep, default off). NTF-03 push via FCM device tokens (`POST /me/devices { token, platform, appVersion, deviceName?, locale }`, upsert on token; `DELETE /me/devices/:token`); the 21st device ⇒ `422 DEVICE_LIMIT {max: 20}`; invalid tokens pruned on FCM `UNREGISTERED`.
@@ -492,7 +492,7 @@ Canonical `NotificationType` slugs are those of 03 §15; the REF frame uses disp
 | `workspace.suspended`, `workspace.reactivated` | `/home` |
 | `workspace.deletion_scheduled` | `/settings/danger` |
 | `legal.reacceptance_required` | `/legal/:key` (the re-acceptance interstitial opens first when still pending) |
-| `platform.announcement` | `/notifications` |
+| `platform.announcement` | `/notifications?announcement=:id` |
 | `app.update_required`, `app.update_recommended` | `AppVersion.storeUrl` (mobile only) |
 | `account.verify_reminder`, `workspace.deleted`, `account.deletion_confirmed` | — (e-mail only) |
 

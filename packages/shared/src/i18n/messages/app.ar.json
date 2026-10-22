@@ -6329,5 +6329,13 @@
  "couriers.platform.procolis": "المنصّة القديمة (Procolis)",
  "couriers.platform.app.hint": "انسخ مفتاح API ومعرّف الحساب من فضائك في ZR Express (zrexpress.app). ملصق ZR والإلغاء قبل الاستلام ونقاط الاستلام مدعومة.",
  "couriers.platform.procolis.hint": "حساب Procolis (procolis.com): رمز + مفتاح. لا ملصق ولا إلغاء عبر الواجهة البرمجية: يُطبع ملصق Djaber.",
- "couriers.platform.current": "المنصّة: {name}"
+ "couriers.platform.current": "المنصّة: {name}",
+ "announcements.more": "اعرف المزيد",
+ "announcements.title": "إعلان",
+ "announcements.state.ended": "انتهى هذا الإعلان: لم يعد معروضًا.",
+ "announcements.state.withdrawn": "سحب فريق Djaber هذا الإعلان.",
+ "announcements.state.scheduled": "لم يبدأ هذا الإعلان بعد.",
+ "announcements.published": "نُشر في {date}",
+ "announcements.until": "حتى {date}",
+ "announcements.fallback": "معروض بالفرنسية (لم يُترجم بعد)."
 }

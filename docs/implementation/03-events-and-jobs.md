@@ -225,7 +225,7 @@ One row per value of the Postgres enum `NotificationType` (56 values, schema ord
 | `app_update_required` · `app.update_required` | `PlatformSettingsService.saveAppVersion` (`PUT /admin/app-versions/:platform` when `minVersion` rises) — push only, to every `DeviceToken` of that platform | — | — | ● | — | once per `(platform, minVersion)` | — (`data.storeUrl`; the app shows the blocking screen) | `{ platform, minVersion, storeUrl }` |
 | `app_update_recommended` · `app.update_recommended` | same, when `recommendedVersion` rises — push only | — | — | ● | — | once per `(platform, recommendedVersion)` | — (`data.storeUrl`) | `{ platform, recommendedVersion, storeUrl }` |
 | `legal_reacceptance_required` · `legal.reacceptance_required` | `LegalDocumentService.publish` with `isMajor=true` | ● | ● | — | — | once per `(userId, key, version)` | `/legal/:key` (the layout interstitial opens on next load) | `{ key, version }` |
-| `platform_announcement` · `platform.announcement` | `CmsService.publish` for `CmsType=announcement` (target plans/workspaces) | ● | pref | pref | — | — | `/notifications` | `{ cmsEntryId }` |
+| `platform_announcement` · `platform.announcement` | `CmsService.publish` for `CmsType=announcement` (target scope paid/free/trial, plans, workspaces) | ● | pref | pref | — | — | `/notifications?announcement=:cmsEntryId` | `{ cmsEntryId, title }` |
 | `job_failed` · `job.failed` | `JobService.fail` (to `createdById`) | ● | — | — | — | — | same targets as `job_finished` | `{ jobId, kind, error }` |
 
 ### 5.2 Push payload (FCM HTTP v1, data-only + notification block)

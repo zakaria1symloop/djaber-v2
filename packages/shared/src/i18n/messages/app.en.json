@@ -6329,5 +6329,13 @@
  "couriers.platform.procolis": "Former platform (Procolis)",
  "couriers.platform.app.hint": "Copy the API key and the tenant ID from your ZR Express space (zrexpress.app). ZR label, cancel before pickup and stop-desks are supported.",
  "couriers.platform.procolis.hint": "Procolis account (procolis.com): token + key. No label or cancel through the API: the Djaber label is printed.",
- "couriers.platform.current": "Platform: {name}"
+ "couriers.platform.current": "Platform: {name}",
+ "announcements.more": "Learn more",
+ "announcements.title": "Announcement",
+ "announcements.state.ended": "This announcement has ended: it is no longer shown.",
+ "announcements.state.withdrawn": "This announcement was withdrawn by the Djaber team.",
+ "announcements.state.scheduled": "This announcement has not started yet.",
+ "announcements.published": "Published on {date}",
+ "announcements.until": "until {date}",
+ "announcements.fallback": "Shown in French (not translated yet)."
 }

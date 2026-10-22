@@ -115,7 +115,8 @@ const PATHS: Partial<Record<NotificationType, (d: Data) => string>> = {
   workspace_deletion_scheduled: () => '/settings/danger',
   agent_preset_update_available: (d) => `/agents/${s(d.agentId)}`,
   legal_reacceptance_required: (d) => `/legal/${s(d.key)}`,
-  platform_announcement: () => '/notifications',
+  // the notifications page opens the announcement itself (tester report 2026-10-21 UX-005: `/notifications` alone went nowhere)
+  platform_announcement: (d) => (d.cmsEntryId ? `/notifications?announcement=${s(d.cmsEntryId)}` : '/notifications'),
 };
 
 export const notificationDeepLink = (type: NotificationType, data: Data) => {

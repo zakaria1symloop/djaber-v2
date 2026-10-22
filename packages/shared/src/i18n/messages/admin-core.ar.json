@@ -1108,5 +1108,6 @@
  "admin.ws.verified": "موثّق",
  "admin.ws.viewers": "العارضات (قراءة فقط): المحادثات والمنتجات ←",
  "admin.ws.webhooks": "{count, plural, zero {# webhook} one {webhook واحد} two {webhookان} few {# webhooks} many {# webhook} other {# webhook}} ({disabled} معطّل)",
- "nav.admin.team": "فريق المنصة"
+ "nav.admin.team": "فريق المنصة",
+ "admin.cms.channelsHint": "شريط: أعلى فضاء العملاء المستهدفين (قابل للإغلاق) · الويب العام: شريط الموقع العام، لإعلانات «كل الفضاءات» · داخل التطبيق / البريد / الإشعارات: إشعار لأصحاب الفضاءات المستهدفة يفتح الإعلان. يظهر خلال الفترة المختارة بعد النشر."
 }

@@ -9,6 +9,7 @@ import { CheckCheck } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useMemo } from 'react';
 import { AppPage } from '@/components/app-page';
+import { AnnouncementDialog } from '@/features/announcements/announcements';
 import { ListFilteredEmpty, QueryError } from '@/components/global-states';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { errorMessage } from '@/lib/forms';
@@ -94,6 +95,14 @@ export function NotificationsView() {
     filter.unread ? t('notifications.unreadOnly') : null,
     ...filter.types.map(typeSlug),
   ].filter(Boolean);
+  // `platform.announcement` deep link: `?announcement=<id>` opens the announcement (UX-005)
+  const announcementId = params.get('announcement');
+  const closeAnnouncement = () => {
+    const next = new URLSearchParams(params.toString());
+    next.delete('announcement');
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
 
   return (
     <AppPage
@@ -162,6 +171,7 @@ export function NotificationsView() {
           ) : null}
         </Card>
       )}
+      <AnnouncementDialog id={announcementId} onClose={closeAnnouncement} />
     </AppPage>
   );
 }

@@ -13,6 +13,7 @@ import { canPlatform } from '../../core/rbac/permission-matrix';
 import { AI_GATEWAY, type AiGateway } from '../ai/provider/ai.gateway';
 import { RoutingService } from '../ai/routing.service';
 import { NotificationProducer } from '../notifications/notification.producer';
+import { announcementTargetWhere } from '../public-site/announcements.service';
 import { AdminJobsService } from './admin-jobs.service';
 import { assertUuid, iso, userRef, userSelect, type AdminActor } from './admin.util';
 
@@ -189,11 +190,11 @@ export class CmsAdminService implements OnModuleInit {
     }
     await tx.cmsEntry.update({ where: { id: e.id }, data: { status: 'published', currentVersion: version, ...(e.startsAt && e.startsAt > new Date() ? {} : {}) } });
     await tx.cmsEntryVersion.create({ data: { entryId: e.id, version, createdById: byId, snapshot: { type: e.type, target: e.target, channels: e.channels, startsAt: iso(e.startsAt), endsAt: iso(e.endsAt), link: e.link, locales: e.locales.map((l) => ({ locale: l.locale, title: l.title, body: l.body, fallbackToFr: missing.includes(l.locale) || l.fallbackToFr })) } as Prisma.InputJsonValue } });
-    // 03-events §5.1 `platform.announcement`: in-app to the targeted workspaces (target.planSlugs / target.workspaceIds; none = all)
+    // 03-events §5.1 `platform.announcement`: in-app to the targeted workspaces (target.scope paid / free / trial and / or
+    // target.planSlugs / target.workspaceIds; none = all) — the same rule as the merchant banner (`GET /announcements`)
     if (e.type === 'announcement' && (e.channels.length === 0 || e.channels.some((c) => c === 'in_app' || c === 'banner' || c === 'email' || c === 'push'))) {
-      const t = (e.target ?? {}) as { planSlugs?: string[]; workspaceIds?: string[] };
       const wss = await tx.workspace.findMany({
-        where: { deletedAt: null, status: 'active', ...(t.workspaceIds?.length ? { id: { in: t.workspaceIds } } : {}), ...(t.planSlugs?.length ? { subscriptions: { some: { status: { in: ['trial', 'active', 'dunning'] }, plan: { slug: { in: t.planSlugs } } } } } : {}) },
+        where: { deletedAt: null, status: 'active', ...announcementTargetWhere(e.target) },
         select: { id: true },
         take: 10_000,
       });

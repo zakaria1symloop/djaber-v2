@@ -1108,5 +1108,6 @@
  "admin.ws.verified": "verified",
  "admin.ws.viewers": "Viewers (read-only): conversations and products →",
  "admin.ws.webhooks": "{count, plural, one {# webhook} other {# webhooks}} ({disabled} disabled)",
- "nav.admin.team": "Platform team"
+ "nav.admin.team": "Platform team",
+ "admin.cms.channelsHint": "Banner: at the top of the targeted clients' workspace (dismissible) · Public web: banner of the public site, for « All workspaces » announcements · In-app / E-mail / Push: notification to the targeted owners, opening the announcement. Shown during the chosen period once published."
 }

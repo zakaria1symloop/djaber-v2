@@ -160,6 +160,7 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
           <Input id="cm-link" dir="ltr" inputMode="url" autoComplete="off" spellCheck={false} autoCapitalize="none" value={d.link} onChange={(e) => setD((x) => ({ ...x, link: e.target.value }))} />
         </Field>
       </fieldset>
+      {entry.type === 'announcement' ? <p className="ts-label-micro !normal-case text-text-muted" data-testid="cms-channels-hint">{t('admin.cms.channelsHint')}</p> : null}
       {missing !== null ? (
         <FormAlert tone="warning">
           <span data-testid="cms-locale-missing">{t('admin.cms.localeMissing', { locales: missing })}</span>

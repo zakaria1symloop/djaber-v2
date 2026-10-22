@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { RESEND_COOLDOWN_S } from '@/components/auth/forgot-form';
 import { PageSessionExpired, PageSuspended, QueryError } from '@/components/global-states';
 import { useAgentEvents } from '@/features/agents/api';
+import { useAnnouncementBanners } from '@/features/announcements/announcements';
 import { authApi } from '@/features/auth/api';
 import { useCatalogEvents } from '@/features/catalog/api';
 import { useShipmentEvents } from '@/features/delivery/api';
@@ -222,6 +223,8 @@ function useShellBanners(): ShellBanner[] {
 
   // `maintenance` (GET /status every 60 s, or a write refused with 503 MAINTENANCE_MODE)
   const maintenance = useMaintenanceBanner();
+  // platform announcements (banner channel), below every other banner
+  const announcements = useAnnouncementBanners();
   const banners: ShellBanner[] = [...channelBanners, ...creditsBanners, ...planBanners];
   if (s.workspace?.status === 'suspended') banners.push({ id: 'suspended', tone: 'danger', content: t('banner.suspended') });
   if (s.workspace?.status === 'deletion_scheduled') {
@@ -259,6 +262,7 @@ function useShellBanners(): ShellBanner[] {
       onDismiss: dropPlanIntent,
     });
   }
+  banners.push(...announcements);
   return banners;
 }
 

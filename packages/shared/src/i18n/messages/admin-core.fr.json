@@ -1108,5 +1108,6 @@
  "admin.ws.verified": "vérifié",
  "admin.ws.viewers": "Visionneuses (lecture seule) : conversations et produits →",
  "admin.ws.webhooks": "{count, plural, one {# webhook} other {# webhooks}} ({disabled} désactivé)",
- "nav.admin.team": "Équipe plateforme"
+ "nav.admin.team": "Équipe plateforme",
+ "admin.cms.channelsHint": "Bandeau : en haut de l'espace des clients ciblés (fermable) · Web public : bandeau du site public, pour les annonces « Tous les espaces » · In-app / E-mail / Push : notification aux propriétaires ciblés, qui ouvre l'annonce. Visible pendant la période choisie une fois publiée."
 }

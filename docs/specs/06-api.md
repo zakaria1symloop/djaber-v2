@@ -260,7 +260,7 @@ POST /workspace/deletion/cancel (Owner; Workspace.status deletion_scheduled → 
 GET /invitations/:token (public) → { workspaceName, workspaceLogoUrl, inviterName, email, role, expiresAt } (INVITATION_EXPIRED; logged-in user with another e-mail ⇒ INVITATION_EMAIL_MISMATCH)   `[FIG AUTH Invitation]`
 PATCH /workspace/quick-replies/order { ids[] } (full ordered list of the workspace's QuickReply ids; 422 VALIDATION_ERROR when an id is missing or unknown)   `[FIG SET quick replies drag]`
 GET /legal/pending → [{ key: LegalDocKey, version, url }] · POST /legal/accept { key, version } → 204 (creates LegalAcceptance; LEGAL_REACCEPT_REQUIRED is lifted once every pending key is accepted)   `[FIG ADM-13 ré-acceptation]`
-GET /announcements (active CmsEntry announcements for my plan/workspace) · POST /announcements/:id/dismiss
+GET /announcements (active CmsEntry announcements of channel banner for my plan/workspace, dismissed ones left out) · GET /announcements/:id (also ended / withdrawn, with `state`) · POST /announcements/:id/dismiss → 204 · public GET /cms/announcements (channel web, every-workspace target)
 ```
 
 ### 8.2 Product moderation — merchant side

@@ -1,12 +1,13 @@
 // M11 — public site API (06 §12, route map §3.1): CMS pages, captcha config, published API docs (API-04).
-import { Controller, Get, Header, NotFoundException, Param, Query, Req, Res } from '@nestjs/common';
+import { Controller, Get, Header, HttpCode, NotFoundException, Param, ParseUUIDPipe, Post, Query, Req, Res } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
 import { createZodDto } from 'nestjs-zod';
 import { CmsListQuerySchema, CmsPublicQuerySchema } from '@djaber/shared';
-import { Public } from '../../core/auth/decorators';
+import { CurrentUser, Public, RequirePermission, type AuthUser } from '../../core/auth/decorators';
 import { CaptchaService } from '../../core/captcha/captcha.service';
 import { ConfigService } from '../../core/config/config.service';
 import { RawResponse } from '../../core/http/envelope.interceptor';
+import { AnnouncementsService } from './announcements.service';
 import { CmsPublicService } from './cms-public.service';
 import { buildOpenApi, toPostman, type OpenApiDoc } from './openapi';
 
@@ -20,12 +21,23 @@ const lang = (q: { lang?: string }, req: any): 'fr' | 'ar' | 'en' => {
 
 @Controller('cms')
 export class CmsPublicController {
-  constructor(private readonly cms: CmsPublicService) {}
+  constructor(
+    private readonly cms: CmsPublicService,
+    private readonly announcements: AnnouncementsService,
+  ) {}
 
   @Public()
   @Get()
   list(@Query() q: CmsListQueryDto, @Req() req: any) {
     return this.cms.list(q, lang(q, req));
+  }
+
+  /** Public site banner: live announcements of channel `web` meant for every workspace (before `:key`). */
+  @Public()
+  @Get('announcements')
+  @Header('Cache-Control', 'public, max-age=60')
+  publicAnnouncements(@Query() q: CmsQueryDto, @Req() req: any) {
+    return this.announcements.publicList(lang(q, req));
   }
 
   @Public()
@@ -39,6 +51,31 @@ export class CmsPublicController {
   @Get(':key')
   get(@Param('key') key: string, @Query() q: CmsQueryDto, @Req() req: any) {
     return this.cms.get(key.slice(0, 120), lang(q, req), { preview: q.preview });
+  }
+}
+
+/** 06 §8.1 — announcements in the merchant app (banner channel; `GET /announcements/:id` = the notification's target). */
+@Controller('announcements')
+export class AnnouncementsController {
+  constructor(private readonly announcements: AnnouncementsService) {}
+
+  @Get()
+  @RequirePermission('workspace.read')
+  list(@CurrentUser() user: AuthUser, @Query() q: CmsQueryDto, @Req() req: any) {
+    return this.announcements.list(user.id, lang(q, req));
+  }
+
+  @Get(':id')
+  @RequirePermission('workspace.read')
+  get(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Query() q: CmsQueryDto, @Req() req: any) {
+    return this.announcements.get(user.id, id, lang(q, req));
+  }
+
+  @Post(':id/dismiss')
+  @HttpCode(204)
+  @RequirePermission('workspace.read')
+  async dismiss(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    await this.announcements.dismiss(user.id, id);
   }
 }
 

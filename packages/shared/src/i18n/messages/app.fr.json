@@ -6329,5 +6329,13 @@
  "couriers.platform.procolis": "Ancienne plateforme (Procolis)",
  "couriers.platform.app.hint": "Copiez la clé API et l'ID tenant depuis votre espace ZR Express (zrexpress.app). Étiquette ZR, annulation avant ramassage et stop-desks pris en charge.",
  "couriers.platform.procolis.hint": "Compte Procolis (procolis.com) : token + clé. Ni étiquette ni annulation par l'API : l'étiquette Djaber est imprimée.",
- "couriers.platform.current": "Plateforme : {name}"
+ "couriers.platform.current": "Plateforme : {name}",
+ "announcements.more": "En savoir plus",
+ "announcements.title": "Annonce",
+ "announcements.state.ended": "Cette annonce est terminée : elle n'est plus affichée.",
+ "announcements.state.withdrawn": "Cette annonce a été retirée par l'équipe Djaber.",
+ "announcements.state.scheduled": "Cette annonce n'a pas encore commencé.",
+ "announcements.published": "Publiée le {date}",
+ "announcements.until": "jusqu'au {date}",
+ "announcements.fallback": "Affichée en français (pas encore traduite)."
 }
