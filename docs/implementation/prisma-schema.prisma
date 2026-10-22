@@ -2454,6 +2454,8 @@ model Product {
   categoryId       String?                 @db.Uuid
   unitId           String?                 @db.Uuid
   trackStock       Boolean                 @default(true)
+  /// orders accepted at zero stock (backorder, meeting PV 22/10): the stock may go below 0 for orders only; meaningful when trackStock
+  sellOutOfStock   Boolean                 @default(false)
   price            Int
   oldPrice         Int?
   costPrice        Int?

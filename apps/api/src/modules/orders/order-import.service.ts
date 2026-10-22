@@ -98,8 +98,8 @@ export class OrderImportService implements OnModuleInit {
   // --- worker: preview ------------------------------------------------------------------------------------------------------
   private async catalog(): Promise<ImportCatalog> {
     const [products, variants, wilayas, rules, communes, clients] = await Promise.all([
-      prisma.product.findMany({ where: { deletedAt: null }, select: { id: true, sku: true, name: true, hasVariants: true, trackStock: true, stock: true, price: true } }),
-      prisma.productVariant.findMany({ where: { deletedAt: null, isActive: true, sku: { not: null }, product: { deletedAt: null } }, select: { id: true, sku: true, name: true, stock: true, price: true, product: { select: { id: true, name: true, trackStock: true } } } }),
+      prisma.product.findMany({ where: { deletedAt: null }, select: { id: true, sku: true, name: true, hasVariants: true, trackStock: true, sellOutOfStock: true, stock: true, price: true } }),
+      prisma.productVariant.findMany({ where: { deletedAt: null, isActive: true, sku: { not: null }, product: { deletedAt: null } }, select: { id: true, sku: true, name: true, stock: true, price: true, product: { select: { id: true, name: true, trackStock: true, sellOutOfStock: true } } } }),
       prisma.wilaya.findMany({ select: { id: true, nameFr: true } }),
       prisma.deliveryFeeRule.findMany({ select: { wilayaId: true, isActive: true, homePrice: true } }),
       prisma.commune.findMany({ select: { id: true, wilayaId: true, nameFr: true } }),
@@ -107,8 +107,8 @@ export class OrderImportService implements OnModuleInit {
     ]);
     const rule = new Map(rules.map((r) => [r.wilayaId, r]));
     const skus: ImportCatalog['skus'] = new Map();
-    for (const p of products) skus.set(p.sku, { productId: p.id, variantId: null, name: p.name, hasVariants: p.hasVariants, trackStock: p.trackStock, available: p.trackStock && !p.hasVariants ? (p.stock ?? 0) : null, price: p.price });
-    for (const v of variants) skus.set(v.sku!, { productId: v.product.id, variantId: v.id, name: `${v.product.name} · ${v.name}`, hasVariants: true, trackStock: v.product.trackStock, available: v.product.trackStock ? v.stock : null, price: v.price });
+    for (const p of products) skus.set(p.sku, { productId: p.id, variantId: null, name: p.name, hasVariants: p.hasVariants, trackStock: p.trackStock, available: p.trackStock && !p.hasVariants && !p.sellOutOfStock ? (p.stock ?? 0) : null, price: p.price });
+    for (const v of variants) skus.set(v.sku!, { productId: v.product.id, variantId: v.id, name: `${v.product.name} · ${v.name}`, hasVariants: true, trackStock: v.product.trackStock, available: v.product.trackStock && !v.product.sellOutOfStock ? v.stock : null, price: v.price });
     const byWilaya: ImportCatalog['communes'] = new Map();
     for (const c of communes) {
       const m = byWilaya.get(c.wilayaId) ?? new Map<string, number>();

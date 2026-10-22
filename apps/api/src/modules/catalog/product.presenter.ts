@@ -58,6 +58,7 @@ export const toListItem = (p: ProductListRow): ProductListItemView => ({
   costPrice: p.costPrice,
   marginPct: marginPct(p.price, p.costPrice),
   trackStock: p.trackStock,
+  sellOutOfStock: p.trackStock && p.sellOutOfStock,
   stock: p.trackStock ? (p.stock ?? 0) : null,
   minStock: p.minStock,
   stockState: productStockState(p),

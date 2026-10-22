@@ -15,6 +15,8 @@ export type CatalogueProduct = {
   oldPrice: number | null;
   /** null = service (no stock tracking) */
   stock: number | null;
+  /** orders taken at zero stock (PV 22/10): STOCK 0 is not « out of stock » for this product */
+  sellOutOfStock: boolean;
   description: string | null;
   hasVariants: boolean;
   variants: CatalogueVariant[];
@@ -81,6 +83,7 @@ export class CatalogueService {
       sku: p.sku,
       oldPrice: p.oldPrice,
       stock: !p.trackStock ? null : p.hasVariants ? p.variants.reduce((n, v) => n + free(p.id, v.id, v.stock), 0) : free(p.id, null, p.stock ?? 0),
+      sellOutOfStock: p.trackStock && p.sellOutOfStock,
       hasVariants: p.hasVariants,
       variants: p.hasVariants ? p.variants.map((v) => ({ id: v.id, name: v.name, price: v.price, stock: p.trackStock ? free(p.id, v.id, v.stock) : v.stock })) : [],
       imageUrl: p.images[0]?.url ?? null,

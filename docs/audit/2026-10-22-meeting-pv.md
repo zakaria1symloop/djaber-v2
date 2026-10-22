@@ -12,4 +12,4 @@ Status: `todo` · `done` (commit) · `exists` (already in the app — where) · 
 | PV4 | List of suspect customers (no finalised / no confirmed order) to call them | done |
 | PV5 | Order tracking through the delivery provider's API (read / update statuses) | todo |
 | PV6 | Date and time of creation of each order | done |
-| PV7 | Per-product option to accept orders when the stock is zero | todo |
+| PV7 | Per-product option to accept orders when the stock is zero | done |

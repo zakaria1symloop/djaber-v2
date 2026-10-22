@@ -6348,5 +6348,8 @@
  "clients.action.block": "Bloquer le client",
  "clients.action.unblock": "Débloquer le client",
  "clients.filter.unconfirmed": "À relancer",
- "clients.filter.unconfirmedHint": "Clients intéressés sans commande confirmée : commande restée « Nouvelle » ou annulée, ou conversation sans commande. Les clients bloqués sont exclus."
+ "clients.filter.unconfirmedHint": "Clients intéressés sans commande confirmée : commande restée « Nouvelle » ou annulée, ou conversation sans commande. Les clients bloqués sont exclus.",
+ "products.form.stock.sellOutOfStock": "Accepter les commandes en rupture de stock",
+ "products.form.stock.sellOutOfStockHint": "Ce produit reste commandable à stock 0 (commande en attente de réassort) : le stock peut passer sous zéro, l'IA prend la commande et prévient que la livraison peut prendre un peu plus de temps. Les autres produits restent bloqués à 0.",
+ "orderForm.items.backorder": "Rupture de stock ({available} disponible) : commande acceptée pour ce produit, à réapprovisionner."
 }

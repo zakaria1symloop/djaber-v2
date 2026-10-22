@@ -70,6 +70,24 @@ describe('creation (ORD-01 / ORD-02, 04 §3 "Order created")', () => {
     expect((await owner.get(`/products/${p.id}`).expect(200)).body.data.stockDetail).toMatchObject({ total: 3, reserved: 0 });
   });
 
+  it('PV 22/10 a product set to sell at zero stock takes orders at stock 0 (back-order, stock below 0 at confirmation); the others stay refused', async () => {
+    const owner = await shop();
+    const backorder = await createProduct(owner, { name: 'Coffret précommande', price: 3000, stock: 0, sellOutOfStock: true });
+    expect(backorder).toMatchObject({ sellOutOfStock: true, stock: 0 });
+    const plain = await createProduct(owner, { name: 'Coffret normal', price: 3000, stock: 0 });
+    const refused = await postOrder(owner, orderBody(plain.id)).expect(422);
+    expect(refused.body.error.code).toBe('ORDER_INSUFFICIENT_STOCK');
+    const res = await postOrder(owner, orderBody(backorder.id, { items: [{ productId: backorder.id, quantity: 2 }] })).expect(201);
+    expect(res.body.data.status).toBe('new');
+    await status(owner, res.body.data, 'confirmed').expect(200);
+    expect(await productStock(backorder.id)).toBe(-2);
+    expect((await movementsOf(res.body.data.id)).map((m) => m.quantity)).toEqual([-2]);
+    // switched off again: back to the normal rule
+    const p = (await owner.get(`/products/${backorder.id}`).expect(200)).body.data;
+    await owner.patch(`/products/${backorder.id}`, { sellOutOfStock: false, version: p.version }).expect(200);
+    expect((await postOrder(owner, orderBody(backorder.id)).expect(422)).body.error.code).toBe('ORDER_INSUFFICIENT_STOCK');
+  });
+
   it('AT-CAT-02 a service product (trackStock=false) never decrements; AT-CAT-03 a variant product needs its variant', async () => {
     const owner = await shop();
     const service = await createProduct(owner, { name: 'Retouche', price: 800, trackStock: false, stock: null });

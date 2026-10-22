@@ -278,7 +278,7 @@ type AiRunDto = { id: string; kind: string; status: string; intent: AiIntent | n
 ```ts
 type ProductListItemDto = {
   id: string; sku: string; name: string; category: { id: string; name: string; color: string } | null; unit: { id: string; abbreviation: string } | null;
-  price: Money; oldPrice: Money | null; costPrice: Money | null; marginPct: number | null; trackStock: boolean; stock: number | null; minStock: number; stockState: 'ok'|'low'|'out'|'untracked';
+  price: Money; oldPrice: Money | null; costPrice: Money | null; marginPct: number | null; trackStock: boolean; sellOutOfStock: boolean /* orders accepted at zero stock, PV 22/10 */; stock: number | null; minStock: number; stockState: 'ok'|'low'|'out'|'untracked';
   hasVariants: boolean; variantSummary: string | null; isActive: boolean; archived: boolean; primaryImageUrl: string | null;
   aiState: 'proposed'|'excluded'; moderation: { status: 'not_required'|'pending'|'approved'|'rejected'|'appealed'; etaLabel?: string; reason?: string } | null; // [FIG MOD list pills]
   updatedAt: string; actions: ActionDescriptor[];

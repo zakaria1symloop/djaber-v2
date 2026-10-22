@@ -6348,5 +6348,8 @@
  "clients.action.block": "Block the customer",
  "clients.action.unblock": "Unblock the customer",
  "clients.filter.unconfirmed": "To call back",
- "clients.filter.unconfirmedHint": "Interested customers without a confirmed order: an order left « New » or cancelled, or a conversation without an order. Blocked customers are left out."
+ "clients.filter.unconfirmedHint": "Interested customers without a confirmed order: an order left « New » or cancelled, or a conversation without an order. Blocked customers are left out.",
+ "products.form.stock.sellOutOfStock": "Accept orders when out of stock",
+ "products.form.stock.sellOutOfStockHint": "This product can still be ordered at stock 0 (back-order): the stock may go below zero, the AI takes the order and says delivery may take a little longer. Other products stay blocked at 0.",
+ "orderForm.items.backorder": "Out of stock ({available} available): the order is accepted for this product, to restock."
 }

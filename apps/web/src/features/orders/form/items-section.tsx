@@ -17,7 +17,7 @@ import { lineStock, lineStockWarning, lineTotal, type FormErrors, type FormLine 
 
 /** A catalogue product → a new order line (variants loaded by the caller when the product has some). */
 export const lineFromProduct = (
-  p: Pick<ProductListItem, 'id' | 'name' | 'sku' | 'price' | 'primaryImageUrl' | 'hasVariants' | 'trackStock' | 'stock'>,
+  p: Pick<ProductListItem, 'id' | 'name' | 'sku' | 'price' | 'primaryImageUrl' | 'hasVariants' | 'trackStock' | 'stock'> & { sellOutOfStock?: boolean },
   variants: Product['variants'] = [],
 ): FormLine => {
   const active = variants.filter((v) => v.isActive);
@@ -30,6 +30,7 @@ export const lineFromProduct = (
     imageUrl: p.primaryImageUrl,
     hasVariants: p.hasVariants,
     trackStock: p.trackStock,
+    sellOutOfStock: p.sellOutOfStock ?? false,
     stock: p.hasVariants ? null : p.stock,
     variants: active.map((v) => ({
       id: v.id,
@@ -91,6 +92,7 @@ export function ItemsSection({ lines, onChange, errors, locked }: { lines: FormL
   const warning = (l: FormLine) => {
     const w = lineStockWarning(l);
     if (w === 'insufficient') return t('error.STOCK_INSUFFICIENT', { available: formatNumber(lineStock(l) ?? 0) });
+    if (w === 'backorder') return t('orderForm.items.backorder', { available: formatNumber(Math.max(0, lineStock(l) ?? 0)) });
     if (w === 'last_unit') return t(l.hasVariants ? 'orderForm.items.lastUnitVariant' : 'orderForm.items.lastUnit');
     return null;
   };

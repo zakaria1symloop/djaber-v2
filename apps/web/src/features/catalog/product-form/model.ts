@@ -47,6 +47,8 @@ export type ProductFormValues = {
   oldPrice: string;
   costPrice: string;
   trackStock: boolean;
+  /** orders accepted at zero stock (PV 22/10) */
+  sellOutOfStock: boolean;
   stock: string;
   minStock: string;
   categoryId: string;
@@ -56,7 +58,7 @@ export type ProductFormValues = {
   variants: VariantRow[];
 };
 
-export const SCALAR_FIELDS = ['name', 'sku', 'keywords', 'description', 'price', 'oldPrice', 'costPrice', 'trackStock', 'stock', 'minStock', 'categoryId', 'unitId', 'weightGrams', 'isActive'] as const;
+export const SCALAR_FIELDS = ['name', 'sku', 'keywords', 'description', 'price', 'oldPrice', 'costPrice', 'trackStock', 'sellOutOfStock', 'stock', 'minStock', 'categoryId', 'unitId', 'weightGrams', 'isActive'] as const;
 export type ScalarField = (typeof SCALAR_FIELDS)[number];
 export const VARIANT_FIELDS = ['name', 'sku', 'price', 'costPrice', 'stock', 'minStock'] as const;
 export type VariantField = (typeof VARIANT_FIELDS)[number];
@@ -91,6 +93,7 @@ export const emptyForm = (o: { service?: boolean } = {}): ProductFormValues => (
   oldPrice: '',
   costPrice: '',
   trackStock: !o.service,
+  sellOutOfStock: false,
   stock: '',
   minStock: '',
   categoryId: '',
@@ -122,6 +125,7 @@ export const toForm = (p: Product): ProductFormValues => ({
   oldPrice: moneyDigits(p.oldPrice),
   costPrice: moneyDigits(p.costPrice),
   trackStock: p.trackStock,
+  sellOutOfStock: p.sellOutOfStock ?? false,
   stock: p.stock === null || p.stock === undefined ? '' : String(p.stock),
   minStock: String(p.minStock ?? 0),
   categoryId: p.category?.id ?? '',
@@ -180,6 +184,7 @@ export const productFormSchema = (mode: 'create' | 'edit') =>
       oldPrice: digits(productPrice),
       costPrice: digits(productCost),
       trackStock: z.boolean(),
+      sellOutOfStock: z.boolean(),
       stock: digits(stockQty),
       minStock: digits(stockQty),
       categoryId: z.string(),
@@ -228,6 +233,7 @@ export function variantUpdatePayload(base: VariantRow, row: VariantRow, o: { adv
 export function toCreatePayload(v: ProductFormValues, o: { advanced: boolean }): CreateProductInput {
   const withVariants = v.trackStock && v.variants.length > 0;
   const out: CreateProductInput = { name: v.name.trim(), price: int(v.price) ?? 0, trackStock: v.trackStock, isActive: v.isActive };
+  if (v.trackStock && v.sellOutOfStock) out.sellOutOfStock = true;
   if (v.sku.trim()) out.sku = v.sku.trim();
   if (v.description.trim()) out.description = v.description.trim();
   if (v.categoryId) out.categoryId = v.categoryId;
@@ -284,6 +290,9 @@ export function toUpdatePayload(base: ProductFormValues, v: ProductFormValues, v
         break;
       case 'trackStock':
         out.trackStock = v.trackStock;
+        break;
+      case 'sellOutOfStock':
+        out.sellOutOfStock = v.sellOutOfStock;
         break;
       case 'minStock':
         out.minStock = int(v.minStock) ?? 0;

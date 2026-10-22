@@ -33,6 +33,8 @@ export type FormLine = {
   imageUrl: string | null;
   hasVariants: boolean;
   trackStock: boolean;
+  /** the product takes orders at zero stock (PV 22/10): asking more than the stock is a back-order, not an error */
+  sellOutOfStock?: boolean;
   /** stock of the product (no variants); variants carry their own */
   stock: number | null;
   variants: VariantOption[];
@@ -91,11 +93,14 @@ export const lineStock = (l: FormLine): number | null => {
   if (l.hasVariants) return lineVariant(l)?.stock ?? null;
   return l.stock;
 };
-/** `last_unit` when the line takes the last unit(s) exactly, `insufficient` when it asks more than the stock. */
-export const lineStockWarning = (l: FormLine): 'last_unit' | 'insufficient' | null => {
+/**
+ * `last_unit` when the line takes the last unit(s) exactly, `insufficient` when it asks more than the stock —
+ * `backorder` instead for a product sold at zero stock (PV 22/10: allowed, a warning only).
+ */
+export const lineStockWarning = (l: FormLine): 'last_unit' | 'insufficient' | 'backorder' | null => {
   const s = lineStock(l);
   if (s === null) return null;
-  if (l.quantity > s) return 'insufficient';
+  if (l.quantity > s) return l.sellOutOfStock ? 'backorder' : 'insufficient';
   if (l.quantity === s) return 'last_unit';
   return null;
 };

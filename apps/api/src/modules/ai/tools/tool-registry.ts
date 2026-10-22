@@ -293,10 +293,11 @@ export class ToolRegistry {
       // AI-14: an archived / inactive product is dropped with a message, never ordered
       if (!p) return fail({ ok: false, error: { code: 'PRODUCT_NOT_AVAILABLE', productId: i.productId } });
       const v = p.hasVariants ? p.variants.find((x) => x.id === i.variantId) : null;
-      if (p.hasVariants && !v) return fail({ ok: false, error: { code: 'VARIANT_REQUIRED', productId: p.id, availableVariants: p.variants.filter((x) => x.stock > 0).map((x) => ({ id: x.id, name: x.name, price: x.price, stock: x.stock })) } });
+      if (p.hasVariants && !v) return fail({ ok: false, error: { code: 'VARIANT_REQUIRED', productId: p.id, availableVariants: p.variants.filter((x) => p.sellOutOfStock || x.stock > 0).map((x) => ({ id: x.id, name: x.name, price: x.price, stock: x.stock })) } });
       const stock = v ? v.stock : p.stock !== null && freed.size ? p.stock + (freed.get(`${p.id}:`) ?? 0) : p.stock;
       const free = stock === null ? null : v ? stock + (freed.get(`${p.id}:${v.id}`) ?? 0) : stock;
-      if (free !== null && free < i.quantity) return fail({ ok: false, error: { code: 'ORDER_INSUFFICIENT_STOCK', productId: p.id, available: stock } });
+      // a product sold at zero stock (PV 22/10) is ordered whatever its stock
+      if (free !== null && free < i.quantity && !p.sellOutOfStock) return fail({ ok: false, error: { code: 'ORDER_INSUFFICIENT_STOCK', productId: p.id, available: stock } });
       items.push({ productId: p.id, variantId: v?.id ?? null, quantity: i.quantity, name: p.name, variant: v?.name ?? null, unitPrice: v ? v.price : p.price });
     }
     const subtotal = items.reduce((n, i) => n + i.unitPrice * i.quantity, 0);

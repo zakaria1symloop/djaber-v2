@@ -82,6 +82,18 @@ export function StockSection({ form, rows, values, mode, product, advanced, lock
         </div>
       </div>
       {errors.trackStock ? <FormAlert className="mt-3">{fieldError(t, errors.trackStock.message)}</FormAlert> : null}
+      {/* PV 22/10: orders accepted at zero stock, product by product */}
+      {tracked ? (
+        <div className="mt-4 flex items-start gap-3" data-testid="sell-out-of-stock">
+          <span className="mt-0.5 shrink-0">
+            <Controller control={form.control} name="sellOutOfStock" render={({ field }) => <Switch checked={field.value} onCheckedChange={field.onChange} label={t('products.form.stock.sellOutOfStock')} disabled={locked} />} />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[14px] font-medium">{t('products.form.stock.sellOutOfStock')}</div>
+            <p className="ts-label-meta mt-0.5 text-text-muted">{t('products.form.stock.sellOutOfStockHint')}</p>
+          </div>
+        </div>
+      ) : null}
 
       {tracked && !hasVariants ? (
         <div className="mt-4 grid grid-cols-2 gap-3">

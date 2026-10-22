@@ -47,8 +47,8 @@ const ctx = (over: Partial<PromptContext> = {}, agent: Partial<PromptContext['ag
     count: 2,
     full: true,
     products: [
-      { id: P1, name: 'Robe satin bordeaux', sku: 'ROB-001', price: 4500, oldPrice: 5200, stock: 7, description: 'Robe longue en satin,\n  coupe droite.', hasVariants: true, variants: [{ id: V1, name: 'S', price: 4500, stock: 4 }, { id: V2, name: 'M', price: 4500, stock: 3 }], imageUrl: null, imageKey: null, category: 'Robes', also: [{ id: P2, name: 'Ceinture dorée', price: 900, reason: 'assortie à la robe' }] },
-      { id: P2, name: 'Ceinture dorée', sku: 'CEI-002', price: 900, oldPrice: null, stock: null, description: null, hasVariants: false, variants: [], imageUrl: null, imageKey: null, category: null, also: [] },
+      { id: P1, name: 'Robe satin bordeaux', sku: 'ROB-001', price: 4500, oldPrice: 5200, stock: 7, description: 'Robe longue en satin,\n  coupe droite.', hasVariants: true, variants: [{ id: V1, name: 'S', price: 4500, stock: 4 }, { id: V2, name: 'M', price: 4500, stock: 3 }], imageUrl: null, imageKey: null, sellOutOfStock: false, category: 'Robes', also: [{ id: P2, name: 'Ceinture dorée', price: 900, reason: 'assortie à la robe' }] },
+      { id: P2, name: 'Ceinture dorée', sku: 'CEI-002', price: 900, oldPrice: null, stock: null, description: null, hasVariants: false, variants: [], imageUrl: null, imageKey: null, sellOutOfStock: false, category: null, also: [] },
     ],
   },
   lang: 'fr',
@@ -200,5 +200,14 @@ describe('PromptBuilder', () => {
     expect(isOutOfHours(night, new Date('2026-10-12T20:00:00Z'))).toBe(false); // Monday 21:00
     expect(isOutOfHours(night, new Date('2026-10-13T00:30:00Z'))).toBe(false); // Tuesday 01:30
     expect(isOutOfHours(night, new Date('2026-10-13T02:00:00Z'))).toBe(true); // Tuesday 03:00
+  });
+});
+
+describe('product sold at zero stock (PV 22/10)', () => {
+  const base = { id: 'p-x', name: 'Coffret parfum', sku: 'COF-1', price: 3000, oldPrice: null, description: null, hasVariants: false, variants: [], imageUrl: null, imageKey: null, category: null, also: [] };
+  it('at STOCK 0 the block tells the model to take the order; in stock or switch off ⇒ no line', () => {
+    expect(productBlock({ ...base, stock: 0, sellOutOfStock: true }, 1, 200)).toContain('ORDERABLE AT ZERO STOCK');
+    expect(productBlock({ ...base, stock: 4, sellOutOfStock: true }, 1, 200)).not.toContain('ORDERABLE AT ZERO STOCK');
+    expect(productBlock({ ...base, stock: 0, sellOutOfStock: false }, 1, 200)).not.toContain('ORDERABLE AT ZERO STOCK');
   });
 });

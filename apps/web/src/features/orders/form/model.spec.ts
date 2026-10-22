@@ -92,6 +92,12 @@ describe('stock warnings', () => {
     expect(lineStockWarning(line({ trackStock: false, stock: null, quantity: 99 }))).toBeNull();
     expect(lineStockWarning(line({ stock: 3, quantity: 2 }))).toBeNull();
   });
+  it('a product sold at zero stock (PV 22/10): more than the stock is a back-order warning, the items check stays ok', () => {
+    expect(lineStockWarning(line({ stock: 0, quantity: 2, sellOutOfStock: true }))).toBe('backorder');
+    expect(lineStockWarning(line({ stock: 0, quantity: 2 }))).toBe('insufficient');
+    const items = validationChecklist(filled({ lines: [line({ stock: 0, quantity: 2, sellOutOfStock: true })] }), { wilayaServed: true });
+    expect(items.find((i) => i.key === 'items')?.state).toBe('ok');
+  });
 });
 
 describe('validation', () => {

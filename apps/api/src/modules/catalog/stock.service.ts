@@ -39,7 +39,7 @@ export type MoveInput = {
 };
 export type MoveResult = { movement: StockMovement | null; before: number; after: number; productStock: number };
 
-type ProductLock = { id: string; name: string; sku: string; trackStock: boolean; hasVariants: boolean; stock: number | null; minStock: number; isActive: boolean; moderationStatus: string };
+type ProductLock = { id: string; name: string; sku: string; trackStock: boolean; sellOutOfStock: boolean; hasVariants: boolean; stock: number | null; minStock: number; isActive: boolean; moderationStatus: string };
 type VariantLock = { id: string; name: string; sku: string | null; stock: number; minStock: number };
 
 const MOVEMENT_INCLUDE = {
@@ -98,7 +98,7 @@ export class StockService implements OnModuleInit {
   async move(tx: Tx, input: MoveInput): Promise<MoveResult> {
     const ws = TenantContext.workspaceId();
     const [product] = await tx.$queryRaw<ProductLock[]>`
-      SELECT "id","name","sku","trackStock","hasVariants","stock","minStock","isActive","moderationStatus"::text AS "moderationStatus"
+      SELECT "id","name","sku","trackStock","sellOutOfStock","hasVariants","stock","minStock","isActive","moderationStatus"::text AS "moderationStatus"
       FROM "Product" WHERE "id" = ${input.productId}::uuid AND "workspaceId" = ${ws}::uuid FOR UPDATE`;
     if (!product) throw notFound();
     if (!product.trackStock) throw new AppException('PRODUCT_NOT_STOCK_TRACKED');
@@ -119,7 +119,9 @@ export class StockService implements OnModuleInit {
       if (input.requireChange) throw new AppException('STOCK_QUANTITY_ZERO', {}, { quantity: 'validation.quantity' });
       return { movement: null, before, after, productStock: product.stock ?? 0 };
     }
-    if (after < 0 && !input.allowNegative) throw input.insufficient?.(before, { name: variant ? `${product.name} · ${variant.name}` : product.name }) ?? new AppException('STOCK_INSUFFICIENT', { available: before }, { quantity: 'validation.quantity' });
+    // a product sold at zero stock (PV 22/10) goes below 0 for an order (backorder); every other movement keeps the rule
+    const backorder = product.sellOutOfStock && input.refType === 'order';
+    if (after < 0 && !input.allowNegative && !backorder) throw input.insufficient?.(before, { name: variant ? `${product.name} · ${variant.name}` : product.name }) ?? new AppException('STOCK_INSUFFICIENT', { available: before }, { quantity: 'validation.quantity' });
 
     let productStock = after;
     if (variant) {
@@ -178,9 +180,10 @@ export class StockService implements OnModuleInit {
     const held = await this.reservedQty(tx, [...new Set(keys.map((k) => k.productId))], [orderId, ...releasing]);
     for (const k of keys) {
       const [product] = await tx.$queryRaw<ProductLock[]>`
-        SELECT "id","name","sku","trackStock","hasVariants","stock","minStock","isActive","moderationStatus"::text AS "moderationStatus"
+        SELECT "id","name","sku","trackStock","sellOutOfStock","hasVariants","stock","minStock","isActive","moderationStatus"::text AS "moderationStatus"
         FROM "Product" WHERE "id" = ${k.productId}::uuid AND "workspaceId" = ${ws}::uuid FOR UPDATE`;
-      if (!product || !product.trackStock) continue;
+      // not tracked, or sold at zero stock (PV 22/10): nothing to hold
+      if (!product || !product.trackStock || product.sellOutOfStock) continue;
       let stock = product.stock ?? 0;
       let name = product.name;
       if (k.variantId) {

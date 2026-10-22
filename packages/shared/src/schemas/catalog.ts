@@ -78,6 +78,8 @@ const productFields = {
   unitId: emptyToNull(id),
   /** false = service / digital product (CAT-11): no quantity, excluded from every stock metric */
   trackStock: z.boolean().optional(),
+  /** accept orders at zero stock (backorder, PV 22/10): the stock may go below 0 for orders; ignored for services */
+  sellOutOfStock: z.boolean().optional(),
   price: productPrice,
   oldPrice: productPrice.nullable().optional(),
   costPrice: productCost.nullable().optional(),
@@ -286,6 +288,8 @@ export type ProductListItemView = {
   costPrice: number | null;
   marginPct: number | null;
   trackStock: boolean;
+  /** orders accepted at zero stock (PV 22/10) */
+  sellOutOfStock: boolean;
   stock: number | null;
   minStock: number;
   stockState: StockState;
