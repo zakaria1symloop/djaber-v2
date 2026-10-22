@@ -171,3 +171,5 @@ Applied on 2026-10-11 by script to the Figma file: **95 / 95 rows** (Web V2: 86 
 | Web V2 | ONB-01 — Onboarding — step 3 | `CATÉGORIE` (select) | (remove — a new shop has no category; the step keeps name, price, stock, photo) |
 | Web V2 | GLOBAL — States, toasts, banners & system dialogs catalogue (banner "Suppression programmée le …") | action `Annuler` | `Annuler la suppression` (calls `POST /workspace/deletion/cancel` directly) |
 | Web V2 | HELP — Help & support (merchant) (status card link) | `status.djaber.ai` | `Page de statut publique` |
+| Web V2 | ADM-11 — Platform admin — reports (KPI strip label) | `Indicateurs des signalements` | `Indicateurs de sécurité` (the strip mixes reports and merchant blocks, UX-014) |
+| Web V2 | ADM-11 — Platform admin — reports (tile « clients bloqués par les marchands · 7 j ») | `spam / insultes` | `manuels + règle auto · en vigueur` (the tile counts blocks of every reason, not spam / insult reports) |

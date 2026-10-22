@@ -362,9 +362,9 @@
  "adminSafety.header.rules": "Règles automatiques",
  "adminSafety.header.words": "Mots bloqués",
  "adminSafety.kpi.blocks": "clients bloqués par les marchands · 7 j",
- "adminSafety.kpi.blocksContext": "spam / insultes",
+ "adminSafety.kpi.blocksContext": "manuels + règle auto · en vigueur",
  "adminSafety.kpi.handled": "traités · 30 j",
- "adminSafety.kpi.label": "Indicateurs des signalements",
+ "adminSafety.kpi.label": "Indicateurs de sécurité",
  "adminSafety.kpi.merchants": "marchands signalés par des clients",
  "adminSafety.kpi.merchantsContext": "via « Signaler » Messenger → e-mail support",
  "adminSafety.kpi.open": "à traiter",
@@ -6338,5 +6338,11 @@
  "announcements.published": "Publiée le {date}",
  "announcements.until": "jusqu'au {date}",
  "announcements.fallback": "Affichée en français (pas encore traduite).",
- "adminSupport.composer.attachmentRefused": "Pièce jointe refusée : retirez-la et joignez-la de nouveau (image, PDF ou CSV, 5 Mo max)."
+ "adminSupport.composer.attachmentRefused": "Pièce jointe refusée : retirez-la et joignez-la de nouveau (image, PDF ou CSV, 5 Mo max).",
+ "adminSafety.kpi.blocksOpen": "Voir les clients bloqués par les marchands (7 j)",
+ "adminSafety.blocks.title": "Clients bloqués par les marchands · 7 j",
+ "adminSafety.blocks.description": "Blocages faits par les marchands (à la main ou par leur règle automatique) encore en vigueur. Ce ne sont pas des signalements : ils n'apparaissent pas dans « À traiter ».",
+ "adminSafety.blocks.empty": "Aucun blocage par les marchands ces 7 derniers jours.",
+ "adminSafety.blocks.source.manual": "Manuel",
+ "adminSafety.blocks.source.auto_rule": "Règle auto"
 }

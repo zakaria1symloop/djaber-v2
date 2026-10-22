@@ -157,6 +157,24 @@ describe('blocked words, auto-rules, export', () => {
     expect((await mod.get('/admin/reports/stats').expect(200)).body.data.blockedWords).toBe(2);
   });
 
+  it('UX-014 the « clients bloqués par les marchands · 7 j » tile counts the blocks still in force and lists them (they are not reports)', async () => {
+    const o = await asOwner(app);
+    const phone = newPhone();
+    const c = await db.client.create({ data: { workspaceId: o.workspaceId, name: 'Client UX014', phone, isPlaceholder: false, source: 'manual' } });
+    const before = (await mod.get('/admin/reports/stats').expect(200)).body.data;
+    const block = (await o.post('/safety/blocks', { clientId: c.id, reason: 'spam' }).expect(201)).body.data;
+    const after = (await mod.get('/admin/reports/stats').expect(200)).body.data;
+    expect(after.merchantBlocks7d).toBe(before.merchantBlocks7d + 1);
+    expect(after.tabs.todo).toBe(before.tabs.todo); // no report behind it
+    const rows = (await mod.get('/admin/reports/blocks').expect(200)).body.data;
+    const row = rows.find((r: any) => r.id === block.id);
+    expect(row).toMatchObject({ workspace: { id: o.workspaceId }, client: { id: c.id }, reason: 'spam', source: 'manual' });
+    expect(row.phone).not.toBe(phone); // masked
+    await o.delete(`/safety/blocks/${block.id}`).expect(200);
+    expect((await mod.get('/admin/reports/stats').expect(200)).body.data.merchantBlocks7d).toBe(before.merchantBlocks7d);
+    expect((await mod.get('/admin/reports/blocks').expect(200)).body.data.map((r: any) => r.id)).not.toContain(block.id);
+  });
+
   it('AT-SAFE-06 phone blocked by 3 workspaces in 7 d ⇒ system report proposing the blacklist; 3 end-customer reports of a merchant ⇒ "revue de l\'espace"; 5 AI-message reports on one agent ⇒ platform alert; idempotent', async () => {
     const phone = newPhone();
     for (let i = 0; i < 3; i++) {

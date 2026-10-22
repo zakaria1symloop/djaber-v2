@@ -1,7 +1,7 @@
 // ADM-11 — abuse reports, platform blacklist, platform blocked words, platform auto-rules, monthly compliance export
 // (03 §24 SAFE-07/08, 04 §13, D37; 06 §8.11; 03-events §4 `sched-abuse-auto-rules`).
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { normalizePhoneDz, type AdminBlockedWordsInput, type AdminReportsQuery, type BlacklistCreateInput, type BlacklistRowDto, type PlatformBlockedWordDto, type ReportAdminDto, type ReportDecideInput, type ReportStatsDto, type SafetyAutoRuleDto } from '@djaber/shared';
+import { normalizePhoneDz, type AdminBlockedWordsInput, type AdminReportsQuery, type BlacklistCreateInput, type BlacklistRowDto, type MerchantBlockRowDto, type PlatformBlockedWordDto, type ReportAdminDto, type ReportDecideInput, type ReportStatsDto, type SafetyAutoRuleDto } from '@djaber/shared';
 import { prisma, Prisma, TenantContext, type Report, type Tx } from '@djaber/db';
 import { AuditService } from '../../../core/audit/audit.service';
 import { AppException, notFound, validationError } from '../../../core/errors/app.exception';
@@ -36,6 +36,9 @@ const include = {
   aiRun: { select: { id: true, agent: { select: { id: true, name: true } } } },
 } as const satisfies Prisma.ReportInclude;
 type Row = Prisma.ReportGetPayload<{ include: typeof include }>;
+
+/** Blocks made by merchants (manual or their auto rule) in the last 7 days and still in force — tile + list (UX-014). */
+const MERCHANT_BLOCKS_7D = (now: number): Prisma.CustomerBlockWhereInput => ({ source: { in: ['manual', 'auto_rule'] }, blockedAt: { gte: new Date(now - 7 * DAY) }, unblockedAt: null });
 
 @Injectable()
 export class AdminSafetyService implements OnModuleInit {
@@ -215,6 +218,19 @@ export class AdminSafetyService implements OnModuleInit {
     });
   }
 
+  /** `GET /admin/reports/blocks` — what the « clients bloqués » tile counts (UX-014: the tile pointed at an empty reports tab). */
+  async merchantBlocks(): Promise<MerchantBlockRowDto[]> {
+    return sys(async () => {
+      const rows = await prisma.customerBlock.findMany({
+        where: MERCHANT_BLOCKS_7D(Date.now()),
+        orderBy: { blockedAt: 'desc' },
+        take: 100,
+        include: { workspace: { select: { id: true, name: true } }, client: { select: { id: true, name: true } }, blockedBy: userRefSelect },
+      });
+      return rows.map((b) => ({ id: b.id, workspace: b.workspace, client: b.client, phone: maskPhone(b.phone), reason: b.reason, source: b.source as 'manual' | 'auto_rule', blockedBy: toUserRef(b.blockedBy), blockedAt: b.blockedAt.toISOString() }));
+    });
+  }
+
   async stats(): Promise<ReportStatsDto> {
     return sys(async () => {
       const now = Date.now();
@@ -223,7 +239,7 @@ export class AdminSafetyService implements OnModuleInit {
         prisma.report.count({ where: openWhere }),
         prisma.report.count({ where: { ...openWhere, createdAt: { lt: new Date(now - REPORT_SLA_MS) } } }),
         prisma.report.count({ where: { status: { in: FINAL }, resolvedAt: { gte: new Date(now - 30 * DAY) } } }),
-        prisma.customerBlock.count({ where: { source: { in: ['manual', 'auto_rule'] }, blockedAt: { gte: new Date(now - 7 * DAY) } } }),
+        prisma.customerBlock.count({ where: MERCHANT_BLOCKS_7D(now) }),
         prisma.report.groupBy({ by: ['targetWorkspaceId'], where: { type: 'merchant', reporterKind: 'end_customer', createdAt: { gte: new Date(now - 30 * DAY) } }, _count: { _all: true } }),
         prisma.blockedWord.count({ where: { workspaceId: null } }),
         prisma.message.count({ where: { containsBlockedWord: true, sentAt: { gte: new Date(now - 7 * DAY) } } }),

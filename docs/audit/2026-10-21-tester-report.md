@@ -32,7 +32,7 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 | # | Issue | Status |
 |---|---|---|
 | UX-012 | Attachment on a support reply ⇒ « Vérifiez les champs (VALIDATION_ERRORS) » | done |
-| UX-014 | « Spam / Insultes » card counts 1 while « À traiter » lists 0 reports | todo |
+| UX-014 | « Spam / Insultes » card counts 1 while « À traiter » lists 0 reports | done |
 
 ## Merchant — clients
 | # | Issue | Status |

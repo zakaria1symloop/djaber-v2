@@ -271,6 +271,11 @@ export type ReportAdminDto = {
   actions: ActionDescriptor[];
 };
 export type ReportStatsDto = { open: number; over24h: number; handled30d: number; merchantBlocks7d: number; merchantsReported30d: number; blockedWords: number; autoFiltered7d: number; tabs: { todo: number; customers: number; merchants: number; aiContent: number; done: number } };
+/**
+ * `GET /admin/reports/blocks` — the merchant blocks behind the « clients bloqués par les marchands · 7 j » tile (UX-014):
+ * manual + auto-rule blocks of the last 7 days still in force, newest first (100 max). Phone masked (admin viewer).
+ */
+export type MerchantBlockRowDto = { id: string; workspace: { id: string; name: string }; client: { id: string; name: string } | null; phone: string | null; reason: string | null; source: 'manual' | 'auto_rule'; blockedBy: InboxUserRef | null; blockedAt: string };
 export type BlacklistRowDto = { id: string; phone: string; reason: string; reportId: string | null; workspaceCount: number; createdBy: InboxUserRef; createdAt: string; revokedBy: InboxUserRef | null; revokedAt: string | null };
 export type PlatformBlockedWordDto = { id: string; word: string; locale: string | null; createdAt: string };
 export type SafetyAutoRuleDto = { key: 'phone_blocked_by_workspaces' | 'merchant_reported_by_customers' | 'ai_messages_reported'; threshold: number; windowDays: number; outcome: string; hits30d: number; lastRunAt: string | null };

@@ -362,9 +362,9 @@
  "adminSafety.header.rules": "Automatic rules",
  "adminSafety.header.words": "Blocked words",
  "adminSafety.kpi.blocks": "customers blocked by merchants · 7 d",
- "adminSafety.kpi.blocksContext": "spam / insults",
+ "adminSafety.kpi.blocksContext": "manual + auto rule · in force",
  "adminSafety.kpi.handled": "handled · 30 d",
- "adminSafety.kpi.label": "Report indicators",
+ "adminSafety.kpi.label": "Safety indicators",
  "adminSafety.kpi.merchants": "merchants reported by customers",
  "adminSafety.kpi.merchantsContext": "via “Report” Messenger → support e-mail",
  "adminSafety.kpi.open": "to handle",
@@ -6338,5 +6338,11 @@
  "announcements.published": "Published on {date}",
  "announcements.until": "until {date}",
  "announcements.fallback": "Shown in French (not translated yet).",
- "adminSupport.composer.attachmentRefused": "Attachment refused: remove it and attach it again (image, PDF or CSV, 5 MB max)."
+ "adminSupport.composer.attachmentRefused": "Attachment refused: remove it and attach it again (image, PDF or CSV, 5 MB max).",
+ "adminSafety.kpi.blocksOpen": "See the customers blocked by merchants (7 d)",
+ "adminSafety.blocks.title": "Customers blocked by merchants · 7 d",
+ "adminSafety.blocks.description": "Blocks made by merchants (by hand or by their automatic rule) still in force. They are not reports: they do not show in « To process ».",
+ "adminSafety.blocks.empty": "No block by merchants in the last 7 days.",
+ "adminSafety.blocks.source.manual": "Manual",
+ "adminSafety.blocks.source.auto_rule": "Auto rule"
 }

@@ -5,10 +5,10 @@
 // Traités, filters in the URL (search, Type, Gravité, Origine, Période), the table (Quand, Type · origine, Objet, Motif,
 // Gravité, Assigné, 👁 / ⋯) and the treatment panel of the report in `?sheet=` (first row by default).
 import { formatNumber, ReporterKindValues, ReportTypeValues, SeverityValues, type AppLocale, type ReportAdminDto, type ReportStatsDto } from '@djaber/shared';
-import { ActionsMenu, ActiveFilters, Button, Card, cn, DataTable, FilterChips, FilterDropdown, IconButton, ListSkeleton, OpsKpiStrip, OpsKpiTile, Pill, PillTabs, SearchInput, Skeleton, toast, type Column, type MenuAction } from '@djaber/ui';
+import { ActionsMenu, ActiveFilters, Button, Card, cn, DataTable, Dialog, FilterChips, FilterDropdown, IconButton, ListSkeleton, OpsKpiStrip, OpsKpiTile, Pill, PillTabs, SearchInput, Skeleton, toast, type Column, type MenuAction } from '@djaber/ui';
 import { Eye } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ListEmpty, ListFilteredEmpty, OfflineBanner } from '@/components/global-states';
 import { AdminPage, AdminQueryError } from '@/features/admin/admin-page';
 import { usePlatform } from '@/features/admin/platform';
@@ -19,7 +19,7 @@ import { useLocaleCode, useT, type TFunction } from '@/lib/i18n';
 import { filterList, filterText } from '@/lib/list-state';
 import { relativeTime } from '@/lib/time';
 import { useListState } from '@/lib/use-list-state';
-import { safetyApi, useReports, useReportStats, useSafetyEvents, useSafetyRefresh } from './api';
+import { safetyApi, useMerchantBlocks, useReports, useReportStats, useSafetyEvents, useSafetyRefresh } from './api';
 import { PERIODS, REPORT_TABS, reportsApiQuery, REPORTS_SPEC, reportTabCount, reportTabOf } from './logic';
 import { AutoRulesSheet, BlockedWordsSheet } from './sheets';
 import { reporterName, TreatmentPanel } from './treatment-panel';
@@ -73,7 +73,7 @@ export function ReportsPage() {
   );
 }
 
-function Kpis({ stats, t }: { stats: ReportStatsDto | undefined; t: TFunction }) {
+function Kpis({ stats, t, onBlocks }: { stats: ReportStatsDto | undefined; t: TFunction; onBlocks: () => void }) {
   if (!stats) {
     return (
       <OpsKpiStrip label={t('adminSafety.kpi.label')}>
@@ -87,15 +87,58 @@ function Kpis({ stats, t }: { stats: ReportStatsDto | undefined; t: TFunction })
     <OpsKpiStrip label={t('adminSafety.kpi.label')}>
       <OpsKpiTile data-kpi="open" context={t('adminSafety.kpi.openContext', { count: stats.over24h })} value={formatNumber(stats.open)} unit={t('adminSafety.kpi.open')} tone={stats.over24h ? 'danger' : undefined} />
       <OpsKpiTile data-kpi="handled" value={formatNumber(stats.handled30d)} unit={t('adminSafety.kpi.handled')} />
-      <OpsKpiTile data-kpi="blocks" context={t('adminSafety.kpi.blocksContext')} value={formatNumber(stats.merchantBlocks7d)} unit={t('adminSafety.kpi.blocks')} />
+      {/* merchant blocks, not reports (UX-014): the tile opens the blocks it counts */}
+      <OpsKpiTile
+        data-kpi="blocks"
+        role="button"
+        tabIndex={0}
+        aria-label={t('adminSafety.kpi.blocksOpen')}
+        onClick={onBlocks}
+        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onBlocks())}
+        className="cursor-pointer hover:border-line-lit focus-visible:outline focus-visible:outline-1 focus-visible:outline-white"
+        context={t('adminSafety.kpi.blocksContext')}
+        value={formatNumber(stats.merchantBlocks7d)}
+        unit={t('adminSafety.kpi.blocks')}
+      />
       <OpsKpiTile data-kpi="merchants" context={t('adminSafety.kpi.merchantsContext')} value={formatNumber(stats.merchantsReported30d)} unit={t('adminSafety.kpi.merchants')} />
       <OpsKpiTile data-kpi="words" context={t('adminSafety.kpi.wordsContext', { count: stats.blockedWords })} value={formatNumber(stats.autoFiltered7d)} unit={t('adminSafety.kpi.words')} />
     </OpsKpiStrip>
   );
 }
 
+/** « Clients bloqués par les marchands · 7 j »: the blocks still in force, per workspace (UX-014). */
+function MerchantBlocksDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const t = useT();
+  const locale = useLocaleCode() as AppLocale;
+  const q = useMerchantBlocks(open);
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()} title={t('adminSafety.blocks.title')} description={t('adminSafety.blocks.description')} closeLabel={t('action.close')} size="lg">
+      {q.isPending ? (
+        <ListSkeleton rows={4} columns={4} label={t('common.loading')} />
+      ) : q.isError ? (
+        <AdminQueryError error={q.error} onRetry={() => void q.refetch()} />
+      ) : q.data.length === 0 ? (
+        <p className="ts-label-meta text-text-muted">{t('adminSafety.blocks.empty')}</p>
+      ) : (
+        <ul className="flex flex-col divide-y divide-line-hairline" data-testid="merchant-blocks">
+          {q.data.map((b) => (
+            <li key={b.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-[13px]">
+              <span className="min-w-0 flex-1 truncate font-medium">{b.workspace.name}</span>
+              <span className="text-text-secondary">{b.client?.name ?? <span dir="ltr">{b.phone ?? '—'}</span>}</span>
+              <Pill>{b.reason ? t(`safety.blockReason.${b.reason}`) : t('safety.reason.none')}</Pill>
+              <span className="ts-label-micro text-text-muted">{t(`adminSafety.blocks.source.${b.source}`)}</span>
+              <span className="ts-label-micro text-text-muted">{relativeTime(b.blockedAt, locale)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Dialog>
+  );
+}
+
 function Reports({ canWrite }: { canWrite: boolean }) {
   const t = useT();
+  const [blocksOpen, setBlocksOpen] = useState(false);
   const locale = useLocaleCode() as AppLocale;
   const { userId } = usePlatform();
   const list = useListState(REPORTS_SPEC);
@@ -184,7 +227,8 @@ function Reports({ canWrite }: { canWrite: boolean }) {
   return (
     <>
       {offline ? <OfflineBanner since={since} onRetry={() => void q.refetch()} /> : null}
-      <Kpis stats={stats.data} t={t} />
+      <Kpis stats={stats.data} t={t} onBlocks={() => setBlocksOpen(true)} />
+      <MerchantBlocksDialog open={blocksOpen} onClose={() => setBlocksOpen(false)} />
       <PillTabs label={t('adminSafety.tab.label')} value={tab} onChange={(k) => list.set({ tab: k === 'todo' ? null : k, sheet: null })} tabs={REPORT_TABS.map((k) => ({ key: k, label: t(`adminSafety.tab.${k}`), count: k === 'todo' ? reportTabCount(k, stats.data) : null }))} />
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput value={s.q} onChange={(v) => list.set({ q: v })} label={t('action.search')} placeholder={t('adminSafety.search')} clearLabel={t('list.clearSearch')} className="min-w-64 flex-1 sm:max-w-72" />

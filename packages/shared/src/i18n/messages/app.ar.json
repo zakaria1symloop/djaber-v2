@@ -362,9 +362,9 @@
  "adminSafety.header.rules": "القواعد التلقائية",
  "adminSafety.header.words": "الكلمات المحظورة",
  "adminSafety.kpi.blocks": "عملاء حظرهم التجار · 7 أيام",
- "adminSafety.kpi.blocksContext": "رسائل مزعجة / شتائم",
+ "adminSafety.kpi.blocksContext": "يدوي + قاعدة تلقائية · سارية",
  "adminSafety.kpi.handled": "تمت معالجتها · 30 يومًا",
- "adminSafety.kpi.label": "مؤشرات البلاغات",
+ "adminSafety.kpi.label": "مؤشرات الأمان",
  "adminSafety.kpi.merchants": "تجار أبلغ عنهم عملاء",
  "adminSafety.kpi.merchantsContext": "عبر «إبلاغ» في Messenger ← بريد الدعم",
  "adminSafety.kpi.open": "للمعالجة",
@@ -6338,5 +6338,11 @@
  "announcements.published": "نُشر في {date}",
  "announcements.until": "حتى {date}",
  "announcements.fallback": "معروض بالفرنسية (لم يُترجم بعد).",
- "adminSupport.composer.attachmentRefused": "تم رفض المرفق: احذفه ثم أرفقه من جديد (صورة أو PDF أو CSV، 5 ميغابايت كحد أقصى)."
+ "adminSupport.composer.attachmentRefused": "تم رفض المرفق: احذفه ثم أرفقه من جديد (صورة أو PDF أو CSV، 5 ميغابايت كحد أقصى).",
+ "adminSafety.kpi.blocksOpen": "عرض العملاء المحظورين من التجار (7 أيام)",
+ "adminSafety.blocks.title": "العملاء المحظورون من التجار · 7 أيام",
+ "adminSafety.blocks.description": "حظر قام به التجار (يدويًا أو بقاعدتهم التلقائية) ولا يزال ساريًا. ليست بلاغات: لا تظهر في «للمعالجة».",
+ "adminSafety.blocks.empty": "لا يوجد حظر من التجار خلال آخر 7 أيام.",
+ "adminSafety.blocks.source.manual": "يدوي",
+ "adminSafety.blocks.source.auto_rule": "قاعدة تلقائية"
 }

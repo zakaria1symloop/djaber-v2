@@ -36,6 +36,12 @@ export class AdminSafetyController {
     return this.safety.stats();
   }
 
+  @Get('reports/blocks')
+  @RequirePlatformRole('admin.safety.read')
+  merchantBlocks() {
+    return this.safety.merchantBlocks();
+  }
+
   @Get('reports/:id')
   @RequirePlatformRole('admin.safety.read')
   get(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
