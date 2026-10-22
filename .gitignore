@@ -24,3 +24,5 @@ Cahier_des_Charges_*.pdf
 
 # local agent worktrees
 .claude/worktrees/
+
+.vercel

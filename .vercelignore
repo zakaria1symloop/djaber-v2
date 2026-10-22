@@ -1,0 +1,16 @@
+# What `vercel deploy` uploads from a developer machine: never the secrets nor the local stack (Vercel builds apps/web).
+.env
+.env.*
+!.env.example
+.local
+.turbo
+.vercel
+node_modules
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/test-results
+**/playwright-report
+*.pdf
+apps/api/test
