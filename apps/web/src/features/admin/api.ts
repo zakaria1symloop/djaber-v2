@@ -21,7 +21,9 @@ export async function adminList<T, M = Record<string, unknown>>(path: string, qu
 
 /** `GET <path>` list with the URL query (keeps the previous page while the next loads). */
 export function useAdminList<T, M = Record<string, unknown>>(path: string, query?: ApiQuery, o: { enabled?: boolean } = {}) {
-  return useQuery({ queryKey: adminKey(path, query ?? {}), queryFn: () => adminList<T, M>(path, query), placeholderData: keepPreviousData, enabled: o.enabled ?? true });
+  // admin lists are monitoring screens: back on the tab, the counts are read again (tester report 2026-10-21 UX-011 — a
+  // redemption made in another tab left « Utilisations (0) » until a reload)
+  return useQuery({ queryKey: adminKey(path, query ?? {}), queryFn: () => adminList<T, M>(path, query), placeholderData: keepPreviousData, enabled: o.enabled ?? true, refetchOnWindowFocus: true });
 }
 
 export function useAdminGet<T>(path: string | null, query?: ApiQuery) {

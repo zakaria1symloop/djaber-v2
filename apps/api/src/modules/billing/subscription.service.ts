@@ -251,6 +251,12 @@ export class SubscriptionService implements OnModuleInit {
       });
       lines.push({ key: 'billingDoc.line.renewal', label: '', params: { plan: this.plans.name(plan, 'fr'), cycle: intent.cycle }, amount: intent.amountBeforePromo, planId: plan.id, cycle: intent.cycle });
       if (!early) await this.credits.ensurePeriod(tx, workspaceId, plan.monthlyCredits, now);
+      // a discount code paid with a renewal is used too (tester report 2026-10-21 UX-011: no redemption was written, the
+      // admin count stayed 0 and the code could be reused); its periods count from this payment
+      if (promo && !cur!.promoRedemptionId) {
+        const rid = await this.promos.record(tx, promo, workspaceId, intent.userId ?? (await this.ownerId(tx, workspaceId)));
+        sub = await tx.subscription.update({ where: { id: sub.id }, data: { promoRedemptionId: rid, ...(promo.kind === 'percent_discount' ? { discountPct: promo.value } : {}) } });
+      }
       // a renewal invoice already issued (J−7 / J0) is the one paid now
       const pending = await tx.invoice.findFirst({ where: { subscriptionId: cur!.id, kind: 'subscription', status: { in: ['upcoming', 'unpaid'] } } });
       if (pending) {

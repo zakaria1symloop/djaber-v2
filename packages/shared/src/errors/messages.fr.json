@@ -67,6 +67,7 @@
   "COURIER_UNAVAILABLE": "Transporteur indisponible, envoi mis en attente.",
   "COURIER_VALIDATION": "Transporteur : {message}.",
   "CREDITS_NEGATIVE_BALANCE": "Solde de crédits négatif ({balance}) après un remboursement : l'IA est bloquée.",
+  "CREDIT_PACK_HAS_PURCHASES": "Pack déjà acheté {count} fois : désactivez-le plutôt que de le supprimer.",
   "CUSTOMER_BLOCKED": "Client bloqué : commande refusée.",
   "CUSTOMER_BLOCKED_BY_PLATFORM": "Bloqué par la plateforme : contestez via le support.",
   "CUSTOMER_HAS_ORDERS": "{count} commandes : archivez plutôt le client.",

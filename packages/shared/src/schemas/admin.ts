@@ -406,7 +406,8 @@ export type AdminCreatePackInput = z.infer<typeof AdminCreatePackSchema>;
 /** `PATCH /admin/credit-packs/:id`. */
 export const AdminUpdatePackSchema = AdminCreatePackSchema.omit({ slug: true }).partial().strict();
 export type AdminUpdatePackInput = z.infer<typeof AdminUpdatePackSchema>;
-export type CreditPackAdminDto = CreditPackDto & { nameI18n: LocalizedText; storeTier: string | null; isActive: boolean; visibleWeb: boolean; visibleMobile: boolean; sales30d: number; sortOrder: number };
+/** `purchases` = every purchase row ever (any status: they keep the pack); `actions` = `edit`, `delete` (greyed `CREDIT_PACK_HAS_PURCHASES` once bought — deactivate instead, UX-010). */
+export type CreditPackAdminDto = CreditPackDto & { nameI18n: LocalizedText; storeTier: string | null; isActive: boolean; visibleWeb: boolean; visibleMobile: boolean; sales30d: number; sortOrder: number; purchases: number; actions: ActionDescriptor[] };
 /** `GET /admin/credit-packs` meta.kpis */
 export type AdminPacksKpis = { packsSold30d: { total: number; web: number; mobile: number }; netDzd30d: number; activeCodes: number; codesExpiringThisWeek: number; creditsGranted30d: number; buyingWorkspacesPct: number };
 export const AdminPackPurchasesQuerySchema = z.object({ ...paging, channel: csv(z.enum(['web', 'google_play', 'app_store'])).optional(), status: csv(z.enum(['pending', 'validated', 'credited', 'refunded', 'failed', 'invalid'])).optional(), from: day.optional(), to: day.optional(), q }).strict();

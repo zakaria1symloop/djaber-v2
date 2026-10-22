@@ -67,6 +67,7 @@
   "COURIER_UNAVAILABLE": "الناقل غير متاح، الإرسال في الانتظار.",
   "COURIER_VALIDATION": "الناقل: {message}.",
   "CREDITS_NEGATIVE_BALANCE": "رصيدك سالب ({balance}) بعد استرجاع: الذكاء الاصطناعي متوقف.",
+  "CREDIT_PACK_HAS_PURCHASES": "تم شراء هذه الباقة {count} مرة: عطّلها بدل حذفها.",
   "CUSTOMER_BLOCKED": "العميل محظور: الطلب مرفوض.",
   "CUSTOMER_BLOCKED_BY_PLATFORM": "محظور من المنصة: اعترض عبر الدعم.",
   "CUSTOMER_HAS_ORDERS": "{count} طلبات: أرشف العميل بدلًا من ذلك.",

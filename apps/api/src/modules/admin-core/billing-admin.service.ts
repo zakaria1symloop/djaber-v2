@@ -562,17 +562,20 @@ export class AdminBillingCatalogService {
   // =========================================================================================================================
   // credit packs & promo codes & pricing history (ADM-15)
   // =========================================================================================================================
-  private packDto(p: CreditPack, sales30d: number): CreditPackAdminDto {
-    return { ...this.packs.toDto(p, 'fr'), nameI18n: fromLocalized(p.name), storeTier: p.storeTier, isActive: p.isActive, visibleWeb: p.visibleWeb, visibleMobile: p.visibleMobile, sales30d, sortOrder: p.sortOrder };
+  private packDto(p: CreditPack, sales30d: number, purchases: number): CreditPackAdminDto {
+    // a pack that was ever bought keeps its history (CreditPackPurchase ON DELETE RESTRICT): deactivate it instead
+    const actions = [{ key: 'edit', enabled: true }, purchases > 0 ? { key: 'delete', enabled: false, reasonCode: 'CREDIT_PACK_HAS_PURCHASES' } : { key: 'delete', enabled: true }];
+    return { ...this.packs.toDto(p, 'fr'), nameI18n: fromLocalized(p.name), storeTier: p.storeTier, isActive: p.isActive, visibleWeb: p.visibleWeb, visibleMobile: p.visibleMobile, sales30d, sortOrder: p.sortOrder, purchases, actions };
   }
 
   async packsList() {
     const since = new Date(Date.now() - 30 * DAY);
-    const [rows, sales] = await Promise.all([
+    const [rows, sales, all] = await Promise.all([
       prisma.creditPack.findMany({ orderBy: [{ sortOrder: 'asc' }, { credits: 'asc' }] }),
       prisma.creditPackPurchase.groupBy({ by: ['creditPackId'], where: { status: 'credited', createdAt: { gte: since } }, _count: { _all: true } }),
+      prisma.creditPackPurchase.groupBy({ by: ['creditPackId'], _count: { _all: true } }),
     ]);
-    const data = rows.map((p) => this.packDto(p, sales.find((s) => s.creditPackId === p.id)?._count._all ?? 0));
+    const data = rows.map((p) => this.packDto(p, sales.find((s) => s.creditPackId === p.id)?._count._all ?? 0, all.find((s) => s.creditPackId === p.id)?._count._all ?? 0));
     return { ...page(data, data.length, { page: 1, pageSize: Math.max(1, data.length) }), meta: { kpis: await this.packKpis() } };
   }
 
@@ -598,7 +601,7 @@ export class AdminBillingCatalogService {
     try {
       const p = await prisma.creditPack.create({ data: { ...rest, name: toLocalized(name)! } });
       await this.log(actor, 'credit_pack.create', 'CreditPack', p.id, null, { ...rest, name }, reason?.trim() || null);
-      return this.packDto(p, 0);
+      return this.packDto(p, 0, 0);
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') throw new AppException('CONFLICT', {}, { googleProductId: 'validation.taken' });
       throw e;
@@ -613,11 +616,28 @@ export class AdminBillingCatalogService {
     try {
       const row = await prisma.creditPack.update({ where: { id }, data: { ...rest, ...(name ? { name: toLocalized(name) } : {}) } });
       await this.log(actor, 'credit_pack.update', 'CreditPack', id, Object.fromEntries(Object.keys(input).map((k) => [k, (p as Record<string, unknown>)[k]])), input, reason?.trim() || null);
-      return this.packDto(row, 0);
+      return this.packDto(row, 0, await prisma.creditPackPurchase.count({ where: { creditPackId: id } }));
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') throw new AppException('CONFLICT', {}, { googleProductId: 'validation.taken' });
       throw e;
     }
+  }
+
+  /** `DELETE /admin/credit-packs/:id` (UX-010) — only a pack never bought (any purchase row keeps it: 409 CREDIT_PACK_HAS_PURCHASES {count}). */
+  async deletePack(id: string, actor: AdminActor) {
+    assertUuid(id);
+    const p = await prisma.creditPack.findUnique({ where: { id } });
+    if (!p) throw notFound();
+    const count = await prisma.creditPackPurchase.count({ where: { creditPackId: id } });
+    if (count > 0) throw new AppException('CREDIT_PACK_HAS_PURCHASES', { count });
+    try {
+      await prisma.creditPack.delete({ where: { id } });
+    } catch (e) {
+      // a purchase started meanwhile (FK restrict)
+      if (e instanceof Prisma.PrismaClientKnownRequestError && (e.code === 'P2003' || e.code === 'P2014')) throw new AppException('CREDIT_PACK_HAS_PURCHASES', { count: 1 });
+      throw e;
+    }
+    await this.log(actor, 'credit_pack.delete', 'CreditPack', id, { slug: p.slug, name: p.name, credits: p.credits, priceWebDzd: p.priceWebDzd }, null, null);
   }
 
   async packPurchases(q: { page: number; pageSize: number; channel?: string[]; status?: string[]; from?: string; to?: string; q?: string }): Promise<Page<AdminPackPurchaseRowDto>> {

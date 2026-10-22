@@ -67,6 +67,7 @@
   "COURIER_UNAVAILABLE": "Courier unavailable, sending queued.",
   "COURIER_VALIDATION": "Courier: {message}.",
   "CREDITS_NEGATIVE_BALANCE": "Negative credit balance ({balance}) after a refund: AI is blocked.",
+  "CREDIT_PACK_HAS_PURCHASES": "Pack already bought {count} times: deactivate it instead of deleting it.",
   "CUSTOMER_BLOCKED": "Client blocked: order refused.",
   "CUSTOMER_BLOCKED_BY_PLATFORM": "Blocked by the platform: contest through support.",
   "CUSTOMER_HAS_ORDERS": "{count} orders: archive the client instead.",

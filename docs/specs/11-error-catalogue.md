@@ -157,6 +157,7 @@ Usage rule: `STOCK_INSUFFICIENT` is returned by stock adjustments and **sale** l
 | 404 | `PLAN_NOT_FOUND` | Plan indisponible. | الخطة غير متاحة. | Plan unavailable. | toast | reload plans |
 | 422 | `PLAN_IS_FREE` | Aucun paiement requis pour ce plan. | لا يلزم دفع لهذه الخطة. | No payment required for this plan. | toast | — |
 | 409 | `PLAN_IN_USE` {count} | Plan utilisé par {count} espaces : désactivez-le. | الخطة مستخدمة من {count} مساحات: عطّلها. | Plan used by {count} workspaces: deactivate it. | dialog (admin) | deactivate |
+| 409 | `CREDIT_PACK_HAS_PURCHASES` {count} | Pack déjà acheté {count} fois : désactivez-le plutôt que de le supprimer. | تم شراء هذه الباقة {count} مرة: عطّلها بدل حذفها. | Pack already bought {count} times: deactivate it instead of deleting it. | dialog (admin) | deactivate |
 | 409 | `SUBSCRIPTION_ALREADY_ACTIVE` | Un abonnement actif existe déjà. | يوجد اشتراك نشط بالفعل. | An active subscription already exists. | dialog (admin) | end it first |
 | 402 | `PAYMENT_FAILED` | Paiement refusé. | تم رفض الدفع. | Payment declined. | state (return page) | retry |
 | 410 | `PAYMENT_EXPIRED` | Session de paiement expirée. | انتهت جلسة الدفع. | Payment session expired. | state | new checkout |

@@ -163,6 +163,19 @@ describe('checkout → Chargily → activation (BIL-02, FL-28)', () => {
     expect(renewed.currentPeriodStart.toISOString()).toBe(sub.currentPeriodStart.toISOString());
   });
 
+  it('UX-011 a discount code paid with a renewal is a redemption (admin count, single use, discount periods run from it)', async () => {
+    const owner = await asOwner(app);
+    const sub = await makePaid(app, owner.workspaceId, 'starter', 'monthly');
+    const admin = await db.user.findFirstOrThrow({ where: { platformRole: 'super_admin' } });
+    const promo = await db.promoCode.create({ data: { code: `RENEW-${Date.now()}`, kind: 'percent_discount', value: 20, periods: 2, createdById: admin.id } });
+    const ren = (await checkout(owner, { planId: await planId('starter'), cycle: 'monthly', promoCode: promo.code }).expect(200)).body.data;
+    expect(ren.preview.mode).toBe('renewal');
+    await payFake(app, ren.checkoutUrl, 'paid');
+    const r = await db.promoRedemption.findFirstOrThrow({ where: { promoCodeId: promo.id, workspaceId: owner.workspaceId } });
+    expect(await currentSubOf(owner.workspaceId)).toMatchObject({ id: sub.id, promoRedemptionId: r.id, discountPct: 20 });
+    expect((await owner.post('/billing/promo/validate', { code: promo.code }).expect(422)).body.error.code).toBe('PROMO_ALREADY_USED');
+  });
+
   it('AT-MOB-05 subscriptions are web-only: checkout / preview / cancel from the app ⇒ 403; a subscription promo from mobile ⇒ PROMO_MOBILE_SUBSCRIPTION_FORBIDDEN; credit codes accepted', async () => {
     const owner = await asOwner(app);
     const pro = await planId('pro');

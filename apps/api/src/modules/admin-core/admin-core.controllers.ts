@@ -534,6 +534,13 @@ export class AdminBillingCatalogController {
     return this.billing.updatePack(id, dto, a);
   }
 
+  @Delete('credit-packs/:id')
+  @HttpCode(204)
+  @RequirePlatformRole('admin.billing.write')
+  async deletePack(@Param('id') id: string, @Admin() a: AdminActor) {
+    await this.billing.deletePack(id, a);
+  }
+
   @Get('credit-pricing/versions')
   @RequirePlatformRole('admin.billing.read')
   pricingVersions() {

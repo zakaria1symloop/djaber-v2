@@ -200,6 +200,30 @@ describe('ADM-15 packs, promo codes, pricing history', () => {
     expect(versions.filter((v: any) => v.current)).toHaveLength(1);
   });
 
+  it('UX-010 delete a pack: allowed while never bought (audited), refused CREDIT_PACK_HAS_PURCHASES {count} once a purchase exists (any status); read role 403', async () => {
+    const fin = await asPlatform(app, 'finance');
+    const make = async () => {
+      const slug = `test-${randomUUID().slice(0, 6)}`;
+      createdPacks.push(slug);
+      return (await fin.post('/admin/credit-packs', { slug, name: { fr: 'Pack test' }, credits: 100, priceWebDzd: 500 }).expect(201)).body.data;
+    };
+    const unused = await make();
+    expect(unused).toMatchObject({ purchases: 0, actions: expect.arrayContaining([{ key: 'delete', enabled: true }]) });
+    await (await asPlatform(app, 'read')).delete(`/admin/credit-packs/${unused.id}`).expect(403);
+    await fin.delete(`/admin/credit-packs/${unused.id}`).expect(204);
+    expect(await db.creditPack.findUnique({ where: { id: unused.id } })).toBeNull();
+    expect(await lastAudit('credit_pack.delete', unused.id)).toBeTruthy();
+    await fin.delete(`/admin/credit-packs/${unused.id}`).expect(404);
+
+    const bought = await make();
+    const owner = await asOwner(app);
+    await db.creditPackPurchase.create({ data: { workspaceId: owner.workspaceId, creditPackId: bought.id, channel: 'web', status: 'failed', amount: 500, purchasedById: owner.userId } });
+    const row = (await fin.get('/admin/credit-packs').expect(200)).body.data.find((p: any) => p.id === bought.id);
+    expect(row).toMatchObject({ purchases: 1, actions: expect.arrayContaining([{ key: 'delete', enabled: false, reasonCode: 'CREDIT_PACK_HAS_PURCHASES' }]) });
+    expect((await fin.delete(`/admin/credit-packs/${bought.id}`).expect(409)).body.error).toMatchObject({ code: 'CREDIT_PACK_HAS_PURCHASES', params: { count: 1 } });
+    await db.creditPackPurchase.deleteMany({ where: { creditPackId: bought.id } });
+  });
+
   it('AT-PRM-03 credit grants: support 1 200 ⇒ ADMIN_CREDIT_GRANT_LIMIT {1000}; finance ⇒ ok, audit credits.grant with reason; moderator 403', async () => {
     const owner = await asOwner(app);
     expect((await (await asPlatform(app, 'support')).post(`/admin/workspaces/${owner.workspaceId}/credits`, { credits: 1200, reason: REASON }).expect(403)).body.error).toMatchObject({ code: 'ADMIN_CREDIT_GRANT_LIMIT', params: { max: 1000 } });

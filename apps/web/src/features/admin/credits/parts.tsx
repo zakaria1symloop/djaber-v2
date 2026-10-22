@@ -1,10 +1,10 @@
 'use client';
-// ADM-15 pieces — pack dialog (store ids read-only once created, store prices are set in the consoles), promo code form
-// (inline under the table: CODE · EFFET · PLANS · CIBLE · LIMITE · VALIDITÉ), redemptions and pricing history dialogs.
+// ADM-15 pieces — pack dialog (store ids read-only once created, store prices are set in the consoles), promo code dialog
+// (CODE · EFFET · VALEUR · PÉRIODES · PLANS · CIBLE · LIMITE · VALIDITÉ), redemptions and pricing history dialogs.
 import type { CreditPackAdminDto, CreditPricingDto, PlanAdminDto, PromoCodeDto, PromoRedemptionRowDto } from '@djaber/shared';
-import { Button, Card, Checkbox, Dialog, Field, FormAlert, Input, NumberInput, Select, toast } from '@djaber/ui';
+import { Checkbox, Dialog, Field, FormAlert, Input, NumberInput, Select, toast } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useT } from '@/lib/i18n';
 import { adminWrite, useAdminGet, useAdminInvalidate, useAdminList } from '../api';
 import { AdminDialog, NO_ERRORS, toServerErrors, useOnOpen, type ServerErrors } from '../dialog-kit';
@@ -107,8 +107,12 @@ export function PackDialog({ pack, open, onClose }: { pack: CreditPackAdminDto |
 const KINDS = ['percent_discount', 'fixed_discount', 'credits', 'trial_extension'] as const;
 const TARGETS = ['all', 'new_workspaces', 'existing', 'workspace'] as const;
 
-/** Inline promo form (new or ✎ edit): kind / value / periods are fixed once the code was used. */
-export function PromoForm({ promo, onClose }: { promo: PromoCodeDto | null; onClose: () => void }) {
+/**
+ * Promo code dialog (new or ✎ edit) — a dialog like the pack one (tester report 2026-10-21 UX-006: the inline form opened
+ * below the table, out of sight); the effect and its value are two fields so the chosen effect stays readable (UX-009: the
+ * effect select was squeezed to zero width). Kind / value / periods are fixed once the code was used.
+ */
+export function PromoDialog({ promo, open, onClose }: { promo: PromoCodeDto | null; open: boolean; onClose: () => void }) {
   const t = useT();
   const invalidate = useAdminInvalidate();
   const plans = useAdminGet<PlanAdminDto[]>('/admin/plans');
@@ -125,7 +129,7 @@ export function PromoForm({ promo, onClose }: { promo: PromoCodeDto | null; onCl
   const [to, setTo] = useState('');
   const [errors, setErrors] = useState<ServerErrors>(NO_ERRORS);
   const m = useMutation({ mutationFn: (fn: () => Promise<unknown>) => fn() });
-  useEffect(() => {
+  useOnOpen(open, () => {
     setCode(promo?.code ?? '');
     setKind(promo?.kind ?? 'percent_discount');
     setValue(promo ? String(promo.value) : '');
@@ -138,7 +142,7 @@ export function PromoForm({ promo, onClose }: { promo: PromoCodeDto | null; onCl
     setFrom(promo?.validFrom?.slice(0, 10) ?? '');
     setTo(promo?.validTo?.slice(0, 10) ?? '');
     setErrors(NO_ERRORS);
-  }, [promo]);
+  });
   const used = !!promo && promo.uses > 0;
   const submit = async () => {
     setErrors(NO_ERRORS);
@@ -157,29 +161,40 @@ export function PromoForm({ promo, onClose }: { promo: PromoCodeDto | null; onCl
     }
   };
   return (
-    <Card className="flex flex-col gap-3 p-4" data-testid="promo-form">
-      <div className="ts-label-micro uppercase text-text-muted">{promo ? t('admin.credits.promo.editTitle', { code: promo.code }) : t('admin.credits.promo.newTitle')}</div>
-      <div className="grid gap-3 md:grid-cols-6">
+    <AdminDialog
+      open={open}
+      onClose={onClose}
+      testId="promo-form"
+      size="lg"
+      title={promo ? t('admin.credits.promo.editTitle', { code: promo.code }) : t('admin.credits.promo.newTitle')}
+      submitLabel={promo ? t('action.save') : t('admin.credits.promo.create')}
+      disabled={!code.trim() || !Number(value) || (target === 'workspace' && !promo && !ws)}
+      pending={m.isPending}
+      error={errors.form}
+      note={t('admin.credits.promo.note')}
+      onSubmit={() => void submit()}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t('admin.credits.col.code')} required htmlFor="promo-code" error={errors.fields.code}>
           <Input id="promo-code" dir="ltr" value={code} disabled={!!promo} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="LANCEMENT-IG" />
         </Field>
-        <Field label={t('admin.credits.col.effect')} required htmlFor="promo-kind" error={errors.fields.value}>
-          <div className="flex gap-1.5">
-            <Select id="promo-kind" value={kind} disabled={!!promo} onChange={(e) => setKind(e.target.value as (typeof KINDS)[number])} className="min-w-0 flex-1">
-              {KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {t(`admin.credits.kind.${k}`)}
-                </option>
-              ))}
-            </Select>
-            <NumberInput aria-label={t('admin.credits.promo.value')} value={value} disabled={used} onValueChange={setValue} className="w-20" />
-          </div>
+        <Field label={t('admin.credits.col.effect')} required htmlFor="promo-kind">
+          <Select id="promo-kind" value={kind} disabled={!!promo} onChange={(e) => setKind(e.target.value as (typeof KINDS)[number])}>
+            {KINDS.map((k) => (
+              <option key={k} value={k}>
+                {t(`admin.credits.kind.${k}`)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t('admin.credits.promo.value')} required htmlFor="promo-value" error={errors.fields.value} hint={t(`admin.credits.promo.unit.${kind}`)}>
+          <NumberInput id="promo-value" value={value} disabled={used} onValueChange={setValue} />
         </Field>
         <Field label={t('admin.credits.promo.periods')} htmlFor="promo-periods" error={errors.fields.periods}>
           <NumberInput id="promo-periods" value={periods} disabled={used || kind === 'credits'} onValueChange={setPeriods} />
         </Field>
-        <Field label={t('admin.credits.col.plans')} htmlFor="promo-plans">
-          <div id="promo-plans" className="flex min-h-10 flex-wrap items-center gap-2 rounded-card border border-line-edge px-2 py-1.5">
+        <Field label={t('admin.credits.col.plans')} htmlFor="promo-plans" className="sm:col-span-2">
+          <div id="promo-plans" className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-card border border-line-edge px-2 py-1.5">
             {(plans.data ?? []).filter((p) => !p.archivedAt && p.priceMonthly > 0).map((p) => (
               <label key={p.id} className="flex cursor-pointer items-center gap-1.5 text-[13px]">
                 <Checkbox checked={planSlugs.includes(p.slug)} onChange={(e) => setPlanSlugs((x) => (e.target.checked ? [...x, p.slug] : x.filter((s) => s !== p.slug)))} />
@@ -197,20 +212,20 @@ export function PromoForm({ promo, onClose }: { promo: PromoCodeDto | null; onCl
             ))}
           </Select>
         </Field>
-        <Field label={t('admin.credits.col.limit')} htmlFor="promo-max" error={errors.fields.maxUses}>
-          <div className="flex gap-1.5">
-            <NumberInput id="promo-max" value={maxUses} onValueChange={setMaxUses} placeholder={t('admin.common.unlimited')} />
-            <NumberInput aria-label={t('admin.credits.promo.perWorkspace')} value={perWs} disabled={!!promo} onValueChange={setPerWs} className="w-14" />
-          </div>
-        </Field>
-      </div>
-      <div className="grid gap-3 md:grid-cols-3">
         {target === 'workspace' && !promo ? (
           <Field label={t('admin.subs.edit.workspace')} required htmlFor="promo-ws">
             <WorkspacePicker id="promo-ws" value={ws?.id ?? null} onChange={(_, w) => setWs(w)} />
           </Field>
-        ) : null}
-        <Field label={t('admin.credits.col.validity')} htmlFor="promo-from" error={errors.fields.validFrom ?? errors.fields.validTo}>
+        ) : (
+          <span aria-hidden className="max-sm:hidden" />
+        )}
+        <Field label={t('admin.credits.col.limit')} htmlFor="promo-max" error={errors.fields.maxUses}>
+          <NumberInput id="promo-max" value={maxUses} onValueChange={setMaxUses} placeholder={t('admin.common.unlimited')} />
+        </Field>
+        <Field label={t('admin.credits.promo.perWorkspace')} htmlFor="promo-per-ws">
+          <NumberInput id="promo-per-ws" value={perWs} disabled={!!promo} onValueChange={setPerWs} />
+        </Field>
+        <Field label={t('admin.credits.col.validity')} htmlFor="promo-from" error={errors.fields.validFrom ?? errors.fields.validTo} className="sm:col-span-2">
           <div className="flex items-center gap-2">
             <Input id="promo-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="[color-scheme:dark]" />
             <span aria-hidden className="text-text-muted">→</span>
@@ -218,17 +233,7 @@ export function PromoForm({ promo, onClose }: { promo: PromoCodeDto | null; onCl
           </div>
         </Field>
       </div>
-      <p className="ts-label-micro text-text-muted">{t('admin.credits.promo.note')}</p>
-      {errors.form ? <FormAlert>{errors.form}</FormAlert> : null}
-      <div className="flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>
-          {t('action.cancel')}
-        </Button>
-        <Button variant="primary" onClick={() => void submit()} loading={m.isPending} disabled={!code.trim() || !Number(value) || (target === 'workspace' && !promo && !ws)} data-testid="promo-save">
-          {promo ? t('action.save') : t('admin.credits.promo.create')}
-        </Button>
-      </div>
-    </Card>
+    </AdminDialog>
   );
 }
 
@@ -255,6 +260,7 @@ export function RedemptionsDialog({ promo, onClose }: { promo: PromoCodeDto | nu
           ))}
         </ul>
       )}
+      {promo && (promo.kind === 'percent_discount' || promo.kind === 'fixed_discount') ? <p className="mt-3 ts-label-micro !normal-case text-text-muted">{t('admin.credits.promo.redemptionsNote')}</p> : null}
     </Dialog>
   );
 }

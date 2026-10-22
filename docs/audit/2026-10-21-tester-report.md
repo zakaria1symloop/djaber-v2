@@ -12,10 +12,10 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 ## Superadmin — credits and promos
 | # | Issue | Status |
 |---|---|---|
-| UX-006 | « + Code promo » neither opens the creation form nor scrolls to the promo codes (unlike « + Pack ») | todo |
-| UX-009 | Promo code form: the chosen « Effet » is not shown in the field | todo |
-| UX-010 | A credit pack never bought cannot be deleted | todo |
-| UX-011 | Promo code « Utilisations » shows 0 after a successful redemption | todo |
+| UX-006 | « + Code promo » neither opens the creation form nor scrolls to the promo codes (unlike « + Pack ») | done |
+| UX-009 | Promo code form: the chosen « Effet » is not shown in the field | done |
+| UX-010 | A credit pack never bought cannot be deleted | done |
+| UX-011 | Promo code « Utilisations » shows 0 after a successful redemption | done |
 
 ## Superadmin — billing
 | # | Issue | Status |

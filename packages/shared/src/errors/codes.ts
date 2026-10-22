@@ -67,6 +67,7 @@ export const ERROR_CODES = {
   COURIER_UNAVAILABLE: { status: 503, params: [] },
   COURIER_VALIDATION: { status: 422, params: ["field","message"] },
   CREDITS_NEGATIVE_BALANCE: { status: 402, params: ["balance"] },
+  CREDIT_PACK_HAS_PURCHASES: { status: 409, params: ["count"] },
   CUSTOMER_BLOCKED: { status: 409, params: ["clientName"] },
   CUSTOMER_BLOCKED_BY_PLATFORM: { status: 403, params: [] },
   CUSTOMER_HAS_ORDERS: { status: 409, params: ["count"] },

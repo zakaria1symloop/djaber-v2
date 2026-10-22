@@ -1109,5 +1109,13 @@
  "admin.ws.viewers": "Visionneuses (lecture seule) : conversations et produits →",
  "admin.ws.webhooks": "{count, plural, one {# webhook} other {# webhooks}} ({disabled} désactivé)",
  "nav.admin.team": "Équipe plateforme",
- "admin.cms.channelsHint": "Bandeau : en haut de l'espace des clients ciblés (fermable) · Web public : bandeau du site public, pour les annonces « Tous les espaces » · In-app / E-mail / Push : notification aux propriétaires ciblés, qui ouvre l'annonce. Visible pendant la période choisie une fois publiée."
+ "admin.cms.channelsHint": "Bandeau : en haut de l'espace des clients ciblés (fermable) · Web public : bandeau du site public, pour les annonces « Tous les espaces » · In-app / E-mail / Push : notification aux propriétaires ciblés, qui ouvre l'annonce. Visible pendant la période choisie une fois publiée.",
+ "admin.credits.promo.unit.percent_discount": "En % de remise (1 à 100)",
+ "admin.credits.promo.unit.fixed_discount": "Remise en DA",
+ "admin.credits.promo.unit.credits": "Nombre de crédits offerts",
+ "admin.credits.promo.unit.trial_extension": "Jours d'essai ajoutés",
+ "admin.credits.promo.redemptionsNote": "Une remise compte une fois le paiement de l'abonnement confirmé : un paiement en attente ou abandonné ne compte pas.",
+ "admin.credits.pack.delete": "Supprimer le pack",
+ "admin.credits.pack.deleteConfirm": "Supprimer le pack « {name} » ? Il n'a jamais été acheté ; cette action est définitive.",
+ "admin.credits.pack.deleted": "Pack « {name} » supprimé."
 }

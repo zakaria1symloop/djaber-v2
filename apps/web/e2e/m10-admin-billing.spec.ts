@@ -158,7 +158,7 @@ test('ADM-05 tabs and KPIs: Factures tab filtered by status in the URL', async (
   await expect(page.getByTestId('invoices-list')).toContainText('PAYÉE');
 });
 
-test('ADM-15 promo codes: create (inline form), duplicate code ⇒ inline error, deactivate ⇒ DÉSACTIVÉ', async () => {
+test('ADM-15 promo codes: create (dialog, like « + Pack » — UX-006; the chosen effect stays readable — UX-009), duplicate code ⇒ inline error, deactivate ⇒ DÉSACTIVÉ', async () => {
   await page.goto('/fr/admin/credits');
   await expect(page.getByTestId('packs-panel')).toBeVisible();
   const code = `E2E${tag}`.toUpperCase();
@@ -166,8 +166,11 @@ test('ADM-15 promo codes: create (inline form), duplicate code ⇒ inline error,
   const form = page.getByTestId('promo-form');
   await form.getByLabel('Code').fill(code);
   await form.getByLabel('Effet').selectOption('credits');
+  await expect(form.getByLabel('Effet')).toHaveValue('credits');
+  // the select is wide enough to show its label (it was squeezed to the padding)
+  expect((await form.getByLabel('Effet').boundingBox())!.width).toBeGreaterThan(120);
   await form.getByLabel('Valeur').fill('300');
-  await page.getByTestId('promo-save').click();
+  await page.getByTestId('promo-form-submit').click();
   await expect(page.getByText(`Code ${code} enregistré.`)).toBeVisible();
   const row = page.getByRole('row', { name: new RegExp(code) });
   await expect(row.locator('[data-pill]')).toHaveText('ACTIF');
@@ -175,9 +178,9 @@ test('ADM-15 promo codes: create (inline form), duplicate code ⇒ inline error,
   await page.getByTestId('new-promo').click();
   await form.getByLabel('Code').fill(code);
   await form.getByLabel('Valeur').fill('10');
-  await page.getByTestId('promo-save').click();
+  await page.getByTestId('promo-form-submit').click();
   await expect(form.locator('[role=alert]').first()).toBeVisible();
-  await form.getByRole('button', { name: 'Annuler' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Annuler' }).click();
 
   await row.getByRole('button', { name: 'Actions' }).click();
   await page.getByRole('menuitem', { name: 'Désactiver' }).click();

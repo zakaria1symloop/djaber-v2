@@ -1,7 +1,7 @@
 'use client';
 // /admin/credits — Figma "ADM-15 — Platform admin — credit packs & promo codes (incl. store in-app purchases)": KPIs,
 // packs table (store ids read-only, store price tiers, MASQUÉ MOBILE), rules note, promo codes table (UTILISÉ / EXPIRÉ,
-// ✎), inline new / edit code form, "Historique des grilles" (CreditPricing versions).
+// ✎), new / edit code dialog (like the pack one, UX-006), "Historique des grilles" (CreditPricing versions).
 import type { AdminPacksKpis, CreditPackAdminDto, PromoCodeDto } from '@djaber/shared';
 import { ActionsMenu, Button, DataTable, EmptyState, FrameNote, ListSkeleton, MonoChip, OpsKpiStrip, OpsKpiTile, OpsPanel, toast, type Column } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
@@ -10,7 +10,7 @@ import { useConfirmAction } from '@/components/confirm-action';
 import { ListPagination } from '@/features/catalog/ui';
 import { AdminPage, AdminQueryError } from '@/features/admin/admin-page';
 import { adminWrite, useAdminInvalidate, useAdminList } from '@/features/admin/api';
-import { PackDialog, PricingHistoryDialog, PromoForm, RedemptionsDialog } from '@/features/admin/credits/parts';
+import { PackDialog, PricingHistoryDialog, PromoDialog, RedemptionsDialog } from '@/features/admin/credits/parts';
 import { usePlatform } from '@/features/admin/platform';
 import { PROMO_LIST } from '@/features/admin/specs';
 import { AdminPill, Num, shortName, useFormats } from '@/features/admin/ui';
@@ -34,6 +34,7 @@ export default function AdminCreditsPage() {
   const [redemptions, setRedemptions] = useState<PromoCodeDto | null>(null);
   const [history, setHistory] = useState(false);
   const deactivate = useMutation({ mutationFn: (id: string) => adminWrite(`/admin/promo-codes/${id}/deactivate`, 'POST', {}) });
+  const removePack = useMutation({ mutationFn: (id: string) => adminWrite(`/admin/credit-packs/${id}`, 'DELETE') });
   const k = packs.data?.meta?.kpis;
 
   const packState = (p: CreditPackAdminDto) =>
@@ -54,6 +55,44 @@ export default function AdminCreditsPage() {
     { key: 'sales', header: t('admin.credits.col.sales'), cell: (p) => <Num value={p.sales30d} /> },
     { key: 'state', header: t('admin.credits.col.state'), cell: packState },
   ];
+  // delete: only a pack never bought (server descriptor; once bought ⇒ greyed, deactivate instead — UX-010)
+  const packMenu = (p: CreditPackAdminDto) => {
+    const del = p.actions?.find((a) => a.key === 'delete');
+    return (
+      <ActionsMenu
+        label={t('action.actions')}
+        heading={p.name}
+        actions={[
+          { key: 'edit', label: t('admin.credits.pack.edit'), onSelect: () => setPack({ pack: p }) },
+          ...(del
+            ? [
+                {
+                  key: 'delete',
+                  label: t('admin.credits.pack.delete'),
+                  destructive: true,
+                  separated: true,
+                  disabledReason: del.enabled ? undefined : t(`error.${del.reasonCode}`, { count: p.purchases }),
+                  onSelect: () =>
+                    confirm.ask({
+                      title: t('admin.credits.pack.deleteConfirm', { name: p.name }),
+                      confirmLabel: t('action.delete'),
+                      destructive: true,
+                      run: () =>
+                        removePack
+                          .mutateAsync(p.id)
+                          .then(() => {
+                            void invalidate('/admin/credit-packs');
+                            toast(t('admin.credits.pack.deleted', { name: p.name }));
+                          })
+                          .catch((e) => toast({ tone: 'danger', message: errorMessage(e, t) })),
+                    }),
+                },
+              ]
+            : []),
+        ]}
+      />
+    );
+  };
   const effect = (p: PromoCodeDto) => {
     const v = p.kind === 'percent_discount' ? `−${p.value} %` : p.kind === 'fixed_discount' ? `−${f.money(p.value)}` : p.kind === 'credits' ? t('admin.credits.effect.credits', { count: f.num(p.value) }) : t('admin.credits.effect.trial', { days: p.value });
     const per = p.periods ? ` ${t('admin.credits.effect.periods', { count: p.periods })}` : '';
@@ -147,7 +186,7 @@ export default function AdminCreditsPage() {
             rows={packs.data.rows}
             rowKey={(p) => p.id}
             actionsLabel={t('action.actions')}
-            rowActions={write ? (p) => <ActionsMenu label={t('action.actions')} heading={p.name} actions={[{ key: 'edit', label: t('admin.credits.pack.edit'), onSelect: () => setPack({ pack: p }) }]} /> : undefined}
+            rowActions={write ? packMenu : undefined}
           />
         )}
         <FrameNote className="mt-3">{t('admin.credits.packs.rules')}</FrameNote>
@@ -170,10 +209,10 @@ export default function AdminCreditsPage() {
             footer={<ListPagination page={list.state.page} pageSize={list.state.pageSize} total={promos.data.total} onChange={(p) => list.set(p)} />}
           />
         )}
-        {promo ? <div className="mt-4"><PromoForm promo={promo.promo} onClose={() => setPromo(null)} /></div> : null}
         <FrameNote className="mt-3">{t('admin.credits.promos.rules')}</FrameNote>
       </OpsPanel>
       <PackDialog pack={pack?.pack ?? null} open={!!pack} onClose={() => setPack(null)} />
+      <PromoDialog promo={promo?.promo ?? null} open={!!promo} onClose={() => setPromo(null)} />
       <RedemptionsDialog promo={redemptions} onClose={() => setRedemptions(null)} />
       <PricingHistoryDialog open={history} onClose={() => setHistory(false)} />
       {confirm.element}

@@ -1109,5 +1109,13 @@
  "admin.ws.viewers": "العارضات (قراءة فقط): المحادثات والمنتجات ←",
  "admin.ws.webhooks": "{count, plural, zero {# webhook} one {webhook واحد} two {webhookان} few {# webhooks} many {# webhook} other {# webhook}} ({disabled} معطّل)",
  "nav.admin.team": "فريق المنصة",
- "admin.cms.channelsHint": "شريط: أعلى فضاء العملاء المستهدفين (قابل للإغلاق) · الويب العام: شريط الموقع العام، لإعلانات «كل الفضاءات» · داخل التطبيق / البريد / الإشعارات: إشعار لأصحاب الفضاءات المستهدفة يفتح الإعلان. يظهر خلال الفترة المختارة بعد النشر."
+ "admin.cms.channelsHint": "شريط: أعلى فضاء العملاء المستهدفين (قابل للإغلاق) · الويب العام: شريط الموقع العام، لإعلانات «كل الفضاءات» · داخل التطبيق / البريد / الإشعارات: إشعار لأصحاب الفضاءات المستهدفة يفتح الإعلان. يظهر خلال الفترة المختارة بعد النشر.",
+ "admin.credits.promo.unit.percent_discount": "نسبة الخصم بالمئة (1 إلى 100)",
+ "admin.credits.promo.unit.fixed_discount": "الخصم بالدينار",
+ "admin.credits.promo.unit.credits": "عدد الأرصدة الممنوحة",
+ "admin.credits.promo.unit.trial_extension": "أيام التجربة المضافة",
+ "admin.credits.promo.redemptionsNote": "يُحتسب الخصم بعد تأكيد دفع الاشتراك: الدفع المعلّق أو المتروك لا يُحتسب.",
+ "admin.credits.pack.delete": "حذف الباقة",
+ "admin.credits.pack.deleteConfirm": "حذف الباقة «{name}»؟ لم تُشترَ أبدًا؛ هذا الإجراء نهائي.",
+ "admin.credits.pack.deleted": "تم حذف الباقة «{name}»."
 }
