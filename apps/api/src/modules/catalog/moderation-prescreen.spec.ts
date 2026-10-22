@@ -22,6 +22,18 @@ describe('moderation pre-screen', () => {
     expect(svc.score({ ...base, description: 'pas une ARNAQUE' }, rules, null).aiFlags[0]).toMatchObject({ code: 'blocked_word', field: 'description' });
   });
 
+  it('PV1: the keyword lists also scan variant names, search keywords and image captions (held for review)', () => {
+    const variant = svc.score({ ...base, variantNames: ['Rouge', 'Modèle Arnaque'] }, rules, null);
+    expect(variant.aiFlags[0]).toMatchObject({ code: 'blocked_word', message: 'arnaque', field: 'variants' });
+    expect(ModerationPrescreenService.autoApprove(variant, 'trusted')).toBe(false);
+    expect(svc.score({ ...base, keywords: ['sac', 'louis vuitton'] }, rules, null).aiFlags[0]).toMatchObject({ code: 'protected_brand', field: 'keywords' });
+    expect(svc.score({ ...base, keywords: ['first copy'] }, rules, null).aiFlags[0]).toMatchObject({ code: 'counterfeit_wording', field: 'keywords' });
+    expect(svc.score({ ...base, imageTexts: ['un sac Louis Vuitton marron', ''] }, rules, null).aiFlags[0]).toMatchObject({ code: 'protected_brand', field: 'images' });
+    // the name still wins the attribution when the word is in both
+    expect(svc.score({ ...base, name: 'Arnaque', keywords: ['arnaque'] }, rules, null).aiFlags[0]?.field).toBe('name');
+    expect(svc.score({ ...base, variantNames: ['Noir'], keywords: ['cuir'], imageTexts: ['sac noir'] }, rules, null).aiFlags).toEqual([]);
+  });
+
   it('misleading price vs the market reference (−87 %), logo in image, missing warranty for electronics', () => {
     const cheap = svc.score({ ...base, price: 500 }, rules, 4000);
     expect(cheap).toMatchObject({ marketReference: 4000 });

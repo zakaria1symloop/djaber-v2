@@ -392,9 +392,17 @@ export type PlatformLimits = z.infer<typeof PlatformLimitsSchema>;
 export const LegalContactsSchema = z.object({ accountDeletionUrl: z.string().trim().url('validation.url').max(2048).startsWith('https://', 'validation.url'), dpoEmail: z.string().trim().email('validation.email').max(254) }).strict();
 /** Sensitive categories of 04 §12 (keywords matched against the category name, case/diacritic-insensitive). */
 export const SensitiveCategoriesSchema = z.object({ keywords: z.array(z.string().trim().min(2).max(60)).max(200) }).strict();
-export const SETTING_KEYS = ['limits', 'legal_contacts', 'sensitive_categories'] as const;
+/** PV 22/10 PV2 — `manualReviewAll`: no auto-approval, every product waits for an admin decision before it is sold. */
+export const ModerationPolicySchema = z.object({ manualReviewAll: z.boolean() }).strict();
+export type ModerationPolicy = z.infer<typeof ModerationPolicySchema>;
+export const SETTING_KEYS = ['limits', 'legal_contacts', 'sensitive_categories', 'moderation_policy'] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
-export const SETTING_SCHEMAS: Record<SettingKey, z.ZodTypeAny> = { limits: PlatformLimitsSchema, legal_contacts: LegalContactsSchema, sensitive_categories: SensitiveCategoriesSchema };
+export const SETTING_SCHEMAS: Record<SettingKey, z.ZodTypeAny> = {
+  limits: PlatformLimitsSchema,
+  legal_contacts: LegalContactsSchema,
+  sensitive_categories: SensitiveCategoriesSchema,
+  moderation_policy: ModerationPolicySchema,
+};
 export const SettingUpdateSchema = z.object({ value: z.unknown(), reason: reason.optional() }).strict();
 export type SettingUpdateInput = z.infer<typeof SettingUpdateSchema>;
 

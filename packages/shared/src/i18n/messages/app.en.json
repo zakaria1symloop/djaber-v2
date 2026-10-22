@@ -6351,5 +6351,13 @@
  "clients.filter.unconfirmedHint": "Interested customers without a confirmed order: an order left « New » or cancelled, or a conversation without an order. Blocked customers are left out.",
  "products.form.stock.sellOutOfStock": "Accept orders when out of stock",
  "products.form.stock.sellOutOfStockHint": "This product can still be ordered at stock 0 (back-order): the stock may go below zero, the AI takes the order and says delivery may take a little longer. Other products stay blocked at 0.",
- "orderForm.items.backorder": "Out of stock ({available} available): the order is accepted for this product, to restock."
+ "orderForm.items.backorder": "Out of stock ({available} available): the order is accepted for this product, to restock.",
+ "adminMod.panel.otherTexts": "Other texts",
+ "adminMod.panel.source.variants": "Variant names",
+ "adminMod.panel.source.keywords": "Search keywords",
+ "adminSettings.moderation.title": "Product validation",
+ "adminSettings.moderation.sub": "Before they are published to the AI sales agent",
+ "adminSettings.moderation.manualReviewAll": "Review every product manually",
+ "adminSettings.moderation.manualReviewAllHint": "On: no automatic approval, every new or edited product waits for an admin decision in Moderation before it is sold. Off: products without alerts are approved automatically (score ≥ 0.9, trusted shop, non-sensitive category).",
+ "adminSettings.history.key.moderation_policy": "Product validation (moderation)"
 }

@@ -142,6 +142,8 @@ function PanelBody({
   const statusLabel = t(`adminMod.status.${item.status}`);
   const head = open ? `${statusLabel} · ${formatWaiting(item.waitingMinutes)}` : statusLabel;
   const unflaggedImages = (p?.images ?? []).length;
+  // PV1: keyword-list hits in the variant names / search keywords (no field row of their own)
+  const otherFlags = [...flagsOf('variants'), ...flagsOf('keywords')];
 
   return (
     <PanelFrame>
@@ -193,6 +195,11 @@ function PanelBody({
               <FlaggedField label={t('adminMod.panel.category')} flagged={isRefused('category')} toggle={fieldToggle('category')}>
                 {t('adminMod.panel.categoryValue', { category: p.category ?? '—', count: p.variants })}
               </FlaggedField>
+              {otherFlags.length ? (
+                <FlaggedField label={t('adminMod.panel.otherTexts')} flagged evidence={otherFlags.map((f) => flagText(t, f)).join(' · ')} data-testid="mod-field-other">
+                  {[...new Set(otherFlags.map((f) => t(`adminMod.panel.source.${f.field}`)))].join(' · ')}
+                </FlaggedField>
+              ) : null}
             </>
           ) : item.agent ? (
             <>

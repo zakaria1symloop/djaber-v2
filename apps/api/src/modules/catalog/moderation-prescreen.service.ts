@@ -16,8 +16,13 @@ export type PrescreenInput = {
   categoryName: string | null;
   imageCount: number;
   imageFlags: (string | null)[];
+  /** PV 22/10 PV1 — the keyword lists also scan the variant names, the search keywords and the image captions / alt texts. */
+  variantNames?: string[];
+  keywords?: string[];
+  imageTexts?: string[];
 };
-export type PrescreenResult = { aiScore: number; aiFlags: ModerationAiFlagView[]; marketReference: number | null; sensitive: boolean };
+/** `manualReview`: the platform `moderation_policy.manualReviewAll` is on — the item never auto-approves (PV2). */
+export type PrescreenResult = { aiScore: number; aiFlags: ModerationAiFlagView[]; marketReference: number | null; sensitive: boolean; manualReview?: boolean };
 export type AutoDecision = { approve: boolean; result: PrescreenResult };
 
 /** Case / diacritic-insensitive comparison form (Latin + Arabic marks, tatweel). */
@@ -54,19 +59,27 @@ const WEIGHTS: Record<string, number> = {
   missing_warranty: 0.05,
 };
 
-type Rules = { brands: string[]; prohibited: string[]; words: string[]; sensitive: string[]; priceRefs: { value: string; price: number; categoryId: string | null }[] };
+type Rules = {
+  brands: string[];
+  prohibited: string[];
+  words: string[];
+  sensitive: string[];
+  priceRefs: { value: string; price: number; categoryId: string | null }[];
+  manualReviewAll?: boolean;
+};
 
 @Injectable()
 export class ModerationPrescreenService {
   constructor(@Optional() private readonly config?: ConfigService) {}
 
-  /** Platform lists (`ModerationRule` + `BlockedWord` platform rows + `PlatformSetting.sensitive_categories`). */
+  /** Platform lists (`ModerationRule` + `BlockedWord` platform rows + `PlatformSetting.sensitive_categories` / `moderation_policy`). */
   async rules(db: Tx | typeof prisma = prisma): Promise<Rules> {
-    const [rules, words, setting] = await TenantContext.runSystem(() =>
+    const [rules, words, setting, policy] = await TenantContext.runSystem(() =>
       Promise.all([
         db.moderationRule.findMany({ where: { isActive: true } }),
         db.blockedWord.findMany({ where: { workspaceId: null }, select: { word: true } }),
         db.platformSetting.findUnique({ where: { key: 'sensitive_categories' } }),
+        db.platformSetting.findUnique({ where: { key: 'moderation_policy' } }),
       ]),
     );
     const of = (k: string) => rules.filter((r) => r.kind === k).map((r) => r.value);
@@ -77,6 +90,7 @@ export class ModerationPrescreenService {
       words: [...of('blocked_word'), ...words.map((w) => w.word)],
       sensitive: [...(stored?.length ? stored : DEFAULT_SENSITIVE_KEYWORDS), ...of('sensitive_category')],
       priceRefs: rules.filter((r) => r.kind === 'price_reference' && r.referencePrice !== null).map((r) => ({ value: r.value, price: r.referencePrice!, categoryId: r.categoryId })),
+      manualReviewAll: (policy?.value as { manualReviewAll?: boolean } | null)?.manualReviewAll === true,
     };
   }
 
@@ -103,17 +117,25 @@ export class ModerationPrescreenService {
     const name = foldText(p.name);
     const desc = foldText(p.description ?? '');
     const cat = foldText(p.categoryName ?? '');
-    const text = `${name} ${desc}`;
+    // the other customer-facing / matching texts, in the order a hit is attributed to them
+    const extra: [string, string][] = [
+      ['variants', foldText((p.variantNames ?? []).join(' '))],
+      ['keywords', foldText((p.keywords ?? []).join(' '))],
+      ['images', foldText((p.imageTexts ?? []).filter(Boolean).join(' '))],
+    ];
+    const text = [name, desc, ...extra.map(([, t]) => t)].join(' ');
+    const where = (needles: readonly string[]) =>
+      containsAny(name, needles) ? 'name' : containsAny(desc, needles) ? 'description' : (extra.find(([, t]) => containsAny(t, needles))?.[0] ?? 'description');
     const brand = containsAny(text, rules.brands);
-    if (brand) add('protected_brand', brand, containsAny(name, rules.brands) ? 'name' : 'description');
+    if (brand) add('protected_brand', brand, where(rules.brands));
     const prohibited = containsAny(`${text} ${cat}`, rules.prohibited);
-    if (prohibited) add('prohibited_category', prohibited, containsAny(cat, rules.prohibited) ? 'categoryId' : 'name');
+    if (prohibited) add('prohibited_category', prohibited, containsAny(cat, rules.prohibited) ? 'categoryId' : where(rules.prohibited));
     const word = containsAny(text, rules.words);
-    if (word) add('blocked_word', word, containsAny(name, rules.words) ? 'name' : 'description');
+    if (word) add('blocked_word', word, where(rules.words));
     const counterfeit = containsAny(text, COUNTERFEIT_WORDING);
-    if (counterfeit) add('counterfeit_wording', counterfeit, containsAny(name, COUNTERFEIT_WORDING) ? 'name' : 'description');
+    if (counterfeit) add('counterfeit_wording', counterfeit, where(COUNTERFEIT_WORDING));
     const health = containsAny(text, HEALTH_CLAIMS);
-    if (health) add('health_claim', health, containsAny(name, HEALTH_CLAIMS) ? 'name' : 'description');
+    if (health) add('health_claim', health, where(HEALTH_CLAIMS));
     const ref = rules.priceRefs.find((r) => (r.categoryId && r.categoryId === p.categoryId) || containsAny(text, [r.value]));
     const marketReference = ref?.price ?? median;
     if (marketReference && p.price > 0 && p.price < marketReference * 0.5) add('misleading_price', `${Math.round((p.price / marketReference - 1) * 100)} %`, 'price');
@@ -121,14 +143,25 @@ export class ModerationPrescreenService {
     if (p.imageCount <= 1) add('single_image', String(p.imageCount), 'images');
     if (containsAny(cat, ELECTRONICS) && !containsAny(desc, WARRANTY_WORDS)) add('missing_warranty', 'warranty', 'description');
     const penalty = flags.reduce((s, f) => s + (WEIGHTS[f.code] ?? 0), 0);
-    return { aiScore: Math.max(0, Math.round((1 - penalty) * 100) / 100), aiFlags: flags, marketReference: marketReference ?? null, sensitive: this.isSensitive(p.categoryName, rules) };
+    return {
+      aiScore: Math.max(0, Math.round((1 - penalty) * 100) / 100),
+      aiFlags: flags,
+      marketReference: marketReference ?? null,
+      sensitive: this.isSensitive(p.categoryName, rules),
+      ...(rules.manualReviewAll ? { manualReview: true } : {}),
+    };
   }
 
   /** Loads what the scorer needs for a product and scores it. */
   async prescreenProduct(db: Tx | typeof prisma, productId: string, rules?: Rules): Promise<PrescreenResult> {
     const p = await db.product.findFirst({
       where: { id: productId },
-      select: { workspaceId: true, name: true, description: true, price: true, categoryId: true, category: { select: { name: true } }, images: { select: { moderationFlag: true } } },
+      select: {
+        workspaceId: true, name: true, description: true, price: true, categoryId: true, keywords: true,
+        category: { select: { name: true } },
+        images: { select: { moderationFlag: true, aiCaption: true, altText: true } },
+        variants: { where: { deletedAt: null }, select: { name: true } },
+      },
     });
     if (!p) throw new Error(`product ${productId} not found`);
     // dev / test hook (never in production): a name containing `prescreen-fail` makes the pre-screen fail (AT-MOD-10 state)
@@ -136,15 +169,19 @@ export class ModerationPrescreenService {
     const r = rules ?? (await this.rules(db));
     const median = await this.categoryMedian(db, p.workspaceId, p.categoryId);
     return this.score(
-      { workspaceId: p.workspaceId, name: p.name, description: p.description, price: p.price, categoryId: p.categoryId, categoryName: p.category?.name ?? null, imageCount: p.images.length, imageFlags: p.images.map((i) => i.moderationFlag) },
+      {
+        workspaceId: p.workspaceId, name: p.name, description: p.description, price: p.price, categoryId: p.categoryId, categoryName: p.category?.name ?? null,
+        imageCount: p.images.length, imageFlags: p.images.map((i) => i.moderationFlag),
+        variantNames: p.variants.map((v) => v.name), keywords: p.keywords, imageTexts: p.images.flatMap((i) => [i.aiCaption ?? '', i.altText ?? '']),
+      },
       r,
       median,
     );
   }
 
-  /** 04 §12 "Auto-approval": `aiScore ≥ 0.9 ∧ trustLevel ∈ {standard, trusted} ∧ category ∉ sensitive`. */
-  static autoApprove(result: Pick<PrescreenResult, 'aiScore' | 'sensitive'>, trustLevel: string) {
-    return result.aiScore >= MODERATION_AUTO_APPROVE_SCORE && (trustLevel === 'standard' || trustLevel === 'trusted') && !result.sensitive;
+  /** 04 §12 "Auto-approval": `aiScore ≥ 0.9 ∧ trustLevel ∈ {standard, trusted} ∧ category ∉ sensitive`, never when the platform reviews every product (PV2). */
+  static autoApprove(result: Pick<PrescreenResult, 'aiScore' | 'sensitive' | 'manualReview'>, trustLevel: string) {
+    return !result.manualReview && result.aiScore >= MODERATION_AUTO_APPROVE_SCORE && (trustLevel === 'standard' || trustLevel === 'trusted') && !result.sensitive;
   }
 
   /** Agent prompts (MOD-08): a platform blocked word or a protected brand in the compiled instructions. */

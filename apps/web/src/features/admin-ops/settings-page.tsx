@@ -14,6 +14,7 @@ import {
   type FeatureFlagDto,
   type LegalDocumentDto,
   type MetaPermissionDto,
+  type ModerationPolicy,
   type PlatformLimits,
   type PlatformProviderDto,
   type ProviderTestResultDto,
@@ -48,6 +49,7 @@ export function SettingsPage() {
   const [history, setHistory] = useState(false);
   const [limits, setLimits] = useState<LimitsForm | null>(null);
   const [contacts, setContacts] = useState<ContactsForm | null>(null);
+  const [manualReview, setManualReview] = useState<boolean | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [reasonOpen, setReasonOpen] = useState(false);
@@ -62,13 +64,16 @@ export function SettingsPage() {
       limitsValue: l,
       limits: Object.fromEntries(LIMIT_FIELDS.map((f) => [f, String(l[f])])) as LimitsForm,
       contacts: { accountDeletionUrl: c.accountDeletionUrl ?? '', dpoEmail: c.dpoEmail ?? '' },
+      manualReview: settingValue<Partial<ModerationPolicy>>(settings.data, 'moderation_policy')?.manualReviewAll === true,
     };
   }, [settings.data]);
   const formLimits = limits ?? base?.limits ?? null;
   const formContacts = contacts ?? base?.contacts ?? null;
   const limitsDirty = !!limits && !!base && LIMIT_FIELDS.some((f) => limits[f] !== base.limits[f]);
   const contactsDirty = !!contacts && !!base && (contacts.accountDeletionUrl !== base.contacts.accountDeletionUrl || contacts.dpoEmail !== base.contacts.dpoEmail);
-  const dirty = limitsDirty || contactsDirty;
+  const formManualReview = manualReview ?? base?.manualReview ?? false;
+  const policyDirty = manualReview !== null && !!base && manualReview !== base.manualReview;
+  const dirty = limitsDirty || contactsDirty || policyDirty;
   const { guard } = useLeaveGuard(dirty, t('nav.admin.settings'));
 
   const save = async (why: string) => {
@@ -77,7 +82,7 @@ export function SettingsPage() {
     setErrors({});
     const next: Record<string, string> = {};
     // each section is its own setting: a saved one leaves the dirty state even when the other one is refused
-    const ok = { limits: false, contacts: false };
+    const ok = { limits: false, contacts: false, policy: false };
     try {
       if (limitsDirty) {
         const value = { ...base.limitsValue, ...Object.fromEntries(LIMIT_FIELDS.map((f) => [f, Number(formLimits[f] || 0)])) };
@@ -96,11 +101,20 @@ export function SettingsPage() {
           next.contacts = errorMessage(e, t);
         }
       }
+      if (policyDirty) {
+        try {
+          await opsApi.putSetting('moderation_policy', { manualReviewAll: formManualReview }, why);
+          ok.policy = true;
+        } catch (e) {
+          next.policy = errorMessage(e, t);
+        }
+      }
       setErrors(next);
-      if (ok.limits || ok.contacts) await qc.invalidateQueries({ queryKey: opsKeys.settings });
+      if (ok.limits || ok.contacts || ok.policy) await qc.invalidateQueries({ queryKey: opsKeys.settings });
       if (ok.limits) setLimits(null);
       if (ok.contacts) setContacts(null);
-      if (!next.limits && !next.contacts) toast({ tone: 'success', message: t('adminSettings.saved') });
+      if (ok.policy) setManualReview(null);
+      if (!next.limits && !next.contacts && !next.policy) toast({ tone: 'success', message: t('adminSettings.saved') });
     } finally {
       setSaving(false);
     }
@@ -143,6 +157,7 @@ export function SettingsPage() {
             <MaintenancePanel data={settings.data} />
           </div>
           <div className="flex min-w-0 flex-col gap-5">
+            <ModerationPolicyPanel value={formManualReview} onChange={setManualReview} error={errors.policy} />
             <LegalPanel docs={settings.data.legal} contacts={formContacts} onContacts={(c) => setContacts(c)} error={errors.contacts} />
             <MetaPanel permissions={settings.data.metaPermissions} />
             <ProvidersPanel providers={settings.data.providers} />
@@ -660,6 +675,28 @@ function LimitsPanel({ value, onChange, error }: { value: LimitsForm; onChange: 
             <NumberInput id={`limit-${f}`} value={value[f]} onValueChange={(v) => onChange({ ...value, [f]: v })} readOnly={!write.allowed} />
           </Field>
         ))}
+      </div>
+      {error ? (
+        <p role="alert" className="mt-2 text-[12px] text-accent-alert">
+          {error}
+        </p>
+      ) : null}
+    </OpsPanel>
+  );
+}
+
+/* ---------- Product moderation policy (PV 22/10 PV2) ---------- */
+function ModerationPolicyPanel({ value, onChange, error }: { value: boolean; onChange: (v: boolean) => void; error?: string }) {
+  const t = useT();
+  const write = useWrite('admin.settings.write');
+  return (
+    <OpsPanel title={t('adminSettings.moderation.title')} sub={t('adminSettings.moderation.sub')} data-testid="moderation-policy">
+      <div className="flex items-start justify-between gap-4">
+        <span className="flex min-w-0 flex-col gap-1">
+          <span className="text-[14px]">{t('adminSettings.moderation.manualReviewAll')}</span>
+          <span className="text-[12px] text-text-muted">{t('adminSettings.moderation.manualReviewAllHint')}</span>
+        </span>
+        <Switch checked={value} onCheckedChange={onChange} disabled={!write.allowed} label={t('adminSettings.moderation.manualReviewAll')} />
       </div>
       {error ? (
         <p role="alert" className="mt-2 text-[12px] text-accent-alert">

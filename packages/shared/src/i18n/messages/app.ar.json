@@ -6351,5 +6351,13 @@
  "clients.filter.unconfirmedHint": "عملاء مهتمون بلا طلب مؤكد: طلب بقي «جديد» أو أُلغي، أو محادثة بلا طلب. العملاء المحظورون مستبعدون.",
  "products.form.stock.sellOutOfStock": "قبول الطلبات عند نفاد المخزون",
  "products.form.stock.sellOutOfStockHint": "يبقى هذا المنتج قابلًا للطلب عند مخزون 0 (طلب بانتظار التزويد): قد ينزل المخزون تحت الصفر، ويأخذ الذكاء الاصطناعي الطلب وينبّه إلى أن التوصيل قد يستغرق وقتًا أطول قليلًا. تبقى المنتجات الأخرى محظورة عند 0.",
- "orderForm.items.backorder": "نفاد المخزون ({available} متوفر): الطلب مقبول لهذا المنتج، يجب إعادة التزويد."
+ "orderForm.items.backorder": "نفاد المخزون ({available} متوفر): الطلب مقبول لهذا المنتج، يجب إعادة التزويد.",
+ "adminMod.panel.otherTexts": "نصوص أخرى",
+ "adminMod.panel.source.variants": "أسماء المتغيرات",
+ "adminMod.panel.source.keywords": "كلمات البحث",
+ "adminSettings.moderation.title": "التحقق من المنتجات",
+ "adminSettings.moderation.sub": "قبل نشرها لوكيل البيع الذكي",
+ "adminSettings.moderation.manualReviewAll": "التحقق اليدوي من كل المنتجات",
+ "adminSettings.moderation.manualReviewAllHint": "مفعّل: لا قبول تلقائي، كل منتج جديد أو معدَّل ينتظر قرار مسؤول في الإشراف قبل بيعه. معطّل: قبول تلقائي للمنتجات بدون تنبيه (نقاط ≥ 0.9، متجر موثوق، فئة غير حساسة).",
+ "adminSettings.history.key.moderation_policy": "التحقق من المنتجات (الإشراف)"
 }

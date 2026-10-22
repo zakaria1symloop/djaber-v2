@@ -73,6 +73,40 @@ describe('pre-screen and auto-approval', () => {
     expect((await itemOf(phone.id)).snapshot).toMatchObject({ sensitive: true });
   });
 
+  it('PV 22/10 PV1: a platform blocked word in a variant name or the search keywords holds the product for review', async () => {
+    const rule = await mod.post('/admin/moderation/rules', { key: 'word.pv1-interdit', kind: 'blocked_word', value: 'motinterdit' }).expect(201);
+    const owner = await merchant('trusted');
+    const v = await createProduct(owner, { name: 'Robe longue', description: 'Coton.', stock: undefined, variants: [{ name: 'Rouge', price: 3000 }, { name: 'Bleu MotInterdit', price: 3000 }] });
+    expect(v.moderation.status).toBe('pending');
+    expect((await itemOf(v.id)).aiFlags).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'blocked_word', message: 'motinterdit', field: 'variants' })]));
+    const k = await createProduct(owner, { name: 'Robe courte', description: 'Coton.', keywords: ['robe', 'motinterdit'] });
+    expect(k.moderation.status).toBe('pending');
+    expect((await itemOf(k.id)).aiFlags).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'blocked_word', field: 'keywords' })]));
+    expect(await catalogueSees(owner.workspaceId, k.id)).toBeNull();
+    await mod.delete(`/admin/moderation/rules/${rule.body.data.id}`).expect(200);
+  });
+
+  it('PV 22/10 PV2: platform setting moderation_policy.manualReviewAll ⇒ no auto-approval, every product waits for an admin (super_admin only, audited)', async () => {
+    await mod.put('/admin/settings/moderation_policy', { value: { manualReviewAll: true }, reason: 'Validation manuelle demandée' }).expect(403);
+    await sa.put('/admin/settings/moderation_policy', { value: { manualReviewAll: 'yes' }, reason: 'Validation manuelle demandée' }).expect(422);
+    await sa.put('/admin/settings/moderation_policy', { value: { manualReviewAll: true }, reason: 'Validation manuelle demandée (PV 22/10)' }).expect(200);
+    try {
+      const owner = await merchant('trusted');
+      const p = await createProduct(owner, { name: 'Sac à dos toile', description: 'Toile solide, fait main.' });
+      expect(p.moderation.status).toBe('pending');
+      const item = await itemOf(p.id);
+      expect(item.status).toBe('pending');
+      expect(Number(item.aiScore)).toBeGreaterThanOrEqual(0.9);
+      expect(await catalogueSees(owner.workspaceId, p.id)).toBeNull();
+      await mod.post(`/admin/moderation/items/${item.id}/approve`, {}).expect(200);
+      expect(await catalogueSees(owner.workspaceId, p.id)).toMatchObject({ id: p.id });
+      expect(await auditRows('setting.update', 'moderation_policy')).toHaveLength(1);
+    } finally {
+      await sa.put('/admin/settings/moderation_policy', { value: { manualReviewAll: false }, reason: 'Retour à la validation automatique' }).expect(200);
+    }
+    expect((await createProduct(await merchant('trusted'), { name: 'Sac à dos cuir', description: 'Cuir, fait main.' })).moderation.status).toBe('approved');
+  });
+
   it('AT-MOD-02 a change waiting for review keeps the last approved snapshot selling (AI quotes the old price)', async () => {
     const owner = await merchant('standard');
     const p = await createProduct(owner, { name: 'Robe kabyle', price: 4000 });

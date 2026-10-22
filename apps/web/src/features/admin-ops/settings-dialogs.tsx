@@ -583,7 +583,7 @@ export function ProviderDialog({ provider, onClose }: { provider: PlatformProvid
 }
 
 /* ---------- "Historique" (PFS-07: every change versioned) ---------- */
-const HISTORY_KEYS: SettingKey[] = ['limits', 'legal_contacts', 'sensitive_categories'];
+const HISTORY_KEYS: SettingKey[] = ['limits', 'legal_contacts', 'sensitive_categories', 'moderation_policy'];
 export function SettingsHistoryDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT();
   const locale = useLocaleCode() as 'fr' | 'ar' | 'en';

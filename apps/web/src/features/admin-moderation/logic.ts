@@ -108,7 +108,8 @@ export function refusableFields(item: Pick<ModerationItemDto, 'product'>): strin
  */
 export function flaggedFields(item: Pick<ModerationItemDto, 'aiFlags' | 'product'>): string[] {
   const out = new Set<string>();
-  for (const f of item.aiFlags) if (f.field && !/^images?$/i.test(f.field.trim())) out.add(normaliseField(f.field));
+  // `variants` / `keywords` (PV1 keyword hits) are shown as evidence but are not refusable fields of the merchant view
+  for (const f of item.aiFlags) if (f.field && !/^(images?|variants|keywords)$/i.test(f.field.trim())) out.add(normaliseField(f.field));
   item.product?.images.forEach((img, i) => {
     if (img.flag) out.add(`image:${i + 1}`);
   });
