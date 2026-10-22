@@ -75,13 +75,14 @@ export class OrderEffects implements OnModuleInit {
    * reserved (checked against stock − the other unconfirmed orders, no movement); confirmed and later ⇒ moved now.
    * The movements of a `new` order are written by `syncStock` when it is confirmed (transition plan `commit`).
    */
-  async holdStock(tx: Tx, order: Pick<Order, 'id' | 'number' | 'status'>, lines: StockLine[], actorId?: string | null) {
+  async holdStock(tx: Tx, order: Pick<Order, 'id' | 'number' | 'status'>, lines: StockLine[], actorId?: string | null, releasing: string[] = []) {
     if (order.status !== 'new') return this.syncStock(tx, order, lines, 'order_cancelled', actorId);
     await this.stock.reserve(
       tx,
       order.id,
       lines.filter((l) => l.trackStock),
       (available, p) => new AppException('ORDER_INSUFFICIENT_STOCK', { product: p.name, available }, {}, { productId: p.productId, variantId: p.variantId, available }),
+      releasing,
     );
   }
 

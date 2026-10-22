@@ -260,8 +260,8 @@ export class OrderService implements OnModuleInit {
   }
 
   /** Effects common to every creation path (04 §3 "Order created"). */
-  private async afterCreate(tx: Tx, order: Order, lines: StockLine[], actor: Actor, o: { amountPaid: number; clientCreated: boolean }) {
-    await this.effects.holdStock(tx, order, lines, actor.type === 'user' ? actor.id : null);
+  private async afterCreate(tx: Tx, order: Order, lines: StockLine[], actor: Actor, o: { amountPaid: number; clientCreated: boolean; releasing?: string[] }) {
+    await this.effects.holdStock(tx, order, lines, actor.type === 'user' ? actor.id : null, o.releasing ?? []);
     let current = order;
     if (o.amountPaid > 0) {
       await this.effects.addPayment(tx, order, { amount: o.amountPaid, method: order.paymentMethod, description: `Commande #${order.number} (acompte)` }, actor);
@@ -348,7 +348,7 @@ export class OrderService implements OnModuleInit {
           },
           include: { items: true },
         });
-        await this.afterCreate(tx, order, lines, { type: 'ai', id: ctx.agentId, name: agent?.name }, { amountPaid: 0, clientCreated: created });
+        await this.afterCreate(tx, order, lines, { type: 'ai', id: ctx.agentId, name: agent?.name }, { amountPaid: 0, clientCreated: created, releasing: req.replaces ? [req.replaces.id] : [] });
         // 04 §1.1: the cart of the conversation is closed with the order id (abandon rate = recap shown, no order)
         if (conversation) {
           const fresh = await tx.conversation.findUniqueOrThrow({ where: { id: conversation.id } });

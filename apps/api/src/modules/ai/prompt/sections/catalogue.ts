@@ -13,6 +13,7 @@ export const productBlock = (p: CatalogueProduct, n: number, descriptionMax: num
   if (description) lines.push(description);
   if (p.variants.length) lines.push(`VARIANTS: ${p.variants.map((v) => `${v.name} [VID:${v.id}] ${v.price} DA stock ${v.stock}`).join('; ')}`);
   if (p.hasVariants) lines.push('VARIANT REQUIRED: the customer chooses one of the VARIANTS; never offer this product without a variant or at another price.');
+  if (p.stock === null) lines.push('SERVICE: present it as a service (what is done, how, when), never as a product in stock or a parcel.');
   for (const a of p.also) lines.push(`ALSO: ${a.name} [ID:${a.id}] ${a.price} DA — ${a.reason?.trim() || 'often bought together'}`);
   return lines.join('\n');
 };

@@ -26,6 +26,7 @@ export const ERROR_CODES = {
   AI_PROVIDER_KEY_REJECTED: { status: 401, params: ["provider"] },
   AI_PROVIDER_NO_KEY: { status: 422, params: [] },
   AI_PROVIDER_UNREACHABLE: { status: 503, params: ["provider"] },
+  ANALYSIS_PRODUCT_EXISTS: { status: 409, params: ["name"] },
   ANALYSIS_RATE_LIMITED: { status: 429, params: [] },
   API_KEY_REVOKED: { status: 401, params: [] },
   API_SCOPE_FORBIDDEN: { status: 403, params: ["scope"] },

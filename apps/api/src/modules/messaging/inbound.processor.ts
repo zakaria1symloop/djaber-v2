@@ -222,7 +222,9 @@ export class InboundProcessor implements OnModuleInit {
    * `ai-reply / reply` job the AI pipeline consumes.
    */
   private async afterInbound(channel: Channel, s: Stored, unsupportedOnly: boolean) {
-    const conv = s.conversation;
+    let conv = s.conversation;
+    // A3: a thread handed off only because the AI failed is retried by the AI with this new customer message
+    if (!s.blocked && conv.status === 'needs_human' && (await this.conversations.resumeAfterAiError(conv.id))) conv = { ...conv, status: 'active', aiPaused: false };
     if (s.blocked || conv.status === 'needs_human' || conv.aiPaused) return;
     const link = await prisma.agentChannel.findUnique({ where: { channelId: channel.id }, include: { agent: { select: { id: true, status: true, deletedAt: true, responseDelaySec: true, imageRecognition: true, voiceTranscription: true } } } });
     if (!link || link.agent.status !== 'active' || link.agent.deletedAt) return;

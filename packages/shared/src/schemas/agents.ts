@@ -272,6 +272,10 @@ export const AnalysisImportItemSchema = z
     quantity: z.number({ invalid_type_error: 'validation.quantity', required_error: 'validation.quantity' }).int('validation.quantity').gt(0, 'validation.quantity'),
     category: z.string().trim().max(120).nullable().optional(),
     imageUrl: z.string().max(2000).nullable().optional(),
+    /** the post it comes from: an imported post is never imported twice (A1) */
+    postId: z.string().max(80).nullable().optional(),
+    /** a service / digital offer: created without stock (A2) */
+    isService: z.boolean().optional(),
   })
   .strict();
 export const AnalysisImportSchema = z.object({ items: z.array(AnalysisImportItemSchema).min(1, 'validation.required').max(100, 'validation.length') }).strict();
@@ -467,7 +471,8 @@ export type AgentGenerationResult = {
   linkedAgent: AgentRefView | null;
 };
 /** One row of the CHN-08 review grid (`Job.result.items[]` of `page-analysis`). */
-export type AnalysisItem = { key: string; postId: string; name: string; description: string | null; price: number | null; category: string | null; imageUrl: string | null; duplicateOf: string | null };
+/** `isService`: a service or a digital offer (no stock); `duplicateOf`: the catalogue product it already is (same post imported before, or the same / a very close name) */
+export type AnalysisItem = { key: string; postId: string; name: string; description: string | null; price: number | null; category: string | null; imageUrl: string | null; duplicateOf: string | null; isService?: boolean };
 export type AnalysisDto = {
   state: 'none' | 'permission_required' | 'running' | 'done' | 'failed';
   jobId: string | null;

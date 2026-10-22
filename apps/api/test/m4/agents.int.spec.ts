@@ -344,7 +344,7 @@ describe('knowledge: FAQ and insights', () => {
     expect((await owner.post(`/agent-insights/${unknown.id}/resolve`, { action: 'ignored_30d' }).expect(422)).body.error.code).toBe('INSIGHT_ALREADY_RESOLVED');
     // the next turn of the agent carries the instruction
     await ask('Bonjour');
-    expect(fakeAi(app).callsOf('reply').at(-1)!.system).toContain('SPECIAL INSTRUCTIONS\nToujours saluer.\n- Nous ne vendons pas de voitures.');
+    expect(fakeAi(app).callsOf('reply').at(-1)!.system).toContain('follow them in every reply, e.g. emoji use, tone, length)\nToujours saluer.\n- Nous ne vendons pas de voitures.');
 
     // create an FAQ from an insight
     const handoff = (await owner.get('/agent-insights?type=handoff&status=pending').expect(200)).body.data[0];

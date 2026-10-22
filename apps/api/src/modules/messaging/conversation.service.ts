@@ -51,6 +51,9 @@ const dec = <T>(cursor: string | undefined): T | null => {
   }
 };
 
+/** A3: how long a thread handed off by an AI failure waits before the next customer message gives it back to the AI. */
+export const AI_ERROR_RETRY_AFTER_MS = 2 * 60_000;
+
 @Injectable()
 export class ConversationService implements OnModuleInit {
   constructor(
@@ -524,6 +527,28 @@ export class ConversationService implements OnModuleInit {
     const c = await this.row(id);
     const n = await prisma.conversationNote.create({ data: { workspaceId: c.workspaceId, conversationId: id, authorId: t.userId!, body }, include: { author: userRef } });
     return { id: n.id, body: n.body, author: n.author, createdAt: n.createdAt.toISOString() };
+  }
+
+  /**
+   * A3 (tester report 2026-10-20: the bot "stopped answering" in the middle of a conversation): a thread handed to the team
+   * only because the AI failed (provider down / malformed answers, `handoffReason = ai_error`) goes back to the AI with the
+   * next customer message — once the failure is `AI_ERROR_RETRY_AFTER_MS` old and as long as nobody of the team has
+   * written since. Returns true when the AI may answer again.
+   */
+  async resumeAfterAiError(conversationId: string, now = new Date()): Promise<boolean> {
+    return prisma.$transaction(async (db) => {
+      const tx = db as Tx;
+      const c = await tx.conversation.findFirst({ where: { id: conversationId, deletedAt: null } });
+      if (!c || c.status !== 'needs_human') return false;
+      const ctx = contextOf(c);
+      const at = ctx.handoffAt ? new Date(ctx.handoffAt) : null;
+      if (ctx.handoffReason !== 'ai_error' || !at || now.getTime() - at.getTime() < AI_ERROR_RETRY_AFTER_MS) return false;
+      if (await tx.message.count({ where: { conversationId: c.id, author: 'human', createdAt: { gt: at } } })) return false;
+      const context: ConversationContext = { ...ctx, handoffAt: null, handoffReason: null, handoffRemindedAt: null, aiPausedById: null, aiUnavailable: null };
+      const updated = await tx.conversation.update({ where: { id: c.id }, data: { status: 'active', aiPaused: false, version: { increment: 1 }, context: context as Prisma.InputJsonValue } });
+      await this.emitUpdated(tx, updated);
+      return true;
+    });
   }
 
   // --- handoff (FL-03) ----------------------------------------------------------------------------------------------------

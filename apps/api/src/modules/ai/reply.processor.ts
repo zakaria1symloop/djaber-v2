@@ -43,6 +43,13 @@ type Batch = { messages: Message[]; text: string; plain: string; hasAudio: boole
 
 const CARD_NAMES = (m: Message) => ((m.payload as { cards?: { name: string }[] } | null)?.cards ?? []).map((c) => c.name).join(', ');
 
+/** A4: non-empty values of this turn over the stored ones. */
+export const mergeCustomer = (stored: ConversationContext['customer'], turn: ConversationContext['customer']): ConversationContext['customer'] => {
+  const out = { ...(stored ?? {}) } as Record<string, string>;
+  for (const [k, v] of Object.entries(turn ?? {})) if (typeof v === 'string' && v.trim()) out[k] = v.trim().slice(0, 500);
+  return Object.keys(out).length ? out : undefined;
+};
+
 @Injectable()
 export class ReplyProcessor implements OnModuleInit {
   private readonly log = new Logger(ReplyProcessor.name);
@@ -241,7 +248,7 @@ export class ReplyProcessor implements OnModuleInit {
     const noteLines = batch.images.map((img) => `[image]\n${visionNoteText(notes[`${img.messageId}:${img.index}`] ?? { kind: 'unavailable' })}`);
     const batchText = [batch.text, ...noteLines].filter(Boolean).join('\n');
     const matchedIds = Object.values(notes).flatMap((n) => (n.kind === 'match' ? [n.productId] : []));
-    const turnCtx = await this.context.load(agent, { text: batch.plain, lastProductIds: [...matchedIds, ...(ctx.lastProductIds ?? [])], lang, unclearStreak: ctx.unclearStreak ?? 0 });
+    const turnCtx = await this.context.load(agent, { text: batch.plain, lastProductIds: [...matchedIds, ...(ctx.lastProductIds ?? [])], lang, unclearStreak: ctx.unclearStreak ?? 0, clientId: conv.clientId, customer: ctx.customer });
     const history = await this.history(conv, batch.messages[0]!.createdAt);
     const prompt = PromptBuilder.build(turnCtx.prompt, history, batchText, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });
 
@@ -367,6 +374,8 @@ export class ReplyProcessor implements OnModuleInit {
         lastProductIds: [...new Set([...cards, ...o.matchedIds, ...toolProducts, ...(contextOf(latest).lastProductIds ?? [])])].slice(0, LAST_PRODUCTS_MAX),
         unclearStreak: out.status === 'UNCLEAR' ? streak : 0,
         aiUnavailable: null,
+        // A4: what the customer gave is kept, a later turn only adds or corrects (an empty value never erases)
+        customer: mergeCustomer(contextOf(latest).customer, out.customer),
       };
       await tx.conversation.update({ where: { id: conv.id }, data: { lastAiIntent: intentOf(out.intent), agentId: agent.id, context: context as Prisma.InputJsonValue } });
       await tx.agent.update({ where: { id: agent.id }, data: { lastActiveAt: new Date() } });

@@ -76,9 +76,16 @@ describe('import', () => {
     e = patchRow(e, 'b', { selected: true });
     const { keys, body } = buildImport(ITEMS, e);
     expect(keys).toEqual(['a', 'd']);
-    expect(body.items[0]).toEqual({ name: 'Robe longue', description: null, price: 6500, quantity: 10, category: 'Vêtements', imageUrl: null });
+    // the post id goes along: a post imported once is never imported again (tester report 2026-10-20 A1)
+    expect(body.items[0]).toEqual({ name: 'Robe longue', description: null, price: 6500, quantity: 10, category: 'Vêtements', imageUrl: null, postId: 'p-a' });
     expect(body.items[1]!.category).toBeNull();
     expect(buildImport(ITEMS, e, new Set(['a'])).keys).toEqual(['d']);
+  });
+  it('a service / digital offer has no quantity to check and is sent as a service (A2)', () => {
+    const items = [item('s', { isService: true, price: 800 })];
+    const e = initialEdits(items);
+    expect(e.s).toMatchObject({ selected: true, isService: true });
+    expect(buildImport(items, patchRow(e, 's', { quantity: '' })).body.items[0]).toMatchObject({ quantity: 1, isService: true, postId: 'p-s' });
   });
   it('maps the per-item result back onto the rows', () => {
     const out = importOutcome(['a', 'b', 'd'], {

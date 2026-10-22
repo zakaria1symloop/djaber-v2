@@ -60,12 +60,13 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
         notes: { type: 'string', maxLength: 500 },
         customerConfirmed: { const: true },
         phoneConfirmed: { type: 'boolean', description: 'true once the customer re-confirmed the phone number when a tool asked for it' },
+        replacesOrder: { type: 'string', maxLength: 30, description: "number of THIS customer's order that the new one replaces (other product, size, quantity or address): the new order is created first, then that one is cancelled" },
       },
     },
   },
   cancel_order: {
     name: 'cancel_order',
-    description: "Cancel one of THIS customer's open orders. Never creates an order.",
+    description: "Cancel one of THIS customer's orders that the shop has NOT confirmed yet. Never creates an order; to change an order use create_order with replacesOrder.",
     parameters: { type: 'object', additionalProperties: false, properties: { orderNumber: { type: 'string' }, reason: { type: 'string', maxLength: 200 }, customerConfirmed: { type: 'boolean' } } },
   },
   lookup_order: {
@@ -110,6 +111,7 @@ const OrderArgs = z.object({
   notes: str.max(500).optional(),
   customerConfirmed: z.unknown().optional(),
   phoneConfirmed: z.boolean().optional(),
+  replacesOrder: str.max(30).optional(),
 });
 const EXAMPLES: Record<string, string | number> = { clientName: 'Amine Benali', clientPhone: '0555123456', secondPhone: '0661123456', wilayaId: 16, address: 'Cité 200 logements, Bt 4, Bab Ezzouar', quantity: 1 };
 const normQuestion = (q: string) => fold(q).replace(/\s+/g, ' ').slice(0, 200);
@@ -272,6 +274,17 @@ export class ToolRegistry {
     if (phone2 && !isPhoneDz(phone2)) return fail(invalid('secondPhone', EXAMPLES.secondPhone));
     if (!d.isStopdesk && (d.address ?? '').length < 10) return fail(invalid('address', EXAMPLES.address));
 
+    // A9: the order it replaces must be this customer's and not confirmed by the shop yet; its units count as free here
+    let replaces: CreateOrderRequest['replaces'] = null;
+    const freed = new Map<string, number>();
+    if (d.replacesOrder) {
+      const old = ctx.clientId ? await prisma.order.findFirst({ where: { clientId: ctx.clientId, number: { equals: d.replacesOrder.trim(), mode: 'insensitive' } }, include: { items: true } }) : null;
+      if (!old || old.status === 'cancelled' || old.status === 'returned' || old.status === 'delivered' || old.deliveryStatus !== 'not_sent') return fail({ ok: false, error: { code: 'ORDER_NOT_REPLACEABLE', number: d.replacesOrder } });
+      if (old.status !== 'new') return fail({ ok: false, error: { code: 'ORDER_CONFIRMED_BY_SELLER', number: old.number }, hint: 'handoff' });
+      replaces = { id: old.id, number: old.number };
+      for (const i of old.items) freed.set(`${i.productId}:${i.variantId ?? ''}`, (freed.get(`${i.productId}:${i.variantId ?? ''}`) ?? 0) + i.quantity);
+    }
+
     const products = await this.catalogue.byIds(ctx.agent, d.items.map((i) => i.productId));
     const by = new Map(products.map((p) => [p.id, p]));
     const items: CreateOrderRequest['items'] = [];
@@ -281,8 +294,9 @@ export class ToolRegistry {
       if (!p) return fail({ ok: false, error: { code: 'PRODUCT_NOT_AVAILABLE', productId: i.productId } });
       const v = p.hasVariants ? p.variants.find((x) => x.id === i.variantId) : null;
       if (p.hasVariants && !v) return fail({ ok: false, error: { code: 'VARIANT_REQUIRED', productId: p.id, availableVariants: p.variants.filter((x) => x.stock > 0).map((x) => ({ id: x.id, name: x.name, price: x.price, stock: x.stock })) } });
-      const stock = v ? v.stock : p.stock;
-      if (stock !== null && stock < i.quantity) return fail({ ok: false, error: { code: 'ORDER_INSUFFICIENT_STOCK', productId: p.id, available: stock } });
+      const stock = v ? v.stock : p.stock !== null && freed.size ? p.stock + (freed.get(`${p.id}:`) ?? 0) : p.stock;
+      const free = stock === null ? null : v ? stock + (freed.get(`${p.id}:${v.id}`) ?? 0) : stock;
+      if (free !== null && free < i.quantity) return fail({ ok: false, error: { code: 'ORDER_INSUFFICIENT_STOCK', productId: p.id, available: stock } });
       items.push({ productId: p.id, variantId: v?.id ?? null, quantity: i.quantity, name: p.name, variant: v?.name ?? null, unitPrice: v ? v.price : p.price });
     }
     const subtotal = items.reduce((n, i) => n + i.unitPrice * i.quantity, 0);
@@ -296,7 +310,7 @@ export class ToolRegistry {
     if (quantity > maxQty || subtotal + deliveryFee > maxAmount) return fail({ ok: false, hint: 'order_limit', maxQty, maxAmount });
     return {
       ok: true,
-      request: { clientName: d.clientName, clientPhone: phone, secondPhone: phone2, wilayaId: d.wilayaId, communeName: d.communeName || null, address: d.address || null, isStopdesk: d.isStopdesk, stopdeskId: d.stopdeskId || null, notes: d.notes || null, items, subtotal, deliveryFee, total: subtotal + deliveryFee, ...(d.phoneConfirmed ? { phoneConfirmed: true } : {}) },
+      request: { clientName: d.clientName, clientPhone: phone, secondPhone: phone2, wilayaId: d.wilayaId, communeName: d.communeName || null, address: d.address || null, isStopdesk: d.isStopdesk, stopdeskId: d.stopdeskId || null, notes: d.notes || null, items, subtotal, deliveryFee, total: subtotal + deliveryFee, ...(d.phoneConfirmed ? { phoneConfirmed: true } : {}), replaces },
     };
   }
 
@@ -313,9 +327,12 @@ export class ToolRegistry {
   private async cancelOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<ToolResult> {
     if (!ctx.clientId) return { ok: false, error: { code: 'NO_OPEN_ORDER' } };
     const number = typeof args.orderNumber === 'string' && args.orderNumber.trim() ? args.orderNumber.trim().toLowerCase() : null;
-    const open = await prisma.order.findMany({ where: { clientId: ctx.clientId, status: { in: ['new', 'confirmed', 'preparing'] }, deliveryStatus: 'not_sent' }, orderBy: { orderedAt: 'desc' }, take: 10 });
+    // A8 (tester report 2026-10-20): only orders the shop has not confirmed yet; a confirmed one is the team's to cancel
+    const open = await prisma.order.findMany({ where: { clientId: ctx.clientId, status: 'new', deliveryStatus: 'not_sent' }, orderBy: { orderedAt: 'desc' }, take: 10 });
     const candidates: CancellableOrder[] = open.map((o) => ({ id: o.id, number: o.number, total: o.total, status: o.status, orderedAt: o.orderedAt.toISOString() }));
     const publicList = candidates.map(({ id: _id, ...c }) => c);
+    const confirmed = await prisma.order.findFirst({ where: { clientId: ctx.clientId, status: { in: ['confirmed', 'preparing'] }, deliveryStatus: 'not_sent', ...(number ? { number: { equals: number, mode: 'insensitive' } } : {}) }, select: { number: true } });
+    if (confirmed && (!candidates.length || (number && !candidates.some((c) => c.number.toLowerCase() === number)))) return { ok: false, error: { code: 'ORDER_CONFIRMED_BY_SELLER', number: confirmed.number }, hint: 'handoff' };
     if (!candidates.length) {
       const any = number ? await prisma.order.findFirst({ where: { clientId: ctx.clientId, number: { equals: number, mode: 'insensitive' } }, select: { id: true } }) : await prisma.order.findFirst({ where: { clientId: ctx.clientId, status: { notIn: ['cancelled', 'returned', 'delivered'] } }, select: { id: true } });
       return { ok: false, error: { code: any ? 'ORDER_NOT_CANCELLABLE' : 'NO_OPEN_ORDER' } };

@@ -39,5 +39,7 @@ export type PromptContext = {
   unclearStreak: number;
   /** catalogue descriptions cut to this many characters (token budget step 3) */
   descriptionMax: number;
+  /** A4: what is already known of the customer (client record + details given in the conversation) */
+  customer?: { name?: string; phone?: string; phone2?: string; wilaya?: string; commune?: string; address?: string } | null;
 };
 export type PromptSection = { key: string; text: string };

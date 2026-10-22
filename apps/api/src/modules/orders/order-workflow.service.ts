@@ -429,7 +429,8 @@ export class OrderWorkflowService implements OnModuleInit {
       await prisma.$transaction(async (db) => {
         const tx = db as Tx;
         const o = await this.orders.lock(tx, order.id);
-        if (o.clientId !== ctx.clientId || !['new', 'confirmed', 'preparing'].includes(o.status) || o.deliveryStatus !== 'not_sent') throw new AppException('ORDER_INVALID_TRANSITION', { from: o.status, to: 'cancelled' });
+        // A8: never an order the shop confirmed (only `new`), never a parcel already sent
+        if (o.clientId !== ctx.clientId || o.status !== 'new' || o.deliveryStatus !== 'not_sent') throw new AppException('ORDER_INVALID_TRANSITION', { from: o.status, to: 'cancelled' });
         await this.transition(tx, o, 'cancelled', { actor: { type: 'ai', id: ctx.agentId }, reason: 'changed_mind', note: reason ? `IA : ${reason}` : 'IA : demande du client', system: true, notifyCustomer: false, shipmentNotice: false });
       });
     } catch (e) {

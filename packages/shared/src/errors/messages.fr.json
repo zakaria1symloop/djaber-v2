@@ -26,6 +26,7 @@
   "AI_PROVIDER_KEY_REJECTED": "Clé refusée par {provider}.",
   "AI_PROVIDER_NO_KEY": "Aucune clé configurée.",
   "AI_PROVIDER_UNREACHABLE": "{provider} injoignable.",
+  "ANALYSIS_PRODUCT_EXISTS": "Déjà dans le catalogue : {name}.",
   "ANALYSIS_RATE_LIMITED": "3 analyses par jour max.",
   "API_KEY_REVOKED": "Clé API révoquée.",
   "API_SCOPE_FORBIDDEN": "Portée requise : {scope}.",

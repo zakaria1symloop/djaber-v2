@@ -22,6 +22,14 @@ const FIELD_TEXT: Record<string, string> = {
 };
 const DEFAULT_REQUIRED = ['product', 'quantity', 'name', 'phone', 'wilaya', 'commune', 'address'];
 
+/** A4: what is already known of the customer — never asked again. */
+const knownCustomerLines = (c: PromptContext): string[] => {
+  const k = c.customer;
+  if (!k) return [];
+  const parts = [k.name && `name=${k.name}`, k.phone && `phone=${k.phone}`, k.phone2 && `secondPhone=${k.phone2}`, k.wilaya && `wilaya=${k.wilaya}`, k.commune && `commune=${k.commune}`, k.address && `address=${k.address}`].filter(Boolean);
+  return parts.length ? [`KNOWN CUSTOMER (already given — confirm it in the recap, do not ask again): ${parts.join(' · ')}`] : [];
+};
+
 export const orderRulesSection = (c: PromptContext): string => {
   const fields = c.agent.orderFields;
   const required = fields.length ? fields.filter((f) => f.required).map((f) => f.key as string) : DEFAULT_REQUIRED;
@@ -37,10 +45,14 @@ export const orderRulesSection = (c: PromptContext): string => {
     'An order above one of these limits is never created: hand off (status=HANDOFF, statusDetail=order_limits).',
     `RISKY_CLIENT_POLICY=${c.agent.riskyClientBehavior ?? 'take_and_flag'}`,
     `RECAP=${c.agent.recapMode ?? 'always'}`,
-    'Ask one field at a time; never invent a value; re-ask an invalid value with an example (0555123456).',
+    ...knownCustomerLines(c),
+    'Ask one field at a time; never invent a value; re-ask an invalid value with an example (0555123456). Never ask again for a value the customer already gave (KNOWN CUSTOMER or earlier messages): reuse it in the recap.',
+    'Report in "customer" the order details the customer has given so far (name, phone, phone2, wilaya, commune, address).',
+    'A place that is both a wilaya and a commune (Blida, Médéa, Sétif, Oran…) given once is that wilaya AND its commune of the same name, unless the customer says another commune: do not ask for the commune again.',
     'Before create_order, show a recap (items, quantities, prices, delivery fee, total, address) and wait for an explicit confirmation of the customer.',
     'Call create_order only once per confirmed recap. If the tool says the order already exists (duplicateOf), confirm that order instead of creating another one.',
-    'When the customer wants to cancel, use cancel_order only (ask which order when there are several); never call create_order to cancel or replace.',
+    'To cancel: cancel_order works only on an order the shop has NOT confirmed yet (ask which one when there are several). ORDER_CONFIRMED_BY_SELLER ⇒ never promise a cancellation or a change: say the shop will contact them, then hand off (status=HANDOFF, statusDetail=customer_request).',
+    'To change an order already placed (product, size, quantity, address): show the new recap, wait for the confirmation, then call create_order with replacesOrder=<its number> — the new order is created first, then the old one is cancelled. Never cancel an order to replace it. replaced=null in the result ⇒ hand off.',
     'Payment is cash on delivery unless a payment link tool is available.',
   ].join('\n');
 };

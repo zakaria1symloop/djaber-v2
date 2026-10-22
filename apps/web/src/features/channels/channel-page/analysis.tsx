@@ -423,7 +423,14 @@ function ItemCard({
           <MoneyInput id={`${id}-price`} className="!h-9 text-[13px]" value={edit.price} disabled={locked} aria-invalid={!!priceIssue || undefined} onValueChange={(v) => onChange({ price: v })} />
         </MiniField>
         <MiniField label={t('channels.analysis.field.stock')} htmlFor={`${id}-qty`} error={showIssues ? fieldError(t, issues.quantity) : undefined}>
-          <NumberInput id={`${id}-qty`} className="!h-9 text-[13px]" maxDigits={6} value={edit.quantity} disabled={locked} aria-invalid={(showIssues && !!issues.quantity) || undefined} onValueChange={(v) => onChange({ quantity: v })} />
+          {/* A2: a service / digital offer has no stock — it can be switched back to a product with stock */}
+          {edit.isService ? (
+            <button type="button" id={`${id}-qty`} className="h-9 w-full rounded-[6px] border border-line-edge px-2 text-start text-[13px] text-text-secondary hover:text-text-primary" disabled={locked} onClick={() => onChange({ isService: false })} title={t('channels.analysis.service.toProduct')}>
+              {t('channels.analysis.service.label')}
+            </button>
+          ) : (
+            <NumberInput id={`${id}-qty`} className="!h-9 text-[13px]" maxDigits={6} value={edit.quantity} disabled={locked} aria-invalid={(showIssues && !!issues.quantity) || undefined} onValueChange={(v) => onChange({ quantity: v })} />
+          )}
         </MiniField>
       </div>
       <MiniField label={isNewCategory(edit.category) ? t('channels.analysis.field.categoryNew') : t('channels.analysis.field.category')} htmlFor={`${id}-cat`}>

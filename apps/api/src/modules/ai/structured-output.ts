@@ -13,6 +13,11 @@ export const AiReplyOutputSchema = z
     recommendations: z.array(z.object({ sourceId: z.string(), recommendedId: z.string() })).max(3),
     confidence: z.number().min(0).max(1),
     language: z.enum(AI_LANGUAGES).optional(),
+    /** A4: the order details the customer gave so far — kept on the conversation, never asked again */
+    customer: z
+      .object({ name: z.string().max(80).optional(), phone: z.string().max(30).optional(), phone2: z.string().max(30).optional(), wilaya: z.string().max(60).optional(), commune: z.string().max(100).optional(), address: z.string().max(500).optional() })
+      .strict()
+      .optional(),
   })
   .strict();
 export type AiReplyOutput = z.infer<typeof AiReplyOutputSchema>;
@@ -30,6 +35,12 @@ export const AI_REPLY_JSON_SCHEMA = {
     recommendations: { type: 'array', maxItems: 3, items: { type: 'object', required: ['sourceId', 'recommendedId'], properties: { sourceId: { type: 'string' }, recommendedId: { type: 'string' } } } },
     confidence: { type: 'number', minimum: 0, maximum: 1 },
     language: { enum: [...AI_LANGUAGES] },
+    customer: {
+      type: 'object',
+      additionalProperties: false,
+      description: 'order details the customer has given so far in this conversation (only what they actually said)',
+      properties: { name: { type: 'string' }, phone: { type: 'string' }, phone2: { type: 'string' }, wilaya: { type: 'string' }, commune: { type: 'string' }, address: { type: 'string' } },
+    },
   },
 } as const;
 

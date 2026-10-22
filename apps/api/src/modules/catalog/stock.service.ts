@@ -59,10 +59,10 @@ const SORTS = ['createdAt'] as const;
  * its quantities without a movement, its `out` movement is written when it is confirmed. Orders created before that
  * rule already moved their stock: what they moved is subtracted, so nothing is counted twice. Key `productId:variantId`.
  */
-export async function reservedQuantities(db: Tx | typeof prisma, productIds: string[], exceptOrderId?: string | null): Promise<Map<string, number>> {
+export async function reservedQuantities(db: Tx | typeof prisma, productIds: string[], exceptOrderIds: string[] = []): Promise<Map<string, number>> {
   if (!productIds.length) return new Map();
   const ws = TenantContext.workspaceId();
-  const except = exceptOrderId ? Prisma.sql`AND o."id" <> ${exceptOrderId}::uuid` : Prisma.empty;
+  const except = exceptOrderIds.length ? Prisma.sql`AND NOT (o."id" = ANY(${exceptOrderIds}::uuid[]))` : Prisma.empty;
   const rows = await (db as typeof prisma).$queryRaw<{ productId: string; variantId: string | null; reserved: number }[]>`
     SELECT x."productId", x."variantId", sum(GREATEST(x.qty + COALESCE(m.moved, 0), 0))::int AS reserved
     FROM (
@@ -153,15 +153,15 @@ export class StockService implements OnModuleInit {
   }
 
   /** Units held by unconfirmed orders (see `reservedQuantities`). */
-  reservedQty(db: Tx | typeof prisma, productIds: string[], exceptOrderId?: string | null) {
-    return reservedQuantities(db, productIds, exceptOrderId);
+  reservedQty(db: Tx | typeof prisma, productIds: string[], exceptOrderIds: string[] = []) {
+    return reservedQuantities(db, productIds, exceptOrderIds);
   }
 
   /**
    * Checks that an order still `new` can hold `lines` (quantity ≤ stock − what the other unconfirmed orders hold), the
    * product / variant rows locked in a stable order so two orders cannot take the same last unit. Nothing is written.
    */
-  async reserve(tx: Tx, orderId: string, lines: { productId: string; variantId: string | null; quantity: number }[], insufficient: (available: number, p: { name: string; productId: string; variantId: string | null }) => Error) {
+  async reserve(tx: Tx, orderId: string, lines: { productId: string; variantId: string | null; quantity: number }[], insufficient: (available: number, p: { name: string; productId: string; variantId: string | null }) => Error, releasing: string[] = []) {
     const want = new Map<string, { productId: string; variantId: string | null; qty: number }>();
     for (const l of lines) {
       const k = `${l.productId}:${l.variantId ?? ''}`;
@@ -174,7 +174,8 @@ export class StockService implements OnModuleInit {
     // what this order already moved (an order of before the rule): only the rest needs to be available
     const moved = await tx.stockMovement.groupBy({ by: ['productId', 'variantId'], where: { refType: 'order', refId: orderId }, _sum: { quantity: true } });
     const own = new Map(moved.map((m) => [`${m.productId}:${m.variantId ?? ''}`, -(m._sum.quantity ?? 0)]));
-    const held = await this.reservedQty(tx, [...new Set(keys.map((k) => k.productId))], orderId);
+    // `releasing`: an order this one replaces (A9) — its units are given back when the new order is in
+    const held = await this.reservedQty(tx, [...new Set(keys.map((k) => k.productId))], [orderId, ...releasing]);
     for (const k of keys) {
       const [product] = await tx.$queryRaw<ProductLock[]>`
         SELECT "id","name","sku","trackStock","hasVariants","stock","minStock","isActive","moderationStatus"::text AS "moderationStatus"

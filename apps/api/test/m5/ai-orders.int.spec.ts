@@ -11,7 +11,7 @@ import { answer, closeOutbox, fakeAi, ledger, linkedAgent, outMessages, replyJob
 import { db, phone, productStock, seedFees } from '../support/m5';
 
 /** Units of the test product held by unconfirmed orders (product page « RÉSERVÉ »). */
-const held = async (s: { owner: { get: (u: string) => any }; robe: { id: string } }) => (await s.owner.get(`/products/${s.robe.id}`).expect(200)).body.data.stockDetail.reserved as number;
+const held = async (s: { owner: { get: (u: string) => any }; robe: Record<string, any> }) => (await s.owner.get(`/products/${s.robe.id}`).expect(200)).body.data.stockDetail.reserved as number;
 let app: TestApp;
 let net: ReturnType<typeof forbidNetwork>;
 type Shop = { owner: Actor; page: Awaited<ReturnType<typeof connectedPage>>; agent: Awaited<ReturnType<typeof linkedAgent>>; robe: Record<string, any> };
@@ -152,6 +152,37 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const shipped = await turn(s, other, 'annuler ma commande svp');
     expect(lastResult(shipped.runs)).toEqual({ ok: false, error: { code: 'ORDER_NOT_CANCELLABLE' } });
     expect(shipped.conversation.status).toBe('needs_human');
+  });
+
+  it('tester report 2026-10-20 A9 / A8: a change replaces a new order (new one created first, then the old one cancelled, its units counted free); a confirmed order is neither cancelled nor replaced by the AI', async () => {
+    const s = await shop();
+    await db.product.update({ where: { id: s.robe.id }, data: { stock: 2 } });
+    const sender = newSender();
+    fakeAi(app).script('reply', { toolCalls: [createCall(s)] }, { reply: 'OK', intent: 'SALE' });
+    const first = await turn(s, sender, 'oui');
+    const oldId = lastResult(first.runs).orderId;
+    expect(await held(s)).toBe(1);
+    // 2 units wanted: possible only because the replaced order's unit is given back
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [{ ...createCall(s, { items: [{ productId: s.robe.id, quantity: 2 }], replacesOrder: 'CMD-1001' }), id: 'call_replace' }] }, { reply: 'Commande modifiée.', intent: 'SALE' });
+    const change = await turn(s, sender, 'oui finalement 2');
+    const replaced = lastResult(change.runs);
+    expect(replaced).toMatchObject({ ok: true, number: 'CMD-1002', replaced: { number: 'CMD-1001' } });
+    expect(await db.order.findUniqueOrThrow({ where: { id: oldId } })).toMatchObject({ status: 'cancelled' });
+    expect(await held(s)).toBe(2);
+    // the shop confirms CMD-1002: the AI may no longer cancel or replace it — the team handles it
+    const newOrder = await db.order.findUniqueOrThrow({ where: { id: replaced.orderId } });
+    await s.owner.post(`/orders/${newOrder.id}/status`, { to: 'confirmed', version: newOrder.version }).set({ 'Idempotency-Key': `confirm-${newOrder.id}` }).expect(200);
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'cancel_order', args: { orderNumber: 'CMD-1002', customerConfirmed: true } }] }, { reply: 'Je transmets.', intent: 'OTHER' });
+    const cancel = await turn(s, sender, 'annulez la svp');
+    expect(lastResult(cancel.runs)).toEqual({ ok: false, error: { code: 'ORDER_CONFIRMED_BY_SELLER', number: 'CMD-1002' }, hint: 'handoff' });
+    expect(await db.order.findUniqueOrThrow({ where: { id: newOrder.id } })).toMatchObject({ status: 'confirmed' });
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [{ ...createCall(s, { replacesOrder: 'CMD-1002' }), id: 'call_replace_2' }] }, { reply: 'Je transmets.', intent: 'SALE' });
+    const again = await turn(s, sender, 'je veux changer');
+    expect(lastResult(again.runs)).toMatchObject({ ok: false, error: { code: 'ORDER_CONFIRMED_BY_SELLER' } });
+    expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(2);
   });
 
   it('a blocked customer ⇒ CUSTOMER_BLOCKED, no order, silent handoff (04 §13); risky client with RISKY_CLIENT_POLICY=handoff ⇒ handoff', async () => {

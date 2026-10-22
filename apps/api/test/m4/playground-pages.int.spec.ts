@@ -286,6 +286,15 @@ describe('generate from page, FAQ extraction, page analysis', () => {
     expect(await db.stockMovement.count({ where: { productId: robe.id } })).toBe(1);
     // a second import continues the numbering
     expect((await owner.post(`/channels/${page.id}/analysis/import`, { items: [{ name: 'Foulard soie', price: 1500, quantity: 1 }] }).expect(200)).body.data.created[0].sku).toBe('FB-0003');
+    // tester report 2026-10-20 A1: the same post / a very close name is never created twice (an analysis run again)
+    const twice = (await owner.post(`/channels/${page.id}/analysis/import`, { items: [{ name: 'Robe satin bordeaux', price: 4500, quantity: 1, postId: done.items[0].postId }, { name: 'robe SATIN bordeaux femme', price: 4500, quantity: 1 }] }).expect(200)).body.data;
+    expect(twice.created).toEqual([]);
+    expect(twice.failed.map((f: any) => [f.index, f.code])).toEqual([[0, 'ANALYSIS_PRODUCT_EXISTS'], [1, 'ANALYSIS_PRODUCT_EXISTS']]);
+    // A2: a service / digital offer is created without stock
+    const service = (await owner.post(`/channels/${page.id}/analysis/import`, { items: [{ name: 'Retouche de robe', price: 800, quantity: 1, isService: true, postId: 'svc-post' }] }).expect(200)).body.data;
+    expect(await db.product.findUniqueOrThrow({ where: { id: service.created[0].productId } })).toMatchObject({ trackStock: false, stock: null });
+    // the imported post is remembered on the analysis: importing it again under another name is refused too
+    expect((await owner.post(`/channels/${page.id}/analysis/import`, { items: [{ name: 'Atelier couture', price: 900, quantity: 1, postId: 'svc-post' }] }).expect(200)).body.data.failed[0].code).toBe('ANALYSIS_PRODUCT_EXISTS');
     // an operator reads the analysis but cannot start or import
     const operator = await asOperator(app, owner.workspaceId);
     await operator.get(`/channels/${page.id}/analysis`).expect(200);

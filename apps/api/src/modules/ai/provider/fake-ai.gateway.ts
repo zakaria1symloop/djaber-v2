@@ -22,7 +22,7 @@ import {
 } from './ai.gateway';
 
 export type FakeStep =
-  | { reply: string; status?: 'OK' | 'UNCLEAR' | 'UNKNOWN' | 'HANDOFF'; statusDetail?: string; intent?: string; productCards?: string[]; recommendations?: { sourceId: string; recommendedId: string }[]; confidence?: number; language?: string }
+  | { reply: string; status?: 'OK' | 'UNCLEAR' | 'UNKNOWN' | 'HANDOFF'; statusDetail?: string; intent?: string; productCards?: string[]; recommendations?: { sourceId: string; recommendedId: string }[]; confidence?: number; language?: string; customer?: Record<string, string> }
   | { object: unknown }
   | { text: string }
   | { toolCalls: { name: string; args: Record<string, unknown>; id?: string }[] }
@@ -228,6 +228,7 @@ export class FakeAiGateway implements AiGateway {
               recommendations: step.recommendations ?? [],
               confidence: step.confidence ?? 0.9,
               ...(step.language ? { language: step.language } : {}),
+              ...(step.customer ? { customer: step.customer } : {}),
             });
     return { text, toolCalls: [], usage: { inputTokens: input, outputTokens: approxTokens(text) }, finishReason: 'stop' };
   }

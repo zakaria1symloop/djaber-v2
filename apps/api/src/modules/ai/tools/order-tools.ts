@@ -29,6 +29,8 @@ export type CreateOrderRequest = {
   total: number;
   /** 04 §21: the customer confirmed the phone number again (required after a "faux numéro" on that phone) */
   phoneConfirmed?: boolean;
+  /** A9: the customer's order (still `new`) this one replaces — created first, then that one is cancelled */
+  replaces?: { id: string; number: string } | null;
 };
 export type CancellableOrder = { id: string; number: string; total: number; status: string; orderedAt: string };
 export type ToolResult = Record<string, unknown>;

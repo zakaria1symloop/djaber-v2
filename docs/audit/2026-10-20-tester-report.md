@@ -42,15 +42,15 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 ## AI agent / chatbot
 | # | Issue | Status |
 |---|---|---|
-| A1 | Page analysis run more than twice duplicates products | todo |
-| A2 | Digital services detected as physical products with stock | todo |
-| A3 | Chatbot sometimes stops answering mid-conversation | todo |
-| A4 | Customer details lost after the conversation resumes; the bot asks again | todo |
-| A5 | Owner instructions not followed (e.g. emoji usage) | todo |
-| A6 | Services presented like products | todo |
-| A7 | Wilaya and commune with the same name confused; bot asks the commune again | todo |
-| A8 | Bot can cancel an order already confirmed by the seller | todo |
-| A9 | Order replacement: bot deletes the order but never creates the replacement | todo |
+| A1 | Page analysis run more than twice duplicates products | done |
+| A2 | Digital services detected as physical products with stock | done |
+| A3 | Chatbot sometimes stops answering mid-conversation | done |
+| A4 | Customer details lost after the conversation resumes; the bot asks again | done |
+| A5 | Owner instructions not followed (e.g. emoji usage) | done |
+| A6 | Services presented like products | done |
+| A7 | Wilaya and commune with the same name confused; bot asks the commune again | done |
+| A8 | Bot can cancel an order already confirmed by the seller | done |
+| A9 | Order replacement: bot deletes the order but never creates the replacement | done |
 
 ## Delivery
 | # | Issue | Status |

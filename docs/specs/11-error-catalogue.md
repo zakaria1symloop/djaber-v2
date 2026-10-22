@@ -97,6 +97,7 @@ UI behaviour legend: **inline** (field), **toast** (transient, auto-dismiss 5 s,
 | 422 | `VARIANT_REQUIRED` | Choisissez une variante. | اختر متغيّرًا. | Choose a variant. | inline on line | pick |
 | 404 | `VARIANT_NOT_FOUND` | Variante introuvable. | المتغيّر غير موجود. | Variant not found. | inline | pick |
 | 409 | `CATEGORY_ALREADY_EXISTS` | Catégorie existante. | الفئة موجودة. | Category exists. | inline | — |
+| 409 | `ANALYSIS_PRODUCT_EXISTS` {name} | Déjà dans le catalogue : {name}. | موجود مسبقًا في الكتالوج: {name}. | Already in the catalogue: {name}. | per-row result (page analysis import) | edit the existing product |
 | 409 | `CATEGORY_IN_USE` {count} | Utilisée par {count} produits. Réassigner ? | مستخدمة في {count} منتجات. إعادة تعيين؟ | Used by {count} products. Reassign? | dialog with reassign select | reassign |
 | 409 | `UNIT_IN_USE` {count} | Utilisée par {count} produits. Réassigner ? | مستخدمة في {count} منتجات. إعادة تعيين؟ | Used by {count} products. Reassign? | dialog with reassign select | reassign |
 | 403 | `UNIT_SYSTEM_READONLY` | Unité système non modifiable. | وحدة النظام غير قابلة للتعديل. | System unit is read-only. | toast | — |

@@ -26,6 +26,7 @@
   "AI_PROVIDER_KEY_REJECTED": "رفض {provider} المفتاح.",
   "AI_PROVIDER_NO_KEY": "لا يوجد مفتاح مُعدّ.",
   "AI_PROVIDER_UNREACHABLE": "تعذّر الوصول إلى {provider}.",
+  "ANALYSIS_PRODUCT_EXISTS": "موجود مسبقًا في الكتالوج: {name}.",
   "ANALYSIS_RATE_LIMITED": "3 تحليلات يوميًا كحد أقصى.",
   "API_KEY_REVOKED": "مفتاح API ملغى.",
   "API_SCOPE_FORBIDDEN": "النطاق المطلوب: {scope}.",

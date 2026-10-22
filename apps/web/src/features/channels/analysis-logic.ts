@@ -25,7 +25,7 @@ export const summaryCounts = (dto: Pick<AnalysisDto, 'items' | 'postsDone'>) => 
 
 /* ---------- rows ---------- */
 /** Editable copy of one detected product; `price` and `quantity` are the digits typed in the fields. */
-export type RowEdit = { selected: boolean; name: string; price: string; quantity: string; category: string };
+export type RowEdit = { selected: boolean; name: string; price: string; quantity: string; category: string; isService?: boolean };
 export type Edits = Record<string, RowEdit>;
 export type RowStatus = 'new' | 'exists' | 'price_missing';
 
@@ -35,7 +35,7 @@ const digits = (n: number | null | undefined): string => (typeof n === 'number' 
  * The stock is not written on a post: it starts at 1 and the merchant corrects it.
  */
 export const initialEdits = (items: readonly AnalysisItem[]): Edits =>
-  Object.fromEntries(items.map((i) => [i.key, { selected: !i.duplicateOf && (i.price ?? 0) > 0, name: i.name, price: digits(i.price), quantity: '1', category: i.category ?? '' }]));
+  Object.fromEntries(items.map((i) => [i.key, { selected: !i.duplicateOf && (i.price ?? 0) > 0, name: i.name, price: digits(i.price), quantity: '1', category: i.category ?? '', ...(i.isService ? { isService: true } : {}) }]));
 
 export const rowStatus = (item: Pick<AnalysisItem, 'duplicateOf'>, edit: Pick<RowEdit, 'price'> | undefined): RowStatus => (item.duplicateOf ? 'exists' : Number(edit?.price || 0) > 0 ? 'new' : 'price_missing');
 
@@ -47,7 +47,7 @@ export const rowIssues = (e: RowEdit): RowIssues => {
   if (!name) out.name = 'validation.required';
   else if (name.length > NAME_MAX) out.name = 'validation.length';
   if (!/^\d+$/.test(e.price) || Number(e.price) <= 0) out.price = 'validation.price';
-  if (!/^\d+$/.test(e.quantity) || Number(e.quantity) <= 0) out.quantity = 'validation.quantity';
+  if (!e.isService && (!/^\d+$/.test(e.quantity) || Number(e.quantity) <= 0)) out.quantity = 'validation.quantity';
   return out;
 };
 export const hasIssues = (e: RowEdit): boolean => Object.keys(rowIssues(e)).length > 0;
@@ -90,7 +90,7 @@ export const buildImport = (items: readonly AnalysisItem[], edits: Edits, import
     body: {
       items: rows.map((i) => {
         const e = edits[i.key]!;
-        return { name: e.name.trim(), description: i.description ?? null, price: Number(e.price), quantity: Number(e.quantity), category: e.category.trim() || null, imageUrl: i.imageUrl ?? null };
+        return { name: e.name.trim(), description: i.description ?? null, price: Number(e.price), quantity: e.isService ? 1 : Number(e.quantity), category: e.category.trim() || null, imageUrl: i.imageUrl ?? null, postId: i.postId, ...(e.isService ? { isService: true } : {}) };
       }),
     },
   };

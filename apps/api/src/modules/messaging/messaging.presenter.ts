@@ -35,6 +35,8 @@ export type ConversationContext = {
   unclearStreak?: number;
   /** why the AI does not answer this thread (banner "IA indisponible" / "Crédits épuisés"); cleared when it answers again */
   aiUnavailable?: 'credits' | 'quota' | 'error' | null;
+  /** A4: order details the customer gave (reported by the AI turn after turn), shown to the next turns as KNOWN CUSTOMER */
+  customer?: { name?: string; phone?: string; phone2?: string; wilaya?: string; commune?: string; address?: string };
 };
 export const contextOf = (c: Pick<Conversation, 'context'>): ConversationContext => (c.context && typeof c.context === 'object' && !Array.isArray(c.context) ? (c.context as ConversationContext) : {});
 

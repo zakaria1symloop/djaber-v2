@@ -187,6 +187,19 @@ describe('FL-01 — reply turn', () => {
     expect((await balanceOf(app, s.owner.workspaceId)).reserved).toBe(0);
     // GET /conversations/:id exposes the banner flag
     expect((await s.owner.get(`/conversations/${ko.conversationId}`).expect(200)).body.data).toMatchObject({ aiUnavailable: true, creditsExhausted: false });
+
+    // A3 (tester report 2026-10-20: the bot "stopped answering"): right away the thread stays with the team …
+    await resetAi();
+    const soon = await turn(s, sender, { text: 'allo ?' });
+    expect(soon.conversation).toMatchObject({ status: 'needs_human', aiPaused: true });
+    // … two minutes later the next customer message is answered by the AI again (nobody of the team wrote meanwhile)
+    const ctx = (await db.conversation.findUniqueOrThrow({ where: { id: ko.conversationId } })).context as any;
+    await db.conversation.update({ where: { id: ko.conversationId }, data: { context: { ...ctx, handoffAt: new Date(Date.now() - 3 * 60_000).toISOString() } } });
+    fakeAi(app).script('reply', { reply: 'La robe est à 4500 DA.', intent: 'INFO' });
+    const back = await turn(s, sender, { text: 'prix robe ?' });
+    expect(back.conversation).toMatchObject({ status: 'active', aiPaused: false });
+    expect((back.conversation.context as any).aiUnavailable).toBeNull();
+    expect(back.out.at(-1)).toMatchObject({ author: 'ai', text: 'La robe est à 4500 DA.' });
   });
 
   it('AT-AI-11 product card template is part of the prompt; the cards are still sent', async () => {
@@ -366,17 +379,17 @@ describe('tools', () => {
     expect(fakeAi(app).callsOf('reply')).toHaveLength(2); // the model was not even called again
   });
 
-  it('AT-AI-07 "annuler ma commande": candidates first, cancellation only after confirmation (through the orders port); a shipped order ⇒ handoff', async () => {
+  it('AT-AI-07 "annuler ma commande": candidates first, cancellation only after confirmation (through the orders port); an order the shop confirmed or shipped ⇒ handoff', async () => {
     const s = await shop();
     const port = app.app.get<OrderTools>(ORDER_TOOLS);
     const cancel = jest.spyOn(port, 'cancelOrder');
     const sender = newSender();
     const first = await turn(s, sender, { text: 'Bonjour' });
     const clientId = first.conversation.clientId!;
-    const order = await db.order.create({ data: { workspaceId: s.owner.workspaceId, number: 'CMD-2001', clientId, source: 'ai', clientName: 'Client', clientPhone: '0555123456', subtotal: 4500, total: 4900, status: 'confirmed' } });
+    const order = await db.order.create({ data: { workspaceId: s.owner.workspaceId, number: 'CMD-2001', clientId, source: 'ai', clientName: 'Client', clientPhone: '0555123456', subtotal: 4500, total: 4900, status: 'new' } });
     // default brain: "annuler" ⇒ cancel_order without confirmation ⇒ the open order is listed, nothing is cancelled
     const ask = await turn(s, sender, { text: 'je veux annuler ma commande' });
-    expect(ask.runs.at(-1)!.toolCalls[0]).toMatchObject({ name: 'cancel_order', result: { ok: true, candidates: [{ number: 'CMD-2001', total: 4900, status: 'confirmed' }] } });
+    expect(ask.runs.at(-1)!.toolCalls[0]).toMatchObject({ name: 'cancel_order', result: { ok: true, candidates: [{ number: 'CMD-2001', total: 4900, status: 'new' }] } });
     expect(cancel).not.toHaveBeenCalled();
     expect(ask.out.at(-1)!.text).toContain('CMD-2001');
     // confirmed ⇒ the port cancels THIS order through OrderEffects (M5); the model then hands off as scripted
@@ -395,7 +408,30 @@ describe('tools', () => {
     const shipped = await turn(s, other, { text: 'annuler ma commande svp' });
     expect(shipped.runs.at(-1)!.toolCalls[0]!.result).toEqual({ ok: false, error: { code: 'ORDER_NOT_CANCELLABLE' } });
     expect(shipped.conversation.status).toBe('needs_human');
+    // A8 (tester report 2026-10-20): an order the shop confirmed is never cancelled by the AI — the team handles it
+    const third = newSender();
+    const hi = await turn(s, third, { text: 'Bonjour' });
+    await db.order.create({ data: { workspaceId: s.owner.workspaceId, number: 'CMD-2003', clientId: hi.conversation.clientId!, source: 'ai', clientName: 'Client', clientPhone: '0555123458', subtotal: 1000, total: 1000, status: 'confirmed' } });
+    const confirmed = await turn(s, third, { text: 'annuler ma commande svp' });
+    expect(confirmed.runs.at(-1)!.toolCalls[0]!.result).toEqual({ ok: false, error: { code: 'ORDER_CONFIRMED_BY_SELLER', number: 'CMD-2003' }, hint: 'handoff' });
+    expect(confirmed.conversation.status).toBe('needs_human');
+    expect(cancel).toHaveBeenCalledTimes(1);
     cancel.mockRestore();
+  });
+
+  it('tester report 2026-10-20 A4: the details the customer gave are kept on the conversation and given to every next turn as KNOWN CUSTOMER', async () => {
+    const s = await shop();
+    const sender = newSender();
+    fakeAi(app).script('reply', { reply: 'Merci Amina, quelle commune ?', intent: 'SALE', customer: { name: 'Amina Benali', phone: '0555 12 34 56', wilaya: 'Blida' } });
+    const first = await turn(s, sender, { text: 'Amina Benali 0555123456 Blida' });
+    expect((first.conversation.context as any).customer).toEqual({ name: 'Amina Benali', phone: '0555 12 34 56', wilaya: 'Blida' });
+    // a later turn adds the commune; what was given before stays, even without being repeated
+    fakeAi(app).script('reply', { reply: 'Noté.', intent: 'SALE', customer: { commune: 'Blida', phone: '' } });
+    const second = await turn(s, sender, { text: 'commune Blida' });
+    expect((second.conversation.context as any).customer).toEqual({ name: 'Amina Benali', phone: '0555 12 34 56', wilaya: 'Blida', commune: 'Blida' });
+    await turn(s, sender, { text: 'je veux commander' });
+    const system = fakeAi(app).callsOf('reply').at(-1)!.system;
+    expect(system).toContain('KNOWN CUSTOMER (already given — confirm it in the recap, do not ask again): name=Amina Benali · phone=0555 12 34 56 · wilaya=Blida · commune=Blida');
   });
 
   it('AT-AI-19 "وين الطلبية ديالي؟" ⇒ `lookup_order` lists this client\'s open orders with the courier status; none ⇒ says so', async () => {

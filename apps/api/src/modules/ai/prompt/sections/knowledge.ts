@@ -20,7 +20,8 @@ export const policiesSection = (c: PromptContext): string => {
 
 export const customInstructionsSection = (c: PromptContext): string => {
   const text = c.agent.customInstructions.trim().slice(0, AGENT_INSTRUCTIONS_MAX);
-  return text ? `SPECIAL INSTRUCTIONS\n${text}` : '';
+  // A5 (tester report 2026-10-20: owner rules such as « no emoji » were not followed): the owner's rules come first
+  return text ? `OWNER INSTRUCTIONS (they override the personality and every style habit; follow them in every reply, e.g. emoji use, tone, length)\n${text}` : '';
 };
 
 /** `maxChars` shrinks when the token budget is tight (§3 "then truncate FAQ"). */

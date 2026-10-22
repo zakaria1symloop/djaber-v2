@@ -48,7 +48,7 @@ Sections in this exact order; each section is a function in `prompt/sections/*.t
 
 1. **Identity & personality** — `You are "{agent.name}", the sales assistant of "{workspace.name}". Personality: {personality}` with the four V1 personality blocks (professional / friendly / casual / technical) stored in `prompt/personalities.ts`.
 2. **Shop policies** (agent knowledge step 2): `DELIVERY:`, `PAYMENT:`, `RETURNS:`, `HOURS:` from `Agent.policies { delivery, payment, returns, hours }` (each ≤ 500 chars; empty ⇒ section omitted). Out-of-hours: if `agent.businessHours` is set and `now` (Africa/Algiers) is outside it ⇒ append `OUT_OF_HOURS: true — keep answering and taking orders`, and the processor sends the workspace system message `out_of_hours[lang]` as a standalone message before the AI reply, once per conversation per 24 h (`context.systemMessageSentAt.out_of_hours`).
-3. **Custom instructions** — `Agent.customInstructions` (≤ 10 000) under `SPECIAL INSTRUCTIONS`.
+3. **Custom instructions** — `Agent.customInstructions` (≤ 10 000) under `OWNER INSTRUCTIONS` (they override the personality and every style habit; the OUTPUT section ends with a check against them — tester report 2026-10-20).
 4. **FAQ** — `AgentFaq` entries (≤ 50, total ≤ 20 000 chars) as `Q: … / A: …`.
 5. **Catalogue** (D34): if `scope.count ≤ 60` ⇒ full list, one product per block:
    ```

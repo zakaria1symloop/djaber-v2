@@ -51,12 +51,31 @@ const GenerationSchema = z.object({
   proposedPolicies: z.object({ delivery: z.string().optional(), payment: z.string().optional(), returns: z.string().optional(), hours: z.string().optional() }).default({}),
 });
 const FaqSchema = z.object({ faq: z.array(z.object({ q: z.string(), a: z.string() })).default([]) });
-const PostSchema = z.object({ isProduct: z.boolean().default(false), name: z.string().default(''), description: z.string().nullable().default(null), price: z.number().nullable().default(null), category: z.string().nullable().default(null) });
+const PostSchema = z.object({ isProduct: z.boolean().default(false), kind: z.enum(['physical', 'service', 'digital']).catch('physical').default('physical'), name: z.string().default(''), description: z.string().nullable().default(null), price: z.number().nullable().default(null), category: z.string().nullable().default(null) });
 type Conv = { messages: { from: 'customer' | 'page'; text: string }[] };
 
 const GENERATION_PROMPT = 'You analyse past conversations between a shop page and its customers. Reply as JSON { "summary": string, "languages": [{ "code": string, "pct": number }], "topQuestions": [{ "question": string, "count": number }], "tone": string, "proposedInstructions": string, "proposedFaq": [{ "q": string, "a": string }], "proposedPolicies": { "delivery"?: string, "payment"?: string, "returns"?: string, "hours"?: string } }. Only use facts stated by the page in the conversations; never invent a price or a policy.';
 const FAQ_PROMPT = 'From these conversations between a shop page and its customers, extract the frequent customer questions that the page answered. Reply as JSON { "faq": [{ "q": string, "a": string }] } with the answer the page gave. Never invent an answer.';
-const POST_PROMPT = 'This is a post of a shop page (caption + picture). Is it a product for sale? Reply as JSON { "isProduct": boolean, "name": string, "description": string|null, "price": number|null, "category": string|null }. The price is in Algerian dinars and must be written in the caption; otherwise null.';
+const POST_PROMPT =
+  'This is a post of a shop page (caption + picture). Is it something offered for sale? Reply as JSON { "isProduct": boolean, "kind": "physical"|"service"|"digital", "name": string, "description": string|null, "price": number|null, "category": string|null }. kind: "physical" = an item shipped from a stock; "service" = work done for the customer (repair, course, design, booking, beauty…); "digital" = delivered online (subscription, account, code, file, template). The price is in Algerian dinars and must be written in the caption; otherwise null.';
+
+/**
+ * A1: two names of one product (« Robe kabyle brodée » / « robe kabyle - brodée main »): the same folded name, one name
+ * containing every word of the other (2 words at least), or 3 words of 4 in common.
+ */
+export const sameProductName = (a: string, b: string): boolean => {
+  const fa = fold(a);
+  const fb = fold(b);
+  if (!fa || !fb) return false;
+  if (fa === fb) return true;
+  const words = (s: string) => new Set(s.split(/[^a-z0-9\u0600-\u06ff]+/).filter((w) => w.length >= 2));
+  const wa = words(fa);
+  const wb = words(fb);
+  const [small, large] = wa.size <= wb.size ? [wa, wb] : [wb, wa];
+  const common = [...small].filter((w) => large.has(w)).length;
+  if (small.size >= 2 && common === small.size) return true;
+  return common / new Set([...wa, ...wb]).size >= 0.75;
+};
 
 /** The generation result with the merchant's review applied (`POST /agents/generate/:jobId/apply { override }`). */
 export const applyOverride = (r: AgentGenerationResult, o: ApplyGenerationInput['override']): AgentGenerationResult => {
@@ -403,7 +422,7 @@ export class PageService implements OnModuleInit {
             // the same product posted twice appears once
             if (byName.has(key)) continue;
             byName.set(key, post.id);
-            items.push({ key: post.id, postId: post.id, name: p.name.trim().slice(0, 255), description: p.description?.trim().slice(0, 5000) || null, price: p.price && p.price > 0 ? Math.round(p.price) : null, category: p.category?.trim() || null, imageUrl: post.imageUrl, duplicateOf: null });
+            items.push({ key: post.id, postId: post.id, name: p.name.trim().slice(0, 255), description: p.description?.trim().slice(0, 5000) || null, price: p.price && p.price > 0 ? Math.round(p.price) : null, category: p.category?.trim() || null, imageUrl: post.imageUrl, duplicateOf: null, ...(p.kind !== 'physical' ? { isService: true } : {}) });
           }
           cursor = pageOfPosts.nextCursor;
           await prisma.job.updateMany({ where: { id: jobId }, data: { result: { channelId, cursor, items, postsDone: done, postsTotal: cursor ? Math.max(done + 1, POSTS_MAX) : done } as unknown as Prisma.InputJsonValue } });
@@ -419,10 +438,12 @@ export class PageService implements OnModuleInit {
         }
         throw e;
       }
-      // products the catalogue already has are flagged, not hidden
+      // products the catalogue already has are flagged, not hidden: a post imported before (A1, tester report 2026-10-20:
+      // a page analysed again created its products again), else the same or a very close name
       const existing = await prisma.product.findMany({ where: { deletedAt: null }, select: { id: true, name: true } });
-      const have = new Map(existing.map((p) => [fold(p.name), p.id]));
-      for (const i of items) i.duplicateOf = have.get(fold(i.name)) ?? null;
+      const imported = await this.importedPosts(channelId);
+      const live = new Set(existing.map((p) => p.id));
+      for (const i of items) i.duplicateOf = (imported.get(i.postId) && live.has(imported.get(i.postId)!) ? imported.get(i.postId)! : null) ?? existing.find((p) => sameProductName(p.name, i.name))?.id ?? null;
       return { result: { channelId, cursor: null, items, postsDone: done, postsTotal: done } };
     });
   }
@@ -431,13 +452,32 @@ export class PageService implements OnModuleInit {
    * `POST /channels/:id/analysis/import { items[] }` — each reviewed row becomes a product through the shared product
    * rules (SKU `FB-<n>`, moderation per D36, `maxProducts`); the post picture is re-hosted as its first image.
    */
+  /** Post id → product id of every post imported from this page's analyses (kept on the analysis jobs, A1). */
+  private async importedPosts(channelId: string): Promise<Map<string, string>> {
+    const jobs = await prisma.job.findMany({ where: { workspaceId: TenantContext.workspaceId(), kind: 'analysis', payload: { path: ['channelId'], equals: channelId } }, select: { result: true } });
+    const out = new Map<string, string>();
+    for (const j of jobs) for (const [post, product] of Object.entries(((j.result ?? {}) as { imported?: Record<string, string> }).imported ?? {})) out.set(post, product);
+    return out;
+  }
+
   async importAnalysis(channelId: string, input: AnalysisImportInput): Promise<AnalysisImportResult> {
     await this.channelOrNotFound(channelId);
     const out: AnalysisImportResult = { created: [], failed: [] };
+    // A1: never a second product for a post already imported, nor for a name the catalogue already has
+    const live = await prisma.product.findMany({ where: { deletedAt: null }, select: { id: true, name: true } });
+    const liveIds = new Set(live.map((p) => p.id));
+    const imported = await this.importedPosts(channelId);
+    const added: Record<string, string> = {};
     const categories = await prisma.category.findMany({ where: { deletedAt: null }, select: { id: true, name: true } });
     const last = await prisma.$queryRaw<{ n: number | null }[]>`SELECT max(substring("sku" from '^FB-([0-9]+)$')::int) AS n FROM "Product" WHERE "workspaceId" = ${TenantContext.workspaceId()}::uuid AND "sku" ~ '^FB-[0-9]+$'`;
     let seq = (last[0]?.n ?? 0) + 1;
     for (const [index, item] of input.items.entries()) {
+      const fromPost = item.postId ? imported.get(item.postId) : undefined;
+      const twin = (fromPost && liveIds.has(fromPost) ? live.find((p) => p.id === fromPost) : undefined) ?? live.find((p) => sameProductName(p.name, item.name));
+      if (twin) {
+        out.failed.push({ index, code: 'ANALYSIS_PRODUCT_EXISTS', message: this.i18n.t(TenantContext.get().locale, 'error.ANALYSIS_PRODUCT_EXISTS', { name: twin.name }) });
+        continue;
+      }
       // unknown category names are created ("catégories créées si nouvelles" of the CHN-08 review footer)
       let categoryId = item.category ? (categories.find((c) => fold(c.name) === fold(item.category!))?.id ?? null) : null;
       if (item.category && !categoryId) {
@@ -451,7 +491,8 @@ export class PageService implements OnModuleInit {
         let product;
         for (let attempt = 0; ; attempt++) {
           try {
-            product = (await this.products.create({ name: item.name, description: item.description ?? undefined, price: item.price, stock: item.quantity, sku: `FB-${String(seq).padStart(4, '0')}`, categoryId: categoryId ?? undefined } as never, 'import')).data;
+            // A2: a service / digital offer has no stock
+            product = (await this.products.create({ name: item.name, description: item.description ?? undefined, price: item.price, ...(item.isService ? { trackStock: false, stock: null } : { stock: item.quantity }), sku: `FB-${String(seq).padStart(4, '0')}`, categoryId: categoryId ?? undefined } as never, 'import')).data;
             seq++;
             break;
           } catch (e) {
@@ -468,9 +509,20 @@ export class PageService implements OnModuleInit {
           if (img) await this.images.upload(product.id, { buffer: img.body, mimetype: img.mime, size: img.body.length, originalname: 'post.jpg' }).catch(() => undefined);
         }
         out.created.push({ key: item.name, productId: product.id, sku: product.sku });
+        live.push({ id: product.id, name: product.name });
+        liveIds.add(product.id);
+        if (item.postId) added[item.postId] = product.id;
       } catch (e) {
         if (!(e instanceof AppException)) throw e;
         out.failed.push({ index, code: e.code, message: this.i18n.t(TenantContext.get().locale, `error.${e.code}`, e.params) });
+      }
+    }
+    // the imported posts are remembered on the page's last analysis (the next analysis flags them, A1)
+    if (Object.keys(added).length) {
+      const last = await this.latestAnalysis(channelId);
+      if (last) {
+        const r = (last.result ?? {}) as Record<string, unknown> & { imported?: Record<string, string> };
+        await prisma.job.updateMany({ where: { id: last.id }, data: { result: { ...r, imported: { ...(r.imported ?? {}), ...added } } as Prisma.InputJsonValue } });
       }
     }
     return out;
