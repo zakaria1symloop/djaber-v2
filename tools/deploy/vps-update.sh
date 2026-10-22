@@ -9,6 +9,22 @@ API_NAME="${API_NAME:-djaber-v2-api}"
 WORKER_NAME="${WORKER_NAME:-djaber-v2-worker}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 
+echo "== 0/7 Checking pnpm"
+# corepack's pnpm 12 has no bin/pnpm.cjs any more (older corepack looks for it): when `pnpm` fails, run the
+# cached pnpm 12.4.2 through a wrapper for this script only (PATH of this run; other apps keep their pnpm)
+PNPM_DIR="$HOME/.cache/node/corepack/v1/pnpm/12.4.2"
+if ! pnpm -v >/dev/null 2>&1; then
+  SHIM="$HOME/.djaber-pnpm"
+  mkdir -p "$SHIM"
+  try() { printf '#!/bin/sh\nexec %s "$@"\n' "$1" > "$SHIM/pnpm"; chmod +x "$SHIM/pnpm"; "$SHIM/pnpm" -v >/dev/null 2>&1; }
+  try "\"$PNPM_DIR/pnpm\"" \
+    || try "node \"$PNPM_DIR/bin/pnpm.mjs\"" \
+    || { (cd "$PNPM_DIR" && node install.js >/dev/null 2>&1 || true); try "\"$PNPM_DIR/pnpm\"" || try "node \"$PNPM_DIR/bin/pnpm.mjs\""; } \
+    || { echo "No working pnpm 12.4.2 (looked in $PNPM_DIR) — stop, nothing changed."; exit 1; }
+  export PATH="$SHIM:$PATH"
+fi
+echo "   pnpm $(pnpm -v)"
+
 echo "== 1/7 Finding the Djaber v2 processes in pm2 ($API_NAME, $WORKER_NAME)"
 export API_NAME WORKER_NAME
 DETECT="$(pm2 jlist | node -e '
