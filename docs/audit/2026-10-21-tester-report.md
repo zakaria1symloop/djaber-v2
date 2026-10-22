@@ -20,7 +20,7 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 ## Superadmin — billing
 | # | Issue | Status |
 |---|---|---|
-| UX-007 | « + Paiement manuel » only switches to Invoices; no way to record a manual payment there or in « Paiements manuels » | todo |
+| UX-007 | « + Paiement manuel » only switches to Invoices; no way to record a manual payment there or in « Paiements manuels » | done |
 
 ## Superadmin — AI
 | # | Issue | Status |

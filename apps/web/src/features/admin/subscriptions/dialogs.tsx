@@ -4,14 +4,14 @@
 // 200 ⚠ INVOICE_PARTIAL_PAYMENT {remaining}; more ⇒ 422 on `amount`), "Abonnement — créer / modifier"
 // (SUBSCRIPTION_ALREADY_ACTIVE → edit the existing one), Prolonger la période, Accorder une remise, Résilier, Renvoyer
 // la relance, Exporter comptabilité.
-import type { AdminSubscriptionRowDto, PlanAdminDto } from '@djaber/shared';
+import type { AdminInvoiceRowDto, AdminSubscriptionRowDto, PlanAdminDto } from '@djaber/shared';
 import { Field, FormAlert, Input, NumberInput, Select, toast } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ApiError } from '@/lib/api';
 import { useT } from '@/lib/i18n';
 import { uploadWithProgress } from '@/lib/upload';
-import { adminWrite, adminWriteRaw, useAdminGet, useAdminInvalidate, useAdminJobToast } from '../api';
+import { adminWrite, adminWriteRaw, useAdminGet, useAdminInvalidate, useAdminJobToast, useAdminList } from '../api';
 import { AdminDialog, NO_ERRORS, ReasonField, reasonOk, toServerErrors, useOnOpen, type ServerErrors } from '../dialog-kit';
 import { WorkspacePicker } from '../pickers';
 import { useFormats } from '../ui';
@@ -364,6 +364,70 @@ export function AccountingExportDialog({ open, onClose }: { open: boolean; onClo
           <option value="xlsx">XLSX</option>
         </Select>
       </Field>
+    </AdminDialog>
+  );
+}
+
+/**
+ * « + Paiement manuel » (tester report 2026-10-21 UX-007: the button only switched to the Factures tab). D71: a manual
+ * payment settles an invoice — pick the workspace, then one of its open invoices (unpaid or upcoming renewal); the
+ * payment itself is `ManualPaymentDialog`. No open invoice ⇒ says so and where the payment belongs instead.
+ */
+export function RecordPaymentDialog({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (invoice: InvoiceRef) => void }) {
+  const t = useT();
+  const f = useFormats();
+  const [ws, setWs] = useState<{ id: string; name: string } | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
+  useOnOpen(open, () => {
+    setWs(null);
+    setPicked(null);
+  });
+  const q = useAdminList<AdminInvoiceRowDto>('/admin/invoices', { workspaceId: ws?.id ?? '', status: 'unpaid,upcoming', pageSize: 20 }, { enabled: open && !!ws });
+  const rows = (q.data?.rows ?? []).filter((i) => i.remaining > 0);
+  const chosen = rows.find((i) => i.id === picked) ?? null;
+  return (
+    <AdminDialog
+      open={open}
+      onClose={onClose}
+      testId="dlg-record-payment"
+      title={t('admin.subs.pay.pickTitle')}
+      submitLabel={t('action.continue')}
+      disabled={!chosen}
+      note={t('admin.subs.pay.pickNote')}
+      onSubmit={() => chosen && onPick({ id: chosen.id, number: chosen.number, amount: chosen.amount, remaining: chosen.remaining, workspace: chosen.workspace })}
+    >
+      <Field label={t('admin.subs.edit.workspace')} required htmlFor="rp-ws">
+        <WorkspacePicker
+          id="rp-ws"
+          value={ws?.id ?? null}
+          onChange={(_, w) => {
+            setWs(w);
+            setPicked(null);
+          }}
+        />
+      </Field>
+      {!ws ? null : q.isPending ? (
+        <p className="ts-label-meta text-text-muted">{t('common.loading')}</p>
+      ) : q.isError ? (
+        <FormAlert>{t('state.list.error.title')}</FormAlert>
+      ) : rows.length === 0 ? (
+        <FormAlert tone="info">
+          <span data-testid="rp-no-invoice">{t('admin.subs.pay.noOpenInvoice', { workspace: ws.name })}</span>
+        </FormAlert>
+      ) : (
+        <fieldset className="flex flex-col gap-1.5" data-testid="rp-invoices">
+          <legend className="mb-1 ts-label-micro uppercase text-text-muted">{t('admin.subs.pay.pickInvoice')}</legend>
+          {rows.map((i) => (
+            <label key={i.id} className="flex cursor-pointer items-center gap-3 rounded-card border border-line-edge px-3 py-2 text-[13px] has-[:checked]:border-line-lit">
+              <input type="radio" name="rp-invoice" value={i.id} checked={picked === i.id} onChange={() => setPicked(i.id)} />
+              <span dir="ltr" className="font-mono text-[12px]">{i.number}</span>
+              <span className="min-w-0 flex-1 truncate text-text-secondary">{i.label}</span>
+              <span className="text-text-muted">{t(`enum.Invoice.status.${i.status}`)}</span>
+              <span dir="ltr">{f.money(i.remaining)}</span>
+            </label>
+          ))}
+        </fieldset>
+      )}
     </AdminDialog>
   );
 }

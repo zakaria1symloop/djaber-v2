@@ -124,8 +124,15 @@ test('12 §26 subscriptions: dunning row RELANCE J0, manual payment partial (INV
   await expect(page.getByText(/Paiement partiel enregistré : reste/)).toBeVisible();
   await expect(row.locator('[data-pill]')).toHaveText('RELANCE J0');
 
-  await row.getByRole('button', { name: 'Actions' }).click();
-  await page.getByRole('menuitem', { name: 'Marquer la facture payée (paiement manuel)' }).click();
+  // the rest through « + Paiement manuel » (UX-007): workspace → its open invoice → the same payment dialog
+  await page.getByTestId('manual-payment-cta').click();
+  const pick = page.getByTestId('dlg-record-payment');
+  await pick.getByRole('combobox').first().click();
+  await page.getByRole('textbox', { name: "Nom de l'espace, propriétaire…" }).fill(wsName);
+  await page.getByRole('option', { name: new RegExp(wsName) }).click();
+  await pick.getByTestId('rp-invoices').getByRole('radio').first().check();
+  await page.getByTestId('dlg-record-payment-submit').click();
+  await expect(page.getByRole('dialog')).toContainText(sub.unpaidInvoice!.number);
   await dlg.getByLabel('Référence').fill(`CCP-${tag}-2`);
   await expect(page.getByTestId('dlg-manual-payment-submit')).toHaveText('Confirmer et réactiver');
   await page.getByTestId('dlg-manual-payment-submit').click();

@@ -1117,5 +1117,11 @@
  "admin.credits.promo.redemptionsNote": "A discount counts once the subscription payment is confirmed: a pending or abandoned payment does not count.",
  "admin.credits.pack.delete": "Delete the pack",
  "admin.credits.pack.deleteConfirm": "Delete the pack « {name} »? It was never bought; this cannot be undone.",
- "admin.credits.pack.deleted": "Pack « {name} » deleted."
+ "admin.credits.pack.deleted": "Pack « {name} » deleted.",
+ "admin.subs.pay.pickTitle": "Record a manual payment",
+ "admin.subs.pay.pickNote": "A manual payment (transfer, CCP, cash) settles an invoice of the workspace: amount = what is left ⇒ invoice paid and subscription reactivated; less ⇒ partial payment.",
+ "admin.subs.pay.pickInvoice": "Invoice to settle",
+ "admin.subs.pay.noOpenInvoice": "No invoice to settle for {workspace}. The renewal invoice shows up 7 days before the due date; a subscription paid offline is created with « Create a subscription » (provider Manual).",
+ "admin.subs.empty.paymentsHint": "Transfers, CCP and cash payments recorded on an invoice show up here, with their reference and proof.",
+ "admin.subs.pay.openInvoice": "Open the invoice"
 }

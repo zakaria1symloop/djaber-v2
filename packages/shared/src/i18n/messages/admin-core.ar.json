@@ -1117,5 +1117,11 @@
  "admin.credits.promo.redemptionsNote": "يُحتسب الخصم بعد تأكيد دفع الاشتراك: الدفع المعلّق أو المتروك لا يُحتسب.",
  "admin.credits.pack.delete": "حذف الباقة",
  "admin.credits.pack.deleteConfirm": "حذف الباقة «{name}»؟ لم تُشترَ أبدًا؛ هذا الإجراء نهائي.",
- "admin.credits.pack.deleted": "تم حذف الباقة «{name}»."
+ "admin.credits.pack.deleted": "تم حذف الباقة «{name}».",
+ "admin.subs.pay.pickTitle": "تسجيل دفعة يدوية",
+ "admin.subs.pay.pickNote": "الدفعة اليدوية (تحويل، CCP، نقدًا) تسدّد فاتورة للفضاء: مبلغ يساوي الباقي ⇐ فاتورة مدفوعة واشتراك مُعاد تفعيله؛ مبلغ أقل ⇐ دفعة جزئية.",
+ "admin.subs.pay.pickInvoice": "الفاتورة المراد تسديدها",
+ "admin.subs.pay.noOpenInvoice": "لا توجد فاتورة للتسديد لـ {workspace}. تظهر فاتورة التجديد قبل 7 أيام من الاستحقاق؛ الاشتراك المدفوع خارج المنصّة يُنشأ عبر «إنشاء اشتراك» (المزوّد: يدوي).",
+ "admin.subs.empty.paymentsHint": "تظهر هنا التحويلات وCCP والدفع النقدي المسجّلة على فاتورة، مع مرجعها وإثباتها.",
+ "admin.subs.pay.openInvoice": "عرض الفاتورة"
 }

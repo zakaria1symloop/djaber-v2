@@ -10,7 +10,7 @@ import { useAdminGet, useAdminList } from '@/features/admin/api';
 import { AdminFilterBar, AdminListBody, type AdminFilter } from '@/features/admin/list-kit';
 import { usePlatform } from '@/features/admin/platform';
 import { SUBSCRIPTIONS_LIST } from '@/features/admin/specs';
-import { AccountingExportDialog, ManualPaymentDialog, SubscriptionActionDialog, SubscriptionDialog, type InvoiceRef, type SubAction } from '@/features/admin/subscriptions/dialogs';
+import { AccountingExportDialog, ManualPaymentDialog, RecordPaymentDialog, SubscriptionActionDialog, SubscriptionDialog, type InvoiceRef, type SubAction } from '@/features/admin/subscriptions/dialogs';
 import { AdminPill, Money, ShortDate, useFormats } from '@/features/admin/ui';
 import { ChangePlanDialog } from '@/features/admin/workspaces/dialogs';
 import { toMenuActions } from '@/lib/actions';
@@ -44,6 +44,7 @@ export default function AdminSubscriptionsPage() {
   const plans = useAdminGet<PlanAdminDto[]>('/admin/plans');
   const kpis = subs.data?.meta?.kpis;
   const [pay, setPay] = useState<InvoiceRef | null>(null);
+  const [picking, setPicking] = useState(false);
   const [subDlg, setSubDlg] = useState<{ editing: AdminSubscriptionRowDto | null } | null>(null);
   const [action, setAction] = useState<{ sub: AdminSubscriptionRowDto; action: SubAction } | null>(null);
   const [planFor, setPlanFor] = useState<AdminSubscriptionRowDto | null>(null);
@@ -148,6 +149,17 @@ export default function AdminSubscriptionsPage() {
     { key: 'by', header: t('admin.subs.col.by'), hideBelow: 'lg', cell: (p) => (p.recordedBy ? `${p.recordedBy.firstName} ${p.recordedBy.lastName}`.trim() : '—') },
     { key: 'proof', header: t('admin.subs.pay.proof'), hideBelow: 'xl', cell: (p) => (p.proofUrl ? <a href={p.proofUrl} target="_blank" rel="noreferrer" className="text-accent-inbound hover:underline">{t('admin.subs.col.proofOpen')}</a> : '—') },
   ];
+  // a recorded payment: its invoice (Factures tab, searched by number) and its proof
+  const payMenu = (p: AdminPaymentRowDto) => (
+    <ActionsMenu
+      label={t('action.actions')}
+      heading={p.invoice?.number ?? p.workspace.name}
+      actions={[
+        ...(p.invoice ? [{ key: 'invoice', label: t('admin.subs.pay.openInvoice'), onSelect: () => list.set({ tab: 'invoices', q: p.invoice!.number, filters: Object.fromEntries(Object.keys(SUBSCRIPTIONS_LIST.filters).map((x) => [x, null])) }) }] : []),
+        ...(p.proofUrl ? [{ key: 'proof', label: t('admin.subs.col.proofOpen'), onSelect: () => window.open(p.proofUrl!, '_blank', 'noopener,noreferrer') }] : []),
+      ]}
+    />
+  );
   const packColumns: Column<AdminPackPurchaseRowDto>[] = [
     { key: 'ws', header: t('admin.ws.col.workspace'), hideable: false, cell: (p) => p.workspace.name },
     { key: 'pack', header: t('admin.subs.col.pack'), cell: (p) => `${p.pack.name} · ${f.num(p.pack.credits)}` },
@@ -175,7 +187,7 @@ export default function AdminSubscriptionsPage() {
             </Button>
           ) : null}
           {write ? (
-            <Button variant="primary" onClick={() => list.set({ tab: 'invoices', filters: { status: ['unpaid'] } })} data-testid="manual-payment-cta">
+            <Button variant="primary" onClick={() => setPicking(true)} data-testid="manual-payment-cta">
               {t('admin.subs.pay.cta')}
             </Button>
           ) : null}
@@ -206,10 +218,18 @@ export default function AdminSubscriptionsPage() {
       ) : tab === 'invoices' ? (
         <AdminListBody testId="invoices-list" query={invoices} list={list} columns={invColumns} rowKey={(i) => i.id} label={t('admin.subs.tab.invoices')} entity={t('admin.subs.entity.invoice')} empty={{ title: t('admin.subs.empty.invoices') }} rowActions={invMenu} />
       ) : tab === 'payments' ? (
-        <AdminListBody testId="payments-list" query={payments} list={list} columns={payColumns} rowKey={(p) => p.id} label={t('admin.subs.tab.payments')} entity={t('admin.subs.entity.payment')} empty={{ title: t('admin.subs.empty.payments') }} />
+        <AdminListBody testId="payments-list" query={payments} list={list} columns={payColumns} rowKey={(p) => p.id} label={t('admin.subs.tab.payments')} entity={t('admin.subs.entity.payment')} empty={{ title: t('admin.subs.empty.payments'), description: t('admin.subs.empty.paymentsHint'), action: write ? { label: t('admin.subs.pay.cta'), onClick: () => setPicking(true) } : undefined }} rowActions={payMenu} />
       ) : (
         <AdminListBody testId="packs-list" query={packs} list={list} columns={packColumns} rowKey={(p) => p.id} label={t('admin.subs.tab.packs')} entity={t('admin.subs.entity.purchase')} empty={{ title: t('admin.subs.empty.packs') }} />
       )}
+      <RecordPaymentDialog
+        open={picking}
+        onClose={() => setPicking(false)}
+        onPick={(inv) => {
+          setPicking(false);
+          setPay(inv);
+        }}
+      />
       <ManualPaymentDialog invoice={pay} open={!!pay} onClose={() => setPay(null)} />
       <SubscriptionDialog
         key={subDlg?.editing?.id ?? 'new'}
