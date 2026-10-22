@@ -13,8 +13,15 @@ import { useT } from '@/lib/i18n';
 import { adminWrite, useAdminInvalidate } from '../api';
 import { AdminDialog, NO_ERRORS, ReasonField, reasonOk, toServerErrors, useOnOpen, type ServerErrors } from '../dialog-kit';
 
-type TestResult = { state: KeyTestState; latency?: number };
+/** `reason` / `status`: why it failed (`details` of AI_PROVIDER_UNREACHABLE); `missing`: models the provider does not list (UX-013). */
+type TestResult = { state: KeyTestState; latency?: number; reason?: string; status?: number; missing?: string[] };
 const testState = (e: unknown): KeyTestState => (e instanceof ApiError ? (e.code === 'AI_PROVIDER_KEY_REJECTED' ? 'rejected' : e.code === 'AI_PROVIDER_UNREACHABLE' ? 'unreachable' : e.code === 'AI_PROVIDER_NO_KEY' ? 'no_key' : 'rejected') : 'unreachable');
+
+/** The reason of a failed test, from the API error (`details.reason`, `details.status`). */
+export const testFailureOf = (e: unknown): Pick<TestResult, 'reason' | 'status'> => {
+  const d = e instanceof ApiError ? (e.body.details as { reason?: unknown; status?: unknown } | null | undefined) : null;
+  return { reason: typeof d?.reason === 'string' ? d.reason : e instanceof ApiError ? undefined : 'network', status: typeof d?.status === 'number' ? d.status : undefined };
+};
 
 export function KeyResult({ r }: { r: TestResult }) {
   const t = useT();
@@ -22,6 +29,8 @@ export function KeyResult({ r }: { r: TestResult }) {
   return (
     <KeyTestRow state={r.state} pill={pill}>
       {t(`admin.ai.key.state.${r.state}`)}
+      {r.reason && t.has(`admin.ai.key.reason.${r.reason}`) ? <span className="block" data-testid="key-test-reason">{t(`admin.ai.key.reason.${r.reason}`, { status: r.status ?? '' })}</span> : null}
+      {r.missing?.length ? <span className="block text-accent-starred" data-testid="key-test-missing">{t('admin.ai.key.missingModels', { models: r.missing.join(', ') })}</span> : null}
     </KeyTestRow>
   );
 }
@@ -47,9 +56,9 @@ export function ProviderKeyDialog({ providers, initial, open, onClose }: { provi
     setResult({ state: 'testing' });
     try {
       const r = await test.mutateAsync({ key, apiKey: apiKey.trim() });
-      setResult({ state: 'ok', latency: r.latencyMs });
+      setResult({ state: 'ok', latency: r.latencyMs, missing: r.missingModels });
     } catch (e) {
-      setResult({ state: testState(e) });
+      setResult({ state: testState(e), ...testFailureOf(e) });
     }
   };
   const submit = async () => {

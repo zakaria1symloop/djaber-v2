@@ -1127,5 +1127,12 @@
  "admin.presets.dialog.nameAr": "Nom (AR)",
  "admin.presets.dialog.nameEn": "Nom (EN)",
  "admin.presets.dialog.nameFallback": "Vide : le nom français est affiché.",
- "admin.presets.missingFallback": "{locales} incomplet : les agents dans cette langue reçoivent les textes et instructions en français."
+ "admin.presets.missingFallback": "{locales} incomplet : les agents dans cette langue reçoivent les textes et instructions en français.",
+ "admin.ai.key.reason.timeout": "Aucune réponse en 10 s (délai dépassé) : réessayez ; si cela dure, le serveur n'atteint pas le fournisseur.",
+ "admin.ai.key.reason.network": "Connexion impossible au fournisseur (réseau / DNS / pare-feu du serveur) — la clé n'a pas pu être vérifiée.",
+ "admin.ai.key.reason.endpoint": "Adresse du service introuvable chez le fournisseur (HTTP {status}).",
+ "admin.ai.key.reason.rate_limited": "Quota ou limite de débit atteint chez le fournisseur (HTTP {status}) : la clé répond, réessayez plus tard ou vérifiez le quota du compte.",
+ "admin.ai.key.reason.provider_down": "Le fournisseur est en panne ou surchargé (HTTP {status}).",
+ "admin.ai.key.reason.http_error": "Le fournisseur a refusé la requête (HTTP {status}).",
+ "admin.ai.key.missingModels": "Modèles inconnus de ce fournisseur avec cette clé : {models} — corrigez ou désactivez-les dans « Modèles »."
 }

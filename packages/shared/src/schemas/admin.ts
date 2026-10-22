@@ -490,7 +490,14 @@ export type AiProviderAdminDto = {
   health: { runs24h: number; errors24h: number; errorRatePct: number | null; thresholdPct: number; failoverActive: boolean };
 };
 /** `POST /admin/ai-providers/:key/test` → 200 `{ ok: true, latencyMs }`; failures are errors: 401 AI_PROVIDER_KEY_REJECTED {provider} · 503 AI_PROVIDER_UNREACHABLE {provider} · 422 AI_PROVIDER_NO_KEY. */
-export type AiProviderTestDto = { ok: true; latencyMs: number; model: string | null };
+/**
+ * `POST /admin/ai-providers/:key/test` — the key lists the provider's models (UX-013). `missingModels` = active models of
+ * this provider the provider does not list (retired / misspelled id: calls to them would fail). A failure is
+ * `AI_PROVIDER_KEY_REJECTED` or `AI_PROVIDER_UNREACHABLE` with `details.reason` ∈ `AI_PROVIDER_TEST_REASONS` (+ `status`).
+ */
+export type AiProviderTestDto = { ok: true; latencyMs: number; model: string | null; missingModels: string[] };
+export const AI_PROVIDER_TEST_REASONS = ['timeout', 'network', 'endpoint', 'rate_limited', 'provider_down', 'http_error'] as const;
+export type AiProviderTestReason = (typeof AI_PROVIDER_TEST_REASONS)[number];
 const modelFields = {
   providerKey: z.enum(AiProviderKeyValues),
   modelId: required(120),

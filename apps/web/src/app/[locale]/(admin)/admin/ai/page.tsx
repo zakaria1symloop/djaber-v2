@@ -8,11 +8,10 @@ import { useMutation } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useConfirmAction } from '@/components/confirm-action';
 import { AdminPage, AdminQueryError } from '@/features/admin/admin-page';
-import { ModelDialog, PricingVersionDialog, ProviderKeyDialog, RouteDialog } from '@/features/admin/ai/dialogs';
+import { ModelDialog, PricingVersionDialog, ProviderKeyDialog, RouteDialog, testFailureOf } from '@/features/admin/ai/dialogs';
 import { adminWrite, useAdminGet, useAdminInvalidate } from '@/features/admin/api';
 import { usePlatform } from '@/features/admin/platform';
 import { useFormats } from '@/features/admin/ui';
-import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 
@@ -53,9 +52,12 @@ export default function AdminAiPage() {
     for (const p of list) {
       try {
         const r = await testOne.mutateAsync(p.key);
-        toast(t('admin.ai.provider.testOk', { name: p.displayName, ms: r.latencyMs }));
+        toast(r.missingModels?.length ? { tone: 'warning', message: `${t('admin.ai.provider.testOk', { name: p.displayName, ms: r.latencyMs })} ${t('admin.ai.key.missingModels', { models: r.missingModels.join(', ') })}` } : t('admin.ai.provider.testOk', { name: p.displayName, ms: r.latencyMs }));
       } catch (e) {
-        toast({ tone: 'danger', message: `${p.displayName} · ${e instanceof ApiError ? e.code : errorMessage(e, t)}` });
+        // the reason (timeout, network, endpoint, quota, provider down…) rather than the code alone (UX-013)
+        const f = testFailureOf(e);
+        const why = f.reason && t.has(`admin.ai.key.reason.${f.reason}`) ? t(`admin.ai.key.reason.${f.reason}`, { status: f.status ?? '' }) : null;
+        toast({ tone: 'danger', message: `${p.displayName} · ${errorMessage(e, t)}${why ? ` — ${why}` : ''}` });
       }
     }
     void invalidate('/admin/ai-providers');

@@ -135,6 +135,16 @@ const toProviderError = (provider: AiProviderName, error: unknown, aborted: bool
   return new AiProviderError('provider_error', provider, `${provider} provider_error`);
 };
 
+type Row = Record<string, unknown>;
+const idsOf = (list: unknown, field: string) => (Array.isArray(list) ? (list as Row[]).map((m) => String(m?.[field] ?? '')).filter(Boolean) : []);
+/** Model list endpoint of each provider (key test): the official API hosts, the key in a header (never in the URL). */
+const MODEL_LISTS: Record<AiProviderName, { url: string; headers: (key: string) => Record<string, string>; ids: (json: unknown) => string[] }> = {
+  openai: { url: 'https://api.openai.com/v1/models', headers: (k) => ({ Authorization: `Bearer ${k}` }), ids: (j) => idsOf((j as Row | null)?.data, 'id') },
+  groq: { url: 'https://api.groq.com/openai/v1/models', headers: (k) => ({ Authorization: `Bearer ${k}` }), ids: (j) => idsOf((j as Row | null)?.data, 'id') },
+  anthropic: { url: 'https://api.anthropic.com/v1/models?limit=1000', headers: (k) => ({ 'x-api-key': k, 'anthropic-version': '2023-06-01' }), ids: (j) => idsOf((j as Row | null)?.data, 'id') },
+  google: { url: 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', headers: (k) => ({ 'x-goog-api-key': k }), ids: (j) => idsOf((j as Row | null)?.models, 'name').map((n) => n.replace(/^models\//, '')) },
+};
+
 export class LiveAiGateway implements AiGateway {
   readonly driver = 'live' as const;
   constructor(private readonly options: LiveAiGatewayOptions = {}) {}
@@ -159,6 +169,28 @@ export class LiveAiGateway implements AiGateway {
       default:
         throw new AiProviderError('provider_error', model.provider, `${String(model.provider)} provider_error`);
     }
+  }
+
+  async checkKey(provider: AiProviderName, apiKey: string, timeoutMs: number): Promise<{ models: string[] }> {
+    const spec = MODEL_LISTS[provider];
+    if (!spec) throw new AiProviderError('provider_error', provider, `${String(provider)} provider_error`, undefined, 'unsupported');
+    const key = apiKey.trim();
+    if (!key) throw new AiProviderError('no_key', provider, `${provider} no_key`);
+    let res: Response;
+    try {
+      res = await this.fetch(spec.url, { method: 'GET', headers: { Accept: 'application/json', ...spec.headers(key) }, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (e) {
+      if (isTimeout(e) || isTimeout((e as { cause?: unknown } | null)?.cause)) throw new AiProviderError('timeout', provider, `${provider} timeout`);
+      throw new AiProviderError('provider_error', provider, `${provider} network`, undefined, 'network');
+    }
+    if (res.status === 401 || res.status === 403) throw new AiProviderError('provider_rejected', provider, `${provider} ${res.status}`, res.status);
+    if (!res.ok) {
+      // Google answers 400 API_KEY_INVALID to a wrong key
+      const text = await res.text().catch(() => '');
+      if (provider === 'google' && res.status === 400 && /API_KEY_INVALID|API key not valid/i.test(text)) throw new AiProviderError('provider_rejected', provider, `${provider} 400`, 400);
+      throw new AiProviderError('provider_error', provider, `${provider} ${res.status}`, res.status);
+    }
+    return { models: spec.ids(await res.json().catch(() => null)) };
   }
 
   async generate(req: AiGenerateRequest): Promise<AiGenerateResult> {

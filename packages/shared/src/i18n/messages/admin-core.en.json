@@ -1127,5 +1127,12 @@
  "admin.presets.dialog.nameAr": "Name (AR)",
  "admin.presets.dialog.nameEn": "Name (EN)",
  "admin.presets.dialog.nameFallback": "Empty: the French name is shown.",
- "admin.presets.missingFallback": "{locales} incomplete: agents in that language get the French texts and instructions."
+ "admin.presets.missingFallback": "{locales} incomplete: agents in that language get the French texts and instructions.",
+ "admin.ai.key.reason.timeout": "No answer within 10 s (timeout): try again; if it lasts, the server cannot reach the provider.",
+ "admin.ai.key.reason.network": "Could not connect to the provider (network / DNS / server firewall) — the key could not be checked.",
+ "admin.ai.key.reason.endpoint": "Service address not found at the provider (HTTP {status}).",
+ "admin.ai.key.reason.rate_limited": "Quota or rate limit reached at the provider (HTTP {status}): the key answers, try later or check the account quota.",
+ "admin.ai.key.reason.provider_down": "The provider is down or overloaded (HTTP {status}).",
+ "admin.ai.key.reason.http_error": "The provider refused the request (HTTP {status}).",
+ "admin.ai.key.missingModels": "Models this provider does not know with this key: {models} — fix or disable them in « Models »."
 }

@@ -1127,5 +1127,12 @@
  "admin.presets.dialog.nameAr": "الاسم (AR)",
  "admin.presets.dialog.nameEn": "الاسم (EN)",
  "admin.presets.dialog.nameFallback": "فارغ: يُعرض الاسم الفرنسي.",
- "admin.presets.missingFallback": "{locales} غير مكتمل: يتلقى الوكلاء بهذه اللغة النصوص والتعليمات بالفرنسية."
+ "admin.presets.missingFallback": "{locales} غير مكتمل: يتلقى الوكلاء بهذه اللغة النصوص والتعليمات بالفرنسية.",
+ "admin.ai.key.reason.timeout": "لا رد خلال 10 ثوانٍ (انتهت المهلة): أعد المحاولة؛ إن استمر ذلك فالخادم لا يصل إلى المزوّد.",
+ "admin.ai.key.reason.network": "تعذّر الاتصال بالمزوّد (الشبكة / DNS / جدار حماية الخادم) — لم يمكن التحقق من المفتاح.",
+ "admin.ai.key.reason.endpoint": "عنوان الخدمة غير موجود لدى المزوّد (HTTP {status}).",
+ "admin.ai.key.reason.rate_limited": "تم بلوغ الحصة أو حد المعدّل لدى المزوّد (HTTP {status}): المفتاح يستجيب، أعد المحاولة لاحقًا أو تحقّق من حصة الحساب.",
+ "admin.ai.key.reason.provider_down": "المزوّد معطّل أو مثقل (HTTP {status}).",
+ "admin.ai.key.reason.http_error": "رفض المزوّد الطلب (HTTP {status}).",
+ "admin.ai.key.missingModels": "نماذج غير معروفة لدى هذا المزوّد بهذا المفتاح: {models} — صحّحها أو عطّلها في «النماذج»."
 }

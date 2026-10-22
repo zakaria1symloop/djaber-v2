@@ -67,6 +67,11 @@ export interface AiGateway {
   readonly driver: 'fake' | 'live';
   generate(req: AiGenerateRequest): Promise<AiGenerateResult>;
   transcribe(req: AiTranscribeRequest): Promise<AiTranscribeResult>;
+  /**
+   * Admin key test (ADM-06): lists the provider's models with this key — no model id involved, so a wrong or retired model
+   * cannot make a good key look unreachable (tester report 2026-10-21 UX-013). Live driver only.
+   */
+  checkKey?(provider: AiProviderName, apiKey: string, timeoutMs: number): Promise<{ models: string[] }>;
 }
 
 /** Non-reply calls carry their input as one JSON line after this marker (the fake adapter reads it back). */

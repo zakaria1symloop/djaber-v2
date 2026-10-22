@@ -491,3 +491,35 @@ describe('the network guard of this spec', () => {
     expect(net.impl).not.toHaveBeenCalled();
   });
 });
+
+describe('admin key test — model list (tester report 2026-10-21 UX-013)', () => {
+  it('Groq: GET api.groq.com/openai/v1/models with the Bearer key ⇒ model ids', async () => {
+    const n = expectHost('api.groq.com');
+    n.reply({ json: { data: [{ id: 'llama-3.3-70b-versatile' }, { id: 'whisper-large-v3-turbo' }] } });
+    expect(await gateway.checkKey('groq', KEY, 10_000)).toEqual({ models: ['llama-3.3-70b-versatile', 'whisper-large-v3-turbo'] });
+    expect(n.calls[0]).toMatchObject({ method: 'GET', path: '/openai/v1/models', headers: { authorization: `Bearer ${KEY}` } });
+  });
+  it('Anthropic and Google: their own headers, the key never in the URL; Google ids without the `models/` prefix', async () => {
+    let n = expectHost('api.anthropic.com');
+    n.reply({ json: { data: [{ id: 'claude-x' }] } });
+    expect((await gateway.checkKey('anthropic', KEY, 10_000)).models).toEqual(['claude-x']);
+    expect(n.calls[0]!.headers).toMatchObject({ 'x-api-key': KEY, 'anthropic-version': '2023-06-01' });
+    n = expectHost('generativelanguage.googleapis.com');
+    n.reply({ json: { models: [{ name: 'models/gemini-2.0-flash' }] } });
+    expect((await gateway.checkKey('google', KEY, 10_000)).models).toEqual(['gemini-2.0-flash']);
+    expect(n.calls[0]!.headers['x-goog-api-key']).toBe(KEY);
+    expect(n.calls[0]!.url).not.toContain(KEY);
+  });
+  it('401 / Google 400 API_KEY_INVALID ⇒ provider_rejected; 404 / 429 / 503 keep their status; a network failure is said so', async () => {
+    let n = expectHost('api.groq.com');
+    n.reply({ status: 401, json: { error: { message: 'Invalid API Key' } } }, { status: 404 }, { status: 429 }, { status: 503 }, { throws: new TypeError('fetch failed') });
+    await expect(gateway.checkKey('groq', KEY, 10_000)).rejects.toMatchObject({ kind: 'provider_rejected', status: 401 });
+    await expect(gateway.checkKey('groq', KEY, 10_000)).rejects.toMatchObject({ kind: 'provider_error', status: 404 });
+    await expect(gateway.checkKey('groq', KEY, 10_000)).rejects.toMatchObject({ kind: 'provider_error', status: 429 });
+    await expect(gateway.checkKey('groq', KEY, 10_000)).rejects.toMatchObject({ kind: 'provider_error', status: 503 });
+    await expect(gateway.checkKey('groq', KEY, 10_000)).rejects.toMatchObject({ kind: 'provider_error', status: undefined, detail: 'network' });
+    n = expectHost('generativelanguage.googleapis.com');
+    n.reply({ status: 400, json: { error: { status: 'INVALID_ARGUMENT', details: [{ reason: 'API_KEY_INVALID' }] } } });
+    await expect(gateway.checkKey('google', KEY, 10_000)).rejects.toMatchObject({ kind: 'provider_rejected', status: 400 });
+  });
+});

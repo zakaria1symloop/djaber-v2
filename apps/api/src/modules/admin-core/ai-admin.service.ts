@@ -14,6 +14,7 @@ import type {
   AiPricingSimulationDto,
   AiProviderAdminDto,
   AiProviderTestDto,
+  AiProviderTestReason,
   AiRouteDto,
   CreditPricingDto,
 } from '@djaber/shared';
@@ -32,6 +33,17 @@ const CAPS: AiCapability[] = ['text', 'vision', 'transcription', 'embeddings'];
 /** Calculator reference volumes: a voice note ≈ 1 min of transcription (USD per minute ≈ inputPricePerM / 1000), an image ≈ 1 000 input tokens on top of a message. */
 const IMAGE_EXTRA_TOKENS = 1000;
 type ModelWithProvider = AiModel & { provider: AiProvider };
+
+/** Why a provider test failed, for the dialog (UX-013): timeout / network / 404 endpoint / 429 / 5xx / another HTTP status. */
+export const testFailure = (e: AiProviderError): { reason: AiProviderTestReason; status?: number } => {
+  if (e.kind === 'timeout') return { reason: 'timeout' };
+  const s = e.status;
+  if (!s) return { reason: 'network' };
+  if (s === 404) return { reason: 'endpoint', status: s };
+  if (s === 429) return { reason: 'rate_limited', status: s };
+  if (s >= 500) return { reason: 'provider_down', status: s };
+  return { reason: 'http_error', status: s };
+};
 
 @Injectable()
 export class AiAdminService {
@@ -132,23 +144,29 @@ export class AiAdminService {
     const model = await prisma.aiModel.findFirst({ where: { providerId: p.id, isActive: true }, orderBy: { isDefault: 'desc' } });
     const started = Date.now();
     let error: AppException | null = null;
+    let missingModels: string[] = [];
     try {
       if (this.gateway.driver !== 'live') {
         // fake driver: deterministic outcomes for the dialog states (TEST… / OK / REJETÉE / INJOIGNABLE)
         if (/reject/i.test(k)) throw new AiProviderError('provider_rejected', p.key, 'rejected', 401);
         if (/unreachable/i.test(k)) throw new AiProviderError('provider_error', p.key, 'unreachable', 503);
+        if (/timeout/i.test(k)) throw new AiProviderError('timeout', p.key, 'timeout');
+      } else if (this.gateway.checkKey) {
+        // the key lists the models: no model id involved (a retired / misspelled model made a good key « injoignable », UX-013)
+        const listed = new Set((await this.gateway.checkKey(p.key, k, 10_000)).models);
+        if (listed.size) missingModels = (await prisma.aiModel.findMany({ where: { providerId: p.id, isActive: true }, select: { modelId: true } })).map((m) => m.modelId).filter((id) => !listed.has(id));
       } else if (model && !model.capabilities.includes('transcription')) {
         await this.gateway.generate({ model: { provider: p.key, modelId: model.modelId, apiKey: k }, purpose: 'reply', system: 'ping', messages: [{ role: 'user', content: 'ping' }], maxTokens: 1, timeoutMs: 10_000 });
       }
     } catch (e) {
-      if (e instanceof AiProviderError) error = e.kind === 'provider_rejected' ? new AppException('AI_PROVIDER_KEY_REJECTED', { provider: p.displayName }) : e.kind === 'no_key' ? new AppException('AI_PROVIDER_NO_KEY') : new AppException('AI_PROVIDER_UNREACHABLE', { provider: p.displayName });
-      else throw e;
+      if (!(e instanceof AiProviderError)) throw e;
+      error = e.kind === 'provider_rejected' ? new AppException('AI_PROVIDER_KEY_REJECTED', { provider: p.displayName }) : e.kind === 'no_key' ? new AppException('AI_PROVIDER_NO_KEY') : new AppException('AI_PROVIDER_UNREACHABLE', { provider: p.displayName }, {}, testFailure(e));
     }
     const latencyMs = Math.max(1, Date.now() - started);
     if (!apiKey) await prisma.aiProvider.update({ where: { id: p.id }, data: { lastTestedAt: new Date(), lastTestOk: !error } });
-    await this.log(actor, 'ai_provider.test', 'AiProvider', p.id, null, { ok: !error, code: error?.code ?? null, latencyMs, candidateKey: !!apiKey }, null);
+    await this.log(actor, 'ai_provider.test', 'AiProvider', p.id, null, { ok: !error, code: error?.code ?? null, reason: (error?.details as { reason?: string } | undefined)?.reason ?? null, latencyMs, candidateKey: !!apiKey, missingModels }, null);
     if (error) throw error;
-    return { ok: true, latencyMs, model: model?.modelId ?? null };
+    return { ok: true, latencyMs, model: model?.modelId ?? null, missingModels };
   }
 
   // --- models --------------------------------------------------------------------------------------------------------------

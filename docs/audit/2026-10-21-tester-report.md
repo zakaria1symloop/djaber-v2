@@ -26,7 +26,7 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 | # | Issue | Status |
 |---|---|---|
 | UX-008 | Agent presets: name in French only; in ar / en the agent gets only the basic tone text | done |
-| UX-013 | Groq provider / key shown « Injoignable » | todo |
+| UX-013 | Groq provider / key shown « Injoignable » | done |
 
 ## Superadmin — support and moderation
 | # | Issue | Status |

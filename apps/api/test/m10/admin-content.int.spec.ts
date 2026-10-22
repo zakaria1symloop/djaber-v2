@@ -51,10 +51,12 @@ describe('ADM-06 AI providers, models, routes, pricing', () => {
     expect(app.app.get(CryptoService).decrypt(Buffer.from(row.apiKey!).toString('utf8'))).toBe(secret);
     const audit = await lastAudit('ai_provider.key_update', row.id);
     expect(JSON.stringify(audit)).not.toContain(secret);
-    expect((await sa.post('/admin/ai-providers/openai/test', {}).expect(200)).body.data).toMatchObject({ ok: true, latencyMs: expect.any(Number) });
+    expect((await sa.post('/admin/ai-providers/openai/test', {}).expect(200)).body.data).toMatchObject({ ok: true, latencyMs: expect.any(Number), missingModels: [] });
     expect((await db.aiProvider.findUniqueOrThrow({ where: { key: 'openai' } })).lastTestOk).toBe(true);
     expect((await sa.post('/admin/ai-providers/openai/test', { apiKey: 'sk-reject-123456' }).expect(401)).body.error).toMatchObject({ code: 'AI_PROVIDER_KEY_REJECTED', params: { provider: 'OpenAI' } });
-    expect((await sa.post('/admin/ai-providers/openai/test', { apiKey: 'sk-unreachable-1234' }).expect(503)).body.error.code).toBe('AI_PROVIDER_UNREACHABLE');
+    // UX-013: the failure says why (provider down / timeout…), not one « injoignable » for everything
+    expect((await sa.post('/admin/ai-providers/openai/test', { apiKey: 'sk-unreachable-1234' }).expect(503)).body.error).toMatchObject({ code: 'AI_PROVIDER_UNREACHABLE', details: { reason: 'provider_down', status: 503 } });
+    expect((await sa.post('/admin/ai-providers/openai/test', { apiKey: 'sk-timeout-123456' }).expect(503)).body.error.details).toEqual({ reason: 'timeout' });
     await db.aiProvider.update({ where: { key: 'google' }, data: { apiKey: null } });
     const saved = process.env.GOOGLE_AI_API_KEY;
     delete process.env.GOOGLE_AI_API_KEY;
