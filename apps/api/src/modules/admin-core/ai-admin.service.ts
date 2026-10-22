@@ -34,6 +34,9 @@ const CAPS: AiCapability[] = ['text', 'vision', 'transcription', 'embeddings'];
 const IMAGE_EXTRA_TOKENS = 1000;
 type ModelWithProvider = AiModel & { provider: AiProvider };
 
+/** A configured model id the provider lists, as is or as the alias of a dated snapshot (`claude-haiku-4-5` ⇒ `claude-haiku-4-5-20251001`). */
+export const knownModel = (listed: Set<string>, id: string) => listed.has(id) || [...listed].some((l) => l.startsWith(`${id}-`) && /^\d{8}$|^\d{4}-\d{2}-\d{2}$|^latest$/.test(l.slice(id.length + 1)));
+
 /** Why a provider test failed, for the dialog (UX-013): timeout / network / 404 endpoint / 429 / 5xx / another HTTP status. */
 export const testFailure = (e: AiProviderError): { reason: AiProviderTestReason; status?: number } => {
   if (e.kind === 'timeout') return { reason: 'timeout' };
@@ -154,7 +157,7 @@ export class AiAdminService {
       } else if (this.gateway.checkKey) {
         // the key lists the models: no model id involved (a retired / misspelled model made a good key « injoignable », UX-013)
         const listed = new Set((await this.gateway.checkKey(p.key, k, 10_000)).models);
-        if (listed.size) missingModels = (await prisma.aiModel.findMany({ where: { providerId: p.id, isActive: true }, select: { modelId: true } })).map((m) => m.modelId).filter((id) => !listed.has(id));
+        if (listed.size) missingModels = (await prisma.aiModel.findMany({ where: { providerId: p.id, isActive: true }, select: { modelId: true } })).map((m) => m.modelId).filter((id) => !knownModel(listed, id));
       } else if (model && !model.capabilities.includes('transcription')) {
         await this.gateway.generate({ model: { provider: p.key, modelId: model.modelId, apiKey: k }, purpose: 'reply', system: 'ping', messages: [{ role: 'user', content: 'ping' }], maxTokens: 1, timeoutMs: 10_000 });
       }
