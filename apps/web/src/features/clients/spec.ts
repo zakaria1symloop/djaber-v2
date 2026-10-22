@@ -18,6 +18,7 @@ export const CLIENTS_LIST: ListSpec = {
     minOrders: 'int',
     maxOrders: 'int',
     neverOrdered: 'bool',
+    unconfirmed: 'bool',
     returned: 'bool',
     minSpent: 'int',
     maxSpent: 'int',
@@ -81,6 +82,7 @@ export type ChipLabels = {
   noConversation: string;
   orders: (range: string) => string;
   neverOrdered: string;
+  unconfirmed: string;
   returned: string;
   spent: (range: string) => string;
   lastOrder: Record<string, string>;
@@ -115,6 +117,7 @@ export function activeChips(s: ListState, l: ChipLabels): Chip[] {
   const orders = range(filterText(s, 'minOrders'), filterText(s, 'maxOrders'), l.number);
   if (orders) chips.push({ key: 'minOrders', label: l.orders(orders), clear: { minOrders: null, maxOrders: null } });
   if (filterBool(s, 'neverOrdered')) chips.push({ key: 'neverOrdered', label: l.neverOrdered, clear: { neverOrdered: null } });
+  if (filterBool(s, 'unconfirmed')) chips.push({ key: 'unconfirmed', label: l.unconfirmed, clear: { unconfirmed: null } });
   if (filterBool(s, 'returned')) chips.push({ key: 'returned', label: l.returned, clear: { returned: null } });
   const spent = range(filterText(s, 'minSpent'), filterText(s, 'maxSpent'), l.money);
   if (spent) chips.push({ key: 'minSpent', label: l.spent(spent), clear: { minSpent: null, maxSpent: null } });

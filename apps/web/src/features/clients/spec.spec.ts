@@ -14,6 +14,7 @@ const labels: ChipLabels = {
   noConversation: 'sans conv',
   orders: (r) => `cmd ${r}`,
   neverOrdered: 'jamais',
+  unconfirmed: 'à relancer',
   returned: 'retournés',
   spent: (r) => `dépensé ${r}`,
   lastOrder: { lt30: '< 30 j' },
@@ -46,6 +47,15 @@ describe('active chips', () => {
   it('one chip per group, ranges merged', () => {
     const s = parseListState(CLIENTS_LIST, params('q=ami&source=ai&minSpent=1000&maxSpent=5000&neverOrdered=1&channelId=c1&tags=vip,fidèle&createdFrom=2026-10-01'));
     expect(activeChips(s, labels).map((c) => c.label)).toEqual(['q:ami', 'IA', 'tags:vip, fidèle', 'canal:#c1', 'jamais', 'dépensé 1000 DA – 5000 DA', 'créé 2026-10-01 → …']);
+  });
+});
+
+describe('« À relancer » (PV 22/10)', () => {
+  it('is a URL filter sent to the API and shown as a chip', () => {
+    const st = parseListState(CLIENTS_LIST, params('unconfirmed=1'));
+    expect(st.filters).toEqual({ unconfirmed: true });
+    expect(clientsQuery(listApiQuery(st))).toMatchObject({ unconfirmed: true });
+    expect(activeChips(st, labels).map((c) => c.label)).toContain('à relancer');
   });
 });
 

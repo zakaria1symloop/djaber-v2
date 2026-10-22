@@ -127,6 +127,8 @@ export const ClientsQuerySchema = z
     minOrders: int.optional(),
     maxOrders: int.optional(),
     neverOrdered: flag.optional(),
+    /** « À relancer » (PV 22/10): buying intent (an order still new or cancelled, or a conversation) but no confirmed order and no completed sale; blocked clients left out */
+    unconfirmed: flag.optional(),
     returned: flag.optional(),
     minSpent: int.optional(),
     maxSpent: int.optional(),

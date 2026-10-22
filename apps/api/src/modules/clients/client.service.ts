@@ -88,6 +88,14 @@ export class ClientService implements OnModuleInit {
     if (q.minOrders !== undefined) and.push({ orderCount: { gte: q.minOrders } });
     if (q.maxOrders !== undefined) and.push({ orderCount: { lte: q.maxOrders } });
     if (q.neverOrdered) and.push({ orderCount: 0 });
+    // « À relancer » (PV 22/10): customers to phone — they showed an intent but never got to a confirmed order or a sale
+    if (q.unconfirmed) {
+      and.push(
+        { orders: { none: { status: { in: ['confirmed', 'preparing', 'shipped', 'delivered', 'returned'] } } } },
+        { sales: { none: { status: 'completed' } } },
+        { OR: [{ orders: { some: { status: { in: ['new', 'cancelled'] } } } }, { conversations: { some: {} } }] },
+      );
+    }
     if (q.returned) and.push({ returnCount: { gt: 0 } });
     if (q.minSpent !== undefined) and.push({ totalSpent: { gte: q.minSpent } });
     if (q.maxSpent !== undefined) and.push({ totalSpent: { lte: q.maxSpent } });
@@ -100,11 +108,13 @@ export class ClientService implements OnModuleInit {
     const to = q.createdTo ?? q.to;
     if (from) and.push({ createdAt: { gte: algiersDayStart(from) } });
     if (to) and.push({ createdAt: { lt: algiersDayEnd(to) } });
-    if (q.blocked !== undefined) {
+    // a client to call back is never a blocked one (unless the blocked filter says otherwise)
+    const blocked = q.blocked ?? (q.unconfirmed ? false : undefined);
+    if (blocked !== undefined) {
       const blockedOr: Prisma.ClientWhereInput[] = [];
       if (index.clientIds.size) blockedOr.push({ id: { in: [...index.clientIds] } });
       if (index.phones.size) blockedOr.push({ phone: { in: [...index.phones] } });
-      if (q.blocked) and.push(blockedOr.length ? { OR: blockedOr } : { id: { in: [] } });
+      if (blocked) and.push(blockedOr.length ? { OR: blockedOr } : { id: { in: [] } });
       else if (blockedOr.length) and.push({ NOT: { OR: blockedOr } });
     }
     if (q.q && q.q.trim().length >= 2) {

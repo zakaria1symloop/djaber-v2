@@ -4,7 +4,7 @@ import { createTestApp, type TestApp } from '../support/app';
 import { drain, jobOf } from '../support/m2';
 import { forbidNetwork } from '../support/m3';
 import { closeOutbox } from '../support/m4';
-import { db, idem, newOrder, phone, seedFees } from '../support/m5';
+import { db, idem, newOrder, phone, seedFees, status } from '../support/m5';
 
 let app: TestApp;
 let net: ReturnType<typeof forbidNetwork>;
@@ -84,6 +84,22 @@ describe('clients', () => {
     const riad = (await owner.get('/clients?q=Riad').expect(200)).body.data[0];
     expect(riad).toMatchObject({ pill: 'reliable', deliveredCount: 1, orderCount: 1 });
     expect((await owner.get('/clients?sort=-bogus').expect(400)).body.error.code).toBe('BAD_REQUEST');
+  });
+
+  it('PV 22/10 « À relancer »: an order left new / cancelled or a conversation, but no confirmed order or sale; blocked clients left out', async () => {
+    const owner = await shop();
+    const pending = await newOrder(owner, { client: { name: 'Nadia Pending', phone: phone() } });
+    const done = await newOrder(owner, { client: { name: 'Karim Confirmed', phone: phone() } });
+    await status(owner, done.order, 'confirmed').expect(200);
+    const channel = await db.channel.create({ data: { workspaceId: owner.workspaceId, platform: 'facebook', externalId: `ext-${Date.now()}`, name: 'Page', connectedById: owner.userId, status: 'active' } });
+    const talker = await db.client.create({ data: { workspaceId: owner.workspaceId, name: 'Samia Chat', phone: phone(), isPlaceholder: false, source: 'ai' } });
+    await db.conversation.create({ data: { workspaceId: owner.workspaceId, channelId: channel.id, externalSenderId: `s-${Date.now()}`, clientId: talker.id } });
+    await db.client.create({ data: { workspaceId: owner.workspaceId, name: 'Yacine Silent', phone: phone(), isPlaceholder: false, source: 'manual' } });
+    const spammer = await newOrder(owner, { client: { name: 'Bilal Blocked', phone: phone() } });
+    await owner.post('/safety/blocks', { clientId: spammer.order.client.id, reason: 'spam' }).expect(201);
+    expect(pending.order.status).toBe('new');
+    const names = (await owner.get('/clients?unconfirmed=true&sort=name').expect(200)).body.data.map((c: any) => c.name);
+    expect(names).toEqual(['Nadia Pending', 'Samia Chat']);
   });
 
   it('AT-CLI-05 aggregates recomputed: delivering and a counter sale raise orderCount / totalSpent / lastOrderAt; cancelling recomputes', async () => {

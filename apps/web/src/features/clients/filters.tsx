@@ -4,7 +4,7 @@
 // Client)". Every value lives in the URL (`useListState`).
 import { formatDate, formatMoney, formatNumber, type AppLocale } from '@djaber/shared';
 import { ActiveFilters, Button, FilterCheckList, InlineAdd, FilterChips, FilterDateRange, FilterDropdown, FilterGroup, FilterPanel, FilterRange, SearchInput, type FilterOption } from '@djaber/ui';
-import { CalendarDays, SlidersHorizontal } from 'lucide-react';
+import { CalendarDays, PhoneCall, SlidersHorizontal } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useChannels } from '@/features/channels/api';
 import { useGeoWilayas } from '@/features/delivery/api';
@@ -71,6 +71,7 @@ export function ClientsFilterBar({ list, tags, onOpenPanel }: { list: ListContro
   const sources = filterList(s, 'source');
   const picked = filterList(s, 'tags');
   const dates = filterText(s, 'createdFrom') || filterText(s, 'createdTo') ? 1 : 0;
+  const unconfirmed = filterBool(s, 'unconfirmed');
   return (
     <div className="flex flex-wrap items-center gap-2">
       <SearchInput value={s.q} onChange={(q) => list.set({ q })} label={t('action.search')} placeholder={t('clients.list.search')} clearLabel={t('list.clearSearch')} className="min-w-52" />
@@ -87,6 +88,11 @@ export function ClientsFilterBar({ list, tags, onOpenPanel }: { list: ListContro
         </div>
         <DateBody list={list} />
       </FilterDropdown>
+      {/* PV 22/10: the customers to call back, one click away */}
+      <Button variant={unconfirmed ? 'primary' : 'secondary'} aria-pressed={unconfirmed} title={t('clients.filter.unconfirmedHint')} onClick={() => list.setFilters({ unconfirmed: unconfirmed ? null : true })} data-testid="filter-unconfirmed">
+        <PhoneCall className="size-4" aria-hidden />
+        {t('clients.filter.unconfirmed')}
+      </Button>
       <Button onClick={onOpenPanel} data-testid="open-filters">
         <SlidersHorizontal className="size-4" aria-hidden />
         {list.activeCount ? t('action.filtersCount', { count: list.activeCount }) : t('action.filters')}
@@ -112,6 +118,7 @@ export function ClientsActiveFilters({ list }: { list: ListController }) {
     noConversation: t('clients.filter.noConversation'),
     orders: (range) => t('clients.chip.orders', { range }),
     neverOrdered: t('clients.filter.orders.neverOrdered'),
+    unconfirmed: t('clients.filter.unconfirmed'),
     returned: t('clients.filter.orders.returned'),
     spent: (range) => t('clients.chip.spent', { range }),
     lastOrder: Object.fromEntries(LAST_ORDER_FILTERS.map((v) => [v, t('clients.chip.lastOrder', { label: t(`clients.filter.lastOrder.${v}`) })])),

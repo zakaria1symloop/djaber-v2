@@ -6346,5 +6346,7 @@
  "adminSafety.blocks.source.manual": "يدوي",
  "adminSafety.blocks.source.auto_rule": "قاعدة تلقائية",
  "clients.action.block": "حظر العميل",
- "clients.action.unblock": "إلغاء حظر العميل"
+ "clients.action.unblock": "إلغاء حظر العميل",
+ "clients.filter.unconfirmed": "للمتابعة",
+ "clients.filter.unconfirmedHint": "عملاء مهتمون بلا طلب مؤكد: طلب بقي «جديد» أو أُلغي، أو محادثة بلا طلب. العملاء المحظورون مستبعدون."
 }

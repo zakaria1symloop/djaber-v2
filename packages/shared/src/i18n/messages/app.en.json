@@ -6346,5 +6346,7 @@
  "adminSafety.blocks.source.manual": "Manual",
  "adminSafety.blocks.source.auto_rule": "Auto rule",
  "clients.action.block": "Block the customer",
- "clients.action.unblock": "Unblock the customer"
+ "clients.action.unblock": "Unblock the customer",
+ "clients.filter.unconfirmed": "To call back",
+ "clients.filter.unconfirmedHint": "Interested customers without a confirmed order: an order left « New » or cancelled, or a conversation without an order. Blocked customers are left out."
 }

@@ -6346,5 +6346,7 @@
  "adminSafety.blocks.source.manual": "Manuel",
  "adminSafety.blocks.source.auto_rule": "Règle auto",
  "clients.action.block": "Bloquer le client",
- "clients.action.unblock": "Débloquer le client"
+ "clients.action.unblock": "Débloquer le client",
+ "clients.filter.unconfirmed": "À relancer",
+ "clients.filter.unconfirmedHint": "Clients intéressés sans commande confirmée : commande restée « Nouvelle » ou annulée, ou conversation sans commande. Les clients bloqués sont exclus."
 }
