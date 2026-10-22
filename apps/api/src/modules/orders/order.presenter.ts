@@ -46,7 +46,7 @@ export const ORDER_DETAIL_INCLUDE = {
   orderNotes: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], include: { author: userRef } },
   shipments: {
     orderBy: { createdAt: 'desc' },
-    include: { courierAccount: { select: { id: true, displayName: true } }, events: { orderBy: { at: 'desc' }, include: { actor: userRef } } },
+    include: { courierAccount: { select: { id: true, displayName: true, baseUrl: true } }, events: { orderBy: { at: 'desc' }, include: { actor: userRef } } },
   },
   payments: { orderBy: { createdAt: 'desc' }, take: 1 },
   sheetsRow: { select: { syncedAt: true } },

@@ -26,6 +26,7 @@ import { courierFieldErrors, encodeShipmentError, errorCodeOf, isSendFailure, pa
 import { CREATE_MAX_ATTEMPTS, CREATE_RETRY_DELAYS_MS, nextSyncAt } from './tracking-rules';
 
 const SEND_STATUSES = ['confirmed', 'preparing'];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const clientSelect = { select: { id: true, name: true, phone: true, riskLevel: true, isPlaceholder: true, orderCount: true } } as const;
 export const SHIPMENT_ORDER_SELECT = {
   id: true,
@@ -102,6 +103,12 @@ export class ShipmentService implements OnModuleInit {
     });
   }
 
+  /** Capabilities of the parcel's courier account (per provider, per platform for ZR Express). */
+  private async capsOf(db: Tx, s: Pick<Shipment, 'provider' | 'courierAccountId'>) {
+    const a = s.courierAccountId ? await db.courierAccount.findFirst({ where: { id: s.courierAccountId }, select: { baseUrl: true } }) : null;
+    return this.adapters.get(s.provider, a?.baseUrl).capabilities;
+  }
+
   // --- reads ----------------------------------------------------------------------------------------------------------------
   async syncAvailableAt(id: string): Promise<string | null> {
     const ttl = await this.redis.client.ttl(`trk:manual:${id}`);
@@ -117,7 +124,7 @@ export class ShipmentService implements OnModuleInit {
     const account = s.courierAccountId ? await prisma.courierAccount.findFirst({ where: { id: s.courierAccountId } }) : null;
     let portalUrl: string | null = null;
     if (account && s.trackingNumber) {
-      const adapter = this.adapters.get(s.provider);
+      const adapter = this.adapters.get(s.provider, account.baseUrl);
       try {
         portalUrl = adapter.portalUrl?.(this.accounts.open(account), s.trackingNumber) ?? null;
       } catch {
@@ -161,7 +168,7 @@ export class ShipmentService implements OnModuleInit {
       o = await this.orders.lock(tx, orderId);
     }
     if (!hasDeliveryAddress(o)) throw new AppException('ORDER_ADDRESS_REQUIRED');
-    const caps = this.adapters.get(account.provider).capabilities;
+    const caps = this.adapters.get(account.provider, account.baseUrl).capabilities;
     if (o.isStopdesk && caps.stopdesks && !o.stopdeskId) throw new AppException('VALIDATION_ERROR', {}, { stopdeskId: 'validation.required' });
     const codAmount = input.codAmount ?? Math.max(0, o.total - o.amountPaid);
     if (codAmount > o.total) throw new AppException('VALIDATION_ERROR', {}, { codAmount: 'validation.range' });
@@ -267,6 +274,8 @@ export class ShipmentService implements OnModuleInit {
     ]);
     const map = o.communeId && s.provider !== 'manual' ? await prisma.courierCommuneMap.findUnique({ where: { provider_communeId: { provider: s.provider as 'zrexpress', communeId: o.communeId } } }) : null;
     const communeName = o.commune?.nameFr ?? o.communeText ?? '';
+    // the order keeps the stop-desk row picked in Djaber (`CourierStopdesk.id`); the courier wants its own desk id
+    const desk = s.stopdeskId && UUID_RE.test(s.stopdeskId) ? await prisma.courierStopdesk.findUnique({ where: { id: s.stopdeskId }, select: { provider: true, externalId: true } }) : null;
     const summary = s.contentSummary ?? o.items.map((i) => `${i.productName}${i.variantName ? ` ${i.variantName}` : ''} ×${i.quantity}`).join(', ');
     return {
       shipmentId: s.id,
@@ -278,7 +287,7 @@ export class ShipmentService implements OnModuleInit {
       communeCode: map?.externalCode ?? null,
       address: o.address ?? (o.isStopdesk ? `Stop-desk ${s.stopdeskId ?? ''} ${communeName}`.trim() : ''),
       isStopdesk: o.isStopdesk,
-      stopdeskId: s.stopdeskId,
+      stopdeskId: desk && desk.provider === s.provider ? desk.externalId : s.stopdeskId,
       codAmount: s.codAmount,
       weightGrams: s.weightKg === null ? null : Math.round(Number(s.weightKg) * 1000),
       productSummary: summary.slice(0, 250),
@@ -305,7 +314,7 @@ export class ShipmentService implements OnModuleInit {
     if (!claimed) return 'skipped';
     const account = claimed.courierAccountId ? await prisma.courierAccount.findFirst({ where: { id: claimed.courierAccountId } }) : null;
     if (!account) return this.sendFailed(claimed, encodeShipmentError('DELIVERY_NO_COURIER'));
-    const adapter = this.adapters.get(claimed.provider);
+    const adapter = this.adapters.get(claimed.provider, account.baseUrl);
     let result;
     try {
       const input = await this.adapterInput(claimed);
@@ -387,7 +396,7 @@ export class ShipmentService implements OnModuleInit {
         }
         await this.fx.notify(tx, 'shipment_created', u, o, { stamp: 'created' });
         await this.fx.customerText(tx, o, 'orderShipped', { number: o.number, tracking: r.trackingNumber, courier: courierName });
-        if (this.adapters.get(s.provider).capabilities.label) await this.queueOutbox.add(tx, 'courier', 'fetch-label', { shipmentId, workspaceId: s.workspaceId }, `label:${shipmentId}`, { attempts: 3, backoff: { type: 'fixed', delay: 30_000 } });
+        if ((await this.capsOf(tx, s)).label) await this.queueOutbox.add(tx, 'courier', 'fetch-label', { shipmentId, workspaceId: s.workspaceId }, `label:${shipmentId}`, { attempts: 3, backoff: { type: 'fixed', delay: 30_000 } });
         await this.fx.emit(tx, u, e as unknown as ShipmentRow['events'][number]);
       },
       { timeout: 20_000 },
@@ -462,7 +471,7 @@ export class ShipmentService implements OnModuleInit {
       const s = await this.fx.lockShipment(tx, id);
       if (!['pending', 'sent'].includes(s.status)) throw new AppException('COURIER_CANCEL_NOT_ALLOWED');
       const atCourier = s.status === 'sent' && s.provider !== 'manual' && !!s.trackingNumber;
-      if (atCourier && !this.adapters.get(s.provider).capabilities.cancel) throw new AppException('COURIER_CANCEL_NOT_ALLOWED');
+      if (atCourier && !(await this.capsOf(tx, s)).cancel) throw new AppException('COURIER_CANCEL_NOT_ALLOWED');
       if (input.then === 'cancelled' && !input.reason) throw new AppException('VALIDATION_ERROR', {}, { reason: 'validation.required' });
       if (atCourier) {
         await this.queueOutbox.add(tx, 'courier', 'cancel-parcel', { shipmentId: id, workspaceId: s.workspaceId, then: input.then, reason: input.reason ?? null, note: input.note ?? null, userId: actor.id }, `cancel:${id}`, { attempts: 3, backoff: { type: 'fixed', delay: 60_000 } });
@@ -501,8 +510,9 @@ export class ShipmentService implements OnModuleInit {
       if (!s || !s.trackingNumber || !s.courierAccountId) return;
       if (!data.withdrawOnly && s.status !== 'sent') return;
       const account = await prisma.courierAccount.findFirst({ where: { id: s.courierAccountId } });
-      const adapter = this.adapters.get(s.provider);
-      if (!account || !adapter.cancel) return;
+      if (!account) return;
+      const adapter = this.adapters.get(s.provider, account.baseUrl);
+      if (!adapter.cancel) return;
       let raw: string | null | undefined = null;
       try {
         await this.limiter.take(account.id, 'other');
@@ -539,7 +549,7 @@ export class ShipmentService implements OnModuleInit {
       await this.orders.lock(tx, head.orderId);
       const s = await this.fx.lockShipment(tx, id);
       if (s.status !== 'failed' || isSendFailure(s)) throw new AppException('CONFLICT');
-      if (!this.adapters.get(s.provider).capabilities.retry || !s.trackingNumber) throw new AppException('COURIER_CANCEL_NOT_ALLOWED');
+      if (!(await this.capsOf(tx, s)).retry || !s.trackingNumber) throw new AppException('COURIER_CANCEL_NOT_ALLOWED');
       await this.queueOutbox.add(tx, 'courier', 'retry-delivery', { shipmentId: id, workspaceId: s.workspaceId, userId: actor.id, note: note ?? null }, `retry:${id}:${s.deliveryAttempts}`, { attempts: 3, backoff: { type: 'fixed', delay: 60_000 } });
     }, locale);
     return this.view(id, locale);
@@ -550,8 +560,9 @@ export class ShipmentService implements OnModuleInit {
       const s = await prisma.shipment.findFirst({ where: { id: data.shipmentId } });
       if (!s || s.status !== 'failed' || !s.trackingNumber || !s.courierAccountId) return;
       const account = await prisma.courierAccount.findFirst({ where: { id: s.courierAccountId } });
-      const adapter = this.adapters.get(s.provider);
-      if (!account || !adapter.retryDelivery) return;
+      if (!account) return;
+      const adapter = this.adapters.get(s.provider, account.baseUrl);
+      if (!adapter.retryDelivery) return;
       await this.limiter.take(account.id, 'other');
       const r = await adapter.retryDelivery(this.accounts.open(account), s.trackingNumber);
       if (!r.ok) {

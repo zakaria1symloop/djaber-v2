@@ -2592,7 +2592,7 @@
  "couriers.field.senderPhone": "هاتف المرسل",
  "couriers.field.senderWilaya": "ولاية الانطلاق",
  "couriers.field.token": "الرمز",
- "couriers.fieldsHint": "الحقول أدناه تتعلّق بشركة التوصيل · ZR Express: رمز + مفتاح · EcoTrack: رابط + رمز · Yalidine: معرّف + رمز · التوصيل الذاتي: بدون معرّفات.",
+ "couriers.fieldsHint": "الحقول أدناه تتعلّق بشركة التوصيل · ZR Express: مفتاح API + معرّف الحساب (Procolis: رمز + مفتاح) · EcoTrack: رابط + رمز · Yalidine: معرّف + رمز · التوصيل الذاتي: بدون معرّفات.",
  "couriers.instance": "المثيل:",
  "couriers.intro": "يدفع الزبون دائمًا حسب جدولك (D15). أسعار شركة التوصيل تُستعمل للتكلفة والهامش.",
  "couriers.manual.description": "موزّعوك الخاصون: علّم الطلب «مُرسل (توصيل ذاتي)»، رقم تتبع اختياري، ملصق Djaber، تحديث الحالة يدويًا.",
@@ -6320,5 +6320,14 @@
  "onboarding.ready.noAgent": "لا يوجد وكيل حاليًا: أنشئه في خطوة الوكيل.",
  "onboarding.ready.membersResource": "أعضاء",
  "agents.wizard.tunnelFinish": "حفظ والانتقال إلى خطوة الصفحة",
- "agents.wizard.tunnelNote": "القنوات والتفعيل: بعد ربط صفحتك"
+ "agents.wizard.tunnelNote": "القنوات والتفعيل: بعد ربط صفحتك",
+ "couriers.field.apiKey": "مفتاح API",
+ "couriers.field.tenantId": "معرّف الحساب (Tenant ID)",
+ "couriers.credentials.zrexpress_app": "مفتاح API + معرّف الحساب",
+ "couriers.platform": "منصّة ZR Express",
+ "couriers.platform.app": "المنصّة الجديدة (zrexpress.app)",
+ "couriers.platform.procolis": "المنصّة القديمة (Procolis)",
+ "couriers.platform.app.hint": "انسخ مفتاح API ومعرّف الحساب من فضائك في ZR Express (zrexpress.app). ملصق ZR والإلغاء قبل الاستلام ونقاط الاستلام مدعومة.",
+ "couriers.platform.procolis.hint": "حساب Procolis (procolis.com): رمز + مفتاح. لا ملصق ولا إلغاء عبر الواجهة البرمجية: يُطبع ملصق Djaber.",
+ "couriers.platform.current": "المنصّة: {name}"
 }

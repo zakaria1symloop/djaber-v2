@@ -58,7 +58,7 @@ export class RatesService implements OnModuleInit {
     await TenantContext.runAs(data.workspaceId, async () => {
       const a = await prisma.courierAccount.findFirst({ where: { id: data.courierAccountId } });
       if (!a) return;
-      const adapter = this.adapters.get(a.provider);
+      const adapter = this.adapters.get(a.provider, a.baseUrl);
       if (!adapter.listStopdesks) return;
       const creds = this.accounts.open(a);
       const norm = (s: string) => normalizeRaw(s);
@@ -97,7 +97,7 @@ export class RatesService implements OnModuleInit {
   async get(q: { courierAccountId: string; wilayaId?: number; stopdesk?: boolean }): Promise<CourierRatesView> {
     const a = await prisma.courierAccount.findFirst({ where: { id: q.courierAccountId } });
     if (!a) throw notFound();
-    const supported = this.adapters.get(a.provider).capabilities.rates;
+    const supported = this.adapters.get(a.provider, a.baseUrl).capabilities.rates;
     const rows = supported ? await prisma.courierRateCache.findMany({ where: { courierAccountId: a.id, ...(q.wilayaId ? { wilayaId: q.wilayaId } : {}) }, orderBy: { wilayaId: 'asc' } }) : [];
     const fetchedAt = rows.length ? new Date(Math.min(...rows.map((r) => r.fetchedAt.getTime()))) : null;
     const stale = supported && (!fetchedAt || Date.now() - fetchedAt.getTime() > TTL_MS || (!q.wilayaId && rows.length < WILAYA_COUNT));
@@ -118,7 +118,7 @@ export class RatesService implements OnModuleInit {
     await TenantContext.runAs(data.workspaceId, async () => {
       const a = await prisma.courierAccount.findFirst({ where: { id: data.courierAccountId } });
       if (!a) return;
-      const adapter = this.adapters.get(a.provider);
+      const adapter = this.adapters.get(a.provider, a.baseUrl);
       const creds = this.accounts.open(a);
       const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: a.workspaceId }, select: { senderWilayaId: true } });
       const from = courierWilayaId(a.senderWilayaId ?? ws.senderWilayaId ?? 16);
@@ -197,7 +197,7 @@ export class RatesService implements OnModuleInit {
       const t = TenantContext.get();
       await this.audit.write({ workspaceId, actorType: 'user', actorId: t.userId ?? null, actorRole: t.role ?? null, action: 'delivery.fees.copy_from_courier', entity: 'DeliveryFeeRule', entityId: null, after: { courierAccountId: a.id, wilayaIds: rows.filter((x) => x.changed).map((x) => x.wilayaId) } });
     }
-    const refreshing = missing.length > 0 && this.adapters.get(a.provider).capabilities.rates;
+    const refreshing = missing.length > 0 && this.adapters.get(a.provider, a.baseUrl).capabilities.rates;
     if (refreshing) await this.refresh(a.id);
     return { rows, missing, written, dryRun: input.dryRun, refreshing };
   }

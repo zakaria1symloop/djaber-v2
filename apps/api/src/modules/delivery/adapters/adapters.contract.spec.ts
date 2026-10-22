@@ -4,11 +4,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
-import { CourierError, type CreateShipmentInput } from './courier-adapter';
+import { capabilitiesOf, CourierError, ZR_APP_CAPABILITIES, type CreateShipmentInput } from './courier-adapter';
 import { createCourierAdapters } from './courier-registry';
 import { EcotrackAdapter } from './ecotrack.adapter';
 import type { CourierTransport, HttpRequest } from './http';
 import { parseYalidineWebhook, YalidineAdapter } from './yalidine.adapter';
+import { ZrExpressAppAdapter } from './zrexpress-app.adapter';
 import { ZrExpressAdapter } from './zrexpress.adapter';
 
 type Interaction = { request: { method: string; url: string; body?: unknown }; response: { status: number; json?: unknown; pdf?: boolean } };
@@ -99,6 +100,79 @@ describe('ZR Express (05-integrations §2.2)', () => {
     expect(zr.capabilities).toMatchObject({ cancel: false, label: false, batchTrack: true });
     expect((zr as { cancel?: unknown }).cancel).toBeUndefined();
     expect((zr as { getLabel?: unknown }).getLabel).toBeUndefined();
+  });
+});
+
+describe('ZR Express new platform (05-integrations §2.2b)', () => {
+  const f = fixture('zrexpress-app');
+  it('testCredentials: X-Api-Key + X-Tenant headers on the fixed host; 401 / unknown tenant ⇒ COURIER_CREDENTIALS_INVALID', async () => {
+    const r = replay(f, 'test_ok', 'test_401', 'test_tenant');
+    const zr = new ZrExpressAppAdapter(r.transport);
+    expect(await zr.testCredentials(f.credentials)).toMatchObject({ ok: true });
+    expect(r.seen[0]!.headers).toMatchObject({ 'X-Api-Key': 'zr-app-key-123456', 'X-Tenant': 'tenant-0001' });
+    expect(await zr.testCredentials(f.credentials)).toMatchObject({ ok: false, code: 'COURIER_CREDENTIALS_INVALID' });
+    expect(await zr.testCredentials(f.credentials)).toMatchObject({ ok: false, code: 'COURIER_CREDENTIALS_INVALID', message: 'Tenant introuvable' });
+    r.done();
+  });
+  it('createShipment: wilaya / commune → territory ids (all pages, searched once), externalId = order number; field errors mapped; unknown commune refused without a call', async () => {
+    const r = replay(f, 'territories', 'territories_p2', 'create_ok', 'create_bad_phone', 'create_new_wilaya');
+    const zr = new ZrExpressAppAdapter(r.transport);
+    expect(await zr.createShipment(f.credentials, input())).toMatchObject({ trackingNumber: 'ZR-APP-778899', externalId: 'p-778899' });
+    await expect(zr.createShipment(f.credentials, input())).rejects.toMatchObject({ kind: 'validation', field: 'phone', message: 'Le numéro de téléphone est invalide.' });
+    await expect(zr.createShipment(f.credentials, input({ communeName: 'Inconnue', communeCode: null }))).rejects.toMatchObject({ kind: 'validation', field: 'commune' });
+    // a commune of a 2026 wilaya (68 Bou Saâda) shipped under its parent code 28: found in the new wilaya
+    await zr.createShipment(f.credentials, input({ wilayaId: 28, wilayaName: "M'Sila", communeName: 'Bou Saada', communeCode: null }));
+    expect(r.seen[4]!.body).toMatchObject({ deliveryAddress: { cityTerritoryId: 'w-68', districtTerritoryId: 'c-68-1' } });
+    r.done();
+  });
+  it('stop-desk parcel: hubId + pickup-point; stop-desks = visible pickup-point hubs per courier wilaya', async () => {
+    const r = replay(f, 'territories', 'territories_p2', 'hubs', 'create_desk');
+    const zr = new ZrExpressAppAdapter(r.transport);
+    await expect(zr.createShipment(f.credentials, input({ isStopdesk: true, stopdeskId: null }))).rejects.toMatchObject({ kind: 'validation', field: 'stopdesk' });
+    await zr.createShipment(f.credentials, input({ isStopdesk: true, stopdeskId: 'hub-16-a' }));
+    expect(r.seen[3]!.body).toMatchObject({ hubId: 'hub-16-a', deliveryType: 'pickup-point', deliveryAddress: { cityTerritoryId: 'w-16', districtTerritoryId: 'c-16-1' } });
+    expect(await zr.listStopdesks(f.credentials, 16)).toEqual([{ id: 'hub-16-a', name: 'ZR Bab Ezzouar', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'Cité 5 Juillet' }]);
+    expect(await zr.listStopdesks(f.credentials, 28)).toEqual([{ id: 'hub-68-a', name: 'ZR Bou Saâda', wilayaId: 28, communeName: 'Bou Saâda', address: 'Route de Biskra' }]);
+    r.done();
+  });
+  it('track: state mapped, situation = failure reason + description; 404 ⇒ TRACKING_NOT_FOUND', async () => {
+    const r = replay(f, 'track_out', 'track_failed', 'track_404');
+    const zr = new ZrExpressAppAdapter(r.transport);
+    expect(await zr.track(f.credentials, 'ZR-APP-778899')).toMatchObject({ mapped: 'out_for_delivery', rawStatus: 'En livraison', at: '2026-10-12T08:30:00.000Z' });
+    expect(await zr.track(f.credentials, 'ZR-APP-778900')).toMatchObject({ mapped: 'failed', failureReason: 'unreachable', rawStatus: 'Échec de livraison · Client injoignable', description: 'Client injoignable' });
+    await expect(zr.track(f.credentials, 'ZR-APP-0')).rejects.toMatchObject({ kind: 'not_found', code: 'TRACKING_NOT_FOUND' });
+    r.done();
+  });
+  it('cancel = DELETE of the parcel while not picked up, else COURIER_CANCEL_NOT_ALLOWED (no DELETE); label PDF fetched without the API key off ZR', async () => {
+    const r = replay(f, 'cancel_get', 'cancel_delete', 'cancel_get_picked', 'label', 'label_file');
+    const zr = new ZrExpressAppAdapter(r.transport);
+    expect(await zr.cancel(f.credentials, 'ZR-APP-778899')).toEqual({ ok: true, rawStatus: 'Annulé' });
+    await expect(zr.cancel(f.credentials, 'ZR-APP-778899')).rejects.toMatchObject({ kind: 'cancel_not_allowed' });
+    const label = await zr.getLabel(f.credentials, 'ZR-APP-778899');
+    expect(label.pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(r.seen[4]!.headers['X-Api-Key']).toBeUndefined();
+    expect(zr.capabilities).toMatchObject({ cancel: true, label: true, stopdesks: true, rates: true, batchTrack: false });
+    r.done();
+  });
+  it('rates from the sender wilaya, default price list when the origin has none; commune rows dropped; TTC / discount preferred', async () => {
+    const r = replay(f, 'territories', 'territories_p2', 'rates_origin_404', 'rates');
+    const zr = new ZrExpressAppAdapter(r.transport);
+    expect(await zr.getAllRates(f.credentials, 16)).toEqual([
+      { wilayaId: 16, home: 400, stopdesk: 250 },
+      { wilayaId: 31, home: 650, stopdesk: null },
+    ]);
+    r.done();
+  });
+  it('registry: a ZR account on api.zrexpress.app gets the new-platform adapter (fake driver too, with its capabilities)', () => {
+    const live = createCourierAdapters({ NODE_ENV: 'production', COURIER_DRIVER: 'live', COURIER_ALLOW_LIVE: false }, async () => {
+      throw new Error('no network in unit tests');
+    });
+    expect(live.zrApp).toBeInstanceOf(ZrExpressAppAdapter);
+    const fake = createCourierAdapters({ NODE_ENV: 'test', COURIER_DRIVER: 'fake', COURIER_ALLOW_LIVE: false });
+    expect(fake.zrApp.capabilities).toMatchObject({ cancel: true, label: true, stopdesks: true });
+    expect(fake.adapters.zrexpress.capabilities).toMatchObject({ cancel: false, label: false, stopdesks: false });
+    expect(capabilitiesOf('zrexpress', 'https://api.zrexpress.app')).toBe(ZR_APP_CAPABILITIES);
+    expect(capabilitiesOf('zrexpress', '')).toMatchObject({ label: false });
   });
 });
 

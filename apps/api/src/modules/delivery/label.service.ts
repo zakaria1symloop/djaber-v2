@@ -57,9 +57,10 @@ export class LabelService implements OnModuleInit {
     await TenantContext.runAs(data.workspaceId, async () => {
       const s = await prisma.shipment.findFirst({ where: { id: data.shipmentId } });
       if (!s || !s.trackingNumber || s.labelUrl || !s.courierAccountId) return;
-      const adapter = this.adapters.get(s.provider);
       const account = await prisma.courierAccount.findFirst({ where: { id: s.courierAccountId } });
-      if (!adapter.getLabel || !account) return;
+      if (!account) return;
+      const adapter = this.adapters.get(s.provider, account.baseUrl);
+      if (!adapter.getLabel) return;
       try {
         await this.limiter.take(account.id, 'other');
         const r = await adapter.getLabel(this.accounts.open(account), s.trackingNumber);
@@ -126,7 +127,7 @@ export class LabelService implements OnModuleInit {
   // --- one label --------------------------------------------------------------------------------------------------------------
   /** `GET /shipments/:id/label` → the courier label when stored, else the Djaber label (+ `LABEL_UNAVAILABLE` warning). */
   async single(id: string, q: LabelQuery): Promise<{ file: LabelFileView; warning: 'LABEL_UNAVAILABLE' | null }> {
-    const s = await prisma.shipment.findFirst({ where: { id } });
+    const s = await prisma.shipment.findFirst({ where: { id }, include: { courierAccount: { select: { baseUrl: true } } } });
     if (!s) throw notFound();
     if (NOT_CREATED.includes(s.status) || (!s.trackingNumber && s.provider !== 'manual')) throw new AppException('SHIPMENT_NOT_CREATED');
     const expiresAt = new Date(Date.now() + URL_TTL_S * 1000).toISOString();
@@ -139,7 +140,7 @@ export class LabelService implements OnModuleInit {
     const data = await this.labelData([{ ...s, order }], lang);
     const pdf = await renderDjaberLabels([data.get(s.id)!], q.format, lang);
     const { key } = await this.store(pdf, `${order.number}-${q.format}-${Date.now()}`, TenantContext.get().userId);
-    const courierHasLabels = s.provider !== 'manual' && this.adapters.get(s.provider).capabilities.label;
+    const courierHasLabels = s.provider !== 'manual' && this.adapters.get(s.provider, s.courierAccount?.baseUrl).capabilities.label;
     return { file: { url: this.storage.signedUrl(key, URL_TTL_S), fileName: `${order.number}.pdf`, size: pdf.length, source: 'djaber', format: q.format, expiresAt }, warning: q.source === 'djaber' || courierHasLabels ? null : 'LABEL_UNAVAILABLE' };
   }
 

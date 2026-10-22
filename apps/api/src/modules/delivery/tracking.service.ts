@@ -131,7 +131,7 @@ export class TrackingService implements OnModuleInit {
       if (!account) return;
       const shipments = await prisma.shipment.findMany({ where: { id: { in: data.shipmentIds }, courierAccountId: account.id, trackingNumber: { not: null }, ...(data.manual ? {} : { status: { in: TRACKED } }) } });
       if (!shipments.length) return;
-      const adapter = this.adapters.get(account.provider);
+      const adapter = this.adapters.get(account.provider, account.baseUrl);
       const creds = this.accounts.open(account);
       const now = new Date();
       let results: TrackResult[] = [];
@@ -206,7 +206,7 @@ export class TrackingService implements OnModuleInit {
   async ingestWebhook(courierAccountId: string, headers: Record<string, string | string[] | undefined>, rawBody: Buffer | undefined): Promise<number> {
     const account = await TenantContext.runSystem(() => prisma.courierAccount.findUnique({ where: { id: courierAccountId } }));
     if (!account) throw notFound();
-    const adapter = this.adapters.get(account.provider);
+    const adapter = this.adapters.get(account.provider, account.baseUrl);
     if (!adapter.parseWebhook) throw notFound();
     const events = adapter.parseWebhook(headers, rawBody ?? Buffer.alloc(0), this.accounts.webhookSecretOf(account));
     if (events === null) throw new AppException('WEBHOOK_SIGNATURE_INVALID');
@@ -242,7 +242,7 @@ export class TrackingService implements OnModuleInit {
       const s = await prisma.shipment.findFirst({ where: { courierAccountId: p.courierAccountId, trackingNumber: p.trackingNumber }, orderBy: { createdAt: 'desc' } });
       const account = await prisma.courierAccount.findFirst({ where: { id: p.courierAccountId } });
       if (!s || !account) return done('unknown_tracking');
-      const adapter = this.adapters.get(account.provider);
+      const adapter = this.adapters.get(account.provider, account.baseUrl);
       await this.limiter.take(account.id, 'track');
       let r: TrackResult;
       try {

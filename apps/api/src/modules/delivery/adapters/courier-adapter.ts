@@ -1,11 +1,13 @@
 // 05-integrations §2.1 — the `CourierAdapter` port (DLV-10). One adapter per provider; each has a `live` driver (HTTP,
 // refused in development / test unless COURIER_ALLOW_LIVE=true) and a `fake` driver (default, deterministic, scriptable).
 // Every provider error leaves the adapter as a `CourierError` (05 §2.1 last paragraph).
-import type { CourierCapabilities, FailureReasonCode, ShipmentStatusName } from '@djaber/shared';
+// ZR Express runs two platforms under the one provider: Procolis (token + key) and the new api.zrexpress.app (API key +
+// tenant id); the account's `baseUrl` tells them apart (`ZR_APP_BASE_URL` = new platform) — see `capabilitiesOf`.
+import { ZR_APP_BASE_URL, type CourierCapabilities, type FailureReasonCode, type ShipmentStatusName, type ZrPlatform } from '@djaber/shared';
 
 export type CourierProvider = 'zrexpress' | 'ecotrack' | 'yalidine' | 'manual';
 export type CourierCredentials = {
-  zrexpress: { token: string; key: string };
+  zrexpress: { token: string; key: string } | { apiKey: string; tenantId: string };
   ecotrack: { baseUrl: string; token: string };
   yalidine: { apiId: string; apiToken: string };
   manual: Record<string, never>;
@@ -113,5 +115,13 @@ export const PROVIDER_CAPABILITIES: Record<CourierProvider, AdapterCapabilities>
   yalidine: { cancel: true, label: true, batchTrack: true, webhook: true, rates: true, stopdesks: true, retry: false },
   manual: { cancel: false, label: false, batchTrack: false, webhook: false, rates: false, stopdesks: false, retry: false },
 };
+/** ZR Express new platform (05-integrations §2.2b): label PDF, cancel (delete before pickup), hubs = stop-desks, rates. */
+export const ZR_APP_CAPABILITIES: AdapterCapabilities = { cancel: true, label: true, batchTrack: false, webhook: false, rates: true, stopdesks: true, retry: false };
+
+/** ZR Express platform of an account (null for the other providers). */
+export const zrPlatformOf = (provider: string, baseUrl: string | null | undefined): ZrPlatform | null => (provider !== 'zrexpress' ? null : baseUrl === ZR_APP_BASE_URL ? 'app' : 'procolis');
+/** Capabilities of an account: per provider, and per platform for ZR Express. */
+export const capabilitiesOf = (provider: string, baseUrl?: string | null): AdapterCapabilities =>
+  zrPlatformOf(provider, baseUrl) === 'app' ? ZR_APP_CAPABILITIES : PROVIDER_CAPABILITIES[provider as CourierProvider];
 
 export const PROVIDER_NAMES: Record<CourierProvider, string> = { zrexpress: 'ZR Express', ecotrack: 'EcoTrack', yalidine: 'Yalidine', manual: 'Livraison propre' };

@@ -2592,7 +2592,7 @@
  "couriers.field.senderPhone": "Téléphone expéditeur",
  "couriers.field.senderWilaya": "Wilaya de départ",
  "couriers.field.token": "Token",
- "couriers.fieldsHint": "Les champs ci-dessous dépendent du transporteur · ZR Express : token + clé · EcoTrack : URL + token · Yalidine : ID + token · Livraison propre : aucun identifiant.",
+ "couriers.fieldsHint": "Les champs ci-dessous dépendent du transporteur · ZR Express : clé API + ID tenant (Procolis : token + clé) · EcoTrack : URL + token · Yalidine : ID + token · Livraison propre : aucun identifiant.",
  "couriers.instance": "Instance :",
  "couriers.intro": "Le client paie toujours votre grille (D15). Les tarifs transporteur servent au coût et à la marge.",
  "couriers.manual.description": "Vos propres livreurs : marquez la commande « expédiée (livraison propre) », numéro de suivi facultatif, bordereau Djaber, statut mis à jour à la main.",
@@ -6320,5 +6320,14 @@
  "onboarding.ready.noAgent": "Aucun agent pour l’instant : créez-le à l’étape Agent.",
  "onboarding.ready.membersResource": "membres",
  "agents.wizard.tunnelFinish": "Enregistrer et passer à la page",
- "agents.wizard.tunnelNote": "Canaux et activation : après la connexion de votre page"
+ "agents.wizard.tunnelNote": "Canaux et activation : après la connexion de votre page",
+ "couriers.field.apiKey": "Clé API",
+ "couriers.field.tenantId": "ID tenant",
+ "couriers.credentials.zrexpress_app": "Clé API + ID tenant",
+ "couriers.platform": "Plateforme ZR Express",
+ "couriers.platform.app": "Nouvelle plateforme (zrexpress.app)",
+ "couriers.platform.procolis": "Ancienne plateforme (Procolis)",
+ "couriers.platform.app.hint": "Copiez la clé API et l'ID tenant depuis votre espace ZR Express (zrexpress.app). Étiquette ZR, annulation avant ramassage et stop-desks pris en charge.",
+ "couriers.platform.procolis.hint": "Compte Procolis (procolis.com) : token + clé. Ni étiquette ni annulation par l'API : l'étiquette Djaber est imprimée.",
+ "couriers.platform.current": "Plateforme : {name}"
 }

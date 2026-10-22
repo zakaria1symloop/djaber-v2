@@ -1,6 +1,7 @@
 // The `fake` courier driver (default everywhere; tests always use it). Deterministic and scriptable, never leaves the
-// process. Each provider keeps its real capabilities (ZR: no label / cancel; EcoTrack: label + cancel + retry; Yalidine:
-// label, stop-desks, webhook, cancel before pickup) and speaks its own raw statuses, so the mapping tables run.
+// process. Each provider keeps its real capabilities (ZR Procolis: no label / cancel; ZR new platform: label, cancel,
+// stop-desks; EcoTrack: label + cancel + retry; Yalidine: label, stop-desks, webhook, cancel before pickup) and speaks its
+// own raw statuses, so the mapping tables run.
 //
 // Built-in behaviour:
 //  - credentials containing `invalid` ⇒ COURIER_CREDENTIALS_INVALID; containing `down` ⇒ COURIER_UNAVAILABLE;
@@ -34,7 +35,7 @@ export class FakeCourierBackend {
   private seq = 0;
 
   accountOf(c: AnyCredentials) {
-    return String(c.token ?? c.apiId ?? c.baseUrl ?? 'acct');
+    return String(c.token ?? c.apiKey ?? c.apiId ?? c.baseUrl ?? 'acct');
   }
 
   record(provider: Provider, op: FakeOp, c: AnyCredentials, count = 1) {
@@ -98,14 +99,15 @@ export class FakeCourierBackend {
     return { ok: true, latencyMs: 42, accountName: `Compte ${provider}`, wilayasServed: 58 };
   }
 
-  create(provider: Provider, c: AnyCredentials, input: CreateShipmentInput) {
+  /** `needsDesk`: the provider routes stop-desk parcels by desk id (Yalidine, ZR Express new platform). */
+  create(provider: Provider, c: AnyCredentials, input: CreateShipmentInput, needsDesk = provider === 'yalidine') {
     this.record(provider, 'create', c);
     this.created.push({ ...input, provider });
     const existing = this.byShipment.get(input.shipmentId);
     if (existing) return { trackingNumber: existing, externalId: existing, labelUrl: null, rawStatus: this.parcels.get(existing)!.raw, raw: { replay: true } };
     const commune = normalizeRaw(input.communeCode || input.communeName);
     if (!commune || commune.startsWith('inconnue') || commune.startsWith('invalid')) throw new CourierError('validation', `Commune « ${input.communeName} » inconnue`, 'commune');
-    if (input.isStopdesk && provider === 'yalidine' && !input.stopdeskId) throw new CourierError('validation', 'stopdesk_id requis', 'stopdesk');
+    if (input.isStopdesk && needsDesk && !input.stopdeskId) throw new CourierError('validation', 'stopdesk_id requis', 'stopdesk');
     const tracking = `${PREFIX[provider]}-${String(++this.seq).padStart(6, '0')}`;
     this.parcels.set(tracking, { provider, account: this.accountOf(c), tracking, raw: CREATED_RAW[provider], at: new Date().toISOString(), script: [], shipmentId: input.shipmentId });
     this.byShipment.set(input.shipmentId, tracking);
@@ -154,8 +156,10 @@ export class FakeCourierAdapter implements CourierAdapter {
   constructor(
     readonly provider: Provider,
     private readonly backend: FakeCourierBackend,
+    /** another platform of the provider (ZR Express new platform) */
+    capabilities: AdapterCapabilities = PROVIDER_CAPABILITIES[provider],
   ) {
-    this.capabilities = PROVIDER_CAPABILITIES[provider];
+    this.capabilities = capabilities;
     const cap = this.capabilities;
     // optional methods exist only where the provider offers them (callers test their presence, like for the live drivers)
     if (!cap.cancel) (this as Partial<CourierAdapter>).cancel = undefined;
@@ -173,7 +177,7 @@ export class FakeCourierAdapter implements CourierAdapter {
     return this.backend.test(this.provider, c);
   }
   async createShipment(c: AnyCredentials, input: CreateShipmentInput) {
-    return this.backend.create(this.provider, c, input);
+    return this.backend.create(this.provider, c, input, this.capabilities.stopdesks);
   }
   async track(c: AnyCredentials, trackingNumber: string) {
     this.backend.record(this.provider, 'track', c);

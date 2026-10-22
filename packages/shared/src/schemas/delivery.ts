@@ -133,27 +133,43 @@ export const COURIER_CREDENTIAL_FIELDS = {
   ecotrack: ['baseUrl', 'token'],
   yalidine: ['apiId', 'apiToken'],
 } as const satisfies Record<CourierProviderName, readonly string[]>;
-export type CourierCredentialField = 'token' | 'key' | 'baseUrl' | 'apiId' | 'apiToken';
+/** ZR Express new platform (api.zrexpress.app, 05-integrations §2.2b): API key + tenant id instead of Procolis token + key. */
+export const ZR_APP_CREDENTIAL_FIELDS = ['apiKey', 'tenantId'] as const;
+/** The two ZR Express platforms: `app` = api.zrexpress.app (account `baseUrl` = `ZR_APP_BASE_URL`), `procolis` = procolis.com (`baseUrl` ''). */
+export type ZrPlatform = 'app' | 'procolis';
+export const ZR_APP_BASE_URL = 'https://api.zrexpress.app';
+export type CourierCredentialField = 'token' | 'key' | 'baseUrl' | 'apiId' | 'apiToken' | 'apiKey' | 'tenantId';
 /** What a provider can do (adapter `capabilities`, api-contract `CourierAccountDto.capabilities`). */
 export type CourierCapabilities = { parcel: boolean; tracking: boolean; label: boolean; rates: boolean; stopdesk: boolean; cancel: boolean; retry: boolean; webhook: boolean; batchTrack: boolean };
 /**
  * `GET /delivery/couriers/providers` — the add dialog (provider → dynamic fields). `manual` = "Livraison propre"
  * (no account, no credentials: `POST /orders/:id/ship-manual`), listed with `account: false`.
  */
+export type CourierProviderField = { key: CourierCredentialField; type: 'text' | 'secret' | 'url'; required: true; labelKey: string; placeholder: string | null };
 export type CourierProviderView = {
   provider: ShipmentProviderName;
   name: string;
   account: boolean;
-  fields: { key: CourierCredentialField; type: 'text' | 'secret' | 'url'; required: true; labelKey: string; placeholder: string | null }[];
+  fields: CourierProviderField[];
   capabilities: CourierCapabilities;
   portalUrl: string | null;
-  /** courier label PDF offered by the provider (else the Djaber label is printed — ZR Express, manual) */
+  /** courier label PDF offered by the provider (else the Djaber label is printed — ZR Express Procolis, manual) */
   labelSource: 'courier' | 'djaber';
+  /** ZR Express only: the platform picked in the dialog (first = default: the new one); the fields above stay Procolis'. */
+  platforms?: { key: ZrPlatform; name: string; fields: CourierProviderField[]; capabilities: CourierCapabilities; portalUrl: string | null; labelSource: 'courier' | 'djaber' }[];
 };
 
 /** https://<instance>.ecotrack.dz (05-integrations §2.3). */
 export const ECOTRACK_URL_RE = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.ecotrack\.dz\/?$/i;
 export const ZrCredentialsSchema = z.object({ token: secret(), key: secret() }).strict();
+export const ZrAppCredentialsSchema = z.object({ apiKey: secret(), tenantId: secret(100) }).strict();
+/** ZR Express: the new platform when `apiKey` / `tenantId` is sent, else Procolis (field errors of the platform meant). */
+const ZrAnyCredentialsSchema = z.record(z.unknown(), { errorMap: () => ({ message: 'validation.required' }) }).transform((v, ctx) => {
+  const r = ('apiKey' in v || 'tenantId' in v ? ZrAppCredentialsSchema : ZrCredentialsSchema).safeParse(v);
+  if (r.success) return r.data;
+  for (const issue of r.error.issues) ctx.addIssue(issue);
+  return z.NEVER;
+});
 export const EcotrackCredentialsSchema = z
   .object({ baseUrl: z.string({ required_error: 'validation.required' }).trim().min(1, 'validation.required').max(200, 'validation.length').regex(ECOTRACK_URL_RE, 'validation.url_https').transform((u) => u.replace(/\/$/, '').toLowerCase()), token: secret() })
   .strict();
@@ -176,13 +192,14 @@ const accountCommon = {
 };
 /**
  * `POST /delivery/couriers` (`delivery.manage`, audited) — per-provider required fields (DLV-03 fix); credentials are
- * stored AES-256-GCM and never returned. `409 CONFLICT` when the same provider (+ EcoTrack instance) already exists.
+ * stored AES-256-GCM and never returned. `409 CONFLICT` when the same provider (+ EcoTrack instance / ZR platform) already exists.
  * The provider is not called here: the dialog calls `POST /delivery/couriers/:id/test` right after.
  */
 export const CreateCourierAccountSchema = z.discriminatedUnion(
   'provider',
   [
-    z.object({ provider: z.literal('zrexpress'), credentials: ZrCredentialsSchema, ...accountCommon }).strict(),
+    // new platform (apiKey + tenantId) or Procolis (token + key); the platform is stored as the account `baseUrl`
+    z.object({ provider: z.literal('zrexpress'), credentials: ZrAnyCredentialsSchema, ...accountCommon }).strict(),
     z.object({ provider: z.literal('ecotrack'), credentials: EcotrackCredentialsSchema, ...accountCommon }).strict(),
     z.object({ provider: z.literal('yalidine'), credentials: YalidineCredentialsSchema, ...accountCommon }).strict(),
   ],
@@ -196,7 +213,7 @@ export type CreateCourierAccountInput = z.infer<typeof CreateCourierAccountSchem
 export const UpdateCourierAccountSchema = z
   .object({
     ...accountCommon,
-    credentials: z.union([ZrCredentialsSchema, EcotrackCredentialsSchema, YalidineCredentialsSchema]).optional(),
+    credentials: z.union([ZrCredentialsSchema, ZrAppCredentialsSchema, EcotrackCredentialsSchema, YalidineCredentialsSchema]).optional(),
   })
   .strict();
 export type UpdateCourierAccountInput = z.infer<typeof UpdateCourierAccountSchema>;
@@ -211,6 +228,8 @@ export type CourierAccountView = {
   provider: CourierProviderName;
   displayName: string;
   baseUrl: string;
+  /** ZR Express platform of the account (`app` when `baseUrl` = `ZR_APP_BASE_URL`); null for the other providers */
+  platform: ZrPlatform | null;
   isActive: boolean;
   isDefault: boolean;
   sender: { name: string | null; phone: string | null; address: string | null; wilayaId: number | null };

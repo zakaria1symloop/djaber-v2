@@ -55,7 +55,7 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 ## Delivery
 | # | Issue | Status |
 |---|---|---|
-| D1 | Carrier integration not working (ZR Express) | deferred — integration details to come from the owner |
+| D1 | Carrier integration not working (ZR Express) | done — new ZR platform (api.zrexpress.app, API key + tenant id) beside Procolis; to confirm on staging with a real account (05 §2.2b) |
 
 ## Workspace
 | # | Issue | Status |

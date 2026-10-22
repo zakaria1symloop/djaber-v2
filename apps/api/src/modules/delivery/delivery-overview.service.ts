@@ -130,7 +130,7 @@ export class DeliveryOverviewService implements OnModuleInit {
         where: { id: { in: pairs.map((p) => p.id) } },
         include: { client: { select: { id: true, name: true, phone: true, riskLevel: true, isPlaceholder: true, orderCount: true } }, wilaya: { select: { id: true, nameFr: true, nameAr: true } }, commune: { select: { nameFr: true, nameAr: true } }, shipments: { where: { status: { in: ['pending', 'sent', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered'] } }, select: { id: true, provider: true, status: true } } },
       }),
-      prisma.shipment.findMany({ where: { id: { in: pairs.map((p) => p.sid).filter((x): x is string => !!x) } }, include: { courierAccount: { select: { id: true, displayName: true } } } }),
+      prisma.shipment.findMany({ where: { id: { in: pairs.map((p) => p.sid).filter((x): x is string => !!x) } }, include: { courierAccount: { select: { id: true, displayName: true, baseUrl: true } } } }),
       prisma.courierAccount.count({ where: { isActive: true } }),
       this.safety.index(),
     ]);
@@ -183,7 +183,7 @@ export class DeliveryOverviewService implements OnModuleInit {
     return {
       id: s.id,
       provider: s.provider,
-      courierAccount: s.courierAccount,
+      courierAccount: s.courierAccount ? { id: s.courierAccount.id, displayName: s.courierAccount.displayName } : null,
       status: s.status,
       trackingNumber: s.trackingNumber,
       failureReason: s.failureReason,

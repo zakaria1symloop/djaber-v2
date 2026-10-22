@@ -3,7 +3,7 @@
 // (`CourierAccount.isDefault` + `Workspace.defaultCourierAccountId` kept in sync), active toggle, delete blocked while
 // parcels are in flight (`409 COURIER_HAS_ACTIVE_SHIPMENTS {count}`). Every change is audited (01-nest-module-map §3.4).
 import { Injectable } from '@nestjs/common';
-import type { CourierAccountView, CourierProviderView, CourierTestResultView, CreateCourierAccountInput, UpdateCourierAccountInput } from '@djaber/shared';
+import { ZR_APP_BASE_URL, type CourierAccountView, type CourierProviderView, type CourierTestResultView, type CreateCourierAccountInput, type UpdateCourierAccountInput, type ZrPlatform } from '@djaber/shared';
 import { Prisma, prisma, TenantContext, type CourierAccount, type Tx } from '@djaber/db';
 import { AuditService } from '../../core/audit/audit.service';
 import { ConfigService } from '../../core/config/config.service';
@@ -13,7 +13,7 @@ import { OutboxService } from '../../core/outbox/outbox.service';
 import { QueueOutbox } from '../../core/queue/queue.outbox';
 import { can } from '../../core/rbac/permission-matrix';
 import { CourierAdapters } from './adapters/courier-registry';
-import { PROVIDER_CAPABILITIES, PROVIDER_NAMES, wireCapabilities, type AnyCredentials, type CourierProvider } from './adapters/courier-adapter';
+import { capabilitiesOf, PROVIDER_CAPABILITIES, PROVIDER_NAMES, wireCapabilities, ZR_APP_CAPABILITIES, zrPlatformOf, type AnyCredentials, type CourierProvider } from './adapters/courier-adapter';
 
 const DAY = 86_400_000;
 /** Parcels still with the courier (delete guard, stats). */
@@ -33,7 +33,14 @@ const FIELD_DEFS: Record<'zrexpress' | 'ecotrack' | 'yalidine', CourierProviderV
     { key: 'apiToken', type: 'secret', required: true, labelKey: 'couriers.field.apiToken', placeholder: null },
   ],
 };
+/** ZR Express new platform (api.zrexpress.app): API key + tenant id, from the merchant's ZR Express space. */
+const ZR_APP_FIELDS: CourierProviderView['fields'] = [
+  { key: 'apiKey', type: 'secret', required: true, labelKey: 'couriers.field.apiKey', placeholder: null },
+  { key: 'tenantId', type: 'text', required: true, labelKey: 'couriers.field.tenantId', placeholder: null },
+];
 const PORTALS: Record<CourierProvider, string | null> = { zrexpress: 'https://procolis.com', ecotrack: null, yalidine: 'https://yalidine.app', manual: null };
+/** Credential fields of an account (ZR Express: per platform). */
+const fieldsOf = (provider: 'zrexpress' | 'ecotrack' | 'yalidine', platform: ZrPlatform | null) => (platform === 'app' ? ZR_APP_FIELDS : FIELD_DEFS[provider]);
 
 const bytes = (s: string) => new Uint8Array(Buffer.from(s, 'utf8'));
 
@@ -61,6 +68,16 @@ export class CourierAccountService {
       portalUrl: PORTALS[p],
       labelSource: PROVIDER_CAPABILITIES[p].label ? 'courier' : 'djaber',
     }));
+    // ZR Express: two platforms, the new one first (default of the dialog); the top-level fields stay Procolis'
+    const i = list.findIndex((p) => p.provider === 'zrexpress');
+    const procolis = list[i]!;
+    list[i] = {
+      ...procolis,
+      platforms: [
+        { key: 'app', name: 'ZR Express', fields: ZR_APP_FIELDS, capabilities: wireCapabilities(ZR_APP_CAPABILITIES), portalUrl: null, labelSource: 'courier' },
+        { key: 'procolis', name: 'ZR Express (Procolis)', fields: procolis.fields, capabilities: procolis.capabilities, portalUrl: procolis.portalUrl, labelSource: procolis.labelSource },
+      ],
+    };
     list.push({ provider: 'manual', name: PROVIDER_NAMES.manual, account: false, fields: [], capabilities: { ...wireCapabilities(PROVIDER_CAPABILITIES.manual), tracking: false }, portalUrl: null, labelSource: 'djaber' });
     return list;
   }
@@ -118,7 +135,8 @@ export class CourierAccountService {
 
   present(a: CourierAccount, stats: { sent: number; failed30d: number; activeShipments: number } | undefined): CourierAccountView {
     const provider = a.provider as 'zrexpress' | 'ecotrack' | 'yalidine';
-    const caps = PROVIDER_CAPABILITIES[provider];
+    const platform = zrPlatformOf(provider, a.baseUrl);
+    const caps = capabilitiesOf(provider, a.baseUrl);
     let creds: AnyCredentials = {};
     try {
       creds = this.open(a);
@@ -126,7 +144,7 @@ export class CourierAccountService {
       creds = {};
     }
     const credentialHints: CourierAccountView['credentialHints'] = {};
-    for (const f of FIELD_DEFS[provider]) credentialHints[f.key] = this.hint(f.key, creds[f.key]);
+    for (const f of fieldsOf(provider, platform)) credentialHints[f.key] = this.hint(f.key, creds[f.key]);
     const s = stats ?? { sent: 0, failed30d: 0, activeShipments: 0 };
     const role = TenantContext.get().role;
     const manage = can(role, 'delivery.manage');
@@ -139,6 +157,7 @@ export class CourierAccountService {
       provider,
       displayName: a.displayName,
       baseUrl: a.baseUrl,
+      platform,
       isActive: a.isActive,
       isDefault: a.isDefault,
       sender: { name: a.senderName, phone: a.senderPhone, address: a.senderAddress, wilayaId: a.senderWilayaId },
@@ -204,8 +223,9 @@ export class CourierAccountService {
 
   async create(input: CreateCourierAccountInput): Promise<CourierAccountView> {
     const workspaceId = TenantContext.workspaceId();
-    const baseUrl = input.provider === 'ecotrack' ? input.credentials.baseUrl : '';
-    const caps = PROVIDER_CAPABILITIES[input.provider];
+    // EcoTrack: the merchant instance; ZR Express: the platform (API key + tenant id = api.zrexpress.app, else Procolis)
+    const baseUrl = input.provider === 'ecotrack' ? input.credentials.baseUrl : input.provider === 'zrexpress' && 'apiKey' in input.credentials ? ZR_APP_BASE_URL : '';
+    const caps = capabilitiesOf(input.provider, baseUrl);
     const secret = input.webhookSecret ?? (caps.webhook ? this.crypto.randomToken(24) : null);
     let id = '';
     try {
@@ -245,7 +265,8 @@ export class CourierAccountService {
     const before = await this.load(id);
     if (input.credentials) {
       const keys = Object.keys(input.credentials).sort().join(',');
-      const want = [...FIELD_DEFS[before.provider as 'zrexpress'].map((f) => f.key)].sort().join(',');
+      // same platform only (a ZR account keeps its platform: its parcels are tracked there)
+      const want = fieldsOf(before.provider as 'zrexpress', zrPlatformOf(before.provider, before.baseUrl)).map((f) => f.key).sort().join(',');
       if (keys !== want) throw new AppException('VALIDATION_ERROR', {}, { credentials: 'validation.required' });
     }
     const baseUrl = before.provider === 'ecotrack' && input.credentials && 'baseUrl' in input.credentials ? (input.credentials as { baseUrl: string }).baseUrl : before.baseUrl;
@@ -298,7 +319,7 @@ export class CourierAccountService {
   /** `POST /delivery/couriers/:id/test` — allowed synchronous courier call (03-events §7, 10 s timeout in the transport). */
   async test(id: string): Promise<CourierTestResultView> {
     const a = await this.load(id);
-    const adapter = this.adapters.get(a.provider);
+    const adapter = this.adapters.get(a.provider, a.baseUrl);
     const r = await adapter.testCredentials(a.creds);
     const at = new Date();
     await prisma.courierAccount.update({

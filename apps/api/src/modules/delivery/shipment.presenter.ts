@@ -3,19 +3,20 @@
 import { SHIPMENT_MAX_ATTEMPTS, SHIPMENT_NO_MOVEMENT_STATUSES, SHIPMENT_STALE_AFTER_DAYS, SHIPMENT_TERMINAL_STATUSES, type ActionDescriptor, type AddressView, type ClientRefView, type ShipmentErrorView, type ShipmentEventView, type ShipmentView } from '@djaber/shared';
 import { TenantContext, type Shipment } from '@djaber/db';
 import { can, type MerchantPermission } from '../../core/rbac/permission-matrix';
-import { PROVIDER_CAPABILITIES, type CourierProvider } from './adapters/courier-adapter';
+import { capabilitiesOf } from './adapters/courier-adapter';
 
 const DAY = 86_400_000;
 export const userRefSelect = { select: { id: true, firstName: true, lastName: true, avatarUrl: true } } as const;
 
 /** Prisma include of a shipment as the presenter reads it. */
 export const SHIPMENT_INCLUDE = {
-  courierAccount: { select: { id: true, displayName: true } },
+  courierAccount: { select: { id: true, displayName: true, baseUrl: true } },
   events: { orderBy: [{ at: 'desc' as const }, { createdAt: 'desc' as const }], include: { actor: userRefSelect } },
 };
 
 export type ShipmentRow = Shipment & {
-  courierAccount: { id: string; displayName: string } | null;
+  /** `baseUrl` picks the ZR Express platform (capabilities); not sent to the client */
+  courierAccount: { id: string; displayName: string; baseUrl?: string } | null;
   events: { at: Date; rawStatus: string; mappedStatus: ShipmentView['status'] | null; description: string | null; location: string | null; source: string; actor: { id: string; firstName: string; lastName: string; avatarUrl: string | null } | null }[];
 };
 export type ShipmentOrderLike = { id: string; number: string; status: string; clientPhone?: string | null };
@@ -64,8 +65,8 @@ export const isSendFailure = (s: Pick<Shipment, 'status' | 'trackingNumber'>) =>
  * Parcel menu (04 §22): sync · label · retry (failed send) · retry_delivery · change_courier · cancel · mark_failed ·
  * mark_delivered · mark_returned · open_order · call_client. At 3 failed attempts "mark_returned" becomes primary.
  */
-export const shipmentActions = (s: Pick<Shipment, 'provider' | 'status' | 'trackingNumber' | 'lastError' | 'deliveryAttempts'>, order: { status: string }, o: { syncAvailableAt?: string | null; now?: number } = {}): ActionDescriptor[] => {
-  const caps = PROVIDER_CAPABILITIES[s.provider as CourierProvider];
+export const shipmentActions = (s: Pick<Shipment, 'provider' | 'status' | 'trackingNumber' | 'lastError' | 'deliveryAttempts'> & { courierAccount?: { baseUrl?: string } | null }, order: { status: string }, o: { syncAvailableAt?: string | null; now?: number } = {}): ActionDescriptor[] => {
+  const caps = capabilitiesOf(s.provider, s.courierAccount?.baseUrl);
   const courier = s.provider !== 'manual';
   const terminal = (SHIPMENT_TERMINAL_STATUSES as readonly string[]).includes(s.status);
   const sendFailed = isSendFailure(s);
@@ -104,14 +105,14 @@ export const presentShipmentEvent = (e: ShipmentRow['events'][number]): Shipment
 
 export const presentShipment = (s: ShipmentRow, order: ShipmentOrderLike, client: ClientRefView, address: AddressView | null, ctx: ShipmentPresentCtx): ShipmentView => {
   const now = ctx.now ?? Date.now();
-  const caps = PROVIDER_CAPABILITIES[s.provider as CourierProvider];
+  const caps = capabilitiesOf(s.provider, s.courierAccount?.baseUrl);
   return {
     id: s.id,
     orderId: order.id,
     orderNumber: order.number,
     client,
     provider: s.provider,
-    courierAccount: s.courierAccount,
+    courierAccount: s.courierAccount ? { id: s.courierAccount.id, displayName: s.courierAccount.displayName } : null,
     status: s.status,
     trackingNumber: s.trackingNumber,
     labelUrl: null,

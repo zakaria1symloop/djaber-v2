@@ -43,8 +43,13 @@ test('AT-DLV-01 (couriers) — empty state, add ZR Express: per-provider fields,
   await expect(page.locator('#cr-token')).toHaveCount(0);
 
   await d.getByRole('radio', { name: 'ZR Express' }).click();
-  await page.locator('#cr-token').fill('e2e-token-ok');
-  await page.locator('#cr-key').fill('e2e-key-ok');
+  // two ZR platforms: the new one by default (API key + tenant id), Procolis on demand (token + key)
+  await d.getByRole('radio', { name: 'Ancienne plateforme (Procolis)' }).click();
+  await expect(page.locator('#cr-token')).toBeVisible();
+  await d.getByRole('radio', { name: 'Nouvelle plateforme (zrexpress.app)' }).click();
+  await expect(page.locator('#cr-token')).toHaveCount(0);
+  await page.locator('#cr-apiKey').fill('e2e-key-ok');
+  await page.locator('#cr-tenantId').fill('e2e-tenant-ok');
   await page.locator('#cr-sname').fill('Boutique Amel');
   await page.locator('#cr-sphone').fill('0550112233');
   await page.getByTestId('dialog-submit').click();
@@ -53,7 +58,8 @@ test('AT-DLV-01 (couriers) — empty state, add ZR Express: per-provider fields,
   const card = page.locator('[data-testid="courier-card"][data-courier="zrexpress"]');
   await expect(card).toContainText(/connecté/i);
   await expect(card).toContainText('PAR DÉFAUT');
-  await expect(card).toContainText('étiquette ✗');
+  await expect(card).toContainText('CLÉ API + ID TENANT');
+  await expect(card).toContainText('étiquette ✓');
   await expect(page.locator('[data-testid="courier-provider-card"]')).toHaveCount(2);
   // D9 auto-send: workspace setting next to the couriers
   await page.getByTestId('auto-send').getByRole('switch').click();

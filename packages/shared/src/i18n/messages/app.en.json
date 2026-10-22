@@ -2592,7 +2592,7 @@
  "couriers.field.senderPhone": "Sender phone",
  "couriers.field.senderWilaya": "Departure wilaya",
  "couriers.field.token": "Token",
- "couriers.fieldsHint": "The fields below depend on the courier · ZR Express: token + key · EcoTrack: URL + token · Yalidine: ID + token · Self-delivery: no credentials.",
+ "couriers.fieldsHint": "The fields below depend on the courier · ZR Express: API key + tenant ID (Procolis: token + key) · EcoTrack: URL + token · Yalidine: ID + token · Self-delivery: no credentials.",
  "couriers.instance": "Instance:",
  "couriers.intro": "The customer always pays your grid (D15). Courier rates feed cost and margin.",
  "couriers.manual.description": "Your own riders: mark the order \"shipped (self-delivery)\", optional tracking number, Djaber label, status updated by hand.",
@@ -6320,5 +6320,14 @@
  "onboarding.ready.noAgent": "No agent yet: create it at the Agent step.",
  "onboarding.ready.membersResource": "members",
  "agents.wizard.tunnelFinish": "Save and go to the page step",
- "agents.wizard.tunnelNote": "Channels and activation: once your page is connected"
+ "agents.wizard.tunnelNote": "Channels and activation: once your page is connected",
+ "couriers.field.apiKey": "API key",
+ "couriers.field.tenantId": "Tenant ID",
+ "couriers.credentials.zrexpress_app": "API key + tenant ID",
+ "couriers.platform": "ZR Express platform",
+ "couriers.platform.app": "New platform (zrexpress.app)",
+ "couriers.platform.procolis": "Former platform (Procolis)",
+ "couriers.platform.app.hint": "Copy the API key and the tenant ID from your ZR Express space (zrexpress.app). ZR label, cancel before pickup and stop-desks are supported.",
+ "couriers.platform.procolis.hint": "Procolis account (procolis.com): token + key. No label or cancel through the API: the Djaber label is printed.",
+ "couriers.platform.current": "Platform: {name}"
 }

@@ -4,7 +4,7 @@
 // default / active, test: en cours ≤ 10 s / OK latency + wilayas / refusé COURIER_CREDENTIALS_INVALID / injoignable
 // COURIER_UNAVAILABLE — save allowed) and "Supprimer le transporteur" (blocked COURIER_HAS_ACTIVE_SHIPMENTS → Désactiver).
 // States: skeleton · [E] no account (provider cards with "+ Ajouter") · cards · 403 without `delivery.manage`.
-import { formatNumber, formatPhoneDz, type AppLocale } from '@djaber/shared';
+import { formatNumber, formatPhoneDz, type AppLocale, type ZrPlatform } from '@djaber/shared';
 import { Button, Card, Checkbox, ConfirmDialog, CourierCard, CourierTestResult, Dialog, EmptyState, Field, FormAlert, Input, Ltr, PhoneInput, SegmentedControl, Skeleton, Switch, toast, type CourierTestState, type Tone } from '@djaber/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { Truck } from 'lucide-react';
@@ -53,6 +53,8 @@ export function testView(r: Pick<TestResult, 'ok' | 'latencyMs' | 'error' | 'mes
 }
 
 const yes = (v: boolean) => (v ? '✓' : '✗');
+/** Card meta "TOKEN + KEY" — per platform for ZR Express. */
+const credentialsLabel = (provider: string, platform: ZrPlatform | null | undefined, t: TFunction) => t(provider === 'zrexpress' && platform !== 'procolis' ? 'couriers.credentials.zrexpress_app' : `couriers.credentials.${provider}`);
 
 export function CouriersPage() {
   const t = useT();
@@ -154,7 +156,7 @@ export function CouriersPage() {
                     name={c.displayName}
                     status={st}
                     muted={!c.isActive}
-                    meta={[c.isDefault ? t('couriers.default') : null, t(`couriers.credentials.${c.provider}`), c.lastTest ? t('couriers.testedAgo', { ago: relativeTime(c.lastTest.at, locale) }) : t('couriers.neverTested')].filter(Boolean).join(' · ').toUpperCase()}
+                    meta={[c.isDefault ? t('couriers.default') : null, credentialsLabel(c.provider, c.platform, t), c.lastTest ? t('couriers.testedAgo', { ago: relativeTime(c.lastTest.at, locale) }) : t('couriers.neverTested')].filter(Boolean).join(' · ').toUpperCase()}
                     actions={
                       <>
                         <Button onClick={() => void test(c)} loading={tr?.state === 'testing'} data-testid="courier-test-btn">
@@ -196,7 +198,7 @@ export function CouriersPage() {
                   data-testid="courier-provider-card"
                   name={p.name}
                   status={{ label: t('couriers.state.notConfigured'), tone: 'neutral' }}
-                  meta={t(`couriers.credentials.${p.provider}`).toUpperCase()}
+                  meta={credentialsLabel(p.provider, p.platforms?.[0]?.key, t).toUpperCase()}
                   actions={
                     <Button variant="primary" onClick={() => setEdit({ account: null, provider: p.provider as ProviderKey })}>
                       {t('couriers.addProvider', { name: p.name })}
@@ -277,6 +279,8 @@ export function CourierDialog({ open, account, provider: initial, providers, exi
   const t = useT();
   const typed = useTypedFlag(open);
   const [provider, setProvider] = useState<ProviderKey>(initial);
+  // ZR Express: new platform (API key + tenant id) or Procolis (token + key)
+  const [platform, setPlatform] = useState<ZrPlatform>(account?.platform ?? 'app');
   const [f, setF] = useState<Form>(() => formOf(account, existing));
   const [current, setCurrent] = useState<CourierAccount | null>(account);
   const [touched, setTouched] = useState(false);
@@ -286,6 +290,7 @@ export function CourierDialog({ open, account, provider: initial, providers, exi
   const [test, setTest] = useState<{ state: CourierTestState; label: string; detail?: string } | null>(null);
   useOnOpen(open, () => {
     setProvider(account?.provider ?? initial);
+    setPlatform(account?.platform ?? 'app');
     setF(formOf(account, existing));
     setCurrent(account);
     setTouched(false);
@@ -295,12 +300,13 @@ export function CourierDialog({ open, account, provider: initial, providers, exi
     setTest(null);
   });
   const info = providers.find((p) => p.provider === provider);
-  const fields = info?.fields ?? [];
+  const plat = info?.platforms?.find((p) => p.key === platform) ?? null;
+  const fields = plat?.fields ?? info?.fields ?? [];
   const editing = !!current;
   const credErr = provider === 'manual' ? {} : credentialErrors(fields.map((x) => ({ name: x.key, secret: x.type === 'secret', url: x.type === 'url' })), f.creds, editing);
   const err = (k: string) => (touched ? (credErr[k] ? t(credErr[k]!) : undefined) : undefined) ?? (serverFields[k] ? (t.has(serverFields[k]!) ? t(serverFields[k]!, { max: '', min: '' }) : serverFields[k]) : undefined);
   const set = (p: Partial<Form>) => setF((x) => ({ ...x, ...p }));
-  const taken = !current && provider !== 'manual' && existing.some((c) => c.provider === provider) && provider !== 'ecotrack';
+  const taken = !current && provider !== 'manual' && provider !== 'ecotrack' && existing.some((c) => c.provider === provider && (!plat || (c.platform ?? 'procolis') === platform));
 
   const save = async (): Promise<CourierAccount | null> => {
     setTouched(true);
@@ -412,7 +418,27 @@ export function CourierDialog({ open, account, provider: initial, providers, exi
           <FormAlert tone="info">{t('couriers.manual.dialog')}</FormAlert>
         ) : (
           <>
-            {taken ? <FormAlert tone="warning">{t('couriers.taken', { name: t(`couriers.provider.${provider}`) })}</FormAlert> : null}
+            {info?.platforms?.length ? (
+              current ? (
+                <p className="ts-label-micro !normal-case text-text-muted">{t('couriers.platform.current', { name: t(`couriers.platform.${platform}`) })}</p>
+              ) : (
+                <SegmentedControl<ZrPlatform>
+                  label={t('couriers.platform')}
+                  value={platform}
+                  onChange={(p) => {
+                    setPlatform(p);
+                    set({ creds: {} });
+                    setTouched(false);
+                    setTest(null);
+                    setServerFields({});
+                    setError(null);
+                  }}
+                  options={info.platforms.map((p) => ({ value: p.key, label: t(`couriers.platform.${p.key}`) }))}
+                />
+              )
+            ) : null}
+            {plat ? <FormAlert tone="info">{t(`couriers.platform.${plat.key}.hint`)}</FormAlert> : null}
+            {taken ? <FormAlert tone="warning">{t('couriers.taken', { name: plat ? t(`couriers.platform.${platform}`) : t(`couriers.provider.${provider}`) })}</FormAlert> : null}
             <p className="ts-label-micro !normal-case text-text-muted">{t('couriers.fieldsHint')}</p>
             <div className="grid gap-3 sm:grid-cols-2">
               {fields.map((x) => (

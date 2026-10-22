@@ -59,6 +59,28 @@ describe('courier accounts (DLV-03)', () => {
     expect(list.map((a: any) => a.id)).toEqual([zr.id, yal.id]);
   });
 
+  it('ZR Express new platform: API key + tenant id ⇒ platform `app` (label, cancel, stop-desks); a Procolis account can sit next to it; credentials stay on their platform', async () => {
+    const owner = await asOwner(app);
+    const catalogue = (await owner.get('/delivery/couriers/providers').expect(200)).body.data.find((p: any) => p.provider === 'zrexpress');
+    expect(catalogue.platforms.map((p: any) => [p.key, p.fields.map((f: any) => f.key), p.labelSource])).toEqual([
+      ['app', ['apiKey', 'tenantId'], 'courier'],
+      ['procolis', ['token', 'key'], 'djaber'],
+    ]);
+    const half = await owner.post('/delivery/couriers', { provider: 'zrexpress', credentials: { apiKey: 'zr-app-key-123456' } }).expect(422);
+    expect(half.body.error.fields).toMatchObject({ 'credentials.tenantId': 'validation.required' });
+
+    const zrApp = (await owner.post('/delivery/couriers', { provider: 'zrexpress', credentials: { apiKey: 'zr-app-key-123456', tenantId: 'tenant-0001' } }).expect(201)).body.data;
+    expect(zrApp).toMatchObject({ provider: 'zrexpress', platform: 'app', baseUrl: 'https://api.zrexpress.app', credentialHints: { apiKey: '••••3456' }, capabilities: { label: true, cancel: true, stopdesk: true, rates: true } });
+    expect(JSON.stringify(zrApp)).not.toContain('zr-app-key-123456');
+    expect((await owner.post(`/delivery/couriers/${zrApp.id}/test`).expect(200)).body.data).toMatchObject({ ok: true });
+    const procolis = await addCourier(owner, 'zrexpress');
+    expect(procolis).toMatchObject({ platform: 'procolis', baseUrl: '', capabilities: { label: false, cancel: false } });
+    expect((await owner.post('/delivery/couriers', { provider: 'zrexpress', credentials: { apiKey: 'other-key-0000', tenantId: 'tenant-0002' } }).expect(409)).body.error.code).toBe('CONFLICT');
+    // a ZR account keeps its platform: its parcels are tracked there
+    expect((await owner.patch(`/delivery/couriers/${zrApp.id}`, { credentials: CREDS.zrexpress }).expect(422)).body.error.code).toBe('VALIDATION_ERROR');
+    await owner.patch(`/delivery/couriers/${zrApp.id}`, { credentials: { apiKey: 'zr-app-key-999999', tenantId: 'tenant-0001' } }).expect(200);
+  });
+
   it('test connection: ok + latency / rejected (COURIER_CREDENTIALS_INVALID) / unreachable (COURIER_UNAVAILABLE), stored on the account', async () => {
     const owner = await asOwner(app);
     const zr = await addCourier(owner, 'zrexpress');
