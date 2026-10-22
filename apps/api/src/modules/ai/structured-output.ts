@@ -44,7 +44,7 @@ export const AI_REPLY_JSON_SCHEMA = {
   },
 } as const;
 
-export const FORMAT_REMINDER = 'Format reminder: respond with the JSON object only.';
+export const FORMAT_REMINDER = 'Format reminder: answer with the one JSON object of the OUTPUT section only (your answer above goes in "reply"), no text around it.';
 
 /** The first balanced `{…}` of a text (models sometimes wrap the object in a code fence or a sentence). */
 export const extractJson = (text: string): string | null => {

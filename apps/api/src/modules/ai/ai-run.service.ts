@@ -171,8 +171,11 @@ export class AiRunService implements OnModuleInit {
       const parsed = parseReplyOutput(res.value.text);
       if (parsed.ok) return { ok: true, output: parsed.value, tools: executed, usage, model, usedFallback, forcedHandoff, repaired };
       if (repaired) return { ok: false, kind: 'format', error: `malformed_output:${parsed.reason}`, tools: executed, usage, model, usedFallback };
-      // §4.1: one retry with the format reminder
+      // §4.1: one retry with the format reminder. It leaves the earlier conversation out (tester report 22/10: in a long
+      // thread the model copies the plain-text style of its past replies and stays malformed after the reminder): with the
+      // batch, this turn's tool results and its own answer only, it just puts that answer in the JSON object.
       repaired = true;
+      messages.splice(0, req.prompt.messages.length - 1);
       messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: FORMAT_REMINDER });
     }
     return { ok: false, kind: 'format', error: 'malformed_output:steps', tools: executed, usage, model, usedFallback };

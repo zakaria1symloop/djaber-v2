@@ -4,6 +4,7 @@ import { getMessages } from '@djaber/shared';
 import { RedisService } from '../../src/core/redis/redis.provider';
 import { ORDER_TOOLS, type OrderTools } from '../../src/modules/ai/tools/order-tools';
 import { RoutingService } from '../../src/modules/ai/routing.service';
+import { FORMAT_REMINDER } from '../../src/modules/ai/structured-output';
 import { ConversationService } from '../../src/modules/messaging/conversation.service';
 import { asOwner, type Actor } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
@@ -167,7 +168,7 @@ describe('FL-01 — reply turn', () => {
     fakeAi(app).script('reply', { text: 'Sure! The dress costs 4500.' }, { reply: 'La robe est à 4500 DA.', intent: 'INFO' });
     const ok = await turn(s, newSender(), { text: 'prix robe ?' });
     expect(ok.outcome).toBe('sent');
-    expect(fakeAi(app).callsOf('reply')[1]!.messages.at(-1)).toMatchObject({ role: 'user', content: 'Format reminder: respond with the JSON object only.' });
+    expect(fakeAi(app).callsOf('reply')[1]!.messages.at(-1)).toMatchObject({ role: 'user', content: FORMAT_REMINDER });
     expect(ok.out.find((m) => m.author === 'ai')!.text).toBe('La robe est à 4500 DA.');
 
     // malformed twice ⇒ FL-01 F-6
@@ -200,6 +201,28 @@ describe('FL-01 — reply turn', () => {
     expect(back.conversation).toMatchObject({ status: 'active', aiPaused: false });
     expect((back.conversation.context as any).aiUnavailable).toBeNull();
     expect(back.out.at(-1)).toMatchObject({ author: 'ai', text: 'La robe est à 4500 DA.' });
+  });
+
+  it('tester report 22/10: in a long thread the format-reminder retry leaves the history out, so the answer still goes out', async () => {
+    const s = await shop();
+    const sender = newSender();
+    for (const text of ['bonjour', 'vous avez des robes ?', 'et des sacs ?']) {
+      fakeAi(app).script('reply', { reply: `Réponse à « ${text} »`, intent: 'INFO' });
+      expect((await turn(s, sender, { text })).outcome).toBe('sent');
+      await resetAi();
+    }
+    // the model copies the plain-text style of its past replies, then wraps its answer once reminded
+    fakeAi(app).script('reply', { text: 'La robe est à 4500 DA.' }, { reply: 'La robe est à 4500 DA.', intent: 'INFO' });
+    const t = await turn(s, sender, { text: 'prix robe ?' });
+    expect(t.outcome).toBe('sent');
+    const [first, retry] = fakeAi(app).callsOf('reply');
+    expect(first!.messages.length).toBeGreaterThan(3); // the thread so far
+    expect(retry!.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
+    expect(String((retry!.messages[0] as { content: unknown }).content)).toContain('prix robe ?');
+    expect(retry!.messages[1]).toMatchObject({ role: 'assistant', content: 'La robe est à 4500 DA.' });
+    expect(retry!.messages[2]).toMatchObject({ role: 'user', content: FORMAT_REMINDER });
+    expect(t.out.at(-1)).toMatchObject({ author: 'ai', text: 'La robe est à 4500 DA.' });
+    expect(t.conversation).toMatchObject({ status: 'active', aiPaused: false });
   });
 
   it('AT-AI-11 product card template is part of the prompt; the cards are still sent', async () => {

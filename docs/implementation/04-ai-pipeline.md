@@ -94,7 +94,7 @@ Token budget: `AiModel.contextTokens − maxTokens − 512`; if exceeded, drop o
     "language": { "enum": ["ar", "arabizi", "fr", "en", "mixed"] }
   } }
 ```
-Malformed ⇒ one retry with an appended `user` message `Format reminder: respond with the JSON object only.`; still malformed ⇒ F-6.
+Malformed ⇒ one retry with the model's answer as `assistant` + a `user` message `Format reminder: answer with the one JSON object of the OUTPUT section only (your answer above goes in "reply"), no text around it.`; that retry leaves the earlier conversation out (only the batch, this turn's tool calls / results and the answer — in a long thread the model otherwise copies the plain-text style of its past replies, tester report 22/10); still malformed ⇒ F-6.
 
 ### 4.2 Tool schemas (`ToolRegistry`; names are final; `maxSteps = 4` = 3 tool rounds + final answer)
 
