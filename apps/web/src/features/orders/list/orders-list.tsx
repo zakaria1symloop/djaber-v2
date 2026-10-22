@@ -26,16 +26,19 @@ import { ExportOrdersDialog, OrdersBulkBar } from './bulk';
 import { OrdersActiveFilters, OrdersFilterBar, OrdersFilterPanel } from './filters';
 import { ORDER_TABS, ORDERS_LIST, ordersQuery, tabCountsQuery } from './spec';
 
-/** "10:58" today, "hier" yesterday, "05 oct." before (Africa/Algiers). */
+/** "10:58" today, "hier · 10:58" yesterday, "05 oct. · 10:58" before — always with the time (Africa/Algiers; PV 22/10). */
 function useOrderedAt() {
   const t = useT();
   const locale = useLocaleCode() as AppLocale;
   return (iso: string) => {
     const now = new Date();
     const day = algiersDay(new Date(iso));
-    if (day === algiersDay(now)) return algiersTime(iso);
-    if (day === algiersDay(new Date(now.getTime() - 86_400_000))) return t('common.yesterday').toLowerCase();
-    return formatDate(iso, locale).replace(/ \d{4}$/, '');
+    const time = algiersTime(iso);
+    if (day === algiersDay(now)) return time;
+    if (day === algiersDay(new Date(now.getTime() - 86_400_000))) return `${t('common.yesterday').toLowerCase()} · ${time}`;
+    const date = formatDate(iso, locale);
+    // the year only when it is not the current one
+    return `${day.slice(0, 4) === algiersDay(now).slice(0, 4) ? date.replace(/ \d{4}$/, '') : date} · ${time}`;
   };
 }
 

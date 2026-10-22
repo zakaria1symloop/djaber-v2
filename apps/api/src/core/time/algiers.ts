@@ -12,6 +12,9 @@ export const algiersDayStart = (day: string): Date => new Date(Date.parse(`${day
 /** First instant after a local day (date-only `to` is inclusive: use `< algiersDayEnd(to)`). */
 export const algiersDayEnd = (day: string): Date => new Date(Date.parse(`${day}T00:00:00Z`) - OFFSET_MS + 24 * 3600_000);
 
+/** `HH:mm` of an instant in Africa/Algiers. */
+export const algiersTime = (at: Date): string => new Date(at.getTime() + OFFSET_MS).toISOString().slice(11, 16);
+
 /** Hour (0–23) and weekday (0 = Sunday) of an instant in Africa/Algiers. */
 export const algiersClock = (at: Date) => {
   const local = new Date(at.getTime() + OFFSET_MS);

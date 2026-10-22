@@ -12,7 +12,7 @@ import { CounterService } from '../../core/counter/counter.service';
 import { AppException, conflict, forbidden, notFound } from '../../core/errors/app.exception';
 import { page, type Page } from '../../core/http/pagination';
 import { can } from '../../core/rbac/permission-matrix';
-import { algiersDay } from '../../core/time/algiers';
+import { algiersDay, algiersTime } from '../../core/time/algiers';
 import type { CreateOrderRequest, OrderToolContext, ToolResult } from '../ai/tools/order-tools';
 import { fold } from '../ai/tools/wilaya-aliases';
 import { ClientService } from '../clients/client.service';
@@ -533,6 +533,8 @@ export class OrderService implements OnModuleInit {
     const standard = [
       { header: h.number, value: (r: R) => r.number },
       { header: h.date, value: (r: R) => algiersDay(r.orderedAt) },
+      // creation time (PV 22/10: « la date et l'heure de chaque commande »)
+      { header: h.time, value: (r: R) => algiersTime(r.orderedAt) },
       { header: h.channel, value: (r: R) => r.channel?.name ?? '' },
       { header: h.source, value: (r: R) => r.source },
       { header: h.client, value: (r: R) => r.clientName },
@@ -584,7 +586,7 @@ export class OrderService implements OnModuleInit {
 }
 
 const EXPORT_HEADERS = {
-  fr: { sheet: 'Commandes', number: 'N°', date: 'Date', channel: 'Canal', source: 'Source', client: 'Client', phone: 'Téléphone', phone2: 'Téléphone 2', wilaya: 'Wilaya', commune: 'Commune', address: 'Adresse / point relais', stopdesk: 'Point relais', items: 'Articles (nom × qté × prix)', subtotal: 'Sous-total', discount: 'Remise', deliveryFee: 'Livraison', total: 'Total', paid: 'Payé', remaining: 'Reste', paymentMethod: 'Mode de paiement', status: 'Statut', confirmation: 'Confirmation', delivery: 'Livraison (statut)', courier: 'Transporteur', tracking: 'Suivi', payment: 'Paiement', calls: 'Appels', risk: 'Risque', notes: 'Notes', cancelReason: "Motif d'annulation" },
-  en: { sheet: 'Orders', number: 'No.', date: 'Date', channel: 'Channel', source: 'Source', client: 'Client', phone: 'Phone', phone2: 'Phone 2', wilaya: 'Wilaya', commune: 'Commune', address: 'Address / stop-desk', stopdesk: 'Stop-desk', items: 'Items (name × qty × price)', subtotal: 'Subtotal', discount: 'Discount', deliveryFee: 'Delivery fee', total: 'Total', paid: 'Paid', remaining: 'Remaining', paymentMethod: 'Payment method', status: 'Status', confirmation: 'Confirmation', delivery: 'Delivery status', courier: 'Courier', tracking: 'Tracking', payment: 'Payment', calls: 'Calls', risk: 'Risk', notes: 'Notes', cancelReason: 'Cancel reason' },
-  ar: { sheet: 'الطلبات', number: 'الرقم', date: 'التاريخ', channel: 'القناة', source: 'المصدر', client: 'العميل', phone: 'الهاتف', phone2: 'الهاتف 2', wilaya: 'الولاية', commune: 'البلدية', address: 'العنوان / نقطة الاستلام', stopdesk: 'نقطة الاستلام', items: 'المنتجات (الاسم × الكمية × السعر)', subtotal: 'المجموع الفرعي', discount: 'الخصم', deliveryFee: 'التوصيل', total: 'المجموع', paid: 'المدفوع', remaining: 'المتبقي', paymentMethod: 'طريقة الدفع', status: 'الحالة', confirmation: 'التأكيد', delivery: 'حالة التوصيل', courier: 'الناقل', tracking: 'التتبع', payment: 'الدفع', calls: 'المكالمات', risk: 'الخطر', notes: 'ملاحظات', cancelReason: 'سبب الإلغاء' },
+  fr: { sheet: 'Commandes', number: 'N°', date: 'Date', time: 'Heure', channel: 'Canal', source: 'Source', client: 'Client', phone: 'Téléphone', phone2: 'Téléphone 2', wilaya: 'Wilaya', commune: 'Commune', address: 'Adresse / point relais', stopdesk: 'Point relais', items: 'Articles (nom × qté × prix)', subtotal: 'Sous-total', discount: 'Remise', deliveryFee: 'Livraison', total: 'Total', paid: 'Payé', remaining: 'Reste', paymentMethod: 'Mode de paiement', status: 'Statut', confirmation: 'Confirmation', delivery: 'Livraison (statut)', courier: 'Transporteur', tracking: 'Suivi', payment: 'Paiement', calls: 'Appels', risk: 'Risque', notes: 'Notes', cancelReason: "Motif d'annulation" },
+  en: { sheet: 'Orders', number: 'No.', date: 'Date', time: 'Time', channel: 'Channel', source: 'Source', client: 'Client', phone: 'Phone', phone2: 'Phone 2', wilaya: 'Wilaya', commune: 'Commune', address: 'Address / stop-desk', stopdesk: 'Stop-desk', items: 'Items (name × qty × price)', subtotal: 'Subtotal', discount: 'Discount', deliveryFee: 'Delivery fee', total: 'Total', paid: 'Paid', remaining: 'Remaining', paymentMethod: 'Payment method', status: 'Status', confirmation: 'Confirmation', delivery: 'Delivery status', courier: 'Courier', tracking: 'Tracking', payment: 'Payment', calls: 'Calls', risk: 'Risk', notes: 'Notes', cancelReason: 'Cancel reason' },
+  ar: { sheet: 'الطلبات', number: 'الرقم', date: 'التاريخ', time: 'الوقت', channel: 'القناة', source: 'المصدر', client: 'العميل', phone: 'الهاتف', phone2: 'الهاتف 2', wilaya: 'الولاية', commune: 'البلدية', address: 'العنوان / نقطة الاستلام', stopdesk: 'نقطة الاستلام', items: 'المنتجات (الاسم × الكمية × السعر)', subtotal: 'المجموع الفرعي', discount: 'الخصم', deliveryFee: 'التوصيل', total: 'المجموع', paid: 'المدفوع', remaining: 'المتبقي', paymentMethod: 'طريقة الدفع', status: 'الحالة', confirmation: 'التأكيد', delivery: 'حالة التوصيل', courier: 'الناقل', tracking: 'التتبع', payment: 'الدفع', calls: 'المكالمات', risk: 'الخطر', notes: 'ملاحظات', cancelReason: 'سبب الإلغاء' },
 } as const;

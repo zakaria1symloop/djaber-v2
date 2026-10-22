@@ -2,7 +2,7 @@
 // /orders/[id]/print — "Bon de commande A5 (ORD-09)" of Figma "DLV-06 / ORD-09 — Labels viewer (…) + order print
 // preview A5": HTML slip printed with `@page { size: A5 }` (two copies on one A4 with "2 par page"), options with /
 // without prices and the slip language; the server PDF (`GET /orders/:id/print` → signed URL) is the secondary action.
-import { formatDate, formatMoney, formatPhoneDz, getMessages, isRtl, type AppLocale } from '@djaber/shared';
+import { formatDateTime, formatMoney, formatPhoneDz, getMessages, isRtl, type AppLocale } from '@djaber/shared';
 import { A5OrderSlip, Button, Card, Checkbox, Field, FormAlert, Select, Skeleton, toast, type A5SlipProps } from '@djaber/ui';
 import { Printer } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -27,7 +27,7 @@ export function slipProps(o: Order, shop: string, lang: Lang, withPrices: boolea
   const tracking = o.shipments[0]?.publicTrackingUrl;
   return {
     shop,
-    heading: tr('orders.print.heading', { number: o.number, date: formatDate(o.orderedAt, lang) }),
+    heading: tr('orders.print.heading', { number: o.number, date: formatDateTime(o.orderedAt, lang) }),
     client: tr('orders.print.client', { name: o.clientName, phone }),
     address,
     lines: o.items.map((i) => ({ key: i.id, label: `${i.productName}${i.variantName ? ` · ${i.variantName}` : ''} ×${i.quantity}`, amount: withPrices ? formatMoney(i.total) : undefined })),
