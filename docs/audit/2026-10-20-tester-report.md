@@ -61,4 +61,4 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 | # | Issue | Status |
 |---|---|---|
 | W1 | Members: a clear table to choose what each member can see | done |
-| W2 | Improvement — search bar at the top of the dashboard | todo |
+| W2 | Improvement — search bar at the top of the dashboard | done |

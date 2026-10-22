@@ -24,6 +24,7 @@ import { planIntentHref, type PlanIntent } from '@/features/public/logic';
 import { clearPlanIntent, readPlanIntent } from '@/lib/plan-intent';
 import { useMessageSound } from '@/features/inbox/sound';
 import { NotificationBell, useUnreadNotifications } from '@/features/notifications/shell';
+import { GlobalSearch } from './global-search';
 import { useQueueCount } from '@/features/queue/shell';
 import { HelpPanelButton } from '@/features/help/help-panel';
 import { MaintenanceGate, useMaintenanceBanner } from '@/features/status/maintenance';
@@ -269,10 +270,14 @@ function TopBar() {
   return (
     <>
       {s.me && s.me.memberships.length > 1 ? (
-        <div className="me-auto min-w-0">
+        <div className="min-w-0">
           <WorkspaceSwitcher />
         </div>
       ) : null}
+      {/* tester report 2026-10-20: one search for pages, orders, clients and products */}
+      <div className="me-auto hidden min-w-0 flex-1 md:block">
+        <GlobalSearch />
+      </div>
       {ws === 'reconnecting' ? (
         <span role="status" data-testid="ws-reconnecting" className="inline-flex h-5 items-center gap-1.5 rounded-full border border-accent-starred/40 px-2 ts-label-meta text-accent-starred">
           <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-accent-starred" />

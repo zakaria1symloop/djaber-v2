@@ -72,6 +72,12 @@ describe('sidebar and settings sub-nav', () => {
     expect(advanced).toContain('nav.purchases');
     expect(advanced).toContain('nav.reports');
   });
+  it('drops the sections the Owner hid from the member (owner decision 2026-10-21)', () => {
+    const hidden = (key: string) => memberCan({ role: 'operator', hiddenSections: ['orders', 'clients', 'agents'] }, key as MerchantPermission);
+    const keys = filterNav(all, { stockMode: 'advanced', can: hidden }).map((i) => i.key);
+    for (const k of ['nav.orders', 'nav.clients', 'nav.agents']) expect(keys).not.toContain(k);
+    for (const k of ['nav.home', 'nav.inbox', 'nav.delivery', 'nav.products', 'nav.channels', 'nav.settings']) expect(keys).toContain(k);
+  });
   it('hides the GDS entries from operators even in advanced mode', () => {
     const op = filterNav(all, { stockMode: 'advanced', can: can('operator') }).map((i) => i.key);
     expect(op).toContain('nav.movements');

@@ -46,21 +46,22 @@ export const MAIN_NAV: NavGroup[] = [
     items: [
       { key: 'nav.home', href: '/home', icon: Home },
       { key: 'nav.queue', href: '/queue', icon: ListChecks, badge: 'queue' },
-      { key: 'nav.inbox', href: '/inbox', icon: Inbox, badge: 'inbox' },
-      { key: 'nav.orders', href: '/orders', icon: ShoppingBag },
-      { key: 'nav.delivery', href: '/delivery', icon: Truck },
-      { key: 'nav.clients', href: '/clients', icon: Users },
+      // the read key of each section: a section the Owner hid from the member leaves the menu (owner decision 2026-10-21)
+      { key: 'nav.inbox', href: '/inbox', icon: Inbox, badge: 'inbox', permission: 'inbox.read' },
+      { key: 'nav.orders', href: '/orders', icon: ShoppingBag, permission: 'orders.read' },
+      { key: 'nav.delivery', href: '/delivery', icon: Truck, permission: 'delivery.send' },
+      { key: 'nav.clients', href: '/clients', icon: Users, permission: 'clients.read' },
     ],
   },
   {
     key: 'nav.group.stock',
     items: [
-      { key: 'nav.stockDashboard', href: '/stock', icon: LayoutDashboard },
-      { key: 'nav.products', href: '/products', icon: Package },
+      { key: 'nav.stockDashboard', href: '/stock', icon: LayoutDashboard, permission: 'stock.read' },
+      { key: 'nav.products', href: '/products', icon: Package, permission: 'catalog.read' },
       // 08-web-screens sidebar "Produits · Services" (CAT-11): the services list (trackStock = false)
-      { key: 'nav.services', href: '/services', icon: Wrench },
-      { key: 'nav.categories', href: '/categories', icon: FolderTree },
-      { key: 'nav.movements', href: '/movements', icon: ArrowLeftRight, advancedOnly: true },
+      { key: 'nav.services', href: '/services', icon: Wrench, permission: 'catalog.read' },
+      { key: 'nav.categories', href: '/categories', icon: FolderTree, permission: 'catalog.read' },
+      { key: 'nav.movements', href: '/movements', icon: ArrowLeftRight, advancedOnly: true, permission: 'stock.read' },
       { key: 'nav.suppliers', href: '/suppliers', icon: Store, advancedOnly: true, permission: 'gds.read' },
       { key: 'nav.purchases', href: '/purchases', icon: ShoppingCart, advancedOnly: true, permission: 'gds.read' },
       { key: 'nav.sales', href: '/sales', icon: Receipt, advancedOnly: true, permission: 'gds.read' },
@@ -72,14 +73,14 @@ export const MAIN_NAV: NavGroup[] = [
   {
     key: 'nav.group.ai',
     items: [
-      { key: 'nav.agents', href: '/agents', icon: Bot },
-      { key: 'nav.channels', href: '/channels', icon: Share2 },
+      { key: 'nav.agents', href: '/agents', icon: Bot, permission: 'agents.read' },
+      { key: 'nav.channels', href: '/channels', icon: Share2, permission: 'channels.read' },
     ],
   },
   {
     key: 'nav.group.analysis',
     items: [
-      { key: 'nav.analytics', href: '/analytics', icon: BarChart3 },
+      { key: 'nav.analytics', href: '/analytics', icon: BarChart3, permission: 'analytics.read' },
       { key: 'nav.reports', href: '/reports', icon: FileBarChart, permission: 'reports.read' },
     ],
   },
