@@ -145,6 +145,10 @@ describe('ADM-07 presets', () => {
     const owner = await asOwner(app);
     const agent = (await owner.post('/agents', { presetKey: key }).expect(201)).body.data;
     expect(agent.preset).toMatchObject({ key, version: 1, updateAvailable: null });
+    // UX-008: the version has no English prompt — an agent created in English gets the French one, not an empty text
+    const en = (await owner.post('/agents', { presetKey: key }).set('Accept-Language', 'en').expect(201)).body.data;
+    expect(en.customInstructions).toBe('Tu es le vendeur de {{shop_name}}.');
+    await db.agent.update({ where: { id: en.id }, data: { deletedAt: new Date() } });
     await db.agent.update({ where: { id: agent.id }, data: { status: 'active' } });
     const v2 = (await sa.post(`/admin/agent-presets/${p.id}/versions`, { changelog: '+ règle délais' }).expect(201)).body.data;
     expect(v2).toMatchObject({ version: 2, status: 'draft' });

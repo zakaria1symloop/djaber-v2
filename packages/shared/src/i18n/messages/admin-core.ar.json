@@ -1123,5 +1123,9 @@
  "admin.subs.pay.pickInvoice": "الفاتورة المراد تسديدها",
  "admin.subs.pay.noOpenInvoice": "لا توجد فاتورة للتسديد لـ {workspace}. تظهر فاتورة التجديد قبل 7 أيام من الاستحقاق؛ الاشتراك المدفوع خارج المنصّة يُنشأ عبر «إنشاء اشتراك» (المزوّد: يدوي).",
  "admin.subs.empty.paymentsHint": "تظهر هنا التحويلات وCCP والدفع النقدي المسجّلة على فاتورة، مع مرجعها وإثباتها.",
- "admin.subs.pay.openInvoice": "عرض الفاتورة"
+ "admin.subs.pay.openInvoice": "عرض الفاتورة",
+ "admin.presets.dialog.nameAr": "الاسم (AR)",
+ "admin.presets.dialog.nameEn": "الاسم (EN)",
+ "admin.presets.dialog.nameFallback": "فارغ: يُعرض الاسم الفرنسي.",
+ "admin.presets.missingFallback": "{locales} غير مكتمل: يتلقى الوكلاء بهذه اللغة النصوص والتعليمات بالفرنسية."
 }

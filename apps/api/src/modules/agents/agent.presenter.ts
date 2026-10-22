@@ -57,6 +57,15 @@ const FORMALITY: Record<string, string> = { follow_customer: 'mirror the custome
 const EMOJI: Record<string, string> = { none: 'never use emojis', moderate: 'at most one emoji per message', many: 'emojis are welcome' };
 const LANG: Record<string, string> = { darija: 'Algerian darija (Arabic script)', arabizi: 'darija in Latin script (arabizi)', fr: 'French', ar: 'Arabic', kabyle: 'Kabyle', en: 'English' };
 
+/**
+ * Instructions of a preset version for a locale (tester report 2026-10-21 UX-008): a blank translation is a missing one —
+ * the French prompt (then any filled one) is used, not an empty text that left the agent with its tone line only.
+ */
+export const presetInstructions = (locales: Record<string, { systemPrompt?: string } | undefined>, locale: string): string => {
+  const filled = (l: string) => locales[l]?.systemPrompt?.trim() || '';
+  return filled(locale) || filled('fr') || filled('en') || filled('ar');
+};
+
 export const merchantInstructions = (stored: string): string => {
   const start = stored.indexOf(AUTO_START);
   const end = stored.indexOf(AUTO_END);

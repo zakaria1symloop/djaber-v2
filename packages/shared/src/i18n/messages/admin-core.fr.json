@@ -1123,5 +1123,9 @@
  "admin.subs.pay.pickInvoice": "Facture à régler",
  "admin.subs.pay.noOpenInvoice": "Aucune facture à régler pour {workspace}. La facture de renouvellement apparaît 7 jours avant l'échéance ; un abonnement payé hors ligne se crée avec « Créer un abonnement » (fournisseur Manuel).",
  "admin.subs.empty.paymentsHint": "Les virements, CCP et espèces enregistrés sur une facture apparaissent ici, avec leur référence et leur justificatif.",
- "admin.subs.pay.openInvoice": "Voir la facture"
+ "admin.subs.pay.openInvoice": "Voir la facture",
+ "admin.presets.dialog.nameAr": "Nom (AR)",
+ "admin.presets.dialog.nameEn": "Nom (EN)",
+ "admin.presets.dialog.nameFallback": "Vide : le nom français est affiché.",
+ "admin.presets.missingFallback": "{locales} incomplet : les agents dans cette langue reçoivent les textes et instructions en français."
 }

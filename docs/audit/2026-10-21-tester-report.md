@@ -25,7 +25,7 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 ## Superadmin — AI
 | # | Issue | Status |
 |---|---|---|
-| UX-008 | Agent presets: name in French only; in ar / en the agent gets only the basic tone text | todo |
+| UX-008 | Agent presets: name in French only; in ar / en the agent gets only the basic tone text | done |
 | UX-013 | Groq provider / key shown « Injoignable » | todo |
 
 ## Superadmin — support and moderation

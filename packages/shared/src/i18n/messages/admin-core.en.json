@@ -1123,5 +1123,9 @@
  "admin.subs.pay.pickInvoice": "Invoice to settle",
  "admin.subs.pay.noOpenInvoice": "No invoice to settle for {workspace}. The renewal invoice shows up 7 days before the due date; a subscription paid offline is created with « Create a subscription » (provider Manual).",
  "admin.subs.empty.paymentsHint": "Transfers, CCP and cash payments recorded on an invoice show up here, with their reference and proof.",
- "admin.subs.pay.openInvoice": "Open the invoice"
+ "admin.subs.pay.openInvoice": "Open the invoice",
+ "admin.presets.dialog.nameAr": "Name (AR)",
+ "admin.presets.dialog.nameEn": "Name (EN)",
+ "admin.presets.dialog.nameFallback": "Empty: the French name is shown.",
+ "admin.presets.missingFallback": "{locales} incomplete: agents in that language get the French texts and instructions."
 }

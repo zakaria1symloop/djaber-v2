@@ -131,6 +131,9 @@ function NewPresetDialog({ open, copyFrom, presets, onClose, onCreated }: { open
   const invalidate = useAdminInvalidate();
   const source = copyFrom ?? presets.find((p) => p.badge === 'recommended' && p.status === 'published') ?? presets.find((p) => p.status === 'published') ?? null;
   const [name, setName] = useState('');
+  // AR / EN names (UX-008: French only before; a blank one falls back to French)
+  const [nameAr, setNameAr] = useState('');
+  const [nameEn, setNameEn] = useState('');
   const [key, setKey] = useState('');
   const [from, setFrom] = useState<'copy' | 'empty'>('copy');
   const [sectors, setSectors] = useState('');
@@ -138,6 +141,8 @@ function NewPresetDialog({ open, copyFrom, presets, onClose, onCreated }: { open
   const m = useMutation({ mutationFn: (b: unknown) => adminWrite<AgentPresetAdminDto>('/admin/agent-presets', 'POST', b, true) });
   useOnOpen(open, () => {
     setName('');
+    setNameAr('');
+    setNameEn('');
     setKey('');
     setFrom(source ? 'copy' : 'empty');
     setSectors('');
@@ -147,7 +152,7 @@ function NewPresetDialog({ open, copyFrom, presets, onClose, onCreated }: { open
   const submit = async () => {
     setErrors(NO_ERRORS);
     try {
-      const p = await m.mutateAsync({ key: key.trim() || slugify(name), name: { fr: name.trim() }, sectors: sectors.split(/[·,]/).map((s) => s.trim()).filter(Boolean), ...(from === 'copy' && source ? { copyFromPresetId: source.id } : {}) });
+      const p = await m.mutateAsync({ key: key.trim() || slugify(name), name: { fr: name.trim(), ...(nameAr.trim() ? { ar: nameAr.trim() } : {}), ...(nameEn.trim() ? { en: nameEn.trim() } : {}) }, sectors: sectors.split(/[·,]/).map((s) => s.trim()).filter(Boolean), ...(from === 'copy' && source ? { copyFromPresetId: source.id } : {}) });
       void invalidate('/admin/agent-presets');
       toast(t('admin.presets.created', { name: name.trim() }));
       onClose();
@@ -161,6 +166,12 @@ function NewPresetDialog({ open, copyFrom, presets, onClose, onCreated }: { open
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t('admin.presets.dialog.name')} required htmlFor="np-name" error={errors.fields.name}>
           <Input id="np-name" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label={t('admin.presets.dialog.nameAr')} htmlFor="np-name-ar" hint={t('admin.presets.dialog.nameFallback')}>
+          <Input id="np-name-ar" dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
+        </Field>
+        <Field label={t('admin.presets.dialog.nameEn')} htmlFor="np-name-en" hint={t('admin.presets.dialog.nameFallback')}>
+          <Input id="np-name-en" dir="ltr" value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
         </Field>
         <Field label={t('admin.presets.dialog.key')} htmlFor="np-key" error={errors.fields.key}>
           <Input id="np-key" dir="ltr" value={key} placeholder={slugify(name)} onChange={(e) => setKey(e.target.value.toLowerCase())} />

@@ -50,6 +50,7 @@ import {
   merchantInstructions,
   normalizeHandoffRules,
   normalizeOrderFields,
+  presetInstructions,
   snapshotOf,
   snapshotToData,
   wizardOf,
@@ -113,7 +114,7 @@ export class AgentService implements OnModuleInit {
       imageRecognition: config.imageRecognition !== false,
       voiceTranscription: config.voiceNotes !== false,
       responseDelaySec: config.replyDelaySec ?? 3,
-      instructions: locales[locale]?.systemPrompt ?? locales.fr?.systemPrompt ?? '',
+      instructions: presetInstructions(locales, locale),
     };
   }
 
@@ -696,7 +697,10 @@ export class AgentService implements OnModuleInit {
     return { results };
   }
 
-  /** `POST /agents/:id/apply-preset-update { presetVersion }` (D53): preset parameters refreshed, instructions kept. */
+  /**
+   * `POST /agents/:id/apply-preset-update { presetVersion }` (D53): preset parameters refreshed, the merchant's instructions
+   * kept — empty ones take the preset's (agents created while a non-French preset text was blank, UX-008).
+   */
   async applyPresetUpdate(id: string, presetVersion: number, locale: string): Promise<AgentDto> {
     const a = await this.rowOrNotFound(id);
     if (!a.presetId) throw conflict({ reason: 'NO_PRESET' });
@@ -706,7 +710,8 @@ export class AgentService implements OnModuleInit {
     const p = this.presetView(v.preset, v, locale);
     await prisma.$transaction(async (db) => {
       const tx = db as Tx;
-      const updated = await tx.agent.update({ where: { id }, data: { personality: p.personality, temperature: p.temperature, maxTokens: p.maxTokens, presetVersion, modelId: await this.routing.agentModelId(), version: { increment: 1 } } });
+      const own = merchantInstructions(a.customInstructions).trim();
+      const updated = await tx.agent.update({ where: { id }, data: { personality: p.personality, temperature: p.temperature, maxTokens: p.maxTokens, presetVersion, ...(own || !p.instructions ? {} : { customInstructions: compileInstructions(a, p.instructions) }), modelId: await this.routing.agentModelId(), version: { increment: 1 } } });
       await this.recordVersion(tx, id, 'preset_update', { note: `preset v${presetVersion}` });
       await this.emit(tx, updated);
     });

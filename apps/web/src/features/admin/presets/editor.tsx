@@ -121,6 +121,7 @@ export function PresetEditor({ preset, locale, onLocale, canWrite }: { preset: A
           );
         })}
       </div>
+      {missing.length && !missing.includes('fr') ? <p className="ts-label-micro !normal-case text-text-muted" data-testid="preset-fallback-note">{t('admin.presets.missingFallback', { locales: missing.map((l) => l.toUpperCase()).join(', ') })}</p> : null}
       <fieldset disabled={!editable || run.isPending} className="flex flex-col gap-4">
         <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
           <Field label={t('admin.presets.field.name', { locale: locale.toUpperCase() })} htmlFor="ps-name">
