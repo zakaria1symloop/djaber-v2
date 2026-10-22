@@ -6337,5 +6337,6 @@
  "announcements.state.scheduled": "لم يبدأ هذا الإعلان بعد.",
  "announcements.published": "نُشر في {date}",
  "announcements.until": "حتى {date}",
- "announcements.fallback": "معروض بالفرنسية (لم يُترجم بعد)."
+ "announcements.fallback": "معروض بالفرنسية (لم يُترجم بعد).",
+ "adminSupport.composer.attachmentRefused": "تم رفض المرفق: احذفه ثم أرفقه من جديد (صورة أو PDF أو CSV، 5 ميغابايت كحد أقصى)."
 }

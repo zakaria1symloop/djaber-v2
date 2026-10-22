@@ -31,7 +31,7 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 ## Superadmin — support and moderation
 | # | Issue | Status |
 |---|---|---|
-| UX-012 | Attachment on a support reply ⇒ « Vérifiez les champs (VALIDATION_ERRORS) » | todo |
+| UX-012 | Attachment on a support reply ⇒ « Vérifiez les champs (VALIDATION_ERRORS) » | done |
 | UX-014 | « Spam / Insultes » card counts 1 while « À traiter » lists 0 reports | todo |
 
 ## Merchant — clients

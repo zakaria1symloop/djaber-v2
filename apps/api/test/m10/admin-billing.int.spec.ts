@@ -151,6 +151,12 @@ describe('ADM-05 subscriptions, invoices, payments', () => {
     await fin.post(`/admin/invoices/${inv.id}/mark-paid`, { method: 'manual_ccp', amount: 900, reference: 'CCP-0098', paidAt: '2026-10-05', reason: REASON }).expect(200);
     const pays = (await fin.get(`/admin/payments?q=CCP-0098`).expect(200)).body.data;
     expect(pays[0]).toMatchObject({ amount: 900, provider: 'manual', method: 'manual_ccp', reference: 'CCP-0098', invoice: { id: inv.id } });
+    // the rest with a proof: a platform file of this admin is accepted, a workspace upload is not (UX-012)
+    const mine = await db.upload.create({ data: { workspaceId: null, storageKey: `users/${fin.userId}/payment_proof/${randomUUID()}.pdf`, url: '/files/proof.pdf', mime: 'application/pdf', size: 10, kind: 'payment_proof', createdById: fin.userId } });
+    const wsFile = await db.upload.create({ data: { workspaceId: d.workspaceId, storageKey: `ws/${d.workspaceId}/cash_proof/${randomUUID()}.pdf`, url: '/files/x.pdf', mime: 'application/pdf', size: 10, kind: 'cash_proof', createdById: fin.userId } });
+    expect((await fin.post(`/admin/invoices/${inv.id}/mark-paid`, { method: 'manual_ccp', amount: 1000, reference: 'CCP-0099', paidAt: '2026-10-06', proofUploadId: wsFile.id, reason: REASON }).expect(422)).body.error.fields).toMatchObject({ proofUploadId: 'validation.id' });
+    await fin.post(`/admin/invoices/${inv.id}/mark-paid`, { method: 'manual_ccp', amount: 1000, reference: 'CCP-0099', paidAt: '2026-10-06', proofUploadId: mine.id, reason: REASON }).expect(200);
+    expect((await fin.get(`/admin/payments?q=CCP-0099`).expect(200)).body.data[0].proofUrl).toBeTruthy();
     const exp = (await fin.get('/admin/invoices/export?from=2026-01-01&to=2026-12-31').expect(202)).body.data;
     await drainAll(app, ['job']);
     const job = (await fin.get(`/admin/jobs/${exp.jobId}`).expect(200)).body.data;

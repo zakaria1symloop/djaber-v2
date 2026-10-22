@@ -6337,5 +6337,6 @@
  "announcements.state.scheduled": "Cette annonce n'a pas encore commencé.",
  "announcements.published": "Publiée le {date}",
  "announcements.until": "jusqu'au {date}",
- "announcements.fallback": "Affichée en français (pas encore traduite)."
+ "announcements.fallback": "Affichée en français (pas encore traduite).",
+ "adminSupport.composer.attachmentRefused": "Pièce jointe refusée : retirez-la et joignez-la de nouveau (image, PDF ou CSV, 5 Mo max)."
 }

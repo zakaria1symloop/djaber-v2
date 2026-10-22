@@ -6337,5 +6337,6 @@
  "announcements.state.scheduled": "This announcement has not started yet.",
  "announcements.published": "Published on {date}",
  "announcements.until": "until {date}",
- "announcements.fallback": "Shown in French (not translated yet)."
+ "announcements.fallback": "Shown in French (not translated yet).",
+ "adminSupport.composer.attachmentRefused": "Attachment refused: remove it and attach it again (image, PDF or CSV, 5 MB max)."
 }

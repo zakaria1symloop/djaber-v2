@@ -239,6 +239,12 @@ describe('attachments and help center', () => {
     const own = (await uploadFile({ headers: { Authorization: `Bearer ${token}` } }, 'ticket_attachment', PDF, 'guide.pdf', 'application/pdf').expect(201)).body.data;
     await support.post(`/admin/support/tickets/${t.id}/messages`, { body: 'Le guide', attachments: [own.id] }).expect(201);
     await support.post(`/admin/support/tickets/${t.id}/messages`, { body: 'Le guide', attachments: [foreign.id] }).expect(422);
+    // UX-012 (2026-10-21): a payment proof (manual billing payment, D71) is a platform file of finance; merchants are refused
+    const fin = await platform('finance');
+    const { token: finToken } = await app.app.get(TokenService).signAccess({ sub: fin.userId, pr: 'finance' });
+    const proof = (await uploadFile({ headers: { Authorization: `Bearer ${finToken}` } }, 'payment_proof', PDF, 'recu.pdf', 'application/pdf').expect(201)).body.data;
+    expect(await db.upload.findUnique({ where: { id: proof.id } })).toMatchObject({ workspaceId: null, kind: 'payment_proof', createdById: fin.userId });
+    expect((await uploadFile(owner, 'payment_proof', PDF, 'x.pdf', 'application/pdf').expect(422)).body.error.fields.kind).toBe('validation.invalid');
     // carry-over M2: appeal attachment PDF (Admin+)
     expect((await uploadFile(owner, 'appeal_attachment', PDF, 'certificat.pdf', 'application/pdf').expect(201)).body.data.mime).toBe('application/pdf');
   });

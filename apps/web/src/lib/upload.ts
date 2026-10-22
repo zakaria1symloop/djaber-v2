@@ -2,7 +2,7 @@
 // so this goes through XMLHttpRequest with the same headers, envelope and single silent refresh as `apiRaw`.
 import { API_URL, ApiError, apiSession, markOwnWrite, refreshSession, type ApiErrorBody, type Envelope } from './api';
 
-const send = <T>(path: string, formData: FormData, onProgress?: (pct: number) => void, signal?: AbortSignal) =>
+const send = <T>(path: string, formData: FormData, onProgress?: (pct: number) => void, signal?: AbortSignal, platform = false) =>
   new Promise<{ status: number; json: (Envelope<T> & { error?: ApiErrorBody }) | null; ref: string }>((resolve, reject) => {
     const s = apiSession.get();
     const xhr = new XMLHttpRequest();
@@ -10,7 +10,8 @@ const send = <T>(path: string, formData: FormData, onProgress?: (pct: number) =>
     xhr.withCredentials = true;
     xhr.setRequestHeader('Accept-Language', s.locale);
     if (s.accessToken) xhr.setRequestHeader('Authorization', `Bearer ${s.accessToken}`);
-    if (s.workspaceId) xhr.setRequestHeader('X-Workspace-Id', s.workspaceId);
+    // `platform`: a file of the admin area (support answer, payment proof) — no workspace, even for an admin who is a member
+    if (s.workspaceId && !platform) xhr.setRequestHeader('X-Workspace-Id', s.workspaceId);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress?.(Math.round((e.loaded * 100) / e.total));
     };
@@ -27,11 +28,11 @@ const send = <T>(path: string, formData: FormData, onProgress?: (pct: number) =>
     xhr.send(formData);
   });
 
-export async function uploadWithProgress<T>(path: string, formData: FormData, o: { onProgress?: (pct: number) => void; signal?: AbortSignal } = {}): Promise<Envelope<T>> {
+export async function uploadWithProgress<T>(path: string, formData: FormData, o: { onProgress?: (pct: number) => void; signal?: AbortSignal; platform?: boolean } = {}): Promise<Envelope<T>> {
   markOwnWrite();
-  let res = await send<T>(path, formData, o.onProgress, o.signal);
+  let res = await send<T>(path, formData, o.onProgress, o.signal, o.platform);
   markOwnWrite();
-  if (res.status === 401 && (await refreshSession())) res = await send<T>(path, formData, o.onProgress, o.signal);
+  if (res.status === 401 && (await refreshSession())) res = await send<T>(path, formData, o.onProgress, o.signal, o.platform);
   if (res.status < 200 || res.status >= 300 || !res.json || res.json.error) {
     throw new ApiError(res.status, {
       code: res.status === 413 ? 'UPLOAD_TOO_LARGE' : 'INTERNAL',

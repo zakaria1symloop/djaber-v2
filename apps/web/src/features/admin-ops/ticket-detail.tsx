@@ -71,7 +71,7 @@ function TicketView({ ticket, label, fill }: { ticket: AdminTicketDto; label: st
         const fd = new FormData();
         fd.append('file', f);
         fd.append('kind', 'ticket_attachment');
-        const r = await uploadWithProgress<{ id: string }>('/uploads', fd);
+        const r = await uploadWithProgress<{ id: string }>('/uploads', fd, { platform: true });
         setFiles((c) => [...c, { id: r.data.id, name: f.name }]);
       } catch (e) {
         setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
@@ -103,7 +103,8 @@ function TicketView({ ticket, label, fill }: { ticket: AdminTicketDto; label: st
       toast({ tone: 'success', message: t(okKey, { number: ticket.number }) });
       return r;
     } catch (e) {
-      setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      // a refused attachment says so (it was the generic « Vérifiez les champs », UX-012)
+      setError(e instanceof ApiError && e.body.fields?.attachments ? t('adminSupport.composer.attachmentRefused') : e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
       if (e instanceof ApiError && (e.code === 'TICKET_CLOSED' || e.status === 409)) void qc.invalidateQueries({ queryKey: opsKeys.ticket(ticket.id) });
       return null;
     } finally {

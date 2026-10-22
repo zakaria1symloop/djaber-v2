@@ -50,7 +50,7 @@ export function ManualPaymentDialog({ invoice, open, onClose }: { invoice: Invoi
       fd.append('file', file);
       fd.append('kind', 'payment_proof');
       setUploading(0);
-      const r = await uploadWithProgress<{ id: string }>('/uploads', fd, { onProgress: setUploading });
+      const r = await uploadWithProgress<{ id: string }>('/uploads', fd, { onProgress: setUploading, platform: true });
       setProof({ id: r.data.id, name: file.name });
     } catch (e) {
       setErrors(toServerErrors(e, t, []));

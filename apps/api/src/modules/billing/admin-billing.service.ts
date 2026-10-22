@@ -53,7 +53,8 @@ export class AdminBillingService {
           await lockBilling(tx, inv0.workspaceId);
           const inv = await tx.invoice.findFirstOrThrow({ where: { id: invoiceId } });
           if (inv.status !== 'unpaid' && inv.status !== 'upcoming') throw new AppException('CONFLICT', {}, {}, { status: inv.status });
-          if (input.proofUploadId && !(await tx.upload.findFirst({ where: { id: input.proofUploadId } }))) throw new AppException('VALIDATION_ERROR', {}, { proofUploadId: 'validation.id' });
+          // the proof is a platform file uploaded by this admin (`POST /uploads { kind: payment_proof }`, no workspace)
+          if (input.proofUploadId && !(await TenantContext.runSystem(() => tx.upload.findFirst({ where: { id: input.proofUploadId, kind: 'payment_proof', workspaceId: null, createdById: admin.userId } })))) throw new AppException('VALIDATION_ERROR', {}, { proofUploadId: 'validation.id' });
           const remaining = await this.invoices.remaining(tx, inv);
           if (input.amount > remaining) throw new AppException('VALIDATION_ERROR', { max: remaining }, { amount: 'validation.range' });
           if (input.amount === remaining) {
