@@ -57,7 +57,8 @@ echo "   now at $(git rev-parse --short HEAD) (was ${PREV:0:7})"
 
 echo "== 5/7 Installing and building"
 REDISMS_DISABLE_POSTINSTALL=1 pnpm install --frozen-lockfile
-pnpm build
+# the API and its packages only: the worker runs the API build, the web is built by Vercel
+pnpm turbo run build --filter=@djaber/api...
 
 echo "== 6/7 Applying the database migration"
 pnpm --filter @djaber/db migrate:deploy
@@ -69,4 +70,4 @@ pm2 ls | grep -E "$API|$WORKER" || true
 curl -s -o /dev/null -w "   /ready -> HTTP %{http_code}\n" https://djaber.72-60-190-211.sslip.io/ready || true
 echo
 echo "Done. Previous commit: ${PREV:0:7} · backup: $BACKUP"
-echo "To go back: git checkout ${PREV:0:7} && REDISMS_DISABLE_POSTINSTALL=1 pnpm install --frozen-lockfile && pnpm build && pm2 restart $API $WORKER"
+echo "To go back: git checkout ${PREV:0:7} && REDISMS_DISABLE_POSTINSTALL=1 pnpm install --frozen-lockfile && pnpm turbo run build --filter=@djaber/api... && pm2 restart $API $WORKER"
