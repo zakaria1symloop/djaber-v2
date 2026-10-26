@@ -233,6 +233,10 @@ describe('attachments and help center', () => {
     const other = await asOwner(app);
     const foreign = (await uploadFile(other, 'ticket_attachment', PDF, 'f.pdf', 'application/pdf').expect(201)).body.data;
     expect((await op.post(`/support/tickets/${t.id}/messages`, { body: 'Voici', attachments: [foreign.id] }).expect(422)).body.error.fields.attachments).toBe('validation.invalid');
+    // tester report 25/10 UX-002: the merchant attaches files to a reply too
+    const shot = (await uploadFile(op, 'ticket_attachment', PDF, 'capture.pdf', 'application/pdf').expect(201)).body.data;
+    await op.post(`/support/tickets/${t.id}/messages`, { body: 'Voici la capture', attachments: [shot.id] }).expect(201);
+    expect((await op.get(`/support/tickets/${t.id}`).expect(200)).body.data.messages.at(-1)).toMatchObject({ body: 'Voici la capture', attachments: [expect.objectContaining({ url: expect.stringContaining('/ticket_attachment/') })] });
     // platform user answer with its own attachment (no workspace)
     const support = await platform('support');
     const { token } = await app.app.get(TokenService).signAccess({ sub: support.userId, pr: 'support' });

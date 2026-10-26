@@ -17,6 +17,7 @@ import { useLocaleCode, useT } from '@/lib/i18n';
 import { useWorkspaceId } from '@/lib/session';
 import { useStickToBottom } from '@/lib/stick-to-bottom';
 import { useWsEvent } from '@/lib/ws';
+import { useTicketAttachments } from './attachments';
 import { helpApi, helpKeys, useTicket, type Ticket } from './api';
 import { canRate, canReply } from './logic';
 import { TicketPill } from './shared';
@@ -89,9 +90,10 @@ function ReplyForm({ ticket, onDone }: { ticket: Ticket; onDone: (t: Ticket) => 
   const [body, setBody] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
-  const reply = useMutation({ mutationFn: (b: string) => helpApi.reply(ticket.id, TicketReplySchema.parse({ body: b })) });
+  const attachments = useTicketAttachments();
+  const reply = useMutation({ mutationFn: (b: string) => helpApi.reply(ticket.id, TicketReplySchema.parse({ body: b, attachments: attachments.ids })) });
   const close = useMutation({ mutationFn: () => helpApi.close(ticket.id) });
-  const { guard } = useLeaveGuard(body.trim().length > 0, t('help.ticket.reply.entity'));
+  const { guard } = useLeaveGuard(body.trim().length > 0 || attachments.files.length > 0, t('help.ticket.reply.entity'));
   const send = async () => {
     setError(null);
     if (!body.trim()) {
@@ -101,6 +103,7 @@ function ReplyForm({ ticket, onDone }: { ticket: Ticket; onDone: (t: Ticket) => 
     try {
       onDone(await reply.mutateAsync(body));
       setBody('');
+      attachments.clear();
       toast({ tone: 'success', message: t('help.ticket.reply.sent') });
     } catch (e) {
       setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
@@ -119,7 +122,8 @@ function ReplyForm({ ticket, onDone }: { ticket: Ticket; onDone: (t: Ticket) => 
   return (
     <Card className="flex flex-col gap-3 p-4" data-testid="ticket-reply">
       <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder={t('help.ticket.reply.placeholder')} aria-label={t('help.ticket.reply.label')} maxLength={5000} data-testid="ticket-reply-body" />
-      {error ? <FormAlert>{error}</FormAlert> : null}
+      {attachments.picker}
+      {error || attachments.error ? <FormAlert>{error ?? attachments.error}</FormAlert> : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         {ticket.status !== 'resolved' ? (
           <Button variant="ghost" size="sm" onClick={() => setClosing(true)} data-testid="ticket-close">
@@ -128,7 +132,7 @@ function ReplyForm({ ticket, onDone }: { ticket: Ticket; onDone: (t: Ticket) => 
         ) : (
           <span />
         )}
-        <Button variant="primary" onClick={() => void send()} loading={reply.isPending} data-testid="ticket-reply-send">
+        <Button variant="primary" onClick={() => void send()} loading={reply.isPending} disabled={attachments.uploading} data-testid="ticket-reply-send">
           {t('action.send')}
         </Button>
       </div>
