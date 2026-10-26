@@ -1,48 +1,270 @@
 {
   "provider": "yalidine",
   "source": "Yalidine API v1 (05-integrations §2.4, V1 delivery.service.ts). Values anonymised.",
-  "credentials": { "apiId": "yal-id-112233", "apiToken": "yal-token-445566" },
+  "credentials": {
+    "apiId": "yal-id-112233",
+    "apiToken": "yal-token-445566"
+  },
   "interactions": {
-    "test_ok": { "request": { "method": "GET", "url": "https://api.yalidine.app/v1/wilayas/" }, "response": { "status": 200, "json": { "has_more": false, "total_data": 58, "data": [{ "id": 1, "name": "Adrar" }] } } },
+    "test_ok": {
+      "request": {
+        "method": "GET",
+        "url": "https://api.yalidine.app/v1/wilayas/"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "has_more": false,
+          "total_data": 58,
+          "data": [
+            {
+              "id": 1,
+              "name": "Adrar"
+            }
+          ]
+        }
+      }
+    },
     "create_ok": {
       "request": {
         "method": "POST",
         "url": "https://api.yalidine.app/v1/parcels/",
         "body": [
-          { "order_id": "CMD-1042", "from_wilaya_name": "Alger", "firstname": "Amine Benali", "familyname": "", "contact_phone": "0555123456", "address": "Cité 200 logements, Bt 4", "to_commune_name": "Bab Ezzouar", "to_wilaya_name": "Alger", "product_list": "Robe kabyle ×1", "price": 4900, "do_insurance": false, "declared_value": 4500, "length": 0, "width": 0, "height": 0, "weight": 1, "freeshipping": false, "is_stopdesk": true, "stopdesk_id": "16201", "has_exchange": false, "product_to_collect": null }
+          {
+            "order_id": "CMD-1042",
+            "from_wilaya_name": "Alger",
+            "firstname": "Amine",
+            "familyname": "Benali",
+            "contact_phone": "0555123456",
+            "address": "Cité 200 logements, Bt 4",
+            "to_commune_name": "Bab Ezzouar",
+            "to_wilaya_name": "Alger",
+            "product_list": "Robe kabyle ×1",
+            "price": 4900,
+            "do_insurance": false,
+            "declared_value": 4500,
+            "length": 0,
+            "width": 0,
+            "height": 0,
+            "weight": 1,
+            "freeshipping": true,
+            "is_stopdesk": true,
+            "stopdesk_id": 16201,
+            "has_exchange": false
+          }
         ]
       },
-      "response": { "status": 200, "json": { "CMD-1042": { "success": true, "order_id": "CMD-1042", "tracking": "yal-8CX2QK", "import_id": 3312, "label": "https://yalidine.app/app/bordereau.php?tracking=yal-8CX2QK", "message": "" } } }
+      "response": {
+        "status": 200,
+        "json": {
+          "CMD-1042": {
+            "success": true,
+            "order_id": "CMD-1042",
+            "tracking": "yal-8CX2QK",
+            "import_id": 3312,
+            "label": "https://yalidine.app/app/bordereau.php?tracking=yal-8CX2QK",
+            "message": ""
+          }
+        }
+      }
     },
     "create_bad": {
-      "request": { "method": "POST", "url": "https://api.yalidine.app/v1/parcels/" },
-      "response": { "status": 200, "json": { "CMD-1042": { "success": "false", "order_id": "CMD-1042", "tracking": null, "message": "to_commune_name: commune does not exist in this wilaya" } } }
+      "request": {
+        "method": "POST",
+        "url": "https://api.yalidine.app/v1/parcels/"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "CMD-1042": {
+            "success": "false",
+            "order_id": "CMD-1042",
+            "tracking": null,
+            "message": "to_commune_name: commune does not exist in this wilaya"
+          }
+        }
+      }
     },
     "track_many": {
-      "request": { "method": "GET", "url": "https://api.yalidine.app/v1/parcels/?tracking=yal-1,yal-2,yal-3" },
+      "request": {
+        "method": "GET",
+        "url": "https://api.yalidine.app/v1/parcels/?tracking=yal-1,yal-2,yal-3"
+      },
       "response": {
         "status": 200,
         "json": {
           "data": [
-            { "tracking": "yal-1", "last_status": "Pas encore expédié", "date_last_status": "2026-10-12 08:00:00" },
-            { "tracking": "yal-2", "last_status": "Echèc livraison", "date_last_status": "2026-10-12 13:00:00", "current_center_name": "Bab Ezzouar" },
-            { "tracking": "yal-3", "last_status": "Retour vers centre", "date_last_status": "2026-10-12 17:30:00" }
+            {
+              "tracking": "yal-1",
+              "last_status": "Pas encore expédié",
+              "date_last_status": "2026-10-12 08:00:00"
+            },
+            {
+              "tracking": "yal-2",
+              "last_status": "Echèc livraison",
+              "date_last_status": "2026-10-12 13:00:00",
+              "current_center_name": "Bab Ezzouar"
+            },
+            {
+              "tracking": "yal-3",
+              "last_status": "Retour vers centre",
+              "date_last_status": "2026-10-12 17:30:00"
+            }
           ]
         }
       }
     },
-    "track_one": { "request": { "method": "GET", "url": "https://api.yalidine.app/v1/parcels/yal-8CX2QK" }, "response": { "status": 200, "json": { "data": [{ "tracking": "yal-8CX2QK", "last_status": "Livré", "date_last_status": "2026-10-13 11:00:00", "label": "https://yalidine.app/app/bordereau.php?tracking=yal-8CX2QK" }] } } },
-    "label_file": { "request": { "method": "GET", "url": "https://yalidine.app/app/bordereau.php?tracking=yal-8CX2QK" }, "response": { "status": 200, "pdf": true } },
-    "centers": { "request": { "method": "GET", "url": "https://api.yalidine.app/v1/centers/?wilaya_id=16" }, "response": { "status": 200, "json": { "data": [{ "center_id": 16201, "name": "Agence Bab Ezzouar", "commune_name": "Bab Ezzouar", "address": "Cité 5 Juillet" }] } } },
-    "fees": { "request": { "method": "GET", "url": "https://api.yalidine.app/v1/fees/?from_wilaya_id=16&to_wilaya_id=31" }, "response": { "status": 200, "json": { "data": [{ "commune_id": 3101, "home_fee": 600, "desk_fee": 400 }, { "commune_id": 3102, "home_fee": 900, "desk_fee": 400 }] } } },
-    "cancel_ok": { "request": { "method": "DELETE", "url": "https://api.yalidine.app/v1/parcels/yal-8CX2QK" }, "response": { "status": 200, "json": [{ "tracking": "yal-8CX2QK", "deleted": true }] } },
+    "track_one": {
+      "request": {
+        "method": "GET",
+        "url": "https://api.yalidine.app/v1/parcels/yal-8CX2QK"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "data": [
+            {
+              "tracking": "yal-8CX2QK",
+              "last_status": "Livré",
+              "date_last_status": "2026-10-13 11:00:00",
+              "label": "https://yalidine.app/app/bordereau.php?tracking=yal-8CX2QK"
+            }
+          ]
+        }
+      }
+    },
+    "label_file": {
+      "request": {
+        "method": "GET",
+        "url": "https://yalidine.app/app/bordereau.php?tracking=yal-8CX2QK"
+      },
+      "response": {
+        "status": 200,
+        "pdf": true
+      }
+    },
+    "centers": {
+      "request": {
+        "method": "GET",
+        "url": "https://api.yalidine.app/v1/centers/?wilaya_id=16"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "data": [
+            {
+              "center_id": 16201,
+              "name": "Agence Bab Ezzouar",
+              "commune_name": "Bab Ezzouar",
+              "address": "Cité 5 Juillet"
+            }
+          ]
+        }
+      }
+    },
+    "fees": {
+      "request": {
+        "method": "GET",
+        "url": "https://api.yalidine.app/v1/fees/?from_wilaya_id=16&to_wilaya_id=31"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "from_wilaya_name": "Alger",
+          "to_wilaya_name": "Oran",
+          "zone": 2,
+          "retour_fee": 250,
+          "oversize_fee": 50,
+          "per_commune": {
+            "3101": {
+              "commune_id": 3101,
+              "commune_name": "Oran",
+              "express_home": 600,
+              "express_desk": 400
+            },
+            "3102": {
+              "commune_id": 3102,
+              "commune_name": "Bir El Djir",
+              "express_home": 900,
+              "express_desk": 400
+            }
+          }
+        }
+      }
+    },
+    "cancel_ok": {
+      "request": {
+        "method": "DELETE",
+        "url": "https://api.yalidine.app/v1/parcels/yal-8CX2QK"
+      },
+      "response": {
+        "status": 200,
+        "json": [
+          {
+            "tracking": "yal-8CX2QK",
+            "deleted": true
+          }
+        ]
+      }
+    },
     "webhook": {
-      "headers": { "x-yalidine-secret": "whsec-test-0123456789" },
+      "headers": {
+        "x-yalidine-secret": "whsec-test-0123456789"
+      },
       "body": {
         "type": "parcel_status_updated",
         "events": [
-          { "event_id": "e1", "occurred_at": "2026-10-12 12:00:00", "data": { "tracking": "yal-8CX2QK", "status": "Sorti en livraison", "date_status": "2026-10-12 11:58:00" } },
-          { "event_id": "e2", "data": { "tracking": "yal-9", "status": "Livré" } }
+          {
+            "event_id": "e1",
+            "occurred_at": "2026-10-12 12:00:00",
+            "data": {
+              "tracking": "yal-8CX2QK",
+              "status": "Sorti en livraison",
+              "date_status": "2026-10-12 11:58:00"
+            }
+          },
+          {
+            "event_id": "e2",
+            "data": {
+              "tracking": "yal-9",
+              "status": "Livré"
+            }
+          }
+        ]
+      }
+    },
+    "centers_create": {
+      "request": {
+        "method": "GET",
+        "url": "https://api.yalidine.app/v1/centers/?wilaya_id=16"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "data": [
+            {
+              "center_id": 16201,
+              "name": "Agence Bab Ezzouar",
+              "commune_name": "Bab Ezzouar",
+              "wilaya_name": "Alger",
+              "address": "Cité 5 Juillet"
+            }
+          ]
+        }
+      }
+    },
+    "cancel_refused": {
+      "request": {
+        "method": "DELETE",
+        "url": "https://api.yalidine.app/v1/parcels/yal-8CX2QK"
+      },
+      "response": {
+        "status": 200,
+        "json": [
+          {
+            "tracking": "yal-8CX2QK",
+            "deleted": false
+          }
         ]
       }
     }

@@ -1,25 +1,120 @@
 {
   "provider": "zrexpress",
   "source": "Written from the ZR Express public API v1 contract (https://api.zrexpress.app/swagger/public-v1/swagger.json, 05-integrations §2.2b). Values anonymised.",
-  "credentials": { "apiKey": "zr-app-key-123456", "tenantId": "tenant-0001" },
+  "credentials": {
+    "apiKey": "zr-app-key-123456",
+    "tenantId": "tenant-0001"
+  },
   "interactions": {
     "test_ok": {
-      "request": { "method": "POST", "url": "https://api.zrexpress.app/api/v1/territories/search", "body": { "pageNumber": 1, "pageSize": 1 } },
-      "response": { "status": 200, "json": { "items": [{ "id": "w-01", "code": 1, "name": "Adrar", "level": "wilaya", "parentId": null }], "pageNumber": 1, "pageSize": 1, "totalCount": 1600, "hasNext": true } }
-    },
-    "test_401": { "request": { "method": "POST", "url": "https://api.zrexpress.app/api/v1/territories/search" }, "response": { "status": 401, "json": { "title": "Unauthorized", "status": 401 } } },
-    "test_tenant": { "request": { "method": "POST", "url": "https://api.zrexpress.app/api/v1/territories/search" }, "response": { "status": 400, "json": { "title": "Bad Request", "status": 400, "detail": "Tenant introuvable" } } },
-    "territories": {
-      "request": { "method": "POST", "url": "https://api.zrexpress.app/api/v1/territories/search", "body": { "pageNumber": 1, "pageSize": 1000, "includeUnavailable": true } },
+      "request": {
+        "method": "POST",
+        "url": "https://api.zrexpress.app/api/v1/territories/search",
+        "body": {
+          "pageNumber": 1,
+          "pageSize": 1
+        }
+      },
       "response": {
         "status": 200,
         "json": {
           "items": [
-            { "id": "w-16", "code": 16, "name": "Alger", "nameArabic": "الجزائر", "level": "wilaya", "parentId": null },
-            { "id": "c-16-1", "code": 1601, "name": "Bab Ezzouar", "nameArabic": "باب الزوار", "level": "commune", "parentId": "w-16" },
-            { "id": "c-16-2", "code": 1602, "name": "Alger Centre", "nameArabic": "الجزائر الوسطى", "level": "commune", "parentId": "w-16" },
-            { "id": "w-28", "code": 28, "name": "M'Sila", "nameArabic": "المسيلة", "level": "wilaya", "parentId": null },
-            { "id": "c-28-1", "code": 2801, "name": "M'Sila", "nameArabic": "المسيلة", "level": "commune", "parentId": "w-28" }
+            {
+              "id": "w-01",
+              "code": 1,
+              "name": "Adrar",
+              "level": "wilaya",
+              "parentId": null
+            }
+          ],
+          "pageNumber": 1,
+          "pageSize": 1,
+          "totalCount": 1600,
+          "hasNext": true
+        }
+      }
+    },
+    "test_401": {
+      "request": {
+        "method": "POST",
+        "url": "https://api.zrexpress.app/api/v1/territories/search"
+      },
+      "response": {
+        "status": 401,
+        "json": {
+          "title": "Unauthorized",
+          "status": 401
+        }
+      }
+    },
+    "test_tenant": {
+      "request": {
+        "method": "POST",
+        "url": "https://api.zrexpress.app/api/v1/territories/search"
+      },
+      "response": {
+        "status": 400,
+        "json": {
+          "title": "Bad Request",
+          "status": 400,
+          "detail": "Tenant introuvable"
+        }
+      }
+    },
+    "territories": {
+      "request": {
+        "method": "POST",
+        "url": "https://api.zrexpress.app/api/v1/territories/search",
+        "body": {
+          "pageNumber": 1,
+          "pageSize": 1000,
+          "includeUnavailable": true
+        }
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "items": [
+            {
+              "id": "w-16",
+              "code": 16,
+              "name": "Alger",
+              "nameArabic": "الجزائر",
+              "level": "wilaya",
+              "parentId": null
+            },
+            {
+              "id": "c-16-1",
+              "code": 1601,
+              "name": "Bab Ezzouar",
+              "nameArabic": "باب الزوار",
+              "level": "commune",
+              "parentId": "w-16"
+            },
+            {
+              "id": "c-16-2",
+              "code": 1602,
+              "name": "Alger Centre",
+              "nameArabic": "الجزائر الوسطى",
+              "level": "commune",
+              "parentId": "w-16"
+            },
+            {
+              "id": "w-28",
+              "code": 28,
+              "name": "M'Sila",
+              "nameArabic": "المسيلة",
+              "level": "wilaya",
+              "parentId": null
+            },
+            {
+              "id": "c-28-1",
+              "code": 2801,
+              "name": "M'Sila",
+              "nameArabic": "المسيلة",
+              "level": "commune",
+              "parentId": "w-28"
+            }
           ],
           "pageNumber": 1,
           "pageSize": 1000,
@@ -28,15 +123,51 @@
       }
     },
     "territories_p2": {
-      "request": { "method": "POST", "url": "https://api.zrexpress.app/api/v1/territories/search", "body": { "pageNumber": 2, "pageSize": 1000, "includeUnavailable": true } },
+      "request": {
+        "method": "POST",
+        "url": "https://api.zrexpress.app/api/v1/territories/search",
+        "body": {
+          "pageNumber": 2,
+          "pageSize": 1000,
+          "includeUnavailable": true
+        }
+      },
       "response": {
         "status": 200,
         "json": {
           "items": [
-            { "id": "w-31", "code": 31, "name": "Oran", "nameArabic": "وهران", "level": "wilaya", "parentId": null },
-            { "id": "c-31-1", "code": 3101, "name": "Oran", "nameArabic": "وهران", "level": "commune", "parentId": "w-31" },
-            { "id": "w-68", "code": 68, "name": "Bou Saâda", "nameArabic": "بوسعادة", "level": "wilaya", "parentId": null },
-            { "id": "c-68-1", "code": 6801, "name": "Bou Saâda", "nameArabic": "بوسعادة", "level": "commune", "parentId": "w-68" }
+            {
+              "id": "w-31",
+              "code": 31,
+              "name": "Oran",
+              "nameArabic": "وهران",
+              "level": "wilaya",
+              "parentId": null
+            },
+            {
+              "id": "c-31-1",
+              "code": 3101,
+              "name": "Oran",
+              "nameArabic": "وهران",
+              "level": "commune",
+              "parentId": "w-31"
+            },
+            {
+              "id": "w-68",
+              "code": 68,
+              "name": "Bou Saâda",
+              "nameArabic": "بوسعادة",
+              "level": "wilaya",
+              "parentId": null
+            },
+            {
+              "id": "c-68-1",
+              "code": 6801,
+              "name": "Bou Saâda",
+              "nameArabic": "بوسعادة",
+              "level": "commune",
+              "parentId": "w-68"
+            }
           ],
           "pageNumber": 2,
           "pageSize": 1000,
@@ -45,14 +176,51 @@
       }
     },
     "hubs": {
-      "request": { "method": "POST", "url": "https://api.zrexpress.app/api/v1/hubs/search", "body": { "pageNumber": 1, "pageSize": 1000 } },
+      "request": {
+        "method": "POST",
+        "url": "https://api.zrexpress.app/api/v1/hubs/search",
+        "body": {
+          "pageNumber": 1,
+          "pageSize": 1000
+        }
+      },
       "response": {
         "status": 200,
         "json": {
           "items": [
-            { "id": "hub-16-a", "name": "ZR Bab Ezzouar", "isPickupPoint": true, "isVisible": true, "address": { "street": "Cité 5 Juillet", "cityTerritoryId": "w-16", "districtTerritoryId": "c-16-1", "district": "Bab Ezzouar" } },
-            { "id": "hub-16-sort", "name": "Centre de tri Alger", "isPickupPoint": false, "isVisible": true, "address": { "cityTerritoryId": "w-16", "districtTerritoryId": "c-16-2" } },
-            { "id": "hub-68-a", "name": "ZR Bou Saâda", "isPickupPoint": true, "isVisible": true, "address": { "street": "Route de Biskra", "cityTerritoryId": "w-68", "districtTerritoryId": "c-68-1" } }
+            {
+              "id": "hub-16-a",
+              "name": "ZR Bab Ezzouar",
+              "isPickupPoint": true,
+              "isVisible": true,
+              "address": {
+                "street": "Cité 5 Juillet",
+                "cityTerritoryId": "w-16",
+                "districtTerritoryId": "c-16-1",
+                "district": "Bab Ezzouar"
+              }
+            },
+            {
+              "id": "hub-16-sort",
+              "name": "Centre de tri Alger",
+              "isPickupPoint": false,
+              "isVisible": true,
+              "address": {
+                "cityTerritoryId": "w-16",
+                "districtTerritoryId": "c-16-2"
+              }
+            },
+            {
+              "id": "hub-68-a",
+              "name": "ZR Bou Saâda",
+              "isPickupPoint": true,
+              "isVisible": true,
+              "address": {
+                "street": "Route de Biskra",
+                "cityTerritoryId": "w-68",
+                "districtTerritoryId": "c-68-1"
+              }
+            }
           ],
           "hasNext": false
         }
@@ -61,66 +229,290 @@
     "create_ok": {
       "request": {
         "method": "POST",
-        "url": "https://api.zrexpress.app/api/v1/parcels",
-        "body": {
-          "customer": { "name": "Amine Benali", "phone": { "number1": "0555123456" } },
-          "deliveryAddress": { "cityTerritoryId": "w-16", "districtTerritoryId": "c-16-1", "street": "Cité 200 logements, Bt 4" },
-          "orderedProducts": [{ "productName": "Robe kabyle ×1", "quantity": 1, "unitPrice": 4500, "stockType": "local" }],
-          "deliveryType": "home",
-          "description": "",
-          "amount": 4900,
-          "weight": { "weight": 1 },
-          "externalId": "CMD-1042"
-        }
+        "url": "https://api.zrexpress.app/api/v1/parcels"
       },
-      "response": { "status": 201, "json": { "id": "p-778899", "trackingNumber": "ZR-APP-778899", "externalId": "CMD-1042", "deliveryPrice": 400, "returnPrice": 200, "amount": 4900 } }
+      "response": {
+        "status": 201,
+        "json": {
+          "id": "p-778899",
+          "trackingNumber": "ZR-APP-778899",
+          "externalId": "CMD-1042",
+          "deliveryPrice": 400,
+          "returnPrice": 200,
+          "amount": 4900
+        }
+      }
     },
     "create_bad_phone": {
-      "request": { "method": "POST", "url": "https://api.zrexpress.app/api/v1/parcels" },
-      "response": { "status": 400, "json": { "title": "One or more validation errors occurred.", "status": 400, "errors": { "Customer.Phone.Number1": ["Le numéro de téléphone est invalide."] } } }
+      "request": {
+        "method": "POST",
+        "url": "https://api.zrexpress.app/api/v1/parcels"
+      },
+      "response": {
+        "status": 400,
+        "json": {
+          "title": "One or more validation errors occurred.",
+          "status": 400,
+          "errors": {
+            "Customer.Phone.Number1": [
+              "Le numéro de téléphone est invalide."
+            ]
+          }
+        }
+      }
     },
     "create_new_wilaya": {
-      "request": { "method": "POST", "url": "https://api.zrexpress.app/api/v1/parcels" },
-      "response": { "status": 201, "json": { "id": "p-6801", "trackingNumber": "ZR-APP-6801" } }
+      "request": {
+        "method": "POST",
+        "url": "https://api.zrexpress.app/api/v1/parcels"
+      },
+      "response": {
+        "status": 201,
+        "json": {
+          "id": "p-6801",
+          "trackingNumber": "ZR-APP-6801"
+        }
+      }
     },
     "create_desk": {
-      "request": { "method": "POST", "url": "https://api.zrexpress.app/api/v1/parcels" },
-      "response": { "status": 201, "json": { "id": "p-desk", "trackingNumber": "ZR-APP-DESK" } }
+      "request": {
+        "method": "POST",
+        "url": "https://api.zrexpress.app/api/v1/parcels"
+      },
+      "response": {
+        "status": 201,
+        "json": {
+          "id": "p-desk",
+          "trackingNumber": "ZR-APP-DESK"
+        }
+      }
     },
     "track_out": {
-      "request": { "method": "GET", "url": "https://api.zrexpress.app/api/v1/parcels/ZR-APP-778899" },
-      "response": { "status": 200, "json": { "id": "p-778899", "trackingNumber": "ZR-APP-778899", "state": { "id": "s-1", "name": "En livraison" }, "situation": null, "lastStateUpdateAt": "2026-10-12T08:30:00Z" } }
+      "request": {
+        "method": "GET",
+        "url": "https://api.zrexpress.app/api/v1/parcels/ZR-APP-778899"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "id": "p-778899",
+          "trackingNumber": "ZR-APP-778899",
+          "state": {
+            "id": "s-1",
+            "name": "En livraison"
+          },
+          "situation": null,
+          "lastStateUpdateAt": "2026-10-12T08:30:00Z"
+        }
+      }
     },
     "track_failed": {
-      "request": { "method": "GET", "url": "https://api.zrexpress.app/api/v1/parcels/ZR-APP-778900" },
-      "response": { "status": 200, "json": { "id": "p-778900", "trackingNumber": "ZR-APP-778900", "state": { "id": "s-2", "name": "Échec de livraison" }, "situation": { "id": "si-1", "name": "Client injoignable", "slug": "client-injoignable" }, "lastSituationUpdateAt": "2026-10-12T09:00:00Z" } }
+      "request": {
+        "method": "GET",
+        "url": "https://api.zrexpress.app/api/v1/parcels/ZR-APP-778900"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "id": "p-778900",
+          "trackingNumber": "ZR-APP-778900",
+          "state": {
+            "id": "s-2",
+            "name": "Échec de livraison"
+          },
+          "situation": {
+            "id": "si-1",
+            "name": "Client injoignable",
+            "slug": "client-injoignable"
+          },
+          "lastSituationUpdateAt": "2026-10-12T09:00:00Z"
+        }
+      }
     },
-    "track_404": { "request": { "method": "GET", "url": "https://api.zrexpress.app/api/v1/parcels/ZR-APP-0" }, "response": { "status": 404, "json": { "title": "Not Found", "status": 404 } } },
+    "track_404": {
+      "request": {
+        "method": "GET",
+        "url": "https://api.zrexpress.app/api/v1/parcels/ZR-APP-0"
+      },
+      "response": {
+        "status": 404,
+        "json": {
+          "title": "Not Found",
+          "status": 404
+        }
+      }
+    },
     "cancel_get": {
-      "request": { "method": "GET", "url": "https://api.zrexpress.app/api/v1/parcels/ZR-APP-778899" },
-      "response": { "status": 200, "json": { "id": "p-778899", "trackingNumber": "ZR-APP-778899", "state": { "name": "En préparation" } } }
+      "request": {
+        "method": "GET",
+        "url": "https://api.zrexpress.app/api/v1/parcels/ZR-APP-778899"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "id": "p-778899",
+          "trackingNumber": "ZR-APP-778899",
+          "state": {
+            "name": "En préparation"
+          }
+        }
+      }
     },
-    "cancel_delete": { "request": { "method": "DELETE", "url": "https://api.zrexpress.app/api/v1/parcels/p-778899" }, "response": { "status": 200, "json": { "id": "p-778899" } } },
+    "cancel_delete": {
+      "request": {
+        "method": "DELETE",
+        "url": "https://api.zrexpress.app/api/v1/parcels/p-778899"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "id": "p-778899"
+        }
+      }
+    },
     "cancel_get_picked": {
-      "request": { "method": "GET", "url": "https://api.zrexpress.app/api/v1/parcels/ZR-APP-778899" },
-      "response": { "status": 200, "json": { "id": "p-778899", "trackingNumber": "ZR-APP-778899", "state": { "name": "Ramassé" } } }
+      "request": {
+        "method": "GET",
+        "url": "https://api.zrexpress.app/api/v1/parcels/ZR-APP-778899"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "id": "p-778899",
+          "trackingNumber": "ZR-APP-778899",
+          "state": {
+            "name": "Ramassé"
+          }
+        }
+      }
     },
     "label": {
-      "request": { "method": "POST", "url": "https://api.zrexpress.app/api/v1/parcels/labels/individual/pdf", "body": { "trackingNumbers": ["ZR-APP-778899"], "format": "A6", "isPreview": false } },
-      "response": { "status": 200, "json": { "parcelLabelFiles": [{ "trackingNumber": "ZR-APP-778899", "fileUrl": "https://files.zrexpress-storage.example/labels/ZR-APP-778899.pdf" }], "failedTrackingNumbers": [] } }
+      "request": {
+        "method": "POST",
+        "url": "https://api.zrexpress.app/api/v1/parcels/labels/individual/pdf",
+        "body": {
+          "trackingNumbers": [
+            "ZR-APP-778899"
+          ],
+          "format": "A6",
+          "isPreview": false
+        }
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "parcelLabelFiles": [
+            {
+              "trackingNumber": "ZR-APP-778899",
+              "fileUrl": "https://files.zrexpress-storage.example/labels/ZR-APP-778899.pdf"
+            }
+          ],
+          "failedTrackingNumbers": []
+        }
+      }
     },
-    "label_file": { "request": { "method": "GET", "url": "https://files.zrexpress-storage.example/labels/ZR-APP-778899.pdf" }, "response": { "status": 200, "pdf": true } },
-    "rates_origin_404": { "request": { "method": "GET", "url": "https://api.zrexpress.app/api/v1/delivery-pricing/rates?fromTerritoryId=w-16" }, "response": { "status": 404, "json": { "title": "Not Found", "status": 404 } } },
+    "label_file": {
+      "request": {
+        "method": "GET",
+        "url": "https://files.zrexpress-storage.example/labels/ZR-APP-778899.pdf"
+      },
+      "response": {
+        "status": 200,
+        "pdf": true
+      }
+    },
+    "rates_origin_404": {
+      "request": {
+        "method": "GET",
+        "url": "https://api.zrexpress.app/api/v1/delivery-pricing/rates?fromTerritoryId=w-16"
+      },
+      "response": {
+        "status": 404,
+        "json": {
+          "title": "Not Found",
+          "status": 404
+        }
+      }
+    },
     "rates": {
-      "request": { "method": "GET", "url": "https://api.zrexpress.app/api/v1/delivery-pricing/rates" },
+      "request": {
+        "method": "GET",
+        "url": "https://api.zrexpress.app/api/v1/delivery-pricing/rates"
+      },
       "response": {
         "status": 200,
         "json": {
           "rates": [
-            { "toTerritoryId": "w-16", "toTerritoryCode": 16, "toTerritoryLevel": "wilaya", "deliveryPrices": [{ "deliveryType": "home", "price": 400 }, { "deliveryType": "pickup-point", "price": 300, "discountedPrice": 250 }] },
-            { "toTerritoryId": "c-16-1", "toTerritoryCode": 1601, "toTerritoryLevel": "commune", "deliveryPrices": [{ "deliveryType": "home", "price": 380 }] },
-            { "toTerritoryId": "w-31", "toTerritoryCode": 31, "toTerritoryLevel": "wilaya", "deliveryPrices": [{ "deliveryType": "home", "price": 600, "priceTtc": 650 }] }
+            {
+              "toTerritoryId": "w-16",
+              "toTerritoryCode": 16,
+              "toTerritoryLevel": "wilaya",
+              "deliveryPrices": [
+                {
+                  "deliveryType": "home",
+                  "price": 400
+                },
+                {
+                  "deliveryType": "pickup-point",
+                  "price": 300,
+                  "discountedPrice": 250
+                }
+              ]
+            },
+            {
+              "toTerritoryId": "c-16-1",
+              "toTerritoryCode": 1601,
+              "toTerritoryLevel": "commune",
+              "deliveryPrices": [
+                {
+                  "deliveryType": "home",
+                  "price": 380
+                }
+              ]
+            },
+            {
+              "toTerritoryId": "w-31",
+              "toTerritoryCode": 31,
+              "toTerritoryLevel": "wilaya",
+              "deliveryPrices": [
+                {
+                  "deliveryType": "home",
+                  "price": 600,
+                  "priceTtc": 650
+                }
+              ]
+            }
           ]
+        }
+      }
+    },
+    "create_id_only": {
+      "request": {
+        "method": "POST",
+        "url": "https://api.zrexpress.app/api/v1/parcels"
+      },
+      "response": {
+        "status": 201,
+        "json": {
+          "id": "p-7790",
+          "trackingNumber": null,
+          "externalId": "CMD-1043"
+        }
+      }
+    },
+    "parcel_by_id": {
+      "request": {
+        "method": "GET",
+        "url": "https://api.zrexpress.app/api/v1/parcels/p-7790"
+      },
+      "response": {
+        "status": 200,
+        "json": {
+          "id": "p-7790",
+          "trackingNumber": "ZR-APP-7790",
+          "state": {
+            "name": "Commande reçue"
+          }
         }
       }
     }

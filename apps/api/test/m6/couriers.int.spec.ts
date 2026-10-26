@@ -29,6 +29,8 @@ describe('courier accounts (DLV-03)', () => {
     const by = Object.fromEntries(res.body.data.map((p: any) => [p.provider, p]));
     expect(by.zrexpress.fields.map((f: any) => f.key)).toEqual(['token', 'key']);
     expect(by.ecotrack.fields.map((f: any) => f.key)).toEqual(['baseUrl', 'token']);
+    // tester report 25/10 UX-009: the simulated driver is said (nothing reaches the couriers)
+    expect(by.zrexpress.simulated).toBe(true);
     expect(by.yalidine.fields.map((f: any) => f.key)).toEqual(['apiId', 'apiToken']);
     expect(by.zrexpress).toMatchObject({ labelSource: 'djaber', capabilities: { label: false, cancel: false, rates: true } });
     expect(by.ecotrack).toMatchObject({ labelSource: 'courier', capabilities: { label: true, cancel: true, retry: true } });
@@ -169,9 +171,9 @@ describe('courier rates (DLV-07)', () => {
     expect(done.written).toBe(2);
     const grid = (await owner.get('/delivery/fees').expect(200)).body.data;
     expect(grid.find((r: any) => r.wilayaId === 16)).toMatchObject({ homePrice: 700, stopdeskPrice: 550, source: 'custom', courierCost: 700 });
-    // EcoTrack has no rates endpoint
+    // EcoTrack reads its fees too since 26/10 (get/fees): asked to the worker like ZR
     const eco = await addCourier(owner, 'ecotrack');
-    expect((await owner.get(`/delivery/rates?courierAccountId=${eco.id}`).expect(200)).body.data).toMatchObject({ supported: false, refreshing: false, rates: [] });
+    expect((await owner.get(`/delivery/rates?courierAccountId=${eco.id}`).expect(200)).body.data).toMatchObject({ supported: true, refreshing: true, rates: [] });
     // operators read rates but cannot copy them
     const op = await asOperator(app, owner.workspaceId);
     await op.get(`/delivery/rates?courierAccountId=${zr.id}`).expect(200);

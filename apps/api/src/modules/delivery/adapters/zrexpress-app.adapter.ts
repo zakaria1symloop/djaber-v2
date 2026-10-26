@@ -8,12 +8,20 @@
 // - label = individual A6 PDF (`labels/individual/pdf` gives a file URL, fetched; the API key is only sent to ZR's host);
 // - cancel = DELETE of the parcel, refused by ZR once the parcel left the merchant (⇒ COURIER_CANCEL_NOT_ALLOWED);
 // - rates = `delivery-pricing/rates` from the sender wilaya (home / pickup-point, TTC when given).
-import { courierWilayaId, WILAYA_COUNT, ZR_APP_BASE_URL } from '@djaber/shared';
+import { randomUUID } from 'node:crypto';
+import { courierWilayaId, normalizePhoneDz, WILAYA_COUNT, ZR_APP_BASE_URL } from '@djaber/shared';
 import { checkStatus, courierDate, fieldOfMessage, num, str, type CourierTransport, type HttpResponse } from './http';
 import { CourierError, ZR_APP_CAPABILITIES, type AnyCredentials, type CourierAdapter, type CourierField, type CreateShipmentInput, type Stopdesk, type TestResult, type TrackResult } from './courier-adapter';
 import { mapCourierStatus, normalizeRaw } from './status-maps';
 
 const API = `${ZR_APP_BASE_URL}/api/v1`;
+/** ZR refuses a cash-on-delivery amount above 150 000 DA. */
+export const ZR_MAX_AMOUNT = 150_000;
+/** ZR wants the international form: 0550 12 34 56 ⇒ +213550123456. */
+export const zrPhone = (raw: string) => {
+  const p = normalizePhoneDz(raw);
+  return /^0\d{8,9}$/.test(p) ? `+213${p.slice(1)}` : p;
+};
 const CACHE_MS = 24 * 3_600_000;
 const PAGE = 1000;
 
@@ -168,13 +176,18 @@ export class ZrExpressAppAdapter implements CourierAdapter {
     }
     if (!geo.wilayaByCode.has(input.wilayaId) && !place) throw new CourierError('validation', `Wilaya ${input.wilayaId} inconnue de ZR Express`, 'wilaya');
     if (!place) throw new CourierError('validation', `Commune « ${input.communeName} » introuvable chez ZR Express (wilaya ${input.wilayaId})`, 'commune');
+    if (input.codAmount > ZR_MAX_AMOUNT) throw new CourierError('validation', `Montant supérieur à ${ZR_MAX_AMOUNT} DA (limite ZR Express)`, 'cod');
+    // checked against ZR's public contract and a reference client (tester report 25/10 UX-009: no order reached ZR):
+    // `stockType: none` (local / warehouse need a ZR product id + SKU), a description of ≥ 2 characters, phones in the
+    // international form, a customer id
+    const summary = input.productSummary.trim() || input.orderNumber;
     const body = {
-      customer: { name: input.recipient.name, phone: { number1: input.recipient.phone, ...(input.recipient.phone2 ? { number2: input.recipient.phone2 } : {}) } },
+      customer: { customerId: randomUUID(), name: input.recipient.name, phone: { number1: zrPhone(input.recipient.phone), ...(input.recipient.phone2 ? { number2: zrPhone(input.recipient.phone2) } : {}) } },
       deliveryAddress: { cityTerritoryId: place.city.id, districtTerritoryId: place.district.id, street: input.address },
       ...(hubId ? { hubId } : {}),
-      orderedProducts: [{ productName: input.productSummary.slice(0, 250), quantity: 1, unitPrice: input.declaredValue ?? input.codAmount, stockType: 'local' }],
+      orderedProducts: [{ productName: summary.slice(0, 250), quantity: 1, unitPrice: input.declaredValue ?? input.codAmount, stockType: 'none' }],
       deliveryType: input.isStopdesk ? 'pickup-point' : 'home',
-      description: (input.note ?? '').slice(0, 250),
+      description: [summary, input.note?.trim()].filter(Boolean).join(' — ').slice(0, 250),
       amount: input.codAmount,
       weight: { weight: Math.max(1, Math.ceil((input.weightGrams ?? 500) / 1000)) },
       externalId: input.orderNumber,
@@ -185,9 +198,13 @@ export class ZrExpressAppAdapter implements CourierAdapter {
       throw new CourierError('validation', r.message, r.field);
     }
     const j = obj(res.json);
-    const trackingNumber = str(j.trackingNumber);
-    if (!trackingNumber) throw new CourierError('unavailable', 'no tracking returned');
-    return { trackingNumber, externalId: str(j.id) || trackingNumber, labelUrl: null, rawStatus: 'En préparation', raw: j };
+    const id = str(j.id);
+    // the creation may answer the parcel id only: the tracking number is read back from the parcel (never a retry, which
+    // would create a second parcel)
+    let trackingNumber = str(j.trackingNumber);
+    if (!trackingNumber && id) trackingNumber = str((await this.parcel(c, id).catch(() => ({}) as Row)).trackingNumber);
+    if (!trackingNumber && !id) throw new CourierError('unavailable', 'no tracking returned');
+    return { trackingNumber: trackingNumber || id, externalId: id || trackingNumber, labelUrl: null, rawStatus: 'Commande reçue', raw: j };
   }
 
   private async parcel(c: AnyCredentials, trackingNumber: string): Promise<Row> {

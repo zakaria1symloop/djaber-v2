@@ -120,6 +120,11 @@ export function CouriersPage() {
   return (
     <AppPage permission="delivery.manage" title={t('delivery.title.couriers')} bare>
       <div className="flex flex-col gap-5" data-testid="couriers-page">
+        {infos.some((p) => p.simulated) ? (
+          <FormAlert tone="warning">
+            <span data-testid="couriers-simulated">{t('couriers.simulated')}</span>
+          </FormAlert>
+        ) : null}
         <AutoSendCard />
         <div className="flex flex-wrap items-center gap-3">
           <p className="min-w-0 flex-1 ts-label-meta text-text-muted">{t('couriers.intro')}</p>

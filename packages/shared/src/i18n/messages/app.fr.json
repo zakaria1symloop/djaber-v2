@@ -6367,5 +6367,6 @@
  "adminMod.reject.titleOne": "Rejeter « {name} »",
  "products.page.pricing.byVariant": "MARGE PAR VARIANTE",
  "products.page.pricing.variantsNote": "Vendu au prix de ses variantes : la marge affichée est la plus basse.",
- "auth.invitation.existing": "Un compte Djaber existe déjà avec {email} : connectez-vous, puis acceptez l'invitation. Votre propre boutique reste à vous."
+ "auth.invitation.existing": "Un compte Djaber existe déjà avec {email} : connectez-vous, puis acceptez l'invitation. Votre propre boutique reste à vous.",
+ "couriers.simulated": "Mode simulation : ce serveur n'envoie aucun colis aux transporteurs (COURIER_DRIVER=fake). Le test de connexion et les numéros de suivi sont simulés ; rien n'apparaît chez ZR Express, Yalidine ou EcoTrack tant que l'administrateur n'a pas activé le mode réel."
 }

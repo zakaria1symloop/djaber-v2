@@ -6367,5 +6367,6 @@
  "adminMod.reject.titleOne": "رفض «{name}»",
  "products.page.pricing.byVariant": "الهامش حسب المتغير",
  "products.page.pricing.variantsNote": "يُباع بأسعار متغيراته: الهامش المعروض هو الأدنى.",
- "auth.invitation.existing": "يوجد حساب Djaber بالفعل بالبريد {email}: سجّل الدخول ثم اقبل الدعوة. يبقى متجرك الخاص ملكك."
+ "auth.invitation.existing": "يوجد حساب Djaber بالفعل بالبريد {email}: سجّل الدخول ثم اقبل الدعوة. يبقى متجرك الخاص ملكك.",
+ "couriers.simulated": "وضع المحاكاة: هذا الخادم لا يرسل أي طرد لشركات التوصيل (COURIER_DRIVER=fake). اختبار الاتصال وأرقام التتبع محاكاة؛ لن يظهر شيء لدى ZR Express أو Yalidine أو EcoTrack حتى يفعّل المسؤول الوضع الحقيقي."
 }

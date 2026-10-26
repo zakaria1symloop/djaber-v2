@@ -157,10 +157,17 @@ export type CourierProviderView = {
   labelSource: 'courier' | 'djaber';
   /** ZR Express only: the platform picked in the dialog (first = default: the new one); the fields above stay Procolis'. */
   platforms?: { key: ZrPlatform; name: string; fields: CourierProviderField[]; capabilities: CourierCapabilities; portalUrl: string | null; labelSource: 'courier' | 'djaber' }[];
+  /**
+   * Tester report 25/10 UX-009 (« the orders do not appear in ZR Express »): the server runs the simulated courier driver
+   * (`COURIER_DRIVER=fake`) — nothing reaches the courier, the connection test and the tracking numbers are simulated.
+   */
+  simulated?: boolean;
 };
 
 /** https://<instance>.ecotrack.dz (05-integrations §2.3). */
-export const ECOTRACK_URL_RE = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.ecotrack\.dz\/?$/i;
+// 26/10 (« intégrer EcoTrack »): the couriers on the EcoTrack platform also run on their own hosts (DHD, Conexlog); a
+// pasted `/api/v1` is accepted and stripped. Only these hosts are ever called with the merchant's token.
+export const ECOTRACK_URL_RE = /^https:\/\/([a-z0-9-]+(\.[a-z0-9-]+)*\.ecotrack\.dz|platform\.dhd-dz\.com|app\.conexlog-dz\.com)(\/api\/v1)?\/?$/i;
 export const ZrCredentialsSchema = z.object({ token: secret(), key: secret() }).strict();
 export const ZrAppCredentialsSchema = z.object({ apiKey: secret(), tenantId: secret(100) }).strict();
 /** ZR Express: the new platform when `apiKey` / `tenantId` is sent, else Procolis (field errors of the platform meant). */
@@ -171,7 +178,7 @@ const ZrAnyCredentialsSchema = z.record(z.unknown(), { errorMap: () => ({ messag
   return z.NEVER;
 });
 export const EcotrackCredentialsSchema = z
-  .object({ baseUrl: z.string({ required_error: 'validation.required' }).trim().min(1, 'validation.required').max(200, 'validation.length').regex(ECOTRACK_URL_RE, 'validation.url_https').transform((u) => u.replace(/\/$/, '').toLowerCase()), token: secret() })
+  .object({ baseUrl: z.string({ required_error: 'validation.required' }).trim().min(1, 'validation.required').max(200, 'validation.length').regex(ECOTRACK_URL_RE, 'validation.url_https').transform((u) => u.replace(/\/$/, '').replace(/\/api\/v1$/i, '').toLowerCase()), token: secret() })
   .strict();
 export const YalidineCredentialsSchema = z.object({ apiId: secret(100), apiToken: secret() }).strict();
 const sender = z

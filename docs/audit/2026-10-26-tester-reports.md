@@ -60,4 +60,4 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 | T25-7 | Integrations › « Documentation API » shows only « openapi.json · Postman collection » | todo |
 | T25-8 / PV26-F2 | Date filters: the « au » date is cut, a horizontal scroll bar appears | todo |
 | L25-UX-002 | Help tickets: no attachment on a reply | todo |
-| L25-UX-009 | ZR Express: the orders do not appear in ZR Express | todo |
+| L25-UX-009 | ZR Express: the orders do not appear in ZR Express | done (code; live mode = server .env) |

@@ -67,6 +67,7 @@ export class CourierAccountService {
       capabilities: wireCapabilities(PROVIDER_CAPABILITIES[p]),
       portalUrl: PORTALS[p],
       labelSource: PROVIDER_CAPABILITIES[p].label ? 'courier' : 'djaber',
+      simulated: this.adapters.driver === 'fake',
     }));
     // ZR Express: two platforms, the new one first (default of the dialog); the top-level fields stay Procolis'
     const i = list.findIndex((p) => p.provider === 'zrexpress');

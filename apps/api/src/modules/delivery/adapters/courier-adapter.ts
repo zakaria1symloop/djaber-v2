@@ -111,7 +111,8 @@ export const wireCapabilities = (a: AdapterCapabilities): CourierCapabilities =>
 /** Static capabilities per provider (05-integrations §2.2–§2.5) — shared by the live and the fake driver. */
 export const PROVIDER_CAPABILITIES: Record<CourierProvider, AdapterCapabilities> = {
   zrexpress: { cancel: false, label: false, batchTrack: true, webhook: false, rates: true, stopdesks: false, retry: false },
-  ecotrack: { cancel: true, label: true, batchTrack: true, webhook: false, rates: false, stopdesks: false, retry: true },
+  // 26/10: fees (`get/fees`) and stop-desks (communes with `has_stop_desk`) read; no batch tracking endpoint
+  ecotrack: { cancel: true, label: true, batchTrack: false, webhook: false, rates: true, stopdesks: true, retry: true },
   yalidine: { cancel: true, label: true, batchTrack: true, webhook: true, rates: true, stopdesks: true, retry: false },
   manual: { cancel: false, label: false, batchTrack: false, webhook: false, rates: false, stopdesks: false, retry: false },
 };
