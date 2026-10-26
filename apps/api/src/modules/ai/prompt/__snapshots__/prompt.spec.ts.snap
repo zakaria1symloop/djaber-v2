@@ -24,7 +24,7 @@ ALSO: Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] 900 DA — assor
 #2 Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] SKU:CEI-002 PRICE:900 DA STOCK:service
 SERVICE: present it as a service (what is done, how, when), never as a product in stock or a parcel.
 OUT_OF_STOCK_SENTENCE: "Désolé, {product} est en rupture de stock pour le moment."
-OUT_OF_STOCK: say OUT_OF_STOCK_SENTENCE, then suggest an alternative from the same category
+OUT_OF_STOCK: write OUT_OF_STOCK_SENTENCE word for word ({product} = the product name; translate it only when the customer writes another language), never a sentence of your own, then suggest an alternative from the same category
 MISSING_VARIANT: say which sizes remain
 
 DELIVERY FEES: use quote_delivery. Free delivery from 8000 DA.
@@ -143,7 +143,7 @@ ALSO: Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] 900 DA — assor
 #2 Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] SKU:CEI-002 PRICE:900 DA STOCK:service
 SERVICE: present it as a service (what is done, how, when), never as a product in stock or a parcel.
 OUT_OF_STOCK_SENTENCE: "Désolé, {product} est en rupture de stock pour le moment."
-OUT_OF_STOCK: say OUT_OF_STOCK_SENTENCE, then suggest an alternative from the same category
+OUT_OF_STOCK: write OUT_OF_STOCK_SENTENCE word for word ({product} = the product name; translate it only when the customer writes another language), never a sentence of your own, then suggest an alternative from the same category
 MISSING_VARIANT: say which sizes remain"
 `;
 
@@ -152,7 +152,7 @@ exports[`prompt sections (04-ai-pipeline §3) §3.5 catalogue: product block, fu
 #1 Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] SKU:CEI-002 PRICE:900 DA STOCK:service
 SERVICE: present it as a service (what is done, how, when), never as a product in stock or a parcel.
 OUT_OF_STOCK_SENTENCE: "عذرًا، {product} غير متوفر حاليًا."
-OUT_OF_STOCK: say OUT_OF_STOCK_SENTENCE only"
+OUT_OF_STOCK: write OUT_OF_STOCK_SENTENCE word for word ({product} = the product name; translate it only when the customer writes another language), never a sentence of your own, nothing else about it"
 `;
 
 exports[`prompt sections (04-ai-pipeline §3) §3.6 delivery and §3.7 order-taking rules 1`] = `

@@ -544,7 +544,7 @@ export class ConversationService implements OnModuleInit {
       const at = ctx.handoffAt ? new Date(ctx.handoffAt) : null;
       if (ctx.handoffReason !== 'ai_error' || !at || now.getTime() - at.getTime() < AI_ERROR_RETRY_AFTER_MS) return false;
       if (await tx.message.count({ where: { conversationId: c.id, author: 'human', createdAt: { gt: at } } })) return false;
-      const context: ConversationContext = { ...ctx, handoffAt: null, handoffReason: null, handoffRemindedAt: null, aiPausedById: null, aiUnavailable: null };
+      const context: ConversationContext = { ...ctx, handoffAt: null, handoffReason: null, handoffRemindedAt: null, handoffMessageSentAt: null, aiPausedById: null, aiUnavailable: null };
       const updated = await tx.conversation.update({ where: { id: c.id }, data: { status: 'active', aiPaused: false, version: { increment: 1 }, context: context as Prisma.InputJsonValue } });
       await this.emitUpdated(tx, updated);
       return true;
@@ -560,10 +560,14 @@ export class ConversationService implements OnModuleInit {
     const run = async (tx: Tx) => {
       const c = await tx.conversation.findFirst({ where: { id: conversationId, deletedAt: null }, include: { client: true } });
       if (!c || c.status === 'needs_human') return false;
-      const ctx: ConversationContext = { ...contextOf(c), ...(o.context ?? {}), handoffAt: new Date().toISOString(), handoffReason: reason, handoffRemindedAt: null, aiPausedById: null };
+      const prev = contextOf(c);
+      // 04-ai-pipeline §10: one handoff message per episode — the episode ends when the AI is given the thread back (the
+      // mark is cleared then). It was « never twice in 24 h »: an edited text was not seen again that day (tester notes 25/10)
+      const sendText = !o.silent && !prev.handoffMessageSentAt;
+      const at = new Date().toISOString();
+      const ctx: ConversationContext = { ...prev, ...(o.context ?? {}), handoffAt: at, handoffReason: reason, handoffRemindedAt: null, aiPausedById: null, ...(sendText ? { handoffMessageSentAt: at } : {}) };
       const updated = await tx.conversation.update({ where: { id: c.id }, data: { status: 'needs_human', aiPaused: true, version: { increment: 1 }, context: ctx as Prisma.InputJsonValue } });
-      // 04-ai-pipeline §10: one handoff message per episode — never twice in 24 h for the same conversation
-      if (!o.silent) await this.outbound.sendSystemText(c.id, 'handoff', {}, { tx, kind: 'system', oncePer24h: true });
+      if (sendText) await this.outbound.sendSystemText(c.id, 'handoff', {}, { tx, kind: 'system' });
       await this.emitUpdated(tx, updated);
       await this.notifications.emit(tx, {
         type: 'conversation_handoff',

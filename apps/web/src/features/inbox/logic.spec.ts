@@ -1,5 +1,6 @@
 // Inbox rules: 24 h window → composer state, banner priority, thread grouping / day separators, optimistic
 // reconciliation, tab / filter codec, quick replies.
+import { formatMoney } from '@djaber/shared';
 import { describe, expect, it } from 'vitest';
 import type { Conversation, Message } from './contracts';
 import {
@@ -346,6 +347,9 @@ describe('quick replies', () => {
   it('fills the first-name variable, or removes it', () => {
     expect(fillQuickReply(replies[1]!.body, { firstName: 'Amina' })).toBe('Merci Amina ! Nous vous appelons pour confirmer la livraison.');
     expect(fillQuickReply('Merci {prénom} !', { firstName: null })).toBe('Merci !');
+    // tester notes 25/10: {boutique} and {total} are filled too; an unknown total is left out
+    expect(fillQuickReply('Bonjour {prénom}, {boutique} confirme {total}.', { firstName: 'Amina', shop: 'Boutique Yasmine', total: 12500 })).toBe(`Bonjour Amina, Boutique Yasmine confirme ${formatMoney(12500)}.`);
+    expect(fillQuickReply('Total : {total} chez {boutique}', { shop: 'Atelier' })).toBe('Total : chez Atelier');
   });
 });
 

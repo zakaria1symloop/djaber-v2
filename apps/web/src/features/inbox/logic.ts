@@ -1,6 +1,6 @@
 // Pure rules of the inbox UI (04 §5 statuses, §23 messaging window; 12 §23 banner priority and composer states).
 // No React here: everything is unit-tested in logic.spec.ts.
-import { TIMEZONE } from '@djaber/shared';
+import { formatMoney, TIMEZONE } from '@djaber/shared';
 import type { Conversation, ConversationCounts, ConversationListItem, ConversationPatch, Message, ServerComposerState, WsMessageUpdated } from './contracts';
 
 export const WINDOW_MS = 24 * 3600 * 1000;
@@ -348,8 +348,17 @@ export const filterQuickReplies = <T extends QuickReplyLike>(replies: readonly T
   const rest = replies.filter((r) => !starts.includes(r) && (fold(r.title).includes(q) || fold(r.body).includes(q)));
   return [...starts, ...rest];
 };
-/** `{prénom}` / `{prenom}` / `{firstName}` of a quick reply are filled with the customer's first name. */
-export const fillQuickReply = (body: string, o: { firstName?: string | null }): string => body.replace(/\{(prénom|prenom|firstName)\}/gi, o.firstName?.trim() || '').replace(/ {2,}/g, ' ');
+/**
+ * The variables of a quick reply (INB-03): `{prénom}` (customer's first name), `{boutique}` (shop name), `{total}` (total of
+ * the customer's last order, `12 500 DA`). Tester notes 25/10: only `{prénom}` was filled. A value that is not known is
+ * left out — a raw `{total}` never reaches the customer.
+ */
+export const fillQuickReply = (body: string, o: { firstName?: string | null; shop?: string | null; total?: number | null }): string =>
+  body
+    .replace(/\{(prénom|prenom|firstName)\}/gi, o.firstName?.trim() || '')
+    .replace(/\{(boutique|shop)\}/gi, o.shop?.trim() || '')
+    .replace(/\{total\}/gi, typeof o.total === 'number' ? formatMoney(o.total) : '')
+    .replace(/ {2,}/g, ' ');
 
 export const firstNameOf = (name: string | null | undefined): string => (name ?? '').trim().split(/\s+/)[0] ?? '';
 

@@ -24,7 +24,8 @@ import { BatchingService } from './batching.service';
 import { ConversationResolver } from './conversation-resolver';
 import { ConversationService } from './conversation.service';
 import { parseInbound, previewOf, type ParsedInbound, type ParsedMessage, type StoredInbound } from './inbound-parser';
-import { attachmentsOf, contextOf, detectLanguage, messageInclude, type ConversationContext, type StoredAttachment } from './messaging.presenter';
+import { detectLanguage, type AiLanguage } from '../ai/language';
+import { attachmentsOf, contextOf, messageInclude, type ConversationContext, type StoredAttachment } from './messaging.presenter';
 import { OutboundSendService } from './outbound-send.service';
 import { containsBlockedWord, SafetyService } from './safety.service';
 
@@ -176,7 +177,9 @@ export class InboundProcessor implements OnModuleInit {
         include: messageInclude,
       });
       const prev = contextOf(conv);
-      const context: ConversationContext = { ...prev, lastDirection: 'in', lastLanguage: detectLanguage(msg ? msg.text : null, prev.lastLanguage) };
+      // the same language detector as the AI (tester notes 25/10: the old one took any Latin text for French — quick
+      // replies, system texts and order messages went out in French to a customer writing English until the AI answered)
+      const context: ConversationContext = { ...prev, lastDirection: 'in', lastLanguage: detectLanguage(msg ? msg.text : null, prev.lastLanguage as AiLanguage | undefined, { neutral: 'previous' }) };
       // INB-05: a new customer message reopens a resolved / archived thread (and brings back a deleted one)
       const reopened = conv.status === 'resolved' || conv.status === 'archived' || conv.deletedAt !== null;
       const newer = !conv.lastMessageAt || p.at >= conv.lastMessageAt;

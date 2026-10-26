@@ -116,11 +116,3 @@ export const presentConversation = (c: ConversationRow, blocked: boolean, now = 
   };
 };
 
-/** Rough language of a customer text: Arabic script ⇒ `ar`, otherwise the previous value is kept (arabizi / darija stay as they were). */
-export const detectLanguage = (text: string | null | undefined, previous?: string): string | undefined => {
-  if (!text) return previous;
-  const arabic = (text.match(/[؀-ۿ]/g) ?? []).length;
-  const latin = (text.match(/[A-Za-zÀ-ÿ]/g) ?? []).length;
-  if (arabic > latin) return 'ar';
-  return previous ?? (latin > 0 ? 'fr' : undefined);
-};

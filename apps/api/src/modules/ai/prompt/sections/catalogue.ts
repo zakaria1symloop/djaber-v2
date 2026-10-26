@@ -29,7 +29,9 @@ export const catalogueSection = (c: PromptContext): string => {
   const sentence = c.workspace.systemMessages.out_of_stock?.[systemLocale(c.lang, c.locale)] ?? c.workspace.systemMessages.out_of_stock?.fr ?? '';
   const rules: string[] = [];
   if (sentence) rules.push(`OUT_OF_STOCK_SENTENCE: "${sentence}"`);
-  rules.push(c.agent.outOfStockBehavior === 'suggest_alternative' ? 'OUT_OF_STOCK: say OUT_OF_STOCK_SENTENCE, then suggest an alternative from the same category' : 'OUT_OF_STOCK: say OUT_OF_STOCK_SENTENCE only');
+  // tester notes 25/10: the shop's sentence word for word (it was paraphrased, so an edit seemed not applied)
+  const say = sentence ? 'write OUT_OF_STOCK_SENTENCE word for word ({product} = the product name; translate it only when the customer writes another language), never a sentence of your own' : 'say the product is out of stock';
+  rules.push(c.agent.outOfStockBehavior === 'suggest_alternative' ? `OUT_OF_STOCK: ${say}, then suggest an alternative from the same category` : `OUT_OF_STOCK: ${say}, nothing else about it`);
   if (c.agent.showMissingVariants) rules.push('MISSING_VARIANT: say which sizes remain');
   return [head, ...(catalogue.count === 0 ? ['(no product available: do not invent any)'] : blocks), ...rules].join('\n');
 };

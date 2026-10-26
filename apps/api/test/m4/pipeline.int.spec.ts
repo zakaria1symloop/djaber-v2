@@ -498,7 +498,7 @@ describe('tools', () => {
 });
 
 describe('handoff, insights, safety', () => {
-  it('AT-AI-10 a refund request ⇒ HANDOFF: reply, workspace `handoff` text once, `needs_human`, insight, notification; a second handoff within 24 h sends no second handoff text', async () => {
+  it('AT-AI-10 a refund request ⇒ HANDOFF: reply, workspace `handoff` text once per episode, `needs_human`, insight, notification; after a resume, a new handoff sends it again (tester notes 25/10)', async () => {
     const s = await shop({ humanHandoffRules: 'Si le client parle de remboursement, transférer à un humain.' });
     const sender = newSender();
     const t = await turn(s, sender, { text: 'Je veux un remboursement' });
@@ -515,11 +515,15 @@ describe('handoff, insights, safety', () => {
     // while a human holds the thread the AI stays silent
     await receive(app, s.page, sender, { text: 'allo ?' });
     expect(await replyJob(app, t.conversationId)).toBeNull();
-    // resumed by a member, the customer asks again ⇒ handoff again, but the handoff text is not repeated within 24 h
+    // the prompt carries the shop's handoff text: the model does not announce the handoff itself
+    expect(fakeAi(app).callsOf('reply')[0]!.system).toContain(`HANDOFF_MESSAGE: "${handoffText}"`);
+    // resumed by a member, the customer asks again ⇒ a new episode: handoff again, with the (edited) handoff text again
+    await db.workspace.update({ where: { id: s.owner.workspaceId }, data: { systemMessages: { handoff: { fr: 'Un conseiller de la boutique vous répond (texte modifié).' } } } });
     await s.owner.patch(`/conversations/${t.conversationId}`, { aiPaused: false, version: (await db.conversation.findUniqueOrThrow({ where: { id: t.conversationId } })).version }).expect(200);
     const again = await turn(s, sender, { text: 'remboursement svp' });
     expect(again.conversation.status).toBe('needs_human');
     expect(again.out.filter((m) => m.text === handoffText)).toHaveLength(1);
+    expect(again.out.filter((m) => m.text === 'Un conseiller de la boutique vous répond (texte modifié).')).toHaveLength(1);
   });
 
   it('UNCLEAR ⇒ insight only; 3 unclear turns in a row ⇒ handoff; UNKNOWN ⇒ reply sent, thread to the queue without the handoff text', async () => {

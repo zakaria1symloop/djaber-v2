@@ -15,7 +15,7 @@ const words = (text: string) => text.toLowerCase().split(/[^a-z0-9à-ÿ']+/i).fi
  * words) ⇒ `arabizi`; French stop-words ⇒ `fr`; else `en`; both scripts in comparable amounts ⇒ `mixed`.
  * An empty / symbol-only text keeps `previous`.
  */
-export const detectLanguage = (text: string | null | undefined, previous?: AiLanguage): AiLanguage | undefined => {
+export const detectLanguage = (text: string | null | undefined, previous?: AiLanguage, o: { neutral?: 'en' | 'previous' } = {}): AiLanguage | undefined => {
   if (!text) return previous;
   const arabic = (text.match(/[؀-ۿ]/g) ?? []).length;
   const latin = (text.match(/[A-Za-zÀ-ÿ]/g) ?? []).length;
@@ -40,6 +40,9 @@ export const detectLanguage = (text: string | null | undefined, previous?: AiLan
   if (fr > en) return 'fr';
   if (en > fr) return 'en';
   if (fr > 0) return 'fr';
+  // no clue in the text ("ok", "spam 0", a name): the turn keeps the previous language, else English (`neutral: 'previous'`:
+  // the previous one whatever it is, else none — the inbound side then lets the workspace locale apply)
+  if (o.neutral === 'previous') return previous;
   return previous && previous !== 'ar' ? previous : 'en';
 };
 

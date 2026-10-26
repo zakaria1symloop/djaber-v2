@@ -288,15 +288,19 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
   };
 
   const list = useMemo(() => replies.data ?? [], [replies.data]);
+  // the replies in the customer's language first (`c.language`, now detected like the AI does — tester notes 25/10: English
+  // was taken for French), then the others, each labelled with its language in the « / » list
+  const replyLocale = c.language === 'ar' || c.language === 'en' ? c.language : c.language ? 'fr' : locale;
   const localized = useMemo(() => {
-    const own = list.filter((r) => r.locale === (c.language ?? locale));
-    return own.length ? own : list.filter((r) => r.locale === locale).length ? list.filter((r) => r.locale === locale) : list;
-  }, [list, c.language, locale]);
+    const own = list.filter((r) => r.locale === replyLocale);
+    return [...own, ...list.filter((r) => r.locale !== replyLocale)];
+  }, [list, replyLocale]);
+  const multiLocale = new Set(list.map((r) => r.locale)).size > 1;
   const slash = slashQuery(draft);
   const pickReply = (rid: string) => {
     const r = list.find((x) => x.id === rid);
     if (!r) return;
-    setDraft(fillQuickReply(r.body, { firstName: firstNameOf(c.client?.isPlaceholder ? '' : c.client?.name) }));
+    setDraft(fillQuickReply(r.body, { firstName: firstNameOf(c.client?.isPlaceholder ? '' : c.client?.name), shop: workspace?.name, total: c.clientPanel?.orders?.[0]?.total ?? null }));
     setInlineError(null);
     input.current?.focus();
   };
@@ -624,13 +628,13 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
                 }
               : null
           }
-          chips={slash === null && !draft ? localized.slice(0, 4).map((r) => ({ id: r.id, label: r.title })) : undefined}
+          chips={slash === null && !draft ? localized.filter((r) => r.locale === replyLocale).slice(0, 4).map((r) => ({ id: r.id, label: r.title })) : undefined}
           slash={
             slash !== null
               ? {
                   heading: t('inbox.quickReplies.heading'),
                   emptyLabel: list.length ? t('inbox.quickReplies.noMatch') : t('inbox.quickReplies.empty'),
-                  items: filterQuickReplies(localized, slash).map((r) => ({ id: r.id, title: r.title, preview: r.body, shortcut: r.shortcut })),
+                  items: filterQuickReplies(localized, slash).map((r) => ({ id: r.id, title: multiLocale ? `${r.title} · ${r.locale.toUpperCase()}` : r.title, preview: r.body, shortcut: r.shortcut })),
                 }
               : null
           }
