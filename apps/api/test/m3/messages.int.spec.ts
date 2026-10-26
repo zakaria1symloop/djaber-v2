@@ -409,7 +409,10 @@ describe('MSG-06 outbound rules', () => {
     const p4 = await dataOf(four.message.id);
     meta.failNext('send', new MetaError('user_unavailable', 'This person isn\'t available right now', 551, 1545041, 400));
     expect(await outbound.process(p4.data, job(0))).toBe('failed');
-    expect(await db.message.findUniqueOrThrow({ where: { id: four.message.id } })).toMatchObject({ deliveryStatus: 'failed', error: 'PROVIDER_UNAVAILABLE' });
+    expect(await db.message.findUniqueOrThrow({ where: { id: four.message.id } })).toMatchObject({ deliveryStatus: 'failed', error: 'PROVIDER_UNAVAILABLE', payload: { _sendError: { kind: 'user_unavailable', code: 551, subcode: 1545041, http: 400, message: "This person isn't available right now" } } });
+    // Meta's own answer stays on the row for the diagnosis (tester account 26/10), never in the message DTO
+    const thread4 = await owner.get(`/conversations/${four.message.conversationId}/messages`).expect(200);
+    expect(JSON.stringify(thread4.body.data)).not.toContain('sendError');
     // an unknown error is retried 3 times at most
     const five = await draft('inconnu');
     const p5 = await dataOf(five.message.id);

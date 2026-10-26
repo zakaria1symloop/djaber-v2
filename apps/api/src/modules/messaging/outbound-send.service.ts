@@ -250,7 +250,7 @@ export class OutboundSendService implements OnModuleInit {
         const attempt = (job?.attemptsMade ?? 0) + 1;
         const max = Math.min(job?.opts?.attempts ?? SEND_ATTEMPTS, e.kind === 'unknown' ? UNKNOWN_ERROR_ATTEMPTS : SEND_ATTEMPTS);
         if (e.retryable && attempt < max) throw e; // BullMQ backoff (15 s × 2ⁿ)
-        this.log.warn({ messageId: m.id, kind: e.kind, code: e.code, subcode: e.subcode, attempt }, 'meta send failed');
+        this.log.warn({ messageId: m.id, kind: e.kind, code: e.code, subcode: e.subcode, http: e.httpStatus, meta: e.message.slice(0, 300), attempt }, 'meta send failed');
         return this.fail(m, conv, data, metaErrorCode(e), e);
       }
       await prisma.$transaction(async (db) => {
@@ -271,7 +271,11 @@ export class OutboundSendService implements OnModuleInit {
     this.metrics?.metaSendFailures.inc({ code: e?.code !== undefined && e?.code !== null ? String(e.code) : code });
     await prisma.$transaction(async (db) => {
       const tx = db as Tx;
-      const r = await tx.message.updateMany({ where: { id: m.id, deliveryStatus: 'pending' }, data: { deliveryStatus: 'failed', error: code } });
+      // `error` keeps the catalogue code; Meta's own answer (code / subcode / text) is kept beside it (`_` keys stay out of the DTO) so a failure the
+      // catalogue does not name (PROVIDER_UNAVAILABLE) can still be explained (tester account 26/10)
+      const sendError = e ? { kind: e.kind, code: e.code, subcode: e.subcode, http: e.httpStatus, message: e.message.slice(0, 300), at: new Date().toISOString() } : undefined;
+      const payload = sendError ? ({ ...((m.payload as Record<string, unknown> | null) ?? {}), _sendError: sendError } as Prisma.InputJsonValue) : undefined;
+      const r = await tx.message.updateMany({ where: { id: m.id, deliveryStatus: 'pending' }, data: { deliveryStatus: 'failed', error: code, ...(payload ? { payload } : {}) } });
       if (!r.count) return;
       await this.emitUpdated(tx, { ...m, deliveryStatus: 'failed', error: code });
       if (e?.kind === 'window' && data.kind !== 'human') {

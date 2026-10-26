@@ -93,9 +93,12 @@ async function workspace(m) {
   console.log(`== AI reply runs, 72 h (${runs.length}), by status / error`);
   for (const [k, n] of tally(runs, (r) => `${r.status}${r.error ? `  ${cut(r.error, 140)}` : ''}`)) console.log(`${String(n).padStart(4)}  ${k}`);
 
-  const failed = await db.message.findMany({ where: { workspaceId: id, direction: 'out', deliveryStatus: 'failed', createdAt: { gte: since } }, orderBy: { createdAt: 'desc' }, take: 6, select: { createdAt: true, author: true, type: true, error: true } });
+  const failed = await db.message.findMany({ where: { workspaceId: id, direction: 'out', deliveryStatus: 'failed', createdAt: { gte: since } }, orderBy: { createdAt: 'desc' }, take: 6, select: { createdAt: true, author: true, type: true, error: true, payload: true } });
   console.log(`== outgoing messages Meta refused, 72 h (${failed.length} shown)`);
-  for (const f of failed) console.log(`${t(f.createdAt)}  ${f.author.padEnd(7)} ${f.type.padEnd(14)} ${cut(f.error, 200)}`);
+  for (const f of failed) {
+    const m = f.payload?._sendError;
+    console.log(`${t(f.createdAt)}  ${f.author.padEnd(7)} ${f.type.padEnd(14)} ${cut(f.error, 200)}${m ? `  Meta ${m.kind} #${m.code ?? '-'}/${m.subcode ?? '-'} http ${m.http ?? '-'}: ${cut(m.message, 200)}` : ''}`);
+  }
   if (failed.length) problems.push(`workspace ${id.slice(-8)}: ${failed.length}+ answers were written but Meta refused to deliver them (see the errors above)`);
 }
 
