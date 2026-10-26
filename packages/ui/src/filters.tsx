@@ -179,12 +179,17 @@ export function FilterDateRange({
           ))}
         </div>
       ) : null}
-      <div className="flex items-center gap-2">
-        <DateInput aria-label={labels.from} value={from} max={to || undefined} onValueChange={(v) => onChange({ from: v, to })} className="!h-9 text-[13px]" />
-        <span aria-hidden className="text-text-muted">
-          →
+      {/* one field under the other (tester report 25/10, PV 26/10 F2): side by side they did not fit the 16 rem popover and
+          the « au » date was cut behind a horizontal scroll bar */}
+      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5" data-testid="filter-date-range">
+        <span aria-hidden className="ts-label-micro text-text-muted">
+          {labels.from}
         </span>
-        <DateInput aria-label={labels.to} value={to} min={from || undefined} onValueChange={(v) => onChange({ from, to: v })} className="!h-9 text-[13px]" />
+        <DateInput aria-label={labels.from} value={from} max={to || undefined} onValueChange={(v) => onChange({ from: v, to })} className="!h-9 w-full min-w-0 text-[13px]" />
+        <span aria-hidden className="ts-label-micro text-text-muted">
+          {labels.to}
+        </span>
+        <DateInput aria-label={labels.to} value={to} min={from || undefined} onValueChange={(v) => onChange({ from, to: v })} className="!h-9 w-full min-w-0 text-[13px]" />
       </div>
     </div>
   );

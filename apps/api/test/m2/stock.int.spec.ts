@@ -167,6 +167,16 @@ describe('POST /stock/adjustments', () => {
 });
 
 describe('low stock (CAT-09)', () => {
+  it('tester notes 25/10: two variants of one product going low the same day ⇒ one alert each', async () => {
+    const owner = await asOwner(app);
+    const p = await createProduct(owner, { name: 'Tee', sku: 'TEE-V', variants: [{ name: 'S', price: 1500, stock: 5, minStock: 2 }, { name: 'M', price: 1500, stock: 5, minStock: 2 }] });
+    const [vs, vm] = (await owner.get(`/products/${p.id}/variants`).expect(200)).body.data;
+    await adjust(owner, { productId: p.id, variantId: vs.id, type: 'out', quantity: 3, reason: 'breakage' }).expect(201);
+    await adjust(owner, { productId: p.id, variantId: vm.id, type: 'out', quantity: 3, reason: 'breakage' }).expect(201);
+    const keys = (await db.outbox.findMany({ where: { workspaceId: owner.workspaceId, topic: 'notification', key: { startsWith: 'stock_low:' } } })).map((r) => r.key).sort();
+    expect(keys).toEqual([`stock_low:${p.id}:${vm.id}:${algiersDay()}`, `stock_low:${p.id}:${vs.id}:${algiersDay()}`].sort());
+  });
+
   it('AT-CAT-08 low-stock crossing ⇒ one notification per day max; `stock.low` webhook once', async () => {
     const owner = await asOwner(app);
     const admin = await asAdmin(app, owner.workspaceId);

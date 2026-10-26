@@ -5,12 +5,15 @@
 import type { NotificationCreatedEvent, NotificationReadEvent, NotificationView } from '@djaber/shared';
 import { cn } from '@djaber/ui';
 import { useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { useRef } from 'react';
 import { Bell } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import { useT } from '@/lib/i18n';
 import { useWorkspaceId } from '@/lib/session';
 import { useWsEvent } from '@/lib/ws';
+import { playChime, SOUND_MIN_GAP_MS } from '../inbox/sound';
 import { notificationKeys, notificationsApi, type NotificationPage } from './api';
+import { usePreferences } from './preferences-api';
 
 /**
  * WS → cache: the unread count comes with both events; a new notification refetches the visible lists (its family and
@@ -19,7 +22,17 @@ import { notificationKeys, notificationsApi, type NotificationPage } from './api
 export function useNotificationEvents() {
   const ws = useWorkspaceId();
   const qc = useQueryClient();
+  // tester notes 25/10 (« no sound on low stock »): the SON column of Settings › Notifications was stored and never
+  // played — a notification of a type whose sound is on rings the chime (at most once every 1.5 s)
+  const prefs = usePreferences();
+  const lastRing = useRef(0);
   useWsEvent<Partial<NotificationCreatedEvent>>('notification.created', (p) => {
+    const type = p?.notification?.type;
+    const now = Date.now();
+    if (type && prefs.data?.find((r) => r.type === type)?.sound && now - lastRing.current >= SOUND_MIN_GAP_MS) {
+      lastRing.current = now;
+      playChime();
+    }
     if (typeof p?.unreadCount === 'number') qc.setQueryData(notificationKeys.unread(ws), p.unreadCount);
     else void qc.invalidateQueries({ queryKey: notificationKeys.unread(ws) });
     void qc.invalidateQueries({ queryKey: notificationKeys.lists(ws) });

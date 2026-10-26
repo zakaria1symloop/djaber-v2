@@ -54,10 +54,10 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 | T25-1 | Invited as admin of another shop while owning one ⇒ « Cet e-mail est déjà utilisé » | done |
 | T25-2 | Quick replies: {boutique} / {total} not replaced; language shown inconsistently, switches to French when an order is confirmed | done |
 | T25-3 | System messages: the edited texts are not the ones the bot sends | done |
-| T25-4 | Notifications: no low-stock sound; the low-stock e-mail is sent only the first time | todo |
+| T25-4 | Notifications: no low-stock sound; the low-stock e-mail is sent only the first time | done |
 | T25-5 | Blocked numbers: meaning of the « sources », remove the useless ones | todo |
 | T25-6 | Integrations › Google Sheets: « Connecter Google » gives NOT_FOUND | done |
 | T25-7 | Integrations › « Documentation API » shows only « openapi.json · Postman collection » | todo |
-| T25-8 / PV26-F2 | Date filters: the « au » date is cut, a horizontal scroll bar appears | todo |
+| T25-8 / PV26-F2 | Date filters: the « au » date is cut, a horizontal scroll bar appears | done |
 | L25-UX-002 | Help tickets: no attachment on a reply | todo |
 | L25-UX-009 | ZR Express: the orders do not appear in ZR Express | done (code; live mode = server .env) |

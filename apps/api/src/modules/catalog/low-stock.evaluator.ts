@@ -48,10 +48,12 @@ export class LowStockEvaluator {
       product: c.variant ? `${c.product.name} · ${c.variant.name}` : c.product.name,
       min: minStock,
     };
-    await this.notifications.emit(tx, { type: kind === 'out' ? 'stock_out' : 'stock_low', workspaceId, key: `stock_${kind}:${c.product.id}:${day}`, data });
+    // one alert per day per product AND variant (tester notes 25/10: a second variant going low the same day said nothing)
+    const item = c.variant ? `${c.product.id}:${c.variant.id}` : c.product.id;
+    await this.notifications.emit(tx, { type: kind === 'out' ? 'stock_out' : 'stock_low', workspaceId, key: `stock_${kind}:${item}:${day}`, data });
     await this.outbox.enqueue(tx, {
       topic: 'webhook',
-      key: `stock.${kind}:${c.product.id}:${day}`,
+      key: `stock.${kind}:${item}:${day}`,
       workspaceId,
       payload: { event: `stock.${kind}`, workspaceId, data },
     });
