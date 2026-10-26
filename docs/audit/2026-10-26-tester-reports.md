@@ -28,7 +28,7 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 ## Superadmin
 | # | Issue | Status |
 |---|---|---|
-| L22-UX-007 | Overview chart « Inscriptions · activations · churn » has no dates, no scale, no totals; activations stacked on sign-ups | todo |
+| L22-UX-007 | Overview chart « Inscriptions · activations · churn » has no dates, no scale, no totals; activations stacked on sign-ups | done |
 | L22-UX-016 | Workspaces: « Statut » filter and « STATUT » column show different statuses | done |
 | L22-UX-017 | Workspaces: the « WILAYA » chip is in capitals | done |
 | L22-UX-022 | Impersonation duration below 5 min: only « Vérifiez les champs » | done |

@@ -86,17 +86,31 @@ export default function AdminOverviewPage() {
               data-testid="overview-chart"
             >
               {d ? (
-                <BarChart
-                  label={t('admin.overview.chart.title')}
-                  buckets={d.series.map((s) => ({ key: s.day, label: f.short(s.day), values: [s.signups, s.activations, s.churned] }))}
-                  series={[
-                    { key: 'signups', label: t('admin.overview.chart.signups'), tone: 'inbound' },
-                    { key: 'activations', label: t('admin.overview.chart.activations'), tone: 'money' },
-                    { key: 'churned', label: t('admin.overview.chart.churned'), tone: 'alert' },
-                  ]}
-                  format={f.num}
-                  empty={t('admin.overview.chart.empty')}
-                />
+                <>
+                  {/* tester report 22/10 UX-007: the period totals and the activation rate, dates and a scale, the three series
+                      side by side (an activation is often a shop that signed up earlier: stacked, it read as more new shops) */}
+                  <p className="mb-2 ts-label-meta text-text-secondary" data-testid="overview-chart-totals">
+                    {t('admin.overview.chart.totals', {
+                      signups: f.num(d.series.reduce((n, s) => n + s.signups, 0)),
+                      activations: f.num(d.series.reduce((n, s) => n + s.activations, 0)),
+                      churned: f.num(d.series.reduce((n, s) => n + s.churned, 0)),
+                      rate: d.cohort?.created ? `${Math.round((d.cohort.activated / d.cohort.created) * 100)} %` : '—',
+                    })}
+                  </p>
+                  <BarChart
+                    layout="grouped"
+                    axis
+                    label={t('admin.overview.chart.title')}
+                    buckets={d.series.map((s) => ({ key: s.day, label: f.short(s.day), values: [s.signups, s.activations, s.churned] }))}
+                    series={[
+                      { key: 'signups', label: t('admin.overview.chart.signups'), tone: 'inbound' },
+                      { key: 'activations', label: t('admin.overview.chart.activations'), tone: 'money' },
+                      { key: 'churned', label: t('admin.overview.chart.churned'), tone: 'alert' },
+                    ]}
+                    format={f.num}
+                    empty={t('admin.overview.chart.empty')}
+                  />
+                </>
               ) : (
                 // same height as the chart (BarChart default 180 px) instead of four text lines
                 <div role="status" aria-label={t('common.loading')}>

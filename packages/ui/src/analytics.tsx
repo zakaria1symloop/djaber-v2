@@ -231,9 +231,17 @@ export function LegendChip({
   );
 }
 
-/* ---------- bar chart: one bucket per day / week / month, stacked series, previous period dashed ---------- */
+/* ---------- bar chart: one bucket per day / week / month, stacked (or grouped) series, previous period dashed ---------- */
 export type ChartSeries = { key: string; label: string; tone: ChartTone };
 export type ChartBucket = { key: string; label: string; values: number[] };
+
+/** 1 / 2 / 5 × 10ⁿ at or above `v`: the top of a readable scale (12 ⇒ 20, 48 ⇒ 50, 130 ⇒ 200). */
+export const niceCeil = (v: number) => {
+  if (v <= 1) return 1;
+  const p = 10 ** Math.floor(Math.log10(v));
+  const m = v / p;
+  return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p;
+};
 
 export function BarChart({
   buckets,
@@ -248,6 +256,8 @@ export function BarChart({
   startLabel,
   endLabel,
   caption,
+  layout = 'stacked',
+  axis = false,
   className,
 }: {
   buckets: ChartBucket[];
@@ -265,12 +275,22 @@ export function BarChart({
   startLabel?: string;
   endLabel?: string;
   caption?: React.ReactNode;
+  /** `grouped`: the series side by side in each bucket (values that are not parts of one total, e.g. sign-ups and activations) */
+  layout?: 'stacked' | 'grouped';
+  /** a scale (top and half values) and dates under the bars, every few buckets (tester report 22/10 UX-007) */
+  axis?: boolean;
   className?: string;
 }) {
   const [active, setActive] = React.useState<number | null>(null);
   const totals = buckets.map((b) => b.values.reduce((s, v) => s + (v || 0), 0));
   const prev = previous ?? null;
-  const max = Math.max(1, ...totals, ...(prev ?? []).map((v) => v ?? 0));
+  const peak = Math.max(
+    1,
+    ...(layout === 'grouped' ? buckets.flatMap((b) => b.values.map((v) => v || 0)) : totals),
+    ...(prev ?? []).map((v) => v ?? 0),
+  );
+  const max = axis ? niceCeil(peak) : peak;
+  const tickEvery = Math.max(1, Math.ceil(buckets.length / 7));
   const isEmpty = totals.every((v) => !v) && !(prev ?? []).some((v) => v);
   const top = React.useMemo(() => {
     if (emphasis !== 'top') return null;
@@ -297,7 +317,7 @@ export function BarChart({
   };
   const tip = active !== null ? buckets[active] : null;
   return (
-    <div className={cn('flex flex-col gap-2', className)} data-testid="bar-chart">
+    <div className={cn('flex flex-col gap-2', axis && 'pt-3', className)} data-testid="bar-chart">
       <div
         role="img"
         aria-label={label}
@@ -323,6 +343,25 @@ export function BarChart({
               aria-hidden
               className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-line-hairline"
             />
+            {axis ? (
+              <>
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute start-0 top-0 z-[1] -translate-y-full pb-0.5 ts-label-micro tabular-nums text-text-muted"
+                  data-testid="chart-scale-max"
+                >
+                  {format(max)}
+                </span>
+                {Number.isInteger(max / 2) ? (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute start-0 top-1/2 z-[1] -translate-y-full pb-0.5 ts-label-micro tabular-nums text-text-muted"
+                  >
+                    {format(max / 2)}
+                  </span>
+                ) : null}
+              </>
+            ) : null}
             <div className="absolute inset-0 flex items-end gap-[2px]">
               {buckets.map((b, i) => {
                 const total = totals[i]!;
@@ -336,26 +375,47 @@ export function BarChart({
                     data-bucket={b.key}
                     data-value={total}
                   >
-                    <div
-                      className={cn(
-                        'mx-auto flex w-[72%] max-w-10 flex-col-reverse gap-[2px] overflow-hidden rounded-t-[3px]',
-                        on && 'brightness-125',
-                      )}
-                      style={{ height: `${h}%`, minHeight: total > 0 ? 2 : 0 }}
-                    >
-                      {series.map((s, si) => {
-                        const v = b.values[si] ?? 0;
-                        if (!v) return null;
-                        const muted = top !== null && !top.has(i);
-                        return (
-                          <div
-                            key={s.key}
-                            className={cn('w-full', muted ? 'bg-ink-raised-high' : BG[s.tone])}
-                            style={{ flexGrow: v, flexBasis: 0 }}
-                          />
-                        );
-                      })}
-                    </div>
+                    {layout === 'grouped' ? (
+                      <div
+                        className={cn(
+                          'mx-auto flex h-full w-[84%] max-w-12 items-end gap-px',
+                          on && 'brightness-125',
+                        )}
+                      >
+                        {series.map((s, si) => {
+                          const v = b.values[si] ?? 0;
+                          return (
+                            <div
+                              key={s.key}
+                              className={cn('min-w-0 flex-1 rounded-t-[2px]', BG[s.tone])}
+                              style={{ height: `${(v / max) * 100}%`, minHeight: v > 0 ? 2 : 0 }}
+                              data-series={s.key}
+                            />
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div
+                        className={cn(
+                          'mx-auto flex w-[72%] max-w-10 flex-col-reverse gap-[2px] overflow-hidden rounded-t-[3px]',
+                          on && 'brightness-125',
+                        )}
+                        style={{ height: `${h}%`, minHeight: total > 0 ? 2 : 0 }}
+                      >
+                        {series.map((s, si) => {
+                          const v = b.values[si] ?? 0;
+                          if (!v) return null;
+                          const muted = top !== null && !top.has(i);
+                          return (
+                            <div
+                              key={s.key}
+                              className={cn('w-full', muted ? 'bg-ink-raised-high' : BG[s.tone])}
+                              style={{ flexGrow: v, flexBasis: 0 }}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -416,6 +476,22 @@ export function BarChart({
           </>
         )}
       </div>
+      {axis && !isEmpty ? (
+        <div
+          aria-hidden
+          className="flex gap-[2px] ts-label-micro !normal-case text-text-muted"
+          data-testid="chart-dates"
+        >
+          {buckets.map((b, i) => (
+            <span
+              key={b.key}
+              className="min-w-0 flex-1 overflow-visible whitespace-nowrap text-center"
+            >
+              {i % tickEvery === 0 ? b.label : ''}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {startLabel || endLabel || caption ? (
         <div className="flex items-center justify-between gap-3 ts-label-micro !normal-case text-text-muted">
           <span>{startLabel}</span>

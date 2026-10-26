@@ -340,6 +340,9 @@ describe('ADM-09 audit · ADM-17 viewers · ADM-01 overview', () => {
     expect(o.kpis.workspaces.active).toBeGreaterThan(0);
     expect(o.kpis.mrr).toMatchObject({ amount: expect.any(Number), byPlan: expect.any(Array) });
     expect(o.series[6].signups).toBeGreaterThan(0); // today, live (test users)
+    // tester report 22/10 UX-007: the shops of the period and how many connected a page (activation rate)
+    expect(o.cohort.created).toBeGreaterThan(0);
+    expect(o.cohort.activated).toBeLessThanOrEqual(o.cohort.created);
     await sa.get('/admin/analytics?period=1y').expect(422);
     const route = await db.aiRoute.findUniqueOrThrow({ where: { capability: 'text' } });
     if (route.fallbackModelId) {

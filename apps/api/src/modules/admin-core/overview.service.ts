@@ -121,6 +121,9 @@ export class AdminOverviewService implements OnModuleInit {
     const prevRow = await prisma.platformDailyStat.findFirst({ where: { day: { lt: new Date(`${from}T00:00:00Z`) } }, orderBy: { day: 'desc' } });
     const prevMrr = (prevRow?.metrics as unknown as PlatformMetrics | undefined)?.mrr;
     const gte = algiersDayStart(from);
+    const [cohortRow] = await prisma.$queryRaw<{ created: bigint; activated: bigint }[]>`
+      SELECT count(*) AS created, count(*) FILTER (WHERE EXISTS (SELECT 1 FROM "Channel" c WHERE c."workspaceId" = w.id)) AS activated
+      FROM "Workspace" w WHERE w."createdAt" >= ${gte} AND w."deletedAt" IS NULL`;
     const [byPlan, top, trials, incidents] = await Promise.all([
       prisma.subscription.groupBy({ by: ['planId'], where: { status: { in: [...CURRENT_STATUSES] } }, _count: { _all: true } }),
       prisma.$queryRaw<{ workspaceId: string; credits: bigint }[]>`SELECT "workspaceId", -sum("credits") AS credits FROM "CreditLedger" WHERE "kind" = 'debit' AND "createdAt" >= ${gte} GROUP BY "workspaceId" ORDER BY credits DESC LIMIT 5`,
@@ -169,6 +172,7 @@ export class AdminOverviewService implements OnModuleInit {
         webhooks: { availabilityPct: Math.round(Math.max(0, 100 - (incidentMinutes / periodMin) * 100) * 10) / 10, incidentMinutes, queueDelays: incidents.filter((i) => i.components.some((c) => /queue|file|job/i.test(c))).length },
       },
       series,
+      cohort: { created: Number(cohortRow?.created ?? 0), activated: Number(cohortRow?.activated ?? 0) },
       topWorkspaces: top.map((t) => {
         const w = topWs.find((x) => x.id === t.workspaceId);
         const p = w?.subscriptions[0]?.plan;

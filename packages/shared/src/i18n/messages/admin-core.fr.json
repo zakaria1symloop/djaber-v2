@@ -1144,5 +1144,6 @@
  "admin.ws.creditsRemove.available": "Crédits du plan restants : {count}",
  "admin.ws.creditsRemove.note": "Finance / super admin · crédits du plan uniquement, les packs achetés ne sont pas touchés · ligne « Ajustement » avec le motif dans l'historique des crédits de la boutique.",
  "admin.ws.filter.wilaya": "Wilaya",
- "admin.cms.field.linkHint": "Une page de Djaber (/settings/billing, /orders, /pricing…) ou une adresse https://…"
+ "admin.cms.field.linkHint": "Une page de Djaber (/settings/billing, /orders, /pricing…) ou une adresse https://…",
+ "admin.overview.chart.totals": "Sur la période : {signups} inscriptions · {activations} activations · {churned} résiliations · {rate} des espaces créés ont connecté une page"
 }

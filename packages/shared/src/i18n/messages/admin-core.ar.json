@@ -1144,5 +1144,6 @@
  "admin.ws.creditsRemove.available": "رصيد الخطة المتبقي: {count}",
  "admin.ws.creditsRemove.note": "المالية / المشرف العام · رصيد الخطة فقط، لا تُمس الباقات المشتراة · سطر «تعديل» مع السبب في سجل رصيد المتجر.",
  "admin.ws.filter.wilaya": "الولاية",
- "admin.cms.field.linkHint": "صفحة من Djaber (/settings/billing، /orders، /pricing…) أو عنوان https://…"
+ "admin.cms.field.linkHint": "صفحة من Djaber (/settings/billing، /orders، /pricing…) أو عنوان https://…",
+ "admin.overview.chart.totals": "خلال الفترة: {signups} تسجيل · {activations} تفعيل · {churned} إلغاء · {rate} من المساحات المنشأة ربطت صفحة"
 }

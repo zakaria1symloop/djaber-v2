@@ -1144,5 +1144,6 @@
  "admin.ws.creditsRemove.available": "Plan credits left: {count}",
  "admin.ws.creditsRemove.note": "Finance / super admin · plan credits only, bought packs are never touched · an « Adjustment » row with the reason in the shop's credits history.",
  "admin.ws.filter.wilaya": "Wilaya",
- "admin.cms.field.linkHint": "A Djaber page (/settings/billing, /orders, /pricing…) or an https://… address"
+ "admin.cms.field.linkHint": "A Djaber page (/settings/billing, /orders, /pricing…) or an https://… address",
+ "admin.overview.chart.totals": "Over the period: {signups} sign-ups · {activations} activations · {churned} churned · {rate} of the workspaces created connected a page"
 }

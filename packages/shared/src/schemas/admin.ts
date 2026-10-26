@@ -85,6 +85,8 @@ export type AdminOverviewDto = {
   };
   /** one row per day of the period (Africa/Algiers) */
   series: { day: string; signups: number; activations: number; churned: number }[];
+  /** tester report 22/10 UX-007: the shops created in the period and how many of them connected a page (activation rate) */
+  cohort: { created: number; activated: number };
   topWorkspaces: { id: string; name: string; planSlug: string; planName: string; credits: number }[];
   aiCostByModel: { provider: string; model: string; capability: string; costUsd: number; units: number; unit: 'credits' | 'notes' | 'photos' }[];
   trialsExpiring: { id: string; name: string; trialEndsAt: string; orders: number; pagesConnected: number; conversations: number }[];

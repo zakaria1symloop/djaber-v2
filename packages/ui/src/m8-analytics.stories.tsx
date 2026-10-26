@@ -177,6 +177,20 @@ export const Charts: Story = {
           height={140}
         />
       </ChartPanel>
+      <ChartPanel title="Inscriptions · activations · churn par jour (groupées, échelle et dates — UX-007 du 22/10)">
+        <BarChart
+          label="Inscriptions · activations · churn"
+          layout="grouped"
+          axis
+          buckets={days.map((d, i) => ({ ...d, values: [i % 5, i % 7 === 0 ? 1 : 0, i % 11 === 0 ? 1 : 0] }))}
+          series={[
+            { key: 'signups', label: 'Inscrits', tone: 'inbound' },
+            { key: 'activations', label: 'Activés', tone: 'money' },
+            { key: 'churned', label: 'Résiliés', tone: 'alert' },
+          ]}
+          format={num}
+        />
+      </ChartPanel>
       <ChartPanel title="Crédits par jour et par type">
         <BarChart
           label="Crédits"
