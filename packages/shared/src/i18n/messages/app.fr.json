@@ -6368,5 +6368,9 @@
  "products.page.pricing.byVariant": "MARGE PAR VARIANTE",
  "products.page.pricing.variantsNote": "Vendu au prix de ses variantes : la marge affichée est la plus basse.",
  "auth.invitation.existing": "Un compte Djaber existe déjà avec {email} : connectez-vous, puis acceptez l'invitation. Votre propre boutique reste à vous.",
- "couriers.simulated": "Mode simulation : ce serveur n'envoie aucun colis aux transporteurs (COURIER_DRIVER=fake). Le test de connexion et les numéros de suivi sont simulés ; rien n'apparaît chez ZR Express, Yalidine ou EcoTrack tant que l'administrateur n'a pas activé le mode réel."
+ "couriers.simulated": "Mode simulation : ce serveur n'envoie aucun colis aux transporteurs (COURIER_DRIVER=fake). Le test de connexion et les numéros de suivi sont simulés ; rien n'apparaît chez ZR Express, Yalidine ou EcoTrack tant que l'administrateur n'a pas activé le mode réel.",
+ "safety.sourceOpt.manual": "Manuel — bloqué par l'équipe",
+ "safety.sourceOpt.auto_rule": "Automatique — règle « colis non récupérés »",
+ "safety.sourceOpt.platform": "Plateforme — liste noire Djaber",
+ "safety.blocks.sourcesHint": "Origine du blocage : MANUEL = un membre l'a bloqué · AUTO = la règle automatique ci-dessous (trop de colis non récupérés) · PLATEFORME = signalé par Djaber à toutes les boutiques, ne peut pas être levé ici."
 }

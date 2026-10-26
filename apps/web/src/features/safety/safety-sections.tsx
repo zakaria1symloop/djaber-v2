@@ -92,7 +92,7 @@ function BlockedCustomers() {
           <option value="">{t('safety.blocks.allSources')}</option>
           {SOURCES.map((s) => (
             <option key={s} value={s}>
-              {t(`safety.source.${s}`)}
+              {t(`safety.sourceOpt.${s}`)}
             </option>
           ))}
         </Select>
@@ -102,6 +102,10 @@ function BlockedCustomers() {
         </Button>
       </div>
 
+      {/* tester notes 25/10: what each source means (all three are used: members, the rule below, the Djaber blacklist) */}
+      <p className="mt-2 ts-label-meta text-text-muted" data-testid="block-sources-hint">
+        {t('safety.blocks.sourcesHint')}
+      </p>
       <div className="mt-3">
         {blocks.isPending ? (
           <Card>

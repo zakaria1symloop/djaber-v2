@@ -140,7 +140,10 @@ export class ApiDocsController {
   ui(@Res({ passthrough: true }) res: any) {
     this.doc();
     const cdn = 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14';
-    res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self' ${cdn} 'sha256-${UI_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline' ${cdn}; img-src 'self' data: ${cdn}; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'`);
+    // a CSP source with a path matches that exact path unless it ends with « / »: without it the browser refused
+    // swagger-ui-bundle.js and the page showed only its two links (tester notes 25/10)
+    const src = `${cdn}/`;
+    res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self' ${src} 'sha256-${UI_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline' ${src}; img-src 'self' data: ${src}; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'`);
     return new RawResponse(
       `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Djaber API</title>` +
         `<link rel="stylesheet" href="${cdn}/swagger-ui.css"></head><body><div id="ui"></div><p style="font:13px system-ui;margin:8px 16px"><a href="/api/docs/openapi.json">openapi.json</a> · <a href="/api/docs/postman.json">Postman collection</a></p>` +

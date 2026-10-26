@@ -174,6 +174,8 @@ describe('account data export (DEL-01, GET /me/data-export)', () => {
 describe('API docs (API-04)', () => {
   it('/api/docs serves Swagger UI; openapi.json generated from the zod DTOs; Postman collection', async () => {
     const ui = await pub(app).get('/api/docs').expect(200);
+    // tester notes 25/10: the CSP allows the whole swagger-ui-dist folder (a path without « / » matched one exact file)
+    expect(ui.headers['content-security-policy']).toContain("script-src 'self' https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/ ");
     expect(ui.text).toContain('swagger-ui');
     const doc = (await pub(app).get('/api/docs/openapi.json').expect(200)).body;
     expect(doc.openapi).toBe('3.0.3');

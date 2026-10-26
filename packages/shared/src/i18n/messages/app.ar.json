@@ -6368,5 +6368,9 @@
  "products.page.pricing.byVariant": "الهامش حسب المتغير",
  "products.page.pricing.variantsNote": "يُباع بأسعار متغيراته: الهامش المعروض هو الأدنى.",
  "auth.invitation.existing": "يوجد حساب Djaber بالفعل بالبريد {email}: سجّل الدخول ثم اقبل الدعوة. يبقى متجرك الخاص ملكك.",
- "couriers.simulated": "وضع المحاكاة: هذا الخادم لا يرسل أي طرد لشركات التوصيل (COURIER_DRIVER=fake). اختبار الاتصال وأرقام التتبع محاكاة؛ لن يظهر شيء لدى ZR Express أو Yalidine أو EcoTrack حتى يفعّل المسؤول الوضع الحقيقي."
+ "couriers.simulated": "وضع المحاكاة: هذا الخادم لا يرسل أي طرد لشركات التوصيل (COURIER_DRIVER=fake). اختبار الاتصال وأرقام التتبع محاكاة؛ لن يظهر شيء لدى ZR Express أو Yalidine أو EcoTrack حتى يفعّل المسؤول الوضع الحقيقي.",
+ "safety.sourceOpt.manual": "يدوي — حظره الفريق",
+ "safety.sourceOpt.auto_rule": "تلقائي — قاعدة «طرود غير مستلمة»",
+ "safety.sourceOpt.platform": "المنصة — القائمة السوداء لـ Djaber",
+ "safety.blocks.sourcesHint": "مصدر الحظر: يدوي = حظره أحد الأعضاء · تلقائي = القاعدة التلقائية أدناه (طرود كثيرة غير مستلمة) · المنصة = أبلغت عنه Djaber لكل المتاجر، لا يمكن رفعه هنا."
 }

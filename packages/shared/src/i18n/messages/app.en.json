@@ -6368,5 +6368,9 @@
  "products.page.pricing.byVariant": "MARGIN PER VARIANT",
  "products.page.pricing.variantsNote": "Sold at its variants' prices: the margin shown is the lowest.",
  "auth.invitation.existing": "A Djaber account already exists with {email}: sign in, then accept the invitation. Your own shop stays yours.",
- "couriers.simulated": "Simulation mode: this server sends no parcel to the couriers (COURIER_DRIVER=fake). The connection test and the tracking numbers are simulated; nothing shows up at ZR Express, Yalidine or EcoTrack until the administrator turns on live mode."
+ "couriers.simulated": "Simulation mode: this server sends no parcel to the couriers (COURIER_DRIVER=fake). The connection test and the tracking numbers are simulated; nothing shows up at ZR Express, Yalidine or EcoTrack until the administrator turns on live mode.",
+ "safety.sourceOpt.manual": "Manual — blocked by the team",
+ "safety.sourceOpt.auto_rule": "Automatic — « parcels not collected » rule",
+ "safety.sourceOpt.platform": "Platform — Djaber blacklist",
+ "safety.blocks.sourcesHint": "Where a block comes from: MANUAL = a member blocked it · AUTO = the automatic rule below (too many parcels not collected) · PLATFORM = reported by Djaber to every shop, cannot be lifted here."
 }
