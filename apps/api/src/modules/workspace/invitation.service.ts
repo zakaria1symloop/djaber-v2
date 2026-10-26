@@ -210,6 +210,9 @@ export class InvitationService {
       const user = await TenantContext.runSystem(() => prisma.user.findUnique({ where: { id: currentUserId } }));
       if (user && user.email !== inv.email) throw new AppException('INVITATION_EMAIL_MISMATCH', { email: inv.email });
     }
+    // tester report 25/10: the invited e-mail may already have an account (it owns a shop) — the page then asks to sign in
+    // and accept instead of offering a sign-up that ends in AUTH_EMAIL_TAKEN. Only the holder of the token learns it.
+    const accountExists = !!(await TenantContext.runSystem(() => prisma.user.findFirst({ where: { email: inv.email, deletedAt: null }, select: { id: true } })));
     return {
       workspaceName: inv.workspace.name,
       workspaceLogoUrl: inv.workspace.logoUrl,
@@ -217,6 +220,7 @@ export class InvitationService {
       email: inv.email,
       role: inv.role,
       expiresAt: inv.expiresAt.toISOString(),
+      accountExists,
     };
   }
 

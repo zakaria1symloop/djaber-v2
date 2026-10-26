@@ -6366,5 +6366,6 @@
  "adminSettings.limits.outOfRange": "خارج النطاق: بين {min} و{max}",
  "adminMod.reject.titleOne": "رفض «{name}»",
  "products.page.pricing.byVariant": "الهامش حسب المتغير",
- "products.page.pricing.variantsNote": "يُباع بأسعار متغيراته: الهامش المعروض هو الأدنى."
+ "products.page.pricing.variantsNote": "يُباع بأسعار متغيراته: الهامش المعروض هو الأدنى.",
+ "auth.invitation.existing": "يوجد حساب Djaber بالفعل بالبريد {email}: سجّل الدخول ثم اقبل الدعوة. يبقى متجرك الخاص ملكك."
 }

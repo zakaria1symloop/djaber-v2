@@ -89,6 +89,8 @@ export type InvitationPreview = {
   email: string;
   role: MemberRole;
   expiresAt: string;
+  /** an account already uses the invited e-mail: sign in, then accept (no sign-up form) */
+  accountExists?: boolean;
 };
 
 export type SessionDto = {

@@ -53,11 +53,14 @@ export default function InvitationPage() {
       onError(e);
     }
   };
+  const [existing, setExisting] = useState(false);
   const onError = (e: unknown) => {
     if (e instanceof ApiError && e.code === 'MEMBER_ALREADY_EXISTS') {
       toast(t('auth.invitation.alreadyMember'));
       return router.replace('/home');
     }
+    // the e-mail got an account meanwhile: sign in instead of signing up
+    if (e instanceof ApiError && e.code === 'AUTH_EMAIL_TAKEN') return setExisting(true);
     setFormError(applyServerErrors(form, e, t, { fields: ['firstName', 'lastName', 'password'], codeToField: { AUTH_PASSWORD_WEAK: 'password' } }));
   };
 
@@ -121,6 +124,21 @@ export default function InvitationPage() {
           {formError ? <FormAlert>{formError}</FormAlert> : null}
           <Button variant="primary" className="w-full" loading={busy} onClick={onAccept}>
             {t('auth.invitation.accept')}
+          </Button>
+        </div>
+      </AuthCard>
+    );
+  }
+
+  const loginHref = `/login?returnTo=${encodeURIComponent(`/invitations/${token}`)}`;
+  // tester report 25/10: an owner of another shop invited as admin already has an account — no sign-up form for that e-mail
+  if (i.accountExists || existing) {
+    return (
+      <AuthCard badge={badge} title={title} description={description}>
+        <div className="flex flex-col gap-4" data-testid="invitation-existing">
+          <FormAlert tone="info">{t('auth.invitation.existing', { email: i.email })}</FormAlert>
+          <Button variant="primary" className="w-full" onClick={() => router.push(loginHref)}>
+            {t('auth.invitation.loginWith', { email: i.email })}
           </Button>
         </div>
       </AuthCard>

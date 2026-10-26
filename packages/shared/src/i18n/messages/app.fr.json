@@ -6366,5 +6366,6 @@
  "adminSettings.limits.outOfRange": "Hors limites : entre {min} et {max}",
  "adminMod.reject.titleOne": "Rejeter « {name} »",
  "products.page.pricing.byVariant": "MARGE PAR VARIANTE",
- "products.page.pricing.variantsNote": "Vendu au prix de ses variantes : la marge affichée est la plus basse."
+ "products.page.pricing.variantsNote": "Vendu au prix de ses variantes : la marge affichée est la plus basse.",
+ "auth.invitation.existing": "Un compte Djaber existe déjà avec {email} : connectez-vous, puis acceptez l'invitation. Votre propre boutique reste à vous."
 }

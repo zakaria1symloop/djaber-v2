@@ -33,7 +33,7 @@ describe('invitations', () => {
 
     // public preview of the invitation page
     const preview = await anonymous(app).get(`/invitations/${inv.token}`).expect(200);
-    expect(preview.body.data).toEqual({ workspaceName: 'Boutique Oran', workspaceLogoUrl: null, inviterName: 'Amine Benali', email: inv.email, role: 'operator', expiresAt: inv.dto.expiresAt });
+    expect(preview.body.data).toEqual({ workspaceName: 'Boutique Oran', workspaceLogoUrl: null, inviterName: 'Amine Benali', email: inv.email, role: 'operator', expiresAt: inv.dto.expiresAt, accountExists: false });
 
     // sign-up with the invited e-mail: no workspace is created (D30), e-mail already verified, lands in the inviter's workspace
     const before = await db.workspace.count();
@@ -92,6 +92,8 @@ describe('invitations', () => {
     expect((await invitee.post('/invitations/unknown-token-unknown-token/accept').expect(404)).body.error.code).toBe('NOT_FOUND');
     await anonymous(app).get('/invitations/unknown-token-unknown-token').expect(404);
 
+    // tester report 25/10: the page knows the invited e-mail has an account (it asks to sign in, no sign-up form)
+    expect((await anonymous(app).get(`/invitations/${inv.token}`).expect(200)).body.data.accountExists).toBe(true);
     await invitee.get(`/invitations/${inv.token}`).expect(200);
     const ok = await invitee.post(`/invitations/${inv.token}/accept`).expect(200);
     expect(ok.body.data).toMatchObject({ workspaceId: owner.workspaceId, role: 'admin', readOnly: false });
