@@ -162,7 +162,7 @@ describe('FL-01 — reply turn', () => {
     expect(cards.map((c: any) => c.productId)).toEqual([s.robe.id]);
   });
 
-  it('AT-AI-03 malformed output ⇒ one retry with the format reminder; still malformed ⇒ no customer message, insight `error`, `needs_human`, nothing charged', async () => {
+  it('AT-AI-03 malformed output ⇒ one retry with the format reminder; a loose object is read as it is, a prose answer is salvaged; nothing sendable ⇒ no customer message, insight `error`, `needs_human`, nothing charged', async () => {
     const s = await shop();
     // repaired on the second try
     fakeAi(app).script('reply', { text: 'Sure! The dress costs 4500.' }, { reply: 'La robe est à 4500 DA.', intent: 'INFO' });
@@ -171,9 +171,28 @@ describe('FL-01 — reply turn', () => {
     expect(fakeAi(app).callsOf('reply')[1]!.messages.at(-1)).toMatchObject({ role: 'user', content: FORMAT_REMINDER });
     expect(ok.out.find((m) => m.author === 'ai')!.text).toBe('La robe est à 4500 DA.');
 
-    // malformed twice ⇒ FL-01 F-6
+    // tester report 26/10: an object right in substance but not to the letter is read as it is (no retry, no handoff)
     await resetAi();
-    fakeAi(app).script('reply', { text: 'not json' }, { object: { reply: 'missing fields' } });
+    fakeAi(app).script('reply', { object: { reply: 'La robe est à 4500 DA.', status: 'ok', intent: 'info', confidence: '0.8', productCards: [s.robe.id], note: 'extra key' } });
+    const loose = await turn(s, newSender(), { text: 'prix robe ?' });
+    expect(loose.outcome).toBe('sent');
+    expect(fakeAi(app).callsOf('reply')).toHaveLength(1);
+    expect(loose.runs[0]).toMatchObject({ status: 'ok', intent: 'info' });
+    expect(Number(loose.runs[0]!.confidence)).toBe(0.8);
+    expect(loose.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('La robe est à 4500 DA.');
+
+    // prose twice: the first answer is a plain message to the customer ⇒ it is sent (flag `format_salvaged`)
+    await resetAi();
+    fakeAi(app).script('reply', { text: 'La robe est à 4500 DA, livraison 48 h.' }, { text: 'Désolé, voici la réponse : la robe est à 4500 DA.' });
+    const prose = await turn(s, newSender(), { text: 'prix robe ?' });
+    expect(prose.outcome).toBe('sent');
+    expect(prose.out.find((m) => m.author === 'ai')!.text).toBe('La robe est à 4500 DA, livraison 48 h.');
+    expect(prose.runs[0]!.flags).toContain('format_salvaged');
+    expect(prose.conversation).toMatchObject({ status: 'active', aiPaused: false });
+
+    // nothing that can be sent, twice ⇒ FL-01 F-6
+    await resetAi();
+    fakeAi(app).script('reply', { text: '' }, { object: { answer: 'no reply field' } });
     const sender = newSender();
     const ko = await turn(s, sender, { text: 'prix robe ?' });
     expect(ko.outcome).toBe('failed');
@@ -184,7 +203,7 @@ describe('FL-01 — reply turn', () => {
     expect(ko.runs[0]).toMatchObject({ status: 'error', creditsCharged: 0 });
     expect(ko.runs[0]!.error).toContain('malformed_output');
     expect((await insightsOf(ko.conversationId)).map((i) => [i.type, i.detail?.split(':')[0]])).toEqual([['error', 'malformed_output']]);
-    expect(await debits(s.owner.workspaceId)).toHaveLength(1); // only the first turn was charged
+    expect(await debits(s.owner.workspaceId)).toHaveLength(3); // only the turns that sent a reply were charged
     expect((await balanceOf(app, s.owner.workspaceId)).reserved).toBe(0);
     // GET /conversations/:id exposes the banner flag
     expect((await s.owner.get(`/conversations/${ko.conversationId}`).expect(200)).body.data).toMatchObject({ aiUnavailable: true, creditsExhausted: false });

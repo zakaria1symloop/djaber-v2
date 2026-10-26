@@ -16,7 +16,7 @@ import { MAX_STEPS, RUN_REAP_AFTER_MS } from './ai.constants';
 import type { BuiltPrompt } from './prompt/prompt-builder';
 import { AI_GATEWAY, AiProviderError, type AiGateway, type AiMessage, type AiToolCallRequest, type AiUsage } from './provider/ai.gateway';
 import { RoutingService, type RoutedModel } from './routing.service';
-import { FORMAT_REMINDER, parseReplyOutput, type AiReplyOutput } from './structured-output';
+import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
 
 export type ExecutedTool = { callId: string; name: string; args: Record<string, unknown>; result: unknown; simulated: boolean; replayed: boolean };
@@ -33,7 +33,7 @@ export type TurnRequest = {
 };
 type TurnBase = { tools: ExecutedTool[]; usage: AiUsage; model: RoutedModel | null; usedFallback: boolean };
 export type TurnResult =
-  | (TurnBase & { ok: true; output: AiReplyOutput; model: RoutedModel; forcedHandoff: string | null; repaired: boolean })
+  | (TurnBase & { ok: true; output: AiReplyOutput; model: RoutedModel; forcedHandoff: string | null; repaired: boolean; salvaged?: boolean })
   | (TurnBase & { ok: false; kind: 'provider' | 'format'; error: string });
 export type RunMeta = { language?: string; toolNames?: string[]; cardsSent?: number; handoff?: boolean; costUsd?: number; plannedCost?: number; vision?: Record<string, unknown>; sessionId?: string; turn?: unknown; evalFlag?: unknown; scenario?: string };
 
@@ -49,7 +49,13 @@ export const canonicalJson = (v: unknown): string => {
  */
 export const toolCallId = (name: string, args: unknown, ordinal: number) => `${createHash('sha256').update(`${canonicalTool(name)}\n${canonicalJson(args)}`).digest('hex').slice(0, 32)}:${ordinal}`;
 export const costUsd = (m: Pick<RoutedModel, 'inputPricePerM' | 'outputPricePerM'>, u: AiUsage) => Math.round(((u.inputTokens * m.inputPricePerM) / 1e6 + (u.outputTokens * m.outputPricePerM) / 1e6) * 1e6) / 1e6;
-const INTENTS: Record<string, AiIntent> = { SALE: 'sale', INFO: 'info', TRACKING: 'tracking', COMPLAINT: 'complaint', GREETING: 'greeting', OTHER: 'other' };
+/**
+ * `AiRun.error` of a provider failure: the §6 class, then the HTTP status and the provider's error type when known
+ * (`provider_error:400 invalid_request_error`) — the bare class did not tell an overload from a refused request
+ * (tester report 26/10). Never the provider's free text.
+ */
+export const providerErrorLabel = (e: AiProviderError) => [e.kind, [e.status, e.detail].filter(Boolean).join(' ')].filter(Boolean).join(':').slice(0, 120);
+const INTENTS: Record<string, AiIntent> ={ SALE: 'sale', INFO: 'info', TRACKING: 'tracking', COMPLAINT: 'complaint', GREETING: 'greeting', OTHER: 'other' };
 export const intentOf = (i: string): AiIntent => INTENTS[i] ?? 'other';
 
 @Injectable()
@@ -131,6 +137,7 @@ export class AiRunService implements OnModuleInit {
     let model = null as RoutedModel | null;
     let usedFallback = false;
     let repaired = false;
+    let firstAnswer = '';
     let forcedHandoff: string | null = null;
     let toolRounds = 0;
     for (let step = 0; step < MAX_STEPS + 1; step++) {
@@ -145,7 +152,7 @@ export class AiRunService implements OnModuleInit {
           { only: (m) => m.supportsTools, prefer: model?.id },
         );
       } catch (e) {
-        if (e instanceof AiProviderError) return { ok: false, kind: 'provider', error: e.kind, tools: executed, usage, model, usedFallback };
+        if (e instanceof AiProviderError) return { ok: false, kind: 'provider', error: providerErrorLabel(e), tools: executed, usage, model, usedFallback };
         throw e;
       }
       model = res.model;
@@ -170,7 +177,14 @@ export class AiRunService implements OnModuleInit {
       }
       const parsed = parseReplyOutput(res.value.text);
       if (parsed.ok) return { ok: true, output: parsed.value, tools: executed, usage, model, usedFallback, forcedHandoff, repaired };
-      if (repaired) return { ok: false, kind: 'format', error: `malformed_output:${parsed.reason}`, tools: executed, usage, model, usedFallback };
+      if (repaired) {
+        // tester report 26/10: the first answer, when it is a plain message to the customer, is sent rather than the
+        // conversation handed to the team in silence (F-6 only when there is nothing to send)
+        const salvaged = salvageReply(firstAnswer) ?? salvageReply(res.value.text);
+        if (salvaged) return { ok: true, output: salvaged, tools: executed, usage, model, usedFallback, forcedHandoff, repaired, salvaged: true };
+        return { ok: false, kind: 'format', error: `malformed_output:${parsed.reason}`, tools: executed, usage, model, usedFallback };
+      }
+      firstAnswer = res.value.text;
       // §4.1: one retry with the format reminder. It leaves the earlier conversation out (tester report 22/10: in a long
       // thread the model copies the plain-text style of its past replies and stays malformed after the reminder): with the
       // batch, this turn's tool results and its own answer only, it just puts that answer in the JSON object.

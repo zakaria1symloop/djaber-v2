@@ -1,5 +1,6 @@
 // 04-ai-pipeline §4.1 — the output contract of a reply turn (replaces the V1 `[STATUS:…]` tags). The JSON Schema is
-// part of the prompt; whatever the model returns is validated here. Malformed ⇒ one "format reminder" retry, then F-6.
+// part of the prompt; whatever the model returns is validated here. Malformed ⇒ one "format reminder" retry, then the
+// first answer is salvaged when it is a plain message (salvageReply), F-6 only when nothing can be sent.
 import { z } from 'zod';
 import { AI_LANGUAGES, AI_REPLY_INTENTS, AI_REPLY_STATUSES } from '@djaber/shared';
 
@@ -68,7 +69,7 @@ export const extractJson = (text: string): string | null => {
   return null;
 };
 
-export const parseJsonObject = <S extends z.ZodTypeAny>(text: string, schema: S): { ok: true; value: z.output<S> } | { ok: false; reason: string } => {
+export const parseJsonObject = <S extends z.ZodTypeAny>(text: string, schema: S, prepare?: (parsed: Record<string, unknown>) => Record<string, unknown>): { ok: true; value: z.output<S> } | { ok: false; reason: string } => {
   const raw = extractJson(text);
   if (!raw) return { ok: false, reason: 'no_json' };
   let parsed: unknown;
@@ -78,9 +79,77 @@ export const parseJsonObject = <S extends z.ZodTypeAny>(text: string, schema: S)
     return { ok: false, reason: 'invalid_json' };
   }
   // providers emit `null` for an absent optional field
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) for (const [k, v] of Object.entries(parsed)) if (v === null) delete (parsed as Record<string, unknown>)[k];
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    for (const [k, v] of Object.entries(parsed)) if (v === null) delete (parsed as Record<string, unknown>)[k];
+    if (prepare) parsed = prepare(parsed as Record<string, unknown>);
+  }
   const r = schema.safeParse(parsed);
   return r.success ? { ok: true, value: r.data as z.output<S> } : { ok: false, reason: `schema:${r.error.issues[0]?.path.join('.') ?? ''}` };
 };
 
-export const parseReplyOutput = (text: string) => parseJsonObject(text, AiReplyOutputSchema);
+const str = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : undefined);
+const upper = <T extends readonly string[]>(v: unknown, list: T): T[number] | undefined => {
+  const s = str(v)?.trim().toUpperCase();
+  return s && (list as readonly string[]).includes(s) ? (s as T[number]) : undefined;
+};
+
+/**
+ * Tester report 26/10 ("the AI stops after one or two answers"): an object that is right in substance but not to the
+ * letter — an extra key, `"status":"ok"`, `"confidence":"0.8"`, six product cards, a 2 100-character reply — no longer
+ * counts as malformed (it ended the conversation with the team). Only `reply` must be there; what cannot be read takes
+ * the neutral value (status OK, intent OTHER, confidence 0.5).
+ */
+export const normalizeReplyObject = (o: Record<string, unknown>): Record<string, unknown> => {
+  if (typeof o.reply !== 'string') return o;
+  const conf = typeof o.confidence === 'number' ? o.confidence : Number.parseFloat(str(o.confidence) ?? '');
+  const ids = (v: unknown) => (Array.isArray(v) ? v.map(str).filter((s): s is string => !!s?.trim()) : []);
+  const customer = o.customer && typeof o.customer === 'object' && !Array.isArray(o.customer) ? (o.customer as Record<string, unknown>) : null;
+  const CUSTOMER_MAX = { name: 80, phone: 30, phone2: 30, wilaya: 60, commune: 100, address: 500 } as const;
+  const kept = customer ? Object.fromEntries(Object.entries(CUSTOMER_MAX).flatMap(([k, max]) => (str(customer[k])?.trim() ? [[k, str(customer[k])!.trim().slice(0, max)]] : []))) : {};
+  const language = str(o.language)?.trim().toLowerCase();
+  const detail = str(o.statusDetail)?.trim();
+  return {
+    reply: o.reply.slice(0, 2000),
+    status: upper(o.status, AI_REPLY_STATUSES) ?? 'OK',
+    ...(detail ? { statusDetail: detail.slice(0, 200) } : {}),
+    intent: upper(o.intent, AI_REPLY_INTENTS) ?? 'OTHER',
+    productCards: ids(o.productCards).slice(0, 5),
+    recommendations: (Array.isArray(o.recommendations) ? o.recommendations : [])
+      .flatMap((r) => {
+        const s = r && typeof r === 'object' ? str((r as Record<string, unknown>).sourceId) : undefined;
+        const d = r && typeof r === 'object' ? str((r as Record<string, unknown>).recommendedId) : undefined;
+        return s && d ? [{ sourceId: s, recommendedId: d }] : [];
+      })
+      .slice(0, 3),
+    confidence: Number.isFinite(conf) ? Math.min(1, Math.max(0, conf >= 2 && conf <= 100 ? conf / 100 : conf)) : 0.5,
+    ...(language && (AI_LANGUAGES as readonly string[]).includes(language) ? { language } : {}),
+    ...(Object.keys(kept).length ? { customer: kept } : {}),
+  };
+};
+
+export const parseReplyOutput = (text: string) => parseJsonObject(text, AiReplyOutputSchema, normalizeReplyObject);
+
+/**
+ * Last resort after the format reminder (tester report 26/10): the model's first answer, when it is a plain message to
+ * the customer (no JSON object at all — it wrote prose) or a JSON object cut off whose `reply` can still be read, is sent
+ * as the reply with the neutral status. Null when there is nothing safe to send (empty, or JSON without a readable reply).
+ */
+export const salvageReply = (text: string): AiReplyOutput | null => {
+  const t = text.trim();
+  if (!t) return null;
+  let reply: string | null = null;
+  if (!t.includes('{')) reply = t.replace(/^```\w*\s*|\s*```$/g, '').trim();
+  else {
+    // a complete `reply` string only (closing quote): never half a sentence of an answer cut by the token limit
+    const m = /"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(t);
+    if (m) {
+      try {
+        reply = JSON.parse(`"${m[1]}"`) as string;
+      } catch {
+        reply = null;
+      }
+    }
+  }
+  if (!reply?.trim()) return null;
+  return { reply: reply.trim().slice(0, 2000), status: 'OK', intent: 'OTHER', productCards: [], recommendations: [], confidence: 0.5 };
+};

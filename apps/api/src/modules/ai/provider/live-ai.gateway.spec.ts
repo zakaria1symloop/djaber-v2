@@ -251,6 +251,25 @@ describe('LiveAiGateway.generate — Anthropic, Google, Groq', () => {
     expect(messages[2].content[0]).toMatchObject({ type: 'tool_result', tool_use_id: 'toolu_01A', content: JSON.stringify({ items: [] }) });
   });
 
+  it('a step without tools (after handoff_to_human, last step) sends the earlier tool calls as text: no tool_use block without tool definitions (tester report 26/10)', async () => {
+    expectHost('api.anthropic.com').reply({ json: { id: 'msg_fixture_3', type: 'message', role: 'assistant', model: 'claude-haiku-4-5', content: [{ type: 'text', text: '{"reply":"ok"}' }], stop_reason: 'end_turn', usage: { input_tokens: 90, output_tokens: 4 } } });
+    await gateway.generate(
+      request('anthropic', 'claude-haiku-4-5', {
+        messages: [
+          { role: 'user', content: QUESTION },
+          { role: 'assistant', content: '', toolCalls: [{ id: 'toolu_01B', name: 'handoff_to_human', args: { reason: 'customer_request' } }] },
+          { role: 'tool', toolCallId: 'toolu_01B', name: 'handoff_to_human', result: { ok: true } },
+        ],
+      }),
+    );
+    const body = net.calls[0]!.json;
+    expect(body.tools).toBeUndefined();
+    expect(JSON.stringify(body.messages)).not.toMatch(/tool_use|tool_result/);
+    expect((body.messages as any[]).map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
+    expect(body.messages[1].content).toEqual([{ type: 'text', text: '[tool call handoff_to_human {"reason":"customer_request"}]' }]);
+    expect(body.messages[2].content).toEqual([{ type: 'text', text: '[tool result handoff_to_human] {"ok":true}' }]);
+  });
+
   it('Google generative language API: key in x-goog-api-key, generateContent, text answer', async () => {
     expectHost('generativelanguage.googleapis.com').reply({
       json: {

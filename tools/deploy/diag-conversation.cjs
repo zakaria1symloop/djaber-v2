@@ -4,9 +4,10 @@
 const fs = require('fs');
 const path = require('path');
 
+// Without an id: an overview of the last 24 h, all workspaces (why conversations went to the team, AI errors by cause).
 const id = process.argv[2];
-if (!/^[0-9a-f-]{36}$/i.test(id ?? '')) {
-  console.error('usage (from the repo root): node ~/diag-conversation.cjs <conversationId>');
+if (id && !/^[0-9a-f-]{36}$/i.test(id)) {
+  console.error('usage (from the repo root): node ~/diag-conversation.cjs [conversationId]');
   process.exit(1);
 }
 const root = process.env.APP_DIR || process.cwd();
@@ -23,7 +24,29 @@ const db = new PrismaClient({ datasources: { db: { url } } });
 const t = (d) => (d ? new Date(d).toISOString().replace('T', ' ').slice(0, 19) + 'Z' : '—');
 const cut = (s, n = 400) => (s ? String(s).replace(/\s+/g, ' ').slice(0, n) : '—');
 
+const tally = (rows, key) => Object.entries(rows.reduce((acc, r) => ((acc[key(r)] = (acc[key(r)] ?? 0) + 1), acc), {})).sort((a, b) => b[1] - a[1]);
+
+async function overview() {
+  const since = new Date(Date.now() - 24 * 3600 * 1000);
+  const queued = await db.conversation.findMany({ where: { status: 'needs_human', deletedAt: null, updatedAt: { gte: since } }, select: { id: true, context: true } });
+  console.log('== conversations handed to the team in the last 24 h, by reason');
+  for (const [reason, n] of tally(queued, (c) => `${c.context?.handoffReason ?? '—'}${c.context?.aiUnavailable ? ` (banner: ${c.context.aiUnavailable})` : ''}`)) console.log(`${String(n).padStart(4)}  ${reason}`);
+  const runs = await db.aiRun.findMany({ where: { kind: 'reply', startedAt: { gte: since } }, select: { status: true, error: true, modelId: true, flags: true } });
+  const models = await db.aiModel.findMany({ where: { id: { in: [...new Set(runs.map((r) => r.modelId))] } }, select: { id: true, modelId: true } });
+  const model = (mid) => models.find((m) => m.id === mid)?.modelId ?? mid;
+  console.log(`== AI reply runs in the last 24 h (${runs.length}), by status`);
+  for (const [status, n] of tally(runs, (r) => r.status)) console.log(`${String(n).padStart(4)}  ${status}`);
+  console.log('== AI errors in the last 24 h, by cause and model');
+  for (const [cause, n] of tally(runs.filter((r) => r.status === 'error'), (r) => `${cut(r.error, 120)}  ·  ${model(r.modelId)}`)) console.log(`${String(n).padStart(4)}  ${cause}`);
+  const salvaged = runs.filter((r) => (r.flags ?? []).includes('format_salvaged')).length;
+  if (salvaged) console.log(`== answers saved from a bad format (sent anyway): ${salvaged}`);
+  const insights = await db.agentInsight.findMany({ where: { createdAt: { gte: since }, type: { in: ['handoff', 'unknown_topic', 'error'] } }, select: { type: true, detail: true } });
+  console.log('== handoff / unknown / error insights in the last 24 h');
+  for (const [k, n] of tally(insights, (i) => `${i.type}  ${cut(i.detail, 80)}`)) console.log(`${String(n).padStart(4)}  ${k}`);
+}
+
 (async () => {
+  if (!id) return overview();
   const c = await db.conversation.findUnique({ where: { id }, include: { channel: { select: { id: true, platform: true, status: true } } } });
   if (!c) return console.log('conversation not found');
   const ctx = c.context ?? {};

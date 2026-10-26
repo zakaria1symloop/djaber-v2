@@ -56,6 +56,18 @@ const requireKey = (model: AiModelRef): string => {
   return key;
 };
 
+/**
+ * A step offered no tools (the last step of the loop, or after a handoff) still carries the tool calls of the earlier
+ * steps: they go as plain text, because Anthropic refuses `tool_use` / `tool_result` blocks in a request without tool
+ * definitions (400 — the AI then looked "unavailable" right after a `handoff_to_human` call, tester report 26/10).
+ */
+const flattenTools = (messages: AiMessage[]): AiMessage[] =>
+  messages.map((m): AiMessage => {
+    if (m.role === 'tool') return { role: 'user', content: `[tool result ${m.name}] ${JSON.stringify(m.result ?? null)}` };
+    if (m.role === 'assistant' && m.toolCalls?.length) return { role: 'assistant', content: [m.content, ...m.toolCalls.map((c) => `[tool call ${c.name} ${JSON.stringify(c.args ?? {})}]`)].filter(Boolean).join('\n') };
+    return m;
+  });
+
 const toMessages = (messages: AiMessage[]): CoreMessage[] =>
   messages.map((m): CoreMessage => {
     if (m.role === 'user') {
@@ -203,7 +215,7 @@ export class LiveAiGateway implements AiGateway {
         generateText({
           model: this.languageModel(req.model, apiKey, dropTemperature),
           system: req.system,
-          messages: toMessages(req.messages),
+          messages: toMessages(tools ? req.messages : flattenTools(req.messages)),
           ...(tools ? { tools } : {}),
           ...(req.temperature !== undefined && !dropTemperature ? { temperature: req.temperature } : {}),
           ...(req.maxTokens !== undefined ? { maxTokens: req.maxTokens } : {}),

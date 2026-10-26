@@ -9,7 +9,7 @@ import { createAiGateway } from './provider/ai-gateway.factory';
 import { AiProviderError, readInput, withInput, type AiGenerateRequest } from './provider/ai.gateway';
 import { FakeAiGateway } from './provider/fake-ai.gateway';
 import { LiveAiGateway } from './provider/live-ai.gateway';
-import { extractJson, parseReplyOutput } from './structured-output';
+import { extractJson, parseReplyOutput, salvageReply } from './structured-output';
 import { RUN_TOOLS, TOOL_DEFS, canonicalTool } from './tools/tool-registry';
 import { fold, WILAYA_ALIASES } from './tools/wilaya-aliases';
 
@@ -54,14 +54,32 @@ describe('structured output (§4.1)', () => {
     ['plain text', 'Sure! It costs 4500.', 'no_json'],
     ['broken JSON', '{"reply": "x", ', 'no_json'],
     ['invalid JSON', '{reply: x}', 'invalid_json'],
-    ['missing field', JSON.stringify({ reply: 'x' }), 'schema:status'],
-    ['unknown status', JSON.stringify({ ...valid, status: 'DONE' }), 'schema:status'],
-    ['extra property', JSON.stringify({ ...valid, price: 4500 }), 'schema:'],
-    ['too many cards', JSON.stringify({ ...valid, productCards: ['1', '2', '3', '4', '5', '6'] }), 'schema:productCards'],
-    ['confidence out of range', JSON.stringify({ ...valid, confidence: 1.4 }), 'schema:confidence'],
-    ['reply too long', JSON.stringify({ ...valid, reply: 'x'.repeat(2001) }), 'schema:reply'],
+    ['no reply', JSON.stringify({ ...valid, reply: undefined, answer: 'x' }), 'schema:reply'],
+    ['reply not a text', JSON.stringify({ ...valid, reply: ['x'] }), 'schema:reply'],
   ])('malformed: %s', (_name, text, reason) => {
     expect(parseReplyOutput(text)).toEqual({ ok: false, reason });
+  });
+
+  it('tester report 26/10: an object right in substance is read as it is (missing / extra keys, case, numbers as text, too many cards, too long)', () => {
+    const neutral = { status: 'OK', intent: 'OTHER', productCards: [], recommendations: [], confidence: 0.5 };
+    expect(parseReplyOutput(JSON.stringify({ reply: 'x' }))).toEqual({ ok: true, value: { reply: 'x', ...neutral } });
+    expect(parseReplyOutput(JSON.stringify({ ...valid, status: 'DONE', intent: 'BUY' }))).toEqual({ ok: true, value: { ...valid, status: 'OK', intent: 'OTHER' } });
+    expect(parseReplyOutput(JSON.stringify({ ...valid, status: 'handoff', statusDetail: ' customer_request ', intent: 'complaint' }))).toEqual({ ok: true, value: { ...valid, status: 'HANDOFF', statusDetail: 'customer_request', intent: 'COMPLAINT' } });
+    expect(parseReplyOutput(JSON.stringify({ ...valid, price: 4500 }))).toEqual({ ok: true, value: valid });
+    expect((parseReplyOutput(JSON.stringify({ ...valid, productCards: ['1', '2', '3', '4', '5', '6'] })) as { value: { productCards: string[] } }).value.productCards).toEqual(['1', '2', '3', '4', '5']);
+    expect((parseReplyOutput(JSON.stringify({ ...valid, confidence: '0.8' })) as { value: { confidence: number } }).value.confidence).toBe(0.8);
+    expect((parseReplyOutput(JSON.stringify({ ...valid, confidence: 85 })) as { value: { confidence: number } }).value.confidence).toBe(0.85);
+    expect((parseReplyOutput(JSON.stringify({ ...valid, confidence: 1.4 })) as { value: { confidence: number } }).value.confidence).toBe(1);
+    expect((parseReplyOutput(JSON.stringify({ ...valid, reply: 'x'.repeat(2001) })) as { value: { reply: string } }).value.reply).toHaveLength(2000);
+    expect((parseReplyOutput(JSON.stringify({ ...valid, language: 'FR', customer: { name: ' Amel ', phone: 550123456, city: 'Oran' } })) as { value: unknown }).value).toMatchObject({ language: 'fr', customer: { name: 'Amel', phone: '550123456' } });
+  });
+
+  it('salvageReply: a prose answer or a cut object whose reply is complete; never an empty text or half a reply', () => {
+    expect(salvageReply('La robe est à 4500 DA.')).toEqual({ reply: 'La robe est à 4500 DA.', status: 'OK', intent: 'OTHER', productCards: [], recommendations: [], confidence: 0.5 });
+    expect(salvageReply('{"reply": "Elle est à \\"4500\\" DA.", "status": "OK", "intent"')?.reply).toBe('Elle est à "4500" DA.');
+    expect(salvageReply('{"reply": "Elle est à 45')).toBeNull();
+    expect(salvageReply('{"answer": "x"}')).toBeNull();
+    expect(salvageReply('   ')).toBeNull();
   });
 });
 

@@ -349,7 +349,7 @@ export class ReplyProcessor implements OnModuleInit {
       // the run is closed first: a second execution of the same batch stops here and stores nothing
       const closed = await this.runs.finish(
         run.id,
-        { status, turn, intent: intentOf(out.intent), confidence: out.confidence, startedAt: run.startedAt, flags: blocked ? ['blocked_word'] : [], meta: { language: out.language ?? o.lang, cardsSent: cards.length, handoff: status === 'handoff' || status === 'unknown' } },
+        { status, turn, intent: intentOf(out.intent), confidence: out.confidence, startedAt: run.startedAt, flags: [...(blocked ? ['blocked_word'] : []), ...(turn.salvaged ? ['format_salvaged'] : [])], meta: { language: out.language ?? o.lang, cardsSent: cards.length, handoff: status === 'handoff' || status === 'unknown' } },
         tx,
       );
       if (!closed) return 'noop';
