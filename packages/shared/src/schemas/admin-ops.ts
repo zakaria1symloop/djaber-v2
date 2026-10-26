@@ -376,15 +376,26 @@ export type CannedReplyDto = { id: string; key: string; title: string; body: Ops
 // =============================================================================================================================
 /** Keys editable with `PUT /admin/settings/:key { value, reason }` (others have their dedicated endpoint). */
 export const PLATFORM_LIMITS_DEFAULTS = { apiRatePerMin: 600, webhookRetries: 6, trialDays: 14, trialCredits: 300, deletionGraceDays: 30, impersonationMinutes: 30, maxDevices: 20 } as const;
+/** Allowed range of every limit (the form shows it under the field and checks it before saving — tester report 22/10 UX-022). */
+export const PLATFORM_LIMITS_RANGES = {
+  apiRatePerMin: [10, 100_000],
+  webhookRetries: [1, 20],
+  trialDays: [0, 365],
+  trialCredits: [0, 1_000_000],
+  deletionGraceDays: [1, 365],
+  impersonationMinutes: [5, 240],
+  maxDevices: [1, 100],
+} as const satisfies Record<keyof typeof PLATFORM_LIMITS_DEFAULTS, readonly [number, number]>;
+const limit = (k: keyof typeof PLATFORM_LIMITS_RANGES) => z.number().int().min(PLATFORM_LIMITS_RANGES[k][0], 'validation.range').max(PLATFORM_LIMITS_RANGES[k][1], 'validation.range');
 export const PlatformLimitsSchema = z
   .object({
-    apiRatePerMin: z.number().int().min(10, 'validation.range').max(100_000, 'validation.range'),
-    webhookRetries: z.number().int().min(1, 'validation.range').max(20, 'validation.range'),
-    trialDays: z.number().int().min(0, 'validation.range').max(365, 'validation.range'),
-    trialCredits: z.number().int().min(0, 'validation.range').max(1_000_000, 'validation.range'),
-    deletionGraceDays: z.number().int().min(1, 'validation.range').max(365, 'validation.range'),
-    impersonationMinutes: z.number().int().min(5, 'validation.range').max(240, 'validation.range'),
-    maxDevices: z.number().int().min(1, 'validation.range').max(100, 'validation.range'),
+    apiRatePerMin: limit('apiRatePerMin'),
+    webhookRetries: limit('webhookRetries'),
+    trialDays: limit('trialDays'),
+    trialCredits: limit('trialCredits'),
+    deletionGraceDays: limit('deletionGraceDays'),
+    impersonationMinutes: limit('impersonationMinutes'),
+    maxDevices: limit('maxDevices'),
   })
   .strict();
 export type PlatformLimits = z.infer<typeof PlatformLimitsSchema>;

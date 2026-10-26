@@ -3,13 +3,14 @@
 // Créer un espace pour un client, Programmer la suppression de « … »; route map §3.5 (same pattern, not drawn as frames):
 // Réactiver, Prolonger l'essai, Changer le plan, Niveau de confiance, Annuler la suppression, Se connecter en tant que.
 // Every write carries the reason (≥ 10 chars → AuditLog.reason); server errors stay inline, content preserved.
-import type { AdminChannelRowDto, AdminWorkspaceDetailDto, AdminWorkspaceRowDto, ImpersonationStartDto, PlanAdminDto } from '@djaber/shared';
+import { PLATFORM_LIMITS_DEFAULTS, type AdminChannelRowDto, type AdminWorkspaceDetailDto, type AdminWorkspaceRowDto, type ImpersonationStartDto, type PlanAdminDto } from '@djaber/shared';
 import { Checkbox, EmailInput, Field, Input, MonoChip, NumberInput, Select, toast } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { impersonation } from '@/lib/impersonation';
 import { useT } from '@/lib/i18n';
+import { useAdminSettings } from '../../admin-ops/api';
 import { adminWrite, useAdminGet, useAdminInvalidate } from '../api';
 import { AdminDialog, NO_ERRORS, ReasonField, reasonOk, toServerErrors, useOnOpen, type ServerErrors } from '../dialog-kit';
 import { useFormats } from '../ui';
@@ -415,13 +416,15 @@ export function ReleaseDialog({ channel, workspaceName, open, onClose }: { chann
   );
 }
 
-/** "Se connecter en tant que" — read-only session, 30 min, reason ≥ 10 chars (D21-bis; no mode selector exists). */
+/** "Se connecter en tant que" — read-only session of `impersonationMinutes` (platform settings), reason ≥ 10 chars (D21-bis; no mode selector exists). */
 export function ImpersonateDialog({ ws, open, onClose, ticketId }: { ws: Pick<AdminWorkspaceRowDto, 'id' | 'name'> | null; open: boolean; onClose: () => void; ticketId?: string }) {
   const t = useT();
   const router = useRouter();
   const [reason, setReason] = useState('');
   const [errors, setErrors] = useState<ServerErrors>(NO_ERRORS);
   const m = useMutation({ mutationFn: (body: unknown) => adminWrite<ImpersonationStartDto>('/admin/impersonation/sessions', 'POST', body) });
+  const settings = useAdminSettings();
+  const minutes = (settings.data?.settings.find((x) => x.key === 'limits')?.value as { impersonationMinutes?: number } | undefined)?.impersonationMinutes ?? PLATFORM_LIMITS_DEFAULTS.impersonationMinutes;
   useOnOpen(open, () => {
     setReason('');
     setErrors(NO_ERRORS);
@@ -444,7 +447,7 @@ export function ImpersonateDialog({ ws, open, onClose, ticketId }: { ws: Pick<Ad
       onClose={onClose}
       testId="dlg-impersonate"
       title={t('admin.ws.impersonate.title', { name: ws.name })}
-      context={t('admin.ws.impersonate.context')}
+      context={t('admin.ws.impersonate.context', { minutes })}
       submitLabel={t('admin.ws.impersonate.submit')}
       disabled={!reasonOk(reason)}
       pending={m.isPending}
@@ -454,7 +457,7 @@ export function ImpersonateDialog({ ws, open, onClose, ticketId }: { ws: Pick<Ad
       <ul className="flex flex-col gap-1 rounded-card border border-accent-alert/40 p-3 text-[13px] text-text-secondary">
         <li>• {t('admin.ws.impersonate.rule.reason')}</li>
         <li>• {t('admin.ws.impersonate.rule.mode')}</li>
-        <li>• {t('admin.ws.impersonate.rule.duration', { name: ws.name })}</li>
+        <li>• {t('admin.ws.impersonate.rule.duration', { name: ws.name, minutes })}</li>
         <li>• {t('admin.ws.impersonate.rule.forbidden')}</li>
       </ul>
       <ReasonField value={reason} onChange={setReason} error={errors.fields.reason} />

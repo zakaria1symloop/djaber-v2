@@ -187,7 +187,7 @@ describe('ADM-08 CMS — announcements reach the merchant app and the public sit
     const make = async (target: Record<string, unknown>, channels: string[]) => {
       const key = `ux005-${randomUUID().slice(0, 8)}`;
       createdCms.push(key);
-      const e = (await sa.post('/admin/cms', { key, type: 'announcement', target, channels, link: '/billing', locales: { fr: { title: `Annonce ${key}`, body: 'Nouvelle grille\nDétails…' } } }).expect(201)).body.data;
+      const e = (await sa.post('/admin/cms', { key, type: 'announcement', target, channels, link: '/settings/billing', locales: { fr: { title: `Annonce ${key}`, body: 'Nouvelle grille\nDétails…' } } }).expect(201)).body.data;
       await sa.post(`/admin/cms/${e.id}/publish`, { fallbackToFr: true }).expect(200);
       return e.id as string;
     };
@@ -200,7 +200,7 @@ describe('ADM-08 CMS — announcements reach the merchant app and the public sit
     expect(mine).not.toContain(elsewhere);
     expect(mine).not.toContain(notWeb); // no banner channel
     const one = (await owner.get(`/announcements/${forAll}?lang=en`).expect(200)).body.data;
-    expect(one).toMatchObject({ title: expect.stringContaining('Annonce'), link: '/billing', state: 'live', locale: 'fr', fallback: true, dismissed: false });
+    expect(one).toMatchObject({ title: expect.stringContaining('Annonce'), link: '/settings/billing', state: 'live', locale: 'fr', fallback: true, dismissed: false });
     await owner.get(`/announcements/${elsewhere}`).expect(404);
 
     // the publication notification of the owner opens the announcement
@@ -249,8 +249,17 @@ describe('ADM-08 CMS', () => {
     expect(sch.status).toBe('scheduled');
     expect(await app.app.get(CmsAdminService).publishDue(new Date(Date.now() + 2 * 3600_000))).toBe(1);
     expect((await sa.get(`/admin/cms/${e.id}`).expect(200)).body.data).toMatchObject({ status: 'published', currentVersion: 2 });
-    const link = (await sa.get(`/admin/cms/${e.id}/preview-link`).expect(200)).body.data;
-    expect(link.url).toContain(`?preview=`);
+    // tester report 22/10 UX-025: an announcement has no public page — no signed link (its preview is the banner)
+    expect((await sa.get(`/admin/cms/${e.id}`).expect(200)).body.data.actions.map((x: any) => x.key)).not.toContain('preview');
+    await sa.get(`/admin/cms/${e.id}/preview-link`).expect(404);
+    const legal = (await sa.post('/admin/cms', { key: `cgu-${Date.now()}`, type: 'legal', locales: { fr: { title: 'CGU', body: 'Conditions' } } }).expect(201)).body.data;
+    expect(legal.actions.map((x: any) => x.key)).toContain('preview');
+    const link = (await sa.get(`/admin/cms/${legal.id}/preview-link`).expect(200)).body.data;
+    expect(link.url).toContain(`/legal/${legal.key}?preview=`);
+    // tester report 22/10 UX-026: a link to a page that does not exist is refused; an app page or an https address is kept
+    expect((await sa.patch(`/admin/cms/${e.id}`, { link: '/billing' }).expect(422)).body.error.fields).toEqual({ link: 'validation.announcementLink' });
+    await sa.patch(`/admin/cms/${e.id}`, { link: 'https://djaber.ai/nouveautes' }).expect(200);
+    await sa.patch(`/admin/cms/${e.id}`, { link: '/settings/billing' }).expect(200);
     const job = (await sa.post(`/admin/cms/${e.id}/translate`, { to: ['en'] }).expect(202)).body.data;
     await drainAll(app, ['job']);
     expect((await sa.get(`/admin/jobs/${job.jobId}`).expect(200)).body.data).toMatchObject({ status: 'done', result: { locales: ['en'] } });

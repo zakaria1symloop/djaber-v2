@@ -1,6 +1,6 @@
 // M10 web-a — pure helpers of the admin shell: guard decision, impersonation clock, platform permission mirror,
 // audit diff lines, reason rule, plan form rules.
-import { platformCan } from '@djaber/shared';
+import { algiersDayOf, platformCan } from '@djaber/shared';
 import { describe, expect, it } from 'vitest';
 import { decideAdmin } from '@/lib/guards';
 import { impersonation, minutesLeft } from '@/lib/impersonation';
@@ -75,5 +75,12 @@ describe('admin form rules', () => {
   it('workspace pill: SUSPENDU / SUPPRESSION win over the subscription state', () => {
     expect(workspacePill({ status: 'suspended', subscriptionStatus: 'active' }).key).toBe('enum.Workspace.status.suspended');
     expect(workspacePill({ status: 'active', subscriptionStatus: 'expired' }).key).toBe('enum.Subscription.status.expired');
+  });
+});
+
+describe('promo code validity in the edit dialog (tester report 22/10 UX-028)', () => {
+  it('a bound stored as Algiers midnight in UTC is shown as its Algiers day, never the day before', () => {
+    expect(algiersDayOf('2026-10-21T23:00:00.000Z')).toBe('2026-10-22');
+    expect(algiersDayOf('2026-10-29T22:59:59.000Z')).toBe('2026-10-29');
   });
 });

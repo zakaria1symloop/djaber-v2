@@ -633,6 +633,28 @@ export const AdminCmsQuerySchema = z
   .object({ ...paging, type: csv(z.enum(CmsTypeValues)).optional(), status: csv(z.enum(CmsStatusValues)).optional(), missingLocale: z.enum(LocaleValues).optional(), target: str(40).optional(), updatedById: id.optional(), q })
   .strict();
 export type AdminCmsQuery = z.infer<typeof AdminCmsQuerySchema>;
+/**
+ * Tester report 22/10 UX-026: the « En savoir plus » link of an announcement — an http(s) address, or a page that exists:
+ * a merchant app page (`/orders`, `/settings/billing` — a logged-out visitor of the public site gets the sign-in first) or a
+ * public page (`/pricing`, `/legal/cgu`…). `/billing` (no such page) is refused instead of leading clients to a 404.
+ */
+export const ANNOUNCEMENT_APP_PAGES = ['home', 'inbox', 'queue', 'orders', 'products', 'categories', 'services', 'stock', 'inventory', 'movements', 'purchases', 'suppliers', 'sales', 'cash', 'clients', 'delivery', 'agents', 'channels', 'recommendations', 'reports', 'analytics', 'notifications', 'help', 'settings'] as const;
+export const ANNOUNCEMENT_SETTINGS_PAGES = ['profile', 'workspace', 'members', 'stock-mode', 'quick-replies', 'system-messages', 'notifications', 'security', 'integrations', 'billing', 'credits', 'danger'] as const;
+export const ANNOUNCEMENT_PUBLIC_PAGES = ['pricing', 'features', 'help-center', 'legal', 'status'] as const;
+export const isAnnouncementLink = (link: string): boolean => {
+  const l = link.trim();
+  if (/^https?:\/\/[^\s/]+\.[^\s]+$/i.test(l)) return true;
+  if (!l.startsWith('/') || l.startsWith('//') || /[\s\\]/.test(l)) return false;
+  const [path] = l.split(/[?#]/);
+  const seg = path!.split('/').filter(Boolean);
+  if (!seg.length) return true; // the home page of the site
+  if (seg[0] === 'settings') return seg.length === 1 || (ANNOUNCEMENT_SETTINGS_PAGES as readonly string[]).includes(seg[1]!);
+  return (ANNOUNCEMENT_APP_PAGES as readonly string[]).includes(seg[0]!) || (ANNOUNCEMENT_PUBLIC_PAGES as readonly string[]).includes(seg[0]!);
+};
+const announcementLink = str(500)
+  .nullable()
+  .optional()
+  .refine((v) => !v || isAnnouncementLink(v), 'validation.announcementLink');
 const cmsLocaleInput = z.object({ title: str(300), body: str(100_000), fallbackToFr: z.boolean().optional() }).strict();
 /** `POST /admin/cms` [DLG "Nouvelle entrée"] — key = slug (`CMS_SLUG_INVALID` / `CMS_SLUG_TAKEN`). */
 export const AdminCreateCmsSchema = z
@@ -644,7 +666,7 @@ export const AdminCreateCmsSchema = z
     channels: z.array(z.enum(['banner', 'in_app', 'email', 'push', 'web'])).max(5).optional(),
     startsAt: instant.nullable().optional(),
     endsAt: instant.nullable().optional(),
-    link: str(500).nullable().optional(),
+    link: announcementLink,
     sortOrder: int(0, 10_000).optional(),
     locales: z.object({ fr: cmsLocaleInput.optional(), ar: cmsLocaleInput.optional(), en: cmsLocaleInput.optional() }).strict().optional(),
   })

@@ -1,7 +1,7 @@
 'use client';
 // ADM-15 pieces — pack dialog (store ids read-only once created, store prices are set in the consoles), promo code dialog
 // (CODE · EFFET · VALEUR · PÉRIODES · PLANS · CIBLE · LIMITE · VALIDITÉ), redemptions and pricing history dialogs.
-import type { CreditPackAdminDto, CreditPricingDto, PlanAdminDto, PromoCodeDto, PromoRedemptionRowDto } from '@djaber/shared';
+import { algiersDayOf, type CreditPackAdminDto, type CreditPricingDto, type PlanAdminDto, type PromoCodeDto, type PromoRedemptionRowDto } from '@djaber/shared';
 import { Checkbox, Dialog, Field, FormAlert, Input, NumberInput, Select, toast } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -139,8 +139,10 @@ export function PromoDialog({ promo, open, onClose }: { promo: PromoCodeDto | nu
     setWs(promo?.targetWorkspace ?? null);
     setMaxUses(promo?.maxUses ? String(promo.maxUses) : '');
     setPerWs(String(promo?.perWorkspaceLimit ?? 1));
-    setFrom(promo?.validFrom?.slice(0, 10) ?? '');
-    setTo(promo?.validTo?.slice(0, 10) ?? '');
+    // tester report 22/10 UX-028: the bounds are stored as Algiers midnight / 23:59:59 in UTC (22/10 starts 21/10 23:00Z):
+    // the field shows the Algiers day, so « Enregistrer » without a change keeps the dates
+    setFrom(promo?.validFrom ? algiersDayOf(promo.validFrom) : '');
+    setTo(promo?.validTo ? algiersDayOf(promo.validTo) : '');
     setErrors(NO_ERRORS);
   });
   const used = !!promo && promo.uses > 0;

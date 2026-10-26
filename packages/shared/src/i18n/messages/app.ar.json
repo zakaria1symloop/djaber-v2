@@ -6361,5 +6361,7 @@
  "adminSettings.history.key.moderation_policy": "التحقق من المنتجات (الإشراف)",
  "settings.danger.dialog.nameHint": "اكتب «{name}» تمامًا: اسم المساحة، وليس بريدك الإلكتروني.",
  "settings.danger.dialog.needName": "اكتب اسم المساحة «{name}» للتأكيد",
- "settings.danger.dialog.needPassword": "أدخل كلمة المرور"
+ "settings.danger.dialog.needPassword": "أدخل كلمة المرور",
+ "adminSettings.limits.range": "بين {min} و{max}",
+ "adminSettings.limits.outOfRange": "خارج النطاق: بين {min} و{max}"
 }

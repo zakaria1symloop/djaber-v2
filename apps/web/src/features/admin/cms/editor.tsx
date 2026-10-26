@@ -2,7 +2,7 @@
 // ADM-08 entry editor "{type} — « {title} »": one card per locale (FR · AR RTL Changa · EN) with its status pill and
 // "Traduire avec l'IA depuis FR" (job), then CIBLE · CANAUX · DÉBUT · FIN · LIEN. Publish / schedule blocked by
 // CMS_LOCALE_MISSING unless "replier sur FR"; preview link 24 h; versions. Leave guard while dirty.
-import type { CmsEntryAdminDto, CmsPreviewLinkDto, CmsVersionDto } from '@djaber/shared';
+import { isAnnouncementLink, type CmsEntryAdminDto, type CmsPreviewLinkDto, type CmsVersionDto } from '@djaber/shared';
 import { Button, Card, Checkbox, Dialog, Field, FormAlert, FrameNote, Input, MonoChip, Select, Textarea, toast } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
@@ -48,6 +48,8 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
   const [preview, setPreview] = useState(false);
   useEffect(() => setD(base), [base]);
   const dirty = JSON.stringify(d) !== JSON.stringify(base);
+  // tester report 22/10 UX-026: a link to a page that does not exist is refused before it is published
+  const linkBad = !!d.link.trim() && !isAnnouncementLink(d.link);
   const { guard } = useLeaveGuard(dirty, entry.key);
   const m = useMutation({ mutationFn: (fn: () => Promise<unknown>) => fn() });
   const status = (l: Loc) => entry.locales.find((x) => x.locale === l)?.status ?? 'missing';
@@ -156,7 +158,7 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
         <Field label={t('admin.cms.field.end')} htmlFor="cm-end">
           <Input id="cm-end" type="datetime-local" value={d.endsAt} onChange={(e) => setD((x) => ({ ...x, endsAt: e.target.value }))} className="[color-scheme:dark]" />
         </Field>
-        <Field label={t('admin.cms.field.link')} htmlFor="cm-link">
+        <Field label={t('admin.cms.field.link')} htmlFor="cm-link" hint={t('admin.cms.field.linkHint')} error={linkBad ? t('validation.announcementLink') : undefined}>
           <Input id="cm-link" dir="ltr" inputMode="url" autoComplete="off" spellCheck={false} autoCapitalize="none" value={d.link} onChange={(e) => setD((x) => ({ ...x, link: e.target.value }))} />
         </Field>
       </fieldset>
@@ -177,14 +179,14 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
           <Button variant="ghost" onClick={() => setPreview(true)}>
             {t('admin.cms.editor.previewBanner')}
           </Button>
-        ) : (
+        ) : entry.type === 'legal' || entry.type === 'help' || entry.type === 'page' ? (
           <Button variant="ghost" onClick={() => void openPreview()}>
             {t('admin.cms.editor.preview')}
           </Button>
-        )}
+        ) : null}
         {canWrite ? (
           <>
-            <Button onClick={() => void act(save, t('admin.cms.saved'))} disabled={!dirty} loading={m.isPending} data-testid="cms-save">
+            <Button onClick={() => void act(save, t('admin.cms.saved'))} disabled={!dirty} disabledReason={linkBad ? t('validation.announcementLink') : undefined} loading={m.isPending} data-testid="cms-save">
               {t('admin.cms.editor.saveDraft')}
             </Button>
             {entry.status === 'published' ? (
@@ -196,7 +198,7 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
                 {t('admin.cms.action.unpublish')}
               </Button>
             ) : null}
-            <Button variant="primary" onClick={() => void publish()} loading={m.isPending} data-testid="cms-publish">
+            <Button variant="primary" onClick={() => void publish()} disabledReason={linkBad ? t('validation.announcementLink') : undefined} loading={m.isPending} data-testid="cms-publish">
               {future ? t('admin.cms.editor.schedule') : t('admin.cms.editor.publish')}
             </Button>
           </>

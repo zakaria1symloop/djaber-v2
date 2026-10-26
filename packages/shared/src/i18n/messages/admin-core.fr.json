@@ -1034,8 +1034,8 @@
  "admin.ws.filter.trust": "Niveau de confiance",
  "admin.ws.filter.withAgents": "Avec agents",
  "admin.ws.filter.withPages": "Avec pages connectées",
- "admin.ws.impersonate.context": "Lecture seule · 30 min · journalisé",
- "admin.ws.impersonate.rule.duration": "Durée 30 min · bandeau rouge persistant « Vous agissez en tant que {name} » + bouton Quitter",
+ "admin.ws.impersonate.context": "Lecture seule · {minutes} min · journalisé",
+ "admin.ws.impersonate.rule.duration": "Durée {minutes} min · bandeau rouge persistant « Vous agissez en tant que {name} » + bouton Quitter",
  "admin.ws.impersonate.rule.forbidden": "Interdit : toute action autre que la lecture (ADMIN_IMPERSONATION_FORBIDDEN_ACTION)",
  "admin.ws.impersonate.rule.mode": "Mode : lecture seule uniquement (aucun mode écriture en v2)",
  "admin.ws.impersonate.rule.reason": "Raison obligatoire (≥ 10 caractères) → AuditLog.reason",
@@ -1142,5 +1142,7 @@
  "admin.ws.creditsRemove.submit": "Retirer",
  "admin.ws.creditsRemove.done": "{count} crédits retirés.",
  "admin.ws.creditsRemove.available": "Crédits du plan restants : {count}",
- "admin.ws.creditsRemove.note": "Finance / super admin · crédits du plan uniquement, les packs achetés ne sont pas touchés · ligne « Ajustement » avec le motif dans l'historique des crédits de la boutique."
+ "admin.ws.creditsRemove.note": "Finance / super admin · crédits du plan uniquement, les packs achetés ne sont pas touchés · ligne « Ajustement » avec le motif dans l'historique des crédits de la boutique.",
+ "admin.ws.filter.wilaya": "Wilaya",
+ "admin.cms.field.linkHint": "Une page de Djaber (/settings/billing, /orders, /pricing…) ou une adresse https://…"
 }

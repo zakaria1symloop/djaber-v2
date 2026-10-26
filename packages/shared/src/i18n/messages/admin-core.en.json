@@ -1034,8 +1034,8 @@
  "admin.ws.filter.trust": "Trust level",
  "admin.ws.filter.withAgents": "With agents",
  "admin.ws.filter.withPages": "With connected pages",
- "admin.ws.impersonate.context": "Read-only · 30 min · logged",
- "admin.ws.impersonate.rule.duration": "Duration 30 min · persistent red banner “You are acting as {name}” + Quit button",
+ "admin.ws.impersonate.context": "Read-only · {minutes} min · logged",
+ "admin.ws.impersonate.rule.duration": "Duration {minutes} min · persistent red banner « You are acting as {name} » + Exit button",
  "admin.ws.impersonate.rule.forbidden": "Forbidden: any action other than reading (ADMIN_IMPERSONATION_FORBIDDEN_ACTION)",
  "admin.ws.impersonate.rule.mode": "Mode: read-only only (no write mode in v2)",
  "admin.ws.impersonate.rule.reason": "Reason required (≥ 10 characters) → AuditLog.reason",
@@ -1142,5 +1142,7 @@
  "admin.ws.creditsRemove.submit": "Remove",
  "admin.ws.creditsRemove.done": "{count} credits removed.",
  "admin.ws.creditsRemove.available": "Plan credits left: {count}",
- "admin.ws.creditsRemove.note": "Finance / super admin · plan credits only, bought packs are never touched · an « Adjustment » row with the reason in the shop's credits history."
+ "admin.ws.creditsRemove.note": "Finance / super admin · plan credits only, bought packs are never touched · an « Adjustment » row with the reason in the shop's credits history.",
+ "admin.ws.filter.wilaya": "Wilaya",
+ "admin.cms.field.linkHint": "A Djaber page (/settings/billing, /orders, /pricing…) or an https://… address"
 }

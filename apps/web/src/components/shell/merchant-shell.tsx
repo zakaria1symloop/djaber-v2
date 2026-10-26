@@ -113,7 +113,7 @@ export function MerchantShell({ children }: { children: ReactNode }) {
     );
   }
 
-  // read-only impersonation whose 30 min window is over (ADMIN_IMPERSONATION_EXPIRED): back to the admin
+  // read-only impersonation whose window (`impersonationMinutes`) is over (ADMIN_IMPERSONATION_EXPIRED): back to the admin
   if (s.impersonating && impersonationExpired) return <ImpersonationExpired />;
   const suspended = decision.kind === 'state' && decision.state === 'suspended';
   return (
@@ -243,7 +243,8 @@ function useShellBanners(): ShellBanner[] {
       action: cooldown > 0 ? { label: t('action.resendIn', { time: formatClock(cooldown) }), disabled: true } : { label: t('action.resend'), onClick: onResend },
     });
   }
-  if (s.readOnly) banners.push({ id: 'readOnly', tone: 'warning', content: t('banner.readOnly') });
+  // tester report 22/10 UX-024: an impersonation is read-only by itself — its red banner says so, not the member-limit one
+  if (s.readOnly && !s.impersonating) banners.push({ id: 'readOnly', tone: 'warning', content: t('banner.readOnly') });
   if (offline) banners.push({ id: 'offline', tone: 'warning', content: t('banner.offline') });
   if (maintenance) banners.push(maintenance);
   if (planIntent && s.can('billing.plan') && s.workspace?.status === 'active') {

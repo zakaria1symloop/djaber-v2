@@ -40,6 +40,9 @@ const parts = (d: Date) => {
   return o;
 };
 
+/** `YYYY-MM-DD` of an instant in Africa/Algiers (a date-only field filled from a stored UTC instant). */
+export const algiersDayOf = (d: Date | string) => new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d));
+
 /** `11 oct. 2026` (Africa/Algiers) */
 export const formatDate = (d: Date | string, locale: 'fr' | 'ar' | 'en' = 'fr') => {
   const p = parts(new Date(d));

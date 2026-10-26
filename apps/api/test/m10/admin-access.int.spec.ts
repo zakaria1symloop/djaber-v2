@@ -147,6 +147,24 @@ describe('platform team & 2FA (PRL-02, AT-PRL-02)', () => {
 });
 
 describe('read-only impersonation (D21-bis, AT-IMP-01, AT-IMP-02)', () => {
+  it('tester report 22/10 UX-023: the session and its token last the « impersonationMinutes » of the platform settings', async () => {
+    const owner = await asOwner(app);
+    const sa = await asPlatform(app);
+    const before = await db.platformSetting.findUnique({ where: { key: 'limits' } });
+    try {
+      const value = { apiRatePerMin: 600, webhookRetries: 6, trialDays: 14, trialCredits: 300, deletionGraceDays: 30, impersonationMinutes: 5, maxDevices: 20 };
+      await sa.put('/admin/settings/limits', { value, reason: REASON }).expect(200);
+      const started = (await sa.post('/admin/impersonation/sessions', { workspaceId: owner.workspaceId, reason: REASON }).expect(201)).body.data;
+      const session = await db.impersonationSession.findUniqueOrThrow({ where: { id: started.sessionId } });
+      expect(session.expiresAt.getTime() - session.startedAt.getTime()).toBe(5 * 60_000);
+      const payload = JSON.parse(Buffer.from(String(started.token).split('.')[1]!, 'base64url').toString('utf8'));
+      expect(payload.exp - payload.iat).toBe(5 * 60);
+    } finally {
+      if (before) await db.platformSetting.update({ where: { key: 'limits' }, data: { value: before.value as object } });
+      else await db.platformSetting.deleteMany({ where: { key: 'limits' } });
+    }
+  });
+
   it('AT-IMP-01 reason rules, roles, session token, GET audited + counted, expiry ⇒ 401, stop ⇒ endedAt + impersonation.stop, no e-mail', async () => {
     const owner = await asOwner(app);
     const sa = await asPlatform(app);

@@ -13,7 +13,7 @@ import { fullName, Num, ShortDate, useFormats } from '@/features/admin/ui';
 import { useWorkspaceActions } from '@/features/admin/workspaces/actions';
 import { CreateWorkspaceDialog } from '@/features/admin/workspaces/dialogs';
 import { WorkspaceSheet } from '@/features/admin/workspaces/sheet';
-import { WorkspaceStatusPill } from '@/features/admin/workspaces/status';
+import { WorkspaceStatusPill, WorkspaceSubscriptionCell } from '@/features/admin/workspaces/status';
 import { WORKSPACES_LIST } from '@/features/admin/specs';
 import { useGeoWilayas } from '@/features/delivery/api';
 import { wilayaLabel } from '@/features/delivery/geo';
@@ -46,7 +46,7 @@ export default function AdminWorkspacesPage() {
       },
       { kind: 'single', key: 'credits', label: t('admin.ws.col.credits'), options: (['lt20', 'exhausted'] as const).map((v) => ({ value: v, label: t(`admin.ws.filter.credits.${v}`) })) },
       { kind: 'date', key: 'created', label: t('admin.ws.filter.created'), from: 'createdFrom', to: 'createdTo' },
-      { kind: 'single', key: 'wilayaId', label: t('common.wilaya'), options: (wilayas.data ?? []).map((w) => ({ value: String(w.id), label: wilayaLabel(w, locale) })) },
+      { kind: 'single', key: 'wilayaId', label: t('admin.ws.filter.wilaya'), options: (wilayas.data ?? []).map((w) => ({ value: String(w.id), label: wilayaLabel(w, locale) })) },
     ],
     [t, plans.data, wilayas.data, locale],
   );
@@ -85,7 +85,7 @@ export default function AdminWorkspacesPage() {
       ),
     },
     { key: 'plan', header: t('admin.common.plan'), cell: (r) => r.plan.name },
-    { key: 'status', header: t('admin.common.status'), cell: (r) => <WorkspaceStatusPill ws={r} /> },
+    { key: 'status', header: t('admin.ws.filter.subscription'), cell: (r) => <WorkspaceSubscriptionCell ws={r} /> },
     {
       key: 'credits',
       header: t('admin.ws.col.creditsMonth'),

@@ -136,14 +136,25 @@ export class AdminViewersService {
     return page(rows.map((s) => this.sessionDto(s)), total, q);
   }
 
-  /** `POST /admin/impersonation/sessions` → `{ sessionId, token, expiresAt }` (read-only, 30 min; no e-mail to the Owner). */
+  /**
+   * PFS-07 / 04 §15 `impersonationMinutes` of the platform setting `limits` (5–240, default 30). Tester report 22/10 UX-023:
+   * the session and its token used the fixed default whatever the setting said.
+   */
+  private async minutes(): Promise<number> {
+    const row = await prisma.platformSetting.findUnique({ where: { key: 'limits' } });
+    const m = (row?.value as { impersonationMinutes?: unknown } | null)?.impersonationMinutes;
+    return typeof m === 'number' && Number.isInteger(m) && m >= 5 && m <= 240 ? m : IMPERSONATION_MINUTES;
+  }
+
+  /** `POST /admin/impersonation/sessions` → `{ sessionId, token, expiresAt }` (read-only, `impersonationMinutes`; no e-mail to the Owner). */
   async start(input: AdminImpersonateInput, actor: AdminActor): Promise<ImpersonationStartDto> {
     const reason = requireReason(input.reason);
     const ws = await prisma.workspace.findFirst({ where: { id: input.workspaceId, deletedAt: null }, select: { id: true, name: true } });
     if (!ws) throw notFound();
     if (input.ticketId && !(await prisma.supportTicket.findUnique({ where: { id: input.ticketId }, select: { id: true } }))) throw new AppException('VALIDATION_ERROR', {}, { ticketId: 'validation.id' });
     const startedAt = new Date();
-    const expiresAt = new Date(startedAt.getTime() + IMPERSONATION_MINUTES * 60_000);
+    const minutes = await this.minutes();
+    const expiresAt = new Date(startedAt.getTime() + minutes * 60_000);
     // one open session per admin: a new one ends the previous
     await prisma.impersonationSession.updateMany({ where: { adminUserId: actor.userId, endedAt: null, expiresAt: { gt: startedAt } }, data: { endedAt: startedAt } });
     const s = await prisma.$transaction(async (db) => {
@@ -152,7 +163,7 @@ export class AdminViewersService {
       await this.outbox.ws(db as never, `ws:${ws.id}`, 'impersonation.started', { sessionId: row.id }, `impersonation.started:ws:${row.id}`);
       return row;
     });
-    const { token } = await this.tokens.signAccess({ sub: actor.userId, wid: ws.id, role: 'admin', pr: actor.platformRole, imp: s.id }, IMPERSONATION_MINUTES * 60);
+    const { token } = await this.tokens.signAccess({ sub: actor.userId, wid: ws.id, role: 'admin', pr: actor.platformRole, imp: s.id }, minutes * 60);
     await this.log(actor, ws.id, 'impersonation.start', 'ImpersonationSession', s.id, { expiresAt: expiresAt.toISOString(), ticketId: input.ticketId ?? null, readOnly: true }, reason, s.id);
     return { sessionId: s.id, token, expiresAt: expiresAt.toISOString(), workspace: ws };
   }

@@ -17,6 +17,9 @@ import { announcementTargetWhere } from '../public-site/announcements.service';
 import { AdminJobsService } from './admin-jobs.service';
 import { assertUuid, iso, userRef, userSelect, type AdminActor } from './admin.util';
 
+/** Types with a public page (`/legal/:key`, `/help/:key`, `/preview/cms/:key` ⇒ page): only they get a signed preview link. */
+const PREVIEWABLE: readonly string[] = ['legal', 'help', 'page'];
+
 const LOCALES: Locale[] = ['fr', 'ar', 'en'];
 const SLUG = /^[a-z0-9]+(?:[-_.][a-z0-9]+)*$/;
 const TYPES = ['announcement', 'legal', 'help', 'email', 'plan_text', 'system_message_default', 'page'] as const;
@@ -82,7 +85,9 @@ export class CmsAdminService implements OnModuleInit {
         a('schedule', e.status !== 'published'),
         a('unpublish', e.status === 'published' || e.status === 'scheduled'),
         a('translate', !missing.includes('fr')),
-        { key: 'preview', enabled: true },
+        // tester report 22/10 UX-025: the signed 24 h link is for the entries with a public page only (03 PUB-03); an
+        // announcement is previewed as its banner in the editor, e-mails / plan texts / system messages have no page
+        ...(PREVIEWABLE.includes(e.type) ? [{ key: 'preview', enabled: true }] : []),
         { key: 'versions', enabled: e.currentVersion > 0 },
       ],
     };
@@ -262,6 +267,7 @@ export class CmsAdminService implements OnModuleInit {
   /** Signed preview URL, 24 h (the public CMS pages accept `?preview=<token>`). */
   async previewLink(id: string): Promise<CmsPreviewLinkDto> {
     const e = await this.full(id);
+    if (!PREVIEWABLE.includes(e.type)) throw notFound();
     const ttl = 24 * 3600;
     const token = await this.tokens.signPurpose('cms_preview', { entryId: e.id, key: e.key }, ttl);
     const base = this.config.get('PUBLIC_WEB_URL').replace(/\/$/, '');

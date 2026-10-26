@@ -23,20 +23,20 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 | L22-UX-019 | Credits can only be added; a mistaken grant cannot be corrected | done |
 | L22-UX-021 | Adding credits sends an e-mail but no in-app notification | done |
 | L22-UX-020 | Extending a trial does not inform the merchant | done |
-| L22-UX-028 | Editing a promo code moves its start date back one day on each save | todo |
+| L22-UX-028 | Editing a promo code moves its start date back one day on each save | done |
 
 ## Superadmin
 | # | Issue | Status |
 |---|---|---|
 | L22-UX-007 | Overview chart « Inscriptions · activations · churn » has no dates, no scale, no totals; activations stacked on sign-ups | todo |
-| L22-UX-016 | Workspaces: « Statut » filter and « STATUT » column show different statuses | todo |
-| L22-UX-017 | Workspaces: the « WILAYA » chip is in capitals | todo |
-| L22-UX-022 | Impersonation duration below 5 min: only « Vérifiez les champs » | todo |
-| L22-UX-023 | The impersonation duration setting has no effect (always 30 min) | todo |
-| L22-UX-024 | Impersonation shows the « READ_ONLY_MEMBER: plan at its member limit » banner | todo |
-| L22-UX-025 | CMS: « Aperçu (lien signé 24 h) » of an announcement opens a 404 | todo |
-| L22-UX-026 | CMS: the announcement link accepts any value and a wrong path leads to a 404 | todo |
-| L22-UX-027 | Spec: the « Site public » announcement channel is missing from 05-data-model | todo |
+| L22-UX-016 | Workspaces: « Statut » filter and « STATUT » column show different statuses | done |
+| L22-UX-017 | Workspaces: the « WILAYA » chip is in capitals | done |
+| L22-UX-022 | Impersonation duration below 5 min: only « Vérifiez les champs » | done |
+| L22-UX-023 | The impersonation duration setting has no effect (always 30 min) | done |
+| L22-UX-024 | Impersonation shows the « READ_ONLY_MEMBER: plan at its member limit » banner | done |
+| L22-UX-025 | CMS: « Aperçu (lien signé 24 h) » of an announcement opens a 404 | done |
+| L22-UX-026 | CMS: the announcement link accepts any value and a wrong path leads to a 404 | done |
+| L22-UX-027 | Spec: the « Site public » announcement channel is missing from 05-data-model | done |
 
 ## Moderation and catalogue
 | # | Issue | Status |

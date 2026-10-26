@@ -6361,5 +6361,7 @@
  "adminSettings.history.key.moderation_policy": "Product validation (moderation)",
  "settings.danger.dialog.nameHint": "Type “{name}” exactly: the workspace name, not your e-mail.",
  "settings.danger.dialog.needName": "Type the workspace name “{name}” to confirm",
- "settings.danger.dialog.needPassword": "Enter your password"
+ "settings.danger.dialog.needPassword": "Enter your password",
+ "adminSettings.limits.range": "Between {min} and {max}",
+ "adminSettings.limits.outOfRange": "Out of range: between {min} and {max}"
 }

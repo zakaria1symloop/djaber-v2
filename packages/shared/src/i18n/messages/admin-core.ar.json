@@ -1034,8 +1034,8 @@
  "admin.ws.filter.trust": "مستوى الثقة",
  "admin.ws.filter.withAgents": "بوكلاء",
  "admin.ws.filter.withPages": "بصفحات مرتبطة",
- "admin.ws.impersonate.context": "قراءة فقط · 30 دقيقة · مُسجَّل",
- "admin.ws.impersonate.rule.duration": "المدة 30 دقيقة · شريط أحمر دائم « أنت تتصرف باسم {name} » + زر خروج",
+ "admin.ws.impersonate.context": "قراءة فقط · {minutes} دقيقة · مسجّل",
+ "admin.ws.impersonate.rule.duration": "المدة {minutes} دقيقة · شريط أحمر دائم «أنت تتصرف باسم {name}» + زر الخروج",
  "admin.ws.impersonate.rule.forbidden": "ممنوع: أي إجراء غير القراءة (ADMIN_IMPERSONATION_FORBIDDEN_ACTION)",
  "admin.ws.impersonate.rule.mode": "الوضع: قراءة فقط (لا يوجد وضع كتابة في الإصدار 2)",
  "admin.ws.impersonate.rule.reason": "السبب إلزامي (10 أحرف على الأقل) ← AuditLog.reason",
@@ -1142,5 +1142,7 @@
  "admin.ws.creditsRemove.submit": "سحب",
  "admin.ws.creditsRemove.done": "تم سحب {count} رصيد.",
  "admin.ws.creditsRemove.available": "رصيد الخطة المتبقي: {count}",
- "admin.ws.creditsRemove.note": "المالية / المشرف العام · رصيد الخطة فقط، لا تُمس الباقات المشتراة · سطر «تعديل» مع السبب في سجل رصيد المتجر."
+ "admin.ws.creditsRemove.note": "المالية / المشرف العام · رصيد الخطة فقط، لا تُمس الباقات المشتراة · سطر «تعديل» مع السبب في سجل رصيد المتجر.",
+ "admin.ws.filter.wilaya": "الولاية",
+ "admin.cms.field.linkHint": "صفحة من Djaber (/settings/billing، /orders، /pricing…) أو عنوان https://…"
 }

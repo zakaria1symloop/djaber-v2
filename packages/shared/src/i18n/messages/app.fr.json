@@ -6361,5 +6361,7 @@
  "adminSettings.history.key.moderation_policy": "Validation des produits (modération)",
  "settings.danger.dialog.nameHint": "Tapez « {name} » exactement : le nom de l'espace, pas votre e-mail.",
  "settings.danger.dialog.needName": "Tapez le nom de l'espace « {name} » pour confirmer",
- "settings.danger.dialog.needPassword": "Saisissez votre mot de passe"
+ "settings.danger.dialog.needPassword": "Saisissez votre mot de passe",
+ "adminSettings.limits.range": "Entre {min} et {max}",
+ "adminSettings.limits.outOfRange": "Hors limites : entre {min} et {max}"
 }

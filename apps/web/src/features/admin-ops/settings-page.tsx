@@ -9,6 +9,7 @@ import {
   formatDate,
   formatNumber,
   PLATFORM_LIMITS_DEFAULTS,
+  PLATFORM_LIMITS_RANGES,
   type AdminSettingsDto,
   type AppVersionDto,
   type FeatureFlagDto,
@@ -27,6 +28,7 @@ import { AdminPage, AdminQueryError } from '@/features/admin/admin-page';
 import { ADMIN_KEY } from '@/features/admin/platform';
 import { billingApi } from '@/features/billing/api';
 import { useRouter } from '@/i18n/navigation';
+import { ApiError } from '@/lib/api';
 import { errorMessage, useLeaveGuard } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { opsApi, opsKeys, useAdminSettings, useMetaApp } from './api';
@@ -86,12 +88,19 @@ export function SettingsPage() {
     try {
       if (limitsDirty) {
         const value = { ...base.limitsValue, ...Object.fromEntries(LIMIT_FIELDS.map((f) => [f, Number(formLimits[f] || 0)])) };
-        try {
-          await opsApi.putSetting('limits', value, why);
-          ok.limits = true;
-        } catch (e) {
-          next.limits = errorMessage(e, t);
-        }
+        // tester report 22/10 UX-022: a value out of its range is named under its own field, not only « Vérifiez les champs »
+        const outside = LIMIT_FIELDS.filter((f) => !inRange(f, value[f]));
+        if (outside.length) for (const f of outside) next[`limit.${f}`] = rangeText(t, f, 'adminSettings.limits.outOfRange');
+        else
+          try {
+            await opsApi.putSetting('limits', value, why);
+            ok.limits = true;
+          } catch (e) {
+            const fields = e instanceof ApiError ? e.body.fields : {};
+            const named = LIMIT_FIELDS.filter((f) => fields[`value.${f}`]);
+            for (const f of named) next[`limit.${f}`] = rangeText(t, f, 'adminSettings.limits.outOfRange');
+            if (!named.length) next.limits = errorMessage(e, t);
+          }
       }
       if (contactsDirty) {
         try {
@@ -114,7 +123,7 @@ export function SettingsPage() {
       if (ok.limits) setLimits(null);
       if (ok.contacts) setContacts(null);
       if (ok.policy) setManualReview(null);
-      if (!next.limits && !next.contacts && !next.policy) toast({ tone: 'success', message: t('adminSettings.saved') });
+      if (!Object.keys(next).length) toast({ tone: 'success', message: t('adminSettings.saved') });
     } finally {
       setSaving(false);
     }
@@ -161,7 +170,7 @@ export function SettingsPage() {
             <LegalPanel docs={settings.data.legal} contacts={formContacts} onContacts={(c) => setContacts(c)} error={errors.contacts} />
             <MetaPanel permissions={settings.data.metaPermissions} />
             <ProvidersPanel providers={settings.data.providers} />
-            <LimitsPanel value={formLimits} onChange={(l) => setLimits(l)} error={errors.limits} />
+            <LimitsPanel value={formLimits} onChange={(l) => setLimits(l)} error={errors.limits} fieldErrors={errors} />
           </div>
         </div>
       ) : null}
@@ -664,15 +673,18 @@ function ProvidersPanel({ providers }: { providers: PlatformProviderDto[] }) {
 }
 
 /* ---------- Limits & defaults ---------- */
-function LimitsPanel({ value, onChange, error }: { value: LimitsForm; onChange: (v: LimitsForm) => void; error?: string }) {
+const inRange = (f: (typeof LIMIT_FIELDS)[number], v: number) => Number.isInteger(v) && v >= PLATFORM_LIMITS_RANGES[f][0] && v <= PLATFORM_LIMITS_RANGES[f][1];
+const rangeText = (t: ReturnType<typeof useT>, f: (typeof LIMIT_FIELDS)[number], key: string) => t(key, { min: formatNumber(PLATFORM_LIMITS_RANGES[f][0]), max: formatNumber(PLATFORM_LIMITS_RANGES[f][1]) });
+
+function LimitsPanel({ value, onChange, error, fieldErrors }: { value: LimitsForm; onChange: (v: LimitsForm) => void; error?: string; fieldErrors: Record<string, string> }) {
   const t = useT();
   const write = useWrite('admin.settings.write');
   return (
     <OpsPanel title={t('adminSettings.limits.title')} data-testid="limits">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-6">
         {LIMIT_FIELDS.map((f) => (
-          <Field key={f} label={t(`adminSettings.limits.${f}`)} htmlFor={`limit-${f}`}>
-            <NumberInput id={`limit-${f}`} value={value[f]} onValueChange={(v) => onChange({ ...value, [f]: v })} readOnly={!write.allowed} />
+          <Field key={f} label={t(`adminSettings.limits.${f}`)} htmlFor={`limit-${f}`} hint={rangeText(t, f, 'adminSettings.limits.range')} error={fieldErrors[`limit.${f}`]}>
+            <NumberInput id={`limit-${f}`} value={value[f]} onValueChange={(v) => onChange({ ...value, [f]: v })} readOnly={!write.allowed} aria-invalid={!!fieldErrors[`limit.${f}`]} />
           </Field>
         ))}
       </div>
