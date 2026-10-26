@@ -45,8 +45,8 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 | L25-UX-003 | Editing a variant does not send the product to moderation | done |
 | L25-UX-007 | Moderation requests are triggered inconsistently (adding a variant does not) | done |
 | L25-UX-006 | The chatbot talks about products / variants pending moderation | done |
-| L25-UX-005 | Moderation: the ✕ button behaves like « Ouvrir la revue » | todo |
-| PV26-P4 | Products with variants: the variant price is shown but the margin uses the base price | todo |
+| L25-UX-005 | Moderation: the ✕ button behaves like « Ouvrir la revue » | done |
+| PV26-P4 | Products with variants: the variant price is shown but the margin uses the base price | done |
 
 ## Merchant app
 | # | Issue | Status |

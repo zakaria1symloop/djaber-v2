@@ -140,7 +140,20 @@ export default function ProductsPage() {
     ...(advanced
       ? ([
           { key: 'cost', header: t('products.col.cost'), sortKey: 'cost', hideBelow: 'xl', cell: (r) => <Money value={r.costPrice} muted /> },
-          { key: 'margin', header: t('products.col.margin'), hideBelow: 'xl', cell: (r) => <Pct value={r.marginPct} className="whitespace-nowrap" /> },
+          {
+            key: 'margin',
+            header: t('products.col.margin'),
+            hideBelow: 'xl',
+            // PV 26/10 P4: a product with variants shows the margins of its variants (each on its own price)
+            cell: (r) =>
+              r.marginRange && r.marginRange.min !== r.marginRange.max ? (
+                <span className="whitespace-nowrap">
+                  <Pct value={r.marginRange.min} /> – <Pct value={r.marginRange.max} />
+                </span>
+              ) : (
+                <Pct value={r.marginPct} className="whitespace-nowrap" />
+              ),
+          },
         ] satisfies Column<ProductListItem>[])
       : []),
     { key: 'stock', header: t('action.stock'), sortKey: 'stock', cell: stockCell },

@@ -190,16 +190,31 @@ export function MovementsBlock({ productId }: { productId: string }) {
 }
 
 /* ---------- Prix & marge ---------- */
-export function PricingBlock({ product, advanced, canEdit = false }: { product: Pick<Product, 'id' | 'price' | 'oldPrice' | 'pricing'>; advanced: boolean; /** expenses editor (catalog.write, live product) */ canEdit?: boolean }) {
+export function PricingBlock({ product, advanced, canEdit = false }: { product: Pick<Product, 'id' | 'price' | 'oldPrice' | 'pricing'> & Partial<Pick<Product, 'priceRange'>>; advanced: boolean; /** expenses editor (catalog.write, live product) */ canEdit?: boolean }) {
   const t = useT();
   const p = product.pricing;
+  // PV 26/10 P4: a product with variants is sold at its variants' prices — those, and the margin of each variant
+  const range = product.priceRange ?? null;
+  const perVariant = p?.variants?.length ? p.variants : null;
   const units = (n: number) => <Ltr className="tabular-nums">{t('products.page.units', { count: formatNumber(n) })}</Ltr>;
   return (
     <Block title={t(advanced ? 'products.page.pricing.title' : 'products.page.pricing.titleSimple')} testId="block-pricing">
       <Rows>
         <Row label={t('products.page.pricing.price')} testId="pricing-price">
-          <Money value={product.price} />
-          {product.oldPrice ? (
+          {range ? (
+            <>
+              <Money value={range.min} />
+              {range.max !== range.min ? (
+                <>
+                  {' – '}
+                  <Money value={range.max} />
+                </>
+              ) : null}
+            </>
+          ) : (
+            <Money value={product.price} />
+          )}
+          {!range && product.oldPrice ? (
             <>
               {' '}
               <Money value={product.oldPrice} className="text-text-muted line-through" />
@@ -223,6 +238,25 @@ export function PricingBlock({ product, advanced, canEdit = false }: { product: 
                 </>
               )}
             </Row>
+            {perVariant ? (
+              <Row label={t('products.page.pricing.byVariant')} testId="pricing-variants">
+                <ul className="flex flex-col gap-0.5">
+                  {perVariant.map((v) => (
+                    <li key={v.id} data-variant={v.id}>
+                      <bdi>{v.name}</bdi> · <Money value={v.price} /> ·{' '}
+                      {v.marginDzd === null ? (
+                        <span className="text-text-muted">—</span>
+                      ) : (
+                        <>
+                          <Money value={v.marginDzd} className={v.marginDzd < 0 ? 'text-accent-alert' : 'text-accent-money'} /> · <Pct value={v.marginPct} />
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <span className="mt-1 block ts-label-meta text-text-muted">{t('products.page.pricing.variantsNote')}</span>
+              </Row>
+            ) : null}
             <Row label={t('products.page.pricing.sales30d')}>
               {units(p?.sales30d?.units ?? 0)} · <Money value={p?.sales30d?.revenue ?? 0} />
             </Row>

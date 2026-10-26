@@ -15,7 +15,8 @@ type Named = { id: string; name: string };
 const failures = (rows: BulkItemResult[], names: Named[]) =>
   rows.filter((r) => !r.ok).map((r) => `${names.find((n) => n.id === r.id)?.name ?? r.id.slice(0, 8)} : ${r.error?.message ?? r.error?.code ?? ''}`);
 
-export function BulkRejectDialog({ open, onClose, items, onDone }: { open: boolean; onClose: () => void; items: Named[]; onDone: (failedIds: string[]) => void }) {
+/** Reject with a common reason — the selection, or one row (its ✕ button, tester report 25/10 UX-005: `single`). */
+export function BulkRejectDialog({ open, onClose, items, onDone, single }: { open: boolean; onClose: () => void; items: Named[]; onDone: (failedIds: string[]) => void; single?: boolean }) {
   const t = useT();
   const refresh = useModerationRefresh();
   const [decision, setDecision] = useState<ModerationDecision | null>(null);
@@ -52,15 +53,15 @@ export function BulkRejectDialog({ open, onClose, items, onDone }: { open: boole
     <AdminDialog
       open={open}
       onClose={onClose}
-      title={t('adminMod.bulk.rejectTitle')}
-      context={t('adminMod.bulk.context', { count: items.length })}
+      title={single && items[0] ? t('adminMod.reject.titleOne', { name: items[0].name }) : t('adminMod.bulk.rejectTitle')}
+      context={single ? undefined : t('adminMod.bulk.context', { count: items.length })}
       submitLabel={t('adminMod.action.reject')}
       onSubmit={() => void submit()}
       destructive
       pending={send.isPending}
       error={error}
       note={t('adminMod.bulk.note')}
-      testId="mod-bulk-reject"
+      testId={single ? 'mod-reject' : 'mod-bulk-reject'}
     >
       <div role="radiogroup" aria-label={t('adminMod.panel.decision')} className="flex flex-wrap gap-2">
         {MODERATION_REASON_TEMPLATES.map((r) => (

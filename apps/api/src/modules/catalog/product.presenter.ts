@@ -8,7 +8,7 @@ export const LIST_INCLUDE = {
   category: { select: { id: true, name: true, color: true } },
   unit: { select: { id: true, abbreviation: true } },
   images: { where: { isPrimary: true }, take: 1, select: { url: true } },
-  variants: { where: { deletedAt: null }, select: { name: true, price: true, stock: true, minStock: true, isActive: true }, orderBy: { createdAt: 'asc' } },
+  variants: { where: { deletedAt: null }, select: { name: true, price: true, costPrice: true, stock: true, minStock: true, isActive: true }, orderBy: { createdAt: 'asc' } },
   currentModeration: { select: { status: true, decision: true, merchantMessage: true, slaDueAt: true } },
   _count: { select: { orderItems: true, saleItems: true } },
 } satisfies Prisma.ProductInclude;
@@ -47,6 +47,19 @@ export const priceRangeOf = (p: { hasVariants: boolean; variants: { price: numbe
   return prices.length ? { min: Math.min(...prices), max: Math.max(...prices) } : null;
 };
 
+/**
+ * PV 26/10 P4 (« le prix affiché est celui de la variante et la marge se calcule sur le prix de base »): a product with
+ * variants is sold at its variants' prices, so its margin is theirs — each variant on its own price, with its own cost or
+ * else the product's; the list shows the lowest (and the range).
+ */
+export const variantMargins = (p: { price: number; costPrice: number | null; hasVariants: boolean; variants: { price: number; costPrice: number | null; isActive: boolean }[] }): { marginPct: number | null; marginRange: { min: number; max: number } | null } => {
+  const active = p.hasVariants ? p.variants.filter((v) => v.isActive) : [];
+  if (!active.length) return { marginPct: marginPct(p.price, p.costPrice), marginRange: null };
+  const all = active.map((v) => marginPct(v.price, v.costPrice ?? p.costPrice)).filter((m): m is number => m !== null);
+  if (!all.length) return { marginPct: null, marginRange: null };
+  return { marginPct: Math.min(...all), marginRange: { min: Math.min(...all), max: Math.max(...all) } };
+};
+
 export const toListItem = (p: ProductListRow): ProductListItemView => ({
   id: p.id,
   sku: p.sku,
@@ -56,7 +69,7 @@ export const toListItem = (p: ProductListRow): ProductListItemView => ({
   price: p.price,
   oldPrice: p.oldPrice,
   costPrice: p.costPrice,
-  marginPct: marginPct(p.price, p.costPrice),
+  ...variantMargins(p),
   trackStock: p.trackStock,
   sellOutOfStock: p.trackStock && p.sellOutOfStock,
   stock: p.trackStock ? (p.stock ?? 0) : null,

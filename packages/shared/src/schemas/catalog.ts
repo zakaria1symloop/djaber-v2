@@ -286,7 +286,10 @@ export type ProductListItemView = {
   price: number;
   oldPrice: number | null;
   costPrice: number | null;
+  /** products with variants: the lowest margin of the active variants, each on its own price and cost (PV 26/10 P4) */
   marginPct: number | null;
+  /** products with variants: lowest and highest margin % of the active variants (null when no cost is known) */
+  marginRange: { min: number; max: number } | null;
   trackStock: boolean;
   /** orders accepted at zero stock (PV 22/10) */
   sellOutOfStock: boolean;
@@ -357,6 +360,8 @@ export type ProductView = ProductListItemView & {
     marginDzd: number | null;
     marginPct: number | null;
     sales30d: { units: number; revenue: number };
+    /** PV 26/10 P4: products with variants — the margin of each active variant on its own price (cost: the variant's, else the product's) */
+    variants?: { id: string; name: string; price: number; weightedCost: number | null; trueCost: number | null; marginDzd: number | null; marginPct: number | null }[];
   };
   agents: { id: string; name: string }[];
   mentions30d: { conversations: number; orders: number };

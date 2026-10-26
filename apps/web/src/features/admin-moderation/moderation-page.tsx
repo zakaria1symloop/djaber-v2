@@ -131,6 +131,8 @@ function Queue({ canWrite }: { canWrite: boolean }) {
   const total = source.data?.total ?? null;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulk, setBulk] = useState<null | 'reject' | 'assign'>(null);
+  // the ✕ of a row rejects that item directly (reason + message dialog), « Ouvrir la revue » stays the full review
+  const [rejectOne, setRejectOne] = useState<{ id: string; name: string } | null>(null);
   const [assignOne, setAssignOne] = useState<ModerationItemDto | null>(null);
   useEffect(() => setSelected(new Set()), [tab, s.page]);
 
@@ -302,7 +304,7 @@ function Queue({ canWrite }: { canWrite: boolean }) {
                       onToggle={selectable ? () => toggle(item.id) : undefined}
                       onOpen={() => open(item.id)}
                       onApprove={() => void approveOne(item)}
-                      onReject={() => open(item.id)}
+                      onReject={() => setRejectOne(named([item.id])[0]!)}
                       menu={menu(item)}
                       canWrite={canWrite}
                     />
@@ -325,6 +327,7 @@ function Queue({ canWrite }: { canWrite: boolean }) {
       </div>
 
       <BulkRejectDialog open={bulk === 'reject'} onClose={() => setBulk(null)} items={named(selected)} onDone={(failed) => setSelected(new Set(failed))} />
+      <BulkRejectDialog single open={!!rejectOne} onClose={() => setRejectOne(null)} items={rejectOne ? [rejectOne] : []} onDone={() => undefined} />
       <AssignDialog open={bulk === 'assign' || !!assignOne} onClose={() => (setBulk(null), setAssignOne(null))} items={assignOne ? [{ id: assignOne.id, name: itemTitle(t, assignOne) }] : named(selected)} onDone={() => setSelected(new Set())} />
     </>
   );

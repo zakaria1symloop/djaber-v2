@@ -275,6 +275,15 @@ describe('GET /products', () => {
     expect(row(D.id)).toMatchObject({ stockState: 'untracked', stock: null, trackStock: false });
     expect(row(E.id)).toMatchObject({ stockState: 'low', stock: 7, hasVariants: true, variantSummary: 'S · M' }); // one variant under its own threshold
 
+    // PV 26/10 P4: a product with variants takes the margins of its variants, each on its own price and cost (or the product's)
+    const other = await asOwner(app);
+    const G = await createProduct(other, { name: 'Golf polo', sku: 'G-1', price: 9999, costPrice: 1000, variants: [{ name: 'M', price: 1500, stock: 1 }, { name: 'L', price: 2000, costPrice: 1200, stock: 1 }] });
+    const g = (await other.get(`/products?q=Golf`).expect(200)).body.data[0];
+    expect(g).toMatchObject({ marginPct: 33.3, marginRange: { min: 33.3, max: 40 }, priceRange: { min: 1500, max: 2000 } });
+    const gPage = (await other.get(`/products/${G.id}`).expect(200)).body.data;
+    expect(gPage.pricing).toMatchObject({ marginPct: 33.3, marginDzd: 500, variants: [{ name: 'M', price: 1500, weightedCost: 1000, marginDzd: 500, marginPct: 33.3 }, { name: 'L', price: 2000, weightedCost: 1200, marginDzd: 800, marginPct: 40 }] });
+    expect(row(A.id).marginRange).toBeNull();
+
     // category (multi; a parent selects its sub-categories)
     expect(await names(`categoryIds=${bags}&sort=name`)).toEqual(['Bravo']);
     expect(await names(`categoryIds=${shoes}&status=active,inactive&sort=name`)).toEqual(['Alpha', 'Charlie']);

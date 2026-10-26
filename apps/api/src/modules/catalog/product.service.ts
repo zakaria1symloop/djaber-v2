@@ -125,14 +125,30 @@ export class ProductService implements OnModuleInit {
   }
 
   /** `GET /products/:id/margins` and the "Prix & marge" block of the product page (GDS-09, EXP-02). */
-  async margins(productId: string, product?: { price: number; costPrice: number | null }) {
+  /**
+   * PV 26/10 P4: a product with variants is sold at its variants' prices — the margin of each active variant (its price, its
+   * cost or else the product's; the product's expenses), and the product's figures are those of its lowest-margin variant.
+   */
+  async margins(productId: string, product?: { price: number; costPrice: number | null; hasVariants?: boolean }, variants?: { id: string; name: string; price: number; costPrice: number | null; isActive: boolean; deletedAt?: Date | null }[]) {
     const p = product ?? (await this.rowOrNotFound(productId));
     const since = new Date(Date.now() - MARGIN_PERIOD_DAYS * DAY_MS);
     const [expenses, sales30d] = await Promise.all([
       prisma.productExpense.findMany({ where: { productId, OR: [{ isPerUnit: true }, { date: { gte: since } }] }, select: { amount: true, isPerUnit: true } }),
       this.salesStats(productId),
     ]);
-    return { ...computeMargins({ price: p.price, weightedCost: p.costPrice, expenses, unitsSold: sales30d.units }), sales30d };
+    const base = computeMargins({ price: p.price, weightedCost: p.costPrice, expenses, unitsSold: sales30d.units });
+    const list = p.hasVariants ? (variants ?? (await prisma.productVariant.findMany({ where: { productId, deletedAt: null }, select: { id: true, name: true, price: true, costPrice: true, isActive: true, deletedAt: true } }))) : [];
+    const active = list.filter((v) => v.isActive && !v.deletedAt);
+    if (!active.length) return { ...base, sales30d };
+    const rows = active.map((v) => ({ id: v.id, name: v.name, price: v.price, ...computeMargins({ price: v.price, weightedCost: v.costPrice ?? p.costPrice, expenses, unitsSold: sales30d.units }) }));
+    const known = rows.filter((r) => r.marginPct !== null);
+    const worst = known.length ? known.reduce((a, b) => (b.marginPct! < a.marginPct! ? b : a)) : null;
+    return {
+      ...base,
+      ...(worst ? { trueCost: worst.trueCost, marginDzd: worst.marginDzd, marginPct: worst.marginPct } : { trueCost: null, marginDzd: null, marginPct: null }),
+      sales30d,
+      variants: rows.map((r) => ({ id: r.id, name: r.name, price: r.price, weightedCost: r.weightedCost, trueCost: r.trueCost, marginDzd: r.marginDzd, marginPct: r.marginPct })),
+    };
   }
 
   /** `GET /products/:id` — the full product page payload (archived products included: banner + Restaurer). */
