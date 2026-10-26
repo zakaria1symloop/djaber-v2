@@ -15,6 +15,8 @@ export const createPaymentGateway = (env: PayEnv, redis: Redis, transport?: PayT
   const api = env.PUBLIC_API_URL.replace(/\/$/, '');
   const webhookUrl = `${api}/api/v1/webhooks/chargily`;
   if (env.PAYMENT_DRIVER !== 'chargily') {
+    // production must take real payments: the simulated checkout is served nowhere there (it would be a dead end)
+    if (env.NODE_ENV === 'production') throw new Error('PAYMENT_DRIVER=fake is refused in production: set PAYMENT_DRIVER=chargily and CHARGILY_SECRET');
     const fake = new FakeChargilyBackend(redis, { pageBase: `${api}/api/v1/dev-payments`, secret: FAKE_CHARGILY_SECRET });
     return { gateway: new ChargilyGateway('fake', fake.transport, { apiBase: FAKE_CHARGILY_BASE, secret: FAKE_CHARGILY_SECRET, webhookUrl }), fake };
   }

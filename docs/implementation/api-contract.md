@@ -429,7 +429,7 @@ type IapValidateResult = { status: 'credited'|'already_credited'|'invalid'|'pend
 - Orders: `OrderDetailView.paymentLink = { id, url: string|null, status: creating|pending|paid|failed|expired|refunded|mismatch, expiresAt: string|null, amount } | null`; `POST /orders/:id/payment-link { send? }` → `201 OrderPaymentLinkDto` (checkout created by the worker); `GET /orders/:id/payment-link`; `POST /orders/:id/refunds { amount, reason, method? }` → order detail; order `actions` add `payment_link`, `refund`. `PATCH /workspace` accepts `onlinePaymentEnabled`.
 - `WorkspaceDto.plan` adds `cancelAtPeriodEnd`, `dunningStage`, `expired { at, planName } | null`, `paused { channels, agents, members }`.
 - Admin (M9 endpoints): `POST /admin/invoices/:id/mark-paid` → `AdminMarkPaidResultDto { invoice, paymentId, remaining, reactivated }` (+ `meta.warnings` `INVOICE_PARTIAL_PAYMENT`); `POST /admin/workspaces/:id/credits { credits, reason, type? }` → `{ ledgerEntryId, balance }`.
-- Development only (fake drivers, 404 in production): `GET|POST /dev-payments/:checkoutId` (fake Chargily checkout page), `POST /dev/billing/{subscription|clock|pack|store-refund}`, `GET /dev/billing/help`.
+- Simulators (fake drivers): `GET|POST /dev-payments/:checkoutId` (fake Chargily checkout page) and `GET /dev/google/consent` (simulated Google consent) are served in development, test and on the staging test site, 404 in production (tester reports 22/10 UX-029, 25/10; production refuses to start with `PAYMENT_DRIVER=fake`); `POST /dev/billing/{subscription|clock|pack|store-refund}`, `GET /dev/billing/help` are development / test only (404 in staging and production).
 
 ### 3.11 Safety, support, moderation (merchant side) — D36–D38
 

@@ -58,6 +58,14 @@ export class ConfigService {
   get isProd() {
     return this.cfg.NODE_ENV === 'production' || this.cfg.NODE_ENV === 'staging';
   }
+  /**
+   * The fake checkout page and the simulated Google consent (PAYMENT_DRIVER / SHEETS_DRIVER=fake) are served everywhere
+   * but in production: the staging site is the testers' site, where they stand in for Chargily test mode and a Google
+   * OAuth client (tester reports 22/10 UX-029, 25/10: « Payer », « Acheter un pack », « Connecter Google » ⇒ NOT_FOUND).
+   */
+  get simulatorsAllowed() {
+    return this.cfg.NODE_ENV !== 'production';
+  }
   get isTest() {
     return this.cfg.NODE_ENV === 'test';
   }

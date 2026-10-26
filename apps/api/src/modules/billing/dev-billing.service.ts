@@ -1,5 +1,5 @@
-// Development / test simulation of billing (PAYMENT_DRIVER=fake and IAP_DRIVER=fake only, never in production — every
-// route answers 404 otherwise). Nothing here talks to Chargily, Google or Apple: the fake Chargily backend and the fake
+// Simulation of billing (PAYMENT_DRIVER=fake and IAP_DRIVER=fake only; development, test and the staging test site,
+// never in production — every route answers 404 otherwise). Nothing here talks to Chargily, Google or Apple: the fake Chargily backend and the fake
 // stores produce the same signed webhooks / receipts as the real ones and they enter through the real code paths.
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
@@ -41,10 +41,12 @@ export class DevBillingService {
   ) {}
 
   private assertFakePay(): FakeChargilyBackend {
-    if (this.config.isProd || this.gateway.driver !== 'fake' || !this.fake) throw notFound();
+    if (!this.config.simulatorsAllowed || this.gateway.driver !== 'fake' || !this.fake) throw notFound();
     return this.fake;
   }
+  /** The shortcuts (clock, subscription states, packs, store refunds) stay development / test only, also on staging. */
   private assertFakeAll() {
+    if (this.config.isProd) throw notFound();
     this.assertFakePay();
     if (this.iap.stores.driver !== 'fake') throw notFound();
   }
@@ -57,7 +59,7 @@ export class DevBillingService {
     const amount = `${c.amount.toLocaleString('fr-FR').replace(/\s/g, ' ')} DA`;
     const btn = (outcome: DevPaymentOutcome, label: string, color: string) =>
       `<form method="post" action="${esc(id)}" style="display:inline"><input type="hidden" name="outcome" value="${outcome}">${outcome === 'failed' ? '<input type="hidden" name="reason" id="reason-field" value="card_declined">' : ''}<button data-testid="dev-pay-${outcome}" style="background:${color}">${label}</button></form>`;
-    const title = locale === 'ar' ? 'دفع تجريبي (تطوير)' : locale === 'en' ? 'Simulated payment (development)' : 'Paiement simulé (développement)';
+    const title = locale === 'ar' ? 'دفع تجريبي (بدون أموال حقيقية)' : locale === 'en' ? 'Simulated payment (no real money)' : 'Paiement simulé (aucun argent réel)';
     return `<!doctype html><html lang="${esc(locale)}" dir="${locale === 'ar' ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
 <style>body{font-family:system-ui,sans-serif;max-width:520px;margin:40px auto;padding:0 16px;color:#111}h1{font-size:20px}.card{border:1px solid #ddd;border-radius:12px;padding:20px}.amt{font-size:32px;font-weight:700;margin:8px 0}button{color:#fff;border:0;border-radius:8px;padding:10px 14px;margin:6px 6px 0 0;font-size:15px;cursor:pointer}.muted{color:#666;font-size:13px}select{margin-top:12px;padding:6px}</style></head>
 <body><h1>${esc(title)}</h1><div class="card"><div class="muted">Chargily Pay (CIB / Edahabia) — PAYMENT_DRIVER=fake</div><div class="amt" data-testid="dev-pay-amount">${esc(amount)}</div><div>${esc(c.description)}</div><div class="muted">Statut : <b data-testid="dev-pay-status">${esc(c.status)}</b> · ${esc(c.id)}</div>

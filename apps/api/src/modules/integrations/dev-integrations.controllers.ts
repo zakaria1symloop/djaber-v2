@@ -1,6 +1,7 @@
-// Development-only simulators of M11 (404 in staging / production):
-//  - simulated Google (SHEETS_DRIVER=fake): consent page + read / re-sort / revoke the simulated spreadsheets;
-//  - local receiver of outbound webhooks: register `http://<api>/api/v1/dev/webhook-receiver/<name>` as an endpoint URL.
+// Simulators of M11:
+//  - simulated Google (SHEETS_DRIVER=fake; development, test and the staging test site, 404 in production): consent page
+//    + read / re-sort / revoke the simulated spreadsheets;
+//  - local receiver of outbound webhooks (404 in staging / production): register `http://<api>/api/v1/dev/webhook-receiver/<name>` as an endpoint URL.
 import { Controller, Get, Header, HttpCode, Inject, Param, Post, Query, Req, Res } from '@nestjs/common';
 import { prisma, TenantContext } from '@djaber/db';
 import { TokenService } from '../../core/auth/token.service';
@@ -28,7 +29,7 @@ export class DevGoogleController {
   ) {}
 
   private guard() {
-    if (this.config.isProd || !this.fake) throw notFound();
+    if (!this.config.simulatorsAllowed || !this.fake) throw notFound();
     return this.fake;
   }
 

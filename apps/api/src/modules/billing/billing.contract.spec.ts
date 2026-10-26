@@ -88,6 +88,9 @@ describe('ChargilyGateway (05 §4.2)', () => {
     expect(fake.gateway).toBeInstanceOf(ChargilyGateway);
     expect(fake.gateway.driver).toBe('fake');
     expect(fake.gateway.provider).toBe('chargily');
+    // tester report 22/10 UX-029: the staging test site keeps the simulated checkout; production refuses it (a dead end)
+    expect(createPaymentGateway({ ...base, NODE_ENV: 'staging', PAYMENT_DRIVER: 'fake', PAYMENT_ALLOW_LIVE: false }, memoryRedis()).gateway.driver).toBe('fake');
+    expect(() => createPaymentGateway({ ...base, NODE_ENV: 'production', PAYMENT_DRIVER: 'fake', PAYMENT_ALLOW_LIVE: false }, memoryRedis())).toThrow(/refused in production/);
     // staging / production may use it (test mode unless CHARGILY_MODE=live), never with a network call here
     const live = createPaymentGateway({ ...base, NODE_ENV: 'staging', PAYMENT_DRIVER: 'chargily', PAYMENT_ALLOW_LIVE: false }, memoryRedis(), async () => ({ status: 200, json: {} }));
     expect(live.gateway.driver).toBe('chargily');

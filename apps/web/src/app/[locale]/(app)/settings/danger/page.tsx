@@ -1,6 +1,7 @@
 'use client';
 // /settings/danger — Figma "SET — Settings — … Danger zone" + DLG "Supprimer l'espace" (FL-14): typed confirmation ·
-// blocked (WORKSPACE_HAS_DEBT, already scheduled) · scheduled state with cancel. Owner only (`workspace.delete`).
+// blocked (WORKSPACE_HAS_DEBT, already scheduled — shown only when the API answers it, tester report 25/10) · scheduled
+// state with cancel. Owner only (`workspace.delete`).
 import { formatDate, type AppLocale } from '@djaber/shared';
 import { Button, Dialog, Field, FormAlert, Input, PasswordInput, Pill, Skeleton, toast } from '@djaber/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -119,7 +120,13 @@ function DeleteWorkspaceDialog({ open, name, onClose }: { open: boolean; name: s
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             {t('action.cancel')}
           </Button>
-          <Button variant="danger" type="submit" form="delete-workspace" loading={busy} disabled={!matches || !password}>
+          <Button
+            variant="danger"
+            type="submit"
+            form="delete-workspace"
+            loading={busy}
+            disabledReason={!matches ? t('settings.danger.dialog.needName', { name }) : !password ? t('settings.danger.dialog.needPassword') : undefined}
+          >
             {t('settings.danger.dialog.submit')}
           </Button>
         </>
@@ -137,7 +144,7 @@ function DeleteWorkspaceDialog({ open, name, onClose }: { open: boolean; name: s
           <Pill tone="danger">{t('common.destructive')}</Pill>
         </div>
         <FormAlert>{t('settings.danger.dialog.warning')}</FormAlert>
-        <Field label={t('settings.danger.dialog.typeName')} htmlFor="confirm-name" hint={t('common.mustMatch')} error={error?.field === 'name' ? error.message : undefined}>
+        <Field label={t('settings.danger.dialog.typeName')} htmlFor="confirm-name" hint={t('settings.danger.dialog.nameHint', { name })} error={error?.field === 'name' ? error.message : undefined}>
           <Input id="confirm-name" autoComplete="off" placeholder={name} value={typed} onChange={(e) => setTyped(e.target.value)} disabled={busy} aria-invalid={error?.field === 'name'} />
         </Field>
         <Field label={t('common.password')} htmlFor="delete-ws-password" error={error?.field === 'password' ? error.message : undefined}>
@@ -152,7 +159,6 @@ function DeleteWorkspaceDialog({ open, name, onClose }: { open: boolean; name: s
             hideLabel={t('auth.password.hide')}
           />
         </Field>
-        <p className="ts-label-meta text-text-muted">{t('settings.danger.dialog.note')}</p>
         {error && !error.field ? <FormAlert>{error.message}</FormAlert> : null}
       </form>
     </Dialog>

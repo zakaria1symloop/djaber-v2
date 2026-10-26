@@ -5871,7 +5871,6 @@
  "settings.danger.cancelled": "Deletion cancelled. Reconnect your pages and check your subscription.",
  "settings.danger.description": "Delete the workspace “{name}”: pages disconnected, AI stopped, members lose access, permanent purge after 30 days.",
  "settings.danger.dialog.context": "Danger zone · owner only",
- "settings.danger.dialog.note": "Blocked when an invoice is unpaid (WORKSPACE_HAS_DEBT) or when a deletion is already scheduled.",
  "settings.danger.dialog.submit": "Schedule deletion",
  "settings.danger.dialog.typeName": "TYPE THE WORKSPACE NAME",
  "settings.danger.dialog.warning": "No refund of the current subscription. Pages will be disconnected and the AI stopped at once. Data kept 30 days (the owner can cancel), then deleted.",
@@ -6359,5 +6358,8 @@
  "adminSettings.moderation.sub": "Before they are published to the AI sales agent",
  "adminSettings.moderation.manualReviewAll": "Review every product manually",
  "adminSettings.moderation.manualReviewAllHint": "On: no automatic approval, every new or edited product waits for an admin decision in Moderation before it is sold. Off: products without alerts are approved automatically (score ≥ 0.9, trusted shop, non-sensitive category).",
- "adminSettings.history.key.moderation_policy": "Product validation (moderation)"
+ "adminSettings.history.key.moderation_policy": "Product validation (moderation)",
+ "settings.danger.dialog.nameHint": "Type “{name}” exactly: the workspace name, not your e-mail.",
+ "settings.danger.dialog.needName": "Type the workspace name “{name}” to confirm",
+ "settings.danger.dialog.needPassword": "Enter your password"
 }

@@ -5871,7 +5871,6 @@
  "settings.danger.cancelled": "Suppression annulée. Reconnectez vos pages et vérifiez votre abonnement.",
  "settings.danger.description": "Supprimer l’espace « {name} » : pages déconnectées, IA arrêtée, membres sans accès, purge définitive après 30 jours.",
  "settings.danger.dialog.context": "Zone de danger · propriétaire uniquement",
- "settings.danger.dialog.note": "Bloqué si une facture est impayée (WORKSPACE_HAS_DEBT) ou si une demande de suppression est déjà programmée.",
  "settings.danger.dialog.submit": "Programmer la suppression",
  "settings.danger.dialog.typeName": "TAPEZ LE NOM DE L’ESPACE",
  "settings.danger.dialog.warning": "Aucun remboursement de l’abonnement en cours. Les pages seront déconnectées, l’IA arrêtée immédiatement. Données conservées 30 j (annulable par le propriétaire), puis supprimées.",
@@ -6359,5 +6358,8 @@
  "adminSettings.moderation.sub": "Avant leur publication à l'IA vendeuse",
  "adminSettings.moderation.manualReviewAll": "Valider manuellement tous les produits",
  "adminSettings.moderation.manualReviewAllHint": "Activé : aucune validation automatique, chaque produit nouveau ou modifié attend la décision d'un administrateur dans Modération avant d'être vendu. Désactivé : validation automatique des produits sans alerte (score ≥ 0,9, boutique de confiance, catégorie non sensible).",
- "adminSettings.history.key.moderation_policy": "Validation des produits (modération)"
+ "adminSettings.history.key.moderation_policy": "Validation des produits (modération)",
+ "settings.danger.dialog.nameHint": "Tapez « {name} » exactement : le nom de l'espace, pas votre e-mail.",
+ "settings.danger.dialog.needName": "Tapez le nom de l'espace « {name} » pour confirmer",
+ "settings.danger.dialog.needPassword": "Saisissez votre mot de passe"
 }

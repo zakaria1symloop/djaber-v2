@@ -224,7 +224,7 @@ Every adapter throws `CourierError { kind: 'validation', field?: 'phone'|'commun
 - Errors: 401/`invalid_grant` ⇒ `status='error'`, `lastError='SHEETS_TOKEN_REVOKED'`, notification, queue skips this connection until reconnect; 404 ⇒ `SHEETS_SPREADSHEET_NOT_FOUND`; 429/403 `quotaExceeded` ⇒ `SHEETS_QUOTA`, pause 60 s, retry; others ⇒ retry then `error`.
 - Backfill: `POST /integrations/google-sheets/backfill { from, to }` ⇒ `sheets-backfill` job iterating orders by `orderedAt` ascending, 100 per batch (`values:batchUpdate`), progress %.
 - Disconnect: delete row, revoke `POST https://oauth2.googleapis.com/revoke?token=` from the worker job `outbox/sheets-revoke` (M11: no Google call from the handler); sheet untouched.
-- Drivers (M11): `SheetsGateway` port — `GoogleSheetsGateway` (`SHEETS_DRIVER=google`, refused in development / test unless `SHEETS_ALLOW_LIVE=true`) and `FakeSheetsGateway` (`SHEETS_DRIVER=fake`, dev / test default: consent page `/api/v1/dev/google/consent`, spreadsheets in Redis, dev viewer `/api/v1/dev/google/spreadsheets/:id/view`).
+- Drivers (M11): `SheetsGateway` port — `GoogleSheetsGateway` (`SHEETS_DRIVER=google`, refused in development / test unless `SHEETS_ALLOW_LIVE=true`) and `FakeSheetsGateway` (`SHEETS_DRIVER=fake`, dev / test default, also served on the staging test site and 404 in production: consent page `/api/v1/dev/google/consent`, spreadsheets in Redis, dev viewer `/api/v1/dev/google/spreadsheets/:id/view`).
 
 ---
 

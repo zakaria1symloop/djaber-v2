@@ -5871,7 +5871,6 @@
  "settings.danger.cancelled": "تم إلغاء الحذف. أعد ربط صفحاتك وتحقق من اشتراكك.",
  "settings.danger.description": "حذف المساحة «{name}»: فصل الصفحات، إيقاف الذكاء الاصطناعي، فقدان الأعضاء للوصول، وحذف نهائي بعد 30 يومًا.",
  "settings.danger.dialog.context": "منطقة الخطر · للمالك فقط",
- "settings.danger.dialog.note": "محظور إذا كانت هناك فاتورة غير مدفوعة (WORKSPACE_HAS_DEBT) أو إذا كان الحذف مبرمجًا مسبقًا.",
  "settings.danger.dialog.submit": "برمجة الحذف",
  "settings.danger.dialog.typeName": "اكتب اسم المساحة",
  "settings.danger.dialog.warning": "لا استرداد للاشتراك الجاري. ستُفصل الصفحات ويتوقف الذكاء الاصطناعي فورًا. تُحفظ البيانات 30 يومًا (يمكن للمالك الإلغاء) ثم تُحذف.",
@@ -6359,5 +6358,8 @@
  "adminSettings.moderation.sub": "قبل نشرها لوكيل البيع الذكي",
  "adminSettings.moderation.manualReviewAll": "التحقق اليدوي من كل المنتجات",
  "adminSettings.moderation.manualReviewAllHint": "مفعّل: لا قبول تلقائي، كل منتج جديد أو معدَّل ينتظر قرار مسؤول في الإشراف قبل بيعه. معطّل: قبول تلقائي للمنتجات بدون تنبيه (نقاط ≥ 0.9، متجر موثوق، فئة غير حساسة).",
- "adminSettings.history.key.moderation_policy": "التحقق من المنتجات (الإشراف)"
+ "adminSettings.history.key.moderation_policy": "التحقق من المنتجات (الإشراف)",
+ "settings.danger.dialog.nameHint": "اكتب «{name}» تمامًا: اسم المساحة، وليس بريدك الإلكتروني.",
+ "settings.danger.dialog.needName": "اكتب اسم المساحة «{name}» للتأكيد",
+ "settings.danger.dialog.needPassword": "أدخل كلمة المرور"
 }
