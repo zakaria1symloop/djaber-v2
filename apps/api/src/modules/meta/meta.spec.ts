@@ -83,6 +83,7 @@ describe('error classes → catalogue codes', () => {
     [{ code: 200 }, 'permission', 'PAGE_TOKEN_EXPIRED'],
     [{ code: 10, error_subcode: 2018108 }, 'permission', 'PAGE_TOKEN_EXPIRED'],
     [{ code: 10, error_subcode: 2018278 }, 'window', 'REPLY_OUTSIDE_WINDOW'],
+    [{ code: 100, error_subcode: 2018276, message: 'tag not allowed' }, 'window', 'REPLY_OUTSIDE_WINDOW'], // HUMAN_AGENT refused: app not approved (tester account 26/10)
     [{ code: 17 }, 'rate_limit', 'META_UNAVAILABLE'],
     [{ code: 32 }, 'rate_limit', 'META_UNAVAILABLE'],
     [{ code: 368 }, 'unavailable', 'META_UNAVAILABLE'],

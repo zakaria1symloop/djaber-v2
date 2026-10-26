@@ -122,7 +122,9 @@ describe('composer state', () => {
   });
   it('outside the window: Messenger offers a template message, Instagram nothing', () => {
     const late = { lastCustomerMessageAt: ago(30), within24h: false };
-    expect(composerState(conv(late), { readOnly: false, now: NOW })).toEqual({ mode: 'disabled', reason: 'outsideWindow', code: 'REPLY_OUTSIDE_WINDOW', template: true });
+    expect(composerState(conv({ ...late, composer: undefined }), { readOnly: false, now: NOW })).toEqual({ mode: 'disabled', reason: 'outsideWindow', code: 'REPLY_OUTSIDE_WINDOW', template: true });
+    // the server says the HUMAN_AGENT tag cannot be used (app not approved for « Human Agent », tester account 26/10): no template either
+    expect(composerState(conv(late), { readOnly: false, now: NOW })).toMatchObject({ reason: 'outsideWindow', template: false });
     expect(composerState(conv({ ...late, channel: { ...conv().channel, platform: 'instagram' } }), { readOnly: false, now: NOW })).toMatchObject({ reason: 'outsideWindow', template: false });
   });
   it('outside the window on Messenger, the reply is allowed with the HUMAN_AGENT tag while the server says so; never on Instagram', () => {
@@ -131,11 +133,12 @@ describe('composer state', () => {
     expect(composerState(conv({ ...late, composer }), { readOnly: false, now: NOW })).toEqual({ mode: 'ready', tagged: true });
     expect(composerState(conv({ ...late, composer, channel: { ...conv().channel, platform: 'instagram' } }), { readOnly: false, now: NOW })).toMatchObject({ mode: 'disabled', template: false });
     // the window closed while the thread was open: the stale server flag (inside the window, no tag) is not trusted
-    expect(composerState(conv({ ...late, composer: { ...composer, within24h: true, humanAgentTag: false } }), { readOnly: false, now: NOW })).toMatchObject({ mode: 'disabled', reason: 'outsideWindow', template: true });
+    expect(composerState(conv({ ...late, composer: { ...composer, within24h: true, humanAgentTag: false } }), { readOnly: false, now: NOW })).toMatchObject({ mode: 'disabled', reason: 'outsideWindow', template: false });
   });
   it('honours a refusal computed by the server when the local rule sees none', () => {
     const composer = { canSend: false, reasonCode: 'REPLY_OUTSIDE_WINDOW', channelStatus: 'active', within24h: false, humanAgentTag: false, windowEndsAt: null };
-    expect(composerState(conv({ composer }), { readOnly: false, now: NOW })).toMatchObject({ reason: 'outsideWindow', template: true });
+    expect(composerState(conv({ composer }), { readOnly: false, now: NOW })).toMatchObject({ reason: 'outsideWindow', template: false });
+    expect(composerState(conv({ composer: { ...composer, humanAgentTag: true } }), { readOnly: false, now: NOW })).toMatchObject({ reason: 'outsideWindow', template: true });
     expect(composerState(conv({ composer: { ...composer, reasonCode: 'READ_ONLY_MEMBER' } }), { readOnly: false, now: NOW })).toMatchObject({ mode: 'hidden' });
   });
   it('the inactive page wins over the window and the block', () => {

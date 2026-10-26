@@ -309,7 +309,7 @@ Sections 12–24 implement decisions D36–D71 (README Decisions, all DECIDED, c
 
 | Platform | Inside 24 h since last customer message | Outside 24 h |
 |---|---|---|
-| Facebook Messenger | AI and human: standard send | AI: never (`skipped_window`, thread label "Non délivré — hors fenêtre 24 h"); human: `HUMAN_AGENT` tag (approved) — composer offers "Envoyer un message modèle"; transactional order updates: `POST_PURCHASE_UPDATE` |
+| Facebook Messenger | AI and human: standard send | AI: never (`skipped_window`, thread label "Non délivré — hors fenêtre 24 h"); human: `HUMAN_AGENT` tag once the app is approved (`META_HUMAN_AGENT_TAG`), else refused with `REPLY_OUTSIDE_WINDOW` — composer offers "Envoyer un message modèle"; transactional order updates: `skipped_window` (Meta retired `POST_PURCHASE_UPDATE` on 2026-04-27) |
 | Instagram DM | AI and human: standard send | Nothing can be sent (`REPLY_OUTSIDE_WINDOW`, composer disabled "impossible"); transactional updates stored `skipped_window` |
 
 Banner "HORS FENÊTRE 24 H" appears when `lastCustomerMessageAt < now − 24 h`; the inbox filter "Dernier message < 24 h (réponse possible)" uses the same field. **COD rule reconfirmed**: `→ delivered` (manual, courier sync, or "Marquer livrée manuellement") while `paymentStatus ≠ paid` ⇒ `amountPaid = total` (or the cashed amount entered), `paymentStatus = paid`, one locked income cash row "Commande #… livrée (COD)" dated the day the cash moved; never applied twice; reversed on `returned`.

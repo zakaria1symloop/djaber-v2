@@ -16,6 +16,7 @@ import { RedisService } from '../../core/redis/redis.provider';
 import { approvedFields, approvedImages, approvedVariants } from '../catalog/approved-content';
 import { ChannelService } from '../channels/channel.service';
 import { ChannelTokens } from '../channels/channel.util';
+import { ConfigService } from '../../core/config/config.service';
 import { MetaError, metaErrorCode } from '../meta/meta-errors';
 import { META_GATEWAY, type MetaGateway, type MetaOutgoing } from '../meta/meta.gateway';
 import { previewOf } from './inbound-parser';
@@ -57,8 +58,14 @@ export class OutboundSendService implements OnModuleInit {
     private readonly tokens: ChannelTokens,
     private readonly channels: ChannelService,
     @Inject(META_GATEWAY) private readonly meta: MetaGateway,
+    private readonly config: ConfigService,
     @Optional() private readonly metrics?: MetricsService,
   ) {}
+
+  /** The Meta app may use the HUMAN_AGENT tag (approved in App Review) — `META_HUMAN_AGENT_TAG`. */
+  get humanAgentTag(): boolean {
+    return this.config.get('META_HUMAN_AGENT_TAG') === true;
+  }
 
   onModuleInit() {
     this.registry.register('outbox', 'meta-send', (data: SendJob, job: Job) => this.process(data, job), { concurrency: 16 });
@@ -73,7 +80,7 @@ export class OutboundSendService implements OnModuleInit {
     const now = o.now ?? new Date();
     const conv = await tx.conversation.findFirst({ where: { id: conversationId }, include: { channel: true } });
     if (!conv) throw notFound();
-    const decision = decideWindow({ platform: conv.channel.platform, kind: draft.kind, lastCustomerMessageAt: conv.lastCustomerMessageAt, now });
+    const decision = decideWindow({ platform: conv.channel.platform, kind: draft.kind, lastCustomerMessageAt: conv.lastCustomerMessageAt, now, humanAgent: this.humanAgentTag });
     if (decision.action === 'reject') throw new AppException(decision.code);
     const attachments = draft.attachments ?? [];
     const type: MessageType = draft.type ?? (attachments[0] ? (attachments[0].type as MessageType) : 'text');

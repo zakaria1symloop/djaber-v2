@@ -6372,5 +6372,6 @@
  "safety.sourceOpt.manual": "Manuel — bloqué par l'équipe",
  "safety.sourceOpt.auto_rule": "Automatique — règle « colis non récupérés »",
  "safety.sourceOpt.platform": "Plateforme — liste noire Djaber",
- "safety.blocks.sourcesHint": "Origine du blocage : MANUEL = un membre l'a bloqué · AUTO = la règle automatique ci-dessous (trop de colis non récupérés) · PLATEFORME = signalé par Djaber à toutes les boutiques, ne peut pas être levé ici."
+ "safety.blocks.sourcesHint": "Origine du blocage : MANUEL = un membre l'a bloqué · AUTO = la règle automatique ci-dessous (trop de colis non récupérés) · PLATEFORME = signalé par Djaber à toutes les boutiques, ne peut pas être levé ici.",
+ "inbox.banner.outsideWindow.facebookNoTag": "Le dernier message du client date de plus de 24 h : aucun envoi n’est possible sur Messenger tant qu’il n’a pas réécrit."
 }

@@ -163,7 +163,7 @@ Queue-level settings: `ai-reply` and `outbox` use `QueueScheduler` delayed jobs;
 1. Throttle check (Redis `nt:<type>:<scopeKey>`), per the Throttle column of §5.1: e.g. `conversation.needs_human_message` 10 min per conversation; `stock.low`/`stock.out` 24 h per product; `credits.exhausted` 24 h per workspace; `product.approved` grouped per day per workspace (one row "n produits validés"); `ai.error` 10 min per workspace; `channel.needs_reconnect` 24 h per channel.
 2. Insert one `Notification` row per target user (title/body stored as i18n key + params; rendered in the user's locale at read time) → WS `notification.created` to `user:<id>`.
 3. For each user: `NotificationPreference(membershipId, type)` → `email-send` job (template `notification/<type>`), `push-send` job (FCM data message, see §5.2).
-4. `customer` ⇒ `OutboundSendService.sendSystemMessage(conversationId, messageKey, params)` subject to MSG-06 window rules (FB `POST_PURCHASE_UPDATE` tag for transactional; IG only inside 24 h else `skipped_window`).
+4. `customer` ⇒ `OutboundSendService.sendSystemMessage(conversationId, messageKey, params)` subject to MSG-06 window rules (FB and IG only inside 24 h, else `skipped_window` — Meta retired `POST_PURCHASE_UPDATE` on 2026-04-27 (#100, Messenger changelog 2026-03-27)).
 
 ### 5.1 Type → producer → channels → deep link (same rows as 03 §15, the canonical list; this table adds the producer and the throttle)
 

@@ -7,6 +7,7 @@ import { TenantContext } from '@djaber/db';
 import { ProcessorRegistry } from '../../src/core/queue/processor.registry';
 import { FakeMetaGateway } from '../../src/modules/meta/fake-meta.gateway';
 import { ConversationService } from '../../src/modules/messaging/conversation.service';
+import { OutboundSendService } from '../../src/modules/messaging/outbound-send.service';
 import { asAdmin, asOperator, asOwner, type Actor } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
 import { eventually } from '../support/m1';
@@ -141,7 +142,7 @@ describe('INB-03 / INB-04 composer', () => {
     expect((await detail(op, conversation.id)).aiPaused).toBe(false);
   });
 
-  it('AT-INB-03 reply outside 24 h on IG ⇒ REPLY_OUTSIDE_WINDOW, nothing stored; on Messenger ⇒ HUMAN_AGENT tag up to 7 days', async () => {
+  it('AT-INB-03 reply outside 24 h on IG ⇒ REPLY_OUTSIDE_WINDOW, nothing stored; on Messenger ⇒ HUMAN_AGENT tag up to 7 days once the app is approved (META_HUMAN_AGENT_TAG), refused before', async () => {
     const { owner, channel } = await setup();
     const ig = (await instagramChild(channel.id))!;
     const igSender = newSender();
@@ -155,7 +156,13 @@ describe('INB-03 / INB-04 composer', () => {
     expect(await db.message.count({ where: { conversationId: insta.conversation.id, direction: 'out' } })).toBe(0);
     expect(await detail(owner, insta.conversation.id)).toMatchObject({ within24h: false, composer: { canSend: false, reasonCode: 'REPLY_OUTSIDE_WINDOW', humanAgentTag: false }, aiPaused: false, assignee: null });
 
-    // Messenger: allowed for a human with the HUMAN_AGENT tag
+    // Messenger, app not approved for Human Agent (the default — Meta refuses the tag with #100/2018276, tester account
+    // 26/10): refused at once like on Instagram, nothing stored
+    expect((await detail(owner, fb.conversation.id)).composer).toMatchObject({ canSend: false, reasonCode: 'REPLY_OUTSIDE_WINDOW', within24h: false, humanAgentTag: false });
+    expect((await reply(owner, fb.conversation.id, { text: 'Désolé du retard' }).expect(422)).body.error.code).toBe('REPLY_OUTSIDE_WINDOW');
+    expect(await db.message.count({ where: { conversationId: fb.conversation.id, direction: 'out' } })).toBe(0);
+    // Messenger, app approved: allowed for a human with the HUMAN_AGENT tag
+    jest.spyOn(app.app.get(OutboundSendService), 'humanAgentTag', 'get').mockReturnValue(true);
     expect((await detail(owner, fb.conversation.id)).composer).toMatchObject({ canSend: true, reasonCode: null, within24h: false, humanAgentTag: true });
     const tagged = await reply(owner, fb.conversation.id, { text: 'Désolé du retard' }).expect(201);
     expect(tagged.body.data.payload).toMatchObject({ tag: 'HUMAN_AGENT' });
@@ -165,6 +172,7 @@ describe('INB-03 / INB-04 composer', () => {
     await db.conversation.update({ where: { id: fb.conversation.id }, data: { lastCustomerMessageAt: ago(8 * 24 * HOUR) } });
     expect((await reply(owner, fb.conversation.id, { text: 'trop tard' }).expect(422)).body.error.code).toBe('REPLY_OUTSIDE_WINDOW');
     expect(sendsTo(fbSender)).toHaveLength(1);
+    jest.restoreAllMocks();
     // inside the window on Instagram: a plain response
     await db.conversation.update({ where: { id: insta.conversation.id }, data: { lastCustomerMessageAt: new Date() } });
     await reply(owner, insta.conversation.id, { text: 'Bonjour' }).expect(201);

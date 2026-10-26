@@ -262,7 +262,7 @@ On `status ∈ UNKNOWN|HANDOFF` or `handoff_to_human` call: in one transaction �
 `WindowRules.canSend(channel, conversation, kind)`:
 - `kind='ai'`: FB and IG — only if `lastCustomerMessageAt ≥ now − 24 h`; otherwise the run is aborted before generation (credits released) and the conversation gets `needs_human` with insight detail `outside_window`. AI never uses message tags.
 - `kind='human'`: FB inside 24 h ⇒ standard; FB outside ⇒ `messaging_type=MESSAGE_TAG, tag=HUMAN_AGENT` (one attempt; Meta refusal ⇒ 422 `REPLY_OUTSIDE_WINDOW`); IG outside ⇒ 422 `REPLY_OUTSIDE_WINDOW` without attempting.
-- `kind='transactional'` (order/shipment/payment system messages): FB ⇒ `messaging_type=MESSAGE_TAG, tag=POST_PURCHASE_UPDATE` regardless of window; IG inside 24 h ⇒ standard, outside ⇒ `Message.deliveryStatus='skipped_window'` (thread label).
+- `kind='transactional'` (order/shipment/payment system messages): FB and IG inside 24 h ⇒ standard, outside ⇒ `Message.deliveryStatus='skipped_window'` (thread label) — Meta retired `POST_PURCHASE_UPDATE` on 2026-04-27 (#100, Messenger changelog 2026-03-27).
 - `kind='system'` (workspace system messages `handoff`, `out_of_hours`, `out_of_stock`, `welcome` + fixed platform texts `unavailable`, `unsupportedMedia`, `voiceFailed`): same as `ai` (inside window only; they are always replies to a fresh customer message so this holds). `out_of_stock` is never sent on its own: it is the sentence the AI reply contains (§3.5).
 
 ---

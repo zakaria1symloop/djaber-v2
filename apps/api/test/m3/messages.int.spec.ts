@@ -292,7 +292,7 @@ describe('MSG-05 batching hook and MSG-09 unsupported media', () => {
 });
 
 describe('MSG-06 outbound rules', () => {
-  it('AT-MSG-05 transactional notification on FB > 24 h after last customer message ⇒ sent with POST_PURCHASE_UPDATE; on IG ⇒ skipped_window', async () => {
+  it('AT-MSG-05 transactional notification > 24 h after last customer message ⇒ skipped_window on FB (POST_PURCHASE_UPDATE retired by Meta) and on IG', async () => {
     const owner = await asOwner(app);
     const page = await connectedPage(owner, app);
     const ig = (await instagramChild(page.id))!;
@@ -308,9 +308,9 @@ describe('MSG-06 outbound rules', () => {
     const sentIg = await inWorkspace(owner.workspaceId, () => outbound.sendSystemText(insta.conversation.id, 'orderShipped', params, { kind: 'transactional' }));
     await work(app, [owner.workspaceId]);
 
-    expect(await db.message.findUniqueOrThrow({ where: { id: sentFb!.id } })).toMatchObject({ deliveryStatus: 'sent', author: 'system', text: 'Votre commande #1042 est en route · suivi ZR-778 (ZR Express).' });
-    expect(sendsTo(fbSender)).toHaveLength(1);
-    expect(sendsTo(fbSender)[0]!.args).toMatchObject({ messagingType: 'MESSAGE_TAG', tag: 'POST_PURCHASE_UPDATE' });
+    // Messenger: Meta answers #100 to every POST_PURCHASE_UPDATE since 2026-04-27 (changelog 2026-03-27) ⇒ stored, labelled, never attempted
+    expect(await db.message.findUniqueOrThrow({ where: { id: sentFb!.id } })).toMatchObject({ deliveryStatus: 'skipped_window', author: 'system', text: 'Votre commande #1042 est en route · suivi ZR-778 (ZR Express).' });
+    expect(sendsTo(fbSender)).toHaveLength(0);
     // Instagram outside the window: stored, labelled, never attempted
     expect(await db.message.findUniqueOrThrow({ where: { id: sentIg!.id } })).toMatchObject({ deliveryStatus: 'skipped_window', error: null });
     expect(sendsTo(igSender)).toHaveLength(0);
@@ -326,7 +326,7 @@ describe('MSG-06 outbound rules', () => {
     const ai = await inWorkspace(owner.workspaceId, () => prisma.$transaction((tx) => outbound.store(tx as Tx, fb.conversation.id, { author: 'ai', kind: 'ai', text: 'réponse IA tardive' })));
     await work(app, [owner.workspaceId]);
     expect(ai.message.deliveryStatus).toBe('skipped_window');
-    expect(sendsTo(fbSender)).toHaveLength(1);
+    expect(sendsTo(fbSender)).toHaveLength(0);
   });
 
   it('AT-MSG-06 AI reply send fails with 10/2018278 ⇒ no tag retry, message failed, conversation needs_human', async () => {

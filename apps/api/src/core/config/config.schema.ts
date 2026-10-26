@@ -55,6 +55,10 @@ export const ConfigSchema = z.object({
   INSTAGRAM_APP_ID: z.string().optional(),
   INSTAGRAM_APP_SECRET: z.string().optional(),
   META_GRAPH_VERSION: z.string().default('v21.0'),
+  // Meta accepts the HUMAN_AGENT tag (a member's reply 24 h – 7 days after the customer's message, Messenger) only from
+  // apps approved for the « Human Agent » feature in App Review; refused otherwise with #100/2018276 (tester account
+  // 26/10). Off ⇒ such a reply is refused at once with REPLY_OUTSIDE_WINDOW, as on Instagram. Turn on once approved.
+  META_HUMAN_AGENT_TAG: bool.default(false),
   // V1 → V2 cutover on the same public host: answer the paths registered in the Meta app (webhook, OAuth return,
   // data deletion) so nothing changes on Meta's side. Off by default.
   META_LEGACY_PATHS: bool.default(false),

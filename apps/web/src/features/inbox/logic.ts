@@ -27,7 +27,8 @@ export type ComposerState =
   | { mode: 'hidden'; reason: 'readOnly'; code: 'READ_ONLY_MEMBER' }
   | { mode: 'disabled'; reason: 'channelInactive'; code: 'REPLY_CHANNEL_INACTIVE'; reconnect: boolean }
   | { mode: 'disabled'; reason: 'blocked'; code: 'CUSTOMER_BLOCKED' }
-  /** `template`: Messenger accepts a template message with the HUMAN_AGENT tag; Instagram accepts nothing */
+  /** `template`: Messenger accepts a template message with the HUMAN_AGENT tag — unless the server says the tag cannot be
+   * used (app not approved for « Human Agent » / beyond 7 days: `composer.humanAgentTag = false`); Instagram accepts nothing */
   | { mode: 'disabled'; reason: 'outsideWindow'; code: 'REPLY_OUTSIDE_WINDOW'; template: boolean };
 
 type ComposerInput = WindowInput & Pick<Conversation, 'channel' | 'blocked'> & { composer?: Pick<ServerComposerState, 'canSend' | 'reasonCode' | 'humanAgentTag'> | null };
@@ -38,7 +39,7 @@ type ComposerInput = WindowInput & Pick<Conversation, 'channel' | 'blocked'> & {
 export const composerState = (c: ComposerInput, o: { readOnly: boolean; now?: number }): ComposerState => {
   if (o.readOnly) return { mode: 'hidden', reason: 'readOnly', code: 'READ_ONLY_MEMBER' };
   const inactive: ComposerState = { mode: 'disabled', reason: 'channelInactive', code: 'REPLY_CHANNEL_INACTIVE', reconnect: c.channel.status === 'needs_reconnect' };
-  const outside: ComposerState = { mode: 'disabled', reason: 'outsideWindow', code: 'REPLY_OUTSIDE_WINDOW', template: c.channel.platform === 'facebook' };
+  const outside: ComposerState = { mode: 'disabled', reason: 'outsideWindow', code: 'REPLY_OUTSIDE_WINDOW', template: c.channel.platform === 'facebook' && c.composer?.humanAgentTag !== false };
   if (c.channel.status !== 'active') return inactive;
   if (c.blocked) return { mode: 'disabled', reason: 'blocked', code: 'CUSTOMER_BLOCKED' };
   if (!isWithinWindow(c, o.now)) {

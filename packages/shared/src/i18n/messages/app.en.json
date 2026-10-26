@@ -6372,5 +6372,6 @@
  "safety.sourceOpt.manual": "Manual — blocked by the team",
  "safety.sourceOpt.auto_rule": "Automatic — « parcels not collected » rule",
  "safety.sourceOpt.platform": "Platform — Djaber blacklist",
- "safety.blocks.sourcesHint": "Where a block comes from: MANUAL = a member blocked it · AUTO = the automatic rule below (too many parcels not collected) · PLATFORM = reported by Djaber to every shop, cannot be lifted here."
+ "safety.blocks.sourcesHint": "Where a block comes from: MANUAL = a member blocked it · AUTO = the automatic rule below (too many parcels not collected) · PLATFORM = reported by Djaber to every shop, cannot be lifted here.",
+ "inbox.banner.outsideWindow.facebookNoTag": "The last customer message is older than 24 h: nothing can be sent on Messenger until the customer writes again."
 }

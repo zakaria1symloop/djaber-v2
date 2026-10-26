@@ -33,7 +33,7 @@ One scenario per rule; IDs `AT-<area>-nn`. Columns: scenario (Given / When / The
 | AT-MSG-02 | Same `mid` delivered twice ⇒ one Message, one reply | MSG-03 | I |
 | AT-MSG-03 | Three messages within 3 s ⇒ one AI reply answering all three | MSG-05 | I |
 | AT-MSG-04 | Video only ⇒ unsupported-media message once; second video in 24 h ⇒ silent | MSG-09 | I |
-| AT-MSG-05 | Transactional notification on FB > 24 h after last customer message ⇒ sent with `POST_PURCHASE_UPDATE`; on IG ⇒ `skipped_window`, thread label shown | MSG-06 | I/E |
+| AT-MSG-05 | Transactional notification > 24 h after last customer message ⇒ `skipped_window` on FB (Meta retired `POST_PURCHASE_UPDATE` on 2026-04-27) and on IG, thread label shown | MSG-06 | I/E |
 | AT-MSG-06 | AI reply send fails with 10/2018278 ⇒ no tag retry, message `failed`, conversation `needs_human` | MSG-06, FL-01 F-7 | I |
 | AT-MSG-07 | Meta data-deletion request ⇒ all conversations of that sender hard-deleted, status URL returns done | MSG-08 | I |
 
@@ -64,7 +64,7 @@ One scenario per rule; IDs `AT-<area>-nn`. Columns: scenario (Given / When / The
 |---|---|---|---|
 | AT-INB-01 | Two browsers on the same thread: message arrives ⇒ both show it < 2 s; read mark on one clears unread on the other | INB-07 | E |
 | AT-INB-02 | Human reply ⇒ AI paused banner; customer replies ⇒ AI silent, push to assignee; Resume ⇒ AI answers next message; on a page without agent (and no agent ever answered) the pause / resume menu items are greyed with `CONVERSATION_NO_AGENT` (`pageHasAgent=false`) | INB-04, FL-03 | I/E |
-| AT-INB-03 | Reply outside 24 h on IG ⇒ `REPLY_OUTSIDE_WINDOW` inline, text kept | FL-06 F-1 | I |
+| AT-INB-03 | Reply outside 24 h on IG — and on FB while `META_HUMAN_AGENT_TAG` is off — ⇒ `REPLY_OUTSIDE_WINDOW` inline, text kept; FB with the approval ⇒ `HUMAN_AGENT` tag up to 7 days | FL-06 F-1 | I |
 | AT-INB-04 | Image 6 MB ⇒ inline error; 4 MB ⇒ sent as attachment with public URL | INB-03 | I |
 | AT-INB-05 | Teammate resolves while I edit ⇒ WS updates; my stale PATCH ⇒ 409 dialog | FL-06 F-3 | I/E |
 | AT-INB-06 | WS disconnected 60 s ⇒ polling fallback; reconnect resyncs missed events | FL-06 F-4 | E |

@@ -1,7 +1,7 @@
 // 05-integrations §1.4 — Graph API error mapping (`error.code` / `error.error_subcode`).
 export type MetaErrorKind =
   | 'token' // 190, OAuthException + 102 ⇒ channel needs_reconnect
-  | 'window' // 10 / 2018278 ⇒ outside the 24 h window
+  | 'window' // 10 / 2018278 ⇒ outside the 24 h window · 100 / 2018276 ⇒ HUMAN_AGENT tag refused (app not approved)
   | 'permission' // 10 / 2018065, 2018108 · 200 ⇒ channel needs_reconnect
   | 'rate_limit' // 4, 17, 32, 613 ⇒ retry with backoff
   | 'user_unavailable' // 551 / 1545041 ⇒ failed, no retry
@@ -44,7 +44,7 @@ export const classifyMetaError = (e: MetaErrorBody | undefined, httpStatus: numb
   const message = e?.message ?? `Meta error${httpStatus ? ` (HTTP ${httpStatus})` : ''}`;
   let kind: MetaErrorKind = 'unknown';
   if (code === 190 || (e?.type === 'OAuthException' && code === 102)) kind = 'token';
-  else if (code === 10 && sub === 2018278) kind = 'window';
+  else if ((code === 10 && sub === 2018278) || (code === 100 && sub === 2018276)) kind = 'window';
   else if ((code === 10 && (sub === 2018065 || sub === 2018108)) || code === 200) kind = 'permission';
   else if (code !== null && RATE_LIMIT.has(code)) kind = 'rate_limit';
   else if (code === 551) kind = 'user_unavailable';

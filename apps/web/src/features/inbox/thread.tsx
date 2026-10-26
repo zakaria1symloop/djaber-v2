@@ -496,7 +496,7 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
         <ThreadBanner
           kind={banner}
           title={t('enum.Conversation.outsideWindow')}
-          description={c.channel.platform === 'facebook' ? t('inbox.banner.outsideWindow.facebook') : t('inbox.banner.outsideWindow.instagram')}
+          description={c.channel.platform !== 'facebook' ? t('inbox.banner.outsideWindow.instagram') : 'template' in state && !state.template ? t('inbox.banner.outsideWindow.facebookNoTag') : t('inbox.banner.outsideWindow.facebook')}
         />
       ) : null}
 
@@ -584,7 +584,7 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
                 ? { tone: 'neutral', tag: t('enum.Client.blocked'), reason: t('inbox.composer.blocked') }
                 : {
                     tag: t('enum.Conversation.outsideWindow'),
-                    reason: `${t('error.REPLY_OUTSIDE_WINDOW')} (REPLY_OUTSIDE_WINDOW)${state.template ? '' : ` — ${t('inbox.composer.outside.instagram')}`}`,
+                    reason: `${t('error.REPLY_OUTSIDE_WINDOW')} (REPLY_OUTSIDE_WINDOW)${state.template || c.channel.platform === 'facebook' ? '' : ` — ${t('inbox.composer.outside.instagram')}`}`,
                     action: state.template ? (
                       <Button size="sm" onClick={() => setTemplateOpen(true)} data-testid="send-template">
                         {t('inbox.composer.template')}

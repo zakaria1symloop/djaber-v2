@@ -184,7 +184,7 @@ export class ConversationService implements OnModuleInit {
 
   composer(c: ConversationRow, now = new Date(), blocked = false): ComposerState {
     const t = TenantContext.get();
-    const decision = decideWindow({ platform: c.channel.platform, kind: 'human', lastCustomerMessageAt: c.lastCustomerMessageAt, now });
+    const decision = decideWindow({ platform: c.channel.platform, kind: 'human', lastCustomerMessageAt: c.lastCustomerMessageAt, now, humanAgent: this.outbound.humanAgentTag });
     const within24h = withinWindow(c.lastCustomerMessageAt, now);
     // 04 §13: a blocked customer is not written to (unblock first, Admin+)
     const reasonCode = t.readOnly ? 'READ_ONLY_MEMBER' : c.channel.status !== 'active' ? 'REPLY_CHANNEL_INACTIVE' : blocked ? 'CUSTOMER_BLOCKED' : decision.action === 'reject' ? 'REPLY_OUTSIDE_WINDOW' : null;

@@ -5,7 +5,6 @@ const NOW = new Date('2026-10-11T12:00:00.000Z');
 const ago = (hours: number) => new Date(NOW.getTime() - hours * 3600_000);
 const SEND = { action: 'send', messagingType: 'RESPONSE' };
 const HUMAN_AGENT = { action: 'send', messagingType: 'MESSAGE_TAG', tag: 'HUMAN_AGENT' };
-const POST_PURCHASE = { action: 'send', messagingType: 'MESSAGE_TAG', tag: 'POST_PURCHASE_UPDATE' };
 const SKIP = { action: 'skip' };
 const REJECT = { action: 'reject', code: 'REPLY_OUTSIDE_WINDOW' };
 
@@ -28,8 +27,9 @@ describe('decideWindow', () => {
     ['facebook', 'human', 24 * 7 - 0.1, HUMAN_AGENT],
     ['facebook', 'human', 24 * 7, REJECT], // HUMAN_AGENT lasts 7 days
     ['facebook', 'human', 24 * 30, REJECT],
-    ['facebook', 'transactional', 25, POST_PURCHASE],
-    ['facebook', 'transactional', 24 * 30, POST_PURCHASE],
+    // POST_PURCHASE_UPDATE is retired by Meta (#100 from 2026-04-27): an order notification outside 24 h is not sent
+    ['facebook', 'transactional', 25, SKIP],
+    ['facebook', 'transactional', 24 * 30, SKIP],
     // Instagram outside 24 h: nothing can be sent
     ['instagram', 'ai', 24, SKIP],
     ['instagram', 'system', 30, SKIP],
@@ -39,12 +39,17 @@ describe('decideWindow', () => {
     // the customer never wrote (page-initiated thread, imported history)
     ['facebook', 'ai', null, SKIP],
     ['facebook', 'human', null, REJECT],
-    ['facebook', 'transactional', null, POST_PURCHASE],
+    ['facebook', 'transactional', null, SKIP],
     ['instagram', 'human', null, REJECT],
     ['instagram', 'transactional', null, SKIP],
   ];
   it.each(rows)('%s · %s · %s h since the last customer message', (platform, kind, hours, expected) => {
-    expect(decideWindow({ platform, kind, lastCustomerMessageAt: hours === null ? null : ago(hours), now: NOW })).toEqual(expected);
+    expect(decideWindow({ platform, kind, lastCustomerMessageAt: hours === null ? null : ago(hours), now: NOW, humanAgent: true })).toEqual(expected);
+  });
+
+  it('without the Human Agent approval (META_HUMAN_AGENT_TAG off) a member reply outside 24 h is refused on Messenger too (#100/2018276)', () => {
+    for (const hours of [24, 30, 24 * 7 - 0.1, 24 * 7]) expect(decideWindow({ platform: 'facebook', kind: 'human', lastCustomerMessageAt: ago(hours), now: NOW })).toEqual(REJECT);
+    expect(decideWindow({ platform: 'facebook', kind: 'human', lastCustomerMessageAt: ago(23.9), now: NOW })).toEqual(SEND);
   });
 
   it('the window closes exactly 24 h after the customer message', () => {
