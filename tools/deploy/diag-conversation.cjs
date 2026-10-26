@@ -70,9 +70,15 @@ async function overview() {
   console.log('== last AI runs of this conversation (newest first)');
   for (const r of runs) console.log(`${t(r.startedAt)}  ${r.status.padEnd(8)} attempt ${r.attempt ?? '-'}  ${model(r.modelId)}  ${cut(r.error)}`);
 
-  const msgs = await db.message.findMany({ where: { conversationId: id }, orderBy: { createdAt: 'desc' }, take: 12, select: { createdAt: true, direction: true, author: true, type: true, deliveryStatus: true, error: true } });
-  console.log('== last messages (no text)');
-  for (const m of msgs) console.log(`${t(m.createdAt)}  ${m.direction.padEnd(3)} ${m.author.padEnd(8)} ${m.type.padEnd(14)} ${m.deliveryStatus}  ${m.error ? cut(m.error, 200) : ''}`);
+  const msgs = await db.message.findMany({ where: { conversationId: id }, orderBy: { createdAt: 'desc' }, take: 25, select: { id: true, createdAt: true, direction: true, author: true, type: true, deliveryStatus: true, error: true, payload: true } });
+  // how each outgoing message was sent (RESPONSE inside 24 h, MESSAGE_TAG + tag outside) — from its `meta-send` outbox row
+  const jobs = await db.outbox.findMany({ where: { topic: 'job', key: { in: msgs.map((m) => `send:${m.id}`) } }, select: { key: true, payload: true } });
+  const how = (mid) => { const d = jobs.find((j) => j.key === `send:${mid}`)?.payload?.data; return d ? `${d.messagingType}${d.tag ? ` ${d.tag}` : ''}` : ''; };
+  console.log('== last messages (no text), newest first');
+  for (const m of msgs) {
+    const se = m.payload?._sendError;
+    console.log(`${t(m.createdAt)}  ${m.id.slice(-8)}  ${m.direction.padEnd(3)} ${m.author.padEnd(8)} ${m.type.padEnd(14)} ${m.deliveryStatus.padEnd(14)} ${how(m.id).padEnd(24)} ${m.error ? cut(m.error, 120) : ''}${m.payload?.external ? ' (typed in the page inbox)' : ''}${se ? `  Meta #${se.code}/${se.subcode}: ${cut(se.message, 160)}` : ''}`);
+  }
 
   const insights = await db.agentInsight.findMany({ where: { conversationId: id }, orderBy: { createdAt: 'desc' }, take: 6, select: { createdAt: true, type: true, detail: true } });
   console.log('== last insights');
