@@ -269,6 +269,14 @@ export class ProductsController {
     return this.moderation.resubmit(id);
   }
 
+  /** Tester report 25/10 UX-001: the product form's « Enregistrer » sends what changed (pictures included) to moderation. */
+  @Post(':id/submit-changes')
+  @RequirePermission('catalog.write')
+  @HttpCode(200)
+  submitChanges(@Id() id: string) {
+    return this.moderation.submitChanges(id);
+  }
+
   @Post(':id/appeal')
   @RequirePermission('catalog.write')
   @Audited({ entity: 'Product', action: 'product.appeal' })

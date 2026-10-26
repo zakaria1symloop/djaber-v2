@@ -4785,7 +4785,7 @@
  "products.form.images.add": "إضافة",
  "products.form.images.drag": "≡ اسحب",
  "products.form.images.hint": "JPG، PNG، WEBP · 5 م.ب كحد أقصى · يُنصح بـ 800 × 800 بكسل · يُولَّد وصف بالذكاء الاصطناعي للتعرّف على الصور",
- "products.form.images.savedNow": "تُحفظ الصور فور إضافتها أو حذفها، دون انتظار «حفظ».",
+ "products.form.images.savedNow": "تُحفظ الصور فور إضافتها؛ والصورة المضافة تُرسل للمراجعة عند «حفظ».",
  "products.form.images.makePrimary": "تعيين كصورة رئيسية",
  "products.form.images.moveAfter": "نقل إلى ما بعد",
  "products.form.images.moveBefore": "نقل إلى ما قبل",

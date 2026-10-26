@@ -2,6 +2,7 @@
 // the vision candidates: products in the agent's scope that are active, not archived and approved by moderation (AI-14, D36).
 import { Injectable } from '@nestjs/common';
 import { prisma, Prisma, TenantContext, type Agent } from '@djaber/db';
+import { approvedFields, approvedImages, approvedVariants } from '../catalog/approved-content';
 import { reservedQuantities } from '../catalog/stock.service';
 import { FULL_CATALOGUE_MAX, RETRIEVAL_TOP } from './ai.constants';
 
@@ -34,15 +35,10 @@ const VISIBLE: Prisma.ProductWhereInput = {
   deletedAt: null,
   OR: [{ moderationStatus: { in: ['approved', 'not_required'] } }, { moderationStatus: 'pending', approvedSnapshot: { not: Prisma.AnyNull } }],
 };
-type ApprovedSnapshot = { title?: string; description?: string | null; price?: number };
-/** Customer-visible fields: the approved snapshot while a change waits for moderation, the live row otherwise. */
-const live = (p: { name: string; description: string | null; price: number; moderationStatus: string; approvedSnapshot: Prisma.JsonValue | null }) => {
-  const s = p.moderationStatus === 'pending' && p.approvedSnapshot && typeof p.approvedSnapshot === 'object' ? (p.approvedSnapshot as ApprovedSnapshot) : null;
-  return s ? { name: s.title ?? p.name, description: s.description ?? null, price: typeof s.price === 'number' ? s.price : p.price } : { name: p.name, description: p.description, price: p.price };
-};
 const include = {
   variants: { where: { isActive: true, deletedAt: null }, orderBy: { createdAt: 'asc' } },
-  images: { where: { isPrimary: true }, take: 1 },
+  // every picture (in order): the first approved one is shown (approvedImages)
+  images: { orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }] },
   category: { select: { name: true } },
 } as const satisfies Prisma.ProductInclude;
 type Row = Prisma.ProductGetPayload<{ include: typeof include }>;
@@ -77,20 +73,24 @@ export class CatalogueService {
     // what the AI may sell: the stock less what the unconfirmed orders hold (owner decision 2026-10-21)
     const held = await reservedQuantities(prisma, rows.filter((r) => r.trackStock).map((r) => r.id));
     const free = (productId: string, variantId: string | null, stock: number) => Math.max(0, stock - (held.get(`${productId}:${variantId ?? ''}`) ?? 0));
-    return rows.map((p) => ({
-      id: p.id,
-      ...live(p),
-      sku: p.sku,
-      oldPrice: p.oldPrice,
-      stock: !p.trackStock ? null : p.hasVariants ? p.variants.reduce((n, v) => n + free(p.id, v.id, v.stock), 0) : free(p.id, null, p.stock ?? 0),
-      sellOutOfStock: p.trackStock && p.sellOutOfStock,
-      hasVariants: p.hasVariants,
-      variants: p.hasVariants ? p.variants.map((v) => ({ id: v.id, name: v.name, price: v.price, stock: p.trackStock ? free(p.id, v.id, v.stock) : v.stock })) : [],
-      imageUrl: p.images[0]?.url ?? null,
-      imageKey: p.images[0]?.storageKey ?? null,
-      category: p.category?.name ?? null,
-      also: also.get(p.id) ?? [],
-    }));
+    return rows.map((p) => {
+      const image = approvedImages(p, p.images)[0];
+      const variants = approvedVariants(p, p.variants);
+      return {
+        id: p.id,
+        ...approvedFields(p),
+        sku: p.sku,
+        oldPrice: p.oldPrice,
+        stock: !p.trackStock ? null : p.hasVariants ? variants.reduce((n, v) => n + free(p.id, v.id, v.stock), 0) : free(p.id, null, p.stock ?? 0),
+        sellOutOfStock: p.trackStock && p.sellOutOfStock,
+        hasVariants: p.hasVariants,
+        variants: p.hasVariants ? variants.map((v) => ({ id: v.id, name: v.name, price: v.price, stock: p.trackStock ? free(p.id, v.id, v.stock) : v.stock })) : [],
+        imageUrl: image?.url ?? null,
+        imageKey: image?.storageKey ?? null,
+        category: p.category?.name ?? null,
+        also: also.get(p.id) ?? [],
+      };
+    });
   }
 
   /** In-scope products by id, in the order asked; anything out of scope / archived / inactive is silently absent. */

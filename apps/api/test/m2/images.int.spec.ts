@@ -110,8 +110,11 @@ describe('product images', () => {
     const b = (await upload(owner, app, url, 'file', [{ buffer: await image(900, 900, 'png'), name: 'b.png', type: 'image/png' }]).expect(201)).body.data;
     const c = (await upload(owner, app, url, 'file', [{ buffer: await image(900, 900, 'webp'), name: 'c.webp', type: 'image/webp' }]).expect(201)).body.data;
     const a = small.body.data;
-    // images are a moderated field: each change of the set is a new content version
-    expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(4);
+    // images are a moderated field, sent with the save of the product (tester report 25/10 UX-001): the uploads alone add
+    // nothing to the queue of an approved product, « Enregistrer » sends them in one new content version
+    expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(1);
+    await owner.post(`/products/${p.id}/submit-changes`, {}).expect(200);
+    expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(2);
 
     const reordered = await owner.patch(`${url}/order`, { ids: [c.id, a.id, b.id] }).expect(200);
     expect(reordered.body.data.map((i: any) => i.id)).toEqual([c.id, a.id, b.id]);

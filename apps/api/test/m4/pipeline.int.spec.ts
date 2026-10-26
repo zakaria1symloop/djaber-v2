@@ -677,6 +677,8 @@ describe('providers, credits', () => {
   it('AT-AI-08 / AT-BIL-03 photo of a catalogue product ⇒ 2-pass vision, match ≥ 0.7, card, 5 credits reserved then debited; unknown photo ⇒ confirmation question, no price; provider error ⇒ reservation released', async () => {
     const s = await shop();
     await upload(s.owner, app, `/products/${s.robe.id}/images`, 'file', [{ buffer: await image(800, 800), name: 'robe.jpg', type: 'image/jpeg' }]).expect(201);
+    // the form's « Enregistrer » sends the new picture to moderation (approved at once here): only then is it shown / compared
+    await s.owner.post(`/products/${s.robe.id}/submit-changes`, {}).expect(200);
     await drain(app, s.owner.workspaceId);
     await resetAi();
     const photo = { attachments: [{ type: 'image', payload: { url: 'https://fake.meta.local/photo-robe.jpg' } }] };

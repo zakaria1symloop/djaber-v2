@@ -13,6 +13,7 @@ import { QueueOutbox } from '../../core/queue/queue.outbox';
 import { MetricsService } from '../../core/metrics/metrics.service';
 import { META_SEND_PER_CHANNEL_RPS, takeSlot, throttleJob } from '../../core/queue/throttle';
 import { RedisService } from '../../core/redis/redis.provider';
+import { approvedFields, approvedImages, approvedVariants } from '../catalog/approved-content';
 import { ChannelService } from '../channels/channel.service';
 import { ChannelTokens } from '../channels/channel.util';
 import { MetaError, metaErrorCode } from '../meta/meta-errors';
@@ -173,9 +174,15 @@ export class OutboundSendService implements OnModuleInit {
   async sendCards(conversationId: string, productIds: string[], o: { author?: 'ai' | 'human' | 'system'; kind?: SendKind; aiRunId?: string | null; authorUserId?: string | null; tx?: Tx } = {}): Promise<MessageRow | null> {
     const run = async (tx: Tx) => {
       const wanted = [...new Set(productIds)];
-      const products = await tx.product.findMany({ where: { id: { in: wanted }, deletedAt: null, isActive: true }, select: { id: true, name: true, price: true, hasVariants: true, variants: { where: { deletedAt: null, isActive: true }, select: { name: true, price: true }, orderBy: { createdAt: 'asc' } } } });
-      const images = await tx.productImage.findMany({ where: { productId: { in: products.map((p) => p.id) }, isPrimary: true }, select: { productId: true, url: true } });
-      const imageBy = new Map(images.map((i) => [i.productId, i.url]));
+      const rows = await tx.product.findMany({
+        where: { id: { in: wanted }, deletedAt: null, isActive: true },
+        select: { id: true, name: true, description: true, price: true, hasVariants: true, moderationStatus: true, approvedSnapshot: true, variants: { where: { deletedAt: null, isActive: true }, select: { id: true, name: true, price: true }, orderBy: { createdAt: 'asc' } } },
+      });
+      const images = await tx.productImage.findMany({ where: { productId: { in: rows.map((p) => p.id) } }, orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }], select: { productId: true, url: true } });
+      // an AI card shows only what moderation approved (tester report 25/10 UX-006); a member sends the product as it is
+      const ai = (o.author ?? 'ai') === 'ai';
+      const imageBy = new Map(rows.map((p) => [p.id, (ai ? approvedImages(p, images.filter((i) => i.productId === p.id)) : images.filter((i) => i.productId === p.id))[0]?.url ?? null]));
+      const products = rows.map((p) => (ai ? { ...p, ...approvedFields(p), variants: approvedVariants(p, p.variants) } : p));
       const byId = new Map(products.map((p) => [p.id, p]));
       const cards: MessageCardView[] = wanted
         .map((id) => byId.get(id))

@@ -1,6 +1,6 @@
 // D36 / 04 §12 — product moderation, merchant side + the decision primitives shared with the admin queue (M10).
-// A `ModerationItem` is written when a product is created and each time a customer-visible field changes (name,
-// description, category, images, price ±50 %). The pre-screen (`ModerationPrescreenService`, free and local) scores it at
+// A `ModerationItem` is written when a product is created and each time a customer-visible part changes (name,
+// description, category, price ±50 %, a new picture, a new / renamed / repriced ±50 % variant), at the save of the change. The pre-screen (`ModerationPrescreenService`, free and local) scores it at
 // once: `aiScore ≥ 0.9 ∧ trustLevel ∈ {standard, trusted} ∧ category not sensitive` ⇒ approved (snapshot live), otherwise
 // the item waits in the human queue (ADM-10) while the last approved snapshot keeps selling (AI catalogue). When the
 // inline pre-screen fails the item stays pending with `prescreen_unavailable` and the `moderation-prescreen` job retries.
@@ -14,16 +14,38 @@ import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { QueueOutbox } from '../../core/queue/queue.outbox';
 import { algiersClock, algiersDay } from '../../core/time/algiers';
 import { NotificationProducer } from '../notifications/notification.producer';
+import { imageToken } from './approved-content';
 import { ModerationPrescreenService, type PrescreenResult } from './moderation-prescreen.service';
 
 export type ModeratedFields = { name: string; description: string | null; categoryId: string | null; price: number };
 
-/** 04 §12 "Trigger": name, description, category, or a price change of at least 50 %. Stock, variants, unit, … never. */
+/** 04 §12 "Trigger": name, description, category, or a price change of at least 50 %. Stock, unit, keywords, … never. */
 export const needsReview = (before: ModeratedFields, after: ModeratedFields): boolean =>
   before.name !== after.name ||
   (before.description ?? '') !== (after.description ?? '') ||
   before.categoryId !== after.categoryId ||
-  (before.price > 0 && Math.abs(after.price - before.price) * 2 >= before.price);
+  priceJump(before.price, after.price);
+const priceJump = (before: number, after: number) => before > 0 && Math.abs(after - before) * 2 >= before;
+
+export type SnapshotVariant = { id: string; name: string; price: number };
+
+/**
+ * Tester report 25/10 UX-001 / UX-003 / UX-007: what in the product as saved now differs from the last version sent to
+ * moderation (`snapshot`): the fields of `needsReview`, a picture that was not in it, a variant that was not in it, renamed,
+ * or priced ±50 %. Removing a picture or a variant never needs a review. A snapshot written before variants were kept
+ * (`variants` absent) only compares the fields and the pictures.
+ */
+export const contentChanged = (snapshot: Snapshot, now: Snapshot): boolean => {
+  if (needsReview({ name: snapshot.title, description: snapshot.description, categoryId: snapshot.categoryId, price: snapshot.price }, { name: now.title, description: now.description, categoryId: now.categoryId, price: now.price })) return true;
+  const seen = new Set((snapshot.images ?? []).map(imageToken));
+  if (now.images.some((u) => !seen.has(imageToken(u)))) return true;
+  if (!snapshot.variants) return false;
+  const before = new Map(snapshot.variants.map((v) => [v.id, v]));
+  return (now.variants ?? []).some((v) => {
+    const b = before.get(v.id);
+    return !b || b.name !== v.name || priceJump(b.price, v.price);
+  });
+};
 
 const OPEN_HOUR = 9;
 const CLOSE_HOUR = 18;
@@ -58,7 +80,7 @@ export const APPEAL_WINDOW_MS = 7 * 24 * 3600 * 1000;
 export const APPEAL_DECISION_MS = 24 * 3600 * 1000;
 const PRESCREEN_UNAVAILABLE: ModerationAiFlagView = { code: 'prescreen_unavailable', message: 'prescreen_unavailable' };
 
-type Snapshot = { title: string; description: string | null; price: number; categoryId: string | null; images: string[] };
+type Snapshot = { title: string; description: string | null; price: number; categoryId: string | null; images: string[]; variants?: SnapshotVariant[] };
 
 @Injectable()
 export class ModerationHookService implements OnModuleInit {
@@ -141,15 +163,39 @@ export class ModerationHookService implements OnModuleInit {
    * One open item per product (04 §12): while an item is still pending, a new change refreshes it in place (new snapshot
    * and content version, pre-screen re-run; submission time, SLA and assignee kept) instead of adding a row to the queue.
    */
-  async submit(tx: Tx, productId: string, source: ModerationSource) {
+  /** The customer-visible content of a product as it is now (the shape of a moderation snapshot). */
+  private async contentOf(tx: Tx, productId: string) {
     const p = await tx.product.findFirst({
       where: { id: productId },
-      include: { images: { orderBy: { sortOrder: 'asc' }, select: { id: true, url: true } }, moderationItems: { orderBy: { contentVersion: 'desc' }, take: 1, select: { contentVersion: true } } },
+      include: {
+        images: { orderBy: { sortOrder: 'asc' }, select: { id: true, url: true } },
+        variants: { where: { deletedAt: null, isActive: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: { id: true, name: true, price: true } },
+        moderationItems: { where: { type: 'product' }, orderBy: { contentVersion: 'desc' }, take: 1, select: { contentVersion: true, snapshot: true } },
+      },
     });
     if (!p) throw notFound();
+    const snapshot: Snapshot = { title: p.name, description: p.description, price: p.price, categoryId: p.categoryId, images: p.images.map((i) => i.url), variants: p.variants.map((v) => ({ id: v.id, name: v.name, price: v.price })) };
+    return { p, snapshot };
+  }
+
+  /**
+   * Submits the product when what it shows now differs from the last version sent to moderation (`contentChanged`) — the
+   * save of the product form (`POST /products/:id/submit-changes`), a variant written, a field update. `force`: the caller
+   * already knows a moderated field changed. A product never sent to moderation is submitted. Returns true when submitted.
+   */
+  async submitIfChanged(tx: Tx, productId: string, source: ModerationSource = 'update', o: { force?: boolean } = {}): Promise<boolean> {
+    const { p, snapshot } = await this.contentOf(tx, productId);
+    const last = p.moderationItems[0]?.snapshot as Snapshot | undefined;
+    const reference = p.moderationStatus === 'approved' && p.approvedSnapshot ? (p.approvedSnapshot as unknown as Snapshot) : last;
+    if (!o.force && reference && !contentChanged(reference, snapshot)) return false;
+    await this.submit(tx, productId, source);
+    return true;
+  }
+
+  async submit(tx: Tx, productId: string, source: ModerationSource) {
+    const { p, snapshot } = await this.contentOf(tx, productId);
     const last = p.moderationItems[0]?.contentVersion ?? 0;
     const contentVersion = Math.max(p.contentVersion, last + 1);
-    const snapshot: Snapshot = { title: p.name, description: p.description, price: p.price, categoryId: p.categoryId, images: p.images.map((i) => i.url) };
     const now = new Date();
     const open = await tx.moderationItem.findFirst({ where: { productId: p.id, type: 'product', status: 'pending' }, orderBy: { submittedAt: 'desc' }, select: { id: true } });
     // older duplicates written before this rule (several pending rows for one product) are dropped: never decided, no appeal
@@ -220,7 +266,8 @@ export class ModerationHookService implements OnModuleInit {
       INSERT INTO "ModerationItem" ("id","workspaceId","type","productId","contentVersion","snapshot","status","aiFlags","priority","slaDueAt","submittedAt","source","rejectedFields")
       SELECT uuid_generate_v7(), p."workspaceId", 'product'::"ModerationItemType", p."id", p."contentVersion",
              jsonb_build_object('title', p."name", 'description', p."description", 'price', p."price", 'categoryId', p."categoryId",
-               'images', COALESCE((SELECT jsonb_agg(i."url" ORDER BY i."sortOrder") FROM "ProductImage" i WHERE i."productId" = p."id"), '[]'::jsonb)),
+               'images', COALESCE((SELECT jsonb_agg(i."url" ORDER BY i."sortOrder") FROM "ProductImage" i WHERE i."productId" = p."id"), '[]'::jsonb),
+               'variants', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', v."id", 'name', v."name", 'price', v."price") ORDER BY v."createdAt", v."id") FROM "ProductVariant" v WHERE v."productId" = p."id" AND v."deletedAt" IS NULL AND v."isActive"), '[]'::jsonb)),
              'pending'::"ModerationItemStatus", '[]'::jsonb, 'normal'::"ModerationPriority", ${due}, ${now}, ${source}::"ModerationSource", ARRAY[]::text[]
       FROM "Product" p WHERE p."workspaceId" = ${ws}::uuid AND p."id" = ANY(${productIds}::uuid[])`;
     await tx.$executeRaw`
@@ -368,6 +415,22 @@ export class ModerationHookService implements OnModuleInit {
   }
 
   /** `POST /products/:id/resubmit` — only a rejected product (409 MODERATION_NOT_REJECTED otherwise): a new item, pre-screened. */
+  /**
+   * `POST /products/:id/submit-changes` — the save of the product form (tester report 25/10 UX-001): pictures are stored as
+   * soon as they are added, the moderation request leaves only now, and only when the product shows something that was
+   * not reviewed yet. Idempotent: a second call with nothing new submits nothing.
+   */
+  async submitChanges(productId: string) {
+    return prisma.$transaction(async (db) => {
+      const tx = db as Tx;
+      const product = await tx.product.findFirst({ where: { id: productId, deletedAt: null }, select: { id: true } });
+      if (!product) throw notFound();
+      const submitted = await this.submitIfChanged(tx, productId);
+      const after = await tx.product.findUniqueOrThrow({ where: { id: productId }, select: { moderationStatus: true } });
+      return { submitted, moderationStatus: after.moderationStatus };
+    });
+  }
+
   async resubmit(productId: string) {
     return prisma.$transaction(async (db) => {
       const tx = db as Tx;

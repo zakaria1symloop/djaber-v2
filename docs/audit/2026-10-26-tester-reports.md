@@ -41,10 +41,10 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 ## Moderation and catalogue
 | # | Issue | Status |
 |---|---|---|
-| L25-UX-001 | Adding an image in « Modifier le produit » sends a moderation request before the product is saved | todo |
-| L25-UX-003 | Editing a variant does not send the product to moderation | todo |
-| L25-UX-007 | Moderation requests are triggered inconsistently (adding a variant does not) | todo |
-| L25-UX-006 | The chatbot talks about products / variants pending moderation | todo |
+| L25-UX-001 | Adding an image in « Modifier le produit » sends a moderation request before the product is saved | done |
+| L25-UX-003 | Editing a variant does not send the product to moderation | done |
+| L25-UX-007 | Moderation requests are triggered inconsistently (adding a variant does not) | done |
+| L25-UX-006 | The chatbot talks about products / variants pending moderation | done |
 | L25-UX-005 | Moderation: the ✕ button behaves like « Ouvrir la revue » | todo |
 | PV26-P4 | Products with variants: the variant price is shown but the margin uses the base price | todo |
 

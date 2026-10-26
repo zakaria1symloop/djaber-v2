@@ -97,8 +97,11 @@ export class ProductImageService implements OnModuleInit {
           },
         });
         await this.queue.add(tx, 'media', 'reencode-image', { productImageId: created.id, workspaceId: ws }, `img:${created.id}`, { attempts: 3, backoff: { type: 'fixed', delay: 5000 } });
-        // 04 §12: images are a moderated field
-        await this.moderation.submit(tx, productId, 'update');
+        // 04 §12: images are a moderated field — sent with the save of the product (tester report 25/10 UX-001: an upload
+        // in « Modifier le produit » no longer opens a moderation request by itself). A product already waiting (just
+        // created, or changed and not decided yet) gets its open request refreshed with the picture.
+        const p = await tx.product.findUniqueOrThrow({ where: { id: productId }, select: { moderationStatus: true } });
+        if (p.moderationStatus === 'pending') await this.moderation.submit(tx, productId, 'update');
         await this.stock.emitProductUpdated(tx, productId);
         return created;
       });

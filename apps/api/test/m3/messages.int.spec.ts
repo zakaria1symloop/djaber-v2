@@ -430,6 +430,9 @@ describe('MSG-06 outbound rules', () => {
     const archived = await createProduct(owner, { name: 'Ancien', price: 900 });
     await db.product.update({ where: { id: archived.id }, data: { deletedAt: new Date() } });
     await db.productImage.create({ data: { productId: products[0]!.id, storageKey: 'ws/x/p.webp', url: 'https://cdn.djaber.test/p1.webp', width: 800, height: 800, isPrimary: true } });
+    // an AI card shows approved pictures only (tester report 25/10 UX-006): this one is part of the approved snapshot
+    const approved = await db.product.findUniqueOrThrow({ where: { id: products[0]!.id } });
+    await db.product.update({ where: { id: approved.id }, data: { approvedSnapshot: { ...(approved.approvedSnapshot as object), images: ['https://cdn.djaber.test/p1.webp'] } } });
 
     const message = await inWorkspace(owner.workspaceId, () => outbound.sendCards(conversation.id, [archived.id, ...products.map((p) => p.id)], { author: 'ai', kind: 'ai' }));
     const cards = (message!.payload as { cards: { productId: string; name: string; price: number; imageUrl: string | null }[] }).cards;

@@ -4785,7 +4785,7 @@
  "products.form.images.add": "AJOUTER",
  "products.form.images.drag": "≡ GLISSER",
  "products.form.images.hint": "JPG, PNG, WEBP · 5 Mo max · 800 × 800 px recommandé · une légende IA est générée pour la reconnaissance photo",
- "products.form.images.savedNow": "Les photos sont enregistrées dès leur ajout ou leur suppression, sans attendre « Enregistrer ».",
+ "products.form.images.savedNow": "Les photos sont enregistrées dès leur ajout ; une photo ajoutée part en validation avec « Enregistrer ».",
  "products.form.images.makePrimary": "Définir comme image principale",
  "products.form.images.moveAfter": "Déplacer après",
  "products.form.images.moveBefore": "Déplacer avant",

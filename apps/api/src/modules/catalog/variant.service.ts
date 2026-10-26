@@ -5,6 +5,7 @@ import { prisma, type Prisma, type Product, type ProductVariant, type Tx } from 
 import { VARIANTS_MAX, type CreateVariantInput, type GenerateVariantsInput, type UpdateVariantInput, type VariantView } from '@djaber/shared';
 import { AppException, notFound, validationError } from '../../core/errors/app.exception';
 import { isUnique, skuTaken } from './catalog.util';
+import { ModerationHookService } from './moderation-hook.service';
 import { PlanLimitService } from './plan-limit.service';
 import { toVariantView } from './product.presenter';
 import { SkuService } from './sku.service';
@@ -18,6 +19,7 @@ export class VariantService {
     private readonly skus: SkuService,
     private readonly stock: StockService,
     private readonly limits: PlanLimitService,
+    private readonly moderation: ModerationHookService,
   ) {}
 
   private async liveProduct(tx: Tx, productId: string): Promise<Product> {
@@ -104,6 +106,8 @@ export class VariantService {
       // 02 §5: a workspace above its product limit (after a downgrade) cannot grow its catalogue with variants either
       await this.limits.assertProductSlots(tx, 0);
       const [row] = await this.addMany(tx, product, [input]);
+      // tester report 25/10 UX-003 / UX-007: a new variant is customer-visible content — the product goes to moderation
+      await this.moderation.submitIfChanged(tx, productId, 'update', { force: true });
       await this.stock.emitProductUpdated(tx, productId);
       return toVariantView(row!);
     });
@@ -125,6 +129,7 @@ export class VariantService {
         .map((attributes) => ({ name: Object.values(attributes).join(' / '), attributes, price: input.defaultPrice, stock: input.defaultStock }))
         .filter((v) => !existing.has(v.name.toLowerCase()));
       const rows = await this.addMany(tx, product, inputs);
+      if (rows.length) await this.moderation.submitIfChanged(tx, productId, 'update', { force: true });
       await this.stock.emitProductUpdated(tx, productId);
       return rows.map(toVariantView);
     });
@@ -154,6 +159,11 @@ export class VariantService {
         },
       });
       if (input.isActive !== undefined && input.isActive !== current.isActive) await this.stock.recomputeProductStock(tx, productId);
+      // tester report 25/10 UX-003: a renamed variant, a price ±50 % or a variant shown again is reviewed; stock, SKU, cost never
+      const renamed = input.name !== undefined && input.name !== current.name;
+      const repriced = input.price !== undefined && current.price > 0 && Math.abs(input.price - current.price) * 2 >= current.price;
+      const shown = input.isActive === true && !current.isActive;
+      if (renamed || repriced || shown) await this.moderation.submitIfChanged(tx, productId, 'update', { force: renamed || repriced });
       await this.stock.emitProductUpdated(tx, productId);
       return toVariantView(row);
     });

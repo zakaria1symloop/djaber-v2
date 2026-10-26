@@ -119,6 +119,8 @@ export const catalogApi = {
   moderationSummary: () => api<ModerationSummary>('/moderation/summary'),
   moderation: (id: string) => api<ProductModeration>(`/products/${id}/moderation`),
   resubmit: (id: string) => api<{ moderationItemId: string; status: string }>(`/products/${id}/resubmit`, { method: 'POST', body: {} }),
+  /** tester report 25/10 UX-001: the save of the form sends what changed since the last review (pictures included) */
+  submitChanges: (id: string) => api<{ submitted: boolean; moderationStatus: string }>(`/products/${id}/submit-changes`, { method: 'POST', body: {} }),
   appeal: (id: string, b: { message: string; attachmentUploadId?: string | null }) => api<unknown>(`/products/${id}/appeal`, { method: 'POST', body: b }),
 
   /* categories & units */

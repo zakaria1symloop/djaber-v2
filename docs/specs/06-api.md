@@ -268,6 +268,7 @@ GET /announcements (active CmsEntry announcements of channel banner for my plan/
 GET /products?moderationStatus=not_required|pending|approved|rejected|appealed (list pill filter; Product.moderationStatus) `[FIG MOD]`
 GET /products/:id/moderation → { status, item: { aiFlags, decision, merchantMessage, rejectedFields, decidedAt }, history[], appeal? }
 POST /products/:id/resubmit → 202 (re-runs AI pre-screen; 409 MODERATION_NOT_REJECTED when Product.moderationStatus ≠ rejected)
+POST /products/:id/submit-changes → 200 `{ submitted, moderationStatus }` (tester report 25/10 UX-001: the save of the product form; submits when the product differs from its last reviewed snapshot — fields, a new picture, a new / renamed / ±50 % variant — else nothing; idempotent)
 POST /products/:id/appeal { message ≤ 500, attachmentUploadId? } (MODERATION_APPEAL_ALREADY_USED / MODERATION_APPEAL_WINDOW_EXPIRED) `[FIG MOD appeal dialog]`
 GET /moderation/summary → { pending, rejected, appealed, trustLevel }  (banner "38 produits en attente")
 ```

@@ -132,6 +132,7 @@ describe('pre-screen and auto-approval', () => {
     const pic = async (name: string) => ({ buffer: await image(800, 800), name, type: 'image/jpeg' });
     const a = (await upload(owner, app, `/products/${p.id}/images`, 'file', [await pic('a.jpg')]).expect(201)).body.data;
     await upload(owner, app, `/products/${p.id}/images`, 'file', [await pic('b.jpg')]).expect(201);
+    await owner.post(`/products/${p.id}/submit-changes`, {}).expect(200); // « Enregistrer » (standard trust ⇒ approved at once)
     let row = await db.product.findUniqueOrThrow({ where: { id: p.id } });
     expect(row.moderationStatus).toBe('approved');
     expect((row.approvedSnapshot as { images: string[] }).images).toHaveLength(2);
@@ -143,9 +144,47 @@ describe('pre-screen and auto-approval', () => {
     expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(items);
     expect((row.approvedSnapshot as { images: string[] }).images).toEqual([expect.not.stringContaining(a.url)]);
     expect(await catalogueSees(owner.workspaceId, p.id)).toMatchObject({ id: p.id });
-    // adding a picture is still reviewed
-    await upload(owner, app, `/products/${p.id}/images`, 'file', [await pic('c.jpg')]).expect(201);
+    // adding a picture is still reviewed — with the save of the product, not at the upload (tester report 25/10 UX-001)
+    const c = (await upload(owner, app, `/products/${p.id}/images`, 'file', [await pic('c.jpg')]).expect(201)).body.data;
+    expect((await db.product.findUniqueOrThrow({ where: { id: p.id } })).moderationStatus).toBe('approved');
+    expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(items);
+    // tester report 25/10 UX-006: until it is approved the new picture is never shown to a customer
+    expect((await catalogueSees(owner.workspaceId, p.id))!.imageUrl).not.toBe(c.url);
+    expect((await owner.post(`/products/${p.id}/submit-changes`, {}).expect(200)).body.data).toEqual({ submitted: true, moderationStatus: 'pending' });
+    expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(items + 1);
+    expect((await itemOf(p.id)).snapshot).toMatchObject({ images: expect.arrayContaining([expect.stringContaining(c.url.split('/').slice(-2, -1)[0]!)]) });
+    // a second save with nothing new adds nothing
+    expect((await owner.post(`/products/${p.id}/submit-changes`, {}).expect(200)).body.data).toEqual({ submitted: false, moderationStatus: 'pending' });
+    expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(items + 1);
+  });
+
+  it('tester report 25/10 UX-003 / UX-007 / UX-006: a new, renamed or repriced (±50 %) variant is reviewed; stock / small price changes are not; the AI sells only approved variants', async () => {
+    const owner = await merchant('standard');
+    const p = await createProduct(owner, { name: 'T-shirt coton', price: 1500, variants: [{ name: 'M', price: 1500, stock: 4 }] });
+    expect(p.moderation.status).toBe('approved');
+    const m = (await owner.get(`/products/${p.id}/variants`).expect(200)).body.data[0];
+    await setTrust(owner.workspaceId, 'new');
+    const items = await db.moderationItem.count({ where: { productId: p.id } });
+    // stock, SKU and a small price change: no review
+    await owner.patch(`/products/${p.id}/variants/${m.id}`, { price: 1600, minStock: 2 }).expect(200);
+    expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(items);
+    expect((await db.product.findUniqueOrThrow({ where: { id: p.id } })).moderationStatus).toBe('approved');
+    // a new variant: the product goes to moderation, the AI keeps selling the approved variant only
+    const l = (await owner.post(`/products/${p.id}/variants`, { name: 'L', price: 1500, stock: 2 }).expect(201)).body.data;
     expect((await db.product.findUniqueOrThrow({ where: { id: p.id } })).moderationStatus).toBe('pending');
+    expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(items + 1);
+    expect((await itemOf(p.id)).snapshot).toMatchObject({ variants: [{ id: m.id, name: 'M' }, { id: l.id, name: 'L' }] });
+    expect((await catalogueSees(owner.workspaceId, p.id))!.variants.map((v) => v.name)).toEqual(['M']);
+    // a rename refreshes the same open request (one queue entry per product)
+    await owner.patch(`/products/${p.id}/variants/${l.id}`, { name: 'XL' }).expect(200);
+    expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(items + 1);
+    expect((await itemOf(p.id)).snapshot).toMatchObject({ variants: [{ name: 'M' }, { name: 'XL' }] });
+    await mod.post(`/admin/moderation/items/${(await itemOf(p.id)).id}/approve`, {}).expect(200);
+    expect((await catalogueSees(owner.workspaceId, p.id))!.variants.map((v) => v.name)).toEqual(['M', 'XL']);
+    // a variant price ±50 % is reviewed too
+    await owner.patch(`/products/${p.id}/variants/${m.id}`, { price: 500 }).expect(200);
+    expect((await db.product.findUniqueOrThrow({ where: { id: p.id } })).moderationStatus).toBe('pending');
+    expect((await catalogueSees(owner.workspaceId, p.id))!.variants.find((v) => v.id === m.id)).toMatchObject({ price: 1600 });
   });
 
   it('AT-MOD-10 the inline pre-screen fails ⇒ pending, aiScore null, flag prescreen_unavailable; the moderation-prescreen job scores it later', async () => {

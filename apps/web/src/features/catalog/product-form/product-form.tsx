@@ -151,11 +151,19 @@ export function ProductForm(props: Props) {
   const [done, setDone] = useState(false);
   const changes = useMemo(() => dirtyItems(base, values, mode), [base, values, mode]);
   const localCount = local.images.filter((i) => !i.rejected).length;
-  const dirty = !done && !archived && (changes.length > 0 || (mode === 'create' && localCount > 0));
+  // tester report 25/10 UX-001: in « Modifier », a picture is stored as soon as it is added but goes to moderation with
+  // « Enregistrer »: until then the form counts it as an unsaved change
+  const imageIds = useMemo(() => (product?.images ?? []).map((i) => i.id), [product?.images]);
+  const [savedImages, setSavedImages] = useState<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    if (product && savedImages === null) setSavedImages(new Set(imageIds));
+  }, [product, imageIds, savedImages]);
+  const addedImages = mode === 'edit' && savedImages ? imageIds.filter((id) => !savedImages.has(id)).length : 0;
+  const dirty = !done && !archived && (changes.length > 0 || (mode === 'create' && localCount > 0) || addedImages > 0);
   const changeLabels = useMemo(() => {
     const list = dirtyLabels(changes, { field: (f) => t(`products.form.dirty.${f}`), variant: (name) => t('products.form.dirty.variant', { name: name || t('products.form.variants.unnamed') }) });
-    return mode === 'create' && localCount > 0 ? [...list, t('products.form.dirty.images')] : list;
-  }, [changes, localCount, mode, t]);
+    return (mode === 'create' && localCount > 0) || addedImages > 0 ? [...list, t('products.form.dirty.images')] : list;
+  }, [changes, localCount, addedImages, mode, t]);
 
   const snapshot = JSON.stringify(values);
   useEffect(() => {
@@ -320,6 +328,9 @@ export function ProductForm(props: Props) {
       }
     }
     const failed = refused.length;
+    // the moderation request of this save (fields, variants and the pictures added since the last one), if anything changed
+    await catalogApi.submitChanges(product.id).catch(() => undefined);
+    setSavedImages(new Set((qc.getQueryData<Product>(key)?.images ?? []).map((i) => i.id)));
     const reco = search.get('reco');
     if (reco && priceSaved) await gdsApi.applyStockReco(reco, { refType: search.get('recoRef') === 'promo' ? 'promo' : 'product', refId: product.id }).catch(() => undefined);
     await refresh({ productId: product.id });

@@ -4785,7 +4785,7 @@
  "products.form.images.add": "ADD",
  "products.form.images.drag": "≡ DRAG",
  "products.form.images.hint": "JPG, PNG, WEBP · 5 MB max · 800 × 800 px recommended · an AI caption is generated for photo recognition",
- "products.form.images.savedNow": "Photos are saved as soon as you add or remove them, without waiting for “Save”.",
+ "products.form.images.savedNow": "Photos are stored as soon as they are added; an added photo goes to review with « Save ».",
  "products.form.images.makePrimary": "Set as primary image",
  "products.form.images.moveAfter": "Move after",
  "products.form.images.moveBefore": "Move before",
