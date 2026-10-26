@@ -993,7 +993,7 @@
  "admin.ws.credits.amount": "الأرصدة",
  "admin.ws.credits.done": "تمت إضافة {count} رصيد.",
  "admin.ws.credits.exhausted": "مستنفد",
- "admin.ws.credits.note": "الدعم ≤ 1 000 · ما فوق ذلك للمشرف العام / المالية · بريد إلى المالك · CreditTransaction(kind=grant).",
+ "admin.ws.credits.note": "الدعم ≤ 1 000 · ما فوق ذلك المشرف العام / المالية · بريد إلكتروني وإشعار للمالك.",
  "admin.ws.credits.reason": "السبب",
  "admin.ws.credits.submit": "إضافة الرصيد",
  "admin.ws.credits.title": "إضافة أرصدة",
@@ -1134,5 +1134,13 @@
  "admin.ai.key.reason.rate_limited": "تم بلوغ الحصة أو حد المعدّل لدى المزوّد (HTTP {status}): المفتاح يستجيب، أعد المحاولة لاحقًا أو تحقّق من حصة الحساب.",
  "admin.ai.key.reason.provider_down": "المزوّد معطّل أو مثقل (HTTP {status}).",
  "admin.ai.key.reason.http_error": "رفض المزوّد الطلب (HTTP {status}).",
- "admin.ai.key.missingModels": "نماذج غير معروفة لدى هذا المزوّد بهذا المفتاح: {models} — صحّحها أو عطّلها في «النماذج»."
+ "admin.ai.key.missingModels": "نماذج غير معروفة لدى هذا المزوّد بهذا المفتاح: {models} — صحّحها أو عطّلها في «النماذج».",
+ "admin.subs.partial": "جزئي",
+ "admin.subs.paidSoFar": "تم استلام {paid} · المتبقي {remaining}",
+ "admin.ws.action.remove_credits": "سحب رصيد",
+ "admin.ws.creditsRemove.title": "سحب رصيد",
+ "admin.ws.creditsRemove.submit": "سحب",
+ "admin.ws.creditsRemove.done": "تم سحب {count} رصيد.",
+ "admin.ws.creditsRemove.available": "رصيد الخطة المتبقي: {count}",
+ "admin.ws.creditsRemove.note": "المالية / المشرف العام · رصيد الخطة فقط، لا تُمس الباقات المشتراة · سطر «تعديل» مع السبب في سجل رصيد المتجر."
 }

@@ -166,6 +166,45 @@ export function CreditsDialog({ ws, open, onClose }: { ws: Ws | null; open: bool
   );
 }
 
+/** Tester report 22/10 UX-019: takes back plan credits granted by mistake (finance / super admin, reason, audited). */
+export function RemoveCreditsDialog({ ws, open, onClose }: { ws: Ws | null; open: boolean; onClose: () => void }) {
+  const t = useT();
+  const f = useFormats();
+  const [credits, setCredits] = useState('');
+  const [reason, setReason] = useState('');
+  const s = useAdminSubmit(onClose);
+  useOnOpen(open, () => {
+    setCredits('');
+    setReason('');
+    s.setErrors(NO_ERRORS);
+  });
+  if (!ws) return null;
+  const left = ws.credits.limit < 0 ? null : Math.max(0, ws.credits.limit - ws.credits.used);
+  return (
+    <AdminDialog
+      open={open}
+      onClose={onClose}
+      testId="dlg-credits-remove"
+      size="sm"
+      title={t('admin.ws.creditsRemove.title')}
+      context={`${ws.name} · ${f.num(ws.credits.used)} / ${f.num(ws.credits.limit)}`}
+      submitLabel={t('admin.ws.creditsRemove.submit')}
+      disabled={!Number(credits) || !reasonOk(reason)}
+      pending={s.pending}
+      error={s.errors.form}
+      note={t('admin.ws.creditsRemove.note')}
+      onSubmit={() =>
+        void s.run(() => adminWrite(`/admin/workspaces/${ws.id}/credits/remove`, 'POST', { credits: Number(credits), reason: reason.trim() }, true), ['credits', 'reason'], t('admin.ws.creditsRemove.done', { count: Number(credits) }), { ADMIN_REASON_REQUIRED: 'reason' })
+      }
+    >
+      <Field label={t('admin.ws.credits.amount')} required htmlFor="f-credits-remove" hint={left === null ? undefined : t('admin.ws.creditsRemove.available', { count: f.num(left) })} error={s.errors.fields.credits}>
+        <NumberInput id="f-credits-remove" value={credits} onValueChange={setCredits} />
+      </Field>
+      <ReasonField label={t('admin.ws.credits.reason')} value={reason} onChange={setReason} error={s.errors.fields.reason} />
+    </AdminDialog>
+  );
+}
+
 export function ChangePlanDialog({ ws, open, onClose }: { ws: Ws | null; open: boolean; onClose: () => void }) {
   const t = useT();
   const plans = useAdminGet<PlanAdminDto[]>(open ? '/admin/plans' : null);

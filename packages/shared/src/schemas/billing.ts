@@ -134,6 +134,18 @@ export const AdminGrantCreditsSchema = z
   })
   .strict();
 export type AdminGrantCreditsInput = z.infer<typeof AdminGrantCreditsSchema>;
+/**
+ * `POST /admin/workspaces/:id/credits/remove { credits, reason }` (`admin.billing.write`: finance + super_admin; tester report
+ * 22/10 UX-019): takes back plan credits granted by mistake — `CreditLedger(bucket=plan, action=adjustment, kind=debit)`, at most
+ * the plan credits left (`fields.credits = validation.range`, `details.max`), audited `credits.remove`. Packs are never touched.
+ */
+export const AdminRemoveCreditsSchema = z
+  .object({
+    credits: z.number({ required_error: 'validation.required', invalid_type_error: 'validation.quantity' }).int('validation.quantity').min(1, 'validation.range').max(1_000_000, 'validation.range'),
+    reason: z.string({ required_error: 'validation.required' }).trim().max(500, 'validation.length'),
+  })
+  .strict();
+export type AdminRemoveCreditsInput = z.infer<typeof AdminRemoveCreditsSchema>;
 
 // --- dev / test simulation (fake drivers only, never in production) -------------------------------------------------------------
 /** `POST /dev-payments/:ref { outcome }` — the fake Chargily checkout page. */

@@ -34,7 +34,7 @@ describe('ADM-02 workspaces list & detail', () => {
     const row = list.data[0];
     expect(row).toMatchObject({ id: b.workspaceId, plan: { slug: 'starter' }, subscriptionStatus: 'active', status: 'active', pages: { count: 0 } });
     expect(row.owner.email).toContain('@');
-    expect(row.actions.map((x: any) => x.key)).toEqual(['open', 'impersonate', 'change_plan', 'add_credits', 'extend_trial', 'suspend', 'schedule_deletion']);
+    expect(row.actions.map((x: any) => x.key)).toEqual(['open', 'impersonate', 'change_plan', 'add_credits', 'remove_credits', 'extend_trial', 'suspend', 'schedule_deletion']);
     expect((await sa.get(`/admin/workspaces?planSlug=starter&pageSize=100`).expect(200)).body.data.map((w: any) => w.id)).toContain(b.workspaceId);
     expect((await sa.get(`/admin/workspaces?planSlug=starter&pageSize=100`).expect(200)).body.data.map((w: any) => w.id)).not.toContain(a.workspaceId);
     expect((await sa.get(`/admin/workspaces?withPages=true&pageSize=100`).expect(200)).body.data.map((w: any) => w.id)).not.toContain(b.workspaceId);
@@ -102,6 +102,19 @@ describe('ADM-02 workspaces list & detail', () => {
     const p = (await sa.patch(`/admin/workspaces/${owner.workspaceId}`, { name: 'Renamed shop', reason: REASON }).expect(200)).body.data;
     expect(p.name).toBe('Renamed shop');
     expect((await lastAudit('workspace.update', owner.workspaceId))!.reason).toBe(REASON);
+  });
+
+  it('tester report 22/10 UX-020: extending a trial tells the Owner (notification subscription.trial_extended, in-app + e-mail)', async () => {
+    const owner = await asOwner(app);
+    const sa = await asPlatform(app);
+    const trialEnd = new Date(Date.now() + 5 * 86_400_000);
+    const sub = await db.subscription.findFirstOrThrow({ where: { workspaceId: owner.workspaceId } });
+    await db.subscription.update({ where: { id: sub.id }, data: { status: 'trial', trialEndsAt: trialEnd, currentPeriodEnd: trialEnd } });
+    await sa.post(`/admin/workspaces/${owner.workspaceId}/extend`, { days: 7, reason: REASON }).expect(200);
+    const until = new Date(trialEnd.getTime() + 7 * 86_400_000);
+    const row = await db.outbox.findFirstOrThrow({ where: { workspaceId: owner.workspaceId, topic: 'notification', key: `subscription_trial_extended:${sub.id}:${until.getTime()}` } });
+    const day = new Date(until.getTime() + 3_600_000).toISOString().slice(0, 10);
+    expect(JSON.stringify(row.payload)).toContain(`${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`);
   });
 
   it('create a workspace for a client (owner created + invite link, plan, trial months, initial credits); duplicate owner ⇒ 409; idempotent replay', async () => {

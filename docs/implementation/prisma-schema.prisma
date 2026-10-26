@@ -872,6 +872,8 @@ enum NotificationType {
   customer_auto_blocked
   support_reply
   credits_pack_purchased
+  credits_granted
+  subscription_trial_extended
   credits_negative
   invoice_unpaid
   workspace_suspended

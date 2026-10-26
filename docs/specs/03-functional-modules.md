@@ -248,6 +248,8 @@ One row per value of the Prisma enum `NotificationType` (56 values). The `type` 
 | `customer.auto_blocked` | Automatic rule blocked a customer (SAFE-05, cancellable) | ● | — | — | — | `/settings/security` |
 | `support.reply` | Support replied to my ticket (HELP-04) | ● | ● | — | — | `/help/tickets/:id` |
 | `credits.pack_purchased` | Credit pack credited (Chargily checkout or store IAP) | ● | ● | — | — | `/settings/credits` |
+| `credits.granted` | Credits added by the platform (admin grant; the e-mail is its own flow) | ● | — | — | — | `/settings/credits` |
+| `subscription.trial_extended` | Trial extended by the platform (new end date) | ● | ● | — | — | `/settings/billing` |
 | `credits.negative` | Store refund made the balance negative — AI blocked (PCK-03) | ● | ● | ● | fixed text `customer.unavailable` | `/settings/credits` |
 | `invoice.unpaid` | Renewal invoice unpaid: J0 and J+3 of dunning (D49; + SMS when enabled) | ● | ● | ● | — | `/settings/billing` |
 | `workspace.suspended` | Admin suspended the workspace (ADM-02) | ● | ● | ● | — | `/home` |
@@ -477,7 +479,7 @@ Canonical `NotificationType` slugs are those of 03 §15; the REF frame uses disp
 | `shipment.created`, `shipment.out_for_delivery`, `shipment.delivered`, `shipment.returned` | `/orders/:id#delivery` |
 | `payment.received`, `payment.failed` | `/orders/:id#payment` |
 | `stock.low`, `stock.out` | `/products?lowStock=1` |
-| `credits.80`, `credits.exhausted`, `credits.pack_purchased`, `credits.negative` | `/settings/credits` |
+| `credits.80`, `credits.exhausted`, `credits.pack_purchased`, `credits.granted`, `credits.negative` | `/settings/credits` |
 | `quota.80`, `quota.100`, `subscription.expiring`, `subscription.expired`, `channel.paused_by_plan`, `invoice.unpaid` | `/settings/billing` |
 | `channel.needs_reconnect`, `channel.approved` | `/channels/:channelId` |
 | `ai.error` | `/queue` |

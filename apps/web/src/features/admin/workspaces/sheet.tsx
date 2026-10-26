@@ -123,7 +123,8 @@ function Summary({ ws, onAction }: { ws: AdminWorkspaceDetailDto; onAction: (kin
           {[fullName(owner), owner.email, owner.emailVerified ? t('admin.ws.verified') : t('enum.Admin.unverified'), owner.totpEnabled ? '2FA' : null].filter(Boolean).join(' · ')}
         </Row>
         <Row label={t('admin.ws.row.subscription')}>
-          {sub ? [`${sub.planName} ${t(`admin.common.cycleOpt.${sub.cycle === 'none' ? 'monthly' : sub.cycle}`).toLowerCase()}`, f.money(sub.appliedPrice), sub.trialEndsAt ? t('admin.ws.trialEnds', { date: f.short(sub.trialEndsAt) }) : t('admin.ws.renews', { date: f.short(sub.currentPeriodEnd) }), sub.dunningStage ? t(`enum.Subscription.dunningStage.${sub.dunningStage}`) : null, sub.method].filter(Boolean).join(' · ') : '—'}
+          {/* tester report 22/10 UX-018: a trial / the free plan has no billing cycle (billingCycle=none): no « mensuel · 0 DA » */}
+          {sub ? [sub.cycle === 'none' ? sub.planName : `${sub.planName} ${t(`admin.common.cycleOpt.${sub.cycle}`).toLowerCase()}`, sub.cycle === 'none' && !sub.appliedPrice ? null : f.money(sub.appliedPrice), sub.trialEndsAt ? t('admin.ws.trialEnds', { date: f.short(sub.trialEndsAt) }) : t('admin.ws.renews', { date: f.short(sub.currentPeriodEnd) }), sub.dunningStage ? t(`enum.Subscription.dunningStage.${sub.dunningStage}`) : null, sub.method].filter(Boolean).join(' · ') : '—'}
         </Row>
         <Row label={t('admin.ws.row.credits')}>
           {[`${f.num(ws.credits.used)} / ${f.num(ws.credits.limit)}`, t('admin.ws.packsBought', { count: ws.creditsDetail.packsBought }), ws.creditsDetail.lastGrant ? t('admin.ws.lastGrant', { credits: f.num(ws.creditsDetail.lastGrant.credits), reason: ws.creditsDetail.lastGrant.reason ?? '—', date: f.short(ws.creditsDetail.lastGrant.at) }) : null].filter(Boolean).join(' · ')}
@@ -215,7 +216,7 @@ function Subscription({ ws }: { ws: AdminWorkspaceDetailDto }) {
           {s.dunningStage && ws.subscriptionStatus === 'dunning' ? t(`enum.Subscription.dunningStage.${s.dunningStage}`) : t(`enum.Subscription.status.${ws.subscriptionStatus}`)}
         </AdminPill>
       </Row>
-      <Row label={t('admin.common.cycle')}>{t(`admin.common.cycleOpt.${s.cycle === 'none' ? 'monthly' : s.cycle}`)}</Row>
+      <Row label={t('admin.common.cycle')}>{s.cycle === 'none' ? '—' : t(`admin.common.cycleOpt.${s.cycle}`)}</Row>
       <Row label={t('admin.ws.row.price')}>{f.money(s.appliedPrice)}</Row>
       <Row label={t('admin.ws.row.periodEnd')}>{f.date(s.currentPeriodEnd)}</Row>
       {s.trialEndsAt ? <Row label={t('admin.ws.row.trialEnd')}>{f.date(s.trialEndsAt)}</Row> : null}

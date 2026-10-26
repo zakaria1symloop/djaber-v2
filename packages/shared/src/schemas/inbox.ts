@@ -294,6 +294,10 @@ export const NOTIFICATION_CHANNELS: Record<NotificationTypeName, NotificationCha
   customer_auto_blocked: ch(true, N, N),
   support_reply: ch(true, A, N),
   credits_pack_purchased: ch(true, A, N),
+  // tester report 22/10 UX-021: the e-mail of an admin grant is sent by its own flow (billing/credits-granted)
+  credits_granted: ch(true, N, N),
+  // tester report 22/10 UX-020
+  subscription_trial_extended: ch(true, A, N),
   credits_negative: ch(true, A, A),
   invoice_unpaid: ch(true, A, A),
   workspace_suspended: ch(true, A, A),

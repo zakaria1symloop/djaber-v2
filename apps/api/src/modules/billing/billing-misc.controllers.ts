@@ -4,6 +4,7 @@ import { Body, Controller, Get, Header, HttpCode, Param, ParseUUIDPipe, Post, Qu
 import { createZodDto } from 'nestjs-zod';
 import {
   AdminGrantCreditsSchema,
+  AdminRemoveCreditsSchema,
   AdminMarkPaidSchema,
   CreatePaymentLinkSchema,
   DevBillingClockSchema,
@@ -24,6 +25,7 @@ import { PaymentService } from './payment.service';
 
 class AdminMarkPaidDto extends createZodDto(AdminMarkPaidSchema) {}
 class AdminGrantCreditsDto extends createZodDto(AdminGrantCreditsSchema) {}
+class AdminRemoveCreditsDto extends createZodDto(AdminRemoveCreditsSchema) {}
 class CreatePaymentLinkDto extends createZodDto(CreatePaymentLinkSchema) {}
 class OrderRefundDto extends createZodDto(OrderRefundSchema) {}
 class DevPaymentOutcomeDto extends createZodDto(DevPaymentOutcomeSchema) {}
@@ -111,6 +113,14 @@ export class AdminBillingController {
   @HttpCode(200)
   grant(@Param('id') id: string, @Body() dto: AdminGrantCreditsDto, @CurrentUser() user: AuthUser, @Req() req: any) {
     return this.admin.grantCredits(id, dto, { userId: user.id, platformRole: user.platformRole, ip: req.ip ?? null, userAgent: req.headers?.['user-agent'] ?? null });
+  }
+
+  @Platform()
+  @RequirePlatformRole('admin.billing.write')
+  @Post('workspaces/:id/credits/remove')
+  @HttpCode(200)
+  remove(@Param('id') id: string, @Body() dto: AdminRemoveCreditsDto, @CurrentUser() user: AuthUser, @Req() req: any) {
+    return this.admin.removeCredits(id, dto, { userId: user.id, platformRole: user.platformRole, ip: req.ip ?? null, userAgent: req.headers?.['user-agent'] ?? null });
   }
 }
 

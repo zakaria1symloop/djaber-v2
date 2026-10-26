@@ -29,6 +29,7 @@ import { MailOutbox } from '../../core/mail/mail.outbox';
 import { OutboxService } from '../../core/outbox/outbox.service';
 import { QueueOutbox } from '../../core/queue/queue.outbox';
 import { canPlatform } from '../../core/rbac/permission-matrix';
+import { algiersDay } from '../../core/time/algiers';
 import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { EmailTokenService } from '../auth/email-token.service';
 import { CURRENT_STATUSES, addCycle, lockBilling, priceOf } from '../billing/billing.util';
@@ -203,6 +204,7 @@ export class AdminWorkspacesService {
       a('impersonate', 'admin.workspaces.impersonate'),
       a('change_plan', 'admin.workspaces.write', { enabled: !deleting, reasonCode: 'WORKSPACE_DELETION_SCHEDULED' }),
       a('add_credits', 'admin.workspaces.credits', { enabled: !deleting, reasonCode: 'WORKSPACE_DELETION_SCHEDULED' }),
+      a('remove_credits', 'admin.billing.write', { enabled: !deleting, reasonCode: 'WORKSPACE_DELETION_SCHEDULED' }),
       a('extend_trial', 'admin.workspaces.write', { enabled: !deleting && (subStatus === 'trial' || subStatus === 'active' || subStatus === 'dunning'), reasonCode: deleting ? 'WORKSPACE_DELETION_SCHEDULED' : 'CONFLICT' }),
       w.status === 'suspended' ? a('reactivate', 'admin.workspaces.write') : a('suspend', 'admin.workspaces.write', { enabled: !deleting, reasonCode: 'WORKSPACE_DELETION_SCHEDULED' }),
       deleting ? a('cancel_deletion', 'admin.workspaces.write') : a('schedule_deletion', 'admin.workspaces.write'),
@@ -440,6 +442,11 @@ export class AdminWorkspacesService {
       const tx = db as Tx;
       await tx.subscription.update({ where: { id: sub.id }, data: { currentPeriodEnd: until, ...(sub.status === 'trial' ? { trialEndsAt: until } : {}) } });
       await TenantContext.runAs(id, () => this.subs.emitWorkspace(tx, id));
+      // tester report 22/10 UX-020: the Owner is told (in-app + e-mail) that the trial now ends later
+      if (sub.status === 'trial') {
+        const day = algiersDay(until);
+        await TenantContext.runAs(id, () => this.notifications.emit(tx, { type: 'subscription_trial_extended', workspaceId: id, target: { owner: true }, key: `subscription_trial_extended:${sub.id}:${until.getTime()}`, data: { until: until.toISOString(), date: `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}` } }));
+      }
     });
     await this.tenants.invalidate(id);
     await this.log(actor, id, sub.status === 'trial' ? 'subscription.trial_extend' : 'subscription.extend', 'Subscription', sub.id, { until: base.toISOString() }, { until: until.toISOString() }, reason);

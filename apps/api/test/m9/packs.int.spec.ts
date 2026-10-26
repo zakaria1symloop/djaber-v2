@@ -255,6 +255,32 @@ describe('admin credit grants (PRM-03) & ledger export', () => {
     const ownerEmail = (await db.user.findUniqueOrThrow({ where: { id: owner.userId } })).email;
     expect((await mailsTo(app, ownerEmail, 'billing/credits-granted')).length).toBe(2);
     await finance.post('/admin/workspaces/00000000-0000-4000-8000-000000000000/credits', body).expect(404);
+    // tester report 22/10 UX-021: the Owner also gets an in-app notification (the e-mail stays its own flow)
+    expect(await db.outbox.count({ where: { workspaceId: owner.workspaceId, topic: 'notification', key: `credits_granted:${ok.ledgerEntryId}` } })).toBe(1);
+  });
+
+  it('tester report 22/10 UX-019: finance / super admin remove plan credits granted by mistake (adjustment debit, at most what is left, audited); support and read roles 403', async () => {
+    const owner = await asOwner(app);
+    const finance = await asPlatform(app, 'finance');
+    const support = await asPlatform(app, 'support');
+    const reader = await asPlatform(app, 'read');
+    const before = (await finance.post(`/admin/workspaces/${owner.workspaceId}/credits`, { credits: 100000, reason: 'Geste commercial (erreur de saisie)' }).expect(200)).body.data.balance.total;
+    const body = { credits: 99000, reason: 'Erreur de saisie : 100 000 au lieu de 1 000' };
+    await support.post(`/admin/workspaces/${owner.workspaceId}/credits/remove`, body).expect(403);
+    await reader.post(`/admin/workspaces/${owner.workspaceId}/credits/remove`, body).expect(403);
+    await owner.post(`/admin/workspaces/${owner.workspaceId}/credits/remove`, body).expect(403);
+    expect((await finance.post(`/admin/workspaces/${owner.workspaceId}/credits/remove`, { ...body, reason: 'court' }).expect(422)).body.error.code).toBe('ADMIN_REASON_REQUIRED');
+    const tooMuch = (await finance.post(`/admin/workspaces/${owner.workspaceId}/credits/remove`, { ...body, credits: before + 1 }).expect(422)).body.error;
+    expect(tooMuch).toMatchObject({ code: 'VALIDATION_ERROR', fields: { credits: 'validation.range' }, details: { max: before } });
+    const ok = (await finance.post(`/admin/workspaces/${owner.workspaceId}/credits/remove`, body).expect(200)).body.data;
+    expect(ok.balance.total).toBe(before - 99000);
+    expect(await db.creditLedger.findUniqueOrThrow({ where: { id: ok.ledgerEntryId } })).toMatchObject({ action: 'adjustment', kind: 'debit', bucket: 'plan', credits: -99000, grantedById: expect.any(String) });
+    expect(await eventually(() => db.auditLog.count({ where: { action: 'credits.remove', entityId: owner.workspaceId, reason: body.reason } }))).toBe(1);
+    await finance.post('/admin/workspaces/00000000-0000-4000-8000-000000000000/credits/remove', body).expect(404);
+    // the row action is offered to finance, refused (FORBIDDEN) to support
+    const row = (r: any) => r.body.data.find((w: any) => w.id === owner.workspaceId).actions.find((x: any) => x.key === 'remove_credits');
+    expect(row(await finance.get('/admin/workspaces?pageSize=100').expect(200))).toMatchObject({ enabled: true });
+    expect(row(await support.get('/admin/workspaces?pageSize=100').expect(200))).toMatchObject({ enabled: false, reasonCode: 'FORBIDDEN' });
   });
 
   it('GET /credits/ledger/export ⇒ 202 job; the CSV lists credits and debits (Admin+, Operator 403)', async () => {

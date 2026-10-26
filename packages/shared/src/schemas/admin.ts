@@ -135,7 +135,7 @@ export type AdminWorkspaceRowDto = {
   conversations30d: number;
   createdAt: string;
   lastActivityAt: string | null;
-  /** keys: open, impersonate, change_plan, add_credits, extend_trial, suspend, reactivate, schedule_deletion, cancel_deletion */
+  /** keys: open, impersonate, change_plan, add_credits, remove_credits, extend_trial, suspend, reactivate, schedule_deletion, cancel_deletion */
   actions: ActionDescriptor[];
 };
 /** `GET /admin/workspaces/:id` — the detail sheet "Résumé". */

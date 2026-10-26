@@ -133,7 +133,7 @@ export function InvoicesCard({ owner }: { owner: boolean }) {
                     </Td>
                     <Td className="whitespace-nowrap text-end tabular-nums">
                       <Ltr>{formatMoney(i.amount)}</Ltr>
-                      {i.status === 'unpaid' && i.remaining > 0 && i.remaining !== i.amount ? <span className="block ts-label-meta text-text-muted">{t('billing.invoices.remaining', { amount: formatMoney(i.remaining) })}</span> : null}
+                      {(i.status === 'unpaid' || i.status === 'upcoming') && i.remaining > 0 && i.remaining < i.amount ? <span className="block ts-label-meta text-text-muted">{t('billing.invoices.remaining', { amount: formatMoney(i.remaining) })}</span> : null}
                     </Td>
                     <Td className="whitespace-nowrap">
                       <StatusPill enumKey="Invoice.status" value={i.status} className="!rounded-[4px]">

@@ -993,7 +993,7 @@
  "admin.ws.credits.amount": "Credits",
  "admin.ws.credits.done": "{count} credits added.",
  "admin.ws.credits.exhausted": "exhausted",
- "admin.ws.credits.note": "Support ≤ 1,000 · above: super admin / finance · e-mail to the owner · CreditTransaction(kind=grant).",
+ "admin.ws.credits.note": "Support ≤ 1,000 · above that super admin / finance · e-mail and notification to the owner.",
  "admin.ws.credits.reason": "Reason",
  "admin.ws.credits.submit": "Credit",
  "admin.ws.credits.title": "Add credits",
@@ -1134,5 +1134,13 @@
  "admin.ai.key.reason.rate_limited": "Quota or rate limit reached at the provider (HTTP {status}): the key answers, try later or check the account quota.",
  "admin.ai.key.reason.provider_down": "The provider is down or overloaded (HTTP {status}).",
  "admin.ai.key.reason.http_error": "The provider refused the request (HTTP {status}).",
- "admin.ai.key.missingModels": "Models this provider does not know with this key: {models} — fix or disable them in « Models »."
+ "admin.ai.key.missingModels": "Models this provider does not know with this key: {models} — fix or disable them in « Models ».",
+ "admin.subs.partial": "Partial",
+ "admin.subs.paidSoFar": "{paid} received · {remaining} left",
+ "admin.ws.action.remove_credits": "Remove credits",
+ "admin.ws.creditsRemove.title": "Remove credits",
+ "admin.ws.creditsRemove.submit": "Remove",
+ "admin.ws.creditsRemove.done": "{count} credits removed.",
+ "admin.ws.creditsRemove.available": "Plan credits left: {count}",
+ "admin.ws.creditsRemove.note": "Finance / super admin · plan credits only, bought packs are never touched · an « Adjustment » row with the reason in the shop's credits history."
 }

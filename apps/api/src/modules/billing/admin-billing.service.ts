@@ -4,15 +4,19 @@
 //     stays unpaid, `200 ⚠ INVOICE_PARTIAL_PAYMENT {remaining}`; amount > remaining ⇒ 422 VALIDATION_ERROR
 //     (`fields.amount = validation.range`, max = remaining). Audited `invoice.mark_paid`. No credit note in v2.
 //   POST /admin/workspaces/:id/credits (PRM-03): `CreditLedger(bucket=plan, kind=credit, action=grant)`, e-mail to the
-//     Owner, audit `credits.grant` with the reason; support ≤ 1 000 (`403 ADMIN_CREDIT_GRANT_LIMIT {max}`).
+//     Owner + in-app notification `credits.granted` (tester report 22/10 UX-021), audit `credits.grant` with the reason;
+//     support ≤ 1 000 (`403 ADMIN_CREDIT_GRANT_LIMIT {max}`).
+//   POST /admin/workspaces/:id/credits/remove (tester report 22/10 UX-019; finance + super_admin): a negative
+//     `adjustment` of the plan credits, at most what is left of them, audit `credits.remove`.
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { ADMIN_REASON_MIN, ADMIN_SUPPORT_GRANT_MAX, type AdminGrantCreditsInput, type AdminGrantCreditsResultDto, type AdminMarkPaidInput, type AdminMarkPaidResultDto } from '@djaber/shared';
+import { ADMIN_REASON_MIN, ADMIN_SUPPORT_GRANT_MAX, type AdminGrantCreditsInput, type AdminGrantCreditsResultDto, type AdminMarkPaidInput, type AdminMarkPaidResultDto, type AdminRemoveCreditsInput } from '@djaber/shared';
 import { prisma, TenantContext, type Tx } from '@djaber/db';
 import { AuditService } from '../../core/audit/audit.service';
 import { ConfigService } from '../../core/config/config.service';
 import { AppException, notFound } from '../../core/errors/app.exception';
 import { MailOutbox } from '../../core/mail/mail.outbox';
+import { NotificationProducer } from '../notifications/notification.producer';
 import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { CreditService } from '../credits/credit.service';
 import { lockBilling } from './billing.util';
@@ -31,6 +35,7 @@ export class AdminBillingService {
     private readonly audit: AuditService,
     private readonly mail: MailOutbox,
     private readonly config: ConfigService,
+    private readonly notifications: NotificationProducer,
   ) {}
 
   private reason(r: string) {
@@ -93,10 +98,35 @@ export class AdminBillingService {
             tx,
           );
         }
+        await this.notifications.emit(tx, { type: 'credits_granted', workspaceId, target: { owner: true }, key: `credits_granted:${w.entryId}`, data: { credits: input.credits, reason } });
         return w.entryId;
       }),
     );
     await this.audit.write({ workspaceId, actorType: 'admin', actorId: admin.userId, actorRole: admin.platformRole, action: 'credits.grant', entity: 'Workspace', entityId: workspaceId, after: { credits: input.credits, type: input.type ?? 'commercial', ledgerEntryId: entryId }, reason, ip: admin.ip ?? null, userAgent: admin.userAgent ?? null });
+    const balance = await TenantContext.run(tenant, () => this.credits.summary());
+    return { ledgerEntryId: entryId, balance };
+  }
+
+  async removeCredits(workspaceId: string, input: AdminRemoveCreditsInput, admin: Admin): Promise<AdminGrantCreditsResultDto> {
+    const reason = this.reason(input.reason);
+    if (!/^[0-9a-f-]{36}$/i.test(workspaceId)) throw notFound();
+    const ws = await TenantContext.runSystem(() => prisma.workspace.findFirst({ where: { id: workspaceId, deletedAt: null }, select: { id: true } }));
+    if (!ws) throw notFound();
+    const tenant = await this.tenants.forWorker(workspaceId);
+    const key = `admin-remove:${workspaceId}:${randomUUID()}`;
+    const entryId = await TenantContext.run({ ...tenant, userId: admin.userId }, () =>
+      prisma.$transaction(async (db) => {
+        const tx = db as Tx;
+        await this.credits.lockIn(tx, workspaceId);
+        const b = await this.credits.balanceIn(tx, workspaceId);
+        // only plan credits (granted or of the plan) can be taken back; bought packs are the merchant's
+        const max = b.unlimited ? 0 : Math.max(0, b.plan);
+        if (input.credits > max) throw new AppException('VALIDATION_ERROR', {}, { credits: 'validation.range' }, { max });
+        const w = await this.credits.writeIn(tx, workspaceId, { bucket: 'plan', action: 'adjustment', credits: -input.credits, key, reason: `admin:remove:${reason}`.slice(0, 500), grantedById: admin.userId });
+        return w.entryId;
+      }),
+    );
+    await this.audit.write({ workspaceId, actorType: 'admin', actorId: admin.userId, actorRole: admin.platformRole, action: 'credits.remove', entity: 'Workspace', entityId: workspaceId, after: { credits: -input.credits, ledgerEntryId: entryId }, reason, ip: admin.ip ?? null, userAgent: admin.userAgent ?? null });
     const balance = await TenantContext.run(tenant, () => this.credits.summary());
     return { ledgerEntryId: entryId, balance };
   }

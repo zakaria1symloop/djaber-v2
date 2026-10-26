@@ -18,11 +18,11 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 | L22-UX-029 | « Payer 4 900 DA (CIB / Edahabia) » opens a raw NOT_FOUND page on the live site | done |
 | T25-9 | Buying a credit pack gives NOT_FOUND | done |
 | T25-10 | Deleting the workspace says an invoice is unpaid when nothing was ever due | done |
-| L22-UX-030 | A partly paid invoice looks unpaid in the Invoices list | todo |
-| L22-UX-018 | A trial is shown « Pro mensuel · 0 DA » and « CYCLE : Mensuel » in the workspace sheet | todo |
-| L22-UX-019 | Credits can only be added; a mistaken grant cannot be corrected | todo |
-| L22-UX-021 | Adding credits sends an e-mail but no in-app notification | todo |
-| L22-UX-020 | Extending a trial does not inform the merchant | todo |
+| L22-UX-030 | A partly paid invoice looks unpaid in the Invoices list | done |
+| L22-UX-018 | A trial is shown « Pro mensuel · 0 DA » and « CYCLE : Mensuel » in the workspace sheet | done |
+| L22-UX-019 | Credits can only be added; a mistaken grant cannot be corrected | done |
+| L22-UX-021 | Adding credits sends an e-mail but no in-app notification | done |
+| L22-UX-020 | Extending a trial does not inform the merchant | done |
 | L22-UX-028 | Editing a promo code moves its start date back one day on each save | todo |
 
 ## Superadmin

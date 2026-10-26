@@ -3,7 +3,7 @@
 // "Enregistrer un paiement manuel". KPIs · tabs Abonnements · Factures · Paiements manuels · Packs de crédits (`?tab=`)
 // · filters per tab in the URL · row `Actions ⌄` from the server descriptors.
 import type { AdminInvoiceRowDto, AdminPackPurchaseRowDto, AdminPaymentRowDto, AdminSubscriptionKpis, AdminSubscriptionRowDto, PlanAdminDto } from '@djaber/shared';
-import { ActionsMenu, Button, OpsKpiStrip, OpsKpiTile, PillTabs, type Column } from '@djaber/ui';
+import { ActionsMenu, Button, OpsKpiStrip, OpsKpiTile, Pill, PillTabs, type Column } from '@djaber/ui';
 import { useMemo, useState } from 'react';
 import { AdminPage } from '@/features/admin/admin-page';
 import { useAdminGet, useAdminList } from '@/features/admin/api';
@@ -18,6 +18,9 @@ import { compactAmount } from '@/lib/money';
 import { useT } from '@/lib/i18n';
 import type { ApiQuery } from '@/lib/list-state';
 import { useListState } from '@/lib/use-list-state';
+
+/** An open invoice a manual payment already covered in part (remaining between 0 and the amount). */
+const partlyPaid = (i: Pick<AdminInvoiceRowDto, 'status' | 'amount' | 'remaining'>) => (i.status === 'upcoming' || i.status === 'unpaid') && i.remaining > 0 && i.remaining < i.amount;
 
 type Tab = 'subscriptions' | 'invoices' | 'payments' | 'packs';
 const TAB_KEYS: Record<Tab, string[]> = {
@@ -129,8 +132,28 @@ export default function AdminSubscriptionsPage() {
     { key: 'ws', header: t('admin.ws.col.workspace'), cell: (i) => i.workspace.name },
     { key: 'label', header: t('admin.subs.col.label'), hideBelow: 'lg', cell: (i) => i.label },
     { key: 'date', header: t('admin.subs.col.date'), cell: (i) => <ShortDate iso={i.date} /> },
-    { key: 'amount', header: t('admin.subs.col.amount'), align: 'end', cell: (i) => <Money value={i.amount} /> },
-    { key: 'status', header: t('admin.common.status'), cell: (i) => <AdminPill group="Invoice.status" value={i.status}>{t(`enum.Invoice.status.${i.status}`)}</AdminPill> },
+    {
+      key: 'amount',
+      header: t('admin.subs.col.amount'),
+      align: 'end',
+      cell: (i) => (
+        <>
+          <Money value={i.amount} />
+          {/* tester report 22/10 UX-030: what a manual payment already covered */}
+          {partlyPaid(i) ? <span className="block ts-label-meta text-text-muted">{t('admin.subs.paidSoFar', { paid: f.money(i.amount - i.remaining), remaining: f.money(i.remaining) })}</span> : null}
+        </>
+      ),
+    },
+    {
+      key: 'status',
+      header: t('admin.common.status'),
+      cell: (i) => (
+        <span className="inline-flex flex-wrap items-center gap-1">
+          <AdminPill group="Invoice.status" value={i.status}>{t(`enum.Invoice.status.${i.status}`)}</AdminPill>
+          {partlyPaid(i) ? <Pill tone="warning">{t('admin.subs.partial')}</Pill> : null}
+        </span>
+      ),
+    },
   ];
   const invMenu = (i: AdminInvoiceRowDto) => (
     <ActionsMenu

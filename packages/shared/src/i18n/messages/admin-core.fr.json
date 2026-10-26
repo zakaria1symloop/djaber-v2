@@ -993,7 +993,7 @@
  "admin.ws.credits.amount": "Crédits",
  "admin.ws.credits.done": "{count} crédits ajoutés.",
  "admin.ws.credits.exhausted": "épuisé",
- "admin.ws.credits.note": "Support ≤ 1 000 · au-delà super admin / finance · e-mail au propriétaire · CreditTransaction(kind=grant).",
+ "admin.ws.credits.note": "Support ≤ 1 000 · au-delà super admin / finance · e-mail et notification au propriétaire.",
  "admin.ws.credits.reason": "Motif",
  "admin.ws.credits.submit": "Créditer",
  "admin.ws.credits.title": "Ajouter des crédits",
@@ -1134,5 +1134,13 @@
  "admin.ai.key.reason.rate_limited": "Quota ou limite de débit atteint chez le fournisseur (HTTP {status}) : la clé répond, réessayez plus tard ou vérifiez le quota du compte.",
  "admin.ai.key.reason.provider_down": "Le fournisseur est en panne ou surchargé (HTTP {status}).",
  "admin.ai.key.reason.http_error": "Le fournisseur a refusé la requête (HTTP {status}).",
- "admin.ai.key.missingModels": "Modèles inconnus de ce fournisseur avec cette clé : {models} — corrigez ou désactivez-les dans « Modèles »."
+ "admin.ai.key.missingModels": "Modèles inconnus de ce fournisseur avec cette clé : {models} — corrigez ou désactivez-les dans « Modèles ».",
+ "admin.subs.partial": "Partiel",
+ "admin.subs.paidSoFar": "{paid} reçus · reste {remaining}",
+ "admin.ws.action.remove_credits": "Retirer des crédits",
+ "admin.ws.creditsRemove.title": "Retirer des crédits",
+ "admin.ws.creditsRemove.submit": "Retirer",
+ "admin.ws.creditsRemove.done": "{count} crédits retirés.",
+ "admin.ws.creditsRemove.available": "Crédits du plan restants : {count}",
+ "admin.ws.creditsRemove.note": "Finance / super admin · crédits du plan uniquement, les packs achetés ne sont pas touchés · ligne « Ajustement » avec le motif dans l'historique des crédits de la boutique."
 }

@@ -51,6 +51,10 @@ export class CreditService implements OnModuleInit {
     this.registry.cron('sched-credits-exhausted-daily', '0 9 * * *', () => this.remindExhausted());
   }
 
+  /** The per-workspace credits lock, for a caller that reads the balance before writing in the same transaction. */
+  lockIn(tx: Tx, workspaceId: string) {
+    return this.lock(tx, workspaceId);
+  }
   private lock(tx: Tx, workspaceId: string) {
     return tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspaceId} || ':credits', 0))`;
   }
