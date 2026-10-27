@@ -23,11 +23,18 @@ export const productBlock = (p: CatalogueProduct, n: number, descriptionMax: num
 export const catalogueSection = (c: PromptContext): string => {
   const { catalogue } = c;
   const head = catalogue.full
-    ? `CATALOGUE (${catalogue.count} products — the complete list; never mention a product, a price or a stock that is not below)`
+    ? `CATALOGUE (${catalogue.count} products — the complete list; never mention a product, a variant, a price or a stock that is not below)`
     : `CATALOGUE: ${catalogue.count} products. Use search_products before naming any product.`;
   const blocks = catalogue.products.map((p, i) => productBlock(p, i + 1, c.descriptionMax));
   const sentence = c.workspace.systemMessages.out_of_stock?.[systemLocale(c.lang, c.locale)] ?? c.workspace.systemMessages.out_of_stock?.fr ?? '';
   const rules: string[] = [];
+  // tester log 26/10 UX-038: a product or variant waiting for Djaber's review is absent from this list (and from the tools);
+  // the customer naming it, an older message or a page post never makes it available
+  rules.push(
+    catalogue.full
+      ? 'NOT_LISTED: a product or a variant (colour, size, model…) that is not in this list is not available, even when the customer names it or an earlier message mentioned it: say it is not available, offer what is listed, never confirm it, show it or take an order for it'
+      : 'NOT_LISTED: a product or a variant (colour, size, model…) that search_products / get_product does not return is not available, even when the customer names it or an earlier message mentioned it: say it is not available, never confirm it, show it or take an order for it',
+  );
   if (sentence) rules.push(`OUT_OF_STOCK_SENTENCE: "${sentence}"`);
   // tester notes 25/10: the shop's sentence word for word (it was paraphrased, so an edit seemed not applied)
   const say = sentence ? 'write OUT_OF_STOCK_SENTENCE word for word ({product} = the product name; translate it only when the customer writes another language), never a sentence of your own' : 'say the product is out of stock';

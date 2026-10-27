@@ -62,11 +62,13 @@ export class CatalogueService {
       const recos = await prisma.recommendation.findMany({
         where: { productId: { in: rows.map((r) => r.id) }, isActive: true, recommended: agent ? this.scopeWhere(agent) : VISIBLE },
         orderBy: { score: 'desc' },
-        include: { recommended: { select: { id: true, name: true, price: true } } },
+        include: { recommended: { select: { id: true, name: true, description: true, price: true, moderationStatus: true, approvedSnapshot: true } } },
       });
       for (const r of recos) {
         const list = also.get(r.productId) ?? [];
-        if (list.length < 2) list.push({ id: r.recommended.id, name: r.recommended.name, price: r.recommended.price, reason: r.reason });
+        // the approved name and price while a change of the recommended product waits for moderation (UX-038)
+        const shown = approvedFields(r.recommended);
+        if (list.length < 2) list.push({ id: r.recommended.id, name: shown.name, price: shown.price, reason: r.reason });
         also.set(r.productId, list);
       }
     }

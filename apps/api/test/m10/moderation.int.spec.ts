@@ -1,5 +1,7 @@
 // M10 ADM-10 — moderation queue, pre-screen, decisions, appeals, rules, stats, SLA job, trust levels (D36, D52, 04 §12).
 // AT-MOD-01, 02, 04, 05, 06, 07, 08 (job part), 09 (API part), 10.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { rawPrisma as db, TenantContext, prisma, type Tx } from '@djaber/db';
 import { CatalogueService } from '../../src/modules/ai/catalogue.service';
 import { ModerationHookService } from '../../src/modules/catalog/moderation-hook.service';
@@ -224,6 +226,33 @@ describe('pre-screen and auto-approval', () => {
     await owner.patch(`/products/${p.id}/variants/${m.id}`, { price: 500 }).expect(200);
     expect((await db.product.findUniqueOrThrow({ where: { id: p.id } })).moderationStatus).toBe('pending');
     expect((await catalogueSees(owner.workspaceId, p.id))!.variants.find((v) => v.id === m.id)).toMatchObject({ price: 1600 });
+  });
+
+  it('tester log 26/10 UX-038: an approved snapshot written before variants were kept showed a variant waiting for review; migration 20261027120000 closes it without hiding what was on sale', async () => {
+    const owner = await merchant('standard');
+    const legacy = async (name: string) => {
+      const p = await createProduct(owner, { name, description: 'Inox.', stock: undefined, variants: [{ name: 'Rouge', price: 2000 }] });
+      expect(p.moderation.status).toBe('approved');
+      // as written before 26/10: no `variants` in the snapshot, the variant older than the cutoff
+      await db.$executeRaw`UPDATE "Product" SET "approvedSnapshot" = "approvedSnapshot" - 'variants' WHERE "id" = ${p.id}::uuid`;
+      await db.productVariant.updateMany({ where: { productId: p.id }, data: { createdAt: new Date('2026-10-01T10:00:00Z') } });
+      return p;
+    };
+    const waiting = await legacy('Gourde ancienne');
+    const selling = await legacy('Thermos ancien');
+    await setTrust(owner.workspaceId, 'new');
+    await owner.post(`/products/${waiting.id}/variants`, { name: 'Bleu', price: 2000 }).expect(201);
+    expect((await db.product.findUniqueOrThrow({ where: { id: waiting.id } })).moderationStatus).toBe('pending');
+    // the leak: every live variant was shown
+    expect((await catalogueSees(owner.workspaceId, waiting.id))!.variants.map((v) => v.name)).toEqual(['Rouge', 'Bleu']);
+    const sql = readFileSync(join(__dirname, '../../../../packages/db/prisma/migrations/20261027120000_approved_snapshot_variants/migration.sql'), 'utf8');
+    for (const statement of sql.replace(/^--.*$/gm, '').split(';').map((x) => x.trim()).filter(Boolean)) await db.$executeRawUnsafe(statement);
+    expect((await catalogueSees(owner.workspaceId, waiting.id))!.variants.map((v) => v.name)).toEqual(['Rouge']);
+    expect((await catalogueSees(owner.workspaceId, selling.id))!.variants.map((v) => v.name)).toEqual(['Rouge']);
+    expect((await itemOf(waiting.id)).snapshot).toMatchObject({ variants: [{ name: 'Rouge' }, { name: 'Bleu' }] });
+    // approving the request puts the new variant on sale
+    await mod.post(`/admin/moderation/items/${(await itemOf(waiting.id)).id}/approve`, {}).expect(200);
+    expect((await catalogueSees(owner.workspaceId, waiting.id))!.variants.map((v) => v.name)).toEqual(['Rouge', 'Bleu']);
   });
 
   it('AT-MOD-10 the inline pre-screen fails ⇒ pending, aiScore null, flag prescreen_unavailable; the moderation-prescreen job scores it later', async () => {

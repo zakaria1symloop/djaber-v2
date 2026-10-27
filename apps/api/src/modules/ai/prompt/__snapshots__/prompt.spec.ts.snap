@@ -15,7 +15,7 @@ A: Non, du samedi au jeudi.
 Q: Peut-on échanger ?
 A: Oui, sous 7 jours.
 
-CATALOGUE (2 products — the complete list; never mention a product, a price or a stock that is not below)
+CATALOGUE (2 products — the complete list; never mention a product, a variant, a price or a stock that is not below)
 #1 Robe satin bordeaux [ID:11111111-1111-7111-8111-111111111111] SKU:ROB-001 PRICE:4500 DA STOCK:7
 Robe longue en satin, coupe droite.
 VARIANTS: S [VID:33333333-3333-7333-8333-333333333333] 4500 DA stock 4; M [VID:44444444-4444-7444-8444-444444444444] 4500 DA stock 3
@@ -23,6 +23,7 @@ VARIANT REQUIRED: the customer chooses one of the VARIANTS; never offer this pro
 ALSO: Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] 900 DA — assortie à la robe
 #2 Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] SKU:CEI-002 PRICE:900 DA STOCK:service
 SERVICE: present it as a service (what is done, how, when), never as a product in stock or a parcel.
+NOT_LISTED: a product or a variant (colour, size, model…) that is not in this list is not available, even when the customer names it or an earlier message mentioned it: say it is not available, offer what is listed, never confirm it, show it or take an order for it
 OUT_OF_STOCK_SENTENCE: "Désolé, {product} est en rupture de stock pour le moment."
 OUT_OF_STOCK: write OUT_OF_STOCK_SENTENCE word for word ({product} = the product name; translate it only when the customer writes another language), never a sentence of your own, then suggest an alternative from the same category
 MISSING_VARIANT: say which sizes remain
@@ -134,7 +135,7 @@ ALSO: Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] 900 DA — assor
 `;
 
 exports[`prompt sections (04-ai-pipeline §3) §3.5 catalogue: product block, full list, retrieval mode, out-of-stock rules 2`] = `
-"CATALOGUE (2 products — the complete list; never mention a product, a price or a stock that is not below)
+"CATALOGUE (2 products — the complete list; never mention a product, a variant, a price or a stock that is not below)
 #1 Robe satin bordeaux [ID:11111111-1111-7111-8111-111111111111] SKU:ROB-001 PRICE:4500 DA STOCK:7
 Robe longue en satin, coupe droite.
 VARIANTS: S [VID:33333333-3333-7333-8333-333333333333] 4500 DA stock 4; M [VID:44444444-4444-7444-8444-444444444444] 4500 DA stock 3
@@ -142,6 +143,7 @@ VARIANT REQUIRED: the customer chooses one of the VARIANTS; never offer this pro
 ALSO: Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] 900 DA — assortie à la robe
 #2 Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] SKU:CEI-002 PRICE:900 DA STOCK:service
 SERVICE: present it as a service (what is done, how, when), never as a product in stock or a parcel.
+NOT_LISTED: a product or a variant (colour, size, model…) that is not in this list is not available, even when the customer names it or an earlier message mentioned it: say it is not available, offer what is listed, never confirm it, show it or take an order for it
 OUT_OF_STOCK_SENTENCE: "Désolé, {product} est en rupture de stock pour le moment."
 OUT_OF_STOCK: write OUT_OF_STOCK_SENTENCE word for word ({product} = the product name; translate it only when the customer writes another language), never a sentence of your own, then suggest an alternative from the same category
 MISSING_VARIANT: say which sizes remain"
@@ -151,6 +153,7 @@ exports[`prompt sections (04-ai-pipeline §3) §3.5 catalogue: product block, fu
 "CATALOGUE: 214 products. Use search_products before naming any product.
 #1 Ceinture dorée [ID:22222222-2222-7222-8222-222222222222] SKU:CEI-002 PRICE:900 DA STOCK:service
 SERVICE: present it as a service (what is done, how, when), never as a product in stock or a parcel.
+NOT_LISTED: a product or a variant (colour, size, model…) that search_products / get_product does not return is not available, even when the customer names it or an earlier message mentioned it: say it is not available, never confirm it, show it or take an order for it
 OUT_OF_STOCK_SENTENCE: "عذرًا، {product} غير متوفر حاليًا."
 OUT_OF_STOCK: write OUT_OF_STOCK_SENTENCE word for word ({product} = the product name; translate it only when the customer writes another language), never a sentence of your own, nothing else about it"
 `;
