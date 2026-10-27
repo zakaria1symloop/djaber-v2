@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 import { useConfirmAction } from '@/components/confirm-action';
 import { AdminPage } from '@/features/admin/admin-page';
 import { adminWrite, useAdminGet, useAdminInvalidate, useAdminJobToast, useAdminList } from '@/features/admin/api';
+import { AnnouncementPreviewDialog, entryText } from '@/features/admin/cms/announcement-preview';
 import { CmsEditor } from '@/features/admin/cms/editor';
 import { AdminDialog, NO_ERRORS, toServerErrors, useOnOpen, type ServerErrors } from '@/features/admin/dialog-kit';
 import { AdminFilterBar, AdminListBody, type AdminFilter } from '@/features/admin/list-kit';
@@ -38,6 +39,7 @@ export default function AdminCmsPage() {
   const invalidate = useAdminInvalidate();
   const track = useAdminJobToast();
   const [create, setCreate] = useState(false);
+  const [previewed, setPreviewed] = useState<CmsEntryAdminDto | null>(null);
   const m = useMutation({ mutationFn: (fn: () => Promise<unknown>) => fn() });
   const act = async (fn: () => Promise<unknown>, done: string) => {
     try {
@@ -63,6 +65,8 @@ export default function AdminCmsPage() {
   const windowOf = (e: CmsEntryAdminDto) =>
     e.status === 'scheduled' && e.startsAt ? t('admin.cms.window.scheduled', { date: f.shortTime(e.startsAt) }) : e.startsAt || e.endsAt ? `${e.startsAt ? f.shortTime(e.startsAt) : '…'} → ${e.endsAt ? f.shortTime(e.endsAt) : t('admin.cms.window.noEnd')}` : '—';
   const preview = async (e: CmsEntryAdminDto) => {
+    // UX-035: an announcement has no public page — it is shown as the clients see it (banner, notification, public site)
+    if (e.type === 'announcement') return setPreviewed(e);
     try {
       const r = await api<CmsPreviewLinkDto>(`/admin/cms/${e.id}/preview-link`);
       window.open(r.url, '_blank', 'noopener');
@@ -83,7 +87,7 @@ export default function AdminCmsPage() {
           schedule: { label: t('admin.cms.action.schedule'), onSelect: () => list.openSheet(e.id), hidden: !write },
           unpublish: { label: t('admin.cms.action.unpublish'), onSelect: () => confirm.ask({ title: t('admin.cms.unpublishConfirm.title', { key: e.key }), description: t('admin.cms.unpublishConfirm.description'), confirmLabel: t('admin.cms.action.unpublish'), destructive: true, run: () => act(() => adminWrite(`/admin/cms/${e.id}/unpublish`, 'POST', {}), t('admin.cms.unpublished')) }), destructive: true, hidden: !write },
           translate: { label: t('admin.cms.action.translate'), onSelect: () => void track(() => adminWrite<{ jobId: string }>(`/admin/cms/${e.id}/translate`, 'POST', {}), { running: t('admin.cms.translating'), done: t('admin.cms.translated') }), hidden: !write },
-          preview: { label: t('admin.cms.action.preview'), onSelect: () => void preview(e) },
+          preview: { label: t(e.type === 'announcement' ? 'admin.cms.action.previewAnnouncement' : 'admin.cms.action.preview'), onSelect: () => void preview(e) },
           versions: { label: t('admin.cms.action.versions'), onSelect: () => list.openSheet(e.id) },
         },
         t,
@@ -122,6 +126,7 @@ export default function AdminCmsPage() {
       <AdminListBody testId="cms-list" query={query} list={list} columns={columns} rowKey={(e) => e.id} label={t('nav.admin.cms')} entity={t('admin.cms.entity')} empty={{ title: t('admin.cms.empty', { type: t(`admin.cms.type.${type}`) }), action: write ? { label: t('admin.cms.new'), onClick: () => setCreate(true) } : undefined }} rowActions={menu} onRowClick={(e) => list.openSheet(e.id)} />
       {list.state.sheet && open.data ? <CmsEditor key={`${open.data.id}:${open.data.updatedAt}`} entry={open.data} canWrite={write} onClose={() => list.openSheet(null)} /> : null}
       <NewCmsDialog open={create} type={type} onClose={() => setCreate(false)} onCreated={(id, ty) => list.set({ tab: ty === 'announcement' ? null : ty, sheet: id })} />
+      {previewed ? <AnnouncementPreviewDialog open onClose={() => setPreviewed(null)} text={entryText(previewed)} channels={previewed.channels} link={previewed.link} /> : null}
       {confirm.element}
     </AdminPage>
   );
@@ -156,7 +161,7 @@ function NewCmsDialog({ open, type, onClose, onCreated }: { open: boolean; type:
     }
   };
   return (
-    <AdminDialog open={open} onClose={onClose} testId="dlg-cms" title={t('admin.cms.dialog.title')} context={t('admin.cms.dialog.context')} submitLabel={t('admin.cms.dialog.submit')} disabled={!slug.trim() || !title.trim()} pending={m.isPending} error={errors.form} note={t('admin.cms.dialog.note')} onSubmit={() => void submit()}>
+    <AdminDialog open={open} onClose={onClose} testId="dlg-cms" title={t('admin.cms.dialog.title')} context={t('admin.cms.dialog.context')} submitLabel={t('admin.cms.dialog.submit')} disabled={!slug.trim() || !title.trim()} pending={m.isPending} error={errors.form} note={t(ty === 'legal' || ty === 'help' || ty === 'page' ? 'admin.cms.dialog.note' : ty === 'announcement' ? 'admin.cms.dialog.noteAnnouncement' : 'admin.cms.dialog.noteOther')} onSubmit={() => void submit()}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t('admin.cms.dialog.type')} htmlFor="nc-type">
           <Select id="nc-type" value={ty} onChange={(e) => setTy(e.target.value as CmsType)}>

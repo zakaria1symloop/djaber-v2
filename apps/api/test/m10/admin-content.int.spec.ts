@@ -260,9 +260,12 @@ describe('ADM-08 CMS', () => {
     expect(sch.status).toBe('scheduled');
     expect(await app.app.get(CmsAdminService).publishDue(new Date(Date.now() + 2 * 3600_000))).toBe(1);
     expect((await sa.get(`/admin/cms/${e.id}`).expect(200)).body.data).toMatchObject({ status: 'published', currentVersion: 2 });
-    // tester report 22/10 UX-025: an announcement has no public page — no signed link (its preview is the banner)
-    expect((await sa.get(`/admin/cms/${e.id}`).expect(200)).body.data.actions.map((x: any) => x.key)).not.toContain('preview');
+    // tester report 22/10 UX-025: an announcement has no public page — no signed link; tester log 26/10 UX-035: its row still
+    // offers « Aperçu », shown in the admin as the clients see it (banner, notification, public site)
+    expect((await sa.get(`/admin/cms/${e.id}`).expect(200)).body.data.actions).toEqual(expect.arrayContaining([{ key: 'preview', enabled: true }]));
     await sa.get(`/admin/cms/${e.id}/preview-link`).expect(404);
+    const mail = (await sa.post('/admin/cms', { key: `mail-${Date.now()}`, type: 'email', locales: { fr: { title: 'Bienvenue', body: 'Bonjour' } } }).expect(201)).body.data;
+    expect(mail.actions.map((x: any) => x.key)).not.toContain('preview');
     const legal = (await sa.post('/admin/cms', { key: `cgu-${Date.now()}`, type: 'legal', locales: { fr: { title: 'CGU', body: 'Conditions' } } }).expect(201)).body.data;
     expect(legal.actions.map((x: any) => x.key)).toContain('preview');
     const link = (await sa.get(`/admin/cms/${legal.id}/preview-link`).expect(200)).body.data;

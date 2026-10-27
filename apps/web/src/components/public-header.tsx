@@ -9,14 +9,8 @@ import { Suspense, type ReactNode } from 'react';
 import { LocaleSwitch } from '@/components/auth/auth-card';
 import { Logo } from '@/components/shell/sidebar';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
+import { PUBLIC_NAV } from '@/features/public/logic';
 import { useT } from '@/lib/i18n';
-
-export const PUBLIC_NAV = [
-  { key: 'public.nav.features', href: '/features' },
-  { key: 'public.nav.pricing', href: '/pricing' },
-  { key: 'public.nav.help', href: '/help-center' },
-  { key: 'public.nav.status', href: '/status' },
-] as const;
 
 const isCurrent = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`);
 

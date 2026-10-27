@@ -86,8 +86,9 @@ export class CmsAdminService implements OnModuleInit {
         a('unpublish', e.status === 'published' || e.status === 'scheduled'),
         a('translate', !missing.includes('fr')),
         // tester report 22/10 UX-025: the signed 24 h link is for the entries with a public page only (03 PUB-03); an
-        // announcement is previewed as its banner in the editor, e-mails / plan texts / system messages have no page
-        ...(PREVIEWABLE.includes(e.type) ? [{ key: 'preview', enabled: true }] : []),
+        // announcement is previewed in the admin as the clients see it — banner, notification, public site (tester log
+        // 26/10 UX-035); e-mails / plan texts / system messages have no preview
+        ...(PREVIEWABLE.includes(e.type) || e.type === 'announcement' ? [{ key: 'preview', enabled: true }] : []),
         { key: 'versions', enabled: e.currentVersion > 0 },
       ],
     };

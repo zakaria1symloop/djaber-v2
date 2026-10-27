@@ -3,7 +3,7 @@
 // "Traduire avec l'IA depuis FR" (job), then CIBLE · CANAUX · DÉBUT · FIN · LIEN. Publish / schedule blocked by
 // CMS_LOCALE_MISSING unless "replier sur FR"; preview link 24 h; versions. Leave guard while dirty.
 import { isAnnouncementLink, type CmsEntryAdminDto, type CmsPreviewLinkDto, type CmsVersionDto } from '@djaber/shared';
-import { Button, Card, Checkbox, Dialog, Field, FormAlert, FrameNote, Input, MonoChip, Select, Textarea, toast } from '@djaber/ui';
+import { Button, Card, Checkbox, Combobox, Dialog, Field, FormAlert, FrameNote, Input, Select, Textarea, toast } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useConfirmAction } from '@/components/confirm-action';
@@ -12,6 +12,8 @@ import { errorMessage, useLeaveGuard } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { adminWrite, useAdminGet, useAdminInvalidate, useAdminJobToast } from '../api';
 import { AdminPill, useFormats } from '../ui';
+import { AnnouncementPreviewDialog, announcementTextOf } from './announcement-preview';
+import { announcementLinkOptions, EXTERNAL_LINK } from './link-options';
 
 type Loc = 'fr' | 'ar' | 'en';
 const LOCALES: Loc[] = ['fr', 'ar', 'en'];
@@ -46,10 +48,16 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
   const [error, setError] = useState<string | null>(null);
   const [versions, setVersions] = useState(false);
   const [preview, setPreview] = useState(false);
+  // tester log 26/10 UX-036: « Lien » = a page picked by name, or « Adresse externe » for an https:// address
+  const linkOptions = useMemo(() => [...announcementLinkOptions(t), { value: EXTERNAL_LINK, label: t('admin.cms.link.external'), hint: 'https://…' }], [t]);
+  const [external, setExternal] = useState(() => !!base.link && !linkOptions.some((o) => o.value === base.link));
   useEffect(() => setD(base), [base]);
   const dirty = JSON.stringify(d) !== JSON.stringify(base);
   // tester report 22/10 UX-026: a link to a page that does not exist is refused before it is published
   const linkBad = !!d.link.trim() && !isAnnouncementLink(d.link);
+  // tester log 26/10 UX-037: the end comes after the start (the server refuses it too: endsAt validation.range)
+  const endBad = !!d.startsAt && !!d.endsAt && d.endsAt <= d.startsAt;
+  const blocked = linkBad ? t('validation.announcementLink') : endBad ? t('admin.cms.field.endBeforeStart') : undefined;
   const { guard } = useLeaveGuard(dirty, entry.key);
   const m = useMutation({ mutationFn: (fn: () => Promise<unknown>) => fn() });
   const status = (l: Loc) => entry.locales.find((x) => x.locale === l)?.status ?? 'missing';
@@ -155,11 +163,29 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
         <Field label={t('admin.cms.field.start')} htmlFor="cm-start">
           <Input id="cm-start" type="datetime-local" value={d.startsAt} onChange={(e) => setD((x) => ({ ...x, startsAt: e.target.value }))} className="[color-scheme:dark]" />
         </Field>
-        <Field label={t('admin.cms.field.end')} htmlFor="cm-end">
-          <Input id="cm-end" type="datetime-local" value={d.endsAt} onChange={(e) => setD((x) => ({ ...x, endsAt: e.target.value }))} className="[color-scheme:dark]" />
+        <Field label={t('admin.cms.field.end')} htmlFor="cm-end" error={endBad ? t('admin.cms.field.endBeforeStart') : undefined}>
+          <Input id="cm-end" type="datetime-local" min={d.startsAt || undefined} value={d.endsAt} onChange={(e) => setD((x) => ({ ...x, endsAt: e.target.value }))} className="[color-scheme:dark]" />
         </Field>
         <Field label={t('admin.cms.field.link')} htmlFor="cm-link" hint={t('admin.cms.field.linkHint')} error={linkBad ? t('validation.announcementLink') : undefined}>
-          <Input id="cm-link" dir="ltr" inputMode="url" autoComplete="off" spellCheck={false} autoCapitalize="none" value={d.link} onChange={(e) => setD((x) => ({ ...x, link: e.target.value }))} />
+          <div className="flex flex-col gap-2" data-testid="cms-link">
+            <Combobox
+              id="cm-link"
+              value={external ? EXTERNAL_LINK : d.link || null}
+              options={linkOptions}
+              placeholder={t('admin.cms.link.none')}
+              searchPlaceholder={t('admin.cms.link.search')}
+              emptyLabel={t('admin.cms.link.empty')}
+              clearLabel={t('admin.cms.link.none')}
+              invalid={linkBad}
+              onChange={(v) => {
+                setExternal(v === EXTERNAL_LINK);
+                setD((x) => ({ ...x, link: v === EXTERNAL_LINK ? (/^https?:/i.test(x.link) ? x.link : '') : (v ?? '') }));
+              }}
+            />
+            {external ? (
+              <Input aria-label={t('admin.cms.link.external')} dir="ltr" inputMode="url" autoComplete="off" spellCheck={false} autoCapitalize="none" placeholder="https://…" value={d.link} onChange={(e) => setD((x) => ({ ...x, link: e.target.value }))} data-testid="cms-link-external" />
+            ) : null}
+          </div>
         </Field>
       </fieldset>
       {entry.type === 'announcement' ? <p className="ts-label-micro !normal-case text-text-muted" data-testid="cms-channels-hint">{t('admin.cms.channelsHint')}</p> : null}
@@ -176,8 +202,8 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
       <div className="flex flex-wrap items-center gap-2">
         <FrameNote className="me-auto max-w-xl">{t('admin.cms.editor.note', { count: entry.versions.length })}</FrameNote>
         {entry.type === 'announcement' ? (
-          <Button variant="ghost" onClick={() => setPreview(true)}>
-            {t('admin.cms.editor.previewBanner')}
+          <Button variant="ghost" onClick={() => setPreview(true)} data-testid="cms-preview-announcement">
+            {t('admin.cms.editor.preview')}
           </Button>
         ) : entry.type === 'legal' || entry.type === 'help' || entry.type === 'page' ? (
           <Button variant="ghost" onClick={() => void openPreview()}>
@@ -186,7 +212,7 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
         ) : null}
         {canWrite ? (
           <>
-            <Button onClick={() => void act(save, t('admin.cms.saved'))} disabled={!dirty} disabledReason={linkBad ? t('validation.announcementLink') : undefined} loading={m.isPending} data-testid="cms-save">
+            <Button onClick={() => void act(save, t('admin.cms.saved'))} disabled={!dirty} disabledReason={blocked} loading={m.isPending} data-testid="cms-save">
               {t('admin.cms.editor.saveDraft')}
             </Button>
             {entry.status === 'published' ? (
@@ -198,7 +224,7 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
                 {t('admin.cms.action.unpublish')}
               </Button>
             ) : null}
-            <Button variant="primary" onClick={() => void publish()} disabledReason={linkBad ? t('validation.announcementLink') : undefined} loading={m.isPending} data-testid="cms-publish">
+            <Button variant="primary" onClick={() => void publish()} disabledReason={blocked} loading={m.isPending} data-testid="cms-publish">
               {future ? t('admin.cms.editor.schedule') : t('admin.cms.editor.publish')}
             </Button>
           </>
@@ -207,18 +233,8 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
       {guard}
       {confirm.element}
       <VersionsDialog id={entry.id} open={versions} onClose={() => setVersions(false)} />
-      <Dialog open={preview} onOpenChange={setPreview} title={t('admin.cms.editor.previewBanner')} closeLabel={t('action.close')} size="lg">
-        <div className="flex flex-col gap-2">
-          {LOCALES.map((l) => (
-            <div key={l} lang={l} dir={l === 'ar' ? 'rtl' : 'ltr'} className="flex items-center gap-3 border-s-[3px] border-accent-inbound bg-ink-raised px-4 py-2.5 text-[13px]">
-              <MonoChip className="shrink-0">{l.toUpperCase()}</MonoChip>
-              <span className="min-w-0 flex-1">
-                <strong>{d.locales[l].title || (fallback ? d.locales.fr.title : '—')}</strong> {d.locales[l].body || (fallback ? d.locales.fr.body : '')}
-              </span>
-            </div>
-          ))}
-        </div>
-      </Dialog>
+      {/* UX-035: the draft as the clients will see it (banner, notification, public site) */}
+      {preview ? <AnnouncementPreviewDialog open onClose={() => setPreview(false)} text={announcementTextOf(d.locales, fallback)} channels={d.channels} link={d.link.trim() || null} /> : null}
     </Card>
   );
 }

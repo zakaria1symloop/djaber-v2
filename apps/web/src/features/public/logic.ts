@@ -60,6 +60,13 @@ export const diffHasChanges = (d: readonly DiffLine[]) => d.some((l) => l.kind !
 
 /* ---------- legal / CMS page keys (route map §3.1 `/legal/[key]`) ---------- */
 /** The legal documents (`LegalDocKey`) + the CMS legal pages linked from the footer, in footer order. */
+/** Header links of the public site (PUB-01): Fonctionnalités · Tarifs · Aide · Statut. */
+export const PUBLIC_NAV = [
+  { key: 'public.nav.features', href: '/features' },
+  { key: 'public.nav.pricing', href: '/pricing' },
+  { key: 'public.nav.help', href: '/help-center' },
+  { key: 'public.nav.status', href: '/status' },
+] as const;
 export const LEGAL_FOOTER_KEYS = ['terms', 'privacy', 'cookies', 'content_rules', 'data-deletion'] as const;
 /** CMS keys are slugs (same rule as the API's `CMS_SLUG_INVALID`) — anything else is a 404 without an API call. */
 export const isCmsKey = (k: string) => k.length <= 80 && /^[a-z0-9]+(?:[-_.][a-z0-9]+)*$/.test(k);
