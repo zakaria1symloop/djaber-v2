@@ -13,7 +13,7 @@ import { fullName, Num, ShortDate, useFormats } from '@/features/admin/ui';
 import { useWorkspaceActions } from '@/features/admin/workspaces/actions';
 import { CreateWorkspaceDialog } from '@/features/admin/workspaces/dialogs';
 import { WorkspaceSheet } from '@/features/admin/workspaces/sheet';
-import { WorkspaceStatusPill, WorkspaceSubscriptionCell } from '@/features/admin/workspaces/status';
+import { WorkspaceStateCell, WorkspaceSubscriptionCell } from '@/features/admin/workspaces/status';
 import { WORKSPACES_LIST } from '@/features/admin/specs';
 import { useGeoWilayas } from '@/features/delivery/api';
 import { wilayaLabel } from '@/features/delivery/geo';
@@ -85,7 +85,8 @@ export default function AdminWorkspacesPage() {
       ),
     },
     { key: 'plan', header: t('admin.common.plan'), cell: (r) => r.plan.name },
-    { key: 'status', header: t('admin.ws.filter.subscription'), cell: (r) => <WorkspaceSubscriptionCell ws={r} /> },
+    { key: 'status', header: t('admin.common.status'), cell: (r) => <WorkspaceStateCell ws={r} /> },
+    { key: 'subscription', header: t('admin.ws.filter.subscription'), cell: (r) => <WorkspaceSubscriptionCell ws={r} /> },
     {
       key: 'credits',
       header: t('admin.ws.col.creditsMonth'),
@@ -132,7 +133,7 @@ export default function AdminWorkspacesPage() {
             <button type="button" onClick={() => list.openSheet(r.id)} className="min-w-0 flex-1 text-start">
               <span className="block truncate text-[14px] font-medium">{r.name}</span>
               <span className="flex flex-wrap items-center gap-2 ts-label-meta text-text-muted">
-                {r.plan.name} <WorkspaceStatusPill ws={r} />
+                {r.plan.name} {r.status !== 'active' ? <WorkspaceStateCell ws={r} /> : null} <WorkspaceSubscriptionCell ws={r} />
               </span>
             </button>
             {menu(r)}

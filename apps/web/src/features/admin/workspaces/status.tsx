@@ -11,18 +11,25 @@ export const workspacePill = (ws: Pick<AdminWorkspaceRowDto, 'status' | 'subscri
     : { group: 'Subscription.status', value: ws.subscriptionStatus, key: `enum.Subscription.status.${ws.subscriptionStatus}` };
 
 /**
- * Column « Abonnement » of the list (tester report 22/10 UX-016: the « Statut » filter is the workspace status, the column
- * showed the subscription under the same name): the subscription pill, after the workspace pill when it is not active.
+ * Columns of the list: « Statut » = the workspace status of every row (ACTIF / SUSPENDU / SUPPRESSION J+30), the value the
+ * « Statut » filter uses (tester log 26/10 UX-041); « Abonnement » = the subscription state only (tester report 22/10
+ * UX-016 had both in one column).
  */
-export function WorkspaceSubscriptionCell({ ws }: { ws: Pick<AdminWorkspaceRowDto, 'status' | 'subscriptionStatus'> }) {
+export function WorkspaceStateCell({ ws }: { ws: Pick<AdminWorkspaceRowDto, 'status'> }) {
   const t = useT();
   return (
-    <span className="inline-flex flex-wrap items-center gap-1">
-      {ws.status !== 'active' ? <WorkspaceStatusPill ws={ws} /> : null}
-      <AdminPill group="Subscription.status" value={ws.subscriptionStatus}>
-        {t(`enum.Subscription.status.${ws.subscriptionStatus}`)}
-      </AdminPill>
-    </span>
+    <AdminPill group="Workspace.status" value={ws.status}>
+      {t(`enum.Workspace.status.${ws.status}`)}
+    </AdminPill>
+  );
+}
+
+export function WorkspaceSubscriptionCell({ ws }: { ws: Pick<AdminWorkspaceRowDto, 'subscriptionStatus'> }) {
+  const t = useT();
+  return (
+    <AdminPill group="Subscription.status" value={ws.subscriptionStatus}>
+      {t(`enum.Subscription.status.${ws.subscriptionStatus}`)}
+    </AdminPill>
   );
 }
 
