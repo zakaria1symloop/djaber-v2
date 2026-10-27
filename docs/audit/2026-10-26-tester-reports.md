@@ -3,7 +3,8 @@
 Sources (in `docs/audit/inputs/`): UX-UI test log of 22/10 (`2026-10-22-ux-ui-test-log.md`, prefix **L22**), UX-UI test log of
 25/10 (`2026-10-25-ux-ui-test-log.md`, prefix **L25** — its numbers restart at UX-001), tester notes of 25/10
 (`2026-10-25-djaber-test.md`, prefix **T25**, numbered in reading order), meeting PV of 26/10 (`2026-10-26-pv-reunion-djaber.md`,
-prefix **PV26**) and the developer's own report of 26/10 (prefix **AI**).
+prefix **PV26**), the developer's own report of 26/10 (prefix **AI**) and the UX-UI test log of 26/10 (`2026-10-26-ux-ui-test-log.md`,
+prefix **L26**, last section).
 
 Status: `todo` · `done` (commit) · `deferred` (reason).
 
@@ -61,3 +62,16 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 | T25-8 / PV26-F2 | Date filters: the « au » date is cut, a horizontal scroll bar appears | done |
 | L25-UX-002 | Help tickets: no attachment on a reply | done |
 | L25-UX-009 | ZR Express: the orders do not appear in ZR Express | done (code; live mode = server .env) |
+
+## UX-UI test log of 26/10 (`2026-10-26-ux-ui-test-log.md`, prefix **L26**)
+| # | Issue | Status |
+|---|---|---|
+| L26-UX-032 | Admin AI: a model cannot be deleted; delete rules only in the code | done (ea0048d) |
+| L26-UX-034 | Moderation: banned-word variants rejected at once, new variants wait for review (« à arbitrer ») | done (af68597) |
+| L26-UX-035 | CMS: announcements lost « Aperçu » in « Actions » (« à arbitrer ») | done (bb3b701) |
+| L26-UX-036 | CMS: announcement « Lien » as a searchable list of pages (« à arbitrer ») | done (bb3b701) |
+| L26-UX-037 | CMS: « Fin » can be set before « Début » | done (bb3b701) |
+| L26-UX-038 | AI chatbot sometimes offers products / variants pending moderation | done (2eabf54) |
+| L26-UX-039 | Pictures added with « + Ajouter » or « Modifier » then « Annuler » skip moderation | done (4f992fb) |
+| L26-UX-040 | « Retirer des crédits » does not tell the client (« à arbitrer ») | done (faf068e) |
+| L26-UX-041 | Admin Workspaces: no column for the « Statut » filter (« à arbitrer ») | done (ff16ffd) |

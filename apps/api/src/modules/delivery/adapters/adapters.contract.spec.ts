@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
-import { capabilitiesOf, CourierError, ZR_APP_CAPABILITIES, type CreateShipmentInput } from './courier-adapter';
+import { capabilitiesOf, ZR_APP_CAPABILITIES, type CreateShipmentInput } from './courier-adapter';
 import { createCourierAdapters } from './courier-registry';
 import { EcotrackAdapter } from './ecotrack.adapter';
 import type { CourierTransport, HttpRequest } from './http';
