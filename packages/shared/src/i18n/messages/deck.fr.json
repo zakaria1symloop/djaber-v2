@@ -551,6 +551,8 @@
  "notification.credits.granted.title": "{credits} crédits ajoutés par Djaber",
  "notification.credits.negative.title": "Solde de crédits négatif — l'IA est bloquée",
  "notification.credits.pack_purchased.title": "Pack de {credits} crédits ajouté",
+ "notification.credits.removed.body": "Motif : {reason}",
+ "notification.credits.removed.title": "{credits} crédits retirés par Djaber",
  "notification.customer.auto_blocked.title": "Client {client} bloqué automatiquement ({rule})",
  "notification.filter.aiIssues": "Problèmes IA",
  "notification.filter.aiOrders": "Commandes IA",

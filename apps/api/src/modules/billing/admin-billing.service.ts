@@ -7,7 +7,8 @@
 //     Owner + in-app notification `credits.granted` (tester report 22/10 UX-021), audit `credits.grant` with the reason;
 //     support ≤ 1 000 (`403 ADMIN_CREDIT_GRANT_LIMIT {max}`).
 //   POST /admin/workspaces/:id/credits/remove (tester report 22/10 UX-019; finance + super_admin): a negative
-//     `adjustment` of the plan credits, at most what is left of them, audit `credits.remove`.
+//     `adjustment` of the plan credits, at most what is left of them, audit `credits.remove`; e-mail to the Owner +
+//     in-app notification `credits.removed` with the reason (tester log 26/10 UX-040).
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { ADMIN_REASON_MIN, ADMIN_SUPPORT_GRANT_MAX, type AdminGrantCreditsInput, type AdminGrantCreditsResultDto, type AdminMarkPaidInput, type AdminMarkPaidResultDto, type AdminRemoveCreditsInput } from '@djaber/shared';
@@ -110,7 +111,7 @@ export class AdminBillingService {
   async removeCredits(workspaceId: string, input: AdminRemoveCreditsInput, admin: Admin): Promise<AdminGrantCreditsResultDto> {
     const reason = this.reason(input.reason);
     if (!/^[0-9a-f-]{36}$/i.test(workspaceId)) throw notFound();
-    const ws = await TenantContext.runSystem(() => prisma.workspace.findFirst({ where: { id: workspaceId, deletedAt: null }, select: { id: true } }));
+    const ws = await TenantContext.runSystem(() => prisma.workspace.findFirst({ where: { id: workspaceId, deletedAt: null }, select: { id: true, name: true, owner: { select: { email: true, locale: true } } } }));
     if (!ws) throw notFound();
     const tenant = await this.tenants.forWorker(workspaceId);
     const key = `admin-remove:${workspaceId}:${randomUUID()}`;
@@ -123,6 +124,14 @@ export class AdminBillingService {
         const max = b.unlimited ? 0 : Math.max(0, b.plan);
         if (input.credits > max) throw new AppException('VALIDATION_ERROR', {}, { credits: 'validation.range' }, { max });
         const w = await this.credits.writeIn(tx, workspaceId, { bucket: 'plan', action: 'adjustment', credits: -input.credits, key, reason: `admin:remove:${reason}`.slice(0, 500), grantedById: admin.userId });
+        // tester log 26/10 UX-040: the Owner is told like for a grant — e-mail with the reason + in-app notification
+        if (ws.owner) {
+          await this.mail.send(
+            { to: ws.owner.email, template: 'billing/credits-removed', locale: ws.owner.locale, params: { credits: input.credits, workspaceName: ws.name, reason, url: `${this.config.get('PUBLIC_WEB_URL').replace(/\/$/, '')}/settings/credits` }, key: `mail:${key}`, workspaceId },
+            tx,
+          );
+        }
+        await this.notifications.emit(tx, { type: 'credits_removed', workspaceId, target: { owner: true }, key: `credits_removed:${w.entryId}`, data: { credits: input.credits, reason } });
         return w.entryId;
       }),
     );

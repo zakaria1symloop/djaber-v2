@@ -551,6 +551,8 @@
  "notification.credits.granted.title": "{credits} credits added by Djaber",
  "notification.credits.negative.title": "Negative credit balance — the AI is blocked",
  "notification.credits.pack_purchased.title": "Pack of {credits} credits added",
+ "notification.credits.removed.body": "Reason: {reason}",
+ "notification.credits.removed.title": "{credits} credits removed by Djaber",
  "notification.customer.auto_blocked.title": "Customer {client} blocked automatically ({rule})",
  "notification.filter.aiIssues": "AI issues",
  "notification.filter.aiOrders": "AI orders",

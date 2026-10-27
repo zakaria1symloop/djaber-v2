@@ -873,6 +873,7 @@ enum NotificationType {
   support_reply
   credits_pack_purchased
   credits_granted
+  credits_removed
   subscription_trial_extended
   credits_negative
   invoice_unpaid

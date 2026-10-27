@@ -551,6 +551,8 @@
  "notification.credits.granted.title": "أضاف Djaber {credits} رصيد",
  "notification.credits.negative.title": "رصيد سالب — الذكاء الاصطناعي متوقف",
  "notification.credits.pack_purchased.title": "تمت إضافة باقة {credits} رصيد",
+ "notification.credits.removed.body": "السبب: {reason}",
+ "notification.credits.removed.title": "سحب Djaber {credits} رصيد",
  "notification.customer.auto_blocked.title": "تم حظر العميل {client} تلقائيًا ({rule})",
  "notification.filter.aiIssues": "مشاكل الذكاء الاصطناعي",
  "notification.filter.aiOrders": "طلبات الذكاء الاصطناعي",

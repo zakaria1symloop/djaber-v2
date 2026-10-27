@@ -30,6 +30,7 @@ export const TYPE_GROUP: Partial<Record<NotificationType, NotificationGroup>> = 
   credits_exhausted: 'credits_plan',
   credits_pack_purchased: 'credits_plan',
   credits_granted: 'credits_plan',
+  credits_removed: 'credits_plan',
   subscription_trial_extended: 'credits_plan',
   credits_negative: 'credits_plan',
   invoice_unpaid: 'credits_plan',

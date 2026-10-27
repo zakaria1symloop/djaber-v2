@@ -19,6 +19,7 @@ export type MailTemplateName =
   | 'reports/scheduled'
   /** PRM-03: admin credit gesture, e-mail to the Owner (M9) */
   | 'billing/credits-granted'
+  | 'billing/credits-removed'
   /** 03-events §5.3 generic "notification/<type>" layout: title, body, CTA deep link (the type rides in params.type) */
   | 'notification'
   /** OPS-06 (M10): public status page subscription — confirmation link, then incident updates */
@@ -49,6 +50,17 @@ const COPY: Record<MailTemplateName, Copy> = {
       'The Djaber team added {credits} credits to your workspace {workspaceName}. Reason: {reason}. They come on top of the credits of your current period.',
     ),
     cta: l('Voir mes crédits', 'عرض أرصدتي', 'See my credits'),
+  },
+  // tester log 26/10 UX-040: a removal is told like a grant
+  'billing/credits-removed': {
+    subject: l('{credits} crédits retirés de {workspaceName}', 'تم سحب {credits} رصيد من {workspaceName}', '{credits} credits removed from {workspaceName}'),
+    title: l('{credits} crédits retirés par Djaber', 'سحب جابر {credits} رصيد', '{credits} credits removed by Djaber'),
+    body: l(
+      'L’équipe Djaber a retiré {credits} crédits de votre espace {workspaceName}. Motif : {reason}. Ils sont déduits des crédits de votre période en cours ; vos packs achetés ne sont pas touchés. Le détail est dans l’historique de vos crédits.',
+      'سحب فريق جابر {credits} رصيد من مساحتك {workspaceName}. السبب: {reason}. تُخصم من أرصدة فترتك الحالية؛ الباقات التي اشتريتها لا تتأثر. التفاصيل في سجل أرصدتك.',
+      'The Djaber team removed {credits} credits from your workspace {workspaceName}. Reason: {reason}. They are taken from the credits of your current period; the packs you bought are not touched. The details are in your credits history.',
+    ),
+    cta: l('Voir l’historique des crédits', 'عرض سجل الأرصدة', 'See the credits history'),
   },
   'auth/verify': {
     subject: l('Vérifiez votre e-mail', 'تحقق من بريدك الإلكتروني', 'Verify your e-mail'),

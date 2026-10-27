@@ -276,6 +276,10 @@ describe('admin credit grants (PRM-03) & ledger export', () => {
     expect(ok.balance.total).toBe(before - 99000);
     expect(await db.creditLedger.findUniqueOrThrow({ where: { id: ok.ledgerEntryId } })).toMatchObject({ action: 'adjustment', kind: 'debit', bucket: 'plan', credits: -99000, grantedById: expect.any(String) });
     expect(await eventually(() => db.auditLog.count({ where: { action: 'credits.remove', entityId: owner.workspaceId, reason: body.reason } }))).toBe(1);
+    // tester log 26/10 UX-040: the Owner is told — e-mail with the reason and the link to the credits history, in-app notification
+    const ownerEmail = (await db.user.findUniqueOrThrow({ where: { id: owner.userId } })).email;
+    expect((await mailsTo(app, ownerEmail, 'billing/credits-removed')).length).toBe(1);
+    expect(await db.outbox.findFirst({ where: { workspaceId: owner.workspaceId, topic: 'notification', key: `credits_removed:${ok.ledgerEntryId}` } })).toMatchObject({ payload: expect.objectContaining({ type: 'credits_removed' }) });
     await finance.post('/admin/workspaces/00000000-0000-4000-8000-000000000000/credits/remove', body).expect(404);
     // the row action is offered to finance, refused (FORBIDDEN) to support
     const row = (r: any) => r.body.data.find((w: any) => w.id === owner.workspaceId).actions.find((x: any) => x.key === 'remove_credits');
