@@ -3,12 +3,13 @@
 // INJOIGNABLE AI_PROVIDER_UNREACHABLE (save anyway) / AUCUNE CLÉ AI_PROVIDER_NO_KEY; the key is never shown again),
 // DLG "Modèle IA" (costs feed the calculator), route editor (primary / fallback, credits, timeout, threshold, bascule)
 // and "Enregistrer une version de grille" (CreditPricing, applied at each workspace's next period).
-import type { AiModelAdminDto, AiPricingSimulateInput, AiProviderAdminDto, AiProviderTestDto, AiRouteDto } from '@djaber/shared';
-import { Checkbox, Field, Input, KeyTestRow, Select, Switch, toast, type KeyTestState } from '@djaber/ui';
+import type { AiModelAdminDto, AiModelDeleteDto, AiPricingSimulateInput, AiProviderAdminDto, AiProviderTestDto, AiRouteDto } from '@djaber/shared';
+import { Checkbox, ConfirmDialog, Field, Input, KeyTestRow, Select, Switch, toast, type KeyTestState } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Button } from '@djaber/ui';
 import { ApiError } from '@/lib/api';
+import { errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { adminWrite, useAdminInvalidate } from '../api';
 import { AdminDialog, NO_ERRORS, ReasonField, reasonOk, toServerErrors, useOnOpen, type ServerErrors } from '../dialog-kit';
@@ -125,8 +126,11 @@ export function ModelDialog({ model, providers, open, onClose }: { model: AiMode
   const [threshold, setThreshold] = useState('2');
   const [active, setActive] = useState(true);
   const [errors, setErrors] = useState<ServerErrors>(NO_ERRORS);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const m = useMutation({ mutationFn: (fn: () => Promise<unknown>) => fn() });
+  const del = useMutation({ mutationFn: (id: string) => adminWrite<AiModelDeleteDto>(`/admin/ai-models/${id}`, 'DELETE') });
   useOnOpen(open, () => {
+    setConfirmDelete(false);
     setProviderKey(model?.providerKey ?? providers[0]?.key ?? 'openai');
     setModelId(model?.modelId ?? '');
     setDisplayName(model?.displayName ?? '');
@@ -154,7 +158,24 @@ export function ModelDialog({ model, providers, open, onClose }: { model: AiMode
     }
   };
   const decimal = (v: string) => v.replace(/[^\d.,]/g, '');
+  // UX-032: refused while a route uses the model (AI_MODEL_IN_ROUTE); a model that already served is switched off instead
+  const routed = model?.usedBy.length ?? 0;
+  const onDelete = async () => {
+    if (!model) return;
+    setErrors(NO_ERRORS);
+    try {
+      const r = await del.mutateAsync(model.id);
+      void invalidate('/admin/ai-models', '/admin/ai-providers', '/admin/ai-routes', '/admin/ai-pricing');
+      toast(t(r.outcome === 'deactivated' ? 'admin.ai.model.delete.deactivated' : 'admin.ai.model.delete.done'));
+      setConfirmDelete(false);
+      onClose();
+    } catch (e) {
+      setConfirmDelete(false);
+      setErrors({ form: errorMessage(e, t), fields: {} });
+    }
+  };
   return (
+    <>
     <AdminDialog
       open={open}
       onClose={onClose}
@@ -166,6 +187,13 @@ export function ModelDialog({ model, providers, open, onClose }: { model: AiMode
       pending={m.isPending}
       error={errors.form}
       note={t('admin.ai.model.note')}
+      extra={
+        model ? (
+          <Button variant="ghost" className="text-accent-alert" disabled={routed > 0 || m.isPending} title={routed > 0 ? t('error.AI_MODEL_IN_ROUTE', { count: routed }) : undefined} onClick={() => setConfirmDelete(true)} data-testid="dlg-model-delete">
+            {t('admin.ai.model.delete.action')}
+          </Button>
+        ) : undefined
+      }
       onSubmit={() => void submit()}
     >
       <div className="grid gap-3 sm:grid-cols-3">
@@ -220,7 +248,21 @@ export function ModelDialog({ model, providers, open, onClose }: { model: AiMode
       <Field label={t('admin.ai.model.displayName')} htmlFor="m-name">
         <Input id="m-name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
       </Field>
+      {routed > 0 ? <p className="text-[12px] text-text-muted" data-testid="dlg-model-routed">{t('error.AI_MODEL_IN_ROUTE', { count: routed })}</p> : null}
     </AdminDialog>
+    <ConfirmDialog
+      open={confirmDelete}
+      onOpenChange={(o) => !o && !del.isPending && setConfirmDelete(false)}
+      title={t('admin.ai.model.delete.title', { name: model?.displayName ?? '' })}
+      description={t('admin.ai.model.delete.confirm')}
+      confirmLabel={t('admin.ai.model.delete.action')}
+      cancelLabel={t('action.cancel')}
+      closeLabel={t('action.close')}
+      destructive
+      loading={del.isPending}
+      onConfirm={() => void onDelete()}
+    />
+    </>
   );
 }
 

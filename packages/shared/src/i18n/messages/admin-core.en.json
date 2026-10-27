@@ -1145,5 +1145,10 @@
  "admin.ws.creditsRemove.note": "Finance / super admin · plan credits only, bought packs are never touched · an « Adjustment » row with the reason in the shop's credits history.",
  "admin.ws.filter.wilaya": "Wilaya",
  "admin.cms.field.linkHint": "A Djaber page (/settings/billing, /orders, /pricing…) or an https://… address",
- "admin.overview.chart.totals": "Over the period: {signups} sign-ups · {activations} activations · {churned} churned · {rate} of the workspaces created connected a page"
+ "admin.overview.chart.totals": "Over the period: {signups} sign-ups · {activations} activations · {churned} churned · {rate} of the workspaces created connected a page",
+ "admin.ai.model.delete.action": "Delete",
+ "admin.ai.model.delete.title": "Delete the model « {name} »?",
+ "admin.ai.model.delete.confirm": "A model that never served is deleted for good. If it has already answered customers, it is switched off instead (the history keeps it).",
+ "admin.ai.model.delete.done": "Model deleted.",
+ "admin.ai.model.delete.deactivated": "Model already used: switched off instead of deleted."
 }

@@ -22,6 +22,7 @@
   "AGENT_READINESS": "Points à vérifier avant activation : {items}.",
   "AGENT_TEST_LINK_EXPIRED": "Lien de test expiré (24 h).",
   "AGENT_VERSION_NOT_FOUND": "Version introuvable.",
+  "AI_MODEL_IN_ROUTE": "Modèle utilisé par {count} route(s) : choisissez un autre modèle pour ces routes avant de le supprimer.",
   "AI_PROVIDER_ERROR": "L'IA ne répond pas ; la conversation passe en file.",
   "AI_PROVIDER_KEY_REJECTED": "Clé refusée par {provider}.",
   "AI_PROVIDER_NO_KEY": "Aucune clé configurée.",

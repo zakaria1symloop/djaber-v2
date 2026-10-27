@@ -22,6 +22,7 @@ export const ERROR_CODES = {
   AGENT_PAUSED_WITH_OPEN_THREADS: { status: 409, params: ["count"] },
   AGENT_TEST_LINK_EXPIRED: { status: 410, params: [] },
   AGENT_VERSION_NOT_FOUND: { status: 404, params: [] },
+  AI_MODEL_IN_ROUTE: { status: 409, params: ["count"] },
   AI_PROVIDER_ERROR: { status: 503, params: [] },
   AI_PROVIDER_KEY_REJECTED: { status: 401, params: ["provider"] },
   AI_PROVIDER_NO_KEY: { status: 422, params: [] },

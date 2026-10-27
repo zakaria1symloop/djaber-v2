@@ -519,6 +519,8 @@ export type AdminCreateAiModelInput = z.infer<typeof AdminCreateAiModelSchema>;
 export const AdminUpdateAiModelSchema = AdminCreateAiModelSchema.omit({ providerKey: true, modelId: true }).partial().strict();
 export type AdminUpdateAiModelInput = z.infer<typeof AdminUpdateAiModelSchema>;
 export type AiModelAdminDto = { id: string; provider: string; providerKey: string; modelId: string; displayName: string; capabilities: string[]; supportsTools: boolean; inputPricePerM: number; outputPricePerM: number; contextTokens: number | null; timeoutSec: number; failoverThresholdPct: number; isActive: boolean; usedBy: string[] };
+/** `DELETE /admin/ai-models/:id` (UX-032): `deactivated` = the model already served (AI runs / agents keep it), switched off instead. */
+export type AiModelDeleteDto = { outcome: 'deleted' | 'deactivated' };
 /** `PUT /admin/ai-routes/:capability` — `failoverActive: true` forces the fallback ("bascule"), `false` clears it. */
 export const AdminPutAiRouteSchema = z
   .object({ primaryModelId: id, fallbackModelId: id.nullable().optional(), creditCost: int(0, 1000), timeoutSec: int(1, 120).optional(), errorThresholdPct: int(1, 100).optional(), failoverActive: z.boolean().optional(), reason: reason.optional() })

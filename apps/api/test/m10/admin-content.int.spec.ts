@@ -89,7 +89,8 @@ describe('ADM-06 AI providers, models, routes, pricing', () => {
     const owner = await asOwner(app);
     const badge = (await owner.get('/ai/routes').expect(200)).body.data.find((b: any) => b.capability === 'text');
     expect(badge).toMatchObject({ failover: true, model: { id: m.id } });
-    await sa.delete(`/admin/ai-models/${m.id}`).expect(409); // routed
+    // routed ⇒ refused with the route count (UX-032)
+    expect((await sa.delete(`/admin/ai-models/${m.id}`).expect(409)).body.error).toMatchObject({ code: 'AI_MODEL_IN_ROUTE', params: { count: 1 } });
     // deactivate the primary ⇒ routing serves the fallback
     await sa.put('/admin/ai-routes/text', { primaryModelId: text.primary.modelId, fallbackModelId: m.id, creditCost: text.credits, failoverActive: false }).expect(200);
     const { RoutingService } = await import('../../src/modules/ai/routing.service');
@@ -100,7 +101,17 @@ describe('ADM-06 AI providers, models, routes, pricing', () => {
     // restore
     await sa.patch(`/admin/ai-models/${text.primary.modelId}`, { isActive: true }).expect(200);
     await sa.put('/admin/ai-routes/text', { primaryModelId: text.primary.modelId, fallbackModelId: text.fallback?.modelId ?? null, creditCost: text.credits, failoverActive: false }).expect(200);
-    await sa.delete(`/admin/ai-models/${m.id}`).expect(204);
+    // never served ⇒ deleted
+    expect((await sa.delete(`/admin/ai-models/${m.id}`).expect(200)).body.data).toEqual({ outcome: 'deleted' });
+    expect(await db.aiModel.findUnique({ where: { id: m.id } })).toBeNull();
+    // already served (an AI run points to it) ⇒ switched off, kept for the history
+    const used = (await sa.post('/admin/ai-models', { providerKey: 'openai', modelId: `${mid}-used`, displayName: 'GPT used', capabilities: ['text'], inputPricePerM: 0.15, outputPricePerM: 0.6 }).expect(201)).body.data;
+    const ws = await db.workspace.findFirstOrThrow();
+    const provider = await db.aiProvider.findUniqueOrThrow({ where: { key: 'openai' } });
+    await db.aiRun.create({ data: { workspaceId: ws.id, kind: 'test', modelId: used.id, providerId: provider.id, status: 'ok' } });
+    expect((await sa.delete(`/admin/ai-models/${used.id}`).expect(200)).body.data).toEqual({ outcome: 'deactivated' });
+    expect(await db.aiModel.findUnique({ where: { id: used.id } })).toMatchObject({ isActive: false });
+    await sa.delete(`/admin/ai-models/${randomUUID()}`).expect(404);
     expect(await lastAudit('ai_route.update', 'text')).toBeTruthy();
 
     const pricing = (await sa.get('/admin/ai-pricing').expect(200)).body.data;

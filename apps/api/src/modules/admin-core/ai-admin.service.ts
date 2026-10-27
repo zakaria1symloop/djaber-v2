@@ -9,6 +9,7 @@ import type {
   AdminPutAiRouteInput,
   AdminUpdateAiModelInput,
   AiModelAdminDto,
+  AiModelDeleteDto,
   AiPricingDto,
   AiPricingSimulateInput,
   AiPricingSimulationDto,
@@ -217,16 +218,26 @@ export class AiAdminService {
     return this.modelDto(row, await prisma.aiRoute.findMany());
   }
 
-  async deleteModel(id: string, actor: AdminActor) {
+  /**
+   * `DELETE /admin/ai-models/:id` (UX-032): refused while a route uses it (`409 AI_MODEL_IN_ROUTE {count}`); a model that
+   * already served (AI runs or agents point to it: the history keeps it) is switched off instead; otherwise deleted.
+   */
+  async deleteModel(id: string, actor: AdminActor): Promise<AiModelDeleteDto> {
     assertUuid(id);
     const m = await prisma.aiModel.findUnique({ where: { id } });
     if (!m) throw notFound();
-    const used = await prisma.aiRoute.count({ where: { OR: [{ primaryModelId: id }, { fallbackModelId: id }] } });
-    if (used) throw new AppException('CONFLICT', {}, {}, { reason: 'MODEL_ROUTED' });
-    const runs = await prisma.aiRun.count({ where: { modelId: id } });
-    if (runs) await prisma.aiModel.update({ where: { id }, data: { isActive: false } });
-    else await prisma.aiModel.delete({ where: { id } });
-    await this.log(actor, 'ai_model.delete', 'AiModel', id, { modelId: m.modelId }, { deleted: !runs, deactivated: !!runs }, null);
+    const routes = await prisma.aiRoute.count({ where: { OR: [{ primaryModelId: id }, { fallbackModelId: id }] } });
+    if (routes) throw new AppException('AI_MODEL_IN_ROUTE', { count: routes });
+    let outcome: 'deleted' | 'deactivated' = 'deleted';
+    try {
+      await prisma.aiModel.delete({ where: { id } });
+    } catch (e) {
+      if (!(e instanceof Prisma.PrismaClientKnownRequestError && (e.code === 'P2003' || e.code === 'P2014'))) throw e;
+      outcome = 'deactivated';
+      await prisma.aiModel.update({ where: { id }, data: { isActive: false } });
+    }
+    await this.log(actor, 'ai_model.delete', 'AiModel', id, { modelId: m.modelId }, { deleted: outcome === 'deleted', deactivated: outcome === 'deactivated' }, null);
+    return { outcome };
   }
 
   // --- routes --------------------------------------------------------------------------------------------------------------

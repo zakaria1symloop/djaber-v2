@@ -24,6 +24,7 @@ exports[`M0 — HTTP pipeline error envelope (11-error-catalogue) statuses of th
   "AGENT_PAUSED_WITH_OPEN_THREADS": 409,
   "AGENT_TEST_LINK_EXPIRED": 410,
   "AGENT_VERSION_NOT_FOUND": 404,
+  "AI_MODEL_IN_ROUTE": 409,
   "AI_PROVIDER_ERROR": 503,
   "AI_PROVIDER_KEY_REJECTED": 401,
   "AI_PROVIDER_NO_KEY": 422,

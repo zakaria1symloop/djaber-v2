@@ -1145,5 +1145,10 @@
  "admin.ws.creditsRemove.note": "Finance / super admin · crédits du plan uniquement, les packs achetés ne sont pas touchés · ligne « Ajustement » avec le motif dans l'historique des crédits de la boutique.",
  "admin.ws.filter.wilaya": "Wilaya",
  "admin.cms.field.linkHint": "Une page de Djaber (/settings/billing, /orders, /pricing…) ou une adresse https://…",
- "admin.overview.chart.totals": "Sur la période : {signups} inscriptions · {activations} activations · {churned} résiliations · {rate} des espaces créés ont connecté une page"
+ "admin.overview.chart.totals": "Sur la période : {signups} inscriptions · {activations} activations · {churned} résiliations · {rate} des espaces créés ont connecté une page",
+ "admin.ai.model.delete.action": "Supprimer",
+ "admin.ai.model.delete.title": "Supprimer le modèle « {name} » ?",
+ "admin.ai.model.delete.confirm": "Un modèle qui n'a jamais servi est supprimé définitivement. S'il a déjà répondu à des clients, il est désactivé à la place (l'historique le garde).",
+ "admin.ai.model.delete.done": "Modèle supprimé.",
+ "admin.ai.model.delete.deactivated": "Modèle déjà utilisé : désactivé au lieu d'être supprimé."
 }

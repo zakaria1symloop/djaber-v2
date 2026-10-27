@@ -173,6 +173,7 @@ Usage rule: `STOCK_INSUFFICIENT` is returned by stock adjustments and **sale** l
 | 401 | `AI_PROVIDER_KEY_REJECTED` | Clé refusée par {provider}. | رفض {provider} المفتاح. | Key rejected by {provider}. | inline (admin test) | replace key |
 | 503 | `AI_PROVIDER_UNREACHABLE` | {provider} injoignable. | تعذّر الوصول إلى {provider}. | {provider} unreachable. | inline (admin test) | retry |
 | 422 | `AI_PROVIDER_NO_KEY` | Aucune clé configurée. | لا يوجد مفتاح مُعدّ. | No key configured. | inline | add key |
+| 409 | `AI_MODEL_IN_ROUTE` {count} | Modèle utilisé par {count} route(s) : choisissez un autre modèle pour ces routes avant de le supprimer. | النموذج مستخدم في {count} مسار(ات): اختر نموذجًا آخر لهذه المسارات قبل حذفه. | Model used by {count} route(s): pick another model for these routes before deleting it. | dialog (admin) | change the routes |
 | 422 | `ADMIN_CANNOT_DEMOTE_SELF` | Vous ne pouvez pas retirer vos propres droits. | لا يمكنك إزالة صلاحياتك. | You can't remove your own rights. | toast | — |
 | 422 | `CMS_SLUG_INVALID` | Slug invalide (lettres, chiffres, tirets). | معرّف غير صالح (أحرف، أرقام، شرطات). | Invalid slug (letters, digits, dashes). | inline | — |
 

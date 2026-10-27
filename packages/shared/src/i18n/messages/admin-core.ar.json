@@ -1145,5 +1145,10 @@
  "admin.ws.creditsRemove.note": "المالية / المشرف العام · رصيد الخطة فقط، لا تُمس الباقات المشتراة · سطر «تعديل» مع السبب في سجل رصيد المتجر.",
  "admin.ws.filter.wilaya": "الولاية",
  "admin.cms.field.linkHint": "صفحة من Djaber (/settings/billing، /orders، /pricing…) أو عنوان https://…",
- "admin.overview.chart.totals": "خلال الفترة: {signups} تسجيل · {activations} تفعيل · {churned} إلغاء · {rate} من المساحات المنشأة ربطت صفحة"
+ "admin.overview.chart.totals": "خلال الفترة: {signups} تسجيل · {activations} تفعيل · {churned} إلغاء · {rate} من المساحات المنشأة ربطت صفحة",
+ "admin.ai.model.delete.action": "حذف",
+ "admin.ai.model.delete.title": "حذف النموذج «{name}»؟",
+ "admin.ai.model.delete.confirm": "يُحذف النموذج نهائيًا إذا لم يُستخدم أبدًا. إذا سبق أن ردّ على عملاء، يُعطَّل بدل ذلك (يحتفظ به السجل).",
+ "admin.ai.model.delete.done": "تم حذف النموذج.",
+ "admin.ai.model.delete.deactivated": "النموذج مستخدم سابقًا: عُطّل بدل حذفه."
 }

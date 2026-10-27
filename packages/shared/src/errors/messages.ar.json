@@ -22,6 +22,7 @@
   "AGENT_READINESS": "نقاط للمراجعة قبل التفعيل: {items}.",
   "AGENT_TEST_LINK_EXPIRED": "انتهت صلاحية رابط الاختبار (24 س).",
   "AGENT_VERSION_NOT_FOUND": "الإصدار غير موجود.",
+  "AI_MODEL_IN_ROUTE": "النموذج مستخدم في {count} مسار(ات): اختر نموذجًا آخر لهذه المسارات قبل حذفه.",
   "AI_PROVIDER_ERROR": "الذكاء الاصطناعي لا يستجيب؛ المحادثة في قائمة الانتظار.",
   "AI_PROVIDER_KEY_REJECTED": "رفض {provider} المفتاح.",
   "AI_PROVIDER_NO_KEY": "لا يوجد مفتاح مُعدّ.",

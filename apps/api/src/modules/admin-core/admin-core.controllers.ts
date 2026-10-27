@@ -625,10 +625,9 @@ export class AdminAiController {
   }
 
   @Delete('ai-models/:id')
-  @HttpCode(204)
   @RequirePlatformRole('admin.ai.write')
-  async deleteModel(@Param('id') id: string, @Admin() a: AdminActor) {
-    await this.ai.deleteModel(id, a);
+  deleteModel(@Param('id') id: string, @Admin() a: AdminActor) {
+    return this.ai.deleteModel(id, a);
   }
 
   @Get('ai-routes')
