@@ -54,8 +54,8 @@ const period = z.enum(['today', '7d', '30d', 'month', 'last_month', '90d', 'year
 // =============================================================================================================================
 // ADM-10 — moderation (D36, D52; 04 §12)
 // =============================================================================================================================
-/** 04 §12 pre-screen flag codes (+ `prescreen_unavailable` when the job failed, AT-MOD-10; `blocked_word` for agent prompts). */
-export const MODERATION_AI_FLAGS = ['protected_brand', 'prohibited_category', 'misleading_price', 'logo_in_image', 'health_claim', 'counterfeit_wording', 'single_image', 'missing_warranty', 'blocked_word', 'prescreen_unavailable'] as const;
+/** 04 §12 pre-screen flag codes (+ `prescreen_unavailable` when the job failed, AT-MOD-10; `blocked_word` for agent prompts; `new_variant`: a variant of an approved product not reviewed yet, never auto-approved — UX-034). */
+export const MODERATION_AI_FLAGS = ['protected_brand', 'prohibited_category', 'misleading_price', 'logo_in_image', 'health_claim', 'counterfeit_wording', 'single_image', 'missing_warranty', 'blocked_word', 'new_variant', 'prescreen_unavailable'] as const;
 export type ModerationAiFlag = (typeof MODERATION_AI_FLAGS)[number];
 /** 04 §12: auto-approval threshold; SLA target in business minutes; appeal window and appeal decision target. */
 export const MODERATION_AUTO_APPROVE_SCORE = 0.9;

@@ -53,6 +53,23 @@ describe('moderation pre-screen', () => {
     expect(ModerationPrescreenService.autoApprove({ aiScore: 0.89, sensitive: false }, 'trusted')).toBe(false);
   });
 
+  it('UX-034: a whole word of the platform lists is a banned hit (rejected at once); inside another word it only flags', () => {
+    const variant = svc.score({ ...base, variantNames: ['Rouge', 'Modèle Arnaque'] }, rules, null);
+    expect(variant.banned).toEqual({ code: 'blocked_word', word: 'arnaque', field: 'variants' });
+    expect(ModerationPrescreenService.autoApprove(variant, 'trusted')).toBe(false);
+    expect(svc.score({ ...base, description: 'pas une ARNAQUE !' }, rules, null).banned).toMatchObject({ field: 'description' });
+    expect(svc.score({ ...base, categoryName: 'Arme' }, rules, null).banned).toEqual({ code: 'prohibited_category', word: 'arme', field: 'categoryId' });
+    // « arnaques » / « Armes blanches » contain the word but are another word: flagged for a moderator, not rejected
+    const plural = svc.score({ ...base, name: 'Guide anti-arnaques' }, rules, null);
+    expect(plural.aiFlags[0]).toMatchObject({ code: 'blocked_word' });
+    expect(plural.banned).toBeUndefined();
+    expect(svc.score({ ...base, categoryName: 'Armes blanches' }, rules, null).banned).toBeUndefined();
+    expect(svc.score(base, rules, null).banned).toBeUndefined();
+    // Arabic words are matched whole too
+    const ar = { ...rules, words: ['مخدرات'] };
+    expect(svc.score({ ...base, description: 'بيع مخدرات هنا' }, ar, null).banned).toMatchObject({ word: 'مخدرات', field: 'description' });
+  });
+
   it('folds Arabic diacritics and tatweel', () => {
     expect(foldText('تَقْلِيـــد')).toBe('تقليد');
     expect(svc.isSensitive('مستحضرات التجميل', rules)).toBe(true);

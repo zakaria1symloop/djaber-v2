@@ -416,8 +416,8 @@ export function attributeHints(attributes: AiFillResult['attributes'] | null | u
 }
 
 /* ---------- moderation: rejected fields of the decision → form fields ---------- */
-export type RejectedField = 'name' | 'description' | 'price' | 'categoryId' | 'images';
-const REJECTED_ALIAS: Record<string, RejectedField> = { name: 'name', title: 'name', titre: 'name', description: 'description', price: 'price', prix: 'price', category: 'categoryId', categoryid: 'categoryId', image: 'images', images: 'images' };
+export type RejectedField = 'name' | 'description' | 'price' | 'categoryId' | 'images' | 'variants' | 'keywords';
+const REJECTED_ALIAS: Record<string, RejectedField> = { name: 'name', title: 'name', titre: 'name', description: 'description', price: 'price', prix: 'price', category: 'categoryId', categoryid: 'categoryId', image: 'images', images: 'images', variant: 'variants', variants: 'variants', keyword: 'keywords', keywords: 'keywords' };
 export const rejectedFieldSet = (fields: readonly string[] | null | undefined): Set<RejectedField> => {
   const out = new Set<RejectedField>();
   for (const f of fields ?? []) {

@@ -4811,7 +4811,7 @@
  "products.form.moderation.rejected": "Refusé par Djaber — masqué des clients et de l’agent IA jusqu’à validation.",
  "products.form.moderation.rejectedMark": "REFUSÉ",
  "products.form.moderation.resubmit": "Resoumettre",
- "products.form.moderation.reviewNote": "Seuls titre, images, catégorie, description, prix (±50 %) déclenchent une revalidation ; stock et variantes non. L’ancienne version reste vendue pendant l’attente.",
+ "products.form.moderation.reviewNote": "Titre, images, catégorie, description, prix (±50 %) et variantes (nouvelle, renommée, prix ±50 %) déclenchent une revalidation ; le stock non. Un mot interdit sur Djaber est refusé automatiquement. L’ancienne version reste vendue pendant l’attente.",
  "products.form.moderation.saveFirst": "Enregistrez d’abord vos modifications : elles sont resoumises automatiquement.",
  "products.form.newTitle": "Nouveau produit",
  "products.form.organisation.category": "CATÉGORIE",
@@ -6373,5 +6373,9 @@
  "safety.sourceOpt.auto_rule": "Automatique — règle « colis non récupérés »",
  "safety.sourceOpt.platform": "Plateforme — liste noire Djaber",
  "safety.blocks.sourcesHint": "Origine du blocage : MANUEL = un membre l'a bloqué · AUTO = la règle automatique ci-dessous (trop de colis non récupérés) · PLATEFORME = signalé par Djaber à toutes les boutiques, ne peut pas être levé ici.",
- "inbox.banner.outsideWindow.facebookNoTag": "Le dernier message du client date de plus de 24 h : aucun envoi n’est possible sur Messenger tant qu’il n’a pas réécrit."
+ "inbox.banner.outsideWindow.facebookNoTag": "Le dernier message du client date de plus de 24 h : aucun envoi n’est possible sur Messenger tant qu’il n’a pas réécrit.",
+ "adminMod.flag.new_variant": "Variante à vérifier",
+ "products.form.moderation.autoRejected": "Refusé automatiquement : « {word} » est un mot interdit sur Djaber ({field}). Retirez-le puis cliquez « Resoumettre ».",
+ "products.form.moderation.field.variants": "variantes",
+ "products.form.moderation.field.keywords": "mots-clés"
 }

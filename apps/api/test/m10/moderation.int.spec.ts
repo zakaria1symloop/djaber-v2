@@ -73,17 +73,56 @@ describe('pre-screen and auto-approval', () => {
     expect((await itemOf(phone.id)).snapshot).toMatchObject({ sensitive: true });
   });
 
-  it('PV 22/10 PV1: a platform blocked word in a variant name or the search keywords holds the product for review', async () => {
+  it('AT-MOD-11 (PV 22/10 PV1 + tester log 26/10 UX-034) a platform blocked word in a variant name or the search keywords — a whole word ⇒ rejected at once (reason, notification, hidden), inside another word ⇒ held for review', async () => {
     const rule = await mod.post('/admin/moderation/rules', { key: 'word.pv1-interdit', kind: 'blocked_word', value: 'motinterdit' }).expect(201);
     const owner = await merchant('trusted');
     const v = await createProduct(owner, { name: 'Robe longue', description: 'Coton.', stock: undefined, variants: [{ name: 'Rouge', price: 3000 }, { name: 'Bleu MotInterdit', price: 3000 }] });
-    expect(v.moderation.status).toBe('pending');
-    expect((await itemOf(v.id)).aiFlags).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'blocked_word', message: 'motinterdit', field: 'variants' })]));
+    expect(v.moderation.status).toBe('rejected');
+    const vi = await itemOf(v.id);
+    expect(vi).toMatchObject({ status: 'rejected', decision: 'prohibited', reviewerId: null, reasonTemplateKey: 'auto_banned_word', rejectedFields: ['variants'] });
+    expect(vi.decidedAt).not.toBeNull();
+    expect(vi.merchantMessage).toContain('motinterdit');
+    expect(vi.aiFlags).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'blocked_word', message: 'motinterdit', field: 'variants' })]));
+    await drainAll(app, ['notification']);
+    expect((await db.notification.findMany({ where: { workspaceId: owner.workspaceId, type: 'product_rejected' } })).map((x) => x.userId)).toContain(owner.userId);
+    expect(await catalogueSees(owner.workspaceId, v.id)).toBeNull();
+    // the merchant reads the reason; nothing waits in the human queue
+    expect((await owner.get(`/products/${v.id}/moderation`).expect(200)).body.data.item).toMatchObject({ status: 'rejected', merchantMessage: expect.stringContaining('motinterdit'), rejectedFields: ['variants'] });
+    expect((await mod.get(`/admin/moderation/items?workspaceId=${owner.workspaceId}&status=pending`).expect(200)).body.data).toEqual([]);
     const k = await createProduct(owner, { name: 'Robe courte', description: 'Coton.', keywords: ['robe', 'motinterdit'] });
-    expect(k.moderation.status).toBe('pending');
-    expect((await itemOf(k.id)).aiFlags).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'blocked_word', field: 'keywords' })]));
+    expect(k.moderation.status).toBe('rejected');
+    expect(await itemOf(k.id)).toMatchObject({ status: 'rejected', rejectedFields: ['keywords'] });
     expect(await catalogueSees(owner.workspaceId, k.id)).toBeNull();
+    // inside another word (« motinterdits ») it may be innocent: flagged, a moderator decides
+    const w = await createProduct(owner, { name: 'Robe midi', description: 'Coton.', keywords: ['motinterdits'] });
+    expect(w.moderation.status).toBe('pending');
+    expect(await itemOf(w.id)).toMatchObject({ status: 'pending', aiFlags: expect.arrayContaining([expect.objectContaining({ code: 'blocked_word' })]) });
+    // the variant added later to an approved product is rejected the same way
+    const ok = await createProduct(owner, { name: 'Gourde isotherme', description: 'Inox.', stock: undefined, variants: [{ name: 'Rouge', price: 2000 }] });
+    expect(ok.moderation.status).toBe('approved');
+    await owner.post(`/products/${ok.id}/variants`, { name: 'motinterdit', price: 2000 }).expect(201);
+    expect((await db.product.findUniqueOrThrow({ where: { id: ok.id } })).moderationStatus).toBe('rejected');
+    expect(await itemOf(ok.id)).toMatchObject({ status: 'rejected', rejectedFields: ['variants'] });
     await mod.delete(`/admin/moderation/rules/${rule.body.data.id}`).expect(200);
+  });
+
+  it('AT-MOD-12 (tester log 26/10 UX-034) a clean variant added to an approved product waits for a moderator, whatever the trust level; the AI keeps selling the approved variants', async () => {
+    const owner = await merchant('trusted');
+    const p = await createProduct(owner, { name: 'Gourde inox', description: 'Inox.', stock: undefined, variants: [{ name: 'Rouge', price: 2000 }] });
+    expect(p.moderation.status).toBe('approved');
+    await owner.post(`/products/${p.id}/variants`, { name: 'Bleu', price: 2000 }).expect(201);
+    expect((await db.product.findUniqueOrThrow({ where: { id: p.id } })).moderationStatus).toBe('pending');
+    const item = await itemOf(p.id);
+    expect(item.status).toBe('pending');
+    expect(Number(item.aiScore)).toBeGreaterThanOrEqual(0.9);
+    expect(item.aiFlags).toEqual(expect.arrayContaining([{ code: 'new_variant', message: 'Bleu', field: 'variants' }]));
+    expect((await catalogueSees(owner.workspaceId, p.id))!.variants.map((v) => v.name)).toEqual(['Rouge']);
+    const listed = (await mod.get(`/admin/moderation/items?workspaceId=${owner.workspaceId}&aiFlag=new_variant`).expect(200)).body.data;
+    expect(listed.map((r: { id: string }) => r.id)).toEqual([item.id]);
+    await mod.post(`/admin/moderation/items/${item.id}/approve`, {}).expect(200);
+    expect((await catalogueSees(owner.workspaceId, p.id))!.variants.map((v) => v.name)).toEqual(['Rouge', 'Bleu']);
+    // a product created with its variants keeps the normal auto-approval
+    expect((await createProduct(owner, { name: 'Gourde verre', description: 'Verre.', stock: undefined, variants: [{ name: 'Vert', price: 1800 }] })).moderation.status).toBe('approved');
   });
 
   it('PV 22/10 PV2: platform setting moderation_policy.manualReviewAll ⇒ no auto-approval, every product waits for an admin (super_admin only, audited)', async () => {

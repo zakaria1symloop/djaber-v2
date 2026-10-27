@@ -4811,7 +4811,7 @@
  "products.form.moderation.rejected": "Rejected by Djaber — hidden from customers and the AI agent until approved.",
  "products.form.moderation.rejectedMark": "REJECTED",
  "products.form.moderation.resubmit": "Resubmit",
- "products.form.moderation.reviewNote": "Only title, images, category, description and price (±50 %) trigger a new review; stock and variants do not. The previous version stays on sale meanwhile.",
+ "products.form.moderation.reviewNote": "Title, images, category, description, price (±50 %) and variants (new, renamed, price ±50 %) trigger a new review; stock does not. A word banned on Djaber is rejected automatically. The previous version stays on sale meanwhile.",
  "products.form.moderation.saveFirst": "Save your changes first: they are resubmitted automatically.",
  "products.form.newTitle": "New product",
  "products.form.organisation.category": "CATEGORY",
@@ -6373,5 +6373,9 @@
  "safety.sourceOpt.auto_rule": "Automatic — « parcels not collected » rule",
  "safety.sourceOpt.platform": "Platform — Djaber blacklist",
  "safety.blocks.sourcesHint": "Where a block comes from: MANUAL = a member blocked it · AUTO = the automatic rule below (too many parcels not collected) · PLATFORM = reported by Djaber to every shop, cannot be lifted here.",
- "inbox.banner.outsideWindow.facebookNoTag": "The last customer message is older than 24 h: nothing can be sent on Messenger until the customer writes again."
+ "inbox.banner.outsideWindow.facebookNoTag": "The last customer message is older than 24 h: nothing can be sent on Messenger until the customer writes again.",
+ "adminMod.flag.new_variant": "Variant to review",
+ "products.form.moderation.autoRejected": "Rejected automatically: « {word} » is a banned word on Djaber ({field}). Remove it, then click « Resubmit ».",
+ "products.form.moderation.field.variants": "variants",
+ "products.form.moderation.field.keywords": "keywords"
 }

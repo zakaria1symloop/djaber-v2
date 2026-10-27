@@ -5,7 +5,7 @@ import { OutboundSendService } from '../messaging/outbound-send.service';
 import { marginPct, productStockState, stockStateOf } from './catalog.util';
 import { crossing } from './low-stock.evaluator';
 import { computeMargins } from './margin.calculator';
-import { moderationSlaDueAt, needsReview } from './moderation-hook.service';
+import { moderationSlaDueAt, needsReview, unreviewedVariants } from './moderation-hook.service';
 import { priceRangeOf } from './product.presenter';
 
 describe('CAT-09 low-stock crossing (quantity ≤ minStock, alerts on the way down only)', () => {
@@ -80,6 +80,22 @@ describe('04 §12 moderation trigger', () => {
   });
   it('an empty description and no description are the same content', () => {
     expect(needsReview({ ...base, description: null }, { ...base, description: '' })).toBe(false);
+  });
+});
+
+describe('UX-034 variants of an approved product not reviewed yet (never auto-approved)', () => {
+  const snap = (variants?: { id: string; name: string; price: number }[]) => ({ title: 'Gourde', description: null, price: 2000, categoryId: null, images: [], ...(variants ? { variants } : {}) });
+  const approved = snap([{ id: 'v1', name: 'Rouge', price: 2000 }]);
+  it('new, renamed, repriced ±50 % or shown again ⇒ listed; same, ±49 % or removed ⇒ nothing', () => {
+    expect(unreviewedVariants(approved, snap([{ id: 'v1', name: 'Rouge', price: 2000 }, { id: 'v2', name: 'Bleu', price: 2000 }]))).toEqual(['Bleu']);
+    expect(unreviewedVariants(approved, snap([{ id: 'v1', name: 'Rouge foncé', price: 2000 }]))).toEqual(['Rouge foncé']);
+    expect(unreviewedVariants(approved, snap([{ id: 'v1', name: 'Rouge', price: 3000 }]))).toEqual(['Rouge']);
+    expect(unreviewedVariants(approved, snap([{ id: 'v1', name: 'Rouge', price: 2900 }]))).toEqual([]);
+    expect(unreviewedVariants(approved, snap([]))).toEqual([]);
+  });
+  it('a product never approved has no reference; an approved snapshot without variants counts them all as new', () => {
+    expect(unreviewedVariants(null, snap([{ id: 'v1', name: 'Rouge', price: 2000 }]))).toEqual([]);
+    expect(unreviewedVariants(snap(), snap([{ id: 'v1', name: 'Rouge', price: 2000 }]))).toEqual(['Rouge']);
   });
 });
 

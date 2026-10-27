@@ -21,8 +21,13 @@ export type PrescreenInput = {
   keywords?: string[];
   imageTexts?: string[];
 };
-/** `manualReview`: the platform `moderation_policy.manualReviewAll` is on — the item never auto-approves (PV2). */
-export type PrescreenResult = { aiScore: number; aiFlags: ModerationAiFlagView[]; marketReference: number | null; sensitive: boolean; manualReview?: boolean };
+/**
+ * `manualReview`: the platform `moderation_policy.manualReviewAll` is on — the item never auto-approves (PV2).
+ * `banned`: a word of the platform lists (blocked words, prohibited categories) appears as a whole word — the item is
+ * rejected at once, nothing is left for a moderator to decide (tester log 26/10 UX-034).
+ */
+export type PrescreenResult = { aiScore: number; aiFlags: ModerationAiFlagView[]; marketReference: number | null; sensitive: boolean; manualReview?: boolean; banned?: BannedHit };
+export type BannedHit = { code: 'blocked_word' | 'prohibited_category'; word: string; field: string };
 export type AutoDecision = { approve: boolean; result: PrescreenResult };
 
 /** Case / diacritic-insensitive comparison form (Latin + Arabic marks, tatweel). */
@@ -32,6 +37,13 @@ export const foldText = (s: string) =>
     .replace(/[̀-ًͯ-ْـ]/g, '')
     .toLowerCase();
 const containsAny = (hay: string, needles: readonly string[]) => needles.find((n) => n.trim().length > 1 && hay.includes(foldText(n).trim())) ?? null;
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Whole-word hit (a letter or digit next to it ends the match): « drug » in « drug test », not in « drugstore ». */
+const containsWord = (hay: string, needles: readonly string[]) =>
+  needles.find((n) => {
+    const w = foldText(n).trim();
+    return w.length > 1 && new RegExp(`(?:^|[^\\p{L}\\p{N}])${escapeRe(w)}(?:$|[^\\p{L}\\p{N}])`, 'u').test(hay);
+  }) ?? null;
 
 /** 04 §12: sensitive categories = electronics, health / supplements, children, cosmetics (editable by super admin). */
 export const DEFAULT_SENSITIVE_KEYWORDS = [
@@ -124,8 +136,8 @@ export class ModerationPrescreenService {
       ['images', foldText((p.imageTexts ?? []).filter(Boolean).join(' '))],
     ];
     const text = [name, desc, ...extra.map(([, t]) => t)].join(' ');
-    const where = (needles: readonly string[]) =>
-      containsAny(name, needles) ? 'name' : containsAny(desc, needles) ? 'description' : (extra.find(([, t]) => containsAny(t, needles))?.[0] ?? 'description');
+    const where = (needles: readonly string[], match = containsAny) =>
+      match(name, needles) ? 'name' : match(desc, needles) ? 'description' : (extra.find(([, t]) => match(t, needles))?.[0] ?? 'description');
     const brand = containsAny(text, rules.brands);
     if (brand) add('protected_brand', brand, where(rules.brands));
     const prohibited = containsAny(`${text} ${cat}`, rules.prohibited);
@@ -143,12 +155,21 @@ export class ModerationPrescreenService {
     if (p.imageCount <= 1) add('single_image', String(p.imageCount), 'images');
     if (containsAny(cat, ELECTRONICS) && !containsAny(desc, WARRANTY_WORDS)) add('missing_warranty', 'warranty', 'description');
     const penalty = flags.reduce((s, f) => s + (WEIGHTS[f.code] ?? 0), 0);
+    // UX-034: a whole-word hit of the platform lists rejects at once (a hit inside another word only flags, for a human)
+    const bannedWord = containsWord(text, rules.words);
+    const bannedCategory = bannedWord ? null : containsWord(`${text} ${cat}`, rules.prohibited);
+    const banned: BannedHit | undefined = bannedWord
+      ? { code: 'blocked_word', word: bannedWord, field: where(rules.words, containsWord) }
+      : bannedCategory
+        ? { code: 'prohibited_category', word: bannedCategory, field: containsWord(cat, rules.prohibited) ? 'categoryId' : where(rules.prohibited, containsWord) }
+        : undefined;
     return {
       aiScore: Math.max(0, Math.round((1 - penalty) * 100) / 100),
       aiFlags: flags,
       marketReference: marketReference ?? null,
       sensitive: this.isSensitive(p.categoryName, rules),
       ...(rules.manualReviewAll ? { manualReview: true } : {}),
+      ...(banned ? { banned } : {}),
     };
   }
 
@@ -180,8 +201,8 @@ export class ModerationPrescreenService {
   }
 
   /** 04 §12 "Auto-approval": `aiScore ≥ 0.9 ∧ trustLevel ∈ {standard, trusted} ∧ category ∉ sensitive`, never when the platform reviews every product (PV2). */
-  static autoApprove(result: Pick<PrescreenResult, 'aiScore' | 'sensitive' | 'manualReview'>, trustLevel: string) {
-    return !result.manualReview && result.aiScore >= MODERATION_AUTO_APPROVE_SCORE && (trustLevel === 'standard' || trustLevel === 'trusted') && !result.sensitive;
+  static autoApprove(result: Pick<PrescreenResult, 'aiScore' | 'sensitive' | 'manualReview' | 'banned'>, trustLevel: string) {
+    return !result.banned && !result.manualReview && result.aiScore >= MODERATION_AUTO_APPROVE_SCORE && (trustLevel === 'standard' || trustLevel === 'trusted') && !result.sensitive;
   }
 
   /** Agent prompts (MOD-08): a platform blocked word or a protected brand in the compiled instructions. */

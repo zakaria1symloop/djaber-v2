@@ -1,13 +1,15 @@
 // D36 / 04 §12 — product moderation, merchant side + the decision primitives shared with the admin queue (M10).
 // A `ModerationItem` is written when a product is created and each time a customer-visible part changes (name,
 // description, category, price ±50 %, a new picture, a new / renamed / repriced ±50 % variant), at the save of the change. The pre-screen (`ModerationPrescreenService`, free and local) scores it at
-// once: `aiScore ≥ 0.9 ∧ trustLevel ∈ {standard, trusted} ∧ category not sensitive` ⇒ approved (snapshot live), otherwise
+// once: a platform banned word (whole word) ⇒ rejected by the system; `aiScore ≥ 0.9 ∧ trustLevel ∈ {standard, trusted} ∧
+// category not sensitive ∧ no unreviewed variant` ⇒ approved (snapshot live), otherwise
 // the item waits in the human queue (ADM-10) while the last approved snapshot keeps selling (AI catalogue). When the
 // inline pre-screen fails the item stays pending with `prescreen_unavailable` and the `moderation-prescreen` job retries.
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { prisma, TenantContext, type ModerationItem, type ModerationSource, type Prisma, type Tx } from '@djaber/db';
 import type { ModerationAiFlagView, ModerationDetailView } from '@djaber/shared';
 import { AppException, notFound, validationError } from '../../core/errors/app.exception';
+import { I18nService } from '../../core/i18n/i18n.service';
 import { originSessionId } from '../../core/tenancy/tenant.guard';
 import { OutboxService } from '../../core/outbox/outbox.service';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
@@ -15,7 +17,7 @@ import { QueueOutbox } from '../../core/queue/queue.outbox';
 import { algiersClock, algiersDay } from '../../core/time/algiers';
 import { NotificationProducer } from '../notifications/notification.producer';
 import { imageToken } from './approved-content';
-import { ModerationPrescreenService, type PrescreenResult } from './moderation-prescreen.service';
+import { ModerationPrescreenService, type BannedHit, type PrescreenResult } from './moderation-prescreen.service';
 
 export type ModeratedFields = { name: string; description: string | null; categoryId: string | null; price: number };
 
@@ -45,6 +47,20 @@ export const contentChanged = (snapshot: Snapshot, now: Snapshot): boolean => {
     const b = before.get(v.id);
     return !b || b.name !== v.name || priceJump(b.price, v.price);
   });
+};
+
+/**
+ * Tester log 26/10 UX-034: the variants of `now` a moderator has not approved yet — new, renamed, repriced ±50 % or shown
+ * again since the approved snapshot. An approved snapshot written before variants were kept counts every variant as new.
+ * A product never approved has no reference (its variants are reviewed with it).
+ */
+export const unreviewedVariants = (approved: Snapshot | null | undefined, now: Snapshot | null | undefined): string[] => {
+  if (!approved || !now?.variants?.length) return [];
+  const before = new Map((approved.variants ?? []).map((v) => [v.id, v]));
+  return now.variants.filter((v) => {
+    const b = before.get(v.id);
+    return !b || b.name !== v.name || priceJump(b.price, v.price);
+  }).map((v) => v.name);
 };
 
 const OPEN_HOUR = 9;
@@ -91,6 +107,7 @@ export class ModerationHookService implements OnModuleInit {
     private readonly queue: QueueOutbox,
     private readonly registry: ProcessorRegistry,
     private readonly notifications: NotificationProducer,
+    private readonly i18n: I18nService,
   ) {}
 
   onModuleInit() {
@@ -141,21 +158,62 @@ export class ModerationHookService implements OnModuleInit {
     await this.outbox.ws(tx, `ws:${workspaceId}`, 'product.updated', { id: p.id, product: { id: p.id, stock: p.stock, isActive: p.isActive, moderationStatus: p.moderationStatus, lowStock, archived: !!p.deletedAt }, originSessionId: originSessionId() });
   }
 
-  /** Applies a pre-screen result to a pending item: auto-approve or leave it in the human queue. */
-  private async applyPrescreen(tx: Tx, item: ModerationItem, r: PrescreenResult, trust: string): Promise<'approved' | 'pending'> {
-    const approve = ModerationPrescreenService.autoApprove(r, trust);
+  /**
+   * Applies a pre-screen result to a pending item: rejected at once on a platform banned word, auto-approved, or left in
+   * the human queue — always the queue when a variant of an approved product was not reviewed yet (UX-034).
+   */
+  private async applyPrescreen(tx: Tx, item: ModerationItem, r: PrescreenResult, trust: string): Promise<'approved' | 'pending' | 'rejected'> {
     const snapshot = { ...(item.snapshot as Record<string, unknown>), marketReference: r.marketReference, sensitive: r.sensitive };
+    if (r.banned) {
+      await this.rejectBanned(tx, item, r, r.banned, snapshot);
+      return 'rejected';
+    }
+    const approvedRef = item.productId ? (await tx.product.findFirst({ where: { id: item.productId }, select: { approvedSnapshot: true } }))?.approvedSnapshot : null;
+    const variants = unreviewedVariants(approvedRef as Snapshot | null, item.snapshot as Snapshot | null);
+    const flags = variants.length ? [...r.aiFlags, { code: 'new_variant', message: variants.join(', '), field: 'variants' }] : r.aiFlags;
+    const approve = !variants.length && ModerationPrescreenService.autoApprove(r, trust);
     await tx.moderationItem.update({
       where: { id: item.id },
       data: {
         aiScore: r.aiScore,
-        aiFlags: r.aiFlags as unknown as Prisma.InputJsonValue,
+        aiFlags: flags as unknown as Prisma.InputJsonValue,
         snapshot: snapshot as Prisma.InputJsonValue,
         ...(approve ? { status: 'auto_approved', decidedAt: new Date() } : {}),
       },
     });
     if (approve) await this.markApproved(tx, { ...item, snapshot: snapshot as Prisma.JsonValue }, { notify: true });
     return approve ? 'approved' : 'pending';
+  }
+
+  /**
+   * UX-034: a word of the platform lists ⇒ the item is rejected by the system (no reviewer, decision `prohibited`), with the
+   * reason in the shop's language; the product is hidden like after a moderator's rejection and the merchant is notified
+   * (in-app + e-mail + push). The appeal stays open, so a wrong match reaches a moderator.
+   */
+  private async rejectBanned(tx: Tx, item: ModerationItem, r: PrescreenResult, hit: BannedHit, snapshot: Record<string, unknown>) {
+    const ws = await tx.workspace.findUnique({ where: { id: item.workspaceId }, select: { locale: true } });
+    const locale = ws?.locale ?? 'fr';
+    const field = this.i18n.t(locale, `products.form.moderation.field.${hit.field}`);
+    await tx.moderationItem.update({
+      where: { id: item.id },
+      data: {
+        aiScore: r.aiScore,
+        aiFlags: r.aiFlags as unknown as Prisma.InputJsonValue,
+        snapshot: snapshot as Prisma.InputJsonValue,
+        status: 'rejected',
+        decidedAt: new Date(),
+        decision: 'prohibited',
+        reasonTemplateKey: 'auto_banned_word',
+        merchantMessage: this.i18n.t(locale, 'products.form.moderation.autoRejected', { word: hit.word, field }),
+        rejectedFields: [hit.field],
+      },
+    });
+    if (!item.productId) return;
+    const product = await tx.product.findFirst({ where: { id: item.productId }, select: { id: true, name: true, moderationItemId: true } });
+    if (!product || product.moderationItemId !== item.id) return;
+    await tx.product.update({ where: { id: product.id }, data: { moderationStatus: 'rejected' } });
+    await this.emitProduct(tx, item.workspaceId, product.id, 'rejected');
+    await this.notifications.emit(tx, { type: 'product_rejected', workspaceId: item.workspaceId, target: { roles: ['owner', 'admin'] }, key: `product_rejected:${item.id}`, data: { productId: product.id, name: product.name, decision: 'prohibited', rejectedFields: [hit.field] } });
   }
 
   /**
@@ -221,7 +279,7 @@ export class ModerationHookService implements OnModuleInit {
         });
     // pending until decided; a previously approved snapshot keeps selling (approvedSnapshot untouched)
     await tx.product.update({ where: { id: p.id }, data: { moderationItemId: item.id, moderationStatus: 'pending', contentVersion } });
-    let status: 'approved' | 'pending' = 'pending';
+    let status: 'approved' | 'pending' | 'rejected' = 'pending';
     try {
       const r = await this.prescreen.prescreenProduct(tx, p.id);
       status = await this.applyPrescreen(tx, item, r, await this.trustOf(tx, p.workspaceId));
@@ -230,11 +288,9 @@ export class ModerationHookService implements OnModuleInit {
       await tx.moderationItem.update({ where: { id: item.id }, data: { aiScore: null, aiFlags: [PRESCREEN_UNAVAILABLE] as unknown as Prisma.InputJsonValue } });
       await this.queue.add(tx, 'jobs', 'moderation-prescreen', { itemId: item.id, workspaceId: p.workspaceId }, `moderation-prescreen:${item.id}`, { attempts: 3, backoff: { type: 'exponential', delay: 30_000 } });
     }
-    if (status === 'pending') {
-      await this.emitProduct(tx, p.workspaceId, p.id, 'pending');
-      await this.emitQueue(tx);
-    }
-    return { ...item, status: status === 'approved' ? ('auto_approved' as const) : ('pending' as const) };
+    if (status === 'pending') await this.emitProduct(tx, p.workspaceId, p.id, 'pending');
+    if (status !== 'approved') await this.emitQueue(tx);
+    return { ...item, status: status === 'approved' ? ('auto_approved' as const) : status === 'rejected' ? ('rejected' as const) : ('pending' as const) };
   }
 
   /** `jobs / moderation-prescreen`: re-runs the pre-screen of a still-pending item (idempotent: decided items are skipped). */
@@ -246,7 +302,7 @@ export class ModerationHookService implements OnModuleInit {
         const tx = db as Tx;
         const r = await this.prescreen.prescreenProduct(tx, item.productId!);
         const status = await this.applyPrescreen(tx, item, r, await this.trustOf(tx, item.workspaceId));
-        if (status === 'pending') await this.emitQueue(tx);
+        if (status !== 'approved') await this.emitQueue(tx);
       }),
     );
     return { attempt };
@@ -294,6 +350,9 @@ export class ModerationHookService implements OnModuleInit {
         await this.queue.add(tx, 'jobs', 'moderation-prescreen', { itemId: item.id, workspaceId: ws }, `moderation-prescreen:${item.id}`, { attempts: 3, backoff: { type: 'exponential', delay: 30_000 } });
       }
     }
+    // UX-034: a platform banned word rejects the item at once (rare in an import: one by one)
+    for (const s of scored.filter((x) => x.r.banned)) await this.rejectBanned(tx, s.item, s.r, s.r.banned!, { ...(s.item.snapshot as Record<string, unknown>), marketReference: s.r.marketReference, sensitive: s.r.sensitive });
+    scored = scored.filter((x) => !x.r.banned);
     if (scored.length) {
       const now = new Date();
       const approved = scored.filter((s) => ModerationPrescreenService.autoApprove(s.r, trust));
@@ -438,7 +497,7 @@ export class ModerationHookService implements OnModuleInit {
       if (!product) throw notFound();
       if (product.moderationStatus !== 'rejected') throw new AppException('MODERATION_NOT_REJECTED');
       const item = await this.submit(tx, productId, 'update');
-      return { moderationItemId: item.id, status: item.status === 'auto_approved' ? ('approved' as const) : ('pending' as const) };
+      return { moderationItemId: item.id, status: item.status === 'auto_approved' ? ('approved' as const) : item.status === 'rejected' ? ('rejected' as const) : ('pending' as const) };
     });
   }
 

@@ -4811,7 +4811,7 @@
  "products.form.moderation.rejected": "مرفوض من جابر — مخفي عن العملاء ووكيل الذكاء الاصطناعي حتى الاعتماد.",
  "products.form.moderation.rejectedMark": "مرفوض",
  "products.form.moderation.resubmit": "إعادة الإرسال",
- "products.form.moderation.reviewNote": "فقط العنوان والصور والفئة والوصف والسعر (±50 %) تستدعي مراجعة جديدة؛ المخزون والمتغيّرات لا. تبقى النسخة السابقة معروضة للبيع أثناء الانتظار.",
+ "products.form.moderation.reviewNote": "العنوان والصور والفئة والوصف والسعر (±50 %) والمتغيّرات (جديد، إعادة تسمية، سعر ±50 %) تستدعي مراجعة جديدة؛ المخزون لا. تُرفض الكلمة المحظورة على Djaber تلقائيًا. تبقى النسخة السابقة معروضة للبيع أثناء الانتظار.",
  "products.form.moderation.saveFirst": "احفظ تعديلاتك أولًا: تُرسل للمراجعة تلقائيًا.",
  "products.form.newTitle": "منتج جديد",
  "products.form.organisation.category": "الفئة",
@@ -6373,5 +6373,9 @@
  "safety.sourceOpt.auto_rule": "تلقائي — قاعدة «طرود غير مستلمة»",
  "safety.sourceOpt.platform": "المنصة — القائمة السوداء لـ Djaber",
  "safety.blocks.sourcesHint": "مصدر الحظر: يدوي = حظره أحد الأعضاء · تلقائي = القاعدة التلقائية أدناه (طرود كثيرة غير مستلمة) · المنصة = أبلغت عنه Djaber لكل المتاجر، لا يمكن رفعه هنا.",
- "inbox.banner.outsideWindow.facebookNoTag": "آخر رسالة من العميل مضى عليها أكثر من 24 ساعة: لا يمكن إرسال أي رسالة على ماسنجر حتى يكتب العميل من جديد."
+ "inbox.banner.outsideWindow.facebookNoTag": "آخر رسالة من العميل مضى عليها أكثر من 24 ساعة: لا يمكن إرسال أي رسالة على ماسنجر حتى يكتب العميل من جديد.",
+ "adminMod.flag.new_variant": "متغيّر للمراجعة",
+ "products.form.moderation.autoRejected": "رُفض تلقائيًا: «{word}» كلمة محظورة على Djaber ({field}). احذفها ثم اضغط «إعادة الإرسال».",
+ "products.form.moderation.field.variants": "المتغيّرات",
+ "products.form.moderation.field.keywords": "الكلمات المفتاحية"
 }
