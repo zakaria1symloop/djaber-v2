@@ -333,6 +333,8 @@ export type ProductImageView = {
   moderationFlag: string | null;
   /** false while the `media.reencode-image` job has not produced the normalised file yet ("ENVOI…") */
   processed: boolean;
+  /** product detail: a picture added to an approved product and not approved yet — « EN ATTENTE DE VALIDATION » (UX-039) */
+  awaitingReview?: boolean;
 };
 export type ModerationDetailView = {
   status: string;

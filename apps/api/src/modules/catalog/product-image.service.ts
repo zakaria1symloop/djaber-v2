@@ -97,11 +97,12 @@ export class ProductImageService implements OnModuleInit {
           },
         });
         await this.queue.add(tx, 'media', 'reencode-image', { productImageId: created.id, workspaceId: ws }, `img:${created.id}`, { attempts: 3, backoff: { type: 'fixed', delay: 5000 } });
-        // 04 §12: images are a moderated field — sent with the save of the product (tester report 25/10 UX-001: an upload
-        // in « Modifier le produit » no longer opens a moderation request by itself). A product already waiting (just
-        // created, or changed and not decided yet) gets its open request refreshed with the picture.
+        // 04 §12: images are a moderated field — every picture stored goes to moderation with its upload (tester log 26/10
+        // UX-039: « + Ajouter » of the product page has no save step). The product form keeps its new pictures in the
+        // browser until « Enregistrer » (UX-001), so an upload is always a picture the merchant decided to keep. A product
+        // already waiting gets its open request refreshed with the picture; an appeal in progress is left to its moderator.
         const p = await tx.product.findUniqueOrThrow({ where: { id: productId }, select: { moderationStatus: true } });
-        if (p.moderationStatus === 'pending') await this.moderation.submit(tx, productId, 'update');
+        if (p.moderationStatus !== 'appealed') await this.moderation.submitIfChanged(tx, productId, 'update');
         await this.stock.emitProductUpdated(tx, productId);
         return created;
       });

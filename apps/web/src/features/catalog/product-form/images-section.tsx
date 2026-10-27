@@ -1,9 +1,10 @@
 'use client';
 // IMAGES · n / 10 of the product form — Figma "CAT-01 — Product form" + DLG GDS II "Images — erreurs inline".
-// Edit: every operation is immediate (upload with progress, "ENVOI…" until the re-encode is done, retry, delete,
-// primary, reorder) and the hint says so (`products.form.images.savedNow`, unlike the fields that wait for
-// "Enregistrer"); errors sit under the tile concerned and never block the form. New product: the pictures stay in
-// the browser until `POST /products` answered, then they are uploaded (see `uploadLocalImages`).
+// New product: the pictures stay in the browser until `POST /products` answered, then they are uploaded (see
+// `uploadLocalImages`). Edit (tester log 26/10 UX-039): a new picture stays in the browser too (« À ENVOYER ») and is
+// uploaded — and sent to moderation — by « Enregistrer »; « Annuler » drops it. Delete, primary and reorder of the saved
+// pictures stay immediate (`products.form.images.savedNow`). A saved picture an approved product does not show yet is
+// flagged « EN ATTENTE DE VALIDATION ». Errors sit under the tile concerned and never block the form.
 import { PRODUCT_IMAGES_MAX } from '@djaber/shared';
 import { cn, ImageTileGrid, SectionLabel, toast, type ImageGridLabels, type ImageTile } from '@djaber/ui';
 import { useQueryClient } from '@tanstack/react-query';
@@ -79,9 +80,10 @@ export function useLocalImages() {
   // previews are released when the page goes away
   useEffect(() => () => ref.current.forEach((i) => URL.revokeObjectURL(i.url)), []);
   const patch = useCallback((key: string, p: Partial<LocalImage>) => setImages((list) => list.map((i) => (i.key === key ? { ...i, ...p } : i))), []);
+  /** `already`: the pictures the product has on the server (edit), counted in the 10-picture limit */
   const add = useCallback(
-    (files: File[]) => {
-      const valid = ref.current.filter((i) => !i.rejected).length;
+    (files: File[], already = 0) => {
+      const valid = already + ref.current.filter((i) => !i.rejected).length;
       const next = checkImageBatch(files, valid).map((c) => toLocal(c.file, c.error));
       setImages((list) => [...list, ...next]);
       for (const img of next) if (!img.rejected) void readImageSize(img.file).then((s) => s && patch(img.key, { smallPx: smallSide(s.width, s.height) }));
@@ -261,29 +263,34 @@ export function useProductImageEditor(product: Pick<Product, 'id' | 'name' | 'im
       status: i.processed === false ? ('processing' as const) : ('ready' as const),
       error: notes[i.id]?.error,
       warning: notes[i.id]?.warning ?? smallWarning(t, i.width && i.height ? smallSide(i.width, i.height) : null),
-      flag: i.moderationFlag ? t('products.form.moderation.imageFlag', { flag: i.moderationFlag.toUpperCase() }) : undefined,
+      flag: i.moderationFlag ? t('products.form.moderation.imageFlag', { flag: i.moderationFlag.toUpperCase() }) : i.awaitingReview ? t('products.form.images.awaitingReview') : undefined,
+      flagTone: !i.moderationFlag && i.awaitingReview ? ('pending' as const) : undefined,
     })),
     ...pending.map((i) => localTile(t, i, false)),
   ];
   return { tiles, count: images.length, add, remove, makePrimary, reorder: (ids: string[]) => void reorder(ids), retry, isLocal };
 }
 
-export function ProductImagesSection({ product, disabled, rejected, footer }: { product: Product; disabled?: boolean; rejected?: boolean; footer?: ReactNode }) {
+/** `staged`: the new pictures of this edit, kept in the browser until « Enregistrer » (UX-039). */
+export function ProductImagesSection({ product, staged, disabled, rejected, footer }: { product: Product; staged: LocalImages; disabled?: boolean; rejected?: boolean; footer?: ReactNode }) {
   const t = useT();
   const labels = useImageGridLabels();
   const editor = useProductImageEditor(product);
+  const stagedKeys = new Set(staged.images.map((i) => i.key));
+  const tiles = [...editor.tiles, ...staged.images.map((i) => ({ ...localTile(t, i, false), ...(i.status === 'idle' && !i.error ? { flag: t('products.form.images.staged'), flagTone: 'pending' as const } : {}) }))];
+  const count = editor.count + staged.images.filter((i) => !i.rejected).length;
   return (
-    <Frame count={editor.count} rejected={rejected} footer={footer}>
+    <Frame count={count} rejected={rejected} footer={footer}>
       <ImageTileGrid
-        tiles={editor.tiles}
+        tiles={tiles}
         max={PRODUCT_IMAGES_MAX}
         accept={IMAGE_ACCEPT}
         labels={labels}
         disabled={disabled}
-        onAdd={disabled ? undefined : editor.add}
-        onRemove={editor.remove}
-        onMakePrimary={editor.makePrimary}
-        onReorder={editor.reorder}
+        onAdd={disabled ? undefined : (files) => staged.add(files, editor.tiles.filter((tile) => !tile.error || tile.retryable !== false).length)}
+        onRemove={(id) => (stagedKeys.has(id) ? staged.remove(id) : editor.remove(id))}
+        onMakePrimary={(id) => (stagedKeys.has(id) ? undefined : editor.makePrimary(id))}
+        onReorder={(ids) => editor.reorder(ids.filter((id) => !stagedKeys.has(id)))}
         onRetry={editor.retry}
         hint={`${t('products.form.images.hint')} · ${t('products.form.images.savedNow')}`}
       />

@@ -20,6 +20,8 @@ export type ImageTile = {
   warning?: string;
   /** small flag over the picture (moderation: "REFUSÉE · LOGO") */
   flag?: string;
+  /** `pending`: an amber flag for a picture that waits (« EN ATTENTE DE VALIDATION », « À ENVOYER ») — red otherwise */
+  flagTone?: 'alert' | 'pending';
   /** `false` hides "Réessayer" on an error tile that can never be sent (wrong type, too large, over the limit) */
   retryable?: boolean;
   /** `false` hides the delete button of this tile (quick-edit sheet: saved pictures are managed on the product form) */
@@ -124,7 +126,7 @@ export function ImageTileGrid({
                 )}
               >
                 {tile.url ? <img src={tile.url} alt={tile.alt ?? ''} className={cn('size-full object-cover', busy && 'opacity-40')} draggable={false} /> : null}
-                {tile.flag ? <span className="absolute inset-x-1 top-1 truncate rounded-[3px] bg-accent-alert px-1 text-center ts-label-micro text-black">{tile.flag}</span> : null}
+                {tile.flag ? <span className={cn('absolute inset-x-1 top-1 truncate rounded-[3px] px-1 text-center ts-label-micro text-black', tile.flagTone === 'pending' ? 'bg-accent-starred' : 'bg-accent-alert')} title={tile.flag}>{tile.flag}</span> : null}
                 {busy ? (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-2">
                     <span className="ts-label-micro text-text-primary">{labels.sending}</span>

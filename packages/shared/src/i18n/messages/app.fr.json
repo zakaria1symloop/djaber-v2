@@ -4785,7 +4785,7 @@
  "products.form.images.add": "AJOUTER",
  "products.form.images.drag": "≡ GLISSER",
  "products.form.images.hint": "JPG, PNG, WEBP · 5 Mo max · 800 × 800 px recommandé · une légende IA est générée pour la reconnaissance photo",
- "products.form.images.savedNow": "Les photos sont enregistrées dès leur ajout ; une photo ajoutée part en validation avec « Enregistrer ».",
+ "products.form.images.savedNow": "Une photo ajoutée est envoyée — et part en validation — avec « Enregistrer » ; « Annuler » l'abandonne. Suppression, ordre et photo principale s'appliquent tout de suite.",
  "products.form.images.makePrimary": "Définir comme image principale",
  "products.form.images.moveAfter": "Déplacer après",
  "products.form.images.moveBefore": "Déplacer avant",
@@ -6377,5 +6377,9 @@
  "adminMod.flag.new_variant": "Variante à vérifier",
  "products.form.moderation.autoRejected": "Refusé automatiquement : « {word} » est un mot interdit sur Djaber ({field}). Retirez-le puis cliquez « Resoumettre ».",
  "products.form.moderation.field.variants": "variantes",
- "products.form.moderation.field.keywords": "mots-clés"
+ "products.form.moderation.field.keywords": "mots-clés",
+ "products.form.images.staged": "À ENREGISTRER",
+ "products.form.images.awaitingReview": "EN ATTENTE DE VALIDATION",
+ "products.form.images.someFailed": "{count, plural, one {# photo n’a pas été envoyée : réessayez avec « Enregistrer ».} other {# photos n’ont pas été envoyées : réessayez avec « Enregistrer ».}}",
+ "products.page.gallery.sentToReview": "Une photo ajoutée ici part en validation Djaber ; elle est montrée aux clients une fois approuvée."
 }

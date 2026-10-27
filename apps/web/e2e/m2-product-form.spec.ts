@@ -177,24 +177,28 @@ test('a new variant saved with "Enregistrer" leaves the form clean: no unsaved n
   await expect(page.getByRole('heading', { name: 'Quitter sans enregistrer ?' })).toHaveCount(0);
 });
 
-test('AT-CAT-04 the 11th image is refused inline (IMAGES_LIMIT); deleting the primary image promotes the next one', async ({ page, request }) => {
+test('AT-CAT-04 the 11th image is refused inline (IMAGES_LIMIT); new pictures are sent with « Enregistrer » (UX-039); deleting the primary image promotes the next one', async ({ page, request }) => {
   test.setTimeout(180_000);
   await loginHome(page, account);
   await openEdit(page, gallery.id);
   const input = page.locator('input[data-upload="product-image"]');
   const count = page.getByTestId('image-count');
   await expect(count).toHaveText('0 / 10');
-  // the first one alone, so that it is the primary image for sure
   await input.setInputFiles([picture(0)]);
-  await expect(count).toHaveText('1 / 10', { timeout: 30_000 });
+  await expect(count).toHaveText('1 / 10');
   await input.setInputFiles(Array.from({ length: 9 }, (_, i) => picture(i + 1)));
-  await expect(count).toHaveText('10 / 10', { timeout: 90_000 });
-  // image operations are immediate: the form itself has nothing to save
-  await expect(page.getByTestId('dirty-note')).toHaveText('');
+  await expect(count).toHaveText('10 / 10');
+  // tester log 26/10 UX-039: the new pictures wait in the form (« À ENREGISTRER »): nothing reached the product yet
+  await expect(page.getByTestId('dirty-note')).toContainText('images');
+  await expect(page.locator('[data-section="images"]').getByText('À ENREGISTRER')).toHaveCount(10);
+  expect(((await getProduct(request, account, gallery.id)) as unknown as { images: unknown[] }).images).toHaveLength(0);
 
   await input.setInputFiles([picture(11)]);
   await expect(page.locator('[data-section="images"]').getByRole('alert').filter({ hasText: '10 images max par produit.' })).toBeVisible();
   await expect(count).toHaveText('10 / 10');
+  // « Enregistrer » uploads them in order (the first one becomes the primary image)
+  await page.getByTestId('form-save').click();
+  await expect(page.getByTestId('dirty-note')).toHaveText('', { timeout: 90_000 });
   expect(((await getProduct(request, account, gallery.id)) as unknown as { images: unknown[] }).images).toHaveLength(10);
 
   // wait for the re-encode ("ENVOI…" ends), then delete the primary image
@@ -211,6 +215,25 @@ test('AT-CAT-04 the 11th image is refused inline (IMAGES_LIMIT); deleting the pr
   const images = ((await getProduct(request, account, gallery.id)) as unknown as { images: { id: string; isPrimary: boolean }[] }).images;
   expect(images).toHaveLength(9);
   expect(images.filter((i) => i.isPrimary).map((i) => i.id)).toEqual([await next.getAttribute('data-image')]);
+});
+
+test('tester log 26/10 UX-039: a picture added in « Modifier » then « Annuler » is dropped; « + Ajouter » of the product page sends it to moderation', async ({ page, request }) => {
+  test.setTimeout(120_000);
+  await loginHome(page, account);
+  await openEdit(page, plain.id);
+  await page.locator('input[data-upload="product-image"]').setInputFiles([picture(20)]);
+  await expect(page.getByTestId('image-count')).toHaveText('1 / 10');
+  await page.getByTestId('form-cancel').click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Quitter sans enregistrer ?' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Quitter', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/products/${plain.id}$`));
+  expect(((await getProduct(request, account, plain.id)) as unknown as { images: unknown[] }).images).toHaveLength(0);
+  // the product page uploads at once: the picture is part of the product and waits for Djaber's review
+  await page.locator('[data-testid="block-gallery"] input[data-upload="product-image"]').setInputFiles([picture(21)]);
+  await expect.poll(async () => ((await getProduct(request, account, plain.id)) as unknown as { images: unknown[] }).images.length, { timeout: 30_000 }).toBe(1);
+  const after = (await getProduct(request, account, plain.id)) as unknown as { moderation: { status: string } };
+  expect(['pending', 'approved']).toContain(after.moderation.status);
 });
 
 test('AT-CAT-10 "Créer depuis une photo" fills only the empty fields and never the price', async ({ page }) => {

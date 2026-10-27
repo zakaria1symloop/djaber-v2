@@ -30,7 +30,8 @@ export function GalleryBlock({ product, canEdit }: { product: Pick<Product, 'id'
   const t = useT();
   const [large, setLarge] = useState<ProductImage | null>(null);
   const images = product.images ?? [];
-  // "+ Ajouter" picks and uploads right here (same checks, progress and inline errors as the product form)
+  // "+ Ajouter" picks and uploads right here (same checks, progress and inline errors as the product form); the upload is
+  // the save: the picture goes to moderation at once and is flagged until approved (tester log 26/10 UX-039)
   const editor = useProductImageEditor(product);
   const imageLabels = useImageGridLabels();
   const input = useRef<HTMLInputElement>(null);
@@ -97,6 +98,11 @@ export function GalleryBlock({ product, canEdit }: { product: Pick<Product, 'id'
                   {sending ? (
                     <span className="absolute inset-0 flex items-center justify-center ts-label-meta uppercase text-text-secondary">{t('products.page.gallery.sending')}</span>
                   ) : null}
+                  {img.awaitingReview ? (
+                    <span className="absolute inset-x-1 top-1 truncate rounded-[3px] bg-accent-starred px-1 text-center ts-label-micro text-black" title={t('products.form.images.awaitingReview')} data-awaiting-review>
+                      {t('products.form.images.awaitingReview')}
+                    </span>
+                  ) : null}
                   {img.isPrimary ? (
                     <span className="absolute bottom-1.5 start-1.5 rounded-[4px] border border-signal-live/50 bg-ink-base/80 px-1.5 py-0.5 ts-label-micro uppercase text-signal-live">
                       {t('products.page.gallery.primary')}
@@ -111,6 +117,7 @@ export function GalleryBlock({ product, canEdit }: { product: Pick<Product, 'id'
       {uploads.length ? <ImageTileGrid tiles={uploads} max={PRODUCT_IMAGES_MAX} accept={IMAGE_ACCEPT} labels={imageLabels} onRemove={editor.remove} onRetry={editor.retry} size={108} /> : null}
       <Note>
         <bdi>{t('products.page.gallery.hint', { size: Math.round(PRODUCT_IMAGE_MAX_BYTES / (1024 * 1024)), max: PRODUCT_IMAGES_MAX, px: PRODUCT_IMAGE_MIN_PX })}</bdi>
+        {canEdit ? <span className="block">{t('products.page.gallery.sentToReview')}</span> : null}
       </Note>
       <Dialog open={!!large} onOpenChange={(o) => !o && setLarge(null)} title={product.name} description={large?.altText ?? large?.aiCaption ?? undefined} closeLabel={t('action.close')} size="lg">
         {large ? <img src={large.url} alt={large.altText ?? product.name} className="max-h-[70vh] w-full rounded-[8px] object-contain" data-testid="gallery-large" /> : null}

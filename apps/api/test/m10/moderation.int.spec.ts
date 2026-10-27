@@ -185,13 +185,17 @@ describe('pre-screen and auto-approval', () => {
     expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(items);
     expect((row.approvedSnapshot as { images: string[] }).images).toEqual([expect.not.stringContaining(a.url)]);
     expect(await catalogueSees(owner.workspaceId, p.id)).toMatchObject({ id: p.id });
-    // adding a picture is still reviewed — with the save of the product, not at the upload (tester report 25/10 UX-001)
+    // adding a picture is reviewed — with its upload, wherever it comes from (tester log 26/10 UX-039: « + Ajouter » of the
+    // product page has no save step; the product form uploads its new pictures only with « Enregistrer »)
     const c = (await upload(owner, app, `/products/${p.id}/images`, 'file', [await pic('c.jpg')]).expect(201)).body.data;
-    expect((await db.product.findUniqueOrThrow({ where: { id: p.id } })).moderationStatus).toBe('approved');
-    expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(items);
-    // tester report 25/10 UX-006: until it is approved the new picture is never shown to a customer
+    expect((await db.product.findUniqueOrThrow({ where: { id: p.id } })).moderationStatus).toBe('pending');
+    expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(items + 1);
+    // tester report 25/10 UX-006: until it is approved the new picture is never shown to a customer; the merchant sees it
+    // flagged « EN ATTENTE DE VALIDATION »
     expect((await catalogueSees(owner.workspaceId, p.id))!.imageUrl).not.toBe(c.url);
-    expect((await owner.post(`/products/${p.id}/submit-changes`, {}).expect(200)).body.data).toEqual({ submitted: true, moderationStatus: 'pending' });
+    const shown = (await owner.get(`/products/${p.id}`).expect(200)).body.data.images as { id: string; awaitingReview: boolean }[];
+    expect(shown.map((i) => [i.id === c.id, i.awaitingReview])).toEqual(expect.arrayContaining([[true, true], [false, false]]));
+    expect((await owner.post(`/products/${p.id}/submit-changes`, {}).expect(200)).body.data).toEqual({ submitted: false, moderationStatus: 'pending' });
     expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(items + 1);
     expect((await itemOf(p.id)).snapshot).toMatchObject({ images: expect.arrayContaining([expect.stringContaining(c.url.split('/').slice(-2, -1)[0]!)]) });
     // a second save with nothing new adds nothing

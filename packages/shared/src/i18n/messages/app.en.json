@@ -4785,7 +4785,7 @@
  "products.form.images.add": "ADD",
  "products.form.images.drag": "≡ DRAG",
  "products.form.images.hint": "JPG, PNG, WEBP · 5 MB max · 800 × 800 px recommended · an AI caption is generated for photo recognition",
- "products.form.images.savedNow": "Photos are stored as soon as they are added; an added photo goes to review with « Save ».",
+ "products.form.images.savedNow": "An added photo is sent — and goes to review — with « Save »; « Cancel » drops it. Delete, order and primary photo apply at once.",
  "products.form.images.makePrimary": "Set as primary image",
  "products.form.images.moveAfter": "Move after",
  "products.form.images.moveBefore": "Move before",
@@ -6377,5 +6377,9 @@
  "adminMod.flag.new_variant": "Variant to review",
  "products.form.moderation.autoRejected": "Rejected automatically: « {word} » is a banned word on Djaber ({field}). Remove it, then click « Resubmit ».",
  "products.form.moderation.field.variants": "variants",
- "products.form.moderation.field.keywords": "keywords"
+ "products.form.moderation.field.keywords": "keywords",
+ "products.form.images.staged": "NOT SAVED YET",
+ "products.form.images.awaitingReview": "AWAITING REVIEW",
+ "products.form.images.someFailed": "{count, plural, one {# photo was not sent: try again with « Save ».} other {# photos were not sent: try again with « Save ».}}",
+ "products.page.gallery.sentToReview": "A photo added here goes to Djaber's review; customers see it once it is approved."
 }

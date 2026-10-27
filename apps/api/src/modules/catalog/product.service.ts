@@ -17,6 +17,7 @@ import { computeMargins, MARGIN_PERIOD_DAYS, MARGIN_SOLD_STATUSES } from './marg
 import { ModerationHookService, needsReview } from './moderation-hook.service';
 import { PlanLimitService } from './plan-limit.service';
 import { folderOf, IMAGE_FILE, isProcessed, THUMB_FILE, thumbUrlOf } from './product-image.util';
+import { approvedImages } from './approved-content';
 import { isProposed, LIST_INCLUDE, toImageView, toListItem, toVariantView, type ProductListRow } from './product.presenter';
 import { findProductIds } from './product.query';
 import { SkuService } from './sku.service';
@@ -167,6 +168,8 @@ export class ProductService implements OnModuleInit {
     ]);
     const base = toListItem({ ...row, variants });
     const total = base.stock;
+    // tester log 26/10 UX-039: the pictures of a changed product that its approved version does not have yet
+    const approvedImageIds = row.moderationStatus === 'pending' && row.approvedSnapshot ? new Set(approvedImages(row, images).map((i) => i.id)) : null;
     const reservedQty = [...reserved.values()].reduce((n, q) => n + q, 0);
     return {
       ...base,
@@ -175,7 +178,7 @@ export class ProductService implements OnModuleInit {
       description: row.description,
       weightGrams: row.weightGrams,
       keywords: row.keywords,
-      images: images.map(toImageView),
+      images: images.map((i) => ({ ...toImageView(i), awaitingReview: !!approvedImageIds && !approvedImageIds.has(i.id) })),
       variants: variants.map(toVariantView),
       stockDetail: {
         total,
