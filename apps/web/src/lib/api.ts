@@ -76,14 +76,25 @@ export const markOwnWrite = () => {
 export const msSinceOwnWrite = () => Date.now() - lastWriteAt;
 
 let refreshing: Promise<boolean> | null = null;
+/**
+ * PV 28/10 « fermeture de session »: the tabs of one browser share the refresh cookie, so they take turns (Web Locks) —
+ * a tab that waited presents the cookie its neighbour just received instead of the rotated one. The API also accepts a
+ * token rotated seconds ago (REFRESH_REUSE_GRACE_S) for browsers without Web Locks and for lost responses.
+ */
+const oneTabAtATime = <T>(fn: () => Promise<T>): Promise<T> => {
+  const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
+  return locks ? (locks.request('djaber-auth-refresh', fn) as Promise<T>) : fn();
+};
 /** Exchanges the refresh cookie for a new access token. Shared by concurrent 401s. */
 export const refreshSession = (): Promise<boolean> => {
-  refreshing ??= fetch(`${API_URL}/api/v1/auth/refresh`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'Accept-Language': session.locale },
-    body: '{}',
-  })
+  refreshing ??= oneTabAtATime(() =>
+    fetch(`${API_URL}/api/v1/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'Accept-Language': session.locale },
+      body: '{}',
+    }),
+  )
     .then(async (r) => {
       if (!r.ok) return false;
       const json = (await r.json()) as Envelope<{ accessToken: string }>;

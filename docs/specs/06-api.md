@@ -32,7 +32,7 @@ One REST API serves the web app, the mobile app and API clients `[CDC §8]`.
 
 ### Auth & account
 ```
-POST /auth/register · POST /auth/login → tokens, or `{ mfaToken }` when 2FA is on · POST /auth/refresh (reuse of a rotated token ⇒ 401 AUTH_REFRESH_REUSED, whole family revoked) · POST /auth/logout?all
+POST /auth/register · POST /auth/login → tokens, or `{ mfaToken }` when 2FA is on · POST /auth/refresh (reuse of a rotated token ⇒ 401 AUTH_REFRESH_REUSED, whole family revoked — except within `REFRESH_REUSE_GRACE_S` (60 s) of its rotation while the family still has a live token: several tabs or a lost response, a new token of the same family is issued, PV 28/10) · POST /auth/logout?all
 POST /auth/forgot-password · GET /auth/reset-password/:token · POST /auth/reset-password
 POST /auth/verify-email · POST /auth/verify-email/resend
 POST /auth/2fa/setup · POST /auth/2fa/enable · POST /auth/2fa/disable (password; users with a platform role ⇒ 403 TWO_FA_REQUIRED_FOR_ROLE) · POST /auth/2fa/verify { mfaToken, code | recoveryCode } · POST /auth/2fa/recovery-codes (password)

@@ -181,10 +181,30 @@ describe('AUTH-02 / AUTH-04 refresh, logout, sessions', () => {
     expect((await refresh('unknown-token-unknown-token').expect(401)).body.error.code).toBe('UNAUTHORIZED');
   });
 
+  it('PV 28/10 « fermeture de session »: two tabs refreshing with the same cookie at once both stay signed in; after a logout the old cookie is refused', async () => {
+    const u = await register(app);
+    // tab A and tab B start together: both present the cookie of the login
+    const [a, b] = await Promise.all([refresh(u.cookie), refresh(u.cookie)]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    // the second one a few seconds later (lost response, slow tab) is accepted too
+    const c = await refresh(u.cookie).expect(200);
+    for (const r of [a, b, c]) await withToken(app, r.body.data.accessToken).get('/me').expect(200);
+    const rows = await db.refreshToken.findMany({ where: { userId: u.userId } });
+    expect(new Set(rows.map((r) => r.familyId)).size).toBe(1);
+    expect(await db.auditLog.count({ where: { action: 'auth.sessions_revoked', entityId: u.userId } })).toBe(0);
+    // every cookie issued keeps working
+    await refresh(refreshCookie(c)!).expect(200);
+    // a logout closes the session: the cookie of the login is refused even inside the window
+    await api(app).post('/api/v1/auth/logout').set('Cookie', `djaber_rt=${refreshCookie(a)!}`).send({}).expect(204);
+    expect((await refresh(u.cookie).expect(401)).body.error.code).toBe('AUTH_REFRESH_REUSED');
+  });
+
   it('AT-AUTH-05 refresh token reused after rotation ⇒ whole family revoked; next request 401', async () => {
     const u = await register(app);
     const r1 = await refresh(u.cookie).expect(200);
     const fresh = refreshCookie(r1)!;
+    // beyond the grace window of concurrent tabs (REFRESH_REUSE_GRACE_S = 60 s)
+    await db.refreshToken.updateMany({ where: { userId: u.userId, revokedAt: { not: null } }, data: { revokedAt: new Date(Date.now() - 120_000) } });
     const reused = await refresh(u.cookie).expect(401);
     expect(reused.body.error.code).toBe('AUTH_REFRESH_REUSED');
     expect(cookieHeader(reused)).toMatch(/djaber_rt=;/); // cookie cleared

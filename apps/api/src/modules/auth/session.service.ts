@@ -13,6 +13,8 @@ import { AppException } from '../../core/errors/app.exception';
 
 export const REFRESH_COOKIE = 'djaber_rt';
 const COOKIE_PATH = '/api/v1/auth';
+/** Live tokens one session may hold at once through concurrent rotations (grace window of REFRESH_REUSE_GRACE_S). */
+const REFRESH_PARALLEL_MAX = 10;
 
 export type ClientInfo = { ip?: string | null; userAgent?: string | null };
 export type IssuedTokens = { accessToken: string; refreshToken: string; expiresIn: number; familyId: string };
@@ -79,7 +81,11 @@ export class SessionService {
         const claimed = row.revokedAt
           ? 0
           : (await tx.refreshToken.updateMany({ where: { id: row.id, revokedAt: null }, data: { revokedAt: new Date() } })).count;
-        if (!claimed) {
+        // PV 28/10 « fermeture de session »: two tabs opened together (each one refreshes at start) or a refresh whose
+        // response was lost present the same cookie twice — that is not a theft. A token rotated less than
+        // REFRESH_REUSE_GRACE_S ago, whose session is still alive, gets a new token of the same family; any other reuse
+        // revokes the whole family as before (AT-AUTH-05).
+        if (!claimed && !(await this.concurrentRotation(tx, row))) {
           await tx.refreshToken.updateMany({ where: { familyId: row.familyId, revokedAt: null }, data: { revokedAt: new Date() } });
           return { kind: 'reused' as const, userId: row.userId, familyId: row.familyId };
         }
@@ -125,6 +131,18 @@ export class SessionService {
     if (outcome.kind === 'blocked') throw new AppException('AUTH_USER_BLOCKED');
     if (outcome.kind !== 'ok') throw new AppException('UNAUTHORIZED');
     return { user: outcome.user, tokens: outcome.tokens };
+  }
+
+  /**
+   * A rotated token presented again within the grace window while its family still has a live token (a logout or a
+   * revocation leaves none). Capped so that a leaked cookie cannot open sessions without end inside the window.
+   */
+  private async concurrentRotation(tx: Tx, row: { familyId: string; revokedAt: Date | null }): Promise<boolean> {
+    const graceMs = this.config.get('REFRESH_REUSE_GRACE_S') * 1000;
+    // revokedAt null: another request claimed it between our read and our update (it committed before our update ran)
+    if (!graceMs || (row.revokedAt && Date.now() - row.revokedAt.getTime() > graceMs)) return false;
+    const alive = await tx.refreshToken.count({ where: { familyId: row.familyId, revokedAt: null, expiresAt: { gt: new Date() } } });
+    return alive > 0 && alive < REFRESH_PARALLEL_MAX;
   }
 
   /** Family of a raw refresh token (logout with the cookie / body token only). */
