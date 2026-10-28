@@ -4,7 +4,7 @@ Sources (in `docs/audit/inputs/`): UX-UI test log of 22/10 (`2026-10-22-ux-ui-te
 25/10 (`2026-10-25-ux-ui-test-log.md`, prefix **L25** — its numbers restart at UX-001), tester notes of 25/10
 (`2026-10-25-djaber-test.md`, prefix **T25**, numbered in reading order), meeting PV of 26/10 (`2026-10-26-pv-reunion-djaber.md`,
 prefix **PV26**), the developer's own report of 26/10 (prefix **AI**) and the UX-UI test log of 26/10 (`2026-10-26-ux-ui-test-log.md`,
-prefix **L26**, last section).
+prefix **L26**) and the meeting PV of 28/10 (`2026-10-28-pv-djaber.md`, prefix **PV28**, last section).
 
 Status: `todo` · `done` (commit) · `deferred` (reason).
 
@@ -75,3 +75,11 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 | L26-UX-039 | Pictures added with « + Ajouter » or « Modifier » then « Annuler » skip moderation | done (4f992fb) |
 | L26-UX-040 | « Retirer des crédits » does not tell the client (« à arbitrer ») | done (faf068e) |
 | L26-UX-041 | Admin Workspaces: no column for the « Statut » filter (« à arbitrer ») | done (ff16ffd) |
+
+## Meeting PV of 28/10 (`2026-10-28-pv-djaber.md`, prefix **PV28**)
+| # | Issue | Status |
+|---|---|---|
+| PV28-1 | The AI agent limits orders to 10 (an empty limit meant 10 units / 50 000 DA while the page showed ∞) | done (4a9dbdb) |
+| PV28-2 | Add tracking through the chatbot (orders taken by phone, phone / tracking number, tracking link) | done (4a9dbdb) |
+| PV28-3 | « Fermeture de session »: sessions closed by themselves (two tabs / lost refresh response revoked the session) | done (aa82847) |
+| PV28-4 | The AI agent does not recognise photos sent from Messenger | done (4a9dbdb) |
