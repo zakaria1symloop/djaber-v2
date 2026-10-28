@@ -27,7 +27,7 @@ import { withinWindow } from '../messaging/window-rules';
 import { META_GATEWAY, type MetaGateway } from '../meta/meta.gateway';
 import { NotificationProducer } from '../notifications/notification.producer';
 import { CrossSellService } from '../recommendations/cross-sell.service';
-import { AI_ERROR_ALERT_FAILURES, AI_ERROR_ALERT_WINDOW_S, LAST_PRODUCTS_MAX, plannedCost, RUN_BUDGET_MS, UNCLEAR_STREAK_HANDOFF } from './ai.constants';
+import { AI_ERROR_ALERT_FAILURES, AI_ERROR_ALERT_WINDOW_S, LAST_PRODUCTS_MAX, MEDIA_WAIT_MS, MEDIA_WAIT_STEP_MS, plannedCost, RUN_BUDGET_MS, UNCLEAR_STREAK_HANDOFF } from './ai.constants';
 import { AiRunService, intentOf, type RunMeta, type TurnResult } from './ai-run.service';
 import { CatalogueService } from './catalogue.service';
 import { InsightService } from './insight.service';
@@ -40,6 +40,10 @@ import { VisionService, visionNoteText, type VisionNote } from './vision.service
 export type ReplyOutcome = 'sent' | 'noop' | 'empty' | 'exhausted' | 'failed' | 'aborted' | `skipped:${string}`;
 type JobInfo = Pick<Job, 'attemptsMade' | 'opts'>;
 type Batch = { messages: Message[]; text: string; plain: string; hasAudio: boolean; images: { messageId: string; index: number; storageKey: string | null; mime: string }[] };
+
+/** A photo of the batch the `media` job has not stored yet (neither stored nor failed). */
+const mediaPending = (b: Batch) => b.messages.some((m) => attachmentsOf(m).some((a) => a.type === 'image' && a.pending && !a.error));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const CARD_NAMES = (m: Message) => ((m.payload as { cards?: { name: string }[] } | null)?.cards ?? []).map((c) => c.name).join(', ');
 
@@ -144,7 +148,14 @@ export class ReplyProcessor implements OnModuleInit {
 
     const already = await prisma.aiRun.findFirst({ where: { conversationId: conv.id, batchKey: d.batchKey } });
     if (already && already.status !== 'running') return 'noop';
-    const batch = await this.batch(conv, d.batchKey, agent, already?.startedAt);
+    let batch = await this.batch(conv, d.batchKey, agent, already?.startedAt);
+    if (!batch) return 'skipped:batch';
+    // PV 28/10 (« l'agent IA ne reconnaît pas les photos envoyées depuis Messenger »): the reply used to start while the
+    // photo was still being downloaded from Meta and answered without it (IMAGE RESULT: unavailable); it now waits for it
+    for (const until = Date.now() + MEDIA_WAIT_MS; batch && agent.imageRecognition && mediaPending(batch) && Date.now() < until; ) {
+      await sleep(MEDIA_WAIT_STEP_MS);
+      batch = await this.batch(conv, d.batchKey, agent, already?.startedAt);
+    }
     if (!batch) return 'skipped:batch';
     if (!batch.text.trim() && !batch.images.length) return 'empty';
 

@@ -17,6 +17,9 @@ export const DEFAULT_CONTEXT_TOKENS = 32_000;
 export const PROMPT_RESERVE_TOKENS = 512;
 /** §6: whole-run budget (the per-call timeout is `AiRoute.timeoutSec`). */
 export const RUN_BUDGET_MS = 45_000;
+/** PV 28/10: a customer photo still downloading when the batching window closes is waited for, at most this long. */
+export const MEDIA_WAIT_MS = 12_000;
+export const MEDIA_WAIT_STEP_MS = 1_000;
 export const DEFAULT_CALL_TIMEOUT_S = 20;
 /** §6 circuit breaker. */
 export const BREAKER_WINDOW_S = 600;

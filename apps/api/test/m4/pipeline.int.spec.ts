@@ -3,6 +3,7 @@
 import { getMessages } from '@djaber/shared';
 import { RedisService } from '../../src/core/redis/redis.provider';
 import { ORDER_TOOLS, type OrderTools } from '../../src/modules/ai/tools/order-tools';
+import { CatalogueService } from '../../src/modules/ai/catalogue.service';
 import { RoutingService } from '../../src/modules/ai/routing.service';
 import { FORMAT_REMINDER } from '../../src/modules/ai/structured-output';
 import { ConversationService } from '../../src/modules/messaging/conversation.service';
@@ -348,7 +349,7 @@ describe('tools', () => {
     const r = t.runs[0]!.toolCalls.sort((a, b) => a.executedAt!.getTime() - b.executedAt!.getTime()).map((c) => c.result as any);
     expect(r[0]).toEqual({ ok: false, error: { code: 'VALIDATION', field: 'clientPhone', example: '0555123456' } });
     expect(r.filter((x) => x.error?.code === 'CONFIRMATION_REQUIRED')).toHaveLength(1);
-    expect(r.filter((x) => x.hint === 'order_limit')).toEqual([{ ok: false, hint: 'order_limit', maxQty: 3, maxAmount: 50000 }]);
+    expect(r.filter((x) => x.hint === 'order_limit')).toEqual([{ ok: false, hint: 'order_limit', maxQty: 3, maxAmount: null }]);
     expect(r.filter((x) => x.error?.field === 'address')).toHaveLength(1);
     // the validated request handed to the orders port (bound to the orders module since M5)
     expect(create).toHaveBeenCalledTimes(1);
@@ -492,8 +493,46 @@ describe('tools', () => {
     await db.order.create({ data: { workspaceId: s.owner.workspaceId, number: 'CMD-3002', clientId: stranger.id, source: 'manual', clientName: 'Autre', clientPhone: '0660000000', subtotal: 1, total: 1 } });
     const found = await turn(s, sender, { text: 'win rahi la commande ?' });
     const orders = (found.runs.at(-1)!.toolCalls[0]!.result as any).orders;
-    expect(orders).toEqual([expect.objectContaining({ number: 'CMD-3001', status: 'shipped', deliveryStatus: 'in_transit', courier: 'zrexpress', trackingNumber: 'ZR-778', lastEvent: expect.objectContaining({ label: 'Colis au centre de tri Alger' }), total: 4900 })]);
+    expect(orders).toEqual([expect.objectContaining({ number: 'CMD-3001', status: 'shipped', deliveryStatus: 'in_transit', courier: 'zrexpress', trackingNumber: 'ZR-778', trackingUrl: expect.stringMatching(new RegExp(`/s/tok-${order.id}$`)), lastEvent: expect.objectContaining({ label: 'Colis au centre de tri Alger' }), total: 4900 })]);
     expect(found.out.at(-1)!.text).toContain('CMD-3001');
+  });
+
+  it('PV 28/10 « tracking via le chatbot »: an order taken by phone is found with the customer\'s phone, or with the phone / tracking number they give (without its amount); an invalid phone is re-asked', async () => {
+    const s = await shop();
+    const ws = s.owner.workspaceId;
+    const sender = newSender();
+    const first = await turn(s, sender, { text: 'Bonjour' });
+    // the customer gave this phone earlier in the chat (A4 context); the shop took an order for it by phone (its own client row)
+    await db.conversation.update({ where: { id: first.conversationId }, data: { context: { ...((first.conversation.context as object | null) ?? {}), customer: { phone: '0550 11 12 22' } } } });
+    const byPhoneClient = await db.client.create({ data: { workspaceId: ws, name: 'Commande téléphone', phone: '0550111222' } });
+    await db.order.create({ data: { workspaceId: ws, number: 'CMD-4001', clientId: byPhoneClient.id, source: 'manual', clientName: 'Commande téléphone', clientPhone: '0550111222', subtotal: 6200, total: 6600, status: 'confirmed' } });
+    // another person's parcel (the customer types its phone or its tracking number)
+    const other = await db.client.create({ data: { workspaceId: ws, name: 'Sœur', phone: '0660123123' } });
+    const o2 = await db.order.create({ data: { workspaceId: ws, number: 'CMD-4002', clientId: other.id, source: 'manual', clientName: 'Sœur', clientPhone: '0660123123', subtotal: 4500, total: 4900, status: 'shipped', deliveryStatus: 'in_transit' } });
+    await db.shipment.create({ data: { workspaceId: ws, orderId: o2.id, provider: 'yalidine', status: 'in_transit', trackingNumber: 'YAL-90210', publicTrackingToken: `tok-${o2.id}`, codAmount: 4900 } });
+    // a stranger's order is never listed without its phone or tracking number
+    const stranger = await db.client.create({ data: { workspaceId: ws, name: 'Inconnu', phone: '0770999999' } });
+    await db.order.create({ data: { workspaceId: ws, number: 'CMD-4003', clientId: stranger.id, source: 'manual', clientName: 'Inconnu', clientPhone: '0770999999', subtotal: 1, total: 1 } });
+
+    await resetAi();
+    fakeAi(app).script(
+      'reply',
+      { toolCalls: [{ name: 'lookup_order', args: {} }, { name: 'lookup_order', args: { phone: '0660 12 31 23' } }, { name: 'lookup_order', args: { trackingNumber: 'yal-90210' } }, { name: 'lookup_order', args: { phone: '12345' } }] },
+      { reply: 'Voici vos commandes.', status: 'OK', intent: 'TRACKING' },
+    );
+    const t = await turn(s, sender, { text: 'où en sont mes commandes ?' });
+    const calls = t.runs.at(-1)!.toolCalls.sort((a, b) => a.executedAt!.getTime() - b.executedAt!.getTime());
+    const [mine, phone, tracking, invalid] = calls.map((c) => c.result as any);
+    expect(mine.orders).toEqual([expect.objectContaining({ number: 'CMD-4001', status: 'confirmed', total: 6600 })]);
+    const parcel = { number: 'CMD-4002', status: 'shipped', deliveryStatus: 'in_transit', courier: 'yalidine', trackingNumber: 'YAL-90210', trackingUrl: expect.stringMatching(new RegExp(`/s/tok-${o2.id}$`)) };
+    expect(phone.orders).toEqual([expect.objectContaining(parcel)]);
+    expect(tracking.orders).toEqual([expect.objectContaining(parcel)]);
+    // someone else's order: never its amount
+    expect(phone.orders[0]).not.toHaveProperty('total');
+    expect(tracking.orders[0]).not.toHaveProperty('total');
+    expect(JSON.stringify([mine, phone, tracking])).not.toContain('CMD-4003');
+    expect(invalid).toEqual({ ok: false, error: { code: 'VALIDATION', field: 'phone', example: '0555123456' } });
+    expect(fakeAi(app).callsOf('reply').at(-1)!.system).toContain('Where is my order / tracking: call lookup_order');
   });
 });
 
@@ -706,7 +745,8 @@ describe('providers, credits', () => {
     expect((await runsOf(conversation.id))[0]).toMatchObject({ status: 'ok', creditsCharged: 5 });
     expect((await ledger(s.owner.workspaceId)).filter((l) => l.aiRunId).map((l) => [l.action, l.kind, l.credits])).toEqual([['reserve', 'reserved', -5], ['release', 'release', 5], ['image_recognition', 'debit', -5]]);
 
-    // a photo that matches nothing: pass 2 never runs ⇒ the turn costs a text reply, and no price is stated
+    // a photo no catalogue word describes: still compared with the shop's pictured products (PV 28/10), no match ⇒
+    // confirmation question, no price, no card; pass 2 ran ⇒ 5 credits
     await resetAi();
     fakeAi(app).script('vision_describe', { object: { category: 'voiture', colors: [], text: '', description: 'voiture rouge', multipleProducts: false, quality: 'ok' } });
     const unknown = await turn(s, newSender(), photo);
@@ -714,7 +754,8 @@ describe('providers, credits', () => {
     expect(question.text).toBe('Pouvez-vous me confirmer de quel produit il s\'agit ?');
     expect(question.text).not.toMatch(/\d+\s*DA/);
     expect(unknown.out.some((m) => m.type === 'product_cards')).toBe(false);
-    expect(unknown.runs[0]).toMatchObject({ status: 'ok', creditsCharged: 1 });
+    expect(fakeAi(app).callsOf('vision_match')).toHaveLength(1);
+    expect(unknown.runs[0]).toMatchObject({ status: 'ok', creditsCharged: 5 });
     // low confidence ⇒ confirmation question too, but pass 2 ran: 5 credits
     await resetAi();
     fakeAi(app).script('vision_describe', { object: { description: 'robe satin', quality: 'ok', multipleProducts: false } }).script('vision_match', { object: { productId: s.robe.id, confidence: 0.4, alternatives: [] } });
@@ -737,6 +778,53 @@ describe('providers, credits', () => {
     expect(rows.map((l) => [l.action, l.kind, l.credits, l.idempotencyKey.split(':')[2]])).toEqual([['reserve', 'reserved', -5, 'reserve'], ['release', 'release', 5, 'release']]);
     expect(await debits(s.owner.workspaceId)).toHaveLength(before);
     expect((await balanceOf(app, s.owner.workspaceId)).reserved).toBe(0);
+  });
+
+  it('PV 28/10 « l\'agent IA ne reconnaît pas les photos »: an English description with no catalogue word still reaches the product pictures; the multilingual keywords find the product; a photo still downloading is waited for', async () => {
+    const s = await shop();
+    await upload(s.owner, app, `/products/${s.robe.id}/images`, 'file', [{ buffer: await image(800, 800), name: 'robe.jpg', type: 'image/jpeg' }]).expect(201);
+    await s.owner.post(`/products/${s.robe.id}/submit-changes`, {}).expect(200);
+    await drain(app, s.owner.workspaceId);
+    const photo = { attachments: [{ type: 'image', payload: { url: 'https://fake.meta.local/photo-cliente.jpg' } }] };
+
+    // 1. what the model used to answer: an English sentence, no word of « Robe satin bordeaux » ⇒ the robe is compared anyway
+    await resetAi();
+    fakeAi(app)
+      .script('vision_describe', { object: { category: 'evening gown', colors: ['burgundy'], text: '', description: 'A woman wearing a long burgundy evening gown', multipleProducts: false, quality: 'ok' } })
+      .script('vision_match', (req) => ({ object: { productId: s.robe.id, confidence: 0.88, alternatives: [] }, ...(req ? {} : {}) }));
+    const english = await turn(s, newSender(), photo);
+    expect(fakeAi(app).callsOf('vision_describe')[0]!.system).toContain('"keywords"');
+    const match = fakeAi(app).callsOf('vision_match')[0]!;
+    expect((match.messages[0] as any).content.filter((p: any) => p.type === 'image')).toHaveLength(2); // the photo + the robe's picture
+    expect(JSON.stringify(match.messages[0])).toContain(s.robe.id);
+    expect((fakeAi(app).callsOf('reply')[0]!.messages.at(-1) as any).content).toContain(`IMAGE RESULT: {"productId":"${s.robe.id}","confidence":0.88`);
+    expect((english.out.find((m) => m.type === 'product_cards')!.payload as any).cards[0].productId).toBe(s.robe.id);
+
+    // 2. the keywords (French / Arabic / English) are what the catalogue is searched with: the robe comes first
+    await resetAi();
+    const search = jest.spyOn(app.app.get(CatalogueService), 'search');
+    fakeAi(app)
+      .script('vision_describe', { object: { category: 'dress', colors: ['burgundy'], text: '', description: 'long dress', keywords: ['robe', 'فستان', 'dress', 'satin', 'bordeaux'], multipleProducts: false, quality: 'ok' } })
+      .script('vision_match', { object: { productId: s.robe.id, confidence: 0.9, alternatives: [] } });
+    await turn(s, newSender(), photo);
+    const visionSearch = search.mock.calls.findIndex((c) => /^robe فستان dress satin bordeaux/.test(c[1]));
+    expect(visionSearch).toBeGreaterThanOrEqual(0);
+    expect(await search.mock.results[visionSearch]!.value).toEqual([expect.objectContaining({ id: s.robe.id })]);
+    search.mockRestore();
+
+    // 3. the photo is still being downloaded from Meta when the batching window closes: the reply waits for it
+    await resetAi();
+    fakeAi(app).script('vision_describe', { object: { category: 'robe', colors: ['bordeaux'], text: '', description: 'robe satin bordeaux', keywords: ['robe', 'satin'], multipleProducts: false, quality: 'ok' } }).script('vision_match', { object: { productId: s.robe.id, confidence: 0.93, alternatives: [] } });
+    const sender = newSender();
+    const { conversation, message } = await receive(app, s.page, sender, photo);
+    const stored = message!.attachments as any[];
+    await db.message.update({ where: { id: message!.id }, data: { attachments: stored.map((a) => ({ ...a, pending: true, storageKey: null })) } });
+    // (a Prisma query only runs once awaited / then-ed)
+    setTimeout(() => void db.message.update({ where: { id: message!.id }, data: { attachments: stored } }).then(() => undefined), 1500);
+    const r = await answer(app, s.owner.workspaceId, conversation.id);
+    expect(r!.outcome).toBe('sent');
+    expect((fakeAi(app).callsOf('reply')[0]!.messages.at(-1) as any).content).toContain(`"productId":"${s.robe.id}"`);
+    expect((fakeAi(app).callsOf('reply')[0]!.messages.at(-1) as any).content).not.toContain('IMAGE RESULT: unavailable');
   });
 
   it('AT-AI-09 voice note ⇒ transcript stored, reply, 3 credits; Groq down ⇒ OpenAI; both down ⇒ `voiceFailed` once, 0 credits', async () => {

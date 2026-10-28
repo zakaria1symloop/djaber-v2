@@ -198,7 +198,7 @@ describe('draft diff and patch', () => {
     const edited = { ...base, maxQtyPerOrder: 8, policies: { delivery: '2–5 jours' } };
     expect(dirtySections(base, edited)).toEqual(['knowledge', 'behaviour']);
     expect(diffDraft(base, edited).map((c) => c.field)).toEqual(['policies', 'maxQtyPerOrder']);
-    expect(diffDraft(base, edited)[1]).toMatchObject({ before: 10, after: 8 });
+    expect(diffDraft(base, edited)[1]).toMatchObject({ before: null, after: 8 });
   });
   it('builds the PATCH body of the dirty sections only', () => {
     const d = { ...valid(), description: ' ', displayName: ' Amel ', policies: { delivery: ' 2–5 j ', payment: '' } };

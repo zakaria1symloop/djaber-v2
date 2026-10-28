@@ -105,13 +105,23 @@ export class CatalogueService {
   }
 
   /**
-   * Free-text search inside the scope (accent-insensitive substring on name / SKU / keywords / description words, plus
-   * trigram word similarity on the name for typos), best match first.
+   * PV 28/10 (« l'agent IA ne reconnaît pas les photos ») — vision candidates beyond the text search: in-scope products
+   * with an approved picture, most recently updated first (a shop of ≤ `limit` such products is compared in full).
    */
-  async search(agent: AgentScope, query: string, limit = 10): Promise<CatalogueProduct[]> {
+  async withImages(agent: AgentScope, limit: number, exclude: string[] = []): Promise<CatalogueProduct[]> {
+    if (limit <= 0) return [];
+    const rows = await prisma.product.findMany({ where: { AND: [this.scopeWhere(agent), { images: { some: {} } }, ...(exclude.length ? [{ id: { notIn: exclude } }] : [])] }, include, orderBy: { updatedAt: 'desc' }, take: limit * 2 });
+    return (await this.present(rows, false, agent)).filter((p) => p.imageKey).slice(0, limit);
+  }
+
+  /**
+   * Free-text search inside the scope (accent-insensitive substring on name / SKU / keywords / description words, plus
+   * trigram word similarity on the name for typos), best match first. `maxWords`: words of the query used (default 8).
+   */
+  async search(agent: AgentScope, query: string, limit = 10, o: { maxWords?: number } = {}): Promise<CatalogueProduct[]> {
     const q = query.trim().slice(0, 200);
     if (!q) return [];
-    const words = [...new Set(q.split(/\s+/).filter((w) => w.length >= 2))].slice(0, 8);
+    const words = [...new Set(q.split(/\s+/).filter((w) => w.length >= 2))].slice(0, o.maxWords ?? 8);
     if (!words.length) return [];
     const scope: Prisma.Sql[] = [Prisma.sql`p."isActive" = true`, Prisma.sql`p."deletedAt" IS NULL`, Prisma.sql`(p."moderationStatus" IN ('approved','not_required') OR (p."moderationStatus" = 'pending' AND p."approvedSnapshot" IS NOT NULL))`];
     if (!agent.sellAllProducts) scope.push(Prisma.sql`EXISTS (SELECT 1 FROM "AgentProduct" ap WHERE ap."productId" = p."id" AND ap."agentId" = ${agent.id}::uuid)`);

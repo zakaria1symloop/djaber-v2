@@ -4,12 +4,14 @@
 // to the run: never returned by the API, not in the error catalogue. Every read is scoped to the agent's catalogue.
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import { AGENT_DEFAULT_MAX_AMOUNT, AGENT_DEFAULT_MAX_QTY, HANDOFF_REASONS, isPhoneDz, normalizePhoneDz, WILAYA_COUNT } from '@djaber/shared';
-import { prisma, TenantContext, type Agent } from '@djaber/db';
+import { HANDOFF_REASONS, isPhoneDz, normalizePhoneDz, WILAYA_COUNT } from '@djaber/shared';
+import { prisma, TenantContext, type Agent, type Prisma } from '@djaber/db';
 import { FAQ_CANDIDATE_INSIGHT_AT } from '../ai.constants';
 import { CatalogueService, type CatalogueProduct } from '../catalogue.service';
 import type { AiToolDef } from '../provider/ai.gateway';
 import { ORDER_TOOLS, PAYMENT_LINK_TOOL, type CancellableOrder, type CreateOrderRequest, type OrderTools, type PaymentLinkTool, type ToolResult } from './order-tools';
+import { ConfigService } from '../../../core/config/config.service';
+import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
 import { fold, WILAYA_ALIASES } from './wilaya-aliases';
 
@@ -71,8 +73,9 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
   },
   lookup_order: {
     name: 'lookup_order',
-    description: "Status of THIS customer's recent orders (order status, courier status, tracking number).",
-    parameters: { type: 'object', additionalProperties: false, properties: { orderNumber: { type: 'string' } } },
+    description:
+      "Where are the customer's orders: order status, delivery status, courier, tracking number, tracking link (trackingUrl) and last courier event. Without arguments: the orders of this customer (this conversation, or the phone they ordered with). An order placed by phone or from another account: give the phone number used for it, or the parcel's tracking number.",
+    parameters: { type: 'object', additionalProperties: false, properties: { orderNumber: { type: 'string' }, phone: { type: 'string', description: 'phone number the order was placed with (05/06/07…)' }, trackingNumber: { type: 'string' } } },
   },
   handoff_to_human: {
     name: 'handoff_to_human',
@@ -124,6 +127,7 @@ export class ToolRegistry {
     @Inject(ORDER_TOOLS) private readonly orders: OrderTools,
     @Inject(PAYMENT_LINK_TOOL) private readonly paymentLinks: PaymentLinkTool,
     private readonly flags: FlagsService,
+    private readonly config: ConfigService,
   ) {}
 
   /** Tools offered to the model for this run. */
@@ -237,22 +241,55 @@ export class ToolRegistry {
     return { ok: true, wilayaId: wilaya.id, wilayaName: wilaya.nameFr, isStopdesk: a.data.isStopdesk, fee: free ? 0 : a.data.isStopdesk ? rule.stopdeskPrice : rule.homePrice, free, freeFrom, stopdeskAvailable, stopdeskFee: stopdeskAvailable ? rule.stopdeskPrice : null, etaDays: '2–5' };
   }
 
-  /** AI-13: this client's orders, except closed ones older than 30 days. */
+  /**
+   * AI-13: the customer's orders, except closed ones older than 30 days. PV 28/10 (« ajout du tracking via le chatbot »):
+   * also the orders placed with the customer's phone (an order taken by phone, or from another Messenger account) and,
+   * when the customer gives them, the orders of a phone number or of a parcel tracking number — those are not shown
+   * with their amount (anyone may type a number). Each parcel comes with its public tracking page.
+   */
   private async lookup(args: Record<string, unknown>, ctx: ToolRunContext): Promise<ToolResult> {
-    if (!ctx.clientId) return { orders: [] };
-    const number = typeof args.orderNumber === 'string' && args.orderNumber.trim() ? args.orderNumber.trim() : null;
+    const text = (k: string) => (typeof args[k] === 'string' && (args[k] as string).trim() ? (args[k] as string).trim() : null);
+    const number = text('orderNumber');
+    const tracking = text('trackingNumber');
+    const given = text('phone');
+    const phone = given ? normalizePhoneDz(given) : null;
+    if (phone && !isPhoneDz(phone)) return invalid('phone', EXAMPLES.clientPhone);
+    // the customer's phones: their client record and what they gave in this conversation (A4 `context.customer`)
+    const [client, conv] = await Promise.all([
+      ctx.clientId ? prisma.client.findUnique({ where: { id: ctx.clientId }, select: { phone: true, phone2: true } }) : null,
+      ctx.conversationId ? prisma.conversation.findUnique({ where: { id: ctx.conversationId }, select: { context: true } }) : null,
+    ]);
+    const said = conv ? contextOf(conv).customer : undefined;
+    const own = [...new Set([client?.phone, client?.phone2, said?.phone, said?.phone2].map((p) => (p ? normalizePhoneDz(p) : null)).filter((p): p is string => !!p && isPhoneDz(p)))];
+    const byPhone = (p: string[]): Prisma.OrderWhereInput[] => (p.length ? [{ clientPhone: { in: p } }, { clientPhone2: { in: p } }] : []);
+    // a phone / tracking number the customer typed: exactly those orders; otherwise the customer's own orders
+    const asked: Prisma.OrderWhereInput[] = [...byPhone(phone ? [phone] : []), ...(tracking ? [{ shipments: { some: { trackingNumber: { equals: tracking, mode: 'insensitive' as const } } } }] : [])];
+    const who: Prisma.OrderWhereInput[] = asked.length ? asked : [...(ctx.clientId ? [{ clientId: ctx.clientId }] : []), ...byPhone(own)];
+    if (!who.length) return { orders: [] };
     const old = new Date(Date.now() - 30 * 86_400_000);
     const rows = await prisma.order.findMany({
-      where: { clientId: ctx.clientId, ...(number ? { number: { equals: number, mode: 'insensitive' } } : { NOT: { status: { in: ['delivered', 'cancelled', 'returned'] }, orderedAt: { lt: old } } }) },
+      where: { OR: who, ...(number ? { number: { equals: number, mode: 'insensitive' } } : tracking ? {} : { NOT: { status: { in: ['delivered', 'cancelled', 'returned'] }, orderedAt: { lt: old } } }) },
       orderBy: { orderedAt: 'desc' },
       take: 5,
       include: { shipments: { orderBy: { createdAt: 'desc' }, take: 1, include: { events: { orderBy: { at: 'desc' }, take: 1 } } } },
     });
+    const web = this.config.get('PUBLIC_WEB_URL').replace(/\/$/, '');
     return {
       orders: rows.map((o) => {
         const s = o.shipments[0];
         const e = s?.events[0];
-        return { number: o.number, status: o.status, deliveryStatus: o.deliveryStatus, courier: s ? s.provider : null, trackingNumber: s?.trackingNumber ?? null, lastEvent: e ? { at: e.at.toISOString(), label: e.description ?? e.rawStatus } : null, total: o.total, orderedAt: o.orderedAt.toISOString() };
+        const mine = (!!ctx.clientId && o.clientId === ctx.clientId) || own.includes(o.clientPhone) || (!!o.clientPhone2 && own.includes(o.clientPhone2));
+        return {
+          number: o.number,
+          status: o.status,
+          deliveryStatus: o.deliveryStatus,
+          courier: s ? s.provider : null,
+          trackingNumber: s?.trackingNumber ?? null,
+          trackingUrl: s?.publicTrackingToken ? `${web}/s/${s.publicTrackingToken}` : null,
+          lastEvent: e ? { at: e.at.toISOString(), label: e.description ?? e.rawStatus, location: e.location ?? null } : null,
+          ...(mine ? { total: o.total } : {}),
+          orderedAt: o.orderedAt.toISOString(),
+        };
       }),
     };
   }
@@ -302,13 +339,14 @@ export class ToolRegistry {
     }
     const subtotal = items.reduce((n, i) => n + i.unitPrice * i.quantity, 0);
     const quantity = items.reduce((n, i) => n + i.quantity, 0);
-    const maxQty = ctx.agent.maxQtyPerOrder ?? AGENT_DEFAULT_MAX_QTY;
-    const maxAmount = ctx.agent.maxAmountPerOrder ?? AGENT_DEFAULT_MAX_AMOUNT;
+    // PV 28/10: an empty limit is no limit (the agent page shows ∞); it used to mean 10 units / 50 000 DA
+    const maxQty = ctx.agent.maxQtyPerOrder ?? null;
+    const maxAmount = ctx.agent.maxAmountPerOrder ?? null;
     const quote = await this.quote({ wilayaId: d.wilayaId, isStopdesk: d.isStopdesk, subtotal });
     if (quote.ok === false) return fail(quote);
     const deliveryFee = Number(quote.fee ?? 0);
     // no order, no error code: the model must hand off with statusDetail=order_limits
-    if (quantity > maxQty || subtotal + deliveryFee > maxAmount) return fail({ ok: false, hint: 'order_limit', maxQty, maxAmount });
+    if ((maxQty !== null && quantity > maxQty) || (maxAmount !== null && subtotal + deliveryFee > maxAmount)) return fail({ ok: false, hint: 'order_limit', maxQty, maxAmount });
     return {
       ok: true,
       request: { clientName: d.clientName, clientPhone: phone, secondPhone: phone2, wilayaId: d.wilayaId, communeName: d.communeName || null, address: d.address || null, isStopdesk: d.isStopdesk, stopdeskId: d.stopdeskId || null, notes: d.notes || null, items, subtotal, deliveryFee, total: subtotal + deliveryFee, ...(d.phoneConfirmed ? { phoneConfirmed: true } : {}), replaces },

@@ -1,7 +1,7 @@
 // Pure logic of the agents module: the wizard draft (03 §30 AGV-02), per-step validation and checklist, the diff
 // between two drafts (dirty sections of AGT-04, merge by section after a 409), the business-hours model, the credit
 // estimate of the summary rail, and the view models of a playground turn and of a tool call (AGT-07).
-import { AGENT_CARD_TEMPLATE_MAX, AGENT_CLOSING_MAX, AGENT_DEFAULT_MAX_AMOUNT, AGENT_DEFAULT_MAX_QTY, AGENT_HANDOFF_KEYWORDS_MAX, AGENT_NAME_MAX, AGENT_POLICY_MAX, AGENT_RESPONSE_DELAY_MAX_S, CREDIT_COST } from '@djaber/shared';
+import { AGENT_CARD_TEMPLATE_MAX, AGENT_CLOSING_MAX, AGENT_DEFAULT_MAX_AMOUNT, AGENT_HANDOFF_KEYWORDS_MAX, AGENT_NAME_MAX, AGENT_POLICY_MAX, AGENT_RESPONSE_DELAY_MAX_S, CREDIT_COST } from '@djaber/shared';
 import type {
   Agent,
   AgentLanguage,
@@ -89,7 +89,8 @@ export const defaultDraft = (): AgentDraft => ({
   policies: {},
   capabilities: { replyText: true, imageRecognition: true, voiceTranscription: true, takeOrders: true, quoteDelivery: true, crossSell: false },
   orderFields: ORDER_FIELDS.map((f) => ({ key: f.key, locked: f.locked, required: f.locked || f.key === 'commune' || f.key === 'address' })),
-  maxQtyPerOrder: AGENT_DEFAULT_MAX_QTY,
+  // PV 28/10: no quantity limit by default (empty = ∞); the amount keeps its 50 000 DA suggestion
+  maxQtyPerOrder: null,
   maxAmountPerOrder: AGENT_DEFAULT_MAX_AMOUNT,
   riskyClientBehavior: 'take_and_flag',
   recapMode: 'always',

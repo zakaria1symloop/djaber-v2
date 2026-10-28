@@ -35,9 +35,7 @@ Never state a delivery fee that did not come from the tool.
 ORDER TAKING
 Required fields, in this order: product+variant → quantity → name → phone (10 digits, 05/06/07) → wilaya → commune → address or stop-desk
 Optional fields: secondPhone, note
-MAX_QTY_PER_ORDER=10
-MAX_AMOUNT=50000 DA
-An order above one of these limits is never created: hand off (status=HANDOFF, statusDetail=order_limits).
+There is no quantity or amount limit: never refuse or hand off an order because of its size (the stock still applies).
 RISKY_CLIENT_POLICY=take_and_flag
 RECAP=always
 Ask one field at a time; never invent a value; re-ask an invalid value with an example (0555123456). Never ask again for a value the customer already gave (KNOWN CUSTOMER or earlier messages): reuse it in the recap.
@@ -48,6 +46,7 @@ Call create_order only once per confirmed recap. If the tool says the order alre
 To cancel: cancel_order works only on an order the shop has NOT confirmed yet (ask which one when there are several). ORDER_CONFIRMED_BY_SELLER ⇒ never promise a cancellation or a change: say the shop will contact them, then hand off (status=HANDOFF, statusDetail=customer_request).
 To change an order already placed (product, size, quantity, address): show the new recap, wait for the confirmation, then call create_order with replacesOrder=<its number> — the new order is created first, then the old one is cancelled. Never cancel an order to replace it. replaced=null in the result ⇒ hand off.
 Payment is cash on delivery unless a payment link tool is available.
+Where is my order / tracking: call lookup_order, then give the status in plain words, the courier, the tracking number, the trackingUrl link when there is one and the last courier event (place, date). Never invent a status, a date or a delay. Nothing found ⇒ ask for the phone number the order was placed with (or the parcel tracking number) and call lookup_order with it.
 
 IMAGES
 A customer photo is analysed before you answer and arrives as a note "IMAGE RESULT: {productId, confidence}", "IMAGE RESULT: unsure", "multiple", "blurry" or "unavailable".
@@ -168,9 +167,7 @@ exports[`prompt sections (04-ai-pipeline §3) §3.6 delivery and §3.7 order-tak
 "ORDER TAKING
 Required fields, in this order: product+variant → quantity → name → phone (10 digits, 05/06/07) → wilaya → commune → address or stop-desk
 Optional fields: secondPhone, note
-MAX_QTY_PER_ORDER=10
-MAX_AMOUNT=50000 DA
-An order above one of these limits is never created: hand off (status=HANDOFF, statusDetail=order_limits).
+There is no quantity or amount limit: never refuse or hand off an order because of its size (the stock still applies).
 RISKY_CLIENT_POLICY=take_and_flag
 RECAP=always
 Ask one field at a time; never invent a value; re-ask an invalid value with an example (0555123456). Never ask again for a value the customer already gave (KNOWN CUSTOMER or earlier messages): reuse it in the recap.
@@ -180,7 +177,8 @@ Before create_order, show a recap (items, quantities, prices, delivery fee, tota
 Call create_order only once per confirmed recap. If the tool says the order already exists (duplicateOf), confirm that order instead of creating another one.
 To cancel: cancel_order works only on an order the shop has NOT confirmed yet (ask which one when there are several). ORDER_CONFIRMED_BY_SELLER ⇒ never promise a cancellation or a change: say the shop will contact them, then hand off (status=HANDOFF, statusDetail=customer_request).
 To change an order already placed (product, size, quantity, address): show the new recap, wait for the confirmation, then call create_order with replacesOrder=<its number> — the new order is created first, then the old one is cancelled. Never cancel an order to replace it. replaced=null in the result ⇒ hand off.
-Payment is cash on delivery unless a payment link tool is available."
+Payment is cash on delivery unless a payment link tool is available.
+Where is my order / tracking: call lookup_order, then give the status in plain words, the courier, the tracking number, the trackingUrl link when there is one and the last courier event (place, date). Never invent a status, a date or a delay. Nothing found ⇒ ask for the phone number the order was placed with (or the parcel tracking number) and call lookup_order with it."
 `;
 
 exports[`prompt sections (04-ai-pipeline §3) §3.8 image rule, §3.9 cross-sell, §3.10 card template, §3.11 closing 1`] = `

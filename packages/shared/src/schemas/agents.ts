@@ -31,7 +31,6 @@ export const AGENT_POLICY_MAX = 500;
 export const AGENT_FAQ_MAX_ENTRIES = 50;
 export const AGENT_FAQ_MAX_CHARS = 20_000;
 export const AGENT_RESPONSE_DELAY_MAX_S = 10;
-export const AGENT_DEFAULT_MAX_QTY = 10;
 export const AGENT_DEFAULT_MAX_AMOUNT = 50_000;
 export const AGENT_HANDOFF_KEYWORDS_MAX = 30;
 /** AGT-07: playground turns per hour per workspace (also per shared test link). */

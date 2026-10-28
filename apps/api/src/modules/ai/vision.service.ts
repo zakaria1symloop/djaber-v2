@@ -17,7 +17,7 @@ import { AI_GATEWAY, AiProviderError, withInput, type AiGateway, type AiPart, ty
 import { RoutingService } from './routing.service';
 import { parseJsonObject } from './structured-output';
 
-const DescribeSchema = z.object({ category: z.string().default(''), colors: z.array(z.string()).default([]), text: z.string().default(''), description: z.string().default(''), multipleProducts: z.boolean().default(false), quality: z.enum(['ok', 'blurry']).default('ok') });
+const DescribeSchema = z.object({ category: z.string().default(''), colors: z.array(z.string()).default([]), text: z.string().default(''), description: z.string().default(''), keywords: z.array(z.string()).default([]), multipleProducts: z.boolean().default(false), quality: z.enum(['ok', 'blurry']).default('ok') });
 const MatchSchema = z.object({ productId: z.string().nullable().default(null), confidence: z.number().min(0).max(1).default(0), alternatives: z.array(z.string()).default([]) });
 const ProductSchema = z.object({ name: z.string().default(''), description: z.string().default(''), categoryName: z.string().nullable().default(null), unitName: z.string().nullable().default(null), attributes: z.array(z.object({ name: z.string(), values: z.array(z.string()) })).default([]) });
 
@@ -33,7 +33,10 @@ export type VisionResult = { note: VisionNote; /** pass 2 answered: the image cr
 export const visionNoteText = (n: VisionNote): string =>
   n.kind === 'match' ? `IMAGE RESULT: ${JSON.stringify({ productId: n.productId, confidence: n.confidence, name: n.name })}` : n.kind === 'unsure' ? `IMAGE RESULT: unsure${n.candidates.length ? ` (closest products: ${n.candidates.join(', ')})` : ''}` : `IMAGE RESULT: ${n.kind}`;
 
-const DESCRIBE = 'Describe the product in this photo: category, colours, visible text/brand, shape. Reply as JSON { "category": string, "colors": string[], "text": string, "description": string, "multipleProducts": boolean, "quality": "ok"|"blurry" }';
+// PV 28/10: the description came back in English and the catalogue (French / Arabic names) was searched with it — no
+// candidate, so the photo was never compared. `keywords` are the search words, in the three languages of the shops.
+const DESCRIBE =
+  'Describe the product in this photo: category, colours, visible text/brand, shape. Reply as JSON { "category": string, "colors": string[], "text": string, "description": string, "keywords": string[], "multipleProducts": boolean, "quality": "ok"|"blurry" }. "keywords": 6 to 15 short search words for the product (its type, colour, material, brand), each given in French, then in Arabic, then in English — e.g. ["robe", "فستان", "dress", "satin", "ساتان", "bordeaux", "burgundy"].';
 const MATCH = 'The first image is a customer photo. The next images are candidate products of the shop, in the order of the candidates list. Which candidate is the product of the customer photo? Reply as JSON { "productId": string|null, "confidence": number 0-1, "alternatives": string[] }. Use null when none matches.';
 const CAPTION = 'Caption this product image in one sentence for search: type, colour, material, notable text';
 const PRODUCT = 'You help a shop owner create a product from photos. Reply as JSON { "name": string, "description": string, "categoryName": string|null, "unitName": string|null, "attributes": [{ "name": string, "values": string[] }] }. Never give a price. Pick categoryName and unitName only from the lists provided.';
@@ -73,8 +76,12 @@ export class VisionService {
     const d = described.ok ? described.value : DescribeSchema.parse({});
     if (d.quality === 'blurry') return { note: { kind: 'blurry' }, matched: false, usage };
     if (d.multipleProducts) return { note: { kind: 'multiple' }, matched: false, usage };
-    const query = [d.description, d.text, d.category, d.colors.join(' ')].filter(Boolean).join(' ').slice(0, 200);
-    const candidates = query ? await this.catalogue.search(agent, query, VISION_CANDIDATES) : [];
+    // the search words first (all of them, not the first 8 of an English sentence), then the rest of the description
+    const keywords = [...d.keywords, d.text, d.category, ...d.colors].map((w) => w.trim()).filter(Boolean);
+    const query = [...keywords, d.description].join(' ').slice(0, 200);
+    const found = query ? await this.catalogue.search(agent, query, VISION_CANDIDATES, { maxWords: 24 }) : [];
+    // the photo is always compared with pictures: the text matches first, then the shop's other pictured products
+    const candidates = [...found, ...(await this.catalogue.withImages(agent, VISION_CANDIDATES - found.length, found.map((c) => c.id)))];
     if (!candidates.length) return { note: { kind: 'unsure', candidates: [] }, matched: false, usage };
     // pass 2
     const withImages = (await Promise.all(candidates.map(async (c) => ({ c, img: await this.primaryImage(c) })))).filter((x): x is { c: CatalogueProduct; img: Buffer } => !!x.img);

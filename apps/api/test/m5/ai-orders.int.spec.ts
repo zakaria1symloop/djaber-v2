@@ -55,6 +55,25 @@ afterAll(async () => {
 beforeEach(resetAi);
 
 describe('create_order (04-ai-pipeline §4.2)', () => {
+  it('PV 28/10 « l\'agent IA limite les commandes à 10 »: an agent without limits takes 12 units and a 60 000 DA order; a limit that is set still hands off', async () => {
+    const s = await shop();
+    expect(s.agent).toMatchObject({ maxQtyPerOrder: null, maxAmountPerOrder: null });
+    const hijab = await createProduct(s.owner, { name: 'Hijab soie', price: 5000, stock: 40 });
+    fakeAi(app).script('reply', { toolCalls: [createCall(s, { items: [{ productId: hijab.id, quantity: 12 }] })] }, { reply: 'Commande enregistrée.', status: 'OK', intent: 'SALE' });
+    const t = await turn(s, newSender(), 'oui je confirme');
+    expect(lastResult(t.runs)).toMatchObject({ ok: true, subtotal: 60_000 });
+    expect(t.conversation.status).toBe('active');
+    expect(await db.order.findFirstOrThrow({ where: { workspaceId: s.owner.workspaceId }, include: { items: true } })).toMatchObject({ subtotal: 60_000, items: [expect.objectContaining({ quantity: 12 })] });
+    // a limit the merchant set is still applied
+    await resetAi();
+    const capped = await shop({ maxQtyPerOrder: 10 });
+    const h2 = await createProduct(capped.owner, { name: 'Hijab soie', price: 1500, stock: 40 });
+    fakeAi(app).script('reply', { toolCalls: [createCall(capped, { items: [{ productId: h2.id, quantity: 12 }] })] }, { reply: 'Je transmets.', status: 'HANDOFF', statusDetail: 'order_limits', intent: 'SALE' });
+    const refused = await turn(capped, newSender(), 'oui');
+    expect(lastResult(refused.runs)).toEqual({ ok: false, hint: 'order_limit', maxQty: 10, maxAmount: null });
+    expect(await db.order.count({ where: { workspaceId: capped.owner.workspaceId } })).toBe(0);
+  });
+
   it('AT-AI-04 / AT-CLI-01 recap confirmed ⇒ order `new` source ai, stock held (no movement until confirmed), placeholder merged into the phone owner, notification + WS, 1 credit for the text, 0 for the order', async () => {
     const s = await shop();
     // the phone already belongs to a client of the shop (an earlier manual order)

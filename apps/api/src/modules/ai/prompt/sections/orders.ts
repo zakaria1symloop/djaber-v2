@@ -1,5 +1,4 @@
 // §3.6 Delivery · §3.7 Order-taking rules (agent behaviour step 3).
-import { AGENT_DEFAULT_MAX_AMOUNT, AGENT_DEFAULT_MAX_QTY } from '@djaber/shared';
 import type { PromptContext } from '../prompt.types';
 
 export const deliverySection = (c: PromptContext): string =>
@@ -40,9 +39,12 @@ export const orderRulesSection = (c: PromptContext): string => {
     'ORDER TAKING',
     `Required fields, in this order: ${list(required).join(' → ')}`,
     ...(optional.length ? [`Optional fields: ${list(optional).join(', ')}`] : []),
-    `MAX_QTY_PER_ORDER=${c.agent.maxQtyPerOrder ?? AGENT_DEFAULT_MAX_QTY}`,
-    `MAX_AMOUNT=${c.agent.maxAmountPerOrder ?? AGENT_DEFAULT_MAX_AMOUNT} DA`,
-    'An order above one of these limits is never created: hand off (status=HANDOFF, statusDetail=order_limits).',
+    // PV 28/10 (« l'agent IA limite les commandes à 10 »): an empty limit is no limit, as the agent page shows it (∞)
+    ...(c.agent.maxQtyPerOrder ? [`MAX_QTY_PER_ORDER=${c.agent.maxQtyPerOrder}`] : []),
+    ...(c.agent.maxAmountPerOrder ? [`MAX_AMOUNT=${c.agent.maxAmountPerOrder} DA`] : []),
+    c.agent.maxQtyPerOrder || c.agent.maxAmountPerOrder
+      ? `An order above ${c.agent.maxQtyPerOrder && c.agent.maxAmountPerOrder ? 'one of these limits' : 'this limit'} is never created: hand off (status=HANDOFF, statusDetail=order_limits).${c.agent.maxQtyPerOrder ? '' : ' There is no quantity limit.'}${c.agent.maxAmountPerOrder ? '' : ' There is no amount limit.'}`
+      : 'There is no quantity or amount limit: never refuse or hand off an order because of its size (the stock still applies).',
     `RISKY_CLIENT_POLICY=${c.agent.riskyClientBehavior ?? 'take_and_flag'}`,
     `RECAP=${c.agent.recapMode ?? 'always'}`,
     ...knownCustomerLines(c),
@@ -54,5 +56,7 @@ export const orderRulesSection = (c: PromptContext): string => {
     'To cancel: cancel_order works only on an order the shop has NOT confirmed yet (ask which one when there are several). ORDER_CONFIRMED_BY_SELLER ⇒ never promise a cancellation or a change: say the shop will contact them, then hand off (status=HANDOFF, statusDetail=customer_request).',
     'To change an order already placed (product, size, quantity, address): show the new recap, wait for the confirmation, then call create_order with replacesOrder=<its number> — the new order is created first, then the old one is cancelled. Never cancel an order to replace it. replaced=null in the result ⇒ hand off.',
     'Payment is cash on delivery unless a payment link tool is available.',
+    // PV 28/10 « ajout du tracking via le chatbot »
+    'Where is my order / tracking: call lookup_order, then give the status in plain words, the courier, the tracking number, the trackingUrl link when there is one and the last courier event (place, date). Never invent a status, a date or a delay. Nothing found ⇒ ask for the phone number the order was placed with (or the parcel tracking number) and call lookup_order with it.',
   ].join('\n');
 };
