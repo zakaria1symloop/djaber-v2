@@ -69,11 +69,11 @@ describe('04 §12 moderation trigger', () => {
     [{ ...base, name: 'Montre homme' }, true],
     [{ ...base, description: null }, true],
     [{ ...base, categoryId: null }, true],
-    [{ ...base, price: 2000 }, true], // −50 %
-    [{ ...base, price: 6000 }, true], // +50 %
-    [{ ...base, price: 1800 }, true], // −55 % (AT-MOD-02)
+    // PV 08/11: a price, however large the change, is the shop's to set (no review)
+    [{ ...base, price: 2000 }, false],
+    [{ ...base, price: 6000 }, false],
+    [{ ...base, price: 1800 }, false],
     [{ ...base, price: 2001 }, false],
-    [{ ...base, price: 5999 }, false],
     [{ ...base }, false],
   ])('%j ⇒ %s', (after, expected) => {
     expect(needsReview(base, after)).toBe(expected);
@@ -86,10 +86,10 @@ describe('04 §12 moderation trigger', () => {
 describe('UX-034 variants of an approved product not reviewed yet (never auto-approved)', () => {
   const snap = (variants?: { id: string; name: string; price: number }[]) => ({ title: 'Gourde', description: null, price: 2000, categoryId: null, images: [], ...(variants ? { variants } : {}) });
   const approved = snap([{ id: 'v1', name: 'Rouge', price: 2000 }]);
-  it('new, renamed, repriced ±50 % or shown again ⇒ listed; same, ±49 % or removed ⇒ nothing', () => {
+  it('new, renamed or shown again ⇒ listed; same, repriced (PV 08/11) or removed ⇒ nothing', () => {
     expect(unreviewedVariants(approved, snap([{ id: 'v1', name: 'Rouge', price: 2000 }, { id: 'v2', name: 'Bleu', price: 2000 }]))).toEqual(['Bleu']);
     expect(unreviewedVariants(approved, snap([{ id: 'v1', name: 'Rouge foncé', price: 2000 }]))).toEqual(['Rouge foncé']);
-    expect(unreviewedVariants(approved, snap([{ id: 'v1', name: 'Rouge', price: 3000 }]))).toEqual(['Rouge']);
+    expect(unreviewedVariants(approved, snap([{ id: 'v1', name: 'Rouge', price: 3000 }]))).toEqual([]);
     expect(unreviewedVariants(approved, snap([{ id: 'v1', name: 'Rouge', price: 2900 }]))).toEqual([]);
     expect(unreviewedVariants(approved, snap([]))).toEqual([]);
   });

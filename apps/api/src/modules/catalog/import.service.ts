@@ -4,7 +4,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { prisma, TenantContext, type Job, type Prisma, type Tx } from '@djaber/db';
-import { IMPORT_FIELDS, IMPORT_MAX_BYTES, IMPORT_MAX_ROWS, type ImportField, type ImportMappingInput, type ImportPreviewResult, type ImportPreviewRow } from '@djaber/shared';
+import { IMPORT_FIELDS, IMPORT_MAX_BYTES, IMPORT_MAX_ROWS, systemUnitText, type ImportField, type ImportMappingInput, type ImportPreviewResult, type ImportPreviewRow } from '@djaber/shared';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { StorageService } from '../../core/storage/storage.service';
@@ -122,7 +122,7 @@ export class ImportService implements OnModuleInit {
     const [products, variants, units, categories, slots] = await Promise.all([
       tx.product.findMany({ where: { deletedAt: null }, select: { sku: true } }),
       tx.productVariant.findMany({ where: { deletedAt: null, sku: { not: null } }, select: { sku: true } }),
-      tx.unit.findMany({ where: { OR: [{ workspaceId: null }, { workspaceId: t.workspaceId }] }, select: { id: true, name: true, abbreviation: true } }),
+      tx.unit.findMany({ where: { OR: [{ workspaceId: null }, { workspaceId: t.workspaceId }] }, select: { id: true, name: true, abbreviation: true, isSystem: true } }),
       tx.category.findMany({ where: { deletedAt: null }, select: { id: true, name: true } }),
       this.limits.productSlots(tx),
     ]);
@@ -133,6 +133,11 @@ export class ImportService implements OnModuleInit {
     for (const u of units) {
       unitIds.set(u.abbreviation.toLowerCase(), u.id);
       unitIds.set(u.name.toLowerCase(), u.id);
+      // a file exported in Arabic or English names the system units in that language (PV 08/11)
+      for (const l of ['fr', 'ar', 'en'] as const) {
+        const shown = u.isSystem ? systemUnitText(u.abbreviation, l) : null;
+        if (shown) for (const w of [shown.name, shown.abbreviation]) if (!unitIds.has(w.toLowerCase())) unitIds.set(w.toLowerCase(), u.id);
+      }
     }
     return { existingSkus, unitIds, categoryIds: new Map(categories.map((c) => [c.name.toLowerCase(), c.id])), slots };
   }

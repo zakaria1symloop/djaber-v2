@@ -148,7 +148,7 @@ describe('pre-screen and auto-approval', () => {
     expect((await createProduct(await merchant('trusted'), { name: 'Sac à dos cuir', description: 'Cuir, fait main.' })).moderation.status).toBe('approved');
   });
 
-  it('AT-MOD-02 a change waiting for review keeps the last approved snapshot selling (AI quotes the old price)', async () => {
+  it('AT-MOD-02 a change waiting for review keeps the last approved snapshot selling (AI shows the old name); a price change is never reviewed and is live at once (PV 08/11)', async () => {
     const owner = await merchant('standard');
     const p = await createProduct(owner, { name: 'Robe kabyle', price: 4000 });
     expect(p.moderation.status).toBe('approved');
@@ -158,13 +158,19 @@ describe('pre-screen and auto-approval', () => {
     expect(r1.status).toBe(200);
     expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(before);
     const cur = (await owner.get(`/products/${p.id}`).expect(200)).body.data;
-    await owner.patch(`/products/${p.id}`, { price: 1800, version: cur.version }).expect(200);
+    // the shop's Owner / Admin sets the price: no item, the AI quotes the new price at once (−55 %)
+    const repriced = (await owner.patch(`/products/${p.id}`, { price: 1800, version: cur.version }).expect(200)).body.data;
+    expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(before);
+    expect(repriced.moderation.status).toBe('approved');
+    expect(await catalogueSees(owner.workspaceId, p.id)).toMatchObject({ price: 1800, name: 'Robe kabyle' });
+    // a new name waits for the review: the AI keeps the approved name, with the live price
+    await owner.patch(`/products/${p.id}`, { name: 'Robe kabyle brodée', price: 1900, version: repriced.version }).expect(200);
     expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(before + 1);
     expect((await owner.get(`/products/${p.id}`).expect(200)).body.data.moderation.status).toBe('pending');
-    expect(await catalogueSees(owner.workspaceId, p.id)).toMatchObject({ price: 4000, name: 'Robe kabyle' });
-    // approval puts the new price live
+    expect(await catalogueSees(owner.workspaceId, p.id)).toMatchObject({ price: 1900, name: 'Robe kabyle' });
+    // approval puts the new name live
     await mod.post(`/admin/moderation/items/${(await itemOf(p.id)).id}/approve`, {}).expect(200);
-    expect(await catalogueSees(owner.workspaceId, p.id)).toMatchObject({ price: 1800 });
+    expect(await catalogueSees(owner.workspaceId, p.id)).toMatchObject({ price: 1900, name: 'Robe kabyle brodée' });
   });
 
   it('tester report 2026-10-20 (UX-002): deleting a picture of an approved product keeps it approved and selling — no new review item, the live snapshot drops the picture', async () => {
@@ -203,7 +209,7 @@ describe('pre-screen and auto-approval', () => {
     expect(await db.moderationItem.count({ where: { productId: p.id } })).toBe(items + 1);
   });
 
-  it('tester report 25/10 UX-003 / UX-007 / UX-006: a new, renamed or repriced (±50 %) variant is reviewed; stock / small price changes are not; the AI sells only approved variants', async () => {
+  it('tester report 25/10 UX-003 / UX-007 / UX-006: a new or renamed variant is reviewed; stock / price changes are not (PV 08/11); the AI sells only approved variants', async () => {
     const owner = await merchant('standard');
     const p = await createProduct(owner, { name: 'T-shirt coton', price: 1500, variants: [{ name: 'M', price: 1500, stock: 4 }] });
     expect(p.moderation.status).toBe('approved');
@@ -226,10 +232,10 @@ describe('pre-screen and auto-approval', () => {
     expect((await itemOf(p.id)).snapshot).toMatchObject({ variants: [{ name: 'M' }, { name: 'XL' }] });
     await mod.post(`/admin/moderation/items/${(await itemOf(p.id)).id}/approve`, {}).expect(200);
     expect((await catalogueSees(owner.workspaceId, p.id))!.variants.map((v) => v.name)).toEqual(['M', 'XL']);
-    // a variant price ±50 % is reviewed too
+    // a variant price, even −69 %, is the shop's to set (PV 08/11): no review, the AI quotes it at once
     await owner.patch(`/products/${p.id}/variants/${m.id}`, { price: 500 }).expect(200);
-    expect((await db.product.findUniqueOrThrow({ where: { id: p.id } })).moderationStatus).toBe('pending');
-    expect((await catalogueSees(owner.workspaceId, p.id))!.variants.find((v) => v.id === m.id)).toMatchObject({ price: 1600 });
+    expect((await db.product.findUniqueOrThrow({ where: { id: p.id } })).moderationStatus).toBe('approved');
+    expect((await catalogueSees(owner.workspaceId, p.id))!.variants.find((v) => v.id === m.id)).toMatchObject({ price: 500 });
   });
 
   it('tester log 26/10 UX-038: an approved snapshot written before variants were kept showed a variant waiting for review; migration 20261027120000 closes it without hiding what was on sale', async () => {

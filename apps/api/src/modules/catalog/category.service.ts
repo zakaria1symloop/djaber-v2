@@ -2,9 +2,10 @@
 // (7 system units + custom). Delete is blocked while products use the row, with a reassign option.
 import { Injectable } from '@nestjs/common';
 import { prisma, TenantContext, type Category, type Prisma, type Tx, type Unit } from '@djaber/db';
-import type { CategoryView, CreateCategoryInput, CreateUnitInput, UnitView, UpdateCategoryInput, UpdateUnitInput } from '@djaber/shared';
+import { systemUnitText, type CategoryView, type CreateCategoryInput, type CreateUnitInput, type UnitView, type UpdateCategoryInput, type UpdateUnitInput } from '@djaber/shared';
 import { AppException, notFound, validationError } from '../../core/errors/app.exception';
 import { action, isUnique } from './catalog.util';
+import { viewLocale } from './product.presenter';
 import { ModerationHookService } from './moderation-hook.service';
 
 const exists = () => new AppException('CATEGORY_ALREADY_EXISTS', {}, { name: 'validation.invalid' });
@@ -159,10 +160,12 @@ export class UnitService {
 
   private view(u: Unit, counts: Map<string, number>): UnitView {
     const readonly = u.isSystem || !u.workspaceId ? 'UNIT_SYSTEM_READONLY' : undefined;
+    // PV 08/11: a system unit in the language the list is viewed in
+    const shown = readonly ? systemUnitText(u.abbreviation, viewLocale()) : null;
     return {
       id: u.id,
-      name: u.name,
-      abbreviation: u.abbreviation,
+      name: shown?.name ?? u.name,
+      abbreviation: shown?.abbreviation ?? u.abbreviation,
       isSystem: u.isSystem || !u.workspaceId,
       containsQty: u.containsQty,
       baseUnitId: u.baseUnitId,

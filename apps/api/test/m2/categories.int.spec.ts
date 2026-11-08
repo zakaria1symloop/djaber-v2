@@ -236,7 +236,7 @@ describe('bulk actions (06 §8.6)', () => {
     expect((await owner.get(`/products/${v.id}`).expect(200)).body.data.variants.map((x: any) => x.price)).toEqual([3105, 3505]);
     // without applyToVariants the variants keep their price
     await owner.post('/products/bulk/price', { ids: [v.id], op: 'set', value: 9000, unit: 'dzd' }).expect(200);
-    expect((await owner.get(`/products/${v.id}`).expect(200)).body.data).toMatchObject({ price: 9000, contentVersion: 2 }); // +190 % ⇒ re-submitted to moderation
+    expect((await owner.get(`/products/${v.id}`).expect(200)).body.data).toMatchObject({ price: 9000, contentVersion: 1 }); // +190 %: a price is never reviewed (PV 08/11)
     expect((await owner.get(`/products/${v.id}`).expect(200)).body.data.variants.map((x: any) => x.price)).toEqual([3105, 3505]);
 
     // a line that would fall to 0 or below is refused on its own, the others pass

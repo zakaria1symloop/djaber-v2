@@ -227,7 +227,7 @@ One scenario per rule; IDs `AT-<area>-nn`. Columns: scenario (Given / When / The
 | ID | Scenario | Covers | Lvl |
 |---|---|---|---|
 | AT-MOD-01 | Create a product (standard trust, non-sensitive) with pre-screen score 0.95 ⇒ `approved` at once, visible to the AI; score 0.6 ⇒ `pending`, absent from `search_products`, cards, recommendations; list pill EN ATTENTE | MOD-01/02, 04 §12 | I |
-| AT-MOD-02 | Edit only `stock` / `minStock` / SKU / cost of an approved product or of its variants ⇒ no `ModerationItem`; edit price from 4 000 to 1 800 (−55 %) ⇒ item created and the previous snapshot keeps selling (IA column ANCIENNE VERSION, AI quotes the old price) | MOD-01, 04 §12 | I |
+| AT-MOD-02 | Edit only `stock` / `minStock` / SKU / cost / price of an approved product or of its variants ⇒ no `ModerationItem` (price from 4 000 to 900, −77 %, live at once — PV 08/11); edit the name ⇒ item created and the previous snapshot keeps selling (IA column ANCIENNE VERSION) | MOD-01, 04 §12 | I |
 | AT-MOD-03 | Sensitive category (electronics) with score 0.99 and trusted merchant ⇒ still human queue; `new` merchant with 0.95 ⇒ human queue | 04 §12 | U |
 | AT-MOD-04 | Moderator rejects without message ⇒ `MODERATION_REASON_REQUIRED`; with reason ⇒ product hidden, `product.rejected` in-app + e-mail + push, rejected view highlights title / image 1 / price | MOD-04/07, FL-16 | I/E |
 | AT-MOD-05 | Appeal once ⇒ `appealed`, routed to a different moderator, decision < 24 h, `moderation.appeal_result`; second appeal ⇒ `MODERATION_APPEAL_ALREADY_USED`; appeal on day 8 ⇒ `MODERATION_APPEAL_WINDOW_EXPIRED` | MOD-05, FL-16 F-1/F-2 | I |

@@ -18,7 +18,7 @@ import { ModerationHookService, needsReview } from './moderation-hook.service';
 import { PlanLimitService } from './plan-limit.service';
 import { folderOf, IMAGE_FILE, isProcessed, THUMB_FILE, thumbUrlOf } from './product-image.util';
 import { approvedImages } from './approved-content';
-import { isProposed, LIST_INCLUDE, toImageView, toListItem, toVariantView, type ProductListRow } from './product.presenter';
+import { isProposed, LIST_INCLUDE, toImageView, toListItem, toVariantView, unitOf, type ProductListRow } from './product.presenter';
 import { findProductIds } from './product.query';
 import { SkuService } from './sku.service';
 import { StockService, reservedQuantities } from './stock.service';
@@ -487,11 +487,24 @@ export class ProductService implements OnModuleInit {
   // --- export (06 §7 "Products") ------------------------------------------------------------------------------------------
   private async exportTable(q: ProductsQuery, locale: 'fr' | 'ar' | 'en') {
     const { ids } = await findProductIds({ ...q, page: 1, pageSize: 25 } as ProductsQuery);
-    const rows: ProductListItemView[] = [];
-    for (let i = 0; i < ids.length; i += 500) rows.push(...(await this.rows(ids.slice(i, i + 500))).map(toListItem));
-    const counts = new Map((await prisma.productVariant.groupBy({ by: ['productId'], where: { deletedAt: null }, _count: { _all: true } })).map((g) => [g.productId, g._count._all]));
+    // PV 08/11 « l'export de la fiche produits se fait sans variantes et confusion sur le prix »: a product with variants
+    // was one line at its base price (never sold at it) with a variant count. Now one line per variant — its name, SKU,
+    // price, cost, stock and threshold; a product without variants keeps its own line.
+    type R = { sku: string; name: string; variant: string; variantSku: string; category: string; unit: string; price: number; oldPrice: number | null; cost: number | null; stock: number | null; min: number; active: boolean };
+    const rows: R[] = [];
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500);
+      const [products, variants] = await Promise.all([this.rows(chunk), prisma.productVariant.findMany({ where: { productId: { in: chunk }, deletedAt: null }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] })]);
+      const byProduct = new Map<string, typeof variants>();
+      for (const v of variants) byProduct.set(v.productId, [...(byProduct.get(v.productId) ?? []), v]);
+      for (const p of products) {
+        const base = { sku: p.sku, name: p.name, category: p.category?.name ?? '', unit: unitOf(p.unit, locale)?.abbreviation ?? '' };
+        const list = p.hasVariants ? (byProduct.get(p.id) ?? []) : [];
+        if (!list.length) rows.push({ ...base, variant: '', variantSku: '', price: p.price, oldPrice: p.oldPrice, cost: p.costPrice, stock: p.trackStock ? p.stock : null, min: p.minStock, active: p.isActive });
+        for (const v of list) rows.push({ ...base, variant: v.name, variantSku: v.sku ?? '', price: v.price, oldPrice: null, cost: v.costPrice ?? p.costPrice, stock: p.trackStock ? v.stock : null, min: v.minStock, active: p.isActive && v.isActive });
+      }
+    }
     const h = PRODUCT_HEADERS[locale] ?? PRODUCT_HEADERS.fr;
-    type R = ProductListItemView;
     return {
       sheetName: h.sheet,
       fileName: `produits-${algiersDay()}`,
@@ -499,22 +512,23 @@ export class ProductService implements OnModuleInit {
       columns: [
         { header: 'SKU', value: (r: R) => r.sku },
         { header: h.name, value: (r: R) => r.name },
-        { header: h.category, value: (r: R) => r.category?.name ?? '' },
-        { header: h.unit, value: (r: R) => r.unit?.abbreviation ?? '' },
+        { header: h.variant, value: (r: R) => r.variant },
+        { header: h.variantSku, value: (r: R) => r.variantSku },
+        { header: h.category, value: (r: R) => r.category },
+        { header: h.unit, value: (r: R) => r.unit },
         { header: h.price, value: (r: R) => r.price },
         { header: h.oldPrice, value: (r: R) => r.oldPrice },
-        { header: h.cost, value: (r: R) => r.costPrice },
+        { header: h.cost, value: (r: R) => r.cost },
         { header: h.stock, value: (r: R) => r.stock },
-        { header: h.min, value: (r: R) => r.minStock },
-        { header: h.variants, value: (r: R) => counts.get(r.id) ?? 0 },
-        { header: h.active, value: (r: R) => (r.isActive ? h.yes : h.no) },
+        { header: h.min, value: (r: R) => r.min },
+        { header: h.active, value: (r: R) => (r.active ? h.yes : h.no) },
       ],
     };
   }
 }
 
 const PRODUCT_HEADERS = {
-  fr: { sheet: 'Produits', name: 'Nom', category: 'Catégorie', unit: 'Unité', price: 'Prix', oldPrice: 'Ancien prix', cost: 'Coût', stock: 'Stock', min: 'Seuil', variants: 'Variantes', active: 'Actif', yes: 'Oui', no: 'Non' },
-  en: { sheet: 'Products', name: 'Name', category: 'Category', unit: 'Unit', price: 'Price', oldPrice: 'Old price', cost: 'Cost', stock: 'Stock', min: 'Threshold', variants: 'Variants', active: 'Active', yes: 'Yes', no: 'No' },
-  ar: { sheet: 'المنتجات', name: 'الاسم', category: 'الفئة', unit: 'الوحدة', price: 'السعر', oldPrice: 'السعر القديم', cost: 'التكلفة', stock: 'المخزون', min: 'الحد الأدنى', variants: 'المتغيّرات', active: 'نشط', yes: 'نعم', no: 'لا' },
+  fr: { sheet: 'Produits', name: 'Nom', category: 'Catégorie', unit: 'Unité', price: 'Prix', oldPrice: 'Ancien prix', cost: 'Coût', stock: 'Stock', min: 'Seuil', variant: 'Variante', variantSku: 'SKU variante', active: 'Actif', yes: 'Oui', no: 'Non' },
+  en: { sheet: 'Products', name: 'Name', category: 'Category', unit: 'Unit', price: 'Price', oldPrice: 'Old price', cost: 'Cost', stock: 'Stock', min: 'Threshold', variant: 'Variant', variantSku: 'Variant SKU', active: 'Active', yes: 'Yes', no: 'No' },
+  ar: { sheet: 'المنتجات', name: 'الاسم', category: 'الفئة', unit: 'الوحدة', price: 'السعر', oldPrice: 'السعر القديم', cost: 'التكلفة', stock: 'المخزون', min: 'الحد الأدنى', variant: 'المتغيّر', variantSku: 'SKU المتغيّر', active: 'نشط', yes: 'نعم', no: 'لا' },
 } as const;

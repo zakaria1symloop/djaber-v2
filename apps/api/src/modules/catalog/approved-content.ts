@@ -1,8 +1,9 @@
 // 04 §12 "Visibility while pending" — what a customer may be shown of a product: only what moderation approved. Shared by
 // the AI catalogue (prompt, tools, vision) and the product cards the AI sends.
-//  - fields (name, description, price): the approved snapshot while a change waits for the decision, the live row otherwise;
+//  - fields (name, description): the approved snapshot while a change waits for the decision, the live row otherwise; the
+//    price is always the live one (not moderated since PV 08/11);
 //  - pictures: those of the approved snapshot (a picture added since waits for the save and the decision);
-//  - variants: those of the approved snapshot (a new variant waits; while a change is pending, the approved name and price).
+//  - variants: those of the approved snapshot (a new variant waits; while a change is pending, the approved name, the live price).
 // A snapshot written before pictures / variants were kept lists none of them: the live ones stay (tester report 25/10 UX-006).
 import type { Prisma } from '@djaber/db';
 
@@ -17,7 +18,7 @@ const snapshotOf = (p: Pick<Moderated, 'approvedSnapshot'>): Snap | null =>
 
 export const approvedFields = (p: Moderated & { name: string; description: string | null; price: number }) => {
   const s = p.moderationStatus === 'pending' ? snapshotOf(p) : null;
-  return s ? { name: s.title ?? p.name, description: s.description ?? null, price: typeof s.price === 'number' ? s.price : p.price } : { name: p.name, description: p.description, price: p.price };
+  return s ? { name: s.title ?? p.name, description: s.description ?? null, price: p.price } : { name: p.name, description: p.description, price: p.price };
 };
 
 export const approvedImages = <I extends { url: string }>(p: Pick<Moderated, 'approvedSnapshot'>, images: I[]): I[] => {
@@ -31,5 +32,5 @@ export const approvedVariants = <V extends { id: string; name: string; price: nu
   const s = snapshotOf(p);
   if (!s || !Array.isArray(s.variants)) return variants;
   const by = new Map(s.variants.map((v) => [v.id, v]));
-  return variants.filter((v) => by.has(v.id)).map((v) => (p.moderationStatus === 'pending' ? { ...v, name: by.get(v.id)!.name, price: by.get(v.id)!.price } : v));
+  return variants.filter((v) => by.has(v.id)).map((v) => (p.moderationStatus === 'pending' ? { ...v, name: by.get(v.id)!.name } : v));
 };

@@ -185,7 +185,7 @@ describe('PATCH /products/:id', () => {
     expect(audits).toHaveLength(2);
   });
 
-  it('AT-MOD-02 moderation hook: stock / minStock / variants edits create no item; name, category or price ±50 % do', async () => {
+  it('AT-MOD-02 moderation hook: stock / minStock / variants / price edits create no item (price: PV 08/11); name or category do', async () => {
     const owner = await asOwner(app);
     const p = await createProduct(owner, { price: 4000, stock: 5 });
     const items = () => db.moderationItem.count({ where: { productId: p.id } });
@@ -198,18 +198,19 @@ describe('PATCH /products/:id', () => {
 
     const cut = await owner.patch(`/products/${p.id}`, { price: 1800, version: 3 }).expect(200); // −48.6 % from 3 500: still under 50 %
     expect(await items()).toBe(1);
-    const half = await owner.patch(`/products/${p.id}`, { price: 900, version: cut.body.data.version }).expect(200); // −50 %
-    expect(await items()).toBe(2);
-    expect(half.body.data).toMatchObject({ contentVersion: 2, moderation: { status: 'approved' } });
+    // −50 %: the shop's Owner / Admin sets the price, no Djaber review (PV 08/11), live at once
+    const half = await owner.patch(`/products/${p.id}`, { price: 900, version: cut.body.data.version }).expect(200);
+    expect(await items()).toBe(1);
+    expect(half.body.data).toMatchObject({ price: 900, contentVersion: 1, moderation: { status: 'approved' } });
     await owner.patch(`/products/${p.id}`, { name: 'Autre titre', version: half.body.data.version }).expect(200);
-    expect(await items()).toBe(3);
+    expect(await items()).toBe(2);
     const last = await db.moderationItem.findFirstOrThrow({ where: { productId: p.id }, orderBy: { contentVersion: 'desc' } });
-    expect(last).toMatchObject({ contentVersion: 3, source: 'update', status: 'auto_approved' });
+    expect(last).toMatchObject({ contentVersion: 2, source: 'update', status: 'auto_approved' });
     expect((await db.product.findUniqueOrThrow({ where: { id: p.id } })).approvedSnapshot).toMatchObject({ title: 'Autre titre', price: 900 });
 
     const detail = await owner.get(`/products/${p.id}/moderation`).expect(200);
-    expect(detail.body.data).toMatchObject({ status: 'approved', contentVersion: 3, item: { decision: null }, appeal: { status: 'available' } });
-    expect(detail.body.data.history).toHaveLength(6);
+    expect(detail.body.data).toMatchObject({ status: 'approved', contentVersion: 2, item: { decision: null }, appeal: { status: 'available' } });
+    expect(detail.body.data.history).toHaveLength(4);
     expect((await owner.get('/moderation/summary').expect(200)).body.data).toEqual({ pending: 0, rejected: 0, appealed: 0, trustLevel: 'standard' });
   });
 

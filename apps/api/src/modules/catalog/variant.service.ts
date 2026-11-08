@@ -159,11 +159,11 @@ export class VariantService {
         },
       });
       if (input.isActive !== undefined && input.isActive !== current.isActive) await this.stock.recomputeProductStock(tx, productId);
-      // tester report 25/10 UX-003: a renamed variant, a price ±50 % or a variant shown again is reviewed; stock, SKU, cost never
+      // tester report 25/10 UX-003: a renamed variant or a variant shown again is reviewed; stock, SKU, cost never — nor the
+      // price since PV 08/11 (the shop's Owner / Admin sets it, live at once)
       const renamed = input.name !== undefined && input.name !== current.name;
-      const repriced = input.price !== undefined && current.price > 0 && Math.abs(input.price - current.price) * 2 >= current.price;
       const shown = input.isActive === true && !current.isActive;
-      if (renamed || repriced || shown) await this.moderation.submitIfChanged(tx, productId, 'update', { force: renamed || repriced });
+      if (renamed || shown) await this.moderation.submitIfChanged(tx, productId, 'update', { force: renamed });
       await this.stock.emitProductUpdated(tx, productId);
       return toVariantView(row);
     });

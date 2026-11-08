@@ -1,6 +1,6 @@
 // D36 / 04 §12 — product moderation, merchant side + the decision primitives shared with the admin queue (M10).
 // A `ModerationItem` is written when a product is created and each time a customer-visible part changes (name,
-// description, category, price ±50 %, a new picture, a new / renamed / repriced ±50 % variant), at the save of the change. The pre-screen (`ModerationPrescreenService`, free and local) scores it at
+// description, category, a new picture, a new / renamed variant — never a price, PV 08/11), at the save of the change. The pre-screen (`ModerationPrescreenService`, free and local) scores it at
 // once: a platform banned word (whole word) ⇒ rejected by the system; `aiScore ≥ 0.9 ∧ trustLevel ∈ {standard, trusted} ∧
 // category not sensitive ∧ no unreviewed variant` ⇒ approved (snapshot live), otherwise
 // the item waits in the human queue (ADM-10) while the last approved snapshot keeps selling (AI catalogue). When the
@@ -21,20 +21,20 @@ import { ModerationPrescreenService, type BannedHit, type PrescreenResult } from
 
 export type ModeratedFields = { name: string; description: string | null; categoryId: string | null; price: number };
 
-/** 04 §12 "Trigger": name, description, category, or a price change of at least 50 %. Stock, unit, keywords, … never. */
+/**
+ * 04 §12 "Trigger": name, description or category. Stock, unit, keywords, … never — nor the price since PV 08/11 (« la
+ * modification du prix ne doit pas être soumise à une validation super admin, seulement admin »): the shop's Owner / Admin
+ * (`catalog.write`) set it and it is live at once, for the AI too.
+ */
 export const needsReview = (before: ModeratedFields, after: ModeratedFields): boolean =>
-  before.name !== after.name ||
-  (before.description ?? '') !== (after.description ?? '') ||
-  before.categoryId !== after.categoryId ||
-  priceJump(before.price, after.price);
-const priceJump = (before: number, after: number) => before > 0 && Math.abs(after - before) * 2 >= before;
+  before.name !== after.name || (before.description ?? '') !== (after.description ?? '') || before.categoryId !== after.categoryId;
 
 export type SnapshotVariant = { id: string; name: string; price: number };
 
 /**
  * Tester report 25/10 UX-001 / UX-003 / UX-007: what in the product as saved now differs from the last version sent to
- * moderation (`snapshot`): the fields of `needsReview`, a picture that was not in it, a variant that was not in it, renamed,
- * or priced ±50 %. Removing a picture or a variant never needs a review. A snapshot written before variants were kept
+ * moderation (`snapshot`): the fields of `needsReview`, a picture that was not in it, a variant that was not in it or
+ * renamed (a new price never, PV 08/11). Removing a picture or a variant never needs a review. A snapshot written before variants were kept
  * (`variants` absent) only compares the fields and the pictures.
  */
 export const contentChanged = (snapshot: Snapshot, now: Snapshot): boolean => {
@@ -45,13 +45,13 @@ export const contentChanged = (snapshot: Snapshot, now: Snapshot): boolean => {
   const before = new Map(snapshot.variants.map((v) => [v.id, v]));
   return (now.variants ?? []).some((v) => {
     const b = before.get(v.id);
-    return !b || b.name !== v.name || priceJump(b.price, v.price);
+    return !b || b.name !== v.name;
   });
 };
 
 /**
- * Tester log 26/10 UX-034: the variants of `now` a moderator has not approved yet — new, renamed, repriced ±50 % or shown
- * again since the approved snapshot. An approved snapshot written before variants were kept counts every variant as new.
+ * Tester log 26/10 UX-034: the variants of `now` a moderator has not approved yet — new, renamed or shown again since the
+ * approved snapshot (a new price is not reviewed, PV 08/11). An approved snapshot written before variants were kept counts every variant as new.
  * A product never approved has no reference (its variants are reviewed with it).
  */
 export const unreviewedVariants = (approved: Snapshot | null | undefined, now: Snapshot | null | undefined): string[] => {
@@ -59,7 +59,7 @@ export const unreviewedVariants = (approved: Snapshot | null | undefined, now: S
   const before = new Map((approved.variants ?? []).map((v) => [v.id, v]));
   return now.variants.filter((v) => {
     const b = before.get(v.id);
-    return !b || b.name !== v.name || priceJump(b.price, v.price);
+    return !b || b.name !== v.name;
   }).map((v) => v.name);
 };
 

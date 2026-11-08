@@ -287,16 +287,18 @@ describe('exports and jobs', () => {
     expect(await jobOf(owner, jobId)).toMatchObject({ kind: 'export', name: 'export', status: 'queued', resultUrl: null, expiresAt: expect.any(String) });
     expect(await drain(app, owner.workspaceId)).toEqual(['export']);
     const job = await jobOf(owner, jobId);
-    expect(job).toMatchObject({ status: 'done', progress: 100, result: { kind: 'products', rows: 2, format: 'xlsx' } });
+    expect(job).toMatchObject({ status: 'done', progress: 100, result: { kind: 'products', rows: 3, format: 'xlsx' } });
     expect(job.result.fileName).toMatch(/^produits-\d{4}-\d{2}-\d{2}\.xlsx$/);
     expect(job.resultUrl).toMatch(/\/api\/v1\/files\/private\/ws\/.+\/exports\/.+\.xlsx\?exp=\d+&sig=/);
     const upload = await db.upload.findFirstOrThrow({ where: { workspaceId: owner.workspaceId, kind: 'export' } });
     expect(upload.storageKey.startsWith(`private/ws/${owner.workspaceId}/exports/`)).toBe(true);
     const sheet = readXlsx((await download(job.resultUrl).expect(200)).body);
     expect(sheet).toEqual([
-      ['SKU', 'Nom', 'Catégorie', 'Unité', 'Prix', 'Ancien prix', 'Coût', 'Stock', 'Seuil', 'Variantes', 'Actif'],
-      ['TEA-2', "'=Formule", '', '', '500', '', '', '0', '0', '2', 'Non'], // formula injection neutralised
-      ['TEA-1', 'Thé vert', 'Thés', '', '800', '950', '300', '12', '2', '0', 'Oui'],
+      // PV 08/11: one line per variant, at its own price (the base price of a product with variants is never shown)
+      ['SKU', 'Nom', 'Variante', 'SKU variante', 'Catégorie', 'Unité', 'Prix', 'Ancien prix', 'Coût', 'Stock', 'Seuil', 'Actif'],
+      ['TEA-2', "'=Formule", '100 g', expect.any(String), '', '', '500', '', '', '0', '0', 'Non'], // formula injection neutralised
+      ['TEA-2', "'=Formule", '250 g', expect.any(String), '', '', '1100', '', '', '0', '0', 'Non'],
+      ['TEA-1', 'Thé vert', '', '', 'Thés', '', '800', '950', '300', '12', '2', 'Oui'],
     ]);
     // the file is private: no signature, a wrong one or another key ⇒ 404
     const path = new URL(job.resultUrl).pathname;
@@ -311,13 +313,13 @@ describe('exports and jobs', () => {
     await drain(app, owner.workspaceId);
     const csvResult = await jobOf(owner, csvJob);
     const text = (await download(csvResult.resultUrl).expect(200)).body.toString('utf8');
-    expect(parseCsv(text)).toEqual([['SKU', 'Nom', 'Catégorie', 'Unité', 'Prix', 'Ancien prix', 'Coût', 'Stock', 'Seuil', 'Variantes', 'Actif'], ['TEA-1', 'Thé vert', 'Thés', '', '800', '950', '300', '12', '2', '0', 'Oui']]); // workspace locale (fr), not the request's
+    expect(parseCsv(text)).toEqual([['SKU', 'Nom', 'Variante', 'SKU variante', 'Catégorie', 'Unité', 'Prix', 'Ancien prix', 'Coût', 'Stock', 'Seuil', 'Actif'], ['TEA-1', 'Thé vert', '', '', 'Thés', '', '800', '950', '300', '12', '2', 'Oui']]); // workspace locale (fr), not the request's
 
     // selection export, archived rows included
     await owner.delete(`/products/${a.id}`).expect(204);
     const bulk = (await owner.post('/products/bulk/export', { ids: [a.id, b.id] }).expect(202)).body.data.jobId;
     await drain(app, owner.workspaceId);
-    expect((await jobOf(owner, bulk)).result).toMatchObject({ rows: 2 });
+    expect((await jobOf(owner, bulk)).result).toMatchObject({ rows: 3 }); // TEA-1 + the two variants of TEA-2
     expect((await owner.get('/products/export?sort=nope').expect(400)).body.error.code).toBe('BAD_REQUEST');
     expect((await owner.get('/products/export?format=pdf').expect(422)).body.error.code).toBe('VALIDATION_ERROR');
   });

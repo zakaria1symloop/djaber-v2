@@ -55,3 +55,14 @@ export const MESSAGES: Record<AppLocale, Flat> = {
 
 /** Flat `key -> ICU message` map of a locale. */
 export const getMessages = (locale: AppLocale): Flat => MESSAGES[locale] ?? MESSAGES.fr;
+
+/**
+ * PV 08/11 « l'unité de produit n'est pas traduite »: the system units (seeded once for every shop: Pièce, Kilogramme…)
+ * are stored in French; their name and abbreviation in a language (keys `unit.system.<abbreviation>.name|abbr`).
+ * null for a unit the shop created (its own words).
+ */
+export const systemUnitText = (abbreviation: string, locale: AppLocale): { name: string; abbreviation: string } | null => {
+  const m = getMessages(locale);
+  const name = m[`unit.system.${abbreviation}.name`];
+  return name ? { name, abbreviation: m[`unit.system.${abbreviation}.abbr`] ?? abbreviation } : null;
+};
