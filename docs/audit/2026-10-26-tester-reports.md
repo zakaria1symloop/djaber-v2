@@ -4,7 +4,7 @@ Sources (in `docs/audit/inputs/`): UX-UI test log of 22/10 (`2026-10-22-ux-ui-te
 25/10 (`2026-10-25-ux-ui-test-log.md`, prefix **L25** — its numbers restart at UX-001), tester notes of 25/10
 (`2026-10-25-djaber-test.md`, prefix **T25**, numbered in reading order), meeting PV of 26/10 (`2026-10-26-pv-reunion-djaber.md`,
 prefix **PV26**), the developer's own report of 26/10 (prefix **AI**) and the UX-UI test log of 26/10 (`2026-10-26-ux-ui-test-log.md`,
-prefix **L26**) and the meeting PV of 28/10 (`2026-10-28-pv-djaber.md`, prefix **PV28**, last section).
+prefix **L26**) and the meeting PV of 28/10 (`2026-10-28-pv-djaber.md`, prefix **PV28**) and the meeting PV of 08/11 (`2026-11-08-pv-djaber.md`, prefix **PV08**, last section).
 
 Status: `todo` · `done` (commit) · `deferred` (reason).
 
@@ -83,3 +83,12 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 | PV28-2 | Add tracking through the chatbot (orders taken by phone, phone / tracking number, tracking link) | done (4a9dbdb) |
 | PV28-3 | « Fermeture de session »: sessions closed by themselves (two tabs / lost refresh response revoked the session) | done (aa82847) |
 | PV28-4 | The AI agent does not recognise photos sent from Messenger | done (4a9dbdb) |
+
+## Meeting PV of 08/11 (`2026-11-08-pv-djaber.md`, prefix **PV08**)
+| # | Issue | Status |
+|---|---|---|
+| PV08-1 | General AI answer problem, confusions (+ « make it answer like a real AI ») | done |
+| PV08-2 | Product unit not translated | done |
+| PV08-3 | A price change must not need super-admin validation, only the admin | done |
+| PV08-4 | Products export without variants, price confusion | done |
+| PV08-5 | Importing orders from a platform-compliant file raises an error | done |
