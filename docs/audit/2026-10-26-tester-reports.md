@@ -87,8 +87,8 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 ## Meeting PV of 08/11 (`2026-11-08-pv-djaber.md`, prefix **PV08**)
 | # | Issue | Status |
 |---|---|---|
-| PV08-1 | General AI answer problem, confusions (+ « make it answer like a real AI ») | done |
-| PV08-2 | Product unit not translated | done |
-| PV08-3 | A price change must not need super-admin validation, only the admin | done |
-| PV08-4 | Products export without variants, price confusion | done |
-| PV08-5 | Importing orders from a platform-compliant file raises an error | done |
+| PV08-1 | General AI answer problem, confusions (+ « make it answer like a real AI ») | done (65911e4) |
+| PV08-2 | Product unit not translated | done (b7a0266) |
+| PV08-3 | A price change must not need super-admin validation, only the admin | done (b7a0266) |
+| PV08-4 | Products export without variants, price confusion | done (b7a0266) |
+| PV08-5 | Importing orders from a platform-compliant file raises an error | done (fd7fe93) |
