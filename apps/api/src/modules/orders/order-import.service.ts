@@ -13,7 +13,7 @@ import { fold } from '../ai/tools/wilaya-aliases';
 import { JobService } from '../jobs/job.service';
 import { detectFormat, readTable, TableFileError } from '../jobs/table-file';
 import type { UploadedFile } from '../uploads/image-upload.service';
-import { autoMapOrders, buildOrderRow, missingOrderColumns, type ImportCatalog, type OrderImportMapping } from './order-import-rows';
+import { autoMapOrders, buildOrderRow, itemKey, missingOrderColumns, type ImportCatalog, type ImportItem, type OrderImportMapping } from './order-import-rows';
 import { OrderService } from './order.service';
 
 const PREVIEW = 'order-import-preview';
@@ -99,25 +99,40 @@ export class OrderImportService implements OnModuleInit {
   private async catalog(): Promise<ImportCatalog> {
     const [products, variants, wilayas, rules, communes, clients] = await Promise.all([
       prisma.product.findMany({ where: { deletedAt: null }, select: { id: true, sku: true, name: true, hasVariants: true, trackStock: true, sellOutOfStock: true, stock: true, price: true } }),
-      prisma.productVariant.findMany({ where: { deletedAt: null, isActive: true, sku: { not: null }, product: { deletedAt: null } }, select: { id: true, sku: true, name: true, stock: true, price: true, product: { select: { id: true, name: true, trackStock: true, sellOutOfStock: true } } } }),
-      prisma.wilaya.findMany({ select: { id: true, nameFr: true } }),
+      prisma.productVariant.findMany({ where: { deletedAt: null, isActive: true, product: { deletedAt: null } }, select: { id: true, sku: true, name: true, stock: true, price: true, product: { select: { id: true, name: true, trackStock: true, sellOutOfStock: true } } } }),
+      prisma.wilaya.findMany({ select: { id: true, nameFr: true, nameAr: true } }),
       prisma.deliveryFeeRule.findMany({ select: { wilayaId: true, isActive: true, homePrice: true } }),
-      prisma.commune.findMany({ select: { id: true, wilayaId: true, nameFr: true } }),
+      prisma.commune.findMany({ select: { id: true, wilayaId: true, nameFr: true, nameAr: true } }),
       prisma.client.findMany({ where: { deletedAt: null, phone: { not: null } }, select: { phone: true } }),
     ]);
     const rule = new Map(rules.map((r) => [r.wilayaId, r]));
     const skus: ImportCatalog['skus'] = new Map();
-    for (const p of products) skus.set(p.sku, { productId: p.id, variantId: null, name: p.name, hasVariants: p.hasVariants, trackStock: p.trackStock, available: p.trackStock && !p.hasVariants && !p.sellOutOfStock ? (p.stock ?? 0) : null, price: p.price });
-    for (const v of variants) skus.set(v.sku!, { productId: v.product.id, variantId: v.id, name: `${v.product.name} · ${v.name}`, hasVariants: true, trackStock: v.product.trackStock, available: v.product.trackStock && !v.product.sellOutOfStock ? v.stock : null, price: v.price });
+    const names: ImportCatalog['names'] = new Map();
+    const named = (key: string, item: ImportItem) => {
+      if (key && !names.has(key)) names.set(key, item);
+    };
+    for (const p of products) {
+      const item: ImportItem = { productId: p.id, variantId: null, name: p.name, hasVariants: p.hasVariants, trackStock: p.trackStock, available: p.trackStock && !p.hasVariants && !p.sellOutOfStock ? (p.stock ?? 0) : null, price: p.price };
+      skus.set(p.sku, item);
+      named(itemKey(p.name), item);
+    }
+    for (const v of variants) {
+      const item: ImportItem = { productId: v.product.id, variantId: v.id, name: `${v.product.name} · ${v.name}`, hasVariants: true, trackStock: v.product.trackStock, available: v.product.trackStock && !v.product.sellOutOfStock ? v.stock : null, price: v.price };
+      if (v.sku) skus.set(v.sku, item);
+      // « Robe · S », « Robe S », « Robe (S) », « Robe - S » (the Djaber and ZR Express exports)
+      named(itemKey(`${v.product.name} ${v.name}`), item);
+    }
     const byWilaya: ImportCatalog['communes'] = new Map();
     for (const c of communes) {
       const m = byWilaya.get(c.wilayaId) ?? new Map<string, number>();
       m.set(fold(c.nameFr), c.id);
+      if (c.nameAr) m.set(fold(c.nameAr), c.id);
       byWilaya.set(c.wilayaId, m);
     }
     return {
       skus,
-      wilayas: new Map(wilayas.map((w) => [w.id, { id: w.id, nameFr: w.nameFr, served: rule.get(w.id)?.isActive ?? true, homePrice: rule.get(w.id)?.homePrice ?? 0 }])),
+      names,
+      wilayas: new Map(wilayas.map((w) => [w.id, { id: w.id, nameFr: w.nameFr, nameAr: w.nameAr, served: rule.get(w.id)?.isActive ?? true, homePrice: rule.get(w.id)?.homePrice ?? 0 }])),
       communes: byWilaya,
       existingPhones: new Set(clients.map((c) => c.phone!)),
     };

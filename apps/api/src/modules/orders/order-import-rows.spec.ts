@@ -1,14 +1,22 @@
 // 03 §37 ORD "Import orders" — column auto-mapping, "SKU×qty;SKU×qty" parsing and per-row validation.
-import { autoMapOrders, buildOrderRow, missingOrderColumns, parseItems, resolveWilaya, type ImportCatalog } from './order-import-rows';
+import { autoMapOrders, buildOrderRow, missingOrderColumns, parseItems, resolveWilaya, type ImportCatalog, type ImportItem } from './order-import-rows';
 
+const ROBE: ImportItem = { productId: 'p1', variantId: null, name: 'Robe', hasVariants: false, trackStock: true, available: 3, price: 4500 };
+const KAB: ImportItem = { productId: 'p2', variantId: null, name: 'Kabyle', hasVariants: true, trackStock: true, available: null, price: 5000 };
+const KAB_M: ImportItem = { productId: 'p2', variantId: 'v1', name: 'Kabyle · M', hasVariants: true, trackStock: true, available: 5, price: 5000 };
 const cat = (): ImportCatalog => ({
   skus: new Map([
-    ['ROBE-01', { productId: 'p1', variantId: null, name: 'Robe', hasVariants: false, trackStock: true, available: 3, price: 4500 }],
-    ['KAB', { productId: 'p2', variantId: null, name: 'Kabyle', hasVariants: true, trackStock: true, available: null, price: 5000 }],
-    ['KAB-M', { productId: 'p2', variantId: 'v1', name: 'Kabyle · M', hasVariants: true, trackStock: true, available: 5, price: 5000 }],
+    ['ROBE-01', ROBE],
+    ['KAB', KAB],
+    ['KAB-M', KAB_M],
+  ]),
+  names: new Map([
+    ['robe', ROBE],
+    ['kabyle', KAB],
+    ['kabyle m', KAB_M],
   ]),
   wilayas: new Map([
-    [16, { id: 16, nameFr: 'Alger', served: true, homePrice: 400 }],
+    [16, { id: 16, nameFr: 'Alger', nameAr: 'الجزائر', served: true, homePrice: 400 }],
     [19, { id: 19, nameFr: 'Sétif', served: false, homePrice: 600 }],
   ]),
   communes: new Map([[16, new Map([['bab ezzouar', 1601]])]]),
@@ -24,10 +32,16 @@ describe('order import rows', () => {
   });
   it('parses SKU×qty lists', () => {
     expect(parseItems('ROBE-01×2;KAB-M x 1;SAC')).toEqual([
-      { sku: 'ROBE-01', quantity: 2 },
-      { sku: 'KAB-M', quantity: 1 },
-      { sku: 'SAC', quantity: 1 },
+      { sku: 'ROBE-01', quantity: 2, raw: 'ROBE-01×2' },
+      { sku: 'KAB-M', quantity: 1, raw: 'KAB-M x 1' },
+      { sku: 'SAC', quantity: 1, raw: 'SAC' },
     ]);
+    // the Djaber export: « name · variant × quantity × unit price » ; ZR Express: « name variant x2, name x1 »
+    expect(parseItems('Kabyle · M × 2 × 5000 ; Robe × 1 × 4500')).toEqual([
+      { sku: 'Kabyle · M', quantity: 2, raw: 'Kabyle · M × 2 × 5000' },
+      { sku: 'Robe', quantity: 1, raw: 'Robe × 1 × 4500' },
+    ]);
+    expect(parseItems('Kabyle M x2, Robe x1')!.map((i) => [i.sku, i.quantity])).toEqual([['Kabyle M', 2], ['Robe', 1]]);
     expect(parseItems('')).toBeNull();
   });
   it('wilaya by code, "16 - Alger" or name', () => {
@@ -35,6 +49,16 @@ describe('order import rows', () => {
     expect(resolveWilaya('16', w)).toBe(16);
     expect(resolveWilaya('16 - Alger', w)).toBe(16);
     expect(resolveWilaya('alger', w)).toBe(16);
+    expect(resolveWilaya('الجزائر', w)).toBe(16); // an export viewed in Arabic
+  });
+  it('PV 08/11: a file exported by Djaber is read back — standard and ZR Express columns, articles by name, Arabic wilaya', () => {
+    expect(autoMapOrders(['Client', 'Tel 1', 'Tel 2', 'Wilaya', 'Commune', 'Adresse', 'Produit', 'Total', 'Stop desk', 'Référence'])).toEqual({ clientName: 'Client', phone: 'Tel 1', wilaya: 'Wilaya', commune: 'Commune', address: 'Adresse', items: 'Produit' });
+    expect(autoMapOrders(['N°', 'Date', 'Client', 'Téléphone', 'Wilaya', 'Commune', 'Adresse', 'Articles', 'Total'])).toMatchObject({ clientName: 'Client', phone: 'Téléphone', items: 'Articles' });
+    const exported = buildOrderRow(2, raw({ Articles: 'Kabyle · M × 2 × 5000 ; Robe × 1 × 4500', Wilaya: 'الجزائر' }), mapping, cat(), new Map());
+    expect(exported).toMatchObject({ ok: true, values: { wilayaId: 16, items: [{ productId: 'p2', variantId: 'v1', quantity: 2 }, { productId: 'p1', variantId: null, quantity: 1 }] } });
+    const zr = buildOrderRow(3, raw({ Articles: 'Kabyle M x1, Robe x1' }), mapping, cat(), new Map());
+    expect(zr.values.items.map((i) => [i.variantId ?? i.productId, i.quantity])).toEqual([['v1', 1], ['p1', 1]]);
+    expect(zr.ok).toBe(true);
   });
   it('a valid row: existing client, commune resolved, informative total', () => {
     const r = buildOrderRow(2, raw(), mapping, cat(), new Map());

@@ -4,8 +4,10 @@
 import { asAdmin, asOperator, asOwner } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
 import { csv, drain, jobOf, upload } from '../support/m2';
-import { seedFees } from '../support/m5';
+import request from 'supertest';
+import { orderBody, seedFees } from '../support/m5';
 import { db, idem, product } from '../support/m7';
+import { TenantResolver } from '../../src/core/tenancy/tenant.resolver';
 import { RecommendationsScheduler } from '../../src/modules/recommendations/recommendations.module';
 
 let app: TestApp;
@@ -17,8 +19,54 @@ afterAll(async () => {
 });
 
 const file = (rows: (string | number)[][]) => [{ buffer: csv(rows), name: 'commandes.csv', type: 'text/csv' }];
+/** Body of a file behind a signed URL, fetched through the API like a browser would. */
+const download = (url: string) =>
+  request(app.http())
+    .get(new URL(url).pathname + new URL(url).search)
+    .buffer(true)
+    .parse((res, cb) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => cb(null, Buffer.concat(chunks)));
+    });
 
 describe('order import (carry-over M5, D69)', () => {
+  it('PV 08/11 « fichier plateforme conforme »: a file exported by Commandes › Exporter (XLSX in French and Arabic, ZR Express CSV) is imported back, variants without their own SKU included', async () => {
+    const owner = await asOwner(app);
+    await seedFees(app, owner.workspaceId);
+    const robe = await product(owner, { name: 'Robe satin', sku: 'ROB-1', price: 4500, stock: 50 });
+    const kab = await product(owner, { name: 'Kabyle brodée', sku: 'KAB', price: 5000, stock: undefined, variants: [{ name: 'M', price: 5000, stock: 40 }, { name: 'L', price: 5200, stock: 40 }] });
+    const m = kab.variants.find((v: { name: string }) => v.name === 'M');
+    await owner.post('/orders', orderBody(robe.id, { items: [{ productId: robe.id, quantity: 2 }, { productId: kab.id, variantId: m.id, quantity: 1 }] })).set(idem()).expect(201);
+    const exported = async (query: string, locale = 'fr') => {
+      const jobId = (await owner.get(`/orders/export?${query}`).set('Accept-Language', locale).expect(202)).body.data.jobId;
+      await drain(app, owner.workspaceId, ['job']);
+      const job = await jobOf(owner, jobId);
+      expect(job.status).toBe('done');
+      return { buffer: (await download(job.resultUrl).expect(200)).body as Buffer, name: job.result.fileName as string, type: job.result.fileName.endsWith('.csv') ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+    };
+    const reimport = async (f: { buffer: Buffer; name: string; type: string }) => {
+      const jobId = (await upload(owner, app, '/orders/import', 'file', [f]).expect(202)).body.data.jobId;
+      await drain(app, owner.workspaceId, ['job']);
+      return jobOf(owner, jobId);
+    };
+    const lines = (p: any) => p.result.rows[0].values.items.map((i: any) => [i.productId, i.variantId, i.quantity]);
+    const want = [[robe.id, null, 2], [kab.id, m.id, 1]];
+    for (const [query, locale] of [['scope=all', 'fr'], ['scope=all&format=csv&courierFormat=zrexpress', 'fr']] as const) {
+      const preview = await reimport(await exported(query, locale));
+      expect([query, preview.status, preview.result.stage, preview.result.totals]).toEqual([query, 'done', 'preview', expect.objectContaining({ rows: 1, valid: 1, invalid: 0 })]);
+      expect(lines(preview)).toEqual(want);
+    }
+    // the workspace is switched to Arabic: wilayas and communes are exported in Arabic
+    await db.workspace.update({ where: { id: owner.workspaceId }, data: { locale: 'ar' } });
+    await db.user.update({ where: { id: owner.userId }, data: { locale: 'ar' } });
+    await app.app.get(TenantResolver).invalidate(owner.workspaceId);
+    const arabic = await reimport(await exported('scope=all', 'ar'));
+    expect(arabic.result.totals).toMatchObject({ rows: 1, valid: 1 });
+    expect(lines(arabic)).toEqual(want);
+    expect(arabic.result.rows[0].values.wilayaId).toBe(16);
+  });
+
   it('preview with row errors → commit job ⇒ orders source=import, client found or created, stock held; second commit writes nothing; SOURCE badge = file name', async () => {
     const owner = await asOwner(app);
     await seedFees(app, owner.workspaceId);

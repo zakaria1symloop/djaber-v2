@@ -1,25 +1,35 @@
 // 03 §37 ORD "Import orders" (D69) — pure part of the order import: column auto-mapping and per-row validation against
 // the catalogue / geography loaded by the service. Columns `clientName, phone, wilaya, commune?, address, items
 // ("SKU×qty;SKU×qty"), note?`. Each error = an error-catalogue code + the field.
+// PV 08/11 (« l'importation de commandes à partir d'un fichier plateforme conforme déclenche une erreur »): a file
+// exported by Djaber itself (Commandes › Exporter, standard or ZR Express layout, in French or Arabic) is read back: its
+// articles name the products (« Robe · S × 2 × 4500 », « Robe S x2, Sac x1 »), its wilayas may be in Arabic, its
+// columns are « Tel 1 », « Produit »…
 import { fullName, isPhoneDz, normalizePhoneDz, ORDER_IMPORT_FIELDS, ORDER_IMPORT_REQUIRED_FIELDS, type OrderImportField, type OrderImportPreviewRow, type OrderImportRowError } from '@djaber/shared';
 import { fold, WILAYA_ALIASES } from '../ai/tools/wilaya-aliases';
 
 export type OrderImportMapping = Partial<Record<OrderImportField, string>>;
 const ALIASES: Record<OrderImportField, string[]> = {
-  clientName: ['clientname', 'client', 'nom', 'name', 'nom client', 'nom complet', 'customer', 'الاسم', 'الزبون'],
-  phone: ['phone', 'telephone', 'téléphone', 'tel', 'mobile', 'numero', 'numéro', 'الهاتف'],
-  wilaya: ['wilaya', 'willaya', 'state', 'الولاية'],
+  clientName: ['clientname', 'client', 'nom', 'name', 'nom client', 'nom complet', 'nom et prenom', 'nom prenom', 'destinataire', 'customer', 'customer name', 'full name', 'الاسم', 'الزبون', 'العميل', 'الاسم الكامل'],
+  phone: ['phone', 'telephone', 'tel', 'mobile', 'numero', 'tel 1', 'tel1', 'telephone 1', 'phone 1', 'mobile 1', 'numero de telephone', 'الهاتف', 'رقم الهاتف'],
+  wilaya: ['wilaya', 'willaya', 'code wilaya', 'wilaya code', 'state', 'الولاية'],
   commune: ['commune', 'city', 'ville', 'البلدية'],
   address: ['address', 'adresse', 'العنوان'],
-  items: ['items', 'articles', 'produits', 'products', 'sku', 'المنتجات'],
-  note: ['note', 'notes', 'remarque', 'comment', 'commentaire', 'ملاحظة'],
+  items: ['items', 'articles', 'article', 'produits', 'produit', 'products', 'product', 'designation', 'sku', 'المنتجات', 'المنتج'],
+  note: ['note', 'notes', 'remarque', 'remarques', 'observation', 'comment', 'commentaire', 'ملاحظة', 'ملاحظات'],
 };
+
+/** A header as compared with the aliases: the Djaber export adds a hint (« Articles (nom × qté × prix) », « Adresse / point relais »). */
+// cut before `fold` (it turns the brackets and the slash into spaces); the aliases go through `fold` too — the Arabic
+// ones lost their article « ال » there and never matched
+const headerKey = (h: string) => fold(h.replace(/\(.*?\)/g, ' ').split(/\s+\/\s+/)[0]!.replace(/[_-]+/g, ' '));
+const FOLDED = Object.fromEntries(Object.entries(ALIASES).map(([f, list]) => [f, new Set(list.map(headerKey))])) as Record<OrderImportField, Set<string>>;
 
 export const autoMapOrders = (headers: string[]): OrderImportMapping => {
   const m: OrderImportMapping = {};
   const used = new Set<string>();
   for (const f of ORDER_IMPORT_FIELDS) {
-    const h = headers.find((x) => !used.has(x) && ALIASES[f].includes(fold(x).replace(/[_-]+/g, ' ').trim()));
+    const h = headers.find((x) => !used.has(x) && FOLDED[f].has(headerKey(x)));
     if (h) {
       m[f] = h;
       used.add(h);
@@ -29,28 +39,44 @@ export const autoMapOrders = (headers: string[]): OrderImportMapping => {
 };
 export const missingOrderColumns = (m: OrderImportMapping) => ORDER_IMPORT_REQUIRED_FIELDS.filter((f) => !m[f]);
 
-/** "SKU×2;SKU2×1" (also `x`, `*`, `,` between lines; a bare SKU = 1). */
-export const parseItems = (raw: string): { sku: string; quantity: number }[] | null => {
+/**
+ * "SKU×2;SKU2×1" (also `x`, `*` before the quantity; `;`, `|`, a line break or ", " between lines; a bare SKU = 1). The
+ * Djaber export writes « name · variant × quantity × unit price »: the second number is the price, dropped (the
+ * catalogue price applies). `sku` is the reference as written — a SKU or a product name, resolved by `lookupItem`.
+ */
+export const parseItems = (raw: string): { sku: string; quantity: number; raw: string }[] | null => {
   const parts = raw
-    .split(/[;|\n]+/)
+    .split(/[;|\n]+|,\s+/)
     .map((s) => s.trim())
     .filter(Boolean);
   if (!parts.length) return null;
-  const out: { sku: string; quantity: number }[] = [];
+  const out: { sku: string; quantity: number; raw: string }[] = [];
   for (const p of parts) {
-    const m = /^(.+?)\s*(?:[×xX*]\s*(\d+))?$/.exec(p);
+    const m = /^(.+?)\s*(?:[×xX*]\s*(\d+))?(?:\s*[×xX*]\s*\d+(?:[.,]\d+)?)?$/.exec(p);
     if (!m) return null;
     const quantity = m[2] ? Number(m[2]) : 1;
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10_000) return null;
-    out.push({ sku: m[1]!.trim(), quantity });
+    out.push({ sku: m[1]!.trim(), quantity, raw: p });
   }
   return out;
 };
 
+/** Product / variant names compared without accents, case, or the punctuation between a name and its variant. */
+export const itemKey = (s: string) => fold(s).replace(/[·()\-–_/]+/g, ' ').replace(/\s+/g, ' ').trim();
+/** An article reference: the line as written (a SKU such as « BOX12 »), then its SKU part, then a product / variant name. */
+export const lookupItem = (cat: ImportCatalog, it: { sku: string; raw: string }): { hit: ImportItem | undefined; quantity: number | null } => {
+  const by = (s: string) => cat.skus.get(s) ?? cat.skus.get(s.toUpperCase()) ?? cat.names.get(itemKey(s));
+  const whole = by(it.raw);
+  return whole ? { hit: whole, quantity: 1 } : { hit: by(it.sku), quantity: null };
+};
+
+export type ImportItem = { productId: string; variantId: string | null; name: string; hasVariants: boolean; trackStock: boolean; available: number | null; price: number };
 export type ImportCatalog = {
   /** SKU → product (no variant) or variant of a product */
-  skus: Map<string, { productId: string; variantId: string | null; name: string; hasVariants: boolean; trackStock: boolean; available: number | null; price: number }>;
-  wilayas: Map<number, { id: number; nameFr: string; served: boolean; homePrice: number }>;
+  skus: Map<string, ImportItem>;
+  /** `itemKey` of « product » and « product variant » → the same entries (a variant without its own SKU is found by name) */
+  names: Map<string, ImportItem>;
+  wilayas: Map<number, { id: number; nameFr: string; nameAr?: string; served: boolean; homePrice: number }>;
   communes: Map<number, Map<string, number>>;
   existingPhones: Set<string>;
 };
@@ -61,7 +87,7 @@ export const resolveWilaya = (raw: string, wilayas: ImportCatalog['wilayas']): n
   if (n && wilayas.has(n)) return n;
   const f = fold(t.replace(/^\d{1,2}\s*[-–.]\s*/, ''));
   if (WILAYA_ALIASES[f]) return WILAYA_ALIASES[f]!;
-  for (const w of wilayas.values()) if (fold(w.nameFr) === f) return w.id;
+  for (const w of wilayas.values()) if (fold(w.nameFr) === f || (w.nameAr && fold(w.nameAr) === f)) return w.id;
   return null;
 };
 
@@ -89,8 +115,10 @@ export function buildOrderRow(rowNo: number, raw: Record<string, string>, mappin
   if (!parsed) errors.push({ field: 'items', code: 'VALIDATION_ERROR', params: { rule: 'validation.quantity' } });
   else {
     const need = new Map<string, number>();
-    for (const it of parsed) {
-      const hit = cat.skus.get(it.sku) ?? cat.skus.get(it.sku.toUpperCase());
+    for (const ref of parsed) {
+      const found = lookupItem(cat, ref);
+      const hit = found.hit;
+      const it = { sku: ref.sku, quantity: found.quantity ?? ref.quantity };
       if (!hit) {
         errors.push({ field: 'items', code: 'NOT_FOUND', params: { sku: it.sku } });
         items.push({ sku: it.sku, quantity: it.quantity, productId: null, variantId: null, name: null, unitPrice: null });
