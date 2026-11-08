@@ -135,7 +135,7 @@ describe('prompt sections (04-ai-pipeline §3)', () => {
 
   it('§3.13 language rule (strict) and §3.14 output contract', () => {
     expect(languageSection(ctx({ lang: 'arabizi' }))).toMatchSnapshot();
-    expect(languageSection(ctx({ lang: 'ar' }))).toContain('DETECTED_LANGUAGE of the last customer message: Arabic script (Algerian darija)');
+    expect(languageSection(ctx({ lang: 'ar' }))).toMatch(/DETECTED_LANGUAGE of the last customer message \(automatic guess[^)]*\): Arabic script \(Algerian darija\)/);
     const out = outputContractSection(ctx());
     expect(out).toMatchSnapshot();
     expect(out.endsWith('Return only the structured output.')).toBe(true);

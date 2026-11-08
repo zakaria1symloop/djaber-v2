@@ -37,6 +37,8 @@ export type PromptContext = {
   now: Date;
   outOfHours: boolean;
   unclearStreak: number;
+  /** no AI / team message yet in the conversation: the shop's welcome goes out right before this reply */
+  firstReply?: boolean;
   /** catalogue descriptions cut to this many characters (token budget step 3) */
   descriptionMax: number;
   /** A4: what is already known of the customer (client record + details given in the conversation) */

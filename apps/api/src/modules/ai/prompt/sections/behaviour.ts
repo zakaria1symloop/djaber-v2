@@ -36,7 +36,7 @@ export const crossSellSection = (c: PromptContext): string => {
 };
 
 export const cardTemplateSection = (c: PromptContext): string =>
-  `PRODUCT CARD\nWhen presenting a product use this template: ${c.agent.productCardTemplate?.trim() || '{name} — {price} DA'}\nList the ids of the products you present in productCards (at most 5); the cards are sent after your text.`;
+  `PRODUCT CARD\nWhen presenting a product use this template: ${c.agent.productCardTemplate?.trim() || '{name} — {price} DA'} (inside a natural sentence; one line per product when you list several)\nList the ids of the products you present in productCards (at most 5); the cards (photo, name, price) are sent right after your text, so do not describe them again. Only present the products the customer is interested in, not the whole catalogue.`;
 
 export const closingSection = (c: PromptContext): string => {
   const text = (c.agent.closingInstructions ?? '').trim();
@@ -45,11 +45,12 @@ export const closingSection = (c: PromptContext): string => {
 
 const BUILT_IN: Record<string, string> = {
   human_request: 'customer_request: the customer asks for a human, a manager or a phone call',
-  refund: 'refund: the customer asks for a refund or an exchange',
-  complaint: 'complaint: the customer complains about an order, a product or the shop',
-  anger: 'angry: insults or an angry tone',
+  // PV 08/11: the rules were so wide that ordinary questions (an exchange, an impatient « alors ? ») handed the thread over
+  refund: 'refund: the customer wants their money back (a question about exchanges or returns is answered from the RETURNS policy when there is one)',
+  complaint: 'complaint: a problem with an order already placed or received (late, damaged, wrong item, never arrived) or a complaint about the shop — not a question about a product',
+  anger: 'angry: insults, threats or a clearly furious customer (an impatient or short message is not anger: just answer it)',
   '3_unclear': `unclear_streak: ${UNCLEAR_STREAK_HANDOFF} messages in a row that you could not understand`,
-  off_topic: 'off_catalogue: a question the catalogue, the policies and the FAQ cannot answer',
+  off_topic: 'off_catalogue: a request only the team can handle (wholesale or reseller prices, a custom order, a partnership, a problem the policies do not cover). A simple question you have no answer to is NOT a handoff: use status=UNKNOWN',
   over_limits: 'order_limits: an order above MAX_QTY_PER_ORDER or MAX_AMOUNT',
   risky_client: 'risky_client: a tool reports a blocked or risky customer and RISKY_CLIENT_POLICY=handoff',
   keyword: 'keyword: the message contains one of HANDOFF_KEYWORDS',
@@ -75,6 +76,6 @@ export const handoffSection = (c: PromptContext): string => {
       ? `Instruction: status=HANDOFF with statusDetail=<rule id> (or call handoff_to_human). The shop's HANDOFF_MESSAGE is sent automatically right after your reply: do not announce the handoff yourself; "reply" only answers what else the customer asked, or stays empty.
 HANDOFF_MESSAGE: "${handoffText}"`
       : 'Instruction: status=HANDOFF with statusDetail=<rule id> (or call handoff_to_human). Tell the customer briefly that a team member will follow up; do not promise a delay.',
-    'status=UNKNOWN when you have no answer but no rule applies; status=UNCLEAR when you did not understand: say so politely in the customer language and ask them to rephrase.',
+    'status=UNKNOWN when you have no answer but no rule applies: say briefly that you will check with the team (call add_faq_candidate with the question) and keep helping with the rest — the conversation stays with you. status=UNCLEAR when you did not understand: say so politely in the customer language and ask them to rephrase.',
   ].join('\n');
 };

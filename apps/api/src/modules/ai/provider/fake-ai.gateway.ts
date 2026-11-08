@@ -358,7 +358,7 @@ export class FakeAiGateway implements AiGateway {
       .join(' ')
       .trim();
     // a turn without words (a photo alone): the language the pipeline detected for the conversation
-    const told = /DETECTED_LANGUAGE of the last customer message: (Arabic|Latin-script|French|English|mixed)/.exec(req.system)?.[1];
+    const told = /DETECTED_LANGUAGE of the last customer message(?: \([^)]*\))?: (Arabic|Latin-script|French|English|mixed)/.exec(req.system)?.[1];
     const fromPrompt: AiLanguage = told === 'Arabic' ? 'ar' : told === 'Latin-script' ? 'arabizi' : told === 'English' ? 'en' : 'fr';
     const lang: AiLanguage = (said ? detectLanguage(said) : undefined) ?? fromPrompt;
     const t = T[lang];

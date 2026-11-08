@@ -565,7 +565,7 @@ describe('handoff, insights, safety', () => {
     expect(again.out.filter((m) => m.text === 'Un conseiller de la boutique vous répond (texte modifié).')).toHaveLength(1);
   });
 
-  it('UNCLEAR ⇒ insight only; 3 unclear turns in a row ⇒ handoff; UNKNOWN ⇒ reply sent, thread to the queue without the handoff text', async () => {
+  it('UNCLEAR ⇒ insight only; 3 unclear turns in a row ⇒ handoff; UNKNOWN ⇒ reply sent, insight, the AI keeps the conversation (PV 08/11)', async () => {
     const s = await shop();
     const sender = newSender();
     const one = await turn(s, sender, { text: '??' });
@@ -581,9 +581,14 @@ describe('handoff, insights, safety', () => {
 
     const unknown = await turn(s, newSender(), { text: 'Est-ce que vous vendez des voitures neuves ?' });
     expect(unknown.runs[0]!.status).toBe('unknown');
-    expect(unknown.conversation.status).toBe('needs_human');
+    // PV 08/11: a question without an answer no longer hands the thread over (the AI used to go silent after it)
+    expect(unknown.conversation).toMatchObject({ status: 'active', aiPaused: false });
     expect(unknown.out.map((m) => m.author)).toEqual(['system', 'ai']); // welcome + the reply; no handoff text
     expect((await insightsOf(unknown.conversationId)).map((i) => [i.type, i.detail])).toEqual([['unknown_topic', 'off_catalogue']]);
+    expect(unknown.runs[0]!.meta).toMatchObject({ handoff: false });
+    // the next message of that customer is answered by the AI
+    const next = await turn(s, (await db.conversation.findUniqueOrThrow({ where: { id: unknown.conversationId } })).externalSenderId, { text: 'Bonjour, combien la robe satin ?' });
+    expect(next.outcome).toBe('sent');
   });
 
   it('blocked words (D37): a reply containing one is never sent — handoff text instead, `needs_human`, insight `error`, run flagged, report when the word is platform-wide; inbound matches only flag the message', async () => {

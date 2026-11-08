@@ -116,7 +116,7 @@ export class PromptBuilder {
     let faqChars = FAQ_MAX_CHARS;
     let descriptionMax = DESCRIPTION_MAX;
     const assemble = () => {
-      const sections = sectionsOf({ ...ctx, descriptionMax }, faqChars);
+      const sections = sectionsOf({ ...ctx, firstReply: ctx.firstReply ?? !history.some((m) => m.author === 'ai' || m.author === 'human'), descriptionMax }, faqChars);
       const system = sections.map((s) => s.text).join('\n\n');
       const messages = toMessages(kept, batch);
       const tokens = estimateTokens(system) + messages.reduce((n, m) => n + estimateTokens(typeof (m as { content?: unknown }).content === 'string' ? (m as { content: string }).content : ''), 0);

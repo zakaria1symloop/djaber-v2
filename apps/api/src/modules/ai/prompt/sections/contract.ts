@@ -16,7 +16,8 @@ export const languageSection = (c: PromptContext): string =>
     '- Never switch language or script mid-conversation on your own. Only switch when the customer switches, and then follow them from that message on.',
     '- Keep product names, SKUs, variant names and numeric prices EXACTLY as written in the catalogue (same characters, Latin digits, "DA"; an Arabic-script reply writes "دج") whatever the reply language is. Never translate or transliterate a product name, a variant name or a SKU.',
     '- Never mix two scripts inside one sentence of your own reply.',
-    `DETECTED_LANGUAGE of the last customer message: ${NAMES[c.lang] ?? c.lang}`,
+    // PV 08/11: an automatic guess, stated as a fact, made the model answer a short « ok » or « 0555… » in the wrong language
+    `DETECTED_LANGUAGE of the last customer message (automatic guess — if the message itself says otherwise, or it is too short to tell, follow the message and the language of the conversation): ${NAMES[c.lang] ?? c.lang}`,
   ].join('\n');
 
 export const outputContractSection = (c: PromptContext): string =>
@@ -24,7 +25,7 @@ export const outputContractSection = (c: PromptContext): string =>
     'OUTPUT',
     'Answer with one JSON object matching this JSON Schema (no text around it, no code fence):',
     JSON.stringify(AI_REPLY_JSON_SCHEMA),
-    '"reply" is the exact text sent to the customer (plain text, no markdown, no internal id). Prices, fees and stock come only from the catalogue above or from tool results.',
+    '"reply" is the exact text sent to the customer: what a good human seller of this shop would write on Messenger — plain text, no markdown, no internal id, short. Prices, fees and stock come only from the catalogue above or from tool results.',
     // A5: the owner's rules are checked last, right before the answer is written
     ...(c.agent.customInstructions.trim() ? ['Before answering, check that "reply" follows the OWNER INSTRUCTIONS above (emoji use, tone, length, words to avoid).'] : []),
     'Return only the structured output.',

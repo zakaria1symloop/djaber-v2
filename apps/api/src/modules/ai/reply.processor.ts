@@ -360,7 +360,7 @@ export class ReplyProcessor implements OnModuleInit {
       // the run is closed first: a second execution of the same batch stops here and stores nothing
       const closed = await this.runs.finish(
         run.id,
-        { status, turn, intent: intentOf(out.intent), confidence: out.confidence, startedAt: run.startedAt, flags: [...(blocked ? ['blocked_word'] : []), ...(turn.salvaged ? ['format_salvaged'] : [])], meta: { language: out.language ?? o.lang, cardsSent: cards.length, handoff: status === 'handoff' || status === 'unknown' } },
+        { status, turn, intent: intentOf(out.intent), confidence: out.confidence, startedAt: run.startedAt, flags: [...(blocked ? ['blocked_word'] : []), ...(turn.salvaged ? ['format_salvaged'] : [])], meta: { language: out.language ?? o.lang, cardsSent: cards.length, handoff: status === 'handoff' } },
         tx,
       );
       if (!closed) return 'noop';
@@ -395,8 +395,11 @@ export class ReplyProcessor implements OnModuleInit {
       const customerMessage = batch.plain || '[image]';
       if (status === 'unclear') await this.insights.create(tx, { agent, conversationId: conv.id, messageId: last.id, aiRunId: run.id, type: 'unclear', customerMessage, aiResponse: replyText, detail: out.statusDetail ?? null });
       if (status === 'unknown' || status === 'handoff') {
-        // UNKNOWN: the reply is sent and the thread only goes to the queue; HANDOFF: the workspace `handoff` text follows
-        await this.conversations.handoff(conv.id, status === 'unknown' ? (out.statusDetail?.trim() || 'unknown') : reason!, { tx, silent: status === 'unknown' });
+        // HANDOFF: the thread goes to the team and the workspace `handoff` text follows. UNKNOWN: the reply is sent and the
+        // question is recorded for the shop (insight `unknown_topic`), the AI keeps the conversation — PV 08/11 (« l'agent
+        // IA fait des confusions »): a question missing from the FAQ used to hand the whole thread over silently, so the
+        // AI stopped answering that customer after one or two messages
+        if (status === 'handoff') await this.conversations.handoff(conv.id, reason!, { tx, silent: false });
         await this.insights.create(tx, {
           agent,
           conversationId: conv.id,
