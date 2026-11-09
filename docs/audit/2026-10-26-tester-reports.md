@@ -4,7 +4,7 @@ Sources (in `docs/audit/inputs/`): UX-UI test log of 22/10 (`2026-10-22-ux-ui-te
 25/10 (`2026-10-25-ux-ui-test-log.md`, prefix **L25** — its numbers restart at UX-001), tester notes of 25/10
 (`2026-10-25-djaber-test.md`, prefix **T25**, numbered in reading order), meeting PV of 26/10 (`2026-10-26-pv-reunion-djaber.md`,
 prefix **PV26**), the developer's own report of 26/10 (prefix **AI**) and the UX-UI test log of 26/10 (`2026-10-26-ux-ui-test-log.md`,
-prefix **L26**) and the meeting PV of 28/10 (`2026-10-28-pv-djaber.md`, prefix **PV28**) and the meeting PV of 08/11 (`2026-11-08-pv-djaber.md`, prefix **PV08**, last section).
+prefix **L26**) and the meeting PV of 28/10 (`2026-10-28-pv-djaber.md`, prefix **PV28**) and the meeting PV of 08/11 (`2026-11-08-pv-djaber.md`, prefix **PV08**) and the meeting PV of 09/11 (`2026-11-09-pv-djaber.md`, prefix **PV09**, last section).
 
 Status: `todo` · `done` (commit) · `deferred` (reason).
 
@@ -92,3 +92,15 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 | PV08-3 | A price change must not need super-admin validation, only the admin | done (b7a0266) |
 | PV08-4 | Products export without variants, price confusion | done (b7a0266) |
 | PV08-5 | Importing orders from a platform-compliant file raises an error | done (fd7fe93) |
+
+## Meeting PV of 09/11 (`2026-11-09-pv-djaber.md`, prefix **PV09**)
+| # | Issue | Status |
+|---|---|---|
+| PV09-1 | General AI answer problem, confusions | done (stock rule, button taps, galleries; real transcripts still to review) |
+| PV09-2 | Products approved at once without moderation, not shown on the super admin dashboard | done |
+| PV09-3 | Ordering below the stock: the agent refuses, it accepts only at stock 0 | done |
+| PV09-4 | Products with a banned name are shown | done |
+| PV09-5 | Banned words in several languages (ar, fr, en) | done |
+| PV09-6 | The agent sends only the main picture, never the others | done |
+| PV09-7 | Product sheet: category and stock alert missing | done |
+| PV09-8 | Messenger card preview incoherent, no « Commander » button | done |
