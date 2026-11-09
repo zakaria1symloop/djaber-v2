@@ -1,13 +1,15 @@
 'use client';
 // AdminShell (02-next-route-map §2.3, frame "ADM-01 — Platform admin — overview"): guard (session + platform role, no
 // workspace needed), sidebar with every admin area (badges for the moderation / reports / support queues from the
-// WS admin room), header tag "PLATEFORME · {role}", user menu, offline banner, legal re-acceptance interstitial.
+// WS admin room), header tag "PLATEFORME · {role}", notification bell (owner request 09/11), user menu, offline banner,
+// legal re-acceptance interstitial.
 import { Spinner } from '@djaber/ui';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { PageSessionExpired, QueryError } from '@/components/global-states';
 import { AdminForbidden } from '@/features/admin/admin-page';
 import { useAdminBadges } from '@/features/admin/badges';
+import { AdminNotificationBell } from '@/features/admin/notifications';
 import { usePlatform } from '@/features/admin/platform';
 import { useMaintenanceBanner } from '@/features/status/maintenance';
 import { usePathname, useRouter } from '@/i18n/navigation';
@@ -89,6 +91,7 @@ function AdminFrame({ children }: { children: ReactNode }) {
               {t('state.ws.reconnecting')}
             </span>
           ) : null}
+          <AdminNotificationBell />
           <UserMenu />
         </>
       }

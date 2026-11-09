@@ -26,6 +26,7 @@ import { ModerationHookService } from '../../catalog/moderation-hook.service';
 import { NotificationProducer } from '../../notifications/notification.producer';
 import { auditAdmin, iso, sys, sysTx, toUserRef, userRefSelect, type PlatformActor } from '../admin-ops.util';
 import { TrustLevelService } from './trust-level.service';
+import { AdminNotifier } from '../../notifications/admin-notifier.service';
 
 export type DecisionKind = 'approve' | 'reject' | 'request_changes';
 const OPEN: ModerationItem['status'][] = ['pending'];
@@ -53,6 +54,7 @@ export class ModerationService {
     private readonly outbox: OutboxService,
     private readonly audit: AuditService,
     private readonly i18n: I18nService,
+    private readonly admins: AdminNotifier,
   ) {}
 
   // --- presentation ------------------------------------------------------------------------------------------------------
@@ -484,6 +486,7 @@ export class ModerationService {
         const tx = db as Tx;
         await tx.moderationItem.updateMany({ where: { id: { in: late.map((l) => l.id) } }, data: { priority: 'urgent' } });
         await this.outbox.ws(tx, 'admin:platform', 'platform.alert', { kind: 'sla_breach', payload: { area: 'moderation', count: late.length } }, `platform.alert:sla:moderation:${now.toISOString().slice(0, 16)}`);
+        await this.admins.notify(tx, { kind: 'alert_sla', key: `alert_sla:moderation:${now.toISOString().slice(0, 16)}`, params: { area: 'moderation', count: late.length } });
         await this.hook.emitQueue(tx);
       });
       return { urgent: late.length };

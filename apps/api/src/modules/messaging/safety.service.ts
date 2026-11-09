@@ -20,6 +20,7 @@ import { MailOutbox } from '../../core/mail/mail.outbox';
 import { OutboxService } from '../../core/outbox/outbox.service';
 import { algiersDay, algiersDayStart } from '../../core/time/algiers';
 import { conversationHead, userRef } from './messaging.presenter';
+import { AdminNotifier } from '../notifications/admin-notifier.service';
 
 const senderKey = (channelId: string, externalSenderId: string) => `${channelId}:${externalSenderId}`;
 const maskPhone = (p: string | null | undefined) => (p && p.length >= 6 ? `${p.slice(0, 2)}•• •• •• ${p.slice(-2)}` : p ? '••' : null);
@@ -62,6 +63,7 @@ export class SafetyService {
     private readonly outbox: OutboxService,
     private readonly audit: AuditService,
     private readonly mail: MailOutbox,
+    private readonly admins: AdminNotifier,
   ) {}
 
   /**
@@ -315,6 +317,9 @@ export class SafetyService {
       if (reporter) await this.mail.send({ to: reporter.email, template: 'reports/acknowledged', locale: reporter.locale, key: `reports-ack:${r.id}`, workspaceId }, tx);
       const open = await TenantContext.runSystem(() => tx.report.count({ where: { status: { in: ['open', 'reviewing'] } } }));
       await this.outbox.ws(tx, 'admin:platform', 'reports.queue', { open }, `reports.queue:${r.id}`);
+      // owner request 09/11: the Djaber team is told of every report
+      const shop = await tx.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } });
+      await this.admins.notify(tx, { kind: 'report_opened', key: `report_opened:${r.id}`, params: { reason: r.reason, from: shop?.name ?? '—' }, ids: { workspaceId, reportId: r.id } });
       return r;
     });
     await this.audit.write({ workspaceId, actorType: 'user', actorId: t.userId, actorRole: t.role, action: 'report.create', entity: 'Report', entityId: created.id, after: { type: created.type, reason: created.reason, blockRequested: created.blockRequested } });

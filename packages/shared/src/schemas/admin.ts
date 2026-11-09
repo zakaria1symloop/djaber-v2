@@ -805,3 +805,37 @@ export type AdminImpersonateInput = z.infer<typeof AdminImpersonateSchema>;
 export type ImpersonationStartDto = { sessionId: string; token: string; expiresAt: string; workspace: { id: string; name: string } };
 export const AdminImpersonationQuerySchema = z.object({ ...paging, adminUserId: id.optional(), workspaceId: id.optional(), from: day.optional(), to: day.optional(), active: bool.optional() }).strict();
 export type ImpersonationSessionDto = { id: string; admin: AdminUserRef; workspace: { id: string; name: string }; reason: string; ticketId: string | null; startedAt: string; expiresAt: string; endedAt: string | null; actionsCount: number; active: boolean };
+
+// --- super admin notifications (owner request 09/11: « des notifications pour l'admin, pour tout, en temps réel ») -------
+/** The platform events a member of the Djaber team is told about (`Notification(type = platform_admin)`, `data.kind`). */
+export const AdminNotificationKindValues = [
+  'workspace_created',
+  'workspace_deletion',
+  'account_deletion',
+  'payment_received',
+  'payment_failed',
+  'payment_mismatch',
+  'subscription_dunning',
+  'moderation_pending',
+  'moderation_pending_many',
+  'moderation_appeal',
+  'report_opened',
+  'ticket_opened',
+  'ticket_reply',
+  'alert_ai_errors',
+  'alert_ai_key',
+  'alert_sla',
+  'alert_trust_watch',
+  'alert_ai_reports',
+  'alert_incident',
+] as const;
+export type AdminNotificationKind = (typeof AdminNotificationKindValues)[number];
+/** The families of the admin bell (filter chips). */
+export const adminNotificationFamily = (k: string): 'shops' | 'billing' | 'moderation' | 'safety' | 'support' | 'alerts' =>
+  k.startsWith('workspace') || k.startsWith('account') ? 'shops' : k.startsWith('payment') || k.startsWith('subscription') ? 'billing' : k.startsWith('moderation') ? 'moderation' : k.startsWith('report') ? 'safety' : k.startsWith('ticket') ? 'support' : 'alerts';
+export type AdminNotificationView = { id: string; kind: AdminNotificationKind; title: string; body: string; link: string; readAt: string | null; createdAt: string };
+/** WS `admin.notification` on `user:<id>` (and the unread count after it). */
+export type AdminNotificationEvent = { notification: AdminNotificationView; unreadCount: number };
+/** `GET /admin/notifications?cursor&limit&unread` — newest first; `cursor` = the last row's id. */
+export const AdminNotificationsQuerySchema = z.object({ cursor: id.optional(), limit: z.coerce.number().int().min(1).max(50).default(20), unread: bool.optional() }).strict();
+export type AdminNotificationsQuery = z.infer<typeof AdminNotificationsQuerySchema>;

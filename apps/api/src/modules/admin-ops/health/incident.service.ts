@@ -11,6 +11,7 @@ import { MailOutbox } from '../../../core/mail/mail.outbox';
 import { OutboxService } from '../../../core/outbox/outbox.service';
 import { auditAdmin, iso, pick, sys, sysTx, toUserRef, userRefSelect, type PlatformActor } from '../admin-ops.util';
 import { unsubscribeToken } from './status-page.service';
+import { AdminNotifier } from '../../notifications/admin-notifier.service';
 
 const include = {
   createdBy: userRefSelect,
@@ -46,6 +47,7 @@ export class IncidentService {
     private readonly outbox: OutboxService,
     private readonly mail: MailOutbox,
     private readonly config: ConfigService,
+    private readonly admins: AdminNotifier,
   ) {}
 
   present(r: Row, bannerIncidentId: string | null): IncidentDto {
@@ -128,6 +130,7 @@ export class IncidentService {
       await tx.incidentUpdate.create({ data: { incidentId: inc.id, status: input.status, body: body as Prisma.InputJsonValue, authorId: actor.userId } });
       if (input.banner) await writeSetting(tx, 'incident_banner', { visible: true, text: input.title, incidentId: inc.id } satisfies IncidentBannerValue, actor.userId, `incident:${inc.id}`);
       await this.outbox.ws(tx, 'admin:platform', 'platform.alert', { kind: 'incident', payload: { id: inc.id, severity: inc.severity, title: input.title.fr } }, `platform.alert:incident:${inc.id}`);
+      await this.admins.notify(tx, { kind: 'alert_incident', key: `alert_incident:${inc.id}`, params: { title: input.title.fr, severity: inc.severity } });
       await this.notifySubscribers(tx, inc, input.status, body, 'created');
       return inc;
     });

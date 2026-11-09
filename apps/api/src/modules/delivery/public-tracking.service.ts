@@ -12,6 +12,7 @@ import { MailOutbox } from '../../core/mail/mail.outbox';
 import { OutboxService } from '../../core/outbox/outbox.service';
 import { RedisService } from '../../core/redis/redis.provider';
 import { PROVIDER_NAMES, type CourierProvider } from './adapters/courier-adapter';
+import { AdminNotifier } from '../notifications/admin-notifier.service';
 
 const REPORT_LIMIT = 3;
 const REPORT_WINDOW_S = 3600;
@@ -24,6 +25,7 @@ export class PublicTrackingService {
     private readonly config: ConfigService,
     private readonly outbox: OutboxService,
     private readonly mail: MailOutbox,
+    private readonly admins: AdminNotifier,
   ) {}
 
   private async byToken(token: string) {
@@ -88,6 +90,7 @@ export class PublicTrackingService {
         if (input.email) await this.mail.send({ to: input.email, template: 'reports/acknowledged', locale: 'fr', key: `reports-ack:${row.id}` }, tx);
         const open = await tx.report.count({ where: { status: { in: ['open', 'reviewing'] } } });
         await this.outbox.ws(tx, 'admin:platform', 'reports.queue', { open }, `reports.queue:${row.id}`);
+        await this.admins.notify(tx, { kind: 'report_opened', key: `report_opened:${row.id}`, params: { reason: input.reason, from: s.workspace.name }, ids: { workspaceId: s.workspace.id, reportId: row.id } });
         return row;
       }),
     );

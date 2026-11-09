@@ -11,6 +11,7 @@ import { RedisService } from '../../core/redis/redis.provider';
 import { WsEmitter } from '../../core/ws/ws.emitter';
 import { BREAKER_MIN_CALLS, BREAKER_OPEN_S, BREAKER_WINDOW_S, DEFAULT_CALL_TIMEOUT_S, VOICE_FALLBACK, VOICE_PRIMARY } from './ai.constants';
 import { AI_GATEWAY, AiProviderError, type AiGateway, type AiModelRef, type AiProviderName } from './provider/ai.gateway';
+import { AdminNotifier } from '../notifications/admin-notifier.service';
 
 export type RoutedModel = {
   id: string;
@@ -39,6 +40,7 @@ export class RoutingService {
     private readonly crypto: CryptoService,
     private readonly redis: RedisService,
     private readonly ws: WsEmitter,
+    private readonly admins: AdminNotifier,
   ) {}
 
   /** Ciphertext stored in `AiProvider.apiKey` (ADM-06 writes it in M10; the seed never does). */
@@ -126,6 +128,8 @@ export class RoutingService {
       if (opened) {
         this.log.warn({ model: model.modelId, provider: model.provider, errors, total }, 'ai circuit breaker opened');
         this.ws.emit('admin:platform', 'platform.alert', { kind: 'ai_error_rate', payload: { provider: model.provider, model: model.modelId, errors, total } });
+        // owner request 09/11: in the admins' bell too (one per model and hour)
+        await this.admins.notify(prisma, { kind: 'alert_ai_errors', key: `alert_ai_errors:${model.id}:${new Date().toISOString().slice(0, 13)}`, params: { provider: model.provider, model: model.modelId, errors, total } }).catch((e) => this.log.warn({ err: String(e) }, 'admin notification failed'));
       }
     }
   }
@@ -161,7 +165,11 @@ export class RoutingService {
         last = e;
         await this.record(model, false, route.errorThresholdPct);
         this.log.warn({ provider: model.provider, model: model.modelId, kind: e.kind, status: e.status, detail: e.detail }, 'ai provider call failed');
-        if (e.kind === 'provider_rejected') this.ws.emit('admin:platform', 'platform.alert', { kind: 'provider_down', payload: { provider: model.provider, code: 'AI_PROVIDER_KEY_REJECTED' } });
+        if (e.kind === 'provider_rejected') {
+          this.ws.emit('admin:platform', 'platform.alert', { kind: 'provider_down', payload: { provider: model.provider, code: 'AI_PROVIDER_KEY_REJECTED' } });
+          // a key the provider refuses (revoked, or a user key without its workspace): once per provider and hour
+          await this.admins.notify(prisma, { kind: 'alert_ai_key', key: `alert_ai_key:${model.provider}:${new Date().toISOString().slice(0, 13)}`, params: { provider: model.provider, model: model.modelId } }).catch((err) => this.log.warn({ err: String(err) }, 'admin notification failed'));
+        }
       }
     }
     throw last;

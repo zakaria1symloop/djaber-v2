@@ -3,7 +3,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { AccountDeletionPublicDto } from '@djaber/shared';
-import { prisma, TenantContext, type AccountDeletionRequest, type User } from '@djaber/db';
+import { prisma, TenantContext, type AccountDeletionRequest, type Tx, type User } from '@djaber/db';
 import { AuditService } from '../../core/audit/audit.service';
 import { ConfigService } from '../../core/config/config.service';
 import { CryptoService } from '../../core/crypto/crypto.service';
@@ -13,6 +13,7 @@ import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { DataExportService } from './data-export.service';
 import { ReauthService } from './reauth.service';
 import { SessionService, type ClientInfo } from './session.service';
+import { AdminNotifier } from '../notifications/admin-notifier.service';
 
 const DAY = 86_400_000;
 /** FL-22 1b: the public confirmation link is valid 24 h and single use. */
@@ -45,6 +46,7 @@ export class AccountDeletionService {
     private readonly tenants: TenantResolver,
     private readonly crypto: CryptoService,
     private readonly config: ConfigService,
+    private readonly admins: AdminNotifier,
     private readonly exports: DataExportService,
   ) {}
 
@@ -110,6 +112,8 @@ export class AccountDeletionService {
           ? await tx.accountDeletionRequest.update({ where: { id: open.id }, data })
           : await tx.accountDeletionRequest.create({ data: { userId: user.id, ...data } });
         await tx.user.update({ where: { id: user.id }, data: { status: 'deletion_scheduled' } });
+        // owner request 09/11: the Djaber team is told
+        await this.admins.notify(tx as Tx, { kind: 'account_deletion', key: `account_deletion:${user.id}:${scheduledAt.toISOString().slice(0, 10)}`, params: { email: user.email, date: scheduledAt.toISOString().slice(0, 10) }, ids: { userId: user.id } });
         // memberships removed (assignments cleared, authored content kept); sessions and device tokens revoked
         for (const m of memberships) {
           await tx.conversation.updateMany({ where: { workspaceId: m.workspaceId, assigneeId: user.id }, data: { assigneeId: null } });

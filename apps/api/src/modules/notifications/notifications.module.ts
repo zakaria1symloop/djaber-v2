@@ -1,5 +1,7 @@
 import { Global, Logger, Module } from '@nestjs/common';
 import { ConfigService } from '../../core/config/config.service';
+import { AdminNotificationsController } from './admin-notifications.controller';
+import { AdminNotifier } from './admin-notifier.service';
 import { NotificationFanoutService } from './notification-fanout.service';
 import { NotificationPreferencesController } from './notification-preferences.controller';
 import { NotificationProducer } from './notification.producer';
@@ -13,10 +15,11 @@ import { createPushGateway, PUSH_GATEWAY } from './push/push.gateway';
  */
 @Global()
 @Module({
-  controllers: [NotificationsController, NotificationPreferencesController],
+  controllers: [NotificationsController, NotificationPreferencesController, AdminNotificationsController],
   providers: [
     NotificationProducer,
     NotificationService,
+    AdminNotifier,
     NotificationFanoutService,
     {
       provide: PUSH_GATEWAY,
@@ -28,6 +31,6 @@ import { createPushGateway, PUSH_GATEWAY } from './push/push.gateway';
       },
     },
   ],
-  exports: [NotificationProducer, NotificationService, NotificationFanoutService, PUSH_GATEWAY],
+  exports: [NotificationProducer, NotificationService, AdminNotifier, NotificationFanoutService, PUSH_GATEWAY],
 })
 export class NotificationsModule {}

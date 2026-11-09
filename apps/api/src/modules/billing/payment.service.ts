@@ -7,7 +7,8 @@
 // `payments/payment-webhook` (`pay:<eventId>`), 200 at once.
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { CHECKOUT_EXPIRES_MIN, type BillingPaymentDto, type CheckoutReturnDto } from '@djaber/shared';
+import { CHECKOUT_EXPIRES_MIN, formatMoney, type BillingPaymentDto, type CheckoutReturnDto } from '@djaber/shared';
+import { AdminNotifier } from '../notifications/admin-notifier.service';
 import { prisma, Prisma, rawPrisma, TenantContext, type BillingPayment, type PaymentMethodBilling, type Tx } from '@djaber/db';
 import { AuditService } from '../../core/audit/audit.service';
 import { ConfigService } from '../../core/config/config.service';
@@ -43,6 +44,7 @@ export class PaymentService implements OnModuleInit {
     private readonly registry: ProcessorRegistry,
     private readonly tenants: TenantResolver,
     private readonly audit: AuditService,
+    private readonly admins: AdminNotifier,
   ) {}
 
   onModuleInit() {
@@ -118,6 +120,8 @@ export class PaymentService implements OnModuleInit {
         await TenantContext.runSystem(() => prisma.billingPayment.update({ where: { id: row.id }, data: { raw: { ...raw, flagged: { reason: 'PAYMENT_AMOUNT_MISMATCH', amount: v.amount, at: new Date().toISOString() } } as unknown as Prisma.InputJsonValue } }));
         this.log.error({ paymentId: row.id, expected: row.amount, received: v.amount, source }, 'PAYMENT_AMOUNT_MISMATCH: checkout paid with another amount, not activated');
         await this.audit.write({ workspaceId: row.workspaceId, actorType: 'system', action: 'payment.amount_mismatch', entity: 'BillingPayment', entityId: row.id, after: { expected: row.amount, received: v.amount, source } });
+        const shop = await TenantContext.runSystem(() => prisma.workspace.findUnique({ where: { id: row.workspaceId }, select: { name: true } }));
+        await this.admins.notify(prisma, { kind: 'payment_mismatch', key: `payment_mismatch:${row.id}`, params: { workspace: shop?.name ?? '—', expected: formatMoney(row.amount), received: formatMoney(v.amount) }, ids: { workspaceId: row.workspaceId } });
       }
       return true;
     }
@@ -128,10 +132,15 @@ export class PaymentService implements OnModuleInit {
           const status = v.status === 'paid' ? 'paid' : v.status === 'expired' ? 'expired' : 'failed';
           const moved = await tx.billingPayment.updateMany({ where: { id: row.id, status: 'pending' }, data: { status, paidAt: status === 'paid' ? new Date() : null, reference: checkoutId, raw: { ...raw, failureReason: v.failureReason ?? null, events: [...(raw.events ?? []), { source, status: v.status, at: new Date().toISOString() }] } as unknown as Prisma.InputJsonValue } });
           if (!moved.count || !raw.intent) return;
+          // owner request 09/11: the Djaber team is told of every payment (a checkout left to expire is not news)
+          const shop = await tx.workspace.findUnique({ where: { id: row.workspaceId }, select: { name: true } });
+          const told = { workspace: shop?.name ?? '—', amount: formatMoney(row.amount), what: raw.intent.kind };
           if (status !== 'paid') {
             await this.failers.get(raw.intent.kind)?.(tx, raw.intent);
+            if (status === 'failed') await this.admins.notify(tx, { kind: 'payment_failed', key: `payment_failed:${row.id}`, params: told, ids: { workspaceId: row.workspaceId } });
             return;
           }
+          await this.admins.notify(tx, { kind: 'payment_received', key: `payment_received:${row.id}`, params: told, ids: { workspaceId: row.workspaceId } });
           const fn = this.activators.get(raw.intent.kind);
           if (!fn) throw new Error(`no activator for ${raw.intent.kind}`);
           const r = await fn(tx, raw.intent, { paymentId: row.id, amount: row.amount, method: v.method, provider: 'chargily', reference: checkoutId, paidAt: new Date() });

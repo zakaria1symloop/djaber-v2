@@ -47,6 +47,8 @@ Handshake: `auth: { token }` (access JWT, claims `{ sub, wid, role, pr, imp }`).
 | `auth.expiring` | socket | `{ expiresAt }` | 60 s before JWT exp |
 | `resync` | socket | see above | client `resync` |
 | `platform.alert` | `admin:platform` | `{ kind: 'queue_lag'|'ai_error_rate'|'provider_down'|'sla_breach'|'incident', payload }` | JobsHealth / monitors |
+| `admin.notification` | `user:<platform user id>` | `{ notification: AdminNotificationView, unreadCount }` — owner request 09/11: one per platform user allowed to act (new shop, shop / account deletion, payment received / failed / amount mismatch, renewal unpaid, product(s) to review, appeal, report, ticket opened / answered, AI error rate, AI key rejected, SLA breach, shop on watch, AI agent reported, incident) | AdminNotifier (outbox, in the event's transaction) |
+| `admin.notification.read` | `user:<platform user id>` | `{ id? , all?, unreadCount }` | `/admin/notifications/:id/read`, `/read-all` |
 
 Client → server: `resync { since }`, `typing { conversationId }` (optional; not forwarded to Meta), `presence` (none).
 

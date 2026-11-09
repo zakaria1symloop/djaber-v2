@@ -31,6 +31,7 @@ import { periodRange, type PeriodKey } from '../../../core/time/period';
 import { moderationSlaDueAt } from '../../catalog/moderation-hook.service';
 import { NotificationProducer } from '../../notifications/notification.producer';
 import { auditAdmin, iso, pick, sys, sysTx, toUserRef, userRefSelect, type PlatformActor } from '../admin-ops.util';
+import { AdminNotifier } from '../../notifications/admin-notifier.service';
 
 /** One business day of 09:00–18:00 = 540 business minutes. */
 const BUSINESS_DAY_MIN = 9 * 60;
@@ -68,6 +69,7 @@ export class SupportTicketService implements OnModuleInit {
     private readonly notifications: NotificationProducer,
     private readonly audit: AuditService,
     private readonly registry: ProcessorRegistry,
+    private readonly admins: AdminNotifier,
   ) {}
 
   onModuleInit() {
@@ -198,6 +200,9 @@ export class SupportTicketService implements OnModuleInit {
       if (ctx) await tx.supportMessage.create({ data: { ticketId: created.id, authorKind: 'system', body: ctx, at: now } });
       await tx.supportMessage.create({ data: { ticketId: created.id, authorKind: 'user', authorId: t.userId!, body: input.message, attachments: atts as unknown as Prisma.InputJsonValue, at: new Date(now.getTime() + 1) } });
       await this.emit(tx, created, now);
+      // owner request 09/11: the support team is told of every new ticket
+      const shop = await tx.workspace.findUnique({ where: { id: t.workspaceId }, select: { name: true } });
+      await this.admins.notify(tx, { kind: 'ticket_opened', key: `ticket_opened:${created.id}`, params: { workspace: shop?.name ?? '—', number: created.number, subject }, ids: { workspaceId: t.workspaceId, ticketId: created.id } });
       return created;
     });
     await this.audit.write({ workspaceId: t.workspaceId, actorType: 'user', actorId: t.userId, actorRole: t.role, action: 'support.ticket_create', entity: 'SupportTicket', entityId: ticket.id, after: { number: ticket.number, category: ticket.category, priority: ticket.priority } });
@@ -229,6 +234,8 @@ export class SupportTicketService implements OnModuleInit {
       await tx.supportMessage.create({ data: { ticketId: id, authorKind: 'user', authorId: t.userId!, body: input.body, attachments: atts as unknown as Prisma.InputJsonValue, at: now } });
       const updated = await tx.supportTicket.update({ where: { id }, data: { status: 'open', resolvedAt: null, slaDueAt: ticketSlaDueAt(now, row.slaHours) } });
       await this.emit(tx, updated, now);
+      const shop = await tx.workspace.findUnique({ where: { id: t.workspaceId }, select: { name: true } });
+      await this.admins.notify(tx, { kind: 'ticket_reply', key: `ticket_reply:${id}:${now.getTime()}`, params: { workspace: shop?.name ?? '—', number: updated.number, subject: updated.subject }, ids: { workspaceId: t.workspaceId, ticketId: id } });
     });
     return this.get(id);
   }
@@ -586,7 +593,10 @@ export class SupportTicketService implements OnModuleInit {
       const breached = await prisma.supportTicket.count({ where: { status: 'open', slaDueAt: { lt: now, gte: new Date(now.getTime() - 15 * 60_000) } } });
       await prisma.$transaction(async (db) => {
         const tx = db as Tx;
-        if (breached) await this.outbox.ws(tx, 'admin:platform', 'platform.alert', { kind: 'sla_breach', payload: { area: 'support', count: breached } }, `platform.alert:sla:support:${now.toISOString().slice(0, 16)}`);
+        if (breached) {
+          await this.outbox.ws(tx, 'admin:platform', 'platform.alert', { kind: 'sla_breach', payload: { area: 'support', count: breached } }, `platform.alert:sla:support:${now.toISOString().slice(0, 16)}`);
+          await this.admins.notify(tx, { kind: 'alert_sla', key: `alert_sla:support:${now.toISOString().slice(0, 16)}`, params: { area: 'support', count: breached }, area: 'admin.support.write' });
+        }
         await this.emitQueue(tx);
       });
       return { breached };

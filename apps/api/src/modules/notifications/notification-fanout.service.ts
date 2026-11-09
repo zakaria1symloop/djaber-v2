@@ -55,7 +55,8 @@ export class NotificationFanoutService implements OnModuleInit {
     const t = TenantContext.get();
     const s = await this.stored(t.workspaceId, t.userId!);
     if (!s) throw notFound();
-    return NotificationTypeValues.map((type) => {
+    // the super admin notifications (platform_admin) are not a member's to tune
+    return NotificationTypeValues.filter((type) => type !== 'platform_admin').map((type) => {
       const c = NOTIFICATION_CHANNELS[type];
       const p = s.byType.get(type);
       return {

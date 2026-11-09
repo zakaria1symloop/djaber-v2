@@ -15,6 +15,7 @@ import { StorageService } from '../../../core/storage/storage.service';
 import { algiersDay, algiersDayEnd, algiersDayStart } from '../../../core/time/algiers';
 import { NotificationProducer } from '../../notifications/notification.producer';
 import { auditAdmin, iso, maskEmail, maskPhone, requireReason, sys, sysTx, toUserRef, userRefSelect, type PlatformActor } from '../admin-ops.util';
+import { AdminNotifier } from '../../notifications/admin-notifier.service';
 
 const DAY = 86400_000;
 const REPORT_SLA_MS = DAY; // 04 §13: decision < 24 h
@@ -52,6 +53,7 @@ export class AdminSafetyService implements OnModuleInit {
     private readonly queue: QueueOutbox,
     private readonly storage: StorageService,
     private readonly redis: RedisService,
+    private readonly admins: AdminNotifier,
   ) {}
 
   onModuleInit() {
@@ -455,8 +457,9 @@ export class AdminSafetyService implements OnModuleInit {
         if (open) continue;
         await prisma.$transaction(async (db) => {
           const tx = db as Tx;
-          await tx.report.create({ data: { type: 'customer', reporterKind: 'system', clientId: p.clientId, reason: 'fraud', severity: 'high', details: `blocked_by_workspaces:${Number(p.n)}:${r1.windowDays}d — blacklist proposed`, excerpt: { phone: p.phone, workspaces: Number(p.n), rule: 'phone_blocked_by_workspaces' } } });
+          const rep = await tx.report.create({ data: { type: 'customer', reporterKind: 'system', clientId: p.clientId, reason: 'fraud', severity: 'high', details: `blocked_by_workspaces:${Number(p.n)}:${r1.windowDays}d — blacklist proposed`, excerpt: { phone: p.phone, workspaces: Number(p.n), rule: 'phone_blocked_by_workspaces' } } });
           await this.emitQueue(tx);
+          await this.admins.notify(tx, { kind: 'report_opened', key: `report_opened:${rep.id}`, params: { reason: 'fraud', from: 'Djaber' }, ids: { reportId: rep.id } });
         });
         customerReports++;
       }
@@ -468,8 +471,9 @@ export class AdminSafetyService implements OnModuleInit {
         if (open) continue;
         await prisma.$transaction(async (db) => {
           const tx = db as Tx;
-          await tx.report.create({ data: { type: 'merchant', reporterKind: 'system', targetWorkspaceId: m.targetWorkspaceId, reason: 'other', severity: 'high', details: `merchant_reported_by_customers:${m._count._all}:${r2.windowDays}d — workspace review`, excerpt: { rule: 'merchant_reported_by_customers', reports: m._count._all } } });
+          const rep = await tx.report.create({ data: { type: 'merchant', reporterKind: 'system', targetWorkspaceId: m.targetWorkspaceId, reason: 'other', severity: 'high', details: `merchant_reported_by_customers:${m._count._all}:${r2.windowDays}d — workspace review`, excerpt: { rule: 'merchant_reported_by_customers', reports: m._count._all } } });
           await this.emitQueue(tx);
+          await this.admins.notify(tx, { kind: 'report_opened', key: `report_opened:${rep.id}`, params: { reason: 'other', from: 'Djaber' }, ids: { workspaceId: m.targetWorkspaceId, reportId: rep.id } });
         });
         merchantReports++;
       }
@@ -484,6 +488,8 @@ export class AdminSafetyService implements OnModuleInit {
         const exists = await prisma.outbox.findUnique({ where: { topic_key: { topic: 'ws', key: `ws:${key}` } } });
         if (exists) continue;
         await this.outbox.ws(prisma, 'admin:platform', 'platform.alert', { kind: 'ai_reports', payload: { agentId: a.agentId, workspaceId: a.workspaceId, presetId: a.presetId, reports30d: Number(a.n) } }, key);
+        const shop = await prisma.workspace.findUnique({ where: { id: a.workspaceId }, select: { name: true } });
+        await this.admins.notify(prisma, { kind: 'alert_ai_reports', key: `alert_ai_reports:${a.agentId}:${algiersDay()}`, params: { workspace: shop?.name ?? '—', count: Number(a.n) }, ids: { workspaceId: a.workspaceId } });
         alerts++;
       }
       return { customerReports, merchantReports, alerts };

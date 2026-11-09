@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { DEFAULT_QUICK_REPLIES, DEFAULT_SYSTEM_MESSAGES, type Tx, type Workspace } from '@djaber/db';
 import type { AppLocale } from '@djaber/shared';
 import { defaultFeeRows } from '../delivery/fee.service';
+import { AdminNotifier } from '../notifications/admin-notifier.service';
 
 const DAY = 86_400_000;
 
@@ -30,6 +31,8 @@ export type NewWorkspace = {
 
 @Injectable()
 export class ProvisioningService {
+  constructor(private readonly admins: AdminNotifier) {}
+
   /** Must run inside the caller's transaction and inside a system / bypass tenant context. */
   async createWorkspace(tx: Tx, input: NewWorkspace): Promise<Workspace> {
     const settings = await tx.platformSetting.findUnique({ where: { key: 'limits' } });
@@ -93,6 +96,9 @@ export class ProvisioningService {
     });
     // DLV-01: the fee grid starts from the default table (69 rows, `source=default`)
     await tx.deliveryFeeRule.createMany({ data: await defaultFeeRows(tx, ws.id), skipDuplicates: true });
+    // owner request 09/11: the Djaber team is told of every new shop
+    const owner = await tx.user.findUnique({ where: { id: input.ownerId }, select: { firstName: true, lastName: true, email: true } });
+    await this.admins.notify(tx, { kind: 'workspace_created', key: `workspace_created:${ws.id}`, params: { workspace: ws.name, owner: [owner?.firstName, owner?.lastName].filter(Boolean).join(' ') || owner?.email || '—' }, ids: { workspaceId: ws.id } });
     return ws;
   }
 }

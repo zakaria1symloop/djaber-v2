@@ -9,6 +9,7 @@ import { notFound } from '../../../core/errors/app.exception';
 import { OutboxService } from '../../../core/outbox/outbox.service';
 import { ProcessorRegistry } from '../../../core/queue/processor.registry';
 import { auditAdmin, requireReason, sys, type PlatformActor } from '../admin-ops.util';
+import { AdminNotifier } from '../../notifications/admin-notifier.service';
 
 export const PROMOTE_MIN_APPROVED = 10;
 export const WATCH_COUNTERFEIT = 3;
@@ -21,6 +22,7 @@ export class TrustLevelService implements OnModuleInit {
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
     private readonly registry: ProcessorRegistry,
+    private readonly admins: AdminNotifier,
   ) {}
 
   onModuleInit() {
@@ -64,6 +66,8 @@ export class TrustLevelService implements OnModuleInit {
       if (n < WATCH_COUNTERFEIT) return null;
       await this.setLevel(prisma, workspaceId, ws.trustLevel, 'watch', null, `auto: ${n} counterfeit rejections in 90 d`);
       await this.outbox.ws(prisma, 'admin:platform', 'platform.alert', { kind: 'trust_watch', payload: { workspaceId, counterfeit90d: n } }, `platform.alert:watch:${workspaceId}:${n}`);
+      const shop = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } });
+      await this.admins.notify(prisma, { kind: 'alert_trust_watch', key: `alert_trust_watch:${workspaceId}:${n}`, params: { workspace: shop?.name ?? '—', count: n }, ids: { workspaceId } });
       return 'watch' as const;
     });
   }

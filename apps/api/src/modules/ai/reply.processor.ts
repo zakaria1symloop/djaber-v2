@@ -26,6 +26,7 @@ import { CARD_POSTBACK } from '../messaging/product-card';
 import { containsBlockedWord } from '../messaging/safety.service';
 import { withinWindow } from '../messaging/window-rules';
 import { META_GATEWAY, type MetaGateway } from '../meta/meta.gateway';
+import { AdminNotifier } from '../notifications/admin-notifier.service';
 import { NotificationProducer } from '../notifications/notification.producer';
 import { CrossSellService } from '../recommendations/cross-sell.service';
 import { AI_ERROR_ALERT_FAILURES, AI_ERROR_ALERT_WINDOW_S, LAST_PRODUCTS_MAX, MEDIA_WAIT_MS, MEDIA_WAIT_STEP_MS, plannedCost, RUN_BUDGET_MS, UNCLEAR_STREAK_HANDOFF } from './ai.constants';
@@ -77,6 +78,7 @@ export class ReplyProcessor implements OnModuleInit {
     @Inject(META_GATEWAY) private readonly meta: MetaGateway,
     private readonly crossSell: CrossSellService,
     private readonly ws: WsEmitter,
+    private readonly admins: AdminNotifier,
   ) {}
 
   onModuleInit() {
@@ -427,7 +429,9 @@ export class ReplyProcessor implements OnModuleInit {
       }
       // D37: a platform-listed word in an AI message is reported for moderation
       if (blocked?.platform) {
-        await TenantContext.runSystem(() => tx.report.create({ data: { workspaceId: conv.workspaceId, type: 'ai_message', reporterKind: 'system', conversationId: conv.id, aiRunId: run.id, reason: 'inappropriate_content', details: `blocked_word:${blocked.word}`, severity: 'high' } }));
+        const rep = await TenantContext.runSystem(() => tx.report.create({ data: { workspaceId: conv.workspaceId, type: 'ai_message', reporterKind: 'system', conversationId: conv.id, aiRunId: run.id, reason: 'inappropriate_content', details: `blocked_word:${blocked.word}`, severity: 'high' } }));
+        const shop = await tx.workspace.findUnique({ where: { id: conv.workspaceId }, select: { name: true } });
+        await this.admins.notify(tx, { kind: 'report_opened', key: `report_opened:${rep.id}`, params: { reason: 'inappropriate_content', from: shop?.name ?? '—' }, ids: { workspaceId: conv.workspaceId, reportId: rep.id } });
       }
 
       // §7: a text turn is charged when its reply is queued for sending; a reply that was not sent is not charged

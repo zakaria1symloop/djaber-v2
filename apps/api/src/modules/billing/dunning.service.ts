@@ -8,11 +8,13 @@
 //      J+7  `expired`, 02 §5 rule (free plan, pauses), `subscription.expired`; the invoice stays unpaid
 //   Never touches `Workspace.status`, never suspends. Each subscription runs in its own transaction and tenant.
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { formatMoney } from '@djaber/shared';
 import { prisma, TenantContext, type Subscription, type Tx } from '@djaber/db';
 import { ConfigService } from '../../core/config/config.service';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { algiersDay } from '../../core/time/algiers';
+import { AdminNotifier } from '../notifications/admin-notifier.service';
 import { NotificationProducer } from '../notifications/notification.producer';
 import { addMonths, DAY_MS, lockBilling } from './billing.util';
 import { InvoiceService } from './invoice.service';
@@ -28,6 +30,7 @@ export class DunningService implements OnModuleInit {
     private readonly registry: ProcessorRegistry,
     private readonly tenants: TenantResolver,
     private readonly config: ConfigService,
+    private readonly admins: AdminNotifier,
   ) {}
 
   onModuleInit() {
@@ -149,6 +152,9 @@ export class DunningService implements OnModuleInit {
       inv = await tx.invoice.update({ where: { id: inv.id }, data: { status: 'unpaid', dunningStage: 'd0' } });
       s = await tx.subscription.update({ where: { id: s.id }, data: { status: 'dunning', dunningStage: 'd0' } });
       await this.unpaid(tx, s, inv.id, inv.number, inv.amount, 'd0');
+      // owner request 09/11: the Djaber team is told of a renewal left unpaid
+      const shop = await tx.workspace.findUnique({ where: { id: s.workspaceId }, select: { name: true } });
+      await this.admins.notify(tx, { kind: 'subscription_dunning', key: `subscription_dunning:${inv.id}`, params: { workspace: shop?.name ?? '—', amount: formatMoney(inv.amount), number: inv.number }, ids: { workspaceId: s.workspaceId } });
       changed = true;
     }
     // J+3

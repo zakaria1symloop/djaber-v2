@@ -15,6 +15,7 @@ import { OutboxService } from '../../core/outbox/outbox.service';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { QueueOutbox } from '../../core/queue/queue.outbox';
 import { algiersClock, algiersDay } from '../../core/time/algiers';
+import { AdminNotifier } from '../notifications/admin-notifier.service';
 import { NotificationProducer } from '../notifications/notification.producer';
 import { imageToken } from './approved-content';
 import { ModerationPrescreenService, type BannedHit, type PrescreenResult } from './moderation-prescreen.service';
@@ -108,6 +109,7 @@ export class ModerationHookService implements OnModuleInit {
     private readonly registry: ProcessorRegistry,
     private readonly notifications: NotificationProducer,
     private readonly i18n: I18nService,
+    private readonly admins: AdminNotifier,
   ) {}
 
   onModuleInit() {
@@ -288,7 +290,12 @@ export class ModerationHookService implements OnModuleInit {
       await tx.moderationItem.update({ where: { id: item.id }, data: { aiScore: null, aiFlags: [PRESCREEN_UNAVAILABLE] as unknown as Prisma.InputJsonValue } });
       await this.queue.add(tx, 'jobs', 'moderation-prescreen', { itemId: item.id, workspaceId: p.workspaceId }, `moderation-prescreen:${item.id}`, { attempts: 3, backoff: { type: 'exponential', delay: 30_000 } });
     }
-    if (status === 'pending') await this.emitProduct(tx, p.workspaceId, p.id, 'pending');
+    if (status === 'pending') {
+      await this.emitProduct(tx, p.workspaceId, p.id, 'pending');
+      // owner request 09/11: the moderators are told of every product waiting for them
+      const shop = await tx.workspace.findUnique({ where: { id: p.workspaceId }, select: { name: true } });
+      await this.admins.notify(tx, { kind: 'moderation_pending', key: `moderation_pending:${item.id}:${contentVersion}`, params: { workspace: shop?.name ?? '—', product: p.name }, ids: { workspaceId: p.workspaceId, itemId: item.id } });
+    }
     if (status !== 'approved') await this.emitQueue(tx);
     return { ...item, status: status === 'approved' ? ('auto_approved' as const) : status === 'rejected' ? ('rejected' as const) : ('pending' as const) };
   }
@@ -375,6 +382,12 @@ export class ModerationHookService implements OnModuleInit {
         await this.notifications.emit(tx, { type: 'product_approved', workspaceId: ws, target: { roles: ['owner', 'admin'] }, key: `product_approved:${ws}:${algiersDay()}`, data: { productIds: approvedIds.slice(0, 200), count: approvedIds.length } });
       }
       if (approved.length < scored.length) await this.emitQueue(tx);
+    }
+    // owner request 09/11: one summary for the moderators (an import can submit hundreds of products)
+    const waiting = await tx.moderationItem.count({ where: { id: { in: items.map((i) => i.id) }, status: 'pending' } });
+    if (waiting) {
+      const shop = await tx.workspace.findUnique({ where: { id: ws }, select: { name: true } });
+      await this.admins.notify(tx, { kind: 'moderation_pending_many', key: `moderation_pending_many:${ws}:${items[0]!.id}`, params: { workspace: shop?.name ?? '—', count: waiting }, ids: { workspaceId: ws } });
     }
     await this.outbox.ws(tx, `ws:${ws}`, 'moderation.updated', { id: productIds[0]!, productIds: productIds.slice(0, 200), status: 'bulk' });
   }
@@ -506,7 +519,7 @@ export class ModerationHookService implements OnModuleInit {
     const t = TenantContext.get();
     const result = await prisma.$transaction(async (db) => {
       const tx = db as Tx;
-      const product = await tx.product.findFirst({ where: { id: productId, deletedAt: null }, select: { id: true, moderationStatus: true, moderationItemId: true } });
+      const product = await tx.product.findFirst({ where: { id: productId, deletedAt: null }, select: { id: true, name: true, moderationStatus: true, moderationItemId: true } });
       if (!product) throw notFound();
       const used = await tx.moderationAppeal.count({ where: { item: { productId } } });
       if (used) throw new AppException('MODERATION_APPEAL_ALREADY_USED');
@@ -527,6 +540,8 @@ export class ModerationHookService implements OnModuleInit {
       await tx.product.update({ where: { id: product.id }, data: { moderationStatus: 'appealed' } });
       await this.emitProduct(tx, t.workspaceId, product.id, 'appealed');
       await this.emitQueue(tx);
+      const shop = await tx.workspace.findUnique({ where: { id: t.workspaceId }, select: { name: true } });
+      await this.admins.notify(tx, { kind: 'moderation_appeal', key: `moderation_appeal:${appeal.id}`, params: { workspace: shop?.name ?? '—', product: product.name }, ids: { workspaceId: t.workspaceId, appealId: appeal.id } });
       return { id: appeal.id, status: 'appealed' as const, deadlineAt: deadlineAt.toISOString() };
     });
     return result;

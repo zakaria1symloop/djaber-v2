@@ -874,6 +874,7 @@ enum NotificationType {
   credits_pack_purchased
   credits_granted
   credits_removed
+  platform_admin // super admin notifications (one per platform user; the event in data.kind)
   subscription_trial_extended
   credits_negative
   invoice_unpaid

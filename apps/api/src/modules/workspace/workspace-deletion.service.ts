@@ -1,7 +1,7 @@
 // FL-14 / 04 §16 / D31 — danger zone: `DELETE /workspace` schedules the deletion (status `deletion_scheduled`,
 // `deletionScheduledAt = now + 30 d`), `POST /workspace/deletion/cancel` restores it, `sched-workspace-purge` purges at the date.
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { prisma, TenantContext } from '@djaber/db';
+import { prisma, TenantContext, type Tx } from '@djaber/db';
 import { AuditService } from '../../core/audit/audit.service';
 import { ConfigService } from '../../core/config/config.service';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
@@ -12,6 +12,7 @@ import { QueueOutbox } from '../../core/queue/queue.outbox';
 import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { ReauthService } from '../auth/reauth.service';
 import type { ClientInfo } from '../auth/session.service';
+import { AdminNotifier } from '../notifications/admin-notifier.service';
 import { NotificationProducer } from '../notifications/notification.producer';
 
 const DAY = 86_400_000;
@@ -26,6 +27,7 @@ export class WorkspaceDeletionService implements OnModuleInit {
     private readonly mail: MailOutbox,
     private readonly tenants: TenantResolver,
     private readonly config: ConfigService,
+    private readonly admins: AdminNotifier,
     private readonly registry: ProcessorRegistry,
     private readonly queue: QueueOutbox,
     private readonly notifications: NotificationProducer,
@@ -59,6 +61,8 @@ export class WorkspaceDeletionService implements OnModuleInit {
 
     const updated = await prisma.$transaction(async (tx) => {
       const row = await tx.workspace.update({ where: { id: ws.id }, data: { status: 'deletion_scheduled', deletionScheduledAt: at } });
+      // owner request 09/11: the Djaber team is told
+      await this.admins.notify(tx as Tx, { kind: 'workspace_deletion', key: `workspace_deletion:${ws.id}:${at.toISOString().slice(0, 10)}`, params: { workspace: row.name, date: at.toISOString().slice(0, 10) }, ids: { workspaceId: ws.id } });
       // M1 carry-over (04 §16): the subscription is cancelled — no renewal / dunning during the grace period; undone by "cancel"
       await tx.subscription.updateMany({ where: { status: { in: ['active', 'dunning'] }, billingCycle: { not: 'none' }, cancelAtPeriodEnd: false }, data: { cancelAtPeriodEnd: true, cancelledAt: new Date(), cancelReason: 'workspace_deletion' } });
       await tx.invoice.updateMany({ where: { status: 'upcoming' }, data: { status: 'void' } });
