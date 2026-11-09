@@ -167,6 +167,9 @@ describe('ADM-05 subscriptions, invoices, payments', () => {
   });
 });
 
+/** YYYY-MM-DD, `offset` days from today. */
+const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+
 describe('ADM-15 packs, promo codes, pricing history', () => {
   it('packs list with KPIs, create (slug / store id unique), patch (hide on mobile), purchases; promo codes CRUD + state + deactivate + redemptions; pricing versions; read role 403 on writes', async () => {
     const fin = await asPlatform(app, 'finance');
@@ -188,7 +191,7 @@ describe('ADM-15 packs, promo codes, pricing history', () => {
     const code = `LANCE-${randomUUID().slice(0, 4).toUpperCase()}`;
     await fin.post('/admin/promo-codes', { code, kind: 'percent_discount', value: 150 }).expect(422);
     await fin.post('/admin/promo-codes', { code, kind: 'credits', value: 100, target: 'workspace' }).expect(422);
-    const promo = (await fin.post('/admin/promo-codes', { code: code.toLowerCase(), kind: 'percent_discount', value: 20, periods: 2, planSlugs: ['starter', 'pro'], maxUses: 500, validFrom: '2026-10-06', validTo: '2026-11-06' }).expect(201)).body.data;
+    const promo = (await fin.post('/admin/promo-codes', { code: code.toLowerCase(), kind: 'percent_discount', value: 20, periods: 2, planSlugs: ['starter', 'pro'], maxUses: 500, validFrom: day(-30), validTo: day(30) }).expect(201)).body.data; // around today: the fixed 2026-11-06 expired on the calendar
     expect(promo).toMatchObject({ code, kind: 'percent_discount', value: 20, uses: 0, state: 'active', perWorkspaceLimit: 1 });
     expect((await fin.post('/admin/promo-codes', { code, kind: 'credits', value: 10 }).expect(409)).body.error.code).toBe('CONFLICT');
     expect((await fin.get(`/admin/promo-codes?q=${code}`).expect(200)).body.data[0].id).toBe(promo.id);
