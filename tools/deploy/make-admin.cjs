@@ -1,19 +1,31 @@
-// Give a platform role (super admin by default) to an EXISTING account, whatever its e-mail domain — owner decision
-// 09/11/2026: the admin screen only invites @djaber.ai addresses, the owner needs admins with other addresses.
-// The person signs up first on the web app with their own e-mail and password (nobody else sees it); this script only
-// changes the role, closes the person's open sessions (so the new role applies at the next login) and writes an audit row.
-// The admin area then asks for 2FA (authenticator app) at the first access, as for every platform user.
-// Usage, from the repo root on the server:  node ~/make-admin.cjs <email> [super_admin|support|moderator|finance|read|none]
+// Platform accounts (super admin, support, moderator, finance, read) for any e-mail domain — owner decision 09/11/2026:
+// the admin screen only invites @djaber.ai addresses, the owner needs other admins without anyone signing up first.
+//  - the account exists: its role changes, its open sessions close (the new role applies at the next login);
+//  - it does not exist: it is created ready to use, like the seed admin (e-mail already verified) with a random password
+//    printed ONCE in this terminal — hand it over privately and ask the person to change it in Profile › Security.
+// An audit row is written for each change. The admin area still asks for 2FA (authenticator app) at the first access.
+// Usage, from the repo root on the server (cd /opt/djaber/v2):
+//   node ~/make-admin.cjs <email> [role]                       one account (role defaults to super_admin)
+//   node ~/make-admin.cjs <email>:<role> <email>:<role> ...    several at once
+// roles: super_admin | support | moderator | finance | read | none (none removes the admin access)
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const ROLES = ['super_admin', 'support', 'moderator', 'finance', 'read', 'none'];
-const email = (process.argv[2] ?? '').trim().toLowerCase();
-const role = (process.argv[3] ?? 'super_admin').trim();
-if (!email.includes('@') || !ROLES.includes(role)) {
-  console.error(`usage (from the repo root): node ~/make-admin.cjs <email> [${ROLES.join('|')}]`);
+const args = process.argv.slice(2);
+const entries = args.length === 2 && !args[1].includes('@') && !args[0].includes(':') ? [[args[0], args[1]]] : args.map((a) => {
+  const i = a.lastIndexOf(':');
+  return i > a.indexOf('@') ? [a.slice(0, i), a.slice(i + 1)] : [a, 'super_admin'];
+});
+const bad = entries.filter(([e, r]) => !/^[^\s@:]+@[^\s@:]+\.[^\s@:]{2,}$/.test(e.trim()) || !ROLES.includes(r.trim()));
+if (!entries.length || bad.length) {
+  if (bad.length) console.error('Not understood: ' + bad.map(([e, r]) => `${e}:${r}`).join(', '));
+  console.error('usage (from the repo root): node ~/make-admin.cjs <email> [role]   or   node ~/make-admin.cjs <email>:<role> <email>:<role> ...');
+  console.error('roles: ' + ROLES.join(' | '));
   process.exit(1);
 }
+
 const root = process.env.APP_DIR || process.cwd();
 const envFile = [path.join(root, '.env'), path.join(root, 'apps/api/.env')].find((f) => fs.existsSync(f));
 const line = envFile && fs.readFileSync(envFile, 'utf8').split(/\r?\n/).find((l) => /^\s*DATABASE_URL\s*=/.test(l));
@@ -22,42 +34,50 @@ if (!line) {
   process.exit(1);
 }
 const url = line.replace(/^\s*DATABASE_URL\s*=\s*/, '').replace(/^["']|["']$/g, '');
-const { PrismaClient } = require(require.resolve('@prisma/client', { paths: [path.join(root, 'packages/db')] }));
+const fromDb = (m) => require(require.resolve(m, { paths: [path.join(root, 'packages/db')] }));
+const { PrismaClient } = fromDb('@prisma/client');
+const argon2 = fromDb('argon2');
 const db = new PrismaClient({ datasources: { db: { url } } });
 
-(async () => {
-  const user = await db.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' }, deletedAt: null }, select: { id: true, email: true, platformRole: true, status: true, emailVerifiedAt: true, totpEnabled: true } });
+// 20 characters, letters + digits (the password rule: at least 8, one letter, one digit)
+const newPassword = () => {
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  let p = '';
+  while (p.length < 18) p += A[crypto.randomInt(A.length)];
+  return p + 'A' + crypto.randomInt(2, 10);
+};
+const audit = (tx, userId, before, after, reason) =>
+  tx.auditLog.create({ data: { actorType: 'system', action: before === null ? 'user.create' : 'user.platform_role_change', entity: 'User', entityId: userId, before: before === null ? undefined : { platformRole: before }, after, reason } });
+
+async function one(emailRaw, role) {
+  const email = emailRaw.trim().toLowerCase();
+  const user = await db.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' }, deletedAt: null }, select: { id: true, email: true, platformRole: true, status: true, totpEnabled: true } });
   if (!user) {
-    console.error(`No account with ${email}. Ask the person to sign up first on the web app with this e-mail, then run this again.`);
-    process.exit(2);
-  }
-  if (user.status !== 'active') console.warn(`Note: this account is ${user.status}; it cannot log in until it is active again.`);
-  if (user.platformRole === role) {
-    console.log(`${user.email} already has the role ${role}. Nothing changed.`);
+    if (role === 'none') return console.log(`${email}: no account, nothing to remove.`);
+    const password = newPassword();
+    const passwordHash = await argon2.hash(password, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 });
+    const local = email.split('@')[0];
+    await db.$transaction(async (tx) => {
+      const u = await tx.user.create({ data: { email, passwordHash, firstName: local.charAt(0).toUpperCase() + local.slice(1), lastName: '', platformRole: role, emailVerifiedAt: new Date() } });
+      await audit(tx, u.id, null, { email, platformRole: role, via: 'tools/deploy/make-admin.cjs' }, 'owner request 09/11: platform account created by server script');
+    });
+    console.log(`CREATED  ${email.padEnd(34)} role ${role.padEnd(12)} password: ${password}`);
     return;
   }
+  if (user.status !== 'active') console.warn(`Note: ${user.email} is ${user.status}; it cannot log in until it is active again.`);
+  if (user.platformRole === role) return console.log(`SAME     ${user.email.padEnd(34)} already ${role}, nothing changed`);
   await db.$transaction(async (tx) => {
     await tx.user.update({ where: { id: user.id }, data: { platformRole: role } });
-    // the access token carries the role: close the open sessions so the next login picks up the new one
     await tx.refreshToken.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: new Date() } });
-    await tx.auditLog.create({
-      data: {
-        actorType: 'system',
-        action: 'user.platform_role_change',
-        entity: 'User',
-        entityId: user.id,
-        before: { platformRole: user.platformRole },
-        after: { platformRole: role, via: 'tools/deploy/make-admin.cjs' },
-        reason: 'owner request 09/11: platform role for an address outside @djaber.ai (server script)',
-      },
-    });
+    await audit(tx, user.id, user.platformRole, { platformRole: role, via: 'tools/deploy/make-admin.cjs' }, 'owner request 09/11: platform role for an address outside @djaber.ai (server script)');
   });
-  console.log(`Done: ${user.email} is now ${role} (was ${user.platformRole}).`);
-  if (role !== 'none') {
-    console.log('Next: the person logs out and logs in again on the web app, opens the admin,');
-    console.log(`and sets up 2FA with an authenticator app${user.totpEnabled ? ' (already set up on this account)' : ' (asked at the first admin access)'}.`);
-    if (!user.emailVerifiedAt) console.log('Their e-mail is not verified yet: they should click the link in the sign-up e-mail first.');
-  }
+  console.log(`UPDATED  ${user.email.padEnd(34)} role ${role.padEnd(12)} (was ${user.platformRole}; keeps their own password, must log in again)`);
+}
+
+(async () => {
+  for (const [e, r] of entries) await one(e, r.trim());
+  console.log('\nPasswords are shown only here: give each one privately, never in a group chat.');
+  console.log('Each person logs in on the web app, changes the password (Profile › Security), opens the admin and sets up 2FA.');
 })()
   .catch((e) => {
     console.error('Failed:', e.message);
