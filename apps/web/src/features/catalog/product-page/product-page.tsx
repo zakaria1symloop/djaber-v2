@@ -17,7 +17,7 @@ import { useSession } from '@/lib/session';
 import { catalogApi, useCatalogRefresh, useProduct } from '../api';
 import type { Product } from '../contracts';
 import { AiPill, ModerationPill, ProductStatePill } from '../ui';
-import { AgentsBlock, GalleryBlock, MovementsBlock, PricingBlock, StockBlock } from './blocks';
+import { AgentsBlock, DetailsBlock, GalleryBlock, MovementsBlock, PricingBlock, StockBlock } from './blocks';
 import { moderationView } from './logic';
 import { AppealDialog, RejectedBanner, ValidationBlock } from './moderation';
 import { useProductActions } from './use-product-actions';
@@ -203,6 +203,7 @@ export function ProductPage({ id }: { id: string }) {
           {advanced && product.trackStock && can('stock.read') ? <MovementsBlock productId={product.id} /> : null}
         </div>
         <div className="flex min-w-0 flex-col gap-4">
+          <DetailsBlock product={product} />
           <PricingBlock product={product} advanced={advanced} canEdit={live && canWrite} />
           <StockBlock product={product} advanced={advanced} />
           <AgentsBlock product={product} onAdd={live && canWrite && can('agents.read') ? () => actions.addToAgent(product) : undefined} />

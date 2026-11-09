@@ -276,6 +276,29 @@ export function PricingBlock({ product, advanced, canEdit = false }: { product: 
 }
 
 /* ---------- Stock ---------- */
+/** PV 09/11: the category (it only showed as grey text under the title, nothing when empty) and the unit. */
+export function DetailsBlock({ product }: { product: Pick<Product, 'category' | 'unit'> }) {
+  const t = useT();
+  return (
+    <Block title={t('products.page.details.title')} testId="block-details">
+      <Rows>
+        <Row label={t('products.page.details.category')} testId="details-category">
+          {product.category ? (
+            <Link href={`/products?categoryIds=${product.category.id}`} className="hover:underline">
+              {product.category.name}
+            </Link>
+          ) : (
+            <span className="text-text-muted">{t('products.form.organisation.noCategory')}</span>
+          )}
+        </Row>
+        <Row label={t('products.page.details.unit')} testId="details-unit">
+          {product.unit ? product.unit.abbreviation : <span className="text-text-muted">—</span>}
+        </Row>
+      </Rows>
+    </Block>
+  );
+}
+
 export function StockBlock({ product, advanced }: { product: Product; advanced: boolean }) {
   const t = useT();
   const locale = useLocaleCode() as Locale;
@@ -307,6 +330,10 @@ export function StockBlock({ product, advanced }: { product: Product; advanced: 
                   </Pill>
                 </>
               ) : null}
+            </Row>
+            {/* PV 09/11 « dans la fiche produit catégorie et alerte stock manquante » */}
+            <Row label={t('products.page.stock.minStock')} testId="stock-min">
+              {s.variants > 0 ? <span className="text-text-secondary">{t('products.page.stock.minStockPerVariant')}</span> : <>{units(product.minStock)} <span className="text-text-secondary">{t('products.page.stock.minStockHint')}</span></>}
             </Row>
             <Row label={t('products.page.stock.reserved')} testId="stock-reserved">
               {units(d?.reserved ?? 0)} <span className="text-text-secondary">{t('products.page.stock.reservedHint')}</span>
