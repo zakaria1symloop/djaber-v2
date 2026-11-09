@@ -4,7 +4,7 @@
 // `skipped_window` and never sent. The job is safe to run twice (status check + per-part bookkeeping).
 import { Inject, Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import type { Job } from 'bullmq';
-import { formatMessage, formatMoney, getMessages, isAppLocale, PRODUCT_CARDS_MAX, type AppLocale, type MessageCardView } from '@djaber/shared';
+import { formatMessage, getMessages, isAppLocale, PRODUCT_CARDS_MAX, type AppLocale, type MessageCardView } from '@djaber/shared';
 import { prisma, Prisma, TenantContext, type Conversation, type MessageType, type Tx } from '@djaber/db';
 import { AppException, notFound } from '../../core/errors/app.exception';
 import { OutboxService } from '../../core/outbox/outbox.service';
@@ -13,13 +13,14 @@ import { QueueOutbox } from '../../core/queue/queue.outbox';
 import { MetricsService } from '../../core/metrics/metrics.service';
 import { META_SEND_PER_CHANNEL_RPS, takeSlot, throttleJob } from '../../core/queue/throttle';
 import { RedisService } from '../../core/redis/redis.provider';
-import { approvedFields, approvedImages, approvedVariants } from '../catalog/approved-content';
+import { systemLocale } from '../ai/language';
 import { ChannelService } from '../channels/channel.service';
 import { ChannelTokens } from '../channels/channel.util';
 import { ConfigService } from '../../core/config/config.service';
 import { MetaError, metaErrorCode } from '../meta/meta-errors';
 import { META_GATEWAY, type MetaGateway, type MetaOutgoing } from '../meta/meta.gateway';
 import { previewOf } from './inbound-parser';
+import { cardElement, cardLabels, GALLERY_MAX, productCards } from './product-card';
 import { attachmentsOf, contextOf, conversationHead, messageInclude, presentMessage, type ConversationContext, type MessageRow, type StoredAttachment } from './messaging.presenter';
 import { decideWindow, type SendKind, type WindowDecision } from './window-rules';
 
@@ -178,39 +179,22 @@ export class OutboundSendService implements OnModuleInit {
   }
 
   /** MSG-07: product cards (image + "name / price DA"), at most 5 per reply; unknown or inactive products are skipped. */
-  async sendCards(conversationId: string, productIds: string[], o: { author?: 'ai' | 'human' | 'system'; kind?: SendKind; aiRunId?: string | null; authorUserId?: string | null; tx?: Tx } = {}): Promise<MessageRow | null> {
+  async sendCards(conversationId: string, productIds: string[], o: { author?: 'ai' | 'human' | 'system'; kind?: SendKind; aiRunId?: string | null; authorUserId?: string | null; tx?: Tx; gallery?: boolean } = {}): Promise<MessageRow | null> {
     const run = async (tx: Tx) => {
-      const wanted = [...new Set(productIds)];
-      const rows = await tx.product.findMany({
-        where: { id: { in: wanted }, deletedAt: null, isActive: true },
-        select: { id: true, name: true, description: true, price: true, hasVariants: true, moderationStatus: true, approvedSnapshot: true, variants: { where: { deletedAt: null, isActive: true }, select: { id: true, name: true, price: true }, orderBy: { createdAt: 'asc' } } },
-      });
-      const images = await tx.productImage.findMany({ where: { productId: { in: rows.map((p) => p.id) } }, orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }], select: { productId: true, url: true } });
       // an AI card shows only what moderation approved (tester report 25/10 UX-006); a member sends the product as it is
-      const ai = (o.author ?? 'ai') === 'ai';
-      const imageBy = new Map(rows.map((p) => [p.id, (ai ? approvedImages(p, images.filter((i) => i.productId === p.id)) : images.filter((i) => i.productId === p.id))[0]?.url ?? null]));
-      const products = rows.map((p) => (ai ? { ...p, ...approvedFields(p), variants: approvedVariants(p, p.variants) } : p));
-      const byId = new Map(products.map((p) => [p.id, p]));
-      const cards: MessageCardView[] = wanted
-        .map((id) => byId.get(id))
-        .filter((p): p is NonNullable<typeof p> => !!p)
-        .slice(0, PRODUCT_CARDS_MAX)
-        .map((p): MessageCardView => {
-          // a product with variants shows its variants and their price range, never the base price (tester report 2026-10-20)
-          if (!p.hasVariants || !p.variants.length) return { productId: p.id, name: p.name, price: p.price, imageUrl: imageBy.get(p.id) ?? null };
-          const prices = p.variants.map((v) => v.price);
-          const [min, max] = [Math.min(...prices), Math.max(...prices)];
-          return { productId: p.id, name: p.name, price: min, ...(max !== min ? { priceMax: max } : {}), variants: p.variants.map((v) => v.name).slice(0, 8).join(' · '), imageUrl: imageBy.get(p.id) ?? null };
-        });
+      const cards = await productCards(tx, productIds, { ai: (o.author ?? 'ai') === 'ai', gallery: o.gallery });
       if (!cards.length) return null;
-      const { message } = await this.store(tx, conversationId, { author: o.author ?? 'ai', kind: o.kind ?? 'ai', type: 'product_cards', payload: { cards }, aiRunId: o.aiRunId ?? null, authorUserId: o.authorUserId ?? null });
+      // the buttons speak the conversation's language (PV 09/11)
+      const conv = await tx.conversation.findFirst({ where: { id: conversationId }, select: { context: true } });
+      const locale = systemLocale(contextOf(conv ?? { context: null }).lastLanguage);
+      const { message } = await this.store(tx, conversationId, { author: o.author ?? 'ai', kind: o.kind ?? 'ai', type: 'product_cards', payload: { cards, locale, ...(o.gallery ? { gallery: true } : {}) }, aiRunId: o.aiRunId ?? null, authorUserId: o.authorUserId ?? null });
       return message;
     };
     return o.tx ? run(o.tx) : prisma.$transaction((tx) => run(tx as Tx));
   }
 
   // --- sending (worker) -------------------------------------------------------------------------------------------------
-  /** The Meta calls one stored message turns into, in order: attachments, text, then one image + caption per card. */
+  /** The Meta calls one stored message turns into, in order: attachments, text, then the cards (one generic template). */
   static partsOf(m: Pick<MessageRow, 'text' | 'attachments' | 'payload' | 'type'>): MetaOutgoing[] {
     const parts: MetaOutgoing[] = [];
     for (const a of attachmentsOf(m)) {
@@ -219,10 +203,13 @@ export class OutboundSendService implements OnModuleInit {
       parts.push({ kind: 'attachment', type, url: a.url });
     }
     if (m.text) parts.push({ kind: 'text', text: m.text });
-    const cards = ((m.payload as { cards?: MessageCardView[] } | null)?.cards ?? []).slice(0, PRODUCT_CARDS_MAX);
-    for (const c of cards) {
-      if (c.imageUrl) parts.push({ kind: 'attachment', type: 'image', url: c.imageUrl });
-      parts.push({ kind: 'text', text: `${c.name}\n${c.variants ? `${c.variants}\n` : ''}${formatMoney(c.price)}${c.priceMax && c.priceMax !== c.price ? ` – ${formatMoney(c.priceMax)}` : ''}` });
+    // PV 09/11: one generic template — picture, name, variants and price, « Commander » / « Plus de photos » buttons —
+    // instead of a picture and a text line per product, without any button
+    const payload = (m.payload ?? null) as { cards?: MessageCardView[]; locale?: 'fr' | 'ar' | 'en'; gallery?: boolean } | null;
+    const cards = (payload?.cards ?? []).slice(0, payload?.gallery ? GALLERY_MAX : PRODUCT_CARDS_MAX);
+    if (cards.length) {
+      const labels = cardLabels(payload?.locale ?? 'fr');
+      parts.push({ kind: 'generic', elements: cards.map((c) => cardElement(c, labels)) });
     }
     return parts;
   }

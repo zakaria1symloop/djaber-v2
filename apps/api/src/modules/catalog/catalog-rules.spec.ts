@@ -121,6 +121,7 @@ describe('products with variants are sold at their variants\' prices (tester rep
   });
   it('a product card shows the variants and their price range', () => {
     const parts = OutboundSendService.partsOf({ text: null, attachments: null, type: 'product_cards', payload: { cards: [{ productId: 'p', name: 'Robe', price: 4500, priceMax: 5200, variants: 'S · M · L', imageUrl: null }] } } as never);
-    expect(parts).toEqual([{ kind: 'text', text: `Robe\nS · M · L\n${formatMoney(4500)} – ${formatMoney(5200)}` }]);
+    // PV 09/11: one generic template, « Commander » button (one picture ⇒ no « Plus de photos »)
+    expect(parts).toEqual([{ kind: 'generic', elements: [{ title: 'Robe', subtitle: `S · M · L · ${formatMoney(4500)} – ${formatMoney(5200)}`, buttons: [{ title: 'Commander', payload: 'ORDER:p' }] }] }]);
   });
 });

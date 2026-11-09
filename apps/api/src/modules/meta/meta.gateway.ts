@@ -23,8 +23,8 @@ export type MetaTag = 'HUMAN_AGENT' | 'POST_PURCHASE_UPDATE';
 export type MetaOutgoing =
   | { kind: 'text'; text: string }
   | { kind: 'attachment'; type: 'image' | 'audio' | 'video' | 'file'; url: string }
-  /** P2 Facebook generic template (flag `fb_generic_template`) */
-  | { kind: 'generic'; elements: { title: string; subtitle?: string; imageUrl?: string; productId: string }[] };
+  /** MSG-07 product cards: generic template, one element per product / picture, postback buttons (PV 09/11) */
+  | { kind: 'generic'; elements: { title: string; subtitle?: string; imageUrl?: string; buttons: { title: string; payload: string }[] }[] };
 export type MetaSendInput = { recipientId: string; message: MetaOutgoing; messagingType: MetaMessagingType; tag?: MetaTag };
 export type MetaSendResult = { messageId: string; recipientId: string | null };
 

@@ -435,9 +435,14 @@ export type MessageAttachmentView = {
   error?: string;
 };
 /** `price` … `priceMax`: the price range of a product with variants (lowest / highest active variant). */
-export type MessageCardView = { productId: string; name: string; price: number; priceMax?: number; imageUrl: string | null; variants?: string };
+/** MSG-07 card; `photos` = approved pictures of the product (> 1 ⇒ « Plus de photos »), `photo` = its place in a gallery. */
+export type MessageCardView = { productId: string; name: string; price: number; priceMax?: number; /** promotion: the price before (no variants) */ oldPrice?: number; imageUrl: string | null; variants?: string; photos?: number; photo?: { n: number; total: number } };
 export type MessagePayloadView = {
   cards?: MessageCardView[];
+  /** language of the card buttons (the conversation's when it was sent) */
+  locale?: 'fr' | 'ar' | 'en';
+  /** the cards are the pictures of one product (« Plus de photos ») */
+  gallery?: boolean;
   postback?: string;
   quickReply?: string;
   quickReplies?: string[];

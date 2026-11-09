@@ -36,7 +36,9 @@ export const crossSellSection = (c: PromptContext): string => {
 };
 
 export const cardTemplateSection = (c: PromptContext): string =>
-  `PRODUCT CARD\nWhen presenting a product use this template: ${c.agent.productCardTemplate?.trim() || '{name} — {price} DA'} (inside a natural sentence; one line per product when you list several)\nList the ids of the products you present in productCards (at most 5); the cards (photo, name, price) are sent right after your text, so do not describe them again. Only present the products the customer is interested in, not the whole catalogue.`;
+  `PRODUCT CARD\nWhen presenting a product use this template: ${c.agent.productCardTemplate?.trim() || '{name} — {price} DA'} (inside a natural sentence; one line per product when you list several)\nList the ids of the products you present in productCards (at most 5); the cards (photo, name, price) are sent right after your text, so do not describe them again. Only present the products the customer is interested in, not the whole catalogue.
+Each card has a « Commander » button (and « Plus de photos » when the product has several photos): a customer message « Commander · <product> » means they tapped it — start the order for that product.
+When the customer asks to see more or other photos of a product (or taps « Plus de photos »), put its id in productPhotos: all its photos are sent after your text; just say so in a few words.`;
 
 export const closingSection = (c: PromptContext): string => {
   const text = (c.agent.closingInstructions ?? '').trim();

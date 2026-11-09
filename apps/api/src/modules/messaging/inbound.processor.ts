@@ -26,6 +26,7 @@ import { ConversationService } from './conversation.service';
 import { parseInbound, previewOf, type ParsedInbound, type ParsedMessage, type StoredInbound } from './inbound-parser';
 import { detectLanguage, type AiLanguage } from '../ai/language';
 import { attachmentsOf, contextOf, messageInclude, type ConversationContext, type StoredAttachment } from './messaging.presenter';
+import { CARD_POSTBACK } from './product-card';
 import { OutboundSendService } from './outbound-send.service';
 import { containsBlockedWord, SafetyService } from './safety.service';
 
@@ -138,7 +139,11 @@ export class InboundProcessor implements OnModuleInit {
     const words = await this.blockedWords(channel.workspaceId);
     const msg = p.kind === 'postback' ? null : p;
     const post = p.kind === 'postback' ? p : null;
-    const text = msg ? msg.text : (post!.title ?? post!.data);
+    // PV 09/11: a card button (« Commander » / « Plus de photos ») says which product it is about — the AI and the team
+    // read « Commander · Robe satin bordeaux », not a bare « Commander »
+    const card = post ? CARD_POSTBACK.exec(post.data ?? '') : null;
+    const product = card ? await prisma.product.findFirst({ where: { id: card[2]!, workspaceId: channel.workspaceId }, select: { name: true } }) : null;
+    const text = msg ? msg.text : product ? `${post!.title ?? card![1]} · ${product.name}` : (post!.title ?? post!.data);
     const attachments: StoredAttachment[] = msg
       ? msg.attachments.map((a) => ({
           type: a.type,

@@ -219,9 +219,9 @@ export class GraphMetaGateway implements MetaGateway {
           template_type: 'generic',
           elements: m.elements.map((e) => ({
             title: e.title,
-            subtitle: e.subtitle,
-            image_url: e.imageUrl,
-            buttons: [{ type: 'postback', title: 'Commander', payload: `ORDER:${e.productId}` }],
+            ...(e.subtitle ? { subtitle: e.subtitle } : {}),
+            ...(e.imageUrl ? { image_url: e.imageUrl } : {}),
+            buttons: e.buttons.map((b) => ({ type: 'postback', title: b.title, payload: b.payload })),
           })),
         },
       },

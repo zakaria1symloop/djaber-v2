@@ -15,7 +15,9 @@ export const productBlock = (p: CatalogueProduct, n: number, descriptionMax: num
   if (p.hasVariants) lines.push('VARIANT REQUIRED: the customer chooses one of the VARIANTS; never offer this product without a variant or at another price.');
   if (p.stock === null) lines.push('SERVICE: present it as a service (what is done, how, when), never as a product in stock or a parcel.');
   // PV 22/10: the merchant takes orders for it at zero stock
-  if (p.sellOutOfStock && (p.stock === 0 || p.variants.some((v) => v.stock <= 0))) lines.push('ORDERABLE AT ZERO STOCK: take the order even when STOCK is 0 (do not use OUT_OF_STOCK); say it may take a little longer to deliver.');
+  // PV 09/11 « il valide la commande seulement quand le produit est à 0 stock »: the line only came at STOCK 0, so with
+  // STOCK 2 and 5 asked the model refused on its own although the shop takes such orders
+  if (p.sellOutOfStock && p.stock !== null) lines.push('ORDERABLE BEYOND STOCK: take the order whatever the quantity and STOCK, even at 0 (do not use OUT_OF_STOCK); when the quantity is above STOCK, say the rest may take a little longer to deliver.');
   for (const a of p.also) lines.push(`ALSO: ${a.name} [ID:${a.id}] ${a.price} DA — ${a.reason?.trim() || 'often bought together'}`);
   return lines.join('\n');
 };

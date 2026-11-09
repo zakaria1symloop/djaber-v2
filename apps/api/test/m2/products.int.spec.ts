@@ -507,8 +507,9 @@ describe('archive, restore, hard delete, duplicate', () => {
     const p = await createProduct(owner, { name: 'Lampe', price: 12500, oldPrice: 15000, stock: 0 });
     expect((await owner.get('/workspace/onboarding').expect(200)).body.data.checklist.product).toBe(true);
     const card = await owner.get(`/products/${p.id}/card-preview`).expect(200);
-    expect(card.body.data).toMatchObject({ title: 'Lampe', price: 12500, oldPrice: 15000, imageUrl: null, visibleToCustomers: true, buttons: [{ title: 'Commander', disabled: true }] });
-    expect(card.body.data.subtitle).toBe(`${formatMoney(12500)} · (${formatMoney(15000)}) · Rupture de stock`);
+    // PV 09/11: the very card the customer receives (Messenger cannot grey a button out; the AI answers the stock)
+    expect(card.body.data).toMatchObject({ title: 'Lampe', price: 12500, oldPrice: 15000, imageUrl: null, visibleToCustomers: true, buttons: [{ title: 'Commander', payload: `ORDER:${p.id}` }] });
+    expect(card.body.data.subtitle).toBe(`${formatMoney(12500)} (${formatMoney(15000)})`);
     expect((await owner.get(`/products/${p.id}/card-preview`).set('Accept-Language', 'ar').expect(200)).body.data.buttons[0].title).toBe('اطلب الآن');
     expect((await owner.get('/workspace').expect(200)).body.data.plan.usage.products).toBe(1);
   });

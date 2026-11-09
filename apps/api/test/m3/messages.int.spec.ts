@@ -1,6 +1,6 @@
 // M3 — MSG-02…09: inbound message types, attachment download, echoes of manual replies, the batching hook, outbound
 // sends (24 h window, tags, skipped_window, retries, error mapping), product cards, retention purge.
-import { getMessages } from '@djaber/shared';
+import { formatMoney, getMessages } from '@djaber/shared';
 import { prisma, TenantContext, type Tx } from '@djaber/db';
 import { ProcessorRegistry } from '../../src/core/queue/processor.registry';
 import { jobId, QueueService } from '../../src/core/queue/queue.service';
@@ -443,11 +443,13 @@ describe('MSG-06 outbound rules', () => {
     expect(cards.map((c) => c.name)).toEqual(['Robe 1', 'Robe 2', 'Robe 3', 'Robe 4', 'Robe 5']);
     expect(message).toMatchObject({ type: 'product_cards', author: 'ai' });
     await work(app, [owner.workspaceId]);
-    const calls = sendsTo(sender).map((c) => c.args.message as { kind: string; text?: string; url?: string });
-    // card = image (when the product has one) + "name / price DA" text
-    expect(calls.filter((c) => c.kind === 'text')).toHaveLength(5);
-    expect(calls.filter((c) => c.kind === 'attachment')).toEqual([{ kind: 'attachment', type: 'image', url: 'https://cdn.djaber.test/p1.webp' }]);
-    expect(calls[1]!.text).toBe('Robe 1\n2 500 DA');
+    const calls = sendsTo(sender).map((c) => c.args.message as { kind: string; elements?: { title: string; subtitle?: string; imageUrl?: string; buttons: { title: string; payload: string }[] }[] });
+    // PV 09/11: the 5 cards are one generic template — picture when there is one, name, price, « Commander »
+    const template = calls.filter((c) => c.kind === 'generic');
+    expect(template).toHaveLength(1);
+    expect(template[0]!.elements!.map((e) => e.title)).toEqual(['Robe 1', 'Robe 2', 'Robe 3', 'Robe 4', 'Robe 5']);
+    expect(template[0]!.elements![0]).toEqual({ title: 'Robe 1', subtitle: formatMoney(2500), imageUrl: 'https://cdn.djaber.test/p1.webp', buttons: [{ title: 'Commander', payload: `ORDER:${products[0]!.id}` }] });
+    expect(template[0]!.elements![1]!.imageUrl).toBeUndefined();
     const view = (await owner.get(`/conversations/${conversation.id}/messages`).expect(200)).body.data[0];
     expect(view).toMatchObject({ type: 'product_cards', deliveryStatus: 'sent' });
     expect(view.payload.cards).toHaveLength(5);

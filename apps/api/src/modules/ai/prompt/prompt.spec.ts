@@ -205,9 +205,10 @@ describe('PromptBuilder', () => {
 
 describe('product sold at zero stock (PV 22/10)', () => {
   const base = { id: 'p-x', name: 'Coffret parfum', sku: 'COF-1', price: 3000, oldPrice: null, description: null, hasVariants: false, variants: [], imageUrl: null, imageKey: null, category: null, also: [] };
-  it('at STOCK 0 the block tells the model to take the order; in stock or switch off ⇒ no line', () => {
-    expect(productBlock({ ...base, stock: 0, sellOutOfStock: true }, 1, 200)).toContain('ORDERABLE AT ZERO STOCK');
-    expect(productBlock({ ...base, stock: 4, sellOutOfStock: true }, 1, 200)).not.toContain('ORDERABLE AT ZERO STOCK');
-    expect(productBlock({ ...base, stock: 0, sellOutOfStock: false }, 1, 200)).not.toContain('ORDERABLE AT ZERO STOCK');
+  it('switched on, the block tells the model to take the order whatever STOCK says (PV 09/11: it used to come at STOCK 0 only); off or a service ⇒ no line', () => {
+    expect(productBlock({ ...base, stock: 0, sellOutOfStock: true }, 1, 200)).toContain('ORDERABLE BEYOND STOCK');
+    expect(productBlock({ ...base, stock: 4, sellOutOfStock: true }, 1, 200)).toContain('ORDERABLE BEYOND STOCK');
+    expect(productBlock({ ...base, stock: 0, sellOutOfStock: false }, 1, 200)).not.toContain('ORDERABLE');
+    expect(productBlock({ ...base, stock: null, sellOutOfStock: true }, 1, 200)).not.toContain('ORDERABLE');
   });
 });

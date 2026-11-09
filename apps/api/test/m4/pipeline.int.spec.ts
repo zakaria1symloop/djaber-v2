@@ -1,6 +1,6 @@
 // M4 — FL-01 steps 6–15 end to end: inbound webhook (fake Meta) → gates → batching → `ai-reply` job → AiRun with tool
 // replay → reply through the outbox → credits. AT ids from 13-acceptance-tests.md. The AI adapter is the scriptable fake.
-import { getMessages } from '@djaber/shared';
+import { formatMoney, getMessages } from '@djaber/shared';
 import { RedisService } from '../../src/core/redis/redis.provider';
 import { ORDER_TOOLS, type OrderTools } from '../../src/modules/ai/tools/order-tools';
 import { CatalogueService } from '../../src/modules/ai/catalogue.service';
@@ -10,7 +10,7 @@ import { ConversationService } from '../../src/modules/messaging/conversation.se
 import { asOwner, type Actor } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
 import { createProduct, image, upload, drain } from '../support/m2';
-import { connectedPage, fakeMeta, forbidNetwork, newSender, receive, work } from '../support/m3';
+import { connectedPage, delivery, fakeMeta, forbidNetwork, newSender, postWebhook, receive, work } from '../support/m3';
 import { closeOutbox, withLimits, aiMessages, answer, balanceOf, db, fakeAi, feeRule, inTenant, ledger, linkedAgent, outMessages, replyJob, runReply, runsOf, setCredits, textRoute } from '../support/m4';
 
 let app: TestApp;
@@ -73,7 +73,9 @@ describe('FL-01 — reply turn', () => {
     expect(out[0]!.text).toBe(fr['customer.welcome']!.replace('{shop}', (await db.workspace.findUniqueOrThrow({ where: { id: s.owner.workspaceId } })).name));
     expect(out[1]!.text).toContain('Robe satin bordeaux — 4500 DA');
     expect((out[2]!.payload as any).cards.map((c: any) => c.productId)).toEqual([s.robe.id]);
-    expect(sends(sender).map((c) => c.args.message.kind)).toEqual(['text', 'text', 'text']); // welcome, reply, card caption (the card has no image)
+    // welcome, reply, then the card as a generic template with its « Commander » button (PV 09/11)
+    expect(sends(sender).map((c) => c.args.message.kind)).toEqual(['text', 'text', 'generic']);
+    expect(sends(sender)[2]!.args.message.elements).toEqual([{ title: 'Robe satin bordeaux', subtitle: formatMoney(4500), buttons: [{ title: 'Commander', payload: `ORDER:${s.robe.id}` }] }]);
     expect(sends(sender).every((c) => c.args.messagingType === 'RESPONSE' && !c.args.tag)).toBe(true);
 
     const [run] = await runsOf(conversation.id);
@@ -533,6 +535,48 @@ describe('tools', () => {
     expect(JSON.stringify([mine, phone, tracking])).not.toContain('CMD-4003');
     expect(invalid).toEqual({ ok: false, error: { code: 'VALIDATION', field: 'phone', example: '0555123456' } });
     expect(fakeAi(app).callsOf('reply').at(-1)!.system).toContain('Where is my order / tracking: call lookup_order');
+  });
+});
+
+describe('product cards on Messenger (PV 09/11)', () => {
+  it('a card is a generic template with « Commander » and « Plus de photos »; « Plus de photos » sends every approved picture as a gallery; a button tap names its product; buttons in the conversation language', async () => {
+    const s = await shop();
+    for (const n of ['a', 'b', 'c']) await upload(s.owner, app, `/products/${s.robe.id}/images`, 'file', [{ buffer: await image(800, 800), name: `${n}.jpg`, type: 'image/jpeg' }]).expect(201);
+    await s.owner.post(`/products/${s.robe.id}/submit-changes`, {}).expect(200);
+    await drain(app, s.owner.workspaceId);
+    const sender = newSender();
+    fakeAi(app).script('reply', { reply: 'Voici la robe.', status: 'OK', intent: 'SALE', productCards: [s.robe.id] });
+    await turn(s, sender, { text: 'la robe satin svp' });
+    const card = sends(sender).find((c) => c.args.message.kind === 'generic')!.args.message.elements[0];
+    expect(card).toMatchObject({ title: 'Robe satin bordeaux', subtitle: formatMoney(4500), imageUrl: expect.any(String), buttons: [{ title: 'Commander', payload: `ORDER:${s.robe.id}` }, { title: 'Plus de photos', payload: `PHOTOS:${s.robe.id}` }] });
+
+    // the customer taps « Plus de photos »: the message names the product, the 3 pictures go as one carousel
+    await resetAi();
+    fakeAi(app).script('reply', { reply: 'Voici toutes les photos.', status: 'OK', intent: 'SALE' });
+    const tap = (payload: string, title: string) => ({ sender: { id: sender }, recipient: { id: s.page.externalId }, timestamp: Date.now(), postback: { mid: `m_${Math.random().toString(36).slice(2)}`, title, payload } });
+    await postWebhook(app, delivery(s.page, [tap(`PHOTOS:${s.robe.id}`, 'Plus de photos')])).expect(200);
+    await work(app, [s.owner.workspaceId]);
+    const conv = await db.conversation.findFirstOrThrow({ where: { channelId: s.page.id, externalSenderId: sender } });
+    const asked = await db.message.findFirstOrThrow({ where: { conversationId: conv.id, type: 'postback' }, orderBy: { createdAt: 'desc' } });
+    expect(asked.text).toBe('Plus de photos · Robe satin bordeaux');
+    await answer(app, s.owner.workspaceId, conv.id);
+    const gallery = (await outMessages(conv.id)).filter((m) => m.type === 'product_cards').at(-1)!;
+    expect(gallery.payload).toMatchObject({ gallery: true, locale: 'fr', cards: [{ photo: { n: 1, total: 3 } }, { photo: { n: 2, total: 3 } }, { photo: { n: 3, total: 3 } }] });
+    const carousel = sends(sender).filter((c) => c.args.message.kind === 'generic').at(-1)!.args.message.elements;
+    expect(carousel).toHaveLength(3);
+    expect(carousel[1]).toMatchObject({ subtitle: `Photo 2/3 · ${formatMoney(4500)}`, buttons: [{ title: 'Commander', payload: `ORDER:${s.robe.id}` }] });
+    expect(new Set(carousel.map((e: any) => e.imageUrl)).size).toBe(3);
+
+    // « Commander »: the AI reads which product; in Arabic the buttons are Arabic
+    await resetAi();
+    await postWebhook(app, delivery(s.page, [tap(`ORDER:${s.robe.id}`, 'Commander')])).expect(200);
+    await work(app, [s.owner.workspaceId]);
+    expect((await db.message.findFirstOrThrow({ where: { conversationId: conv.id, type: 'postback' }, orderBy: { createdAt: 'desc' } })).text).toBe('Commander · Robe satin bordeaux');
+    await answer(app, s.owner.workspaceId, conv.id);
+    const arabic = newSender();
+    fakeAi(app).script('reply', { reply: 'هذي هي', status: 'OK', intent: 'SALE', productCards: [s.robe.id] });
+    await turn(s, arabic, { text: 'بشحال الروب ساتان؟' });
+    expect(sends(arabic).find((c) => c.args.message.kind === 'generic')!.args.message.elements[0].buttons.map((b: any) => b.title)).toEqual(['اطلب الآن', 'صور أخرى']);
   });
 });
 

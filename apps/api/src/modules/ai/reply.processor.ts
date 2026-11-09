@@ -22,6 +22,7 @@ import { BatchingService, type AiReplyJob } from '../messaging/batching.service'
 import { ConversationService } from '../messaging/conversation.service';
 import { attachmentsOf, contextOf, type ConversationContext } from '../messaging/messaging.presenter';
 import { OutboundSendService } from '../messaging/outbound-send.service';
+import { CARD_POSTBACK } from '../messaging/product-card';
 import { containsBlockedWord } from '../messaging/safety.service';
 import { withinWindow } from '../messaging/window-rules';
 import { META_GATEWAY, type MetaGateway } from '../meta/meta.gateway';
@@ -330,6 +331,13 @@ export class ReplyProcessor implements OnModuleInit {
     const blocked = await this.blockedWord(conv.workspaceId, out.reply);
     // AI-14: cards only for products the agent may sell right now
     const cards = blocked ? [] : (await this.catalogue.byIds(agent, out.productCards)).map((p) => p.id);
+    // PV 09/11 « l'agent répond avec seulement l'image principale »: every picture of a product (a gallery) when the customer
+    // tapped « Plus de photos » on a card or asked for more photos (`productPhotos`) — products the agent may sell only
+    const askedPhotos = batch.messages.flatMap((m) => {
+      const hit = CARD_POSTBACK.exec((m.payload as { postback?: string } | null)?.postback ?? '');
+      return hit && hit[1]!.toUpperCase() === 'PHOTOS' ? [hit[2]!] : [];
+    });
+    const galleries = blocked ? [] : (await this.catalogue.byIds(agent, [...new Set([...askedPhotos, ...(out.productPhotos ?? [])])])).map((p) => p.id).slice(0, 2);
     const toolProducts = turn.tools.flatMap((t) => ((t.result as { products?: { id: string }[] } | null)?.products ?? []).map((p) => p.id).slice(0, 3));
     const last = batch.messages[batch.messages.length - 1]!;
     const streak = (contextOf(conv).unclearStreak ?? 0) + (out.status === 'UNCLEAR' ? 1 : 0);
@@ -375,6 +383,7 @@ export class ReplyProcessor implements OnModuleInit {
       if (replyText) replyId = (await this.outbound.store(tx, conv.id, { author: 'ai', kind: 'ai', text: replyText, aiRunId: run.id })).message.id;
       // §16: the text first, then ≤ 5 cards as their own message
       if (replyText && cards.length) await this.outbound.sendCards(conv.id, cards, { tx, aiRunId: run.id, author: 'ai', kind: 'ai' });
+      for (const id of galleries) await this.outbound.sendCards(conv.id, [id], { tx, aiRunId: run.id, author: 'ai', kind: 'ai', gallery: true });
       // REC-03: the cross-sell suggestions of a sent reply count as impressions (≤ 3, active rules only)
       if (replyId && out.recommendations?.length) await this.crossSell.impressions(tx, conv.id, out.recommendations);
 

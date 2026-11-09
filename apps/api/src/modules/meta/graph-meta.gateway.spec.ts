@@ -190,12 +190,12 @@ describe('send API (05 §1.4)', () => {
     await graph.send(page, { recipientId, message: { kind: 'text', text: 'Je reviens vers vous' }, messagingType: 'MESSAGE_TAG', tag: 'HUMAN_AGENT' });
     await graph.send(page, { recipientId, message: { kind: 'text', text: 'Votre commande est en route' }, messagingType: 'MESSAGE_TAG', tag: 'POST_PURCHASE_UPDATE' });
     await graph.send(page, { recipientId, message: { kind: 'attachment', type: 'image', url: 'https://cdn.djaber.ai/ws/1/p.webp' }, messagingType: 'RESPONSE' });
-    await graph.send(page, { recipientId, message: { kind: 'generic', elements: [{ title: 'Robe', subtitle: '2 500 DA', imageUrl: 'https://cdn.djaber.ai/r.webp', productId: 'p1' }] }, messagingType: 'RESPONSE' });
+    await graph.send(page, { recipientId, message: { kind: 'generic', elements: [{ title: 'Robe', subtitle: '2 500 DA', imageUrl: 'https://cdn.djaber.ai/r.webp', buttons: [{ title: 'Commander', payload: 'ORDER:p1' }, { title: 'Plus de photos', payload: 'PHOTOS:p1' }] }] }, messagingType: 'RESPONSE' });
     expect(bodyOf(0)).toEqual({ recipient: { id: recipientId }, messaging_type: 'MESSAGE_TAG', tag: 'HUMAN_AGENT', message: { text: 'Je reviens vers vous' } });
     expect(bodyOf(1)).toMatchObject({ messaging_type: 'MESSAGE_TAG', tag: 'POST_PURCHASE_UPDATE' });
     expect(bodyOf(2)).toEqual({ recipient: { id: recipientId }, messaging_type: 'RESPONSE', message: { attachment: { type: 'image', payload: { url: 'https://cdn.djaber.ai/ws/1/p.webp', is_reusable: true } } } });
     expect(bodyOf(3).message).toEqual({
-      attachment: { type: 'template', payload: { template_type: 'generic', elements: [{ title: 'Robe', subtitle: '2 500 DA', image_url: 'https://cdn.djaber.ai/r.webp', buttons: [{ type: 'postback', title: 'Commander', payload: 'ORDER:p1' }] }] } },
+      attachment: { type: 'template', payload: { template_type: 'generic', elements: [{ title: 'Robe', subtitle: '2 500 DA', image_url: 'https://cdn.djaber.ai/r.webp', buttons: [{ type: 'postback', title: 'Commander', payload: 'ORDER:p1' }, { type: 'postback', title: 'Plus de photos', payload: 'PHOTOS:p1' }] }] } },
     });
   });
 

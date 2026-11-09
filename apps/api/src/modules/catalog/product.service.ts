@@ -19,6 +19,7 @@ import { PlanLimitService } from './plan-limit.service';
 import { folderOf, IMAGE_FILE, isProcessed, THUMB_FILE, thumbUrlOf } from './product-image.util';
 import { approvedImages } from './approved-content';
 import { isProposed, LIST_INCLUDE, toImageView, toListItem, toVariantView, unitOf, type ProductListRow } from './product.presenter';
+import { cardElement, cardLabels, productCards } from '../messaging/product-card';
 import { findProductIds } from './product.query';
 import { SkuService } from './sku.service';
 import { StockService, reservedQuantities } from './stock.service';
@@ -464,22 +465,18 @@ export class ProductService implements OnModuleInit {
   /** `GET /products/:id/card-preview` — the generic-template card a customer receives on Messenger (data, not HTML). */
   async cardPreview(id: string, locale: string) {
     const p = await this.rowOrNotFound(id);
-    const out = p.trackStock && (p.stock ?? 0) <= 0;
-    const labels: Record<string, { order: string; out: string }> = {
-      fr: { order: 'Commander', out: 'Rupture de stock' },
-      ar: { order: 'اطلب الآن', out: 'غير متوفر' },
-      en: { order: 'Order', out: 'Out of stock' },
-    };
-    const l = labels[locale] ?? labels.fr!;
-    const full = await prisma.productImage.findFirst({ where: { productId: id, isPrimary: true }, select: { url: true } });
+    // PV 09/11 « aperçu carte Messenger visuel incohérent, pas de bouton commander »: the very card the AI sends (approved
+    // content, variants and price range, buttons), built by the same function as the send
+    const [card] = await productCards(prisma, [id], { ai: true });
+    const element = card ? cardElement(card, cardLabels(locale === 'ar' || locale === 'en' ? locale : 'fr')) : null;
     return {
-      title: p.name.slice(0, 80),
-      subtitle: [formatMoney(p.price), p.oldPrice ? `(${formatMoney(p.oldPrice)})` : null, out ? l.out : null].filter(Boolean).join(' · ').slice(0, 80),
-      imageUrl: full?.url ?? null,
-      price: p.price,
+      title: element?.title ?? p.name.slice(0, 80),
+      subtitle: element?.subtitle ?? formatMoney(p.price),
+      imageUrl: element?.imageUrl ?? null,
+      price: card?.price ?? p.price,
       oldPrice: p.oldPrice,
       variants: p.hasVariants ? p.variants.filter((v) => v.isActive).map((v) => v.name) : [],
-      buttons: [{ type: 'postback' as const, title: l.order, payload: `ORDER:${p.id}`, disabled: out }],
+      buttons: (element?.buttons ?? []).map((b) => ({ type: 'postback' as const, title: b.title, payload: b.payload, disabled: false })),
       visibleToCustomers: isProposed(p),
     };
   }

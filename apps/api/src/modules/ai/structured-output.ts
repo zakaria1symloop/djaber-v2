@@ -11,6 +11,8 @@ export const AiReplyOutputSchema = z
     statusDetail: z.string().max(200).optional(),
     intent: z.enum(AI_REPLY_INTENTS),
     productCards: z.array(z.string()).max(5),
+    /** PV 09/11: products whose every picture is sent (a gallery) — when the customer asks for more / other photos */
+    productPhotos: z.array(z.string()).max(2).optional(),
     recommendations: z.array(z.object({ sourceId: z.string(), recommendedId: z.string() })).max(3),
     confidence: z.number().min(0).max(1),
     language: z.enum(AI_LANGUAGES).optional(),
@@ -33,6 +35,7 @@ export const AI_REPLY_JSON_SCHEMA = {
     statusDetail: { type: 'string', maxLength: 200 },
     intent: { enum: [...AI_REPLY_INTENTS] },
     productCards: { type: 'array', maxItems: 5, items: { type: 'string', description: 'productId' } },
+    productPhotos: { type: 'array', maxItems: 2, items: { type: 'string', description: 'productId whose every photo is sent' } },
     recommendations: { type: 'array', maxItems: 3, items: { type: 'object', required: ['sourceId', 'recommendedId'], properties: { sourceId: { type: 'string' }, recommendedId: { type: 'string' } } } },
     confidence: { type: 'number', minimum: 0, maximum: 1 },
     language: { enum: [...AI_LANGUAGES] },
@@ -114,6 +117,7 @@ export const normalizeReplyObject = (o: Record<string, unknown>): Record<string,
     ...(detail ? { statusDetail: detail.slice(0, 200) } : {}),
     intent: upper(o.intent, AI_REPLY_INTENTS) ?? 'OTHER',
     productCards: ids(o.productCards).slice(0, 5),
+    ...(ids(o.productPhotos).length ? { productPhotos: ids(o.productPhotos).slice(0, 2) } : {}),
     recommendations: (Array.isArray(o.recommendations) ? o.recommendations : [])
       .flatMap((r) => {
         const s = r && typeof r === 'object' ? str((r as Record<string, unknown>).sourceId) : undefined;
