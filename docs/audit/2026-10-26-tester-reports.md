@@ -96,11 +96,11 @@ Status: `todo` · `done` (commit) · `deferred` (reason).
 ## Meeting PV of 09/11 (`2026-11-09-pv-djaber.md`, prefix **PV09**)
 | # | Issue | Status |
 |---|---|---|
-| PV09-1 | General AI answer problem, confusions | done (stock rule, button taps, galleries; real transcripts still to review) |
-| PV09-2 | Products approved at once without moderation, not shown on the super admin dashboard | done |
-| PV09-3 | Ordering below the stock: the agent refuses, it accepts only at stock 0 | done |
-| PV09-4 | Products with a banned name are shown | done |
-| PV09-5 | Banned words in several languages (ar, fr, en) | done |
-| PV09-6 | The agent sends only the main picture, never the others | done |
-| PV09-7 | Product sheet: category and stock alert missing | done |
-| PV09-8 | Messenger card preview incoherent, no « Commander » button | done |
+| PV09-1 | General AI answer problem, confusions | done (aa513c3; real transcripts still to review) |
+| PV09-2 | Products approved at once without moderation, not shown on the super admin dashboard | done (d18664a) |
+| PV09-3 | Ordering below the stock: the agent refuses, it accepts only at stock 0 | done (aa513c3) |
+| PV09-4 | Products with a banned name are shown | done (d18664a) |
+| PV09-5 | Banned words in several languages (ar, fr, en) | done (d18664a) |
+| PV09-6 | The agent sends only the main picture, never the others | done (aa513c3) |
+| PV09-7 | Product sheet: category and stock alert missing | done (68d51de) |
+| PV09-8 | Messenger card preview incoherent, no « Commander » button | done (aa513c3) |
