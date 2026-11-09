@@ -66,7 +66,8 @@ export function SettingsPage() {
       limitsValue: l,
       limits: Object.fromEntries(LIMIT_FIELDS.map((f) => [f, String(l[f])])) as LimitsForm,
       contacts: { accountDeletionUrl: c.accountDeletionUrl ?? '', dpoEmail: c.dpoEmail ?? '' },
-      manualReview: settingValue<Partial<ModerationPolicy>>(settings.data, 'moderation_policy')?.manualReviewAll === true,
+      // PV 09/11: no setting ⇒ manual review (as the API)
+      manualReview: settingValue<Partial<ModerationPolicy>>(settings.data, 'moderation_policy')?.manualReviewAll !== false,
     };
   }, [settings.data]);
   const formLimits = limits ?? base?.limits ?? null;

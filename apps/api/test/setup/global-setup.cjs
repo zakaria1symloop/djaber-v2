@@ -104,6 +104,17 @@ module.exports = async () => {
   const opts = { cwd: resolve(ROOT, 'packages/db'), env: { ...process.env, ...env }, stdio: 'pipe' };
   execSync('npx prisma migrate deploy', opts);
   execSync('npx tsx seeds/index.ts', opts);
+  // PV 09/11: without a `moderation_policy` the platform reviews every product by hand. The suites are written for the
+  // pre-screen (a clean product of a standard shop is approved at once, the AI sells it): the test platform says so;
+  // test/m10/moderation.int checks the default without this row.
+  {
+    const pg = new Client(DATABASE_URL);
+    await pg.connect();
+    await pg.query(`INSERT INTO "PlatformSetting" ("id", "key", "value", "version", "updatedById", "updatedAt")
+      SELECT uuid_generate_v7(), 'moderation_policy', '{"manualReviewAll": false}'::jsonb, 1, "id", now() FROM "User" WHERE "platformRole" IS NOT NULL ORDER BY "createdAt" LIMIT 1
+      ON CONFLICT ("key") DO UPDATE SET "value" = EXCLUDED."value"`);
+    await pg.end();
+  }
 
   // flush this run's redis db
   const Redis = require('ioredis');

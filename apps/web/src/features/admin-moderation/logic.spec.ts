@@ -17,11 +17,11 @@ describe('ADM-10 tabs', () => {
     expect(tabQuery('prompts')).toEqual({ type: ['agent_prompt'] });
     expect(tabQuery('rejected')).toMatchObject({ status: ['rejected', 'appeal_rejected'], sort: '-submittedAt' });
   });
-  it('reads the tab counts from the KPIs (none for the sample)', () => {
+  it('reads the tab counts from the KPIs (« Auto-approuvés » = the 7-day KPI, PV 09/11)', () => {
     expect(tabCount('todo', stats)).toBe(23);
     expect(tabCount('appeals', stats)).toBe(3);
     expect(tabCount('rejected', stats)).toBe(31);
-    expect(tabCount('sample', stats)).toBeNull();
+    expect(tabCount('sample', stats)).toBe(stats.autoApproved7d);
     expect(tabCount('todo', undefined)).toBeNull();
   });
 });

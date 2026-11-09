@@ -34,7 +34,7 @@ export function tabQuery(tab: ModTab): ApiQuery {
   }
 }
 
-/** Tab counts from the KPIs (the sample tab carries no count in the frame). */
+/** Tab counts from the KPIs. */
 export function tabCount(tab: ModTab, s: ModerationStatsDto | undefined): number | null {
   if (!s) return null;
   switch (tab) {
@@ -48,6 +48,8 @@ export function tabCount(tab: ModTab, s: ModerationStatsDto | undefined): number
       return s.rejected7d;
     case 'prompts':
       return s.agentPrompts;
+    case 'sample':
+      return s.autoApproved7d;
     default:
       return null;
   }

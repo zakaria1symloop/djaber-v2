@@ -74,4 +74,16 @@ describe('moderation pre-screen', () => {
     expect(foldText('تَقْلِيـــد')).toBe('تقليد');
     expect(svc.isSensitive('مستحضرات التجميل', rules)).toBe(true);
   });
+  it('PV 09/11: an Arabic banned word is found with its article, particles and endings, whatever the hamza / ta marbuta spelling', () => {
+    const ar = { ...rules, words: ['خمر', 'أسلحة', 'arnaque'] };
+    expect(foldText('أسلحة')).toBe(foldText('اسلحه'));
+    expect(svc.score({ ...base, name: 'بيع الخمر الأصلي' }, ar, null).banned).toMatchObject({ code: 'blocked_word', word: 'خمر', field: 'name' });
+    expect(svc.score({ ...base, description: 'توصيل بالخمر لكل الولايات' }, ar, null).banned).toMatchObject({ word: 'خمر', field: 'description' });
+    expect(svc.score({ ...base, name: 'اسلحه للبيع' }, ar, null).banned).toMatchObject({ word: 'أسلحة' });
+    expect(svc.score({ ...base, name: 'والأسلحة' }, ar, null).banned).toMatchObject({ word: 'أسلحة' });
+    // a longer word that merely contains it is not a hit
+    expect(svc.score({ ...base, name: 'خمرية اللون' }, ar, null).banned).toBeUndefined();
+    // French / English whole words as before
+    expect(svc.score({ ...base, name: 'Arnaques' }, ar, null).banned).toBeUndefined();
+  });
 });

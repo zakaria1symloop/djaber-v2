@@ -445,12 +445,14 @@ export class ModerationService {
     });
   }
 
-  /** "Auto-approuvés (échantillon)": the deterministic 5 % of the auto-approved items of the last 7 days. */
+  /**
+   * « Auto-approuvés »: every auto-approved item of the last 7 days (the KPI tile), newest first — PV 09/11 (« ne s'affichent pas dans le
+   * dashboard super admin »): a 5 % sample hid almost every product the pre-screen let through.
+   */
   async sample(q: { page: number; pageSize: number }, actor: PlatformActor, canWrite: boolean): Promise<Page<ModerationItemDto>> {
     return sys(async () => {
       const ids = await prisma.$queryRaw<{ id: string }[]>`
         SELECT "id" FROM "ModerationItem" WHERE "status" = 'auto_approved' AND "decidedAt" >= now() - interval '7 days'
-          AND ('x' || substr(encode(sha256(('sample:' || "id"::text)::bytea), 'hex'), 1, 4))::bit(16)::int % 100 < ${MODERATION_SAMPLE_PCT}
         ORDER BY "decidedAt" DESC, "id" DESC`;
       const slice = ids.slice((q.page - 1) * q.pageSize, q.page * q.pageSize).map((r) => r.id);
       const rows = slice.length ? await prisma.moderationItem.findMany({ where: { id: { in: slice } }, include }) : [];

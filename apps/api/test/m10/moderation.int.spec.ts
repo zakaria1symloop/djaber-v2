@@ -148,6 +148,23 @@ describe('pre-screen and auto-approval', () => {
     expect((await createProduct(await merchant('trusted'), { name: 'Sac à dos cuir', description: 'Cuir, fait main.' })).moderation.status).toBe('approved');
   });
 
+  it('PV 09/11: without a moderation policy the platform reviews every product by hand (no auto-approval); a banned Arabic word is refused with its article', async () => {
+    const kept = await db.platformSetting.findUniqueOrThrow({ where: { key: 'moderation_policy' } });
+    await db.platformSetting.delete({ where: { key: 'moderation_policy' } });
+    try {
+      const owner = await merchant('trusted');
+      const p = await createProduct(owner, { name: 'Sac à dos jean', description: 'Jean épais, fait main.' });
+      expect(p.moderation.status).toBe('pending');
+      expect(await catalogueSees(owner.workspaceId, p.id)).toBeNull();
+      const rule = (await sa.post('/admin/moderation/rules', { key: 'blocked_word.ar.test-khamr', kind: 'blocked_word', value: 'خمر', locale: 'ar' }).expect(201)).body.data;
+      const banned = await createProduct(owner, { name: 'بيع الخمر', description: 'توصيل سريع' });
+      expect(banned.moderation.status).toBe('rejected');
+      await sa.delete(`/admin/moderation/rules/${rule.id}`).expect(200);
+    } finally {
+      await db.platformSetting.create({ data: { key: kept.key, value: kept.value as never, updatedById: kept.updatedById } });
+    }
+  });
+
   it('AT-MOD-02 a change waiting for review keeps the last approved snapshot selling (AI shows the old name); a price change is never reviewed and is live at once (PV 08/11)', async () => {
     const owner = await merchant('standard');
     const p = await createProduct(owner, { name: 'Robe kabyle', price: 4000 });
@@ -452,13 +469,15 @@ describe('rules, stats, sample, SLA', () => {
     await (await platformUser(app, 'support')).post('/admin/moderation/rules', { key: 'x.y', kind: 'blocked_word', value: 'arnaque' }).expect(403);
   });
 
-  it('stats KPIs and the 5 % auto-approved sample', async () => {
+  it('stats KPIs and every auto-approved item of the last 7 days (PV 09/11: it was a 5 % sample)', async () => {
     const stats = (await mod.get('/admin/moderation/stats?period=30d').expect(200)).body.data;
     expect(stats).toEqual(expect.objectContaining({ pending: expect.any(Number), overSla: expect.any(Number), autoApproved7d: expect.any(Number), rejectedByReason: expect.any(Array), suspensionProposed: expect.any(Array) }));
     expect(stats.rejectedByReason.find((r: { decision: string }) => r.decision === 'counterfeit')?.count).toBeGreaterThanOrEqual(1);
     const sample = (await mod.get('/admin/moderation/sample').expect(200)).body;
     expect(sample.meta).toMatchObject({ page: 1, pageSize: 25 });
-    for (const r of sample.data) expect(r).toMatchObject({ status: 'auto_approved', sampled: true });
+    for (const r of sample.data) expect(r).toMatchObject({ status: 'auto_approved' });
+    expect(sample.meta.total).toBe(await db.moderationItem.count({ where: { status: 'auto_approved', decidedAt: { gte: new Date(Date.now() - 7 * 86_400_000) } } }));
+    expect(sample.meta.total).toBe(stats.autoApproved7d);
   });
 
   it('AT-MOD-08 (job) sched-moderation-sla: pending past slaDueAt ⇒ urgent + platform.alert sla_breach', async () => {

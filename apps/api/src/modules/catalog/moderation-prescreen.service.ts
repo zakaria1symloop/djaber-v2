@@ -30,19 +30,31 @@ export type PrescreenResult = { aiScore: number; aiFlags: ModerationAiFlagView[]
 export type BannedHit = { code: 'blocked_word' | 'prohibited_category'; word: string; field: string };
 export type AutoDecision = { approve: boolean; result: PrescreenResult };
 
-/** Case / diacritic-insensitive comparison form (Latin + Arabic marks, tatweel). */
+// PV 09/11 « les mots interdits multi langue ar fr en »: accents and Arabic marks go (the hamza forms أ إ آ are plain alef
+// after NFD, U+0653–U+0655), ة is ه and ى is ي — « خمرة » / « اسلحة » match the other spellings
 export const foldText = (s: string) =>
   s
     .normalize('NFD')
-    .replace(/[̀-ًͯ-ْـ]/g, '')
+    .replace(/[̀-ًͯ-ٕـ]/g, '')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
     .toLowerCase();
 const containsAny = (hay: string, needles: readonly string[]) => needles.find((n) => n.trim().length > 1 && hay.includes(foldText(n).trim())) ?? null;
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-/** Whole-word hit (a letter or digit next to it ends the match): « drug » in « drug test », not in « drugstore ». */
+const ARABIC = /[؀-ۿ]/;
+// Arabic writes the article, « and », « with », « for »… and the plural / feminine endings onto the word itself
+const AR_PREFIX = '(?:وال|فال|بال|كال|لل|ال|و|ف|ب|ك|ل)?';
+const AR_SUFFIX = '(?:ات|ين|ون|ان|ه|ي)?';
+/**
+ * Whole-word hit (a letter or digit next to it ends the match): « drug » in « drug test », not in « drugstore »; an Arabic
+ * word with its attached article / particles / endings too (« الخمر », « بالخمر », « مخدراتهم » excepted).
+ */
 const containsWord = (hay: string, needles: readonly string[]) =>
   needles.find((n) => {
     const w = foldText(n).trim();
-    return w.length > 1 && new RegExp(`(?:^|[^\\p{L}\\p{N}])${escapeRe(w)}(?:$|[^\\p{L}\\p{N}])`, 'u').test(hay);
+    if (w.length <= 1) return false;
+    const core = ARABIC.test(w) ? `${AR_PREFIX}${escapeRe(w.replace(/^ال/, ''))}${AR_SUFFIX}` : escapeRe(w);
+    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${core}(?:$|[^\\p{L}\\p{N}])`, 'u').test(hay);
   }) ?? null;
 
 /** 04 §12: sensitive categories = electronics, health / supplements, children, cosmetics (editable by super admin). */
@@ -102,7 +114,9 @@ export class ModerationPrescreenService {
       words: [...of('blocked_word'), ...words.map((w) => w.word)],
       sensitive: [...(stored?.length ? stored : DEFAULT_SENSITIVE_KEYWORDS), ...of('sensitive_category')],
       priceRefs: rules.filter((r) => r.kind === 'price_reference' && r.referencePrice !== null).map((r) => ({ value: r.value, price: r.referencePrice!, categoryId: r.categoryId })),
-      manualReviewAll: (policy?.value as { manualReviewAll?: boolean } | null)?.manualReviewAll === true,
+      // PV 09/11 « les produits sont directement validés sans aucune modération »: every product waits for a super admin
+      // unless the platform switched auto-approval on (Paramètres plateforme › Modération)
+      manualReviewAll: (policy?.value as { manualReviewAll?: boolean } | null)?.manualReviewAll !== false,
     };
   }
 
