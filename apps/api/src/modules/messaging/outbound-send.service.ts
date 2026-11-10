@@ -138,7 +138,32 @@ export class OutboundSendService implements OnModuleInit {
   /** Locale of a customer text: the customer's last language, else the workspace locale. */
   private localeOf(conv: Pick<Conversation, 'context'>, workspaceLocale: string): AppLocale {
     const l = contextOf(conv).lastLanguage;
-    return isAppLocale(l) ? l : isAppLocale(workspaceLocale) ? workspaceLocale : 'fr';
+    const fallback: AppLocale = isAppLocale(workspaceLocale) ? workspaceLocale : 'fr';
+    // recette 09/11 (Badro): a customer writing darija in Latin letters (arabizi) or a mix got the shop's text in the
+    // workspace language (English for that shop) — the conversation's language decides, as in the prompt
+    return l ? systemLocale(l, fallback) : fallback;
+  }
+
+  /** The text `sendSystemText` would send for this key (workspace text or catalogue), or null when nothing would go out. */
+  async systemTemplate(tx: Tx, conversationId: string, key: string, lang?: string): Promise<string | null> {
+    const conv = await tx.conversation.findFirst({ where: { id: conversationId } });
+    if (!conv) return null;
+    const ws = await tx.workspace.findUniqueOrThrow({ where: { id: conv.workspaceId }, select: { locale: true, systemMessages: true } });
+    // `lang`: the language of the turn being answered (it becomes the conversation's language when the turn is stored)
+    const at = lang ? { context: { ...contextOf(conv), lastLanguage: lang } as Prisma.JsonValue } : conv;
+    return this.templateOf(key, this.localeOf(at, ws.locale), ws.systemMessages);
+  }
+
+  private templateOf(key: string, locale: AppLocale, systemMessages: unknown): string | null {
+    let template: string | undefined;
+    if (WORKSPACE_KEYS.has(key)) {
+      const custom = (systemMessages as Record<string, Record<string, string>> | null)?.[key];
+      // an empty workspace text means "do not send" (welcome); a missing one falls back to the default
+      if (custom && typeof custom[locale] === 'string') template = custom[locale];
+      else if (custom && typeof custom.fr === 'string') template = custom.fr;
+    }
+    template ??= getMessages(locale)[`customer.${key}`];
+    return template && template.trim() ? template : null;
   }
 
   /**
@@ -160,16 +185,8 @@ export class OutboundSendService implements OnModuleInit {
       const now = new Date();
       if (o.oncePer24h && last && now.getTime() - Date.parse(last) < DAY_MS) return null;
       const ws = await tx.workspace.findUniqueOrThrow({ where: { id: conv.workspaceId }, select: { name: true, locale: true, systemMessages: true } });
-      const locale = this.localeOf(conv, ws.locale);
-      let template: string | undefined;
-      if (WORKSPACE_KEYS.has(key)) {
-        const custom = (ws.systemMessages as Record<string, Record<string, string>> | null)?.[key];
-        // an empty workspace text means "do not send" (welcome); a missing one falls back to the default
-        if (custom && typeof custom[locale] === 'string') template = custom[locale];
-        else if (custom && typeof custom.fr === 'string') template = custom.fr;
-      }
-      template ??= getMessages(locale)[`customer.${key}`];
-      if (!template || !template.trim()) return null;
+      const template = this.templateOf(key, this.localeOf(conv, ws.locale), ws.systemMessages);
+      if (!template) return null;
       const text = formatMessage(template, { shop: ws.name, ...params });
       const patch: Prisma.ConversationUncheckedUpdateInput = { ...(o.patch ?? {}), context: { ...((o.patch?.context as object | undefined) ?? {}), lastSystemTextAt: { ...(ctx.lastSystemTextAt ?? {}), [key]: now.toISOString() } } as Prisma.InputJsonValue };
       const { message } = await this.store(tx, conversationId, { author: o.author ?? 'system', kind: o.kind ?? 'system', text, payload: { templateKey: key }, authorUserId: o.authorUserId ?? null }, { patch, now });

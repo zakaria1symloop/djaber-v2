@@ -5,6 +5,13 @@ import { CREDIT_COST } from '@djaber/shared';
 export const MAX_STEPS = 4;
 /** §3: last messages of the conversation given to the model. */
 export const HISTORY_MESSAGES = 30;
+/**
+ * recette 09/11 (Badro: « continues from the previous conversation when I start a brand new one »): Messenger keeps one
+ * thread per customer, so a customer back after this long starts a new visit — the history says so (NEW_VISIT).
+ */
+export const NEW_VISIT_AFTER_MS = 6 * 3_600_000;
+export const NEW_VISIT_NOTE =
+  '[NEW VISIT: the customer writes again after a long pause. The messages above are an earlier visit: answer this new message for itself — do not resume, recap or continue the earlier product, order or question unless the customer refers to it. Keep only what you know of them (name, phone, address) for a new order.]';
 /** §3.5 (D34): above this many products in scope the catalogue is retrieved instead of listed. */
 export const FULL_CATALOGUE_MAX = 60;
 export const RETRIEVAL_TOP = 30;

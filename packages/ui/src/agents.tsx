@@ -340,9 +340,11 @@ export function RangeSlider({ id, value, onChange, min, max, step = 1, label, fo
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-ink-raised-high accent-white disabled:cursor-not-allowed disabled:opacity-50"
+        // recette 09/11 (Badro): the dark track and white thumb were hard to see — the chosen part is filled in blue
+        style={{ background: `linear-gradient(to right, var(--accent-inbound) ${max > min ? ((value - min) / (max - min)) * 100 : 0}%, var(--line-edge) 0)` }}
+        className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full accent-accent-inbound disabled:cursor-not-allowed disabled:opacity-50 [&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-accent-inbound [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-accent-inbound"
       />
-      <output htmlFor={id} className="w-24 shrink-0 text-end text-[13px] tabular-nums text-text-primary">
+      <output htmlFor={id} className="w-24 shrink-0 text-end text-[13px] font-medium tabular-nums text-accent-inbound">
         <bdi dir="ltr">{format(value)}</bdi>
       </output>
     </div>

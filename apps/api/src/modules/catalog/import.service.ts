@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { prisma, TenantContext, type Job, type Prisma, type Tx } from '@djaber/db';
 import { IMPORT_FIELDS, IMPORT_MAX_BYTES, IMPORT_MAX_ROWS, systemUnitText, type ImportField, type ImportMappingInput, type ImportPreviewResult, type ImportPreviewRow } from '@djaber/shared';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
+import { I18nService } from '../../core/i18n/i18n.service';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { StorageService } from '../../core/storage/storage.service';
 import { JobService } from '../jobs/job.service';
@@ -33,6 +34,7 @@ export class ImportService implements OnModuleInit {
     private readonly stock: StockService,
     private readonly limits: PlanLimitService,
     private readonly moderation: ModerationHookService,
+    private readonly i18n: I18nService,
   ) {}
 
   onModuleInit() {
@@ -230,14 +232,25 @@ export class ImportService implements OnModuleInit {
     });
   }
 
-  /** CSV of the skipped rows: file line, SKU, name, field in error, error code (one line per error). Stored under `private/`. */
+  /**
+   * CSV of the skipped rows: file line, SKU, name, field in error, the reason in the importer's language and its code (one
+   * line per error). Stored under `private/`, named after the imported file (recette 09/11 UX-044: the column held only
+   * « validation.price » and the file was « <job id>-errors.csv »).
+   */
   private async errorReport(job: Job, preview: ImportPreviewResult): Promise<string | undefined> {
     const t = TenantContext.get();
     if (!job.createdById) return undefined;
-    type Line = { row: number; sku: string; name: string; field: string; code: string };
+    const user = await prisma.user.findUnique({ where: { id: job.createdById }, select: { locale: true } });
+    const locale = user?.locale ?? t.locale ?? 'fr';
+    const reason = (code: string, params?: Record<string, string | number>) => {
+      const key = code.startsWith('validation.') ? code : `error.${code}`;
+      const text = this.i18n.t(locale, key, { min: '', max: '', row: '', count: '', ...(params ?? {}) }).replace(/\s+/g, ' ').trim();
+      return text && text !== key && text !== code ? text : code;
+    };
+    type Line = { row: number; sku: string; name: string; field: string; reason: string; code: string };
     const lines: Line[] = preview.rows
       .filter((r) => !r.ok)
-      .flatMap((r) => r.errors.map((e) => ({ row: r.row, sku: String(r.values.sku ?? ''), name: String(r.values.name ?? ''), field: e.field ? (preview.mapping[e.field] ?? e.field) : '', code: e.code })));
+      .flatMap((r) => r.errors.map((e) => ({ row: r.row, sku: String(r.values.sku ?? ''), name: String(r.values.name ?? ''), field: e.field ? (preview.mapping[e.field] ?? e.field) : '', reason: reason(e.code, e.params), code: e.code })));
     const file = writeTable<Line>(
       'csv',
       'Erreurs',
@@ -246,11 +259,13 @@ export class ImportService implements OnModuleInit {
         { header: 'sku', value: (l) => l.sku },
         { header: 'name', value: (l) => l.name },
         { header: 'column', value: (l) => l.field },
-        { header: 'error', value: (l) => l.code },
+        { header: 'error', value: (l) => l.reason },
+        { header: 'code', value: (l) => l.code },
       ],
       lines,
     );
-    const key = `private/ws/${t.workspaceId}/imports/${job.id}-errors.csv`;
+    const base = (preview.fileName || 'import').replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'import';
+    const key = `private/ws/${t.workspaceId}/imports/${job.id}/${base}-${this.i18n.t(locale, 'import.errors.suffix')}.csv`;
     await this.storage.put(key, file.body, file.mime);
     const upload = await prisma.upload.create({ data: { workspaceId: t.workspaceId, storageKey: key, url: key, mime: file.mime, size: file.body.length, kind: 'report', createdById: job.createdById } });
     return upload.id;
@@ -349,6 +364,10 @@ export class ImportService implements OnModuleInit {
       if (needsReview(before, after)) review.push(before.id);
     }
     await this.moderation.resubmitMany(tx, review, 'import');
-    return { created: created.length, updated: updates.length, skipped: 0, categoriesCreated: wanted.size };
+    // recette 09/11 UX-044: the result screen says how many products of THIS import wait for validation (the banner
+    // showed the shop's total only, which read as if the import had created 6 products to review)
+    const touched = [...created.map((p) => p.id), ...review];
+    const pendingReview = touched.length ? await tx.product.count({ where: { id: { in: touched }, moderationStatus: 'pending' } }) : 0;
+    return { created: created.length, updated: updates.length, skipped: 0, categoriesCreated: wanted.size, pendingReview };
   }
 }

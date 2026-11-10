@@ -4,7 +4,7 @@
 // / `COURIER_UNAVAILABLE`), timeline (source courier / Djaber member), the parcel actions, and the alternative panels
 // Annulée / Livrée ✓ (COD encaissé) / Retournée (stock réintégré). Opened from a row (`?sheet=<shipmentId>`).
 import { formatDate, formatMoney, formatPhoneDz, type AppLocale } from '@djaber/shared';
-import { ActionsMenu, Banner, Button, Ltr, Pill, SideSheet, Skeleton, StatusPill, TrackingSyncBar, TrackingTimeline, type SheetNav, type SyncState, type TrackingStep } from '@djaber/ui';
+import { ActionsMenu, Banner, Button, Ltr, Pill, SideSheet, Skeleton, StatusPill, toast, TrackingSyncBar, TrackingTimeline, type SheetNav, type SyncState, type TrackingStep } from '@djaber/ui';
 import { useEffect, useState } from 'react';
 import { QueryError } from '@/components/global-states';
 import { newestFirst, shortName } from '@/features/orders/logic';
@@ -46,6 +46,15 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
     else if (r.code === 'TRACKING_NOT_FOUND') setSync({ state: 'not_found', message: `${t('error.TRACKING_NOT_FOUND')} (TRACKING_NOT_FOUND)` });
     else if (r.code === 'COURIER_UNAVAILABLE') setSync({ state: 'unavailable', message: `${t('tracking.sync.unavailable')} (COURIER_UNAVAILABLE)` });
     else setSync({ state: 'unavailable', message: r.code && t.has(`error.${r.code}`) ? `${t(`error.${r.code}`, { message: '', retryAfter: '' })} (${r.code})` : t('toast.noConnection') });
+  };
+
+  const copyLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast(t('toast.copied'));
+    } catch {
+      toast({ tone: 'warning', message: url });
+    }
   };
 
   const title = s ? [`#${s.orderNumber}`, s.trackingNumber].filter(Boolean).join(' · ') : t('common.loading');
@@ -162,6 +171,21 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
               <dd>
                 <Ltr className="!inline">{formatMoney(s.codAmount)}</Ltr>
               </dd>
+              {/* recette 09/11 M-15: the public page (/s/<token>) was only printed on the slip — copied or opened from here */}
+              {s.publicTrackingUrl && s.status !== 'cancelled' ? (
+                <>
+                  <dt className="ts-label-micro self-center text-text-muted">{t('tracking.panel.publicLink')}</dt>
+                  <dd className="flex min-w-0 flex-wrap items-center gap-2" data-testid="panel-public-link">
+                    <Ltr className="!inline min-w-0 truncate text-text-secondary">{s.publicTrackingUrl.replace(/^https?:\/\//, '')}</Ltr>
+                    <Button size="sm" variant="ghost" onClick={() => void copyLink(s.publicTrackingUrl)} data-action="copy-tracking-link">
+                      {t('action.copy')}
+                    </Button>
+                    <a href={s.publicTrackingUrl} target="_blank" rel="noreferrer" className="ts-label-meta text-accent-inbound underline underline-offset-2" data-action="open-tracking-link">
+                      {t('tracking.panel.openLink')}
+                    </a>
+                  </dd>
+                </>
+              ) : null}
             </dl>
 
             <section className="flex flex-col gap-3">

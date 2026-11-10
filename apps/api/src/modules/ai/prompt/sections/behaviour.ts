@@ -36,7 +36,7 @@ export const crossSellSection = (c: PromptContext): string => {
 };
 
 export const cardTemplateSection = (c: PromptContext): string =>
-  `PRODUCT CARD\nWhen presenting a product use this template: ${c.agent.productCardTemplate?.trim() || '{name} — {price} DA'} (inside a natural sentence; one line per product when you list several)\nList the ids of the products you present in productCards (at most 5); the cards (photo, name, price) are sent right after your text, so do not describe them again. Only present the products the customer is interested in, not the whole catalogue.
+  `PRODUCT CARD\nWhen presenting a product use this template: ${c.agent.productCardTemplate?.trim() || '{name} — {price} DA'} (inside a natural sentence; one line per product when you list several${(c.agent.productCardTemplate ?? '').includes('{stock}') ? '; {stock} = « in stock » / « out of stock » in the customer language, never a number' : ''})\nList the ids of the products you present in productCards (at most 5); the cards (photo, name, price) are sent right after your text, so do not describe them again. Only present the products the customer is interested in, not the whole catalogue.
 Each card has a « Commander » button (and « Plus de photos » when the product has several photos): a customer message « Commander · <product> » means they tapped it — start the order for that product.
 When the customer asks to see more or other photos of a product (or taps « Plus de photos »), put its id in productPhotos: all its photos are sent after your text; just say so in a few words.`;
 
@@ -49,7 +49,7 @@ const BUILT_IN: Record<string, string> = {
   human_request: 'customer_request: the customer asks for a human, a manager or a phone call',
   // PV 08/11: the rules were so wide that ordinary questions (an exchange, an impatient « alors ? ») handed the thread over
   refund: 'refund: the customer wants their money back (a question about exchanges or returns is answered from the RETURNS policy when there is one)',
-  complaint: 'complaint: a problem with an order already placed or received (late, damaged, wrong item, never arrived) or a complaint about the shop — not a question about a product',
+  complaint: 'complaint: a problem with an order already placed or received (damaged, wrong item, never arrived after the expected delay) or a complaint about the shop — not a question about a product, and not a question about where an order is or when it arrives (answer that with lookup_order)',
   anger: 'angry: insults, threats or a clearly furious customer (an impatient or short message is not anger: just answer it)',
   '3_unclear': `unclear_streak: ${UNCLEAR_STREAK_HANDOFF} messages in a row that you could not understand`,
   off_topic: 'off_catalogue: a request only the team can handle (wholesale or reseller prices, a custom order, a partnership, a problem the policies do not cover). A simple question you have no answer to is NOT a handoff: use status=UNKNOWN',
@@ -75,7 +75,7 @@ export const handoffSection = (c: PromptContext): string => {
     ...(custom ? [`Shop rules:\n${custom}`] : []),
     ...(c.unclearStreak >= UNCLEAR_STREAK_HANDOFF - 1 ? [`UNCLEAR_STREAK=${c.unclearStreak}: if this message is unclear too, hand off (unclear_streak).`] : []),
     handoffText
-      ? `Instruction: status=HANDOFF with statusDetail=<rule id> (or call handoff_to_human). The shop's HANDOFF_MESSAGE is sent automatically right after your reply: do not announce the handoff yourself; "reply" only answers what else the customer asked, or stays empty.
+      ? `Instruction: status=HANDOFF with statusDetail=<rule id> (or call handoff_to_human). The shop's HANDOFF_MESSAGE is sent automatically right after your reply: do not announce the handoff yourself (no « je vous passe un conseiller », « a team member will contact you »); "reply" only answers what else the customer asked, or stays empty — when they only asked for a human, "reply" is empty.
 HANDOFF_MESSAGE: "${handoffText}"`
       : 'Instruction: status=HANDOFF with statusDetail=<rule id> (or call handoff_to_human). Tell the customer briefly that a team member will follow up; do not promise a delay.',
     'status=UNKNOWN when you have no answer but no rule applies: say briefly that you will check with the team (call add_faq_candidate with the question) and keep helping with the rest — the conversation stays with you. status=UNCLEAR when you did not understand: say so politely in the customer language and ask them to rephrase.',

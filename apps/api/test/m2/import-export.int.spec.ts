@@ -110,10 +110,13 @@ describe('catalogue import', () => {
     const done = await jobOf(owner, jobId);
     expect(done).toMatchObject({ status: 'partial', name: 'product-import-commit', result: { stage: 'committed', report: { created: 3, updated: 0, skipped: 5, categoriesCreated: 2 } } });
     // the skipped rows come back as a private file (signed URL)
-    expect(done.resultUrl).toMatch(/\/files\/private\/ws\/.+-errors\.csv\?exp=/);
+    // recette 09/11 UX-044: named after the imported file, the reason in the importer's language, then the code
+    expect(done.resultUrl).toMatch(/\/files\/private\/ws\/.+\/imports\/.+-erreurs\.csv\?exp=/);
     const report = parseCsv((await download(done.resultUrl).expect(200)).body.toString('utf8'));
-    expect(report[0]).toEqual(['row', 'sku', 'name', 'column', 'error']);
-    expect(report.slice(1)).toEqual([
+    expect(report[0]).toEqual(['row', 'sku', 'name', 'column', 'error', 'code']);
+    expect(report.slice(1).every((r) => !!r[4] && r[4] !== r[5] && !r[4].startsWith('validation.'))).toBe(true);
+    expect(report[2]![4]).toBe('Prix de vente requis (> 0)');
+    expect(report.slice(1).map((r) => [r[0], r[1], r[2], r[3], r[5]])).toEqual([
       ['4', 'IMP-3', '', 'Nom', 'validation.required'],
       ['5', 'IMP-4', 'Plateau', 'Prix de vente', 'validation.price'],
       ['6', 'IMP-1', 'Doublon', 'Référence', 'IMPORT_DUPLICATE_SKU_IN_FILE'],

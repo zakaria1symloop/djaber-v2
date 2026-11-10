@@ -17,6 +17,7 @@ import { channelsApi, useChannels, useChannelsRefresh } from '@/features/channel
 import { ConflictDialog, QueryError } from '@/components/global-states';
 import { useOnboardingStep } from '@/features/workspace/api';
 import { Link, useRouter } from '@/i18n/navigation';
+import { ApiError } from '@/lib/api';
 import { conflictOf } from '@/lib/conflict';
 import { errorMessage, useLeaveGuard } from '@/lib/forms';
 import { needsOnboarding, onboardingPath, onboardingWrite, stepNumber, TUNNEL_WIZARD_STEPS } from '@/lib/guards';
@@ -40,12 +41,14 @@ import {
   enabledCapabilities,
   enabledRuleCount,
   issueMap,
+  issueSummary,
   mergeBySection,
   monthlyCreditEstimate,
   nextStep,
   policyCount,
   previousStep,
   sectionsPatch,
+  serverIssues,
   stepIndex,
   stepState,
   validateStep,
@@ -199,7 +202,8 @@ function WizardBody({ step, agent, crumb, inTunnel, exitTo, initialStart }: { st
     // an error leaves the summary as soon as the form no longer has it (also when another field resolves it)
     if (issues.length) {
       const still = new Set(validateStep(step, { ...draft, ...patch }).map((i) => i.field));
-      setIssues((old) => old.filter((i) => (i.field === 'start' ? start === null : still.has(i.field) && !(i.field.split('.')[0]! in patch))));
+      const edited = (i: Issue) => i.field.split('.')[0]! in patch;
+      setIssues((old) => old.filter((i) => (i.field === 'start' ? start === null : i.server ? !edited(i) : still.has(i.field) && !edited(i))));
     }
   };
   const presetTagline = (key: string | null) => (key && key !== SCRATCH ? (presets.data?.find((p) => p.key === key)?.tagline ?? '') : '');
@@ -264,8 +268,13 @@ function WizardBody({ step, agent, crumb, inTunnel, exitTo, initialStart }: { st
       return saved;
     } catch (e) {
       const c = conflictOf<Agent>(e);
+      // recette 09/11 (Badro): a field the server refused is named and outlined, never just « Vérifiez les champs »
+      const refused = e instanceof ApiError && e.code === 'VALIDATION_ERROR' ? serverIssues(e.body.fields) : [];
       if (c) setConflict({ current: c.current, by: c.changedBy, at: c.changedAt });
-      else if (mode !== 'auto') setError(errorMessage(e, t));
+      else if (refused.length) {
+        setIssues(refused);
+        window.requestAnimationFrame(() => document.querySelector('[aria-invalid="true"]')?.scrollIntoView({ block: 'center' }));
+      } else if (mode !== 'auto') setError(errorMessage(e, t));
       return null;
     } finally {
       setSaving(null);
@@ -426,7 +435,7 @@ function WizardBody({ step, agent, crumb, inTunnel, exitTo, initialStart }: { st
             ),
         }}
       >
-        <ValidationSummary title={t('agents.validation.summary', { count: issues.length })} items={[...new Set(issues.map((i) => t(i.key, i.params)))]} />
+        <ValidationSummary title={t('agents.validation.summary', { count: issues.length })} items={issueSummary(t, issues)} />
         {error ? <FormAlert>{error}</FormAlert> : null}
 
         {step === 'identity' ? (

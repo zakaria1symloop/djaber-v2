@@ -1,4 +1,10 @@
 {
+ "agents.template.insert": "Insérer :",
+ "agents.template.placeholder.description": "Description du produit",
+ "agents.template.placeholder.name": "Nom du produit",
+ "agents.template.placeholder.price": "Prix (ex. 4 900 DA)",
+ "agents.template.placeholder.stock": "Disponibilité (« en stock » / « épuisé », jamais la quantité)",
+ "agents.template.sample.stock": "en stock",
  "cash.action.viewProof": "Voir le justificatif",
  "cash.proof.current": "Justificatif joint — voir",
  "cash.proof.newTab": "NOUVEL ONGLET",
@@ -60,6 +66,9 @@
  "gaps.job.progress": "Progression : {kind}",
  "gaps.job.running": "{kind} en cours : {pct} %",
  "gaps.orders.notify.noConversation": "Commande sans conversation : le client ne peut pas être prévenu par message.",
+ "import.done.moderationImported": "{count, plural, one {Le produit importé est en attente} other {Les # produits importés sont en attente}} de validation",
+ "import.done.moderationSplit": "{count, plural, one {# produit de cet import est en attente} other {# produits de cet import sont en attente}} de validation · {total} au total dans votre boutique",
+ "import.errors.suffix": "erreurs",
  "import.template.download": "Télécharger un exemple (CSV)",
  "import.template.fileName": "exemple-import-produits.csv",
  "members.section.empty": "Aucun membre à part le propriétaire.",
@@ -85,5 +94,8 @@
  "search.global.placeholder": "Rechercher une commande, un client, un produit, une page…",
  "suppliers.dialog.sameName": "Un fournisseur porte déjà ce nom : {list}. Vérifiez qu'il ne s'agit pas du même avant de créer.",
  "suppliers.dialog.seeExisting": "Voir",
+ "tracking.panel.openLink": "Ouvrir",
+ "tracking.panel.publicLink": "LIEN DE SUIVI",
+ "validation.banned_word": "Contient un mot interdit sur Djaber : choisissez un autre nom.",
  "validation.supplier_taken": "Déjà utilisé par un autre fournisseur"
 }

@@ -249,7 +249,8 @@ export const withinHours = (s: BusinessHours | null, weekday: number, minutes: n
 export const hoursLabel = (s: BusinessHours): string => `${s.from}–${s.to}`;
 
 /* ---------- validation ---------- */
-export type Issue = { field: string; key: string; params?: Record<string, string | number> };
+/** `server`: the API refused it (422 `fields`) — it stays until that field is edited (the form's own checks cannot clear it). */
+export type Issue = { field: string; key: string; params?: Record<string, string | number>; server?: boolean };
 const tooLong = (field: string, value: string, max: number): Issue[] => (value.trim().length > max ? [{ field, key: 'agents.validation.tooLong', params: { max } }] : []);
 
 export const validateIdentity = (d: AgentDraft): Issue[] => {
@@ -278,6 +279,60 @@ export const validateBehaviour = (d: AgentDraft): Issue[] => {
   out.push(...tooLong('productCardTemplate', d.productCardTemplate, TEMPLATE_MAX), ...tooLong('closingInstructions', d.closingInstructions, CLOSING_MAX));
   return out;
 };
+/**
+ * recette 09/11 (Badro): a 422 of the server lands on its field like the form's own checks — the step used to show only
+ * « Vérifiez les champs en rouge » with no field in red. `wizard.displayName` → `displayName`, `wizard.policies.delivery`
+ * → `policies.delivery`, `wizard.languages.0` → `languages`, `presetKey` → `start`.
+ */
+export const serverIssues = (fields: Record<string, string> | null | undefined): Issue[] =>
+  Object.entries(fields ?? {}).map(([path, key]) => {
+    const p = path.replace(/^wizard\./, '');
+    const field = p === 'presetKey' || p === 'fromScratch' ? 'start' : p.startsWith('policies.') ? p.split('.').slice(0, 2).join('.') : p.split('.')[0]!;
+    return { field, key, params: { max: '', min: '' }, server: true };
+  });
+const FIELD_LABEL: Record<string, string> = {
+  start: 'agents.start.title',
+  name: 'agents.identity.name',
+  displayName: 'agents.identity.displayName',
+  description: 'agents.identity.description',
+  avatarUploadId: 'agents.identity.avatar',
+  avatarMode: 'agents.identity.avatar',
+  languages: 'agents.languages.title',
+  defaultLanguage: 'agents.languages.default',
+  tone: 'agents.tone.label',
+  formality: 'agents.formality.label',
+  emojiLevel: 'agents.emoji.label',
+  catalogScope: 'agents.catalog.title',
+  scopeCategoryIds: 'agents.catalog.categories',
+  maxQtyPerOrder: 'agents.order.maxQty',
+  maxAmountPerOrder: 'agents.order.maxAmount',
+  riskyClientBehavior: 'agents.order.risky',
+  recapMode: 'agents.order.recap',
+  orderFields: 'agents.order.title',
+  handoffRules: 'agents.handoff.title',
+  handoffKeywords: 'agents.handoff.keywords',
+  responseDelaySec: 'agents.delay.label',
+  productCardTemplate: 'agents.template.label',
+  closingInstructions: 'agents.closing.label',
+};
+/** The i18n key of the label of an issue's field (the summary names the field: « Nom affiché : mot interdit… »). */
+export const issueLabelKey = (field: string): string | null => FIELD_LABEL[field] ?? (field.startsWith('policies.') ? 'agents.policies.title' : null);
+/** The lines of the validation summary, each one naming its field. */
+export const issueSummary = (t: (key: string, params?: Record<string, string | number>) => string, issues: Issue[]): string[] => [
+  ...new Set(
+    issues.map((i) => {
+      const label = issueLabelKey(i.field);
+      const text = t(i.key, i.params);
+      return label ? `${t(label)} : ${text}` : text;
+    }),
+  ),
+];
+/** The section (Configuration tab) that holds an issue's field. */
+export const sectionOfField = (field: string): SectionKey | null => {
+  const head = field.split('.')[0] as keyof AgentDraft;
+  return SECTIONS.find((s) => SECTION_FIELDS[s].includes(head)) ?? null;
+};
+
 export const validateSection = (section: SectionKey, d: AgentDraft): Issue[] => (section === 'identity' ? validateIdentity(d) : section === 'knowledge' ? validateKnowledge(d) : validateBehaviour(d));
 /** Steps 4 and 5 have no draft field: channels are linked one by one, activation is checked by the server. */
 export const validateStep = (step: WizardStepKey, d: AgentDraft): Issue[] => (step === 'identity' || step === 'knowledge' || step === 'behaviour' ? validateSection(step, d) : []);

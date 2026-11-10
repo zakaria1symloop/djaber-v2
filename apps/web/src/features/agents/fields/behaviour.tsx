@@ -6,7 +6,7 @@
 // The model is assigned by the platform routing (`GET /ai/routes`): read-only badge, never a choice (D54).
 import { Button, Checkbox, CheckChip, Dialog, Field, FormAlert, FormSection, Ltr, MoneyInput, NumberInput, RangeSlider, ScheduleEditor, Select, TagInput, Textarea, ToggleRow } from '@djaber/ui';
 import { CREDIT_COST, formatMoney, type AppLocale } from '@djaber/shared';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from '@/i18n/navigation';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { digitsToInt, moneyDigits } from '@/lib/money';
@@ -20,6 +20,8 @@ import { issueText, type SectionProps } from './identity';
 
 const COST: Partial<Record<CapabilityKey, number>> = { replyText: CREDIT_COST.text, imageRecognition: CREDIT_COST.image, voiceTranscription: CREDIT_COST.voice, takeOrders: CREDIT_COST.order };
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+/** The placeholders offered as chips (the stock is never given to customers as a number: {stock} reads « en stock »). */
+export const TEMPLATE_PLACEHOLDERS = ['name', 'price', 'description', 'stock'] as const;
 /** Product card template placeholders (03 AGT-02) filled with a sample product for the live preview. */
 export const renderCardTemplate = (template: string, sample: { name: string; price: string; description: string; stock: string }): string =>
   template.replace(/\[PRODUCT_CARD\]/g, '').replace(/\{(name|price|description|stock)\}/g, (_m, k: keyof typeof sample) => sample[k]).trim();
@@ -33,7 +35,21 @@ export function BehaviourFields({ draft: d, set, errors, readOnly, badge, inTunn
   const text = routes.data?.find((r) => r.capability === 'text');
   const failover = (routes.data ?? []).some((r) => r.failover);
   const system = (key: 'handoff' | 'out_of_hours') => workspace?.systemMessages?.[key]?.[locale]?.trim() || workspace?.systemMessages?.[key]?.fr?.trim() || '';
-  const sample = { name: t('agents.template.sample.name'), price: formatMoney(4900), description: t('agents.template.sample.description'), stock: '7' };
+  const sample = { name: t('agents.template.sample.name'), price: formatMoney(4900), description: t('agents.template.sample.description'), stock: t('agents.template.sample.stock') };
+  const templateRef = useRef<HTMLTextAreaElement>(null);
+  const insertPlaceholder = (p: (typeof TEMPLATE_PLACEHOLDERS)[number]) => {
+    const el = templateRef.current;
+    const value = d.productCardTemplate;
+    const token = `{${p}}`;
+    const start = el ? el.selectionStart : value.length;
+    const end = el ? el.selectionEnd : value.length;
+    const next = `${value.slice(0, start)}${token}${value.slice(end)}`;
+    set({ productCardTemplate: next });
+    window.requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(start + token.length, start + token.length);
+    });
+  };
 
   return (
     <>
@@ -136,7 +152,24 @@ export function BehaviourFields({ draft: d, set, errors, readOnly, badge, inTunn
       <FormSection title={t('agents.template.title')} description={t('agents.template.description')} data-section="template">
         <div className="grid gap-4 lg:grid-cols-2">
           <Field label={t('agents.template.label')} htmlFor="agent-template" error={issueText(t, errors.productCardTemplate)} hint={t('agents.template.hint')}>
-            <Textarea id="agent-template" dir="auto" value={d.productCardTemplate} maxLength={TEMPLATE_MAX + 100} disabled={readOnly} placeholder="{name} — {price}" aria-invalid={!!errors.productCardTemplate || undefined} onChange={(e) => set({ productCardTemplate: e.target.value })} />
+            <Textarea ref={templateRef} id="agent-template" dir="auto" value={d.productCardTemplate} maxLength={TEMPLATE_MAX + 100} disabled={readOnly} placeholder="{name} — {price}" aria-invalid={!!errors.productCardTemplate || undefined} onChange={(e) => set({ productCardTemplate: e.target.value })} />
+            {/* recette 09/11 (Badro): the placeholders are picked, not typed — one click writes « {price} » where the cursor is */}
+            <div role="group" aria-label={t('agents.template.insert')} className="flex flex-wrap items-center gap-1.5" data-testid="template-placeholders">
+              <span className="ts-label-meta text-text-muted">{t('agents.template.insert')}</span>
+              {TEMPLATE_PLACEHOLDERS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  disabled={readOnly}
+                  data-placeholder={p}
+                  title={t(`agents.template.placeholder.${p}`)}
+                  onClick={() => insertPlaceholder(p)}
+                  className="rounded-[4px] border border-line-edge bg-ink-surface px-2 py-0.5 font-mono text-[12px] text-accent-inbound hover:border-accent-inbound disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <bdi dir="ltr">{`{${p}}`}</bdi>
+                </button>
+              ))}
+            </div>
           </Field>
           <div className="flex flex-col gap-1.5">
             <span className="ts-label-meta uppercase text-text-secondary">{t('agents.template.preview')}</span>

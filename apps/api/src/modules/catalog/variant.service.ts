@@ -40,6 +40,34 @@ export class VariantService {
    * Adds variants to a product inside the caller's transaction. The first variant turns the product into a variant
    * product: its own quantity is written off by a movement (`refType = variant`) because stock now lives on the variants.
    */
+  /**
+   * recette 09/11 UX-042 (AT « 4 × 2 creates 8 with auto SKUs », the dialog's « avec SKU automatiques »): a variant left
+   * without SKU gets one, like the product — the product's SKU and the variant's values (`PRD-7K3Q9AXB-S-NOIR`); values
+   * without Latin letters or digits give `-V1`, `-V2`…; a random tail when that SKU is already used.
+   */
+  private async autoSkus(tx: Tx, product: Product, inputs: CreateVariantInput[], used: Set<string>): Promise<CreateVariantInput[]> {
+    if (inputs.every((v) => v.sku)) return inputs;
+    const base = (product.sku || this.skus.generate()).slice(0, 200);
+    const slug = (s: string) =>
+      s
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40);
+    const n = await tx.productVariant.count({ where: { productId: product.id } });
+    const wanted = inputs.map((v, i) => v.sku || `${base}-${slug(v.name) || `V${n + i + 1}`}`);
+    const taken = await this.skus.taken(tx, wanted.filter((s, i) => !inputs[i]!.sku));
+    return inputs.map((v, i) => {
+      if (v.sku) return v;
+      let sku = wanted[i]!;
+      while (taken.has(sku) || used.has(sku)) sku = this.skus.generate(base);
+      used.add(sku);
+      return { ...v, sku };
+    });
+  }
+
   async addMany(tx: Tx, product: Product, inputs: CreateVariantInput[], field: (i: number, f: string) => string = (_i, f) => f): Promise<ProductVariant[]> {
     if (!inputs.length) return [];
     if (!product.trackStock) throw new AppException('PRODUCT_NOT_STOCK_TRACKED');
@@ -58,6 +86,7 @@ export class VariantService {
     });
     const taken = await this.skus.taken(tx, inputs.map((v) => v.sku));
     if (taken.size) throw skuTaken(field(inputs.findIndex((v) => v.sku && taken.has(v.sku)), 'sku'));
+    inputs = await this.autoSkus(tx, product, inputs, seenSkus);
 
     if (!product.hasVariants) {
       if ((product.stock ?? 0) !== 0) {

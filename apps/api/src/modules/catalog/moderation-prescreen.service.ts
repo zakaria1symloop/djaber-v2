@@ -45,17 +45,47 @@ const ARABIC = /[؀-ۿ]/;
 // Arabic writes the article, « and », « with », « for »… and the plural / feminine endings onto the word itself
 const AR_PREFIX = '(?:وال|فال|بال|كال|لل|ال|و|ف|ب|ك|ل)?';
 const AR_SUFFIX = '(?:ات|ين|ون|ان|ه|ي)?';
+// recette 09/11 UX-043: the French / English plural and feminine endings, as Arabic has its own (« armes », « drugs »,
+// « interdite »). A word already ending in « e » only takes « s » (« arme » → « armes », never « armee » = « armée »).
+const latinSuffix = (w: string) => (w.endsWith('e') ? '(?:s)?' : w.endsWith('s') || w.endsWith('x') ? '(?:es)?' : '(?:s|x|e|es)?');
 /**
- * Whole-word hit (a letter or digit next to it ends the match): « drug » in « drug test », not in « drugstore »; an Arabic
- * word with its attached article / particles / endings too (« الخمر », « بالخمر », « مخدراتهم » excepted).
+ * Whole-word hit (a letter or digit next to it ends the match): « drug » in « drug test » and « drugs », not in
+ * « drugstore »; an Arabic word with its attached article / particles / endings too (« الخمر », « بالخمر », « مخدراتهم »).
  */
-const containsWord = (hay: string, needles: readonly string[]) =>
+export const containsWord = (hay: string, needles: readonly string[]) =>
   needles.find((n) => {
     const w = foldText(n).trim();
     if (w.length <= 1) return false;
-    const core = ARABIC.test(w) ? `${AR_PREFIX}${escapeRe(w.replace(/^ال/, ''))}${AR_SUFFIX}` : escapeRe(w);
+    const core = ARABIC.test(w) ? `${AR_PREFIX}${escapeRe(w.replace(/^ال/, ''))}${AR_SUFFIX}` : `${escapeRe(w)}${/\p{L}$/u.test(w) ? latinSuffix(w) : ''}`;
     return new RegExp(`(?:^|[^\\p{L}\\p{N}])${core}(?:$|[^\\p{L}\\p{N}])`, 'u').test(hay);
   }) ?? null;
+
+/**
+ * recette 09/11 (Badro, « VERY URGENT »): the name customers read — an agent's name / display name — never carries an
+ * insult, even when the platform lists hold only scam words. Kept short and unambiguous (fr, en, darija, Arabic);
+ * the super admin's lists (Modération › Mots & catégories interdits) are added to it.
+ */
+export const NAME_INSULTS = [
+  'connard', 'connasse', 'salope', 'salaud', 'pute', 'putain', 'encule', 'enfoire', 'batard', 'merde', 'nique', 'niquer', 'fdp', 'ntm', 'pd', 'abruti', 'debile',
+  'fuck', 'fucker', 'fucking', 'shit', 'bitch', 'asshole', 'bastard', 'cunt', 'whore', 'slut', 'motherfucker',
+  'zebi', 'zbi', 'qahba', 'kahba', '9a7ba', '9ahba', 'nikmok', 'nik mok', 'tabon', 'mnayek', 'hmar', '7mar', 'kelb',
+  'قحبة', 'زبي', 'نيك', 'نيكمك', 'طبون', 'منايك', 'حمار', 'كلب', 'شرموطة', 'عاهرة', 'لعنة',
+];
+/**
+ * A word of 7 letters or more is caught glued inside another one too (« SuperConnard », « BigBastard »); shorter ones only
+ * as words (« nique » must not hit « technique », « salope » not « salopette »).
+ */
+export const nameHit = (text: string, needles: readonly string[]) => {
+  const hay = foldText(text);
+  const tokens = hay.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return (
+    needles.find((n) => {
+      const w = foldText(n).trim();
+      if (w.length >= 7 && !ARABIC.test(w) && !/\s/.test(w)) return tokens.some((tok) => tok.includes(w));
+      return !!containsWord(hay, [n]);
+    }) ?? null
+  );
+};
 
 /** 04 §12: sensitive categories = electronics, health / supplements, children, cosmetics (editable by super admin). */
 export const DEFAULT_SENSITIVE_KEYWORDS = [
@@ -217,6 +247,16 @@ export class ModerationPrescreenService {
   /** 04 §12 "Auto-approval": `aiScore ≥ 0.9 ∧ trustLevel ∈ {standard, trusted} ∧ category ∉ sensitive`, never when the platform reviews every product (PV2). */
   static autoApprove(result: Pick<PrescreenResult, 'aiScore' | 'sensitive' | 'manualReview' | 'banned'>, trustLevel: string) {
     return !result.banned && !result.manualReview && result.aiScore >= MODERATION_AUTO_APPROVE_SCORE && (trustLevel === 'standard' || trustLevel === 'trusted') && !result.sensitive;
+  }
+
+  /**
+   * recette 09/11 (Badro): the banned word of a name customers read (agent name / display name), else null — the platform
+   * blocked words and prohibited categories, plus the common insults of {@link NAME_INSULTS}.
+   */
+  async bannedInName(text: string | null | undefined, rules?: Rules): Promise<string | null> {
+    if (!text?.trim()) return null;
+    const r = rules ?? (await this.rules());
+    return nameHit(text, [...r.words, ...r.prohibited, ...NAME_INSULTS]);
   }
 
   /** Agent prompts (MOD-08): a platform blocked word or a protected brand in the compiled instructions. */

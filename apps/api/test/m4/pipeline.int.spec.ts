@@ -265,7 +265,7 @@ describe('FL-01 — reply turn', () => {
     await feeRule(s.owner.workspaceId, 16);
     fakeAi(app).script(
       'reply',
-      { toolCalls: [{ name: 'search_products', args: { query: 'veste' } }, { name: 'get_product', args: { productId: archived.id } }, { name: 'create_order', args: { clientName: 'Amine Benali', clientPhone: '0555123456', wilayaId: 16, address: 'Cité des 200 logements, Alger', items: [{ productId: archived.id, quantity: 1 }], customerConfirmed: true } }] },
+      { toolCalls: [{ name: 'search_products', args: { query: 'veste' } }, { name: 'get_product', args: { productId: archived.id } }, { name: 'create_order', args: { clientName: 'Amine Benali', clientPhone: '0555123456', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'Cité des 200 logements, Alger', items: [{ productId: archived.id, quantity: 1 }], customerConfirmed: true } }] },
       { reply: "Cette veste n'est plus disponible.", intent: 'INFO', productCards: [archived.id, inactive.id, s.robe.id] },
     );
     const t = await turn(s, newSender(), { text: 'je veux la veste' });
@@ -339,7 +339,7 @@ describe('tools', () => {
     await feeRule(s.owner.workspaceId, 16, 400, 300);
     const port = app.app.get<OrderTools>(ORDER_TOOLS);
     const create = jest.spyOn(port, 'createOrder');
-    const base = { clientName: 'Amine Benali', wilayaId: 16, address: 'Cité des 200 logements, Bt 4, Alger', items: [{ productId: s.robe.id, quantity: 1 }], customerConfirmed: true };
+    const base = { clientName: 'Amine Benali', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'Cité des 200 logements, Bt 4, Alger', items: [{ productId: s.robe.id, quantity: 1 }], customerConfirmed: true };
     fakeAi(app).script(
       'reply',
       { toolCalls: [{ name: 'create_order', args: { ...base, clientPhone: '12345' } }] },
@@ -371,7 +371,7 @@ describe('tools', () => {
     await feeRule(s.owner.workspaceId, 16, 400, 300);
     const port = app.app.get<OrderTools>(ORDER_TOOLS);
     const create = jest.spyOn(port, 'createOrder').mockResolvedValue({ ok: true, orderId: 'o-1', number: 'CMD-1042', subtotal: 4500, deliveryFee: 400, total: 4900, items: [], duplicateOf: null, paymentOptions: ['cod'] });
-    const call = { name: 'create_order', args: { clientName: 'Amine Benali', clientPhone: '0555123456', wilayaId: 16, address: 'Cité des 200 logements, Alger', items: [{ productId: s.robe.id, quantity: 1 }], customerConfirmed: true } };
+    const call = { name: 'create_order', args: { clientName: 'Amine Benali', clientPhone: '0555123456', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'Cité des 200 logements, Alger', items: [{ productId: s.robe.id, quantity: 1 }], customerConfirmed: true } };
     const sender = newSender();
     const { conversation } = await receive(app, s.page, sender, { text: 'oui je confirme' });
     // attempt 1: the tool runs, then both models fail ⇒ the job throws (BullMQ will retry it)

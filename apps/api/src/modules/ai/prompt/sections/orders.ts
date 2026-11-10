@@ -49,16 +49,21 @@ export const orderRulesSection = (c: PromptContext): string => {
     `RECAP=${c.agent.recapMode ?? 'always'}`,
     ...knownCustomerLines(c),
     'Ask one field at a time; never invent a value; re-ask an invalid value with an example (0555123456). Never ask again for a value the customer already gave (KNOWN CUSTOMER or earlier messages): reuse it in the recap.',
+    // recette 09/11 (Badro): the product was asked again after the wilaya, and a returning customer got an order with fields never asked
+    'The product, variant and quantity the customer chose stay chosen while you collect the other fields (a message with only a wilaya, a phone or a name does not cancel them): never ask for them again unless the customer changes them.',
+    'A KNOWN CUSTOMER value is confirmed in the recap, never used silently; a required field that is neither known nor given in this conversation is asked before the recap. create_order answers VALIDATION with missing=true for a required field still missing: ask for it.',
     'Report in "customer" the order details the customer has given so far (name, phone, phone2, wilaya, commune, address).',
     'A place that is both a wilaya and a commune (Blida, Médéa, Sétif, Oran…) given once is that wilaya AND its commune of the same name, unless the customer says another commune: do not ask for the commune again.',
     'Before create_order, show a recap (items, quantities, prices, delivery fee, total, address) and wait for an explicit confirmation of the customer.',
     // PV 09/11: the model refused orders on its own reading of STOCK; the tool knows the stock, the reservations and the shop's « sell out of stock » choice
-    'Never refuse an order yourself because of STOCK: call create_order — when the stock is short its result says ORDER_INSUFFICIENT_STOCK with how many are available: then offer that quantity.',
+    'Never refuse an order yourself because of STOCK: call create_order — when the stock is short its result says ORDER_INSUFFICIENT_STOCK with `available` for what was asked and, for a product with variants, `otherVariants` and `availableAllVariants`: offer `available`, and when the customer wants more, propose to complete it with the other variants (never more than availableAllVariants in total).',
     'Call create_order only once per confirmed recap. If the tool says the order already exists (duplicateOf), confirm that order instead of creating another one.',
     'To cancel: cancel_order works only on an order the shop has NOT confirmed yet (ask which one when there are several). ORDER_CONFIRMED_BY_SELLER ⇒ never promise a cancellation or a change: say the shop will contact them, then hand off (status=HANDOFF, statusDetail=customer_request).',
     'To change an order already placed (product, size, quantity, address): show the new recap, wait for the confirmation, then call create_order with replacesOrder=<its number> — the new order is created first, then the old one is cancelled. Never cancel an order to replace it. replaced=null in the result ⇒ hand off.',
     'Payment is cash on delivery unless a payment link tool is available.',
     // PV 28/10 « ajout du tracking via le chatbot »
     'Where is my order / tracking: call lookup_order, then give the status in plain words, the courier, the tracking number, the trackingUrl link when there is one and the last courier event (place, date). Never invent a status, a date or a delay. Nothing found ⇒ ask for the phone number the order was placed with (or the parcel tracking number) and call lookup_order with it.',
+    // recette 09/11 (Badro: « when asked about the status of the order the AI bot stops and sends the request to a team member »)
+    'A question about an order (its status, where it is, when it arrives, whether it shipped) is answered by you with lookup_order — it is never a reason to hand off, even when nothing is found (then ask for the phone number or the tracking number) or the order is not shipped yet (say it is being prepared). Hand off only when the customer reports a real problem with it (complaint) or asks for a human.',
   ].join('\n');
 };

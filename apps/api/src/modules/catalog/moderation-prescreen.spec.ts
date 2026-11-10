@@ -59,15 +59,39 @@ describe('moderation pre-screen', () => {
     expect(ModerationPrescreenService.autoApprove(variant, 'trusted')).toBe(false);
     expect(svc.score({ ...base, description: 'pas une ARNAQUE !' }, rules, null).banned).toMatchObject({ field: 'description' });
     expect(svc.score({ ...base, categoryName: 'Arme' }, rules, null).banned).toEqual({ code: 'prohibited_category', word: 'arme', field: 'categoryId' });
-    // « arnaques » / « Armes blanches » contain the word but are another word: flagged for a moderator, not rejected
-    const plural = svc.score({ ...base, name: 'Guide anti-arnaques' }, rules, null);
-    expect(plural.aiFlags[0]).toMatchObject({ code: 'blocked_word' });
-    expect(plural.banned).toBeUndefined();
-    expect(svc.score({ ...base, categoryName: 'Armes blanches' }, rules, null).banned).toBeUndefined();
+    // a real compound (« arnaqueur », « armement ») contains the word but is another word: flagged for a moderator only
+    const compound = svc.score({ ...base, name: 'Le guide de l’arnaqueur' }, rules, null);
+    expect(compound.aiFlags[0]).toMatchObject({ code: 'blocked_word' });
+    expect(compound.banned).toBeUndefined();
+    expect(svc.score({ ...base, categoryName: 'Armement ancien' }, rules, null).banned).toBeUndefined();
     expect(svc.score(base, rules, null).banned).toBeUndefined();
     // Arabic words are matched whole too
     const ar = { ...rules, words: ['مخدرات'] };
     expect(svc.score({ ...base, description: 'بيع مخدرات هنا' }, ar, null).banned).toMatchObject({ word: 'مخدرات', field: 'description' });
+  });
+
+  it('recette 09/11 UX-043: French / English plural and feminine endings are rejected like the word (« armes », « drugs »)', () => {
+    const fr = { ...rules, words: ['arme', 'drug', 'interdit'] };
+    expect(svc.score({ ...base, name: 'Recette H-19 armes' }, fr, null).banned).toMatchObject({ code: 'blocked_word', word: 'arme', field: 'name' });
+    expect(svc.score({ ...base, name: 'Recette H-19 drugs' }, fr, null).banned).toMatchObject({ word: 'drug' });
+    expect(svc.score({ ...base, name: 'Vente interdite' }, fr, null).banned).toMatchObject({ word: 'interdit' });
+    expect(svc.score({ ...base, categoryName: 'Armes blanches' }, rules, null).banned).toEqual({ code: 'prohibited_category', word: 'arme', field: 'categoryId' });
+    // « armée » is not « arme » + « e » (a word ending in e only takes s); compounds only flag
+    expect(svc.score({ ...base, name: 'Surplus armée' }, fr, null).banned).toBeUndefined();
+    expect(svc.score({ ...base, name: 'Drugstore kit' }, fr, null).banned).toBeUndefined();
+    expect(svc.score({ ...base, name: 'Drugstore kit' }, fr, null).aiFlags[0]).toMatchObject({ code: 'blocked_word' });
+  });
+
+  it('recette 09/11 (Badro): an agent name with an insult or a banned word is refused; ordinary words are not', async () => {
+    const r = { ...rules, words: ['arnaque'], prohibited: ['arme'] };
+    expect(await svc.bannedInName('Connard', r)).toBe('connard');
+    expect(await svc.bannedInName('SuperConnard du 16', r)).toBe('connard');
+    expect(await svc.bannedInName('Sara la pute', r)).toBe('pute');
+    expect(await svc.bannedInName('زبي', r)).toBe('زبي');
+    expect(await svc.bannedInName('9a7ba shop', r)).toBe('9a7ba');
+    expect(await svc.bannedInName('Agent arnaques', r)).toBe('arnaque');
+    expect(await svc.bannedInName('Vendeur d’armes', r)).toBe('arme');
+    for (const ok of ['Sara', 'Agent technique', 'Salopette Store', 'Assistant unique', 'Amina — Boutique Dar El Kendil', 'Conseiller', null, '']) expect(await svc.bannedInName(ok, r)).toBeNull();
   });
 
   it('folds Arabic diacritics and tatweel', () => {
@@ -83,7 +107,8 @@ describe('moderation pre-screen', () => {
     expect(svc.score({ ...base, name: 'والأسلحة' }, ar, null).banned).toMatchObject({ word: 'أسلحة' });
     // a longer word that merely contains it is not a hit
     expect(svc.score({ ...base, name: 'خمرية اللون' }, ar, null).banned).toBeUndefined();
-    // French / English whole words as before
-    expect(svc.score({ ...base, name: 'Arnaques' }, ar, null).banned).toBeUndefined();
+    // French / English: the word with its plural ending too (recette 09/11 UX-043), not a longer word
+    expect(svc.score({ ...base, name: 'Arnaques' }, ar, null).banned).toMatchObject({ word: 'arnaque' });
+    expect(svc.score({ ...base, name: 'Arnaqueurs' }, ar, null).banned).toBeUndefined();
   });
 });

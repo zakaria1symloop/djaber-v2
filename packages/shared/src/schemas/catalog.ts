@@ -426,5 +426,6 @@ export type ImportPreviewResult = {
   updateExisting: boolean;
   totals: { rows: number; valid: number; invalid: number; create: number; update: number; overPlanLimit: number; newCategories: number };
   rows: ImportPreviewRow[];
-  report?: { created: number; updated: number; skipped: number; categoriesCreated: number };
+  /** `pendingReview`: products of this import waiting for validation after it (absent on imports run before 10/11/2026) */
+  report?: { created: number; updated: number; skipped: number; categoriesCreated: number; pendingReview?: number };
 };

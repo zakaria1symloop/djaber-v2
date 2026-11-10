@@ -71,7 +71,7 @@ describe('playground (AGT-07)', () => {
     const robe = await createProduct(owner, { name: 'Robe satin bordeaux', price: 4500, stock: 5 });
     await feeRule(owner.workspaceId, 16, 400, 300);
     const stock = (await db.product.findUniqueOrThrow({ where: { id: robe.id } })).stock;
-    const args = { clientName: 'Amine Benali', clientPhone: '0555 12 34 56', wilayaId: 16, address: 'Cité des 200 logements, Alger', items: [{ productId: robe.id, quantity: 2 }], customerConfirmed: true };
+    const args = { clientName: 'Amine Benali', clientPhone: '0555 12 34 56', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'Cité des 200 logements, Alger', items: [{ productId: robe.id, quantity: 2 }], customerConfirmed: true };
     fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args }, { name: 'create_order', args: { ...args, clientPhone: '123' } }, { name: 'add_faq_candidate', args: { question: 'Livrez-vous le vendredi ?' } }] }, { reply: 'Commande test enregistrée.', intent: 'SALE' });
     const turn = (await test(owner, agent.id, say('oui je confirme')).expect(200)).body.data;
     expect(turn.toolCalls[0]).toMatchObject({ name: 'create_order', simulated: true, result: { ok: true, simulated: true, orderId: null, subtotal: 9000, deliveryFee: 400, total: 9400, items: [{ name: 'Robe satin bordeaux', quantity: 2, unitPrice: 4500 }], paymentOptions: ['cod'] } });

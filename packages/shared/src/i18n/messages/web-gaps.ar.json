@@ -1,4 +1,10 @@
 {
+ "agents.template.insert": "إدراج:",
+ "agents.template.placeholder.description": "وصف المنتج",
+ "agents.template.placeholder.name": "اسم المنتج",
+ "agents.template.placeholder.price": "السعر (مثال 4 900 دج)",
+ "agents.template.placeholder.stock": "التوفر (« متوفر » / « نفد »، دون ذكر الكمية)",
+ "agents.template.sample.stock": "متوفر",
  "cash.action.viewProof": "عرض الوصل",
  "cash.proof.current": "الوصل المرفق — عرض",
  "cash.proof.newTab": "علامة تبويب جديدة",
@@ -60,6 +66,9 @@
  "gaps.job.progress": "التقدم: {kind}",
  "gaps.job.running": "{kind} قيد التنفيذ: {pct} %",
  "gaps.orders.notify.noConversation": "طلب بدون محادثة: لا يمكن إبلاغ العميل برسالة.",
+ "import.done.moderationImported": "{count, plural, zero {لا منتجات مستوردة} one {المنتج المستورد} two {المنتجان المستوردان} few {# منتجات مستوردة} many {# منتجًا مستوردًا} other {# منتج مستورد}} في انتظار المراجعة",
+ "import.done.moderationSplit": "{count, plural, zero {لا منتجات من هذا الاستيراد} one {منتج واحد من هذا الاستيراد} two {منتجان من هذا الاستيراد} few {# منتجات من هذا الاستيراد} many {# منتجًا من هذا الاستيراد} other {# منتج من هذا الاستيراد}} في انتظار المراجعة · {total} في المجموع في متجرك",
+ "import.errors.suffix": "أخطاء",
  "import.template.download": "تنزيل ملف نموذجي (CSV)",
  "import.template.fileName": "نموذج-استيراد-المنتجات.csv",
  "members.section.empty": "لا يوجد عضو غير المالك.",
@@ -85,5 +94,8 @@
  "search.global.placeholder": "ابحث عن طلب، عميل، منتج، صفحة…",
  "suppliers.dialog.sameName": "يوجد مورّد بنفس الاسم: {list}. تأكّد أنه ليس نفسه قبل الإنشاء.",
  "suppliers.dialog.seeExisting": "عرض",
+ "tracking.panel.openLink": "فتح",
+ "tracking.panel.publicLink": "رابط التتبع",
+ "validation.banned_word": "يحتوي على كلمة ممنوعة في Djaber: اختر اسمًا آخر.",
  "validation.supplier_taken": "مستخدم لدى مورّد آخر"
 }

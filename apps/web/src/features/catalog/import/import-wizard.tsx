@@ -132,7 +132,10 @@ export function ImportWizard() {
 
   const describe = useCallback((e: Parameters<typeof describeRowError>[1]) => describeRowError(t, e), [t]);
   const downloadErrors = (j: Job | undefined) => {
-    if (j?.resultUrl && j.result?.stage === 'committed') return downloadUrl(j.resultUrl);
+    // recette 09/11 UX-044: the stored file (codes « validation.price », a random name) is only the fallback — the rows of
+    // the committed import are still on the job, so the file is built here with the reasons shown on screen and the
+    // imported file's name (« H-22-import-erreurs.csv »)
+    if (j?.resultUrl && j.result?.stage === 'committed' && !invalidRows(j.result.rows ?? []).length) return downloadUrl(j.resultUrl);
     if (!j?.result) return;
     const csv = buildErrorsCsv(j.result.rows, {
       fields: IMPORT_FIELDS.filter((f) => !!j.result!.mapping?.[f]),
@@ -377,6 +380,9 @@ function DoneStep({ job, onDownload, onAnother }: { job: Job | undefined; onDown
   const report = job?.result?.report ?? null;
   const hasErrors = !!job?.resultUrl || (job?.result ? invalidRows(job.result.rows).length > 0 : false);
   const pending = moderation.data?.pending ?? 0;
+  // recette 09/11 UX-044: « 6 produits en attente » read as if the import created 6 — the banner gives this import's
+  // products waiting for validation (report.pendingReview) and the shop's total apart
+  const imported = Math.min(report?.pendingReview ?? 0, pending);
   return (
     <Card className="flex flex-col gap-4 px-5 py-6" data-testid="import-done" data-status={job?.status}>
       <div className="flex items-center gap-2">
@@ -398,7 +404,9 @@ function DoneStep({ job, onDownload, onAnother }: { job: Job | undefined; onDown
       {report?.categoriesCreated ? <p className="text-[13px] text-text-secondary">{t('import.done.categories', { count: report.categoriesCreated })}</p> : null}
       {pending > 0 ? (
         <Banner tone="warning" action={{ label: t('action.view'), href: `/${locale}/products?tab=pending` }}>
-          {t('import.done.moderation', { count: pending })}
+          <span data-testid="import-pending" data-imported={imported} data-total={pending}>
+            {imported > 0 && imported < pending ? t('import.done.moderationSplit', { count: imported, total: pending }) : imported === pending && imported > 0 ? t('import.done.moderationImported', { count: imported }) : t('import.done.moderation', { count: pending })}
+          </span>
         </Banner>
       ) : null}
       <div className="flex flex-wrap gap-2">

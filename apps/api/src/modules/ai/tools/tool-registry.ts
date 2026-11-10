@@ -8,6 +8,7 @@ import { HANDOFF_REASONS, isPhoneDz, normalizePhoneDz, WILAYA_COUNT } from '@dja
 import { prisma, TenantContext, type Agent, type Prisma } from '@djaber/db';
 import { FAQ_CANDIDATE_INSIGHT_AT } from '../ai.constants';
 import { CatalogueService, type CatalogueProduct } from '../catalogue.service';
+import { stockWord } from '../prompt/sections/catalogue';
 import type { AiToolDef } from '../provider/ai.gateway';
 import { ORDER_TOOLS, PAYMENT_LINK_TOOL, type CancellableOrder, type CreateOrderRequest, type OrderTools, type PaymentLinkTool, type ToolResult } from './order-tools';
 import { ConfigService } from '../../../core/config/config.service';
@@ -116,7 +117,7 @@ const OrderArgs = z.object({
   phoneConfirmed: z.boolean().optional(),
   replacesOrder: str.max(30).optional(),
 });
-const EXAMPLES: Record<string, string | number> = { clientName: 'Amine Benali', clientPhone: '0555123456', secondPhone: '0661123456', wilayaId: 16, address: 'Cité 200 logements, Bt 4, Bab Ezzouar', quantity: 1 };
+const EXAMPLES: Record<string, string | number> = { clientName: 'Amine Benali', clientPhone: '0555123456', secondPhone: '0661123456', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'Cité 200 logements, Bt 4, Bab Ezzouar', quantity: 1 };
 const normQuestion = (q: string) => fold(q).replace(/\s+/g, ' ').slice(0, 200);
 const seqOf = (s: string) => 1000 + ([...s].reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) >>> 0, 7) % 9000);
 
@@ -187,7 +188,14 @@ export class ToolRegistry {
     const prices = p.variants.map((v) => v.price);
     const price = p.hasVariants ? (prices.length ? Math.min(...prices) : null) : p.price;
     const extra = p.hasVariants ? { priceMax: prices.length ? Math.max(...prices) : null, variantRequired: true } : { oldPrice: p.oldPrice };
-    return { id: p.id, name: p.name, sku: p.sku, price, ...extra, stock: p.stock, hasVariants: p.hasVariants, variants: p.variants, imageUrl: p.imageUrl, category: p.category };
+    // recette 09/11 (Badro): no stock count reaches the model, so none reaches the customer (STOCK_PRIVATE)
+    return {
+      id: p.id, name: p.name, sku: p.sku, price, ...extra,
+      stock: stockWord(p.stock, p.sellOutOfStock),
+      hasVariants: p.hasVariants,
+      variants: p.variants.map((v) => ({ id: v.id, name: v.name, price: v.price, stock: stockWord(v.stock, p.sellOutOfStock) })),
+      imageUrl: p.imageUrl, category: p.category,
+    };
   }
 
   private async search(args: Record<string, unknown>, ctx: ToolRunContext): Promise<ToolResult> {
@@ -295,7 +303,7 @@ export class ToolRegistry {
   }
 
   /** Validation, catalogue check and limits of `create_order` (04 §5, FL-02); the write itself is the `OrderTools` port. */
-  async prepareOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<{ ok: true; request: CreateOrderRequest } | { ok: false; result: ToolResult }> {
+  async prepareOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<{ ok: true; request: CreateOrderRequest; beyondStock?: { name: string; quantity: number }[] } | { ok: false; result: ToolResult }> {
     const fail = (result: ToolResult) => ({ ok: false as const, result });
     const a = OrderArgs.safeParse(args);
     if (!a.success) {
@@ -310,6 +318,8 @@ export class ToolRegistry {
     const phone2 = d.secondPhone ? normalizePhoneDz(d.secondPhone) : null;
     if (phone2 && !isPhoneDz(phone2)) return fail(invalid('secondPhone', EXAMPLES.secondPhone));
     if (!d.isStopdesk && (d.address ?? '').length < 10) return fail(invalid('address', EXAMPLES.address));
+    const missing = this.missingRequired(d, ctx.agent);
+    if (missing) return fail({ ok: false, error: { code: 'VALIDATION', field: missing, missing: true, ...(EXAMPLES[missing] !== undefined ? { example: EXAMPLES[missing] } : {}) }, say: 'ask the customer for this field (one question), then show the recap again' });
 
     // A9: the order it replaces must be this customer's and not confirmed by the shop yet; its units count as free here
     let replaces: CreateOrderRequest['replaces'] = null;
@@ -325,16 +335,33 @@ export class ToolRegistry {
     const products = await this.catalogue.byIds(ctx.agent, d.items.map((i) => i.productId));
     const by = new Map(products.map((p) => [p.id, p]));
     const items: CreateOrderRequest['items'] = [];
+    const beyondStock: { name: string; quantity: number }[] = [];
     for (const i of d.items) {
       const p = by.get(i.productId);
       // AI-14: an archived / inactive product is dropped with a message, never ordered
       if (!p) return fail({ ok: false, error: { code: 'PRODUCT_NOT_AVAILABLE', productId: i.productId } });
       const v = p.hasVariants ? p.variants.find((x) => x.id === i.variantId) : null;
-      if (p.hasVariants && !v) return fail({ ok: false, error: { code: 'VARIANT_REQUIRED', productId: p.id, availableVariants: p.variants.filter((x) => p.sellOutOfStock || x.stock > 0).map((x) => ({ id: x.id, name: x.name, price: x.price, stock: x.stock })) } });
+      if (p.hasVariants && !v) return fail({ ok: false, error: { code: 'VARIANT_REQUIRED', productId: p.id, availableVariants: p.variants.filter((x) => p.sellOutOfStock || x.stock > 0).map((x) => ({ id: x.id, name: x.name, price: x.price })) } });
       const stock = v ? v.stock : p.stock !== null && freed.size ? p.stock + (freed.get(`${p.id}:`) ?? 0) : p.stock;
       const free = stock === null ? null : v ? stock + (freed.get(`${p.id}:${v.id}`) ?? 0) : stock;
       // a product sold at zero stock (PV 22/10) is ordered whatever its stock
-      if (free !== null && free < i.quantity && !p.sellOutOfStock) return fail({ ok: false, error: { code: 'ORDER_INSUFFICIENT_STOCK', productId: p.id, available: stock } });
+      if (free !== null && free < i.quantity && !p.sellOutOfStock) {
+        // recette 09/11 (Badro): with variants, the answer gave the chosen variant's count only — it now gives the others
+        // too and the total, so the model can offer to complete the order with another size / colour
+        const others = v ? p.variants.filter((x) => x.id !== v.id && x.stock + (freed.get(`${p.id}:${x.id}`) ?? 0) > 0).map((x) => ({ variantId: x.id, name: x.name, price: x.price, available: x.stock + (freed.get(`${p.id}:${x.id}`) ?? 0) })) : [];
+        return fail({
+          ok: false,
+          error: {
+            code: 'ORDER_INSUFFICIENT_STOCK',
+            productId: p.id,
+            ...(v ? { variantId: v.id, variant: v.name } : {}),
+            available: free,
+            ...(v ? { otherVariants: others, availableAllVariants: free + others.reduce((n, x) => n + x.available, 0) } : {}),
+            say: v ? 'offer `available` of this variant; when the customer wants more, offer to complete with otherVariants (their available quantities), never more than availableAllVariants in total' : 'offer `available`',
+          },
+        });
+      }
+      if (free !== null && free < i.quantity && p.sellOutOfStock) beyondStock.push({ name: v ? `${p.name} ${v.name}` : p.name, quantity: i.quantity - Math.max(0, free) });
       items.push({ productId: p.id, variantId: v?.id ?? null, quantity: i.quantity, name: p.name, variant: v?.name ?? null, unitPrice: v ? v.price : p.price });
     }
     const subtotal = items.reduce((n, i) => n + i.unitPrice * i.quantity, 0);
@@ -350,16 +377,33 @@ export class ToolRegistry {
     return {
       ok: true,
       request: { clientName: d.clientName, clientPhone: phone, secondPhone: phone2, wilayaId: d.wilayaId, communeName: d.communeName || null, address: d.address || null, isStopdesk: d.isStopdesk, stopdeskId: d.stopdeskId || null, notes: d.notes || null, items, subtotal, deliveryFee, total: subtotal + deliveryFee, ...(d.phoneConfirmed ? { phoneConfirmed: true } : {}), replaces },
+      ...(beyondStock.length ? { beyondStock } : {}),
     };
+  }
+
+  /**
+   * recette 09/11 (Badro: « makes orders with missing info he never asks for when it isn't your first order »): the fields
+   * the agent's « Prise de commande » marks required are checked here too, so a missing one comes back as VALIDATION and
+   * the model asks for it instead of creating the order without it.
+   */
+  private missingRequired(d: z.infer<typeof OrderArgs>, agent: ToolRunContext['agent']): string | null {
+    const fields = Array.isArray(agent.orderFields) ? (agent.orderFields as unknown as { key: string; required: boolean }[]) : [];
+    const required = new Set(fields.length ? fields.filter((f) => f.required).map((f) => f.key) : ['commune', 'address']);
+    if (!d.isStopdesk && required.has('commune') && !d.communeName?.trim()) return 'communeName';
+    if (required.has('phone2') && !d.secondPhone?.trim()) return 'secondPhone';
+    if (required.has('note') && !d.notes?.trim()) return 'notes';
+    return null;
   }
 
   private async createOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<ToolResult> {
     const prepared = await this.prepareOrder(args, ctx);
     if (!prepared.ok) return prepared.result;
     const r = prepared.request;
+    const beyond = prepared.beyondStock ? { beyondStock: prepared.beyondStock } : {};
     // §8 dry run: everything validated, nothing written
-    if (ctx.dryRun) return { ok: true, orderId: null, number: `TEST-${seqOf(ctx.callId)}`, simulated: true, subtotal: r.subtotal, deliveryFee: r.deliveryFee, total: r.total, items: r.items.map((i) => ({ name: i.name, variant: i.variant, quantity: i.quantity, unitPrice: i.unitPrice })), duplicateOf: null, paymentOptions: ['cod'] };
-    return this.orders.createOrder({ workspaceId: ctx.workspaceId, agentId: ctx.agent.id, conversationId: ctx.conversationId, clientId: ctx.clientId, channelId: ctx.channelId, runId: ctx.runId, callId: ctx.callId }, r);
+    if (ctx.dryRun) return { ok: true, orderId: null, number: `TEST-${seqOf(ctx.callId)}`, simulated: true, subtotal: r.subtotal, deliveryFee: r.deliveryFee, total: r.total, items: r.items.map((i) => ({ name: i.name, variant: i.variant, quantity: i.quantity, unitPrice: i.unitPrice })), duplicateOf: null, paymentOptions: ['cod'], ...beyond };
+    const created = await this.orders.createOrder({ workspaceId: ctx.workspaceId, agentId: ctx.agent.id, conversationId: ctx.conversationId, clientId: ctx.clientId, channelId: ctx.channelId, runId: ctx.runId, callId: ctx.callId }, r);
+    return created && typeof created === 'object' && (created as { ok?: unknown }).ok !== false ? { ...(created as object), ...beyond } : created;
   }
 
   /** FL-02 F-5: this client's open orders only; one confirmed ⇒ cancel, several ⇒ ask which, none ⇒ hand off. */

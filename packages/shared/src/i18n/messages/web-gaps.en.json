@@ -1,4 +1,10 @@
 {
+ "agents.template.insert": "Insert:",
+ "agents.template.placeholder.description": "Product description",
+ "agents.template.placeholder.name": "Product name",
+ "agents.template.placeholder.price": "Price (e.g. 4,900 DA)",
+ "agents.template.placeholder.stock": "Availability (« in stock » / « sold out », never the quantity)",
+ "agents.template.sample.stock": "in stock",
  "cash.action.viewProof": "View receipt",
  "cash.proof.current": "Attached receipt — view",
  "cash.proof.newTab": "NEW TAB",
@@ -60,6 +66,9 @@
  "gaps.job.progress": "Progress: {kind}",
  "gaps.job.running": "{kind} in progress: {pct} %",
  "gaps.orders.notify.noConversation": "Order without a conversation: the customer cannot be notified by message.",
+ "import.done.moderationImported": "{count, plural, one {The imported product is} other {The # imported products are}} awaiting review",
+ "import.done.moderationSplit": "{count, plural, one {# product from this import is} other {# products from this import are}} awaiting review · {total} in total in your shop",
+ "import.errors.suffix": "errors",
  "import.template.download": "Download a sample file (CSV)",
  "import.template.fileName": "product-import-sample.csv",
  "members.section.empty": "No member besides the owner.",
@@ -85,5 +94,8 @@
  "search.global.placeholder": "Search an order, a client, a product, a page…",
  "suppliers.dialog.sameName": "A supplier already has this name: {list}. Check it is not the same one before creating.",
  "suppliers.dialog.seeExisting": "View",
+ "tracking.panel.openLink": "Open",
+ "tracking.panel.publicLink": "TRACKING LINK",
+ "validation.banned_word": "Contains a word banned on Djaber: choose another name.",
  "validation.supplier_taken": "Already used by another supplier"
 }

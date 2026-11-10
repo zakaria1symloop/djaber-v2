@@ -26,6 +26,7 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { OutboxService } from '../../core/outbox/outbox.service';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { ModerationHookService } from '../catalog/moderation-hook.service';
+import { ModerationPrescreenService } from '../catalog/moderation-prescreen.service';
 import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
 import { CatalogueService } from '../ai/catalogue.service';
@@ -88,7 +89,19 @@ export class AgentService implements OnModuleInit {
     private readonly conversations: ConversationService,
     private readonly outbound: OutboundSendService,
     private readonly safety: SafetyService,
+    private readonly prescreen: ModerationPrescreenService,
   ) {}
+
+  /**
+   * recette 09/11 (Badro, « VERY URGENT »): the names customers read — the agent's name and its display name — never
+   * carry a banned word or an insult (422 on the field, the form says which one).
+   */
+  private async assertCleanNames(names: { name?: string | null; displayName?: string | null }) {
+    const fields: Record<string, string> = {};
+    if (await this.prescreen.bannedInName(names.name)) fields.name = 'validation.banned_word';
+    if (await this.prescreen.bannedInName(names.displayName)) fields['wizard.displayName'] = 'validation.banned_word';
+    if (Object.keys(fields).length) throw validationError(fields);
+  }
 
   onModuleInit() {
     // `POST /agents/:id/activate { at }`: scheduled activations (same checks as an immediate one)
@@ -405,6 +418,7 @@ export class AgentService implements OnModuleInit {
       if (p.status === 'archived' || p.archivedAt) throw new AppException('PRESET_ARCHIVED');
       preset = { ...this.presetView(p, p.versions[0], locale), id: p.id };
     }
+    await this.assertCleanNames({ name: input.name, displayName: input.wizard?.displayName });
     const id = await prisma.$transaction(async (db) => {
       const tx = db as Tx;
       await this.assertRefs(tx, input.wizard);
@@ -459,6 +473,8 @@ export class AgentService implements OnModuleInit {
     };
     if (version !== before.version) throw await stale();
     if (customInstructions !== undefined && customInstructions.length > AGENT_INSTRUCTIONS_MAX) throw validationError({ customInstructions: 'validation.length' });
+    // a name saved before the check keeps working until it is edited; any edit of it is checked
+    await this.assertCleanNames({ name: fields.name !== before.name ? fields.name : undefined, displayName: wizard?.displayName !== before.displayName ? wizard?.displayName : undefined });
     const modelId = await this.routing.agentModelId();
     const ok = await prisma.$transaction(async (db) => {
       const tx = db as Tx;

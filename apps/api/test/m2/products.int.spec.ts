@@ -479,7 +479,8 @@ describe('archive, restore, hard delete, duplicate', () => {
     expect(copy.body.data.sku).not.toBe('DUP-1');
     const full = await owner.post(`/products/${p.id}/duplicate`, { name: 'Copie complète', copyVariants: true, copyCost: true }).expect(201);
     expect(full.body.data).toMatchObject({ costPrice: 1000, hasVariants: true, stock: 0 });
-    expect(full.body.data.variants).toEqual([expect.objectContaining({ name: 'Noir', sku: null, price: 3100, costPrice: 1100, stock: 0 })]);
+    // recette 09/11 UX-042: the copied variant gets an automatic SKU from the copy's own (never the original's)
+    expect(full.body.data.variants).toEqual([expect.objectContaining({ name: 'Noir', sku: `${full.body.data.sku}-NOIR`, price: 3100, costPrice: 1100, stock: 0 })]);
     expect((await db.moderationItem.findFirstOrThrow({ where: { productId: full.body.data.id } })).source).toBe('duplicate');
     expect((await owner.post(`/products/${p.id}/duplicate`, {}).expect(422)).body.error.fields.name).toBe('validation.required');
 

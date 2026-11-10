@@ -29,13 +29,14 @@ import { META_GATEWAY, type MetaGateway } from '../meta/meta.gateway';
 import { AdminNotifier } from '../notifications/admin-notifier.service';
 import { NotificationProducer } from '../notifications/notification.producer';
 import { CrossSellService } from '../recommendations/cross-sell.service';
-import { AI_ERROR_ALERT_FAILURES, AI_ERROR_ALERT_WINDOW_S, LAST_PRODUCTS_MAX, MEDIA_WAIT_MS, MEDIA_WAIT_STEP_MS, plannedCost, RUN_BUDGET_MS, UNCLEAR_STREAK_HANDOFF } from './ai.constants';
+import { AI_ERROR_ALERT_FAILURES, AI_ERROR_ALERT_WINDOW_S, LAST_PRODUCTS_MAX, MEDIA_WAIT_MS, MEDIA_WAIT_STEP_MS, NEW_VISIT_AFTER_MS, NEW_VISIT_NOTE, plannedCost, RUN_BUDGET_MS, UNCLEAR_STREAK_HANDOFF } from './ai.constants';
 import { AiRunService, intentOf, type RunMeta, type TurnResult } from './ai-run.service';
 import { CatalogueService } from './catalogue.service';
 import { InsightService } from './insight.service';
 import { detectLanguage, type AiLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
 import { AiProviderError } from './provider/ai.gateway';
+import { canonicalTool } from './tools/tool-registry';
 import { TurnContextService } from './turn-context.service';
 import { VisionService, visionNoteText, type VisionNote } from './vision.service';
 
@@ -128,13 +129,16 @@ export class ReplyProcessor implements OnModuleInit {
     return { messages, text: lines.join('\n'), plain: plain.join('\n'), hasAudio, images };
   }
 
-  private async history(conv: Conversation, before: Date): Promise<HistoryMessage[]> {
-    const rows = await prisma.message.findMany({ where: { conversationId: conv.id, createdAt: { lt: before }, type: { not: 'system' }, author: { in: ['customer', 'ai', 'human'] } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 30, include: { authorUser: { select: { firstName: true } } } });
-    return rows.reverse().map((m) => ({
-      author: m.author as HistoryMessage['author'],
-      humanName: m.authorUser?.firstName ?? null,
-      text: [m.text?.trim() ?? '', m.transcript ? `[voice note transcript]: ${m.transcript}` : '', ...attachmentsOf(m).filter((a) => a.type === 'image').map(() => '[image]'), m.type === 'product_cards' ? `[product cards: ${CARD_NAMES(m)}]` : ''].filter(Boolean).join('\n'),
-    }));
+  /** The earlier messages (oldest first); a customer message after a long pause carries the NEW_VISIT note. */
+  private async history(conv: Conversation, before: Date): Promise<{ messages: HistoryMessage[]; newVisit: boolean }> {
+    const rows = (await prisma.message.findMany({ where: { conversationId: conv.id, createdAt: { lt: before }, type: { not: 'system' }, author: { in: ['customer', 'ai', 'human'] } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 30, include: { authorUser: { select: { firstName: true } } } })).reverse();
+    const gap = (i: number) => i > 0 && rows[i]!.createdAt.getTime() - rows[i - 1]!.createdAt.getTime() > NEW_VISIT_AFTER_MS;
+    const messages = rows.map((m, i) => {
+      const text = [m.text?.trim() ?? '', m.transcript ? `[voice note transcript]: ${m.transcript}` : '', ...attachmentsOf(m).filter((a) => a.type === 'image').map(() => '[image]'), m.type === 'product_cards' ? `[product cards: ${CARD_NAMES(m)}]` : ''].filter(Boolean).join('\n');
+      return { author: m.author as HistoryMessage['author'], humanName: m.authorUser?.firstName ?? null, text: m.author === 'customer' && text && gap(i) ? `${NEW_VISIT_NOTE}\n${text}` : text };
+    });
+    const last = rows[rows.length - 1];
+    return { messages, newVisit: !!last && before.getTime() - last.createdAt.getTime() > NEW_VISIT_AFTER_MS };
   }
 
   // --- the job -----------------------------------------------------------------------------------------------------------------
@@ -264,7 +268,7 @@ export class ReplyProcessor implements OnModuleInit {
     const matchedIds = Object.values(notes).flatMap((n) => (n.kind === 'match' ? [n.productId] : []));
     const turnCtx = await this.context.load(agent, { text: batch.plain, lastProductIds: [...matchedIds, ...(ctx.lastProductIds ?? [])], lang, unclearStreak: ctx.unclearStreak ?? 0, clientId: conv.clientId, customer: ctx.customer });
     const history = await this.history(conv, batch.messages[0]!.createdAt);
-    const prompt = PromptBuilder.build(turnCtx.prompt, history, batchText, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });
+    const prompt = PromptBuilder.build(turnCtx.prompt, history.messages, history.newVisit ? `${NEW_VISIT_NOTE}\n${batchText}` : batchText, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });
 
     // --- model loop ------------------------------------------------------------------------------------------------------------
     const turn = await this.runs.turn({
@@ -356,7 +360,7 @@ export class ReplyProcessor implements OnModuleInit {
       status = 'handoff';
       reason = 'blocked_word';
     }
-    const replyText = blocked ? '' : out.reply.trim();
+    let replyText = blocked ? '' : out.reply.trim();
 
     return prisma.$transaction(async (db): Promise<ReplyOutcome> => {
       const tx = db as Tx;
@@ -367,6 +371,12 @@ export class ReplyProcessor implements OnModuleInit {
         if (await this.runs.finish(run.id, { status: 'error', error: 'aborted', startedAt: run.startedAt, turn }, tx)) await this.credits.release(run, tx);
         return 'aborted';
       }
+      // recette 09/11 (Badro: « asking for a human gives a useless double msg »): the model's « je vous passe un conseiller »
+      // and the shop's handoff text both went out. When the customer only asked for a human (or wrote a handoff keyword) —
+      // no other tool ran this turn, so the reply carries no order / cancellation news — and the shop's text is about to
+      // be sent, that text is the only message.
+      const onlyHandoff = turn.tools.every((t) => canonicalTool(t.name) === 'handoff_to_human');
+      if (replyText && status === 'handoff' && onlyHandoff && (reason === 'customer_request' || reason === 'keyword') && !contextOf(fresh).handoffMessageSentAt && (await this.outbound.systemTemplate(tx, conv.id, 'handoff', o.lang))) replyText = '';
       // the run is closed first: a second execution of the same batch stops here and stores nothing
       const closed = await this.runs.finish(
         run.id,

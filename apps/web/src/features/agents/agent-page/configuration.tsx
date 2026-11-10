@@ -11,6 +11,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ConflictDialog } from '@/components/global-states';
 import { Link } from '@/i18n/navigation';
+import { ApiError } from '@/lib/api';
 import { conflictOf } from '@/lib/conflict';
 import { errorMessage, useLeaveGuard } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
@@ -22,7 +23,7 @@ import { BehaviourFields } from '../fields/behaviour';
 import { ChannelsFields } from '../fields/channels';
 import { IdentityFields } from '../fields/identity';
 import { KnowledgeFields } from '../fields/knowledge';
-import { dirtySections, draftFromAgent, issueMap, mergeBySection, SECTIONS, sectionsPatch, validateSection, type AgentDraft, type Issue, type SectionKey } from '../logic';
+import { dirtySections, draftFromAgent, issueMap, issueSummary, mergeBySection, SECTIONS, sectionOfField, sectionsPatch, serverIssues, validateSection, type AgentDraft, type Issue, type SectionKey } from '../logic';
 import { useAgentPage } from './agent-shell';
 
 const TABS = ['identity', 'knowledge', 'behaviour', 'channels'] as const;
@@ -75,7 +76,7 @@ export function AgentConfiguration() {
     if (issues.length) {
       const next = { ...draft, ...patch };
       const still = new Set(SECTIONS.flatMap((s) => validateSection(s, next)).map((i) => i.field));
-      setIssues((old) => old.filter((i) => still.has(i.field) && !(i.field.split('.')[0]! in patch)));
+      setIssues((old) => old.filter((i) => (i.server || still.has(i.field)) && !(i.field.split('.')[0]! in patch)));
     }
   };
   const cancel = () => {
@@ -109,8 +110,15 @@ export function AgentConfiguration() {
       toast(t('agents.versions.created', { version: saved.currentVersion }));
     } catch (e) {
       const c = conflictOf<Agent>(e);
+      // recette 09/11 (Badro): a field the server refused is named, outlined and its section opened
+      const refused = e instanceof ApiError && e.code === 'VALIDATION_ERROR' ? serverIssues(e.body.fields) : [];
       if (c) setConflict({ current: c.current, by: c.changedBy, at: c.changedAt });
-      else setError(errorMessage(e, t));
+      else if (refused.length) {
+        setIssues(refused);
+        const first = sectionOfField(refused[0]!.field);
+        if (first && first !== tab) setTab(first);
+        window.requestAnimationFrame(() => document.querySelector('[aria-invalid="true"]')?.scrollIntoView({ block: 'center' }));
+      } else setError(errorMessage(e, t));
     } finally {
       setSaving(false);
     }
@@ -185,7 +193,7 @@ export function AgentConfiguration() {
           <span data-testid="config-foreign">{t('agents.config.foreign')}</span>
         </FormAlert>
       ) : null}
-      <ValidationSummary title={t('agents.validation.summary', { count: issues.length })} items={[...new Set(issues.map((i) => t(i.key, i.params)))]} />
+      <ValidationSummary title={t('agents.validation.summary', { count: issues.length })} items={issueSummary(t, issues)} />
       {error ? <FormAlert>{error}</FormAlert> : null}
 
       {tab === 'identity' ? <IdentityFields {...section} badge={badge('identity')} /> : null}

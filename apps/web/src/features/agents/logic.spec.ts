@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Agent, AgentPreset, PlaygroundTurn } from './contracts';
 import {
+  issueSummary,
+  sectionOfField,
+  serverIssues,
   blockingChecks,
   localDateTimeInput,
   canOpenStep,
@@ -324,5 +327,18 @@ describe('activation (AGT-02 step 5)', () => {
   it('localDateTimeInput formats a datetime-local value (min of "Activer à une date")', () => {
     expect(localDateTimeInput(new Date(2031, 0, 5, 9, 7))).toBe('2031-01-05T09:07');
     expect(localDateTimeInput(new Date(2026, 11, 31, 23, 59))).toBe('2026-12-31T23:59');
+  });
+  it('recette 09/11 (Badro): a 422 of the server lands on its field and the summary names the field', () => {
+    const issues = serverIssues({ 'wizard.displayName': 'validation.banned_word', name: 'validation.length', 'wizard.policies.delivery': 'validation.length', 'wizard.languages.0': 'validation.invalid', presetKey: 'validation.required' });
+    expect(issues.map((i) => i.field)).toEqual(['displayName', 'name', 'policies.delivery', 'languages', 'start']);
+    expect(issues.every((i) => i.server)).toBe(true);
+    const labels: Record<string, string> = { 'agents.identity.displayName': 'NOM AFFICHÉ AU CLIENT', 'validation.banned_word': 'mot interdit' };
+    const t = (k: string) => labels[k] ?? k;
+    expect(issueSummary(t, issues.slice(0, 1))).toEqual(['NOM AFFICHÉ AU CLIENT : mot interdit']);
+    expect(issueSummary(t, [{ field: 'nowhere', key: 'validation.banned_word' }])).toEqual(['mot interdit']);
+    expect(sectionOfField('displayName')).toBe('identity');
+    expect(sectionOfField('policies.delivery')).toBe('knowledge');
+    expect(sectionOfField('responseDelaySec')).toBe('behaviour');
+    expect(sectionOfField('nowhere')).toBeNull();
   });
 });
