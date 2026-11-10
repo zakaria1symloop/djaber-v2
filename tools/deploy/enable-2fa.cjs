@@ -6,14 +6,17 @@
 // Usage, from the repo root on the server (cd /opt/djaber/v2):
 //   node ~/enable-2fa.cjs <email>            2FA on (refused when it is already on)
 //   node ~/enable-2fa.cjs <email> --reset    new secret + new recovery codes (lost phone); the old ones stop working
+//   node ~/enable-2fa.cjs <email> --off      2FA off for this account: the login no longer asks for the 6-digit code
+//                                            (the admin then needs PLATFORM_2FA_OFF_UNTIL in .env, else it asks for 2FA again)
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
 const [emailArg, flag] = process.argv.slice(2);
 const reset = flag === '--reset';
-if (!emailArg || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailArg.trim()) || (flag && !reset)) {
-  console.error('usage (from the repo root): node ~/enable-2fa.cjs <email> [--reset]');
+const off = flag === '--off';
+if (!emailArg || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailArg.trim()) || (flag && !reset && !off)) {
+  console.error('usage (from the repo root): node ~/enable-2fa.cjs <email> [--reset | --off]');
   process.exit(1);
 }
 const email = emailArg.trim().toLowerCase();
@@ -59,6 +62,17 @@ const db = new PrismaClient({ datasources: { db: { url } } });
 (async () => {
   const user = await db.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' }, deletedAt: null }, select: { id: true, email: true, platformRole: true, totpEnabled: true, status: true } });
   if (!user) throw new Error(`${email}: no account (create it first with make-admin.cjs)`);
+  if (off) {
+    if (!user.totpEnabled) return console.log(`${user.email}: 2FA is already off — the login does not ask for a code.`);
+    await db.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: user.id }, data: { totpEnabled: false, totpSecret: null, recoveryCodes: [] } });
+      await tx.auditLog.create({ data: { actorType: 'system', action: 'auth.2fa_disable', entity: 'User', entityId: user.id, before: { totpEnabled: true }, after: { totpEnabled: false, via: 'tools/deploy/enable-2fa.cjs --off' }, reason: 'owner request 10/11: 2FA switched off for the recette (PLATFORM_2FA_OFF_UNTIL)' } });
+    });
+    const until = envValue('PLATFORM_2FA_OFF_UNTIL');
+    console.log(`2FA OFF for ${user.email}: the login no longer asks for the 6-digit code.`);
+    console.log(until ? `The admin opens without 2FA until ${until} (PLATFORM_2FA_OFF_UNTIL).` : 'Warning: PLATFORM_2FA_OFF_UNTIL is not set in .env — the admin area will ask this account to set 2FA up.');
+    return;
+  }
   if (user.totpEnabled && !reset) {
     console.log(`${user.email}: 2FA is already on. Lost phone? Run it again with --reset (new key, new recovery codes).`);
     return;
