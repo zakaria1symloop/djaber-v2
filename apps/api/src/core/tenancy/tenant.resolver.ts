@@ -22,8 +22,15 @@ type WorkspaceCtx = {
 const CURRENT = ['trial', 'active', 'dunning'] as const;
 const SUSPENDED_ALLOWED = [/^\/api\/v1\/workspace$/, /^\/api\/v1\/billing\//, /^\/api\/v1\/credits$/, /^\/api\/v1\/me(\/|$)/, /^\/api\/v1\/help\//, /^\/api\/v1\/support\//];
 
-/** D41 testing exemption (`PLATFORM_2FA_EXEMPT_EMAILS`); never in production. */
-export const twoFaExempt = (email: string): boolean => {
+/** Owner decision 10/11/2026: `PLATFORM_2FA_OFF_UNTIL=YYYY-MM-DD` pauses D41 for everyone until the end of that day (Algiers, UTC+1). */
+export const twoFaPaused = (now = new Date()): boolean => {
+  const until = loadConfig().PLATFORM_2FA_OFF_UNTIL;
+  return !!until && now.getTime() < Date.parse(`${until}T23:59:59+01:00`);
+};
+
+/** D41 testing exemption (`PLATFORM_2FA_EXEMPT_EMAILS`, never in production), or the dated pause above. */
+export const twoFaExempt = (email: string, now = new Date()): boolean => {
+  if (twoFaPaused(now)) return true;
   const cfg = loadConfig();
   if (cfg.NODE_ENV === 'production') return false;
   return cfg.PLATFORM_2FA_EXEMPT_EMAILS.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean).includes(email.toLowerCase());
