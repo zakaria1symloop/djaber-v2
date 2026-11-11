@@ -43,6 +43,22 @@ async function overview() {
   const insights = await db.agentInsight.findMany({ where: { createdAt: { gte: since }, type: { in: ['handoff', 'unknown_topic', 'error'] } }, select: { type: true, detail: true } });
   console.log('== handoff / unknown / error insights in the last 24 h');
   for (const [k, n] of tally(insights, (i) => `${i.type}  ${cut(i.detail, 80)}`)) console.log(`${String(n).padStart(4)}  ${k}`);
+
+  // retest 11/11 (Badro « hands off for no reason »): each handoff of the last 24 h with what led to it — the reason the
+  // model gave, the tools it called and the error codes they answered (no message text); open the id in the inbox to read it
+  const handoffs = await db.aiRun.findMany({ where: { kind: 'reply', status: 'handoff', startedAt: { gte: since } }, orderBy: { startedAt: 'desc' }, take: 15, select: { id: true, startedAt: true, conversationId: true, workspaceId: true, intent: true, meta: true, toolCalls: { select: { name: true, args: true, result: true } }, insights: { select: { type: true, detail: true } } } });
+  const wsNames = await db.workspace.findMany({ where: { id: { in: [...new Set(handoffs.map((h) => h.workspaceId))] } }, select: { id: true, name: true } });
+  console.log('== last handoffs (newest first): time · shop · conversation · reason · intent · tools (error codes)');
+  for (const h of handoffs) {
+    const reason = h.insights.find((i) => i.type === 'handoff')?.detail ?? '—';
+    const tools = h.toolCalls.map((tc) => {
+      const code = tc.result?.error?.code ?? (tc.result?.ok === false ? 'failed' : null);
+      const why = tc.name.endsWith('handoff_to_human') && tc.args?.reason ? ` reason=${tc.args.reason}` : '';
+      return `${tc.name.replace(/^.*__/, '')}${code ? `!${code}` : ''}${why}`;
+    });
+    console.log(`${t(h.startedAt)}  ${cut(wsNames.find((w) => w.id === h.workspaceId)?.name, 24).padEnd(24)}  ${h.conversationId}  ${String(reason).padEnd(16)}  ${String(h.intent ?? '—').padEnd(8)}  ${tools.join(', ') || 'no tool'}`);
+  }
+  if (handoffs.length) console.log('Open one in the shop inbox: https://djaber.vercel.app/fr/inbox/<conversation id>  (or details: node ~/diag-conversation.cjs <id>)');
 }
 
 (async () => {
