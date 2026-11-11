@@ -8,18 +8,23 @@
 //   node ~/make-admin.cjs <email> [role]                       one account (role defaults to super_admin)
 //   node ~/make-admin.cjs <email>:<role> <email>:<role> ...    several at once
 // roles: super_admin | support | moderator | finance | read | none (none removes the admin access)
+//   node ~/make-admin.cjs --list                               every platform account (no password shown)
+//   node ~/make-admin.cjs --reset-password <email> [<email> …]  new random password for existing accounts, printed ONCE
+//     here (open sessions closed; role and 2FA unchanged) — passwords are stored hashed, nobody can read them back
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
 const ROLES = ['super_admin', 'support', 'moderator', 'finance', 'read', 'none'];
-const args = process.argv.slice(2);
+const LIST = process.argv.includes('--list');
+const RESET = process.argv.includes('--reset-password');
+const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const entries = args.length === 2 && !args[1].includes('@') && !args[0].includes(':') ? [[args[0], args[1]]] : args.map((a) => {
   const i = a.lastIndexOf(':');
   return i > a.indexOf('@') ? [a.slice(0, i), a.slice(i + 1)] : [a, 'super_admin'];
 });
 const bad = entries.filter(([e, r]) => !/^[^\s@:]+@[^\s@:]+\.[^\s@:]{2,}$/.test(e.trim()) || !ROLES.includes(r.trim()));
-if (!entries.length || bad.length) {
+if (!LIST && (!entries.length || bad.length)) {
   if (bad.length) console.error('Not understood: ' + bad.map(([e, r]) => `${e}:${r}`).join(', '));
   console.error('usage (from the repo root): node ~/make-admin.cjs <email> [role]   or   node ~/make-admin.cjs <email>:<role> <email>:<role> ...');
   console.error('roles: ' + ROLES.join(' | '));
@@ -49,6 +54,27 @@ const newPassword = () => {
 const audit = (tx, userId, before, after, reason) =>
   tx.auditLog.create({ data: { actorType: 'system', action: before === null ? 'user.create' : 'user.platform_role_change', entity: 'User', entityId: userId, before: before === null ? undefined : { platformRole: before }, after, reason } });
 
+async function list() {
+  const users = await db.user.findMany({ where: { platformRole: { not: 'none' }, deletedAt: null }, orderBy: [{ platformRole: 'asc' }, { email: 'asc' }], select: { email: true, platformRole: true, status: true, totpEnabled: true, lastLoginAt: true } });
+  for (const u of users) console.log(`${u.email.padEnd(34)} ${u.platformRole.padEnd(12)} ${u.status.padEnd(18)} 2FA ${u.totpEnabled ? 'on ' : 'off'}  last login ${u.lastLoginAt ? u.lastLoginAt.toISOString().slice(0, 16).replace('T', ' ') : 'never'}`);
+  console.log(`
+${users.length} platform account(s). Passwords are never shown: use --reset-password <email> to give a new one.`);
+}
+
+async function reset(emailRaw) {
+  const email = emailRaw.trim().toLowerCase();
+  const user = await db.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' }, deletedAt: null }, select: { id: true, email: true, platformRole: true } });
+  if (!user) return console.log(`${email}: no account (create it with: node ~/make-admin.cjs ${email}:<role>)`);
+  const password = newPassword();
+  const passwordHash = await argon2.hash(password, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 });
+  await db.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: user.id }, data: { passwordHash } });
+    await tx.refreshToken.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: new Date() } });
+    await tx.auditLog.create({ data: { actorType: 'system', action: 'user.password_reset', entity: 'User', entityId: user.id, after: { via: 'tools/deploy/make-admin.cjs --reset-password' }, reason: 'owner request 11/11: new password set by server script' } });
+  });
+  console.log(`RESET    ${user.email.padEnd(34)} role ${user.platformRole.padEnd(12)} password: ${password}`);
+}
+
 async function one(emailRaw, role) {
   const email = emailRaw.trim().toLowerCase();
   const user = await db.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' }, deletedAt: null }, select: { id: true, email: true, platformRole: true, status: true, totpEnabled: true } });
@@ -75,7 +101,10 @@ async function one(emailRaw, role) {
 }
 
 (async () => {
-  for (const [e, r] of entries) await one(e, r.trim());
+  if (LIST) return list();
+  if (RESET) {
+    for (const [e] of entries) await reset(e);
+  } else for (const [e, r] of entries) await one(e, r.trim());
   console.log('\nPasswords are shown only here: give each one privately, never in a group chat.');
   console.log('Each person logs in on the web app, changes the password (Profile › Security), opens the admin and sets up 2FA.');
 })()
