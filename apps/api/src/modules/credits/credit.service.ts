@@ -101,8 +101,10 @@ export class CreditService implements OnModuleInit {
     const inPeriod = { bucket: 'plan' as CreditBucket, periodStart: period.start };
     const [planNet, planLimit, planDebits, pack, reservedRows, unreserved] = await Promise.all([
       this.sum(tx, workspaceId, inPeriod),
-      this.sum(tx, workspaceId, { ...inPeriod, kind: 'credit' }),
-      this.sum(tx, workspaceId, { ...inPeriod, kind: 'debit' }),
+      // retest 11/11 M-31: credits taken back by an admin (`adjustment` debit) lower the month's limit — they were counted as
+      // « used » as if the AI had spent them; « used » is what the AI consumed
+      this.sum(tx, workspaceId, { ...inPeriod, OR: [{ kind: 'credit' }, { kind: 'debit', action: 'adjustment' }] }),
+      this.sum(tx, workspaceId, { ...inPeriod, kind: 'debit', NOT: { action: 'adjustment' } }),
       this.sum(tx, workspaceId, { bucket: 'pack' }),
       this.sum(tx, workspaceId, { kind: 'reserved', OR: [{ periodStart: period.start }, { bucket: 'pack' }] }),
       this.sum(tx, workspaceId, { kind: 'release', OR: [{ periodStart: period.start }, { bucket: 'pack' }] }),

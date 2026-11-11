@@ -272,8 +272,12 @@ describe('admin credit grants (PRM-03) & ledger export', () => {
     expect((await finance.post(`/admin/workspaces/${owner.workspaceId}/credits/remove`, { ...body, reason: 'court' }).expect(422)).body.error.code).toBe('ADMIN_REASON_REQUIRED');
     const tooMuch = (await finance.post(`/admin/workspaces/${owner.workspaceId}/credits/remove`, { ...body, credits: before + 1 }).expect(422)).body.error;
     expect(tooMuch).toMatchObject({ code: 'VALIDATION_ERROR', fields: { credits: 'validation.range' }, details: { max: before } });
+    const planBefore = (await owner.get('/credits').expect(200)).body.data.plan;
     const ok = (await finance.post(`/admin/workspaces/${owner.workspaceId}/credits/remove`, body).expect(200)).body.data;
     expect(ok.balance.total).toBe(before - 99000);
+    // retest 11/11 M-31: taken-back credits lower the limit, they are not « used »
+    expect((await owner.get('/credits').expect(200)).body.data.plan).toMatchObject({ used: planBefore.used, limit: planBefore.limit - 99000 });
+    expect((await finance.get('/admin/workspaces?pageSize=100').expect(200)).body.data.find((w: any) => w.id === owner.workspaceId).credits).toMatchObject({ used: planBefore.used, limit: planBefore.limit - 99000 });
     expect(await db.creditLedger.findUniqueOrThrow({ where: { id: ok.ledgerEntryId } })).toMatchObject({ action: 'adjustment', kind: 'debit', bucket: 'plan', credits: -99000, grantedById: expect.any(String) });
     expect(await eventually(() => db.auditLog.count({ where: { action: 'credits.remove', entityId: owner.workspaceId, reason: body.reason } }))).toBe(1);
     // tester log 26/10 UX-040: the Owner is told — e-mail with the reason and the link to the credits history, in-app notification

@@ -70,8 +70,8 @@ export class AdminWorkspacesService {
       WITH p AS (SELECT "workspaceId", max("periodStart") AS ps FROM "CreditLedger" l WHERE "bucket" = 'plan' AND "kind" = 'credit' ${filter} GROUP BY "workspaceId")
       SELECT l."workspaceId",
         sum(l."credits") FILTER (WHERE l."bucket" = 'plan' AND l."periodStart" = p.ps) AS "planNet",
-        sum(l."credits") FILTER (WHERE l."bucket" = 'plan' AND l."periodStart" = p.ps AND l."kind" = 'credit') AS "planLimit",
-        -sum(l."credits") FILTER (WHERE l."bucket" = 'plan' AND l."periodStart" = p.ps AND l."kind" = 'debit') AS "planUsed",
+        sum(l."credits") FILTER (WHERE l."bucket" = 'plan' AND l."periodStart" = p.ps AND (l."kind" = 'credit' OR (l."kind" = 'debit' AND l."action" = 'adjustment'))) AS "planLimit",
+        -sum(l."credits") FILTER (WHERE l."bucket" = 'plan' AND l."periodStart" = p.ps AND l."kind" = 'debit' AND l."action" <> 'adjustment') AS "planUsed",
         sum(l."credits") FILTER (WHERE l."bucket" = 'pack') AS "pack",
         sum(l."credits") FILTER (WHERE l."bucket" = 'pack' AND (l."kind" = 'credit' OR l."action" IN ('store_refund', 'adjustment'))) AS "packTotal"
       FROM "CreditLedger" l JOIN p ON p."workspaceId" = l."workspaceId" WHERE true ${filter}

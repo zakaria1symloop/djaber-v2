@@ -82,7 +82,8 @@ export function InvoicesCard({ owner }: { owner: boolean }) {
   const menu = (i: Invoice): MenuAction[] => {
     const out: MenuAction[] = [];
     if (i.status === 'unpaid') out.push({ key: 'pay', label: t('billing.invoices.payNow'), primary: true, onSelect: () => void pay.run(i.id), disabledReason: !canPay ? t('billing.writeOnly') : !canPayInvoice(i) ? t('error.CONFLICT') : undefined });
-    if (i.status !== 'upcoming') {
+    // retest 11/11 M-20: « À venir » too (the invoice F-2026-00008 of the retest was one) — every invoice has a number and a PDF
+    if (i.number) {
       out.push({ key: 'open', label: t('billing.invoices.open'), onSelect: () => void pdf(i, 'open') });
       out.push({ key: 'pdf', label: t('billing.invoices.pdf'), onSelect: () => void pdf(i, 'save'), hint: 'PDF' });
     }
@@ -134,8 +135,8 @@ export function InvoicesCard({ owner }: { owner: boolean }) {
                 return (
                   <Tr key={i.id} data-testid="invoice-row" data-status={i.status} data-number={i.number}>
                     <Td className="whitespace-nowrap">
-                      {i.status === 'upcoming' ? (
-                        <Ltr>{i.number || '—'}</Ltr>
+                      {!i.number ? (
+                        <Ltr>—</Ltr>
                       ) : (
                         <button type="button" className="font-medium text-accent-inbound hover:underline" title={t('billing.invoices.open')} onClick={() => void pdf(i, 'open')} data-testid="invoice-open">
                           <Ltr>{i.number}</Ltr>
@@ -166,7 +167,7 @@ export function InvoicesCard({ owner }: { owner: boolean }) {
                             {t('billing.invoices.payNow')}
                           </Button>
                         ) : null}
-                        {i.status !== 'upcoming' ? (
+                        {i.number ? (
                           <Button size="sm" variant="ghost" onClick={() => void pdf(i, 'save')} loading={saving === i.id} aria-label={`${t('billing.invoices.pdf')} ${i.number}`} title={t('billing.invoices.pdf')} data-testid="invoice-pdf">
                             <Download className="size-4" aria-hidden />
                             PDF

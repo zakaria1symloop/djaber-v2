@@ -99,7 +99,7 @@ describe('dunning R-J (D49)', () => {
     expect(sub).toMatchObject({ status: 'active', dunningStage: 'd_minus_7' });
     const upcoming = await db.invoice.findFirstOrThrow({ where: { workspaceId: owner.workspaceId, subscriptionId: sub.id } });
     expect(upcoming).toMatchObject({ kind: 'subscription', status: 'upcoming', amount: 1900, dunningStage: 'd_minus_7' });
-    expect((await owner.get('/billing/invoices').expect(200)).body.data[0]).toMatchObject({ status: 'upcoming', pdfUrl: null, dueAt: end.toISOString() });
+    expect((await owner.get('/billing/invoices').expect(200)).body.data[0]).toMatchObject({ status: 'upcoming', pdfUrl: expect.stringMatching(/\/billing\/invoices\/.+\/pdf$/), dueAt: end.toISOString() }); // retest 11/11 M-20
     expect(await outboxNotifications(owner.workspaceId, 'subscription_expiring')).toHaveLength(1);
     expect(await runDunning(app)).toBe(0); // idempotent per stage
 

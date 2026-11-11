@@ -77,7 +77,8 @@ export class InvoiceService {
       status: inv.status,
       method: inv.method,
       paidAt: inv.paidAt?.toISOString() ?? null,
-      pdfUrl: inv.status === 'upcoming' ? null : `/api/v1/billing/invoices/${inv.id}/pdf`,
+      // retest 11/11 M-20: an invoice « À venir » (renewal from J−7) opens too — its PDF reads « À venir » with the due date
+      pdfUrl: `/api/v1/billing/invoices/${inv.id}/pdf`,
       dueAt: inv.dueAt?.toISOString() ?? null,
       remaining: await this.remaining(tx, inv),
       dunningStage: inv.dunningStage,
