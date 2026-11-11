@@ -80,7 +80,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
   },
   handoff_to_human: {
     name: 'handoff_to_human',
-    description: 'Escalate to the merchant team. Use when a rule requires it or the customer asks.',
+    description: 'Escalate to the merchant team, only when one of the HANDOFF rules applies (reason = that rule id; reason=other only for a « Shop rules » item). Never for a question you cannot answer (status=UNKNOWN) or a stock problem (offer what is available).',
     parameters: { type: 'object', required: ['reason'], additionalProperties: false, properties: { reason: { enum: [...HANDOFF_REASONS] }, detail: { type: 'string', maxLength: 200 } } },
   },
   add_faq_candidate: {
@@ -149,7 +149,11 @@ export class ToolRegistry {
    * Returns the handoff reason, else null.
    */
   forcedHandoff(name: string, args: Record<string, unknown>, result: unknown): string | null {
-    if (canonicalTool(name) === 'handoff_to_human') return typeof args.reason === 'string' && (HANDOFF_REASONS as readonly string[]).includes(args.reason) ? args.reason : 'other';
+    if (canonicalTool(name) === 'handoff_to_human') {
+      // retest 11/11: a handoff without a rule was refused by the tool — the model answers instead, the thread stays with it
+      if ((result as { error?: { code?: unknown } } | null)?.error?.code === 'HANDOFF_NOT_NEEDED') return null;
+      return typeof args.reason === 'string' && (HANDOFF_REASONS as readonly string[]).includes(args.reason) ? args.reason : 'other';
+    }
     const r = result as { hint?: unknown; error?: { code?: unknown } } | null;
     // 04 §13 / 04-ai-pipeline §4.2: a blocked customer, or a risky one with RISKY_CLIENT_POLICY=handoff, goes to the team
     if (r?.hint === 'risky_client' || r?.error?.code === 'CUSTOMER_BLOCKED') return 'risky_client';
@@ -173,7 +177,7 @@ export class ToolRegistry {
       case 'cancel_order':
         return this.cancelOrder(args, ctx);
       case 'handoff_to_human':
-        return { ok: true };
+        return this.handoff(args, ctx);
       case 'add_faq_candidate':
         return this.faqCandidate(args, ctx);
       case 'create_payment_link':
@@ -181,6 +185,24 @@ export class ToolRegistry {
       default:
         return { ok: false, error: { code: 'UNKNOWN_TOOL', name: rawName } };
     }
+  }
+
+  /**
+   * Retest 11/11 (Badro: « the AI sometimes sends the discussion to a team member for no reason »): the 2 handoffs « other »
+   * of the day were a product question it had no answer to and an ORDER_INSUFFICIENT_STOCK — both cases the prompt says to
+   * keep. A handoff whose reason is no rule (« other », or unknown) is refused when the shop wrote no rule of its own
+   * (« Shop rules » are the only use of « other »): the model gets the instruction back and answers in the same turn.
+   */
+  private handoff(args: Record<string, unknown>, ctx: ToolRunContext): ToolResult {
+    const reason = typeof args.reason === 'string' ? args.reason : '';
+    const known = (HANDOFF_REASONS as readonly string[]).includes(reason) && reason !== 'other';
+    if (known || (ctx.agent.humanHandoffRules ?? '').trim()) return { ok: true };
+    return {
+      ok: false,
+      error: { code: 'HANDOFF_NOT_NEEDED' },
+      instruction:
+        'No handoff rule applies: keep the conversation and answer now. A question you have no answer to ⇒ status=UNKNOWN, call add_faq_candidate and say briefly you will check with the team. A stock problem (ORDER_INSUFFICIENT_STOCK, out of stock) ⇒ offer the quantity available, the other variants or a similar product. Hand off only for a listed rule (customer_request, refund, complaint, angry, unclear_streak, off_catalogue, order_limits, risky_client, keyword).',
+    } as ToolResult;
   }
 
   private view(p: CatalogueProduct) {
