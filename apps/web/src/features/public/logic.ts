@@ -185,3 +185,6 @@ export const isBlockingCode = (c: string): c is (typeof BLOCKING_CODES)[number] 
 export const isDeletionToken = (t: string | null | undefined): t is string => !!t && /^[A-Za-z0-9_-]{20,100}$/.test(t);
 /** Export polling: every 3 s while the job runs, stopped once it is done / failed. */
 export const exportPollMs = (s: string | null | undefined): number | false => (s === 'queued' || s === 'running' ? 3000 : false);
+/** UX-047: « Exporter mes données » is offered while no export is running or ready (none yet, failed, or its link expired). */
+export const canStartExport = (x: { status: string; url: string | null } | null | undefined): boolean =>
+  !x || !(x.status === 'queued' || x.status === 'running' || (x.status === 'done' && !!x.url));

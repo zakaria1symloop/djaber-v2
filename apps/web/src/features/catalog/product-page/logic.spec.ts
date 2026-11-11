@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Product } from '../contracts';
-import { appealExpired, moderationView, rejectedField, stockSummary, timelineTone, variantPatch } from './logic';
+import { appealExpired, moderationView, qtyText, rejectedField, stockSummary, timelineTone, variantPatch } from './logic';
 
 const detail = (o: Partial<NonNullable<Product['moderationDetail']>> = {}): NonNullable<Product['moderationDetail']> => ({
   status: 'rejected',
@@ -104,5 +104,15 @@ describe('variantPatch', () => {
   it('price and threshold are required', () => {
     expect(variantPatch(current, { price: '', costPrice: '1500', minStock: '' }, true).errors).toEqual({ price: 'validation.price', minStock: 'validation.quantity' });
     expect(variantPatch(current, { price: '0', costPrice: '1500', minStock: '0' }, true)).toEqual({ patch: { minStock: 0 }, errors: { price: 'validation.price' } });
+  });
+});
+
+describe('UX-050 quantities in the product unit', () => {
+  const generic = (count: string) => `${count} u`;
+  it('uses the unit abbreviation, the generic « u » only without a unit', () => {
+    expect(qtyText('10', { abbreviation: 'pc' }, generic)).toBe('10 pc');
+    expect(qtyText('10', { abbreviation: 'قطعة' }, generic)).toBe('10 قطعة');
+    expect(qtyText('10', null, generic)).toBe('10 u');
+    expect(qtyText('3', { abbreviation: '  ' }, generic)).toBe('3 u');
   });
 });

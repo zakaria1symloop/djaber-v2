@@ -9,6 +9,7 @@ import { StorageService } from '../../core/storage/storage.service';
 import { money, renderGdsDocument } from '../gds/gds-document.pdf';
 import { JobService } from './job.service';
 import { writeTable, type TableColumn, type TableFormat } from './table-file';
+import { logoBytes } from '../uploads/logo-bytes';
 
 export type ExportTable<T = any> = {
   sheetName: string;
@@ -85,11 +86,9 @@ export class ExportService implements OnModuleInit {
   }
 
   /** The shop logo bytes for PDF headers (null when absent or not stored by us). */
-  private async logo(url: string | null): Promise<Buffer | null> {
-    if (!url) return null;
-    const upload = await prisma.upload.findFirst({ where: { url, workspaceId: TenantContext.workspaceId() }, select: { storageKey: true, mime: true } });
-    if (!upload || !/png|jpe?g/i.test(upload.mime)) return null;
-    return (await this.storage.get(upload.storageKey).catch(() => null))?.body ?? null;
+  private logo(url: string | null): Promise<Buffer | null> {
+    // a WebP / GIF logo is converted to PNG (pdfkit draws PNG / JPEG only)
+    return logoBytes(this.storage, url);
   }
 
   /** Job handler. A second run of a finished job is a no-op (JobService.run). */

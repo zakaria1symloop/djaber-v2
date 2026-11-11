@@ -10,6 +10,12 @@ import { eachDay, pct, round1, type DayRange } from '../../analytics/range';
 import { profitAndLoss } from '../money-figures';
 import { deadStock, stockLines } from './stock-queries';
 
+/**
+ * UX-052 (10/11): « COD » (paid on delivery) only for cash collected on an order; cash at the counter (sale), on a
+ * purchase or in the till is « Espèces » (`report.paymentMethod.*`).
+ */
+export const reportMethod = (method: string, documentType: string | null | undefined): string => (method === 'cash' && documentType === 'order' ? 'cod' : method);
+
 export type ReportCtx = {
   workspaceId: string;
   /** null for snapshot reports */
@@ -309,7 +315,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     const rows: ReportRow[] = entries
       .map((e) => {
         const d = doc.get(e.sourceId);
-        return { date: iso(e.paidAt), documentType: e.sourceType, number: d?.number ?? null, party: d?.party ?? null, method: e.method, direction: e.sourceType === 'purchase' ? 'out' : 'in', amount: e.amount, reference: e.reference, _ref: { type: e.sourceType as 'order' | 'sale' | 'purchase', id: e.sourceId } };
+        return { date: iso(e.paidAt), documentType: e.sourceType, number: d?.number ?? null, party: d?.party ?? null, method: reportMethod(e.method, e.sourceType), direction: e.sourceType === 'purchase' ? 'out' : 'in', amount: e.amount, reference: e.reference, _ref: { type: e.sourceType as 'order' | 'sale' | 'purchase', id: e.sourceId } };
       })
       .filter((row) => !q || [row.number, row.party, row.reference].some((v) => v?.toLowerCase().includes(q)));
     const received = rows.filter((x) => x.direction === 'in').reduce((s, x) => s + n(x.amount), 0);
@@ -494,7 +500,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     const all: ReportRow[] = txs.map((t) => {
       balance += t.type === 'income' ? t.amount : -t.amount;
       const doc = docOf(t);
-      return { date: iso(t.date), description: t.description, reference: doc?.number ?? t.reference, category: t.category, method: t.method, income: t.type === 'income' ? t.amount : 0, expense: t.type === 'expense' ? t.amount : 0, balance, proof: t.proof?.storageKey ?? null, _ref: doc ? { type: doc.type, id: doc.id } : null };
+      return { date: iso(t.date), description: t.description, reference: doc?.number ?? t.reference, category: t.category, method: reportMethod(t.method, doc?.type), income: t.type === 'income' ? t.amount : 0, expense: t.type === 'expense' ? t.amount : 0, balance, proof: t.proof?.storageKey ?? null, _ref: doc ? { type: doc.type, id: doc.id } : null };
     });
     const rows = q ? all.filter((x) => [x.description, x.reference].some((v) => typeof v === 'string' && v.toLowerCase().includes(q))) : all;
     const income = sumOf(all, 'income');

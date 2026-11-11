@@ -7,6 +7,7 @@ import { createTestApp, type TestApp } from '../support/app';
 import { orderBody, postOrder, status } from '../support/m5';
 import { advancedShop, product, sale } from '../support/m7';
 import { DailyStatsService } from '../../src/modules/analytics/daily-stats.service';
+import { METRICS_VERSION } from '../../src/modules/analytics/day-metrics';
 import { addDays } from '../../src/modules/analytics/range';
 import { agent, aiRun, at, channel, conversation, creditDebit, daysAgo, db, message, order, shipment, todayAlgiers } from '../support/m8';
 
@@ -43,6 +44,9 @@ describe('AT-ORD-10 named figures — identical in home, analytics and reports',
     expect(overview.kpis.netRevenue).toMatchObject({ value: 2600, figure: 'net_revenue' });
     expect(overview.kpis.pipeline).toEqual({ value: 500, unit: 'money', figure: 'pipeline' });
     expect(overview.kpis.cashCollected.value).toBe(home.kpis.cashCollected30d);
+    // UX-052 (10/11): the 1 000 DA paid on the counter sale is « encaissé » too
+    expect(overview.kpis.cashCollected.hint).toMatchObject({ sales: 1000 });
+    expect(home.kpis.cashCollected30d).toBe(1000 + overview.kpis.cashCollected.hint.orders);
     expect(report.totals.netRevenue).toBe(2600);
 
     // the delivered order turns out to be an AI order ⇒ AI revenue = 2000 everywhere
@@ -152,7 +156,7 @@ describe('DailyStat rollup (sched-daily-stats) + live today', () => {
     const first = await stats.rollupWorkspace(ws, d1);
     expect(first.written).toBeGreaterThanOrEqual(3);
     const rows = await db.dailyStat.findMany({ where: { workspaceId: ws } });
-    expect(rows.find((r) => r.day.toISOString().slice(0, 10) === d3)?.metrics).toMatchObject({ v: 1, orders: { created: 2, cancelled: 1 }, conv: { created: 1 } });
+    expect(rows.find((r) => r.day.toISOString().slice(0, 10) === d3)?.metrics).toMatchObject({ v: METRICS_VERSION, orders: { created: 2, cancelled: 1 }, conv: { created: 1 } });
     const after = (await get(owner, '/analytics/orders?period=7d')).data;
     // d3 … d1 come from the rollup (the backfill starts at the first activity); the days before it and today are live
     expect(after.range.source).toEqual({ rollupDays: 3, liveDays: 4 });

@@ -30,7 +30,8 @@ export type MailTemplateName =
   | 'reports/resolved';
 
 type L = Record<AppLocale, string>;
-type Copy = { subject: L; title: L; body: L; cta?: L; footer?: L };
+/** `cta2` = an optional second link (`params.url2`), drawn as a secondary button under the first one */
+type Copy = { subject: L; title: L; body: L; cta?: L; cta2?: L; footer?: L };
 
 const l = (fr: string, ar: string, en: string): L => ({ fr, ar, en });
 
@@ -125,11 +126,13 @@ const COPY: Record<MailTemplateName, Copy> = {
     subject: l('Suppression de votre compte programmée', 'تمت برمجة حذف حسابك', 'Your account deletion is scheduled'),
     title: l('Compte désactivé', 'تم تعطيل الحساب', 'Account deactivated'),
     body: l(
-      'Votre compte sera supprimé définitivement le {scheduledAt}. Pour annuler, connectez-vous avant cette date.',
-      'سيُحذف حسابك نهائيًا في {scheduledAt}. للإلغاء، سجّل الدخول قبل هذا التاريخ.',
-      'Your account will be permanently deleted on {scheduledAt}. To cancel, sign in before that date.',
+      'Votre compte sera supprimé définitivement le {scheduledAt}. D’ici là, vous pouvez annuler la suppression ou télécharger vos données (fichier disponible 7 jours) depuis ce message ou en vous connectant à Djaber.',
+      'سيُحذف حسابك نهائيًا في {scheduledAt}. حتى ذلك الحين، يمكنك إلغاء الحذف أو تنزيل بياناتك (الملف متاح 7 أيام) من هذه الرسالة أو بتسجيل الدخول إلى جابر.',
+      'Your account will be permanently deleted on {scheduledAt}. Until then, you can cancel the deletion or download your data (file available for 7 days) from this e-mail or by signing in to Djaber.',
     ),
-    cta: l('Annuler (se connecter)', 'إلغاء (تسجيل الدخول)', 'Cancel (sign in)'),
+    cta: l('Annuler la suppression', 'إلغاء الحذف', 'Cancel the deletion'),
+    // UX-047 (10/11): « Exporter mes données » next to the cancel (both open the public page with the cancel token)
+    cta2: l('Exporter mes données', 'تصدير بياناتي', 'Export my data'),
   },
   'workspace/invitation': {
     subject: l('{inviterName} vous invite sur {workspaceName}', '{inviterName} يدعوك إلى {workspaceName}', '{inviterName} invites you to {workspaceName}'),
@@ -233,7 +236,7 @@ export type RenderedMail = { subject: string; html: string; text: string };
 export const isMailTemplate = (name: string): name is MailTemplateName => name in COPY;
 
 /**
- * `params.url` is the call-to-action link; `*At` params are ISO dates rendered in Africa/Algiers;
+ * `params.url` is the call-to-action link (`params.url2` the second one, for a template with `cta2`); `*At` params are ISO dates rendered in Africa/Algiers;
  * `role` is a MemberRole rendered with its label.
  */
 export const renderMail = (name: MailTemplateName, localeIn: string, paramsIn: Record<string, unknown>): RenderedMail => {
@@ -252,6 +255,8 @@ export const renderMail = (name: MailTemplateName, localeIn: string, paramsIn: R
   const body = t(copy.body);
   const url = typeof paramsIn.url === 'string' ? paramsIn.url : undefined;
   const cta = copy.cta && url ? t(copy.cta) : undefined;
+  const url2 = typeof paramsIn.url2 === 'string' ? paramsIn.url2 : undefined;
+  const cta2 = copy.cta2 && url2 ? t(copy.cta2) : undefined;
   const dir = locale === 'ar' ? 'rtl' : 'ltr';
   const html = `<!doctype html>
 <html lang="${locale}" dir="${dir}">
@@ -269,12 +274,17 @@ export const renderMail = (name: MailTemplateName, localeIn: string, paramsIn: R
         <tr><td style="padding:12px 32px 0;font-size:12px;line-height:18px;color:#6b7280;word-break:break-all;"><span dir="ltr">${esc(url)}</span></td></tr>`
             : ''
         }
+        ${
+          cta2 && url2
+            ? `<tr><td style="padding:16px 32px 0;"><a href="${esc(url2)}" style="display:inline-block;background:#ffffff;color:#2563eb;border:1px solid #2563eb;text-decoration:none;font-size:14px;font-weight:700;padding:11px 19px;border-radius:8px;">${esc(cta2)}</a></td></tr>`
+            : ''
+        }
         <tr><td style="padding:28px 32px 28px;font-size:12px;color:#6b7280;">© Djaber</td></tr>
       </table>
     </td></tr>
   </table>
 </body>
 </html>`;
-  const text = [title, '', body, ...(url ? ['', cta ? `${cta}: ${url}` : url] : [])].join('\n');
+  const text = [title, '', body, ...(url ? ['', cta ? `${cta}: ${url}` : url] : []), ...(cta2 && url2 ? [`${cta2}: ${url2}`] : [])].join('\n');
   return { subject, html, text };
 };

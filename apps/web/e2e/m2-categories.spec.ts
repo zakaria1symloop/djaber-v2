@@ -87,7 +87,10 @@ test('AT-CAT-06 delete a category used by a product: reassign dialog, then gone 
   await page.getByRole('menuitem', { name: 'Supprimer' }).click();
   const dialog = page.getByTestId('delete-dialog');
   await expect(dialog).toHaveAttribute('data-mode', 'reassign');
-  await expect(dialog).toContainText('1 produit utilise cette catégorie (CATEGORY_IN_USE)');
+  await expect(dialog).toContainText('1 produit utilise cette catégorie.');
+  // UX-051: nothing preselected, the button waits for a choice
+  await expect(dialog.locator('#reassign-to')).toHaveValue('');
+  await expect(page.getByTestId('taxonomy-delete')).toBeDisabled();
   await dialog.locator('#reassign-to').selectOption({ label: TARGET });
   await page.getByRole('button', { name: 'Réassigner et supprimer' }).click();
   await expect(page.locator(category(USED))).toHaveCount(0);

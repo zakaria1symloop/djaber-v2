@@ -17,16 +17,33 @@ import { refusal } from '../dialogs/common';
 
 type Lang = AppLocale;
 
+type Shop = { name: string; logoUrl?: string | null; phone?: string | null; address?: string | null };
+
+/**
+ * UX-049 (10/11): wilaya, commune (left out when it only repeats the wilaya's name), then « Point relais : <name> » or
+ * « Domicile : <address> » — each written once.
+ */
+export function slipAddress(a: Order['address'], tr: (key: string, params?: Record<string, string | number>) => string): string {
+  if (!a) return '—';
+  const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
+  const commune = a.communeText && fold(a.communeText) !== fold(a.wilayaName) ? a.communeText : null;
+  const where = a.isStopdesk ? tr('orders.print.relay', { name: a.stopdeskName ?? '—' }) : a.address ? tr('orders.print.homeAt', { address: a.address }) : tr('orders.print.home');
+  return [a.wilayaName, commune, where].filter(Boolean).join(' · ');
+}
+
 /** Slip content in the chosen language (labels from the catalogue of that language, numbers always Latin). */
-export function slipProps(o: Order, shop: string, lang: Lang, withPrices: boolean): A5SlipProps {
+export function slipProps(o: Order, shop: string | Shop, lang: Lang, withPrices: boolean): A5SlipProps {
   const m = getMessages(lang);
   const tr = (key: string, params?: Record<string, string | number>) => formatMessage(lang, m, key, params);
-  const a = o.address;
-  const address = a ? [`${a.wilayaName}`, a.communeText, a.isStopdesk ? (a.stopdeskName ?? tr('common.stopdesk')) : a.address, a.isStopdesk ? tr('common.stopdesk').toLowerCase() : tr('orders.print.home')].filter(Boolean).join(' · ') : '—';
+  const s: Shop = typeof shop === 'string' ? { name: shop } : shop;
+  const address = slipAddress(o.address, tr);
   const phone = [formatPhoneDz(o.clientPhone), o.clientPhone2 ? formatPhoneDz(o.clientPhone2) : null].filter(Boolean).join(' / ');
   const tracking = o.shipments[0]?.publicTrackingUrl;
   return {
-    shop,
+    shop: s.name,
+    shopLogoUrl: s.logoUrl ?? null,
+    shopPhone: s.phone ? formatPhoneDz(s.phone) : null,
+    shopAddress: s.address ?? null,
     heading: tr('orders.print.heading', { number: o.number, date: formatDateTime(o.orderedAt, lang) }),
     client: tr('orders.print.client', { name: o.clientName, phone }),
     address,
@@ -55,7 +72,8 @@ export function OrderPrintPage({ id }: { id: string }) {
   const [lang, setLang] = useState<Lang>(locale);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
-  const props = useMemo(() => (q.data ? slipProps(q.data, workspace?.name ?? '', lang, withPrices) : null), [q.data, workspace?.name, lang, withPrices]);
+  const shop = useMemo<Shop>(() => ({ name: workspace?.name ?? '', logoUrl: workspace?.logoUrl, phone: workspace?.phone, address: workspace?.address }), [workspace?.name, workspace?.logoUrl, workspace?.phone, workspace?.address]);
+  const props = useMemo(() => (q.data ? slipProps(q.data, shop, lang, withPrices) : null), [q.data, shop, lang, withPrices]);
 
   const pdf = async () => {
     setPdfBusy(true);

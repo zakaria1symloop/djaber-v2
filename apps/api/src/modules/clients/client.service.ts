@@ -532,5 +532,5 @@ export class ClientService implements OnModuleInit {
 const HEADERS = {
   fr: { sheet: 'Clients', name: 'Nom', phone: 'Téléphone', email: 'E-mail', source: 'Source', orders: 'Commandes', spent: 'Dépensé (DA)', lastOrder: 'Dernière commande', tags: 'Tags' },
   en: { sheet: 'Clients', name: 'Name', phone: 'Phone', email: 'E-mail', source: 'Source', orders: 'Orders', spent: 'Spent (DA)', lastOrder: 'Last order', tags: 'Tags' },
-  ar: { sheet: 'العملاء', name: 'الاسم', phone: 'الهاتف', email: 'البريد الإلكتروني', source: 'المصدر', orders: 'الطلبات', spent: 'المصروف (دج)', lastOrder: 'آخر طلب', tags: 'الوسوم' },
+  ar: { sheet: 'العملاء', name: 'الاسم', phone: 'الهاتف', email: 'البريد الإلكتروني', source: 'المصدر', orders: 'الطلبات', spent: 'المصروف (DA)', lastOrder: 'آخر طلب', tags: 'الوسوم' },
 } as const;

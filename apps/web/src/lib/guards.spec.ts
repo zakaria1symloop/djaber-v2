@@ -58,6 +58,12 @@ describe('(app) guard', () => {
     expect(decideApp({ ...base, status: 'loading' })).toEqual({ kind: 'wait' });
     expect(decideApp({ ...base, workspace: null, workspaceLoading: true })).toEqual({ kind: 'wait' });
   });
+  it('UX-047: an account in its deletion grace goes to « Compte désactivé » (/workspaces/new) first, shop or not', () => {
+    expect(decideApp({ ...base, deletionScheduled: true })).toEqual({ kind: 'redirect', to: '/workspaces/new' });
+    expect(decideApp({ ...base, deletionScheduled: true, workspace: null, workspaceLoading: true })).toEqual({ kind: 'redirect', to: '/workspaces/new' });
+    expect(decideOnboarding({ ...base, deletionScheduled: true, slug: 'welcome' })).toEqual({ kind: 'redirect', to: '/workspaces/new' });
+    expect(decideApp({ ...base, deletionScheduled: false })).toEqual(decideApp(base));
+  });
   it('redirects visitors to /login with returnTo', () => {
     expect(decideApp({ ...base, status: 'anonymous', pathname: '/settings/members' })).toEqual({ kind: 'redirect', to: '/login?returnTo=%2Fsettings%2Fmembers' });
   });

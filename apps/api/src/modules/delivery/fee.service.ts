@@ -35,12 +35,24 @@ export const quoteFee = (rule: Rule | null, o: { wilayaId: number; isStopdesk: b
   return { ...common, fee: free ? 0 : base, base, free, reason: free ? 'free_threshold' : 'grid', wilayaServed: true };
 };
 
-/** "GRILLE SÉTIF · DOMICILE 400 → OFFERTE" (OrderDto.feeExplanation) — wording assembled by the server, French labels. */
-export const feeExplanation = (q: FeeQuoteView, wilayaName: string | null) => {
-  const head = `GRILLE ${(wilayaName ?? String(q.wilayaId)).toUpperCase()} · ${q.isStopdesk ? 'POINT RELAIS' : 'DOMICILE'} ${q.base}`;
-  if (q.reason === 'free_threshold') return `${head} → OFFERTE`;
-  if (q.reason === 'override') return `${head} → ${q.fee} (MODIFIÉ)`;
-  if (q.reason === 'not_served') return `${head} → NON DESSERVIE`;
+/** Words of the fee note per app language (UX-046, 10/11: the note stayed in French on the Arabic and English pages). */
+const FEE_NOTE = {
+  fr: { grid: (w: string, m: string, b: number) => `GRILLE ${w} · ${m} ${b}`, home: 'DOMICILE', stopdesk: 'POINT RELAIS', free: 'OFFERTE', changed: 'MODIFIÉ', notServed: 'NON DESSERVIE', arrow: '→' },
+  en: { grid: (w: string, m: string, b: number) => `${w} FEE GRID · ${m} ${b}`, home: 'HOME', stopdesk: 'PICKUP POINT', free: 'FREE', changed: 'CHANGED', notServed: 'NOT SERVED', arrow: '→' },
+  ar: { grid: (w: string, m: string, b: number) => `شبكة رسوم ${w} · ${m} ${b}`, home: 'توصيل للمنزل', stopdesk: 'نقطة استلام', free: 'مجاني', changed: 'معدَّل', notServed: 'غير مخدومة', arrow: '←' },
+} as const;
+
+/**
+ * "GRILLE SÉTIF · DOMICILE 400 → OFFERTE" (OrderDto.feeExplanation) — assembled by the server in the request's language
+ * (`Accept-Language`), with the wilaya name of that language (Arabic name in Arabic).
+ */
+export const feeExplanation = (q: FeeQuoteView, wilaya: string | { nameFr: string; nameAr: string } | null, locale = 'fr') => {
+  const w = FEE_NOTE[locale === 'ar' || locale === 'en' ? locale : 'fr'];
+  const name = wilaya === null ? String(q.wilayaId) : typeof wilaya === 'string' ? wilaya : locale === 'ar' ? wilaya.nameAr || wilaya.nameFr : wilaya.nameFr;
+  const head = w.grid(name.toUpperCase(), q.isStopdesk ? w.stopdesk : w.home, q.base);
+  if (q.reason === 'free_threshold') return `${head} ${w.arrow} ${w.free}`;
+  if (q.reason === 'override') return `${head} ${w.arrow} ${q.fee} (${w.changed})`;
+  if (q.reason === 'not_served') return `${head} ${w.arrow} ${w.notServed}`;
   return head;
 };
 

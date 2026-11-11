@@ -54,6 +54,8 @@ const kpi = (ctx: Ctx, unit: AnalyticsUnit, value: number | null, previous: numb
 const snap = (unit: AnalyticsUnit, value: number | null, extra: { figure?: MoneyFigureName; hint?: AnalyticsKpi['hint'] } = {}): AnalyticsKpi => ({ value, unit, ...extra });
 
 const revenueOf = (m: DayMetrics) => m.revenue.sales + m.revenue.orders;
+/** 04 §4 Cash collected = Σ amountPaid of the orders placed in the period + of the completed counter sales (UX-052). */
+const cashOf = (m: DayMetrics) => m.orders.cashCollected + (m.revenue.salesPaid ?? 0);
 const median = (h: Parameters<typeof percentile>[0], counts: number[]) => percentile(h, counts, 0.5);
 const sum = (o: Record<string, number>) => Object.values(o).reduce((s, v) => s + v, 0);
 const usd = (micro: number) => Math.round(micro / 100) / 10_000;
@@ -155,7 +157,8 @@ export class AnalyticsService {
       revenue: kpi(ctx, 'money', revenueOf(cur), prev ? revenueOf(prev) : null, { figure: 'revenue', hint: { salesCount: cur.revenue.salesCount, deliveredOrders: cur.orders.delivered, salesRevenue: cur.revenue.sales, ordersRevenue: cur.revenue.orders } }),
       netRevenue: kpi(ctx, 'money', revenueOf(cur) - cur.revenue.deliveryFees, prev ? revenueOf(prev) - prev.revenue.deliveryFees : null, { figure: 'net_revenue', hint: { deliveryFees: cur.revenue.deliveryFees } }),
       pipeline: snap('money', await this.pipeline(ctx.channelId), { figure: 'pipeline' }),
-      cashCollected: kpi(ctx, 'money', cur.orders.cashCollected, prev?.orders.cashCollected, { figure: 'cash_collected' }),
+      // 04 §4 (UX-052, 10/11): amounts paid on the orders placed in the period + on the counter sales of the period
+      cashCollected: kpi(ctx, 'money', cashOf(cur), prev ? cashOf(prev) : null, { figure: 'cash_collected', hint: { orders: cur.orders.cashCollected, sales: cur.revenue.salesPaid ?? 0 } }),
       aiRevenue: kpi(ctx, 'money', cur.revenue.ordersAi, prev?.revenue.ordersAi, { figure: 'ai_revenue' }),
     };
   }

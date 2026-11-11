@@ -81,7 +81,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const wsQ = useQuery({
     queryKey: workspaceKey(workspaceId),
     queryFn: () => api<WorkspaceDto>('/workspace'),
-    enabled: !!me && !!workspaceId,
+    // an account in its deletion grace is refused by every workspace route (401): the guards send it to « Compte désactivé »
+    enabled: !!me && !!workspaceId && (!!imp || !me.deletionScheduledAt),
     staleTime: 30_000,
   });
 

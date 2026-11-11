@@ -1,5 +1,7 @@
 'use client';
 // /workspaces/new — Figma "AUTH — States catalogue" (Créer mon espace, utilisateur invité seulement): form · saving · blocked if already owner.
+// UX-047 (10/11): an account in its deletion grace sees « Compte désactivé » (cancel / export) first; an account without a
+// shop opens « Supprimer mon compte… » from here (Paramètres › Profil needs a shop). UX-045: « Se déconnecter » opens the login.
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CreateWorkspaceSchema, type CreateWorkspaceInput } from '@djaber/shared';
 import { Button, buttonClass, Field, FormAlert, Input, Select } from '@djaber/ui';
@@ -7,6 +9,8 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { AuthCard, AuthLink } from '@/components/auth/auth-card';
+import { DeactivatedAccount } from '@/features/auth/deactivated-account';
+import { DeleteAccountDialog } from '@/features/settings/account-dialogs';
 import { useWilayas, workspaceApi } from '@/features/workspace/api';
 import { Link, useRouter } from '@/i18n/navigation';
 import { applyServerErrors, fieldError } from '@/lib/forms';
@@ -21,7 +25,16 @@ export default function CreateWorkspacePage() {
   const wilayas = useWilayas();
   const form = useForm<CreateWorkspaceInput>({ resolver: zodResolver(CreateWorkspaceSchema), defaultValues: { name: '', senderWilayaId: '', stockMode: 'simple' } });
   const [formError, setFormError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const create = useMutation({ mutationFn: workspaceApi.create });
+
+  // UX-045: same as the user menu — the session closes and the login page opens at once
+  const leave = async () => {
+    await logout();
+    router.replace('/login');
+  };
+
+  if (me?.deletionScheduledAt) return <DeactivatedAccount scheduledAt={me.deletionScheduledAt} onLogout={() => void leave()} />;
 
   if (me?.ownedWorkspaceId) {
     // D30: one owned workspace per user
@@ -56,9 +69,14 @@ export default function CreateWorkspacePage() {
         me && me.memberships.length > 0 ? (
           <AuthLink href="/home">{t('action.backHome')}</AuthLink>
         ) : (
-          <button type="button" className="hover:text-text-primary hover:underline" onClick={() => void logout()}>
-            {t('userMenu.logout')}
-          </button>
+          <span className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+            <button type="button" className="hover:text-text-primary hover:underline" onClick={() => void leave()} data-testid="create-ws-logout">
+              {t('userMenu.logout')}
+            </button>
+            <button type="button" className="hover:text-accent-alert hover:underline" onClick={() => setDeleting(true)} data-testid="create-ws-delete-account">
+              {t('settings.deleteAccount.open')}
+            </button>
+          </span>
         )
       }
     >
@@ -88,6 +106,7 @@ export default function CreateWorkspacePage() {
         </Button>
         <p className="ts-label-meta text-text-muted">{t('auth.createWorkspace.note')}</p>
       </form>
+      <DeleteAccountDialog open={deleting} onClose={() => setDeleting(false)} onDone={() => void refetchMe()} />
     </AuthCard>
   );
 }

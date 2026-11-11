@@ -18,6 +18,7 @@ import { JobService } from '../../jobs/job.service';
 import { NotificationProducer } from '../../notifications/notification.producer';
 import { matchesFilters, rowOf, sheetsRowOf, type Labeler, type SheetsOrder } from './sheets-row';
 import { SHEETS_ERROR_CODE, SHEETS_GATEWAY, SheetsApiError, type SheetCell, type SheetsGateway } from './sheets.gateway';
+import { stopdeskLabels, type StopdeskLabel } from '../../delivery/stopdesk-names';
 
 const UPSERT_ATTEMPTS = 5;
 const BATCH = 100;
@@ -79,9 +80,10 @@ export class SheetsSyncService implements OnModuleInit {
     };
   }
 
-  private toSheetsOrder(o: any): SheetsOrder {
+  /** `desks`: relay point names of the batch (UX-049: the name, never the technical id). */
+  private toSheetsOrder(o: any, desks: Map<string, StopdeskLabel>): SheetsOrder {
     const s = o.shipments?.find((x: { status: string }) => x.status !== 'cancelled') ?? null;
-    return { ...o, stopdeskName: o.stopdeskId ?? null, shipment: s ? { provider: s.provider, trackingNumber: s.trackingNumber } : null };
+    return { ...o, stopdeskName: o.isStopdesk && o.stopdeskId ? (desks.get(o.stopdeskId)?.name ?? null) : null, shipment: s ? { provider: s.provider, trackingNumber: s.trackingNumber } : null };
   }
 
   private ids(c: SheetsConnection, rt: string): Promise<string[]> {
@@ -95,7 +97,7 @@ export class SheetsSyncService implements OnModuleInit {
       if (!c || !c.spreadsheetId || c.status === 'disconnected') return 'skipped';
       const order = await prisma.order.findFirst({ where: { id: orderId, workspaceId: c.workspaceId }, include: orderInclude });
       if (!order) return 'skipped';
-      const o = this.toSheetsOrder(order);
+      const o = this.toSheetsOrder(order, await stopdeskLabels([order.isStopdesk ? order.stopdeskId : null]));
       if (!matchesFilters(o, c.filters as Partial<SheetsFilters>)) return 'skipped';
       const values = sheetsRowOf(o, this.labeler(c.workspace.locale));
       const rt = this.refreshToken(c);
@@ -169,10 +171,11 @@ export class SheetsSyncService implements OnModuleInit {
         if (!batch.length) break;
         cursor = batch[batch.length - 1]!.id;
         const ids = await this.ids(c, rt);
+        const desks = await stopdeskLabels(batch.map((r) => (r.isStopdesk ? r.stopdeskId : null)));
         const updates: { row: number; values: SheetCell[] }[] = [];
         const appends: { id: string; values: SheetCell[] }[] = [];
         for (const raw of batch) {
-          const o = this.toSheetsOrder(raw);
+          const o = this.toSheetsOrder(raw, desks);
           if (!matchesFilters(o, c.filters as Partial<SheetsFilters>)) {
             skipped++;
             continue;

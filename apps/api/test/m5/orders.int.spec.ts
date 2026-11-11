@@ -435,6 +435,8 @@ describe('calls, callback, address, assignment, payments (04 §1.3, §1.4, §21)
     expect(order.deliveryFee).toBe(400);
     const oran = await owner.post(`/orders/${order.id}/address`, address({ wilayaId: 31, communeText: 'Bir El Djir', phone2: '0661234567' })).expect(200);
     expect(oran.body.data).toMatchObject({ deliveryFee: 600, total: order.subtotal + 600, clientPhone2: '0661234567', address: expect.objectContaining({ wilayaId: 31, wilayaName: 'Oran' }) });
+    // UX-046 (10/11): the history shows the whole address with names, not « 16 → 31 »
+    expect(oran.body.data.history.find((h: any) => h.field === 'address')).toMatchObject({ from: expect.stringMatching(/^Alger · /), to: 'Oran · Bir El Djir · Cité 200 logements, Bt 4, Bab Ezzouar' });
     const fixed = await owner.patch(`/orders/${order.id}`, { deliveryFee: 100, version: oran.body.data.version }).expect(200);
     const moved = await owner.post(`/orders/${order.id}/address`, address({ wilayaId: 16 })).expect(200);
     expect(moved.body.data.deliveryFee).toBe(100); // the override survives the address change

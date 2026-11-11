@@ -7,6 +7,9 @@ export type SlipLang = 'fr' | 'ar' | 'en';
 export type OrderSlipData = {
   shopName: string;
   shopPhone: string | null;
+  /** UX-048 (10/11): the shop address and logo of Paramètres › Boutique (« utilisé sur PDF et étiquettes ») */
+  shopAddress?: string | null;
+  logo?: Buffer | null; // PNG / JPEG bytes; skipped when unreadable
   number: string; // "CMD-1042"
   orderedAt: string; // ISO UTC; rendered in Africa/Algiers as dd/mm/yyyy HH:mm, Latin digits
   clientName: string; // may contain Arabic or Latin
@@ -16,7 +19,7 @@ export type OrderSlipData = {
   commune: string | null;
   address: string | null; // may contain Arabic
   isStopdesk: boolean;
-  stopdeskName: string | null;
+  stopdeskName: string | null; // relay point name (+ address), never its technical id (UX-049)
   items: { name: string; variant: string | null; sku: string | null; quantity: number; unitPrice: number; total: number }[];
   subtotal: number;
   discount: number;
@@ -261,6 +264,7 @@ const A5: [number, number] = [419.53, 595.28];
 const A4: [number, number] = [595.28, 841.89];
 const LINE = 1.5; // line height factor (Naskh has tall ascenders/descenders)
 const ASCENT = 1.05; // baseline offset from the top of a line, in font sizes
+const LOGO = 40; // header logo box (pt)
 
 type Box = { x0: number; x1: number; top: number; bottom: number };
 type Align = 'left' | 'right' | 'center';
@@ -434,11 +438,25 @@ class SlipWriter {
     const leftW = this.width * 0.56;
     const rightW = this.width - leftW - 8;
     const top = this.y;
-    let a = this.block(s.shopName, this.colX(0, leftW), top, leftW, { size: 15, bold: true, align: this.start });
+    // UX-048: logo at the start of the header, then name, phone and address of the shop
+    let logoH = 0;
+    if (s.logo) {
+      try {
+        this.doc.image(s.logo, this.colX(0, LOGO), top, { fit: [LOGO, LOGO] });
+        logoH = LOGO;
+      } catch {
+        logoH = 0; // unreadable image: the header is printed without it
+      }
+    }
+    const textX = logoH ? LOGO + 8 : 0;
+    const textW = leftW - textX;
+    let a = this.block(s.shopName, this.colX(textX, textW), top, textW, { size: 15, bold: true, align: this.start });
     if (s.shopPhone) {
-      this.drawLine(formatSlipPhone(s.shopPhone), this.colX(0, leftW), a, leftW, { size: 9, align: this.start });
+      this.drawLine(formatSlipPhone(s.shopPhone), this.colX(textX, textW), a, textW, { size: 9, align: this.start });
       a += 9 * LINE;
     }
+    if (s.shopAddress) a = this.block(s.shopAddress, this.colX(textX, textW), a, textW, { size: 8.5, align: this.start });
+    a = Math.max(a, top + logoH);
     const rx = this.colX(leftW + 8, rightW);
     let b = top;
     this.drawLine(this.L.title, rx, b, rightW, { size: 9, bold: true, align: this.end });

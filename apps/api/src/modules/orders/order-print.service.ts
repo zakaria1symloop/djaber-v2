@@ -7,7 +7,9 @@ import { ConfigService } from '../../core/config/config.service';
 import { notFound } from '../../core/errors/app.exception';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { StorageService } from '../../core/storage/storage.service';
+import { stopdeskLabels, stopdeskText } from '../delivery/stopdesk-names';
 import { JobService } from '../jobs/job.service';
+import { logoBytes } from '../uploads/logo-bytes';
 import { renderOrderSlips, type OrderSlipData, type SlipLang } from './print/order-slip.pdf';
 
 const PRINT_URL_TTL_S = 24 * 3600;
@@ -37,12 +39,16 @@ export class OrderPrintService implements OnModuleInit {
 
   /** Slip data of the given orders, in the requested order (missing ids are skipped). */
   async slips(ids: string[], lang: SlipLang): Promise<OrderSlipData[]> {
-    const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: TenantContext.workspaceId() }, select: { name: true, phone: true } });
+    // UX-048 (10/11): the slip carries the shop's logo, name, phone and address (Paramètres › Boutique)
+    const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: TenantContext.workspaceId() }, select: { name: true, phone: true, address: true, logoUrl: true } });
+    const logo = await logoBytes(this.storage, ws.logoUrl);
     const rows = await prisma.order.findMany({
       where: { id: { in: ids } },
       include: { items: { orderBy: { id: 'asc' } }, wilaya: true, commune: true, shipments: { where: { status: { notIn: ['cancelled'] } }, orderBy: { createdAt: 'desc' }, take: 1 } },
     });
     const by = new Map(rows.map((r) => [r.id, r]));
+    // UX-049: the relay point's name and address, never its technical id
+    const desks = await stopdeskLabels(rows.map((r) => (r.isStopdesk ? r.stopdeskId : null)));
     const web = this.config.get('PUBLIC_WEB_URL').replace(/\/$/, '');
     return ids
       .map((id) => by.get(id))
@@ -50,6 +56,8 @@ export class OrderPrintService implements OnModuleInit {
       .map((o) => ({
         shopName: ws.name,
         shopPhone: ws.phone,
+        shopAddress: ws.address,
+        logo,
         number: o.number,
         orderedAt: o.orderedAt.toISOString(),
         clientName: o.clientName,
@@ -59,7 +67,7 @@ export class OrderPrintService implements OnModuleInit {
         commune: o.communeText ?? (o.commune ? (lang === 'ar' ? o.commune.nameAr : o.commune.nameFr) : null),
         address: o.address,
         isStopdesk: o.isStopdesk,
-        stopdeskName: o.stopdeskId,
+        stopdeskName: o.stopdeskId ? stopdeskText(desks.get(o.stopdeskId)) : null,
         items: o.items.map((i) => ({ name: i.productName, variant: i.variantName, sku: i.sku, quantity: i.quantity, unitPrice: i.unitPrice, total: i.total })),
         subtotal: o.subtotal,
         discount: o.discount,

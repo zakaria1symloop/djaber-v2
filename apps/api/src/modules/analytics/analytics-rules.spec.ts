@@ -3,7 +3,7 @@
 import { getMessages, REPORT_DEFINITIONS, REPORT_KEYS, SIMPLE_MODE_REPORTS, PNL_LINES } from '@djaber/shared';
 import { AppException } from '../../core/errors/app.exception';
 import { previousMonth } from '../gds/reports/report-schedule.service';
-import { bucketOf, emptyDay, mergeInto, percentile, sumDays } from './day-metrics';
+import { bucketOf, emptyDay, mergeInto, METRICS_VERSION, percentile, sumDays } from './day-metrics';
 import { addDays, daysBetween, deltaPct, eachDay, pct, resolveRange } from './range';
 
 const NOW = new Date('2026-10-13T08:00:00Z'); // 09:00 in Algiers
@@ -74,7 +74,7 @@ describe('daily figures', () => {
     expect(s.revenue.sales).toBe(1000);
     expect(s.wilayas).toEqual({ '16': { orders: 3, delivered: 2, returned: 1, revenue: 2500 }, '31': { orders: 4, delivered: 0, returned: 0, revenue: 0 } });
     expect(s.aiLatency[1]).toBe(5);
-    expect(s.v).toBe(1);
+    expect(s.v).toBe(METRICS_VERSION);
     expect(a.orders.created).toBe(2);
     expect(mergeInto(emptyDay(), null).orders.created).toBe(0);
   });

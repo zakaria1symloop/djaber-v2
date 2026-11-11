@@ -18,7 +18,7 @@ import type { Product, ProductImage } from '../contracts';
 import { IMAGE_ACCEPT } from '../product-form/images';
 import { useImageGridLabels, useProductImageEditor } from '../product-form/images-section';
 import { Money, MovementTypePill, Num, Pct, useMovementReason } from '../ui';
-import { stockSummary } from './logic';
+import { qtyText, stockSummary } from './logic';
 import { Block, Note, Row, Rows } from './parts';
 
 type Locale = 'fr' | 'ar' | 'en';
@@ -197,13 +197,13 @@ export function MovementsBlock({ productId }: { productId: string }) {
 }
 
 /* ---------- Prix & marge ---------- */
-export function PricingBlock({ product, advanced, canEdit = false }: { product: Pick<Product, 'id' | 'price' | 'oldPrice' | 'pricing'> & Partial<Pick<Product, 'priceRange'>>; advanced: boolean; /** expenses editor (catalog.write, live product) */ canEdit?: boolean }) {
+export function PricingBlock({ product, advanced, canEdit = false }: { product: Pick<Product, 'id' | 'price' | 'oldPrice' | 'pricing'> & Partial<Pick<Product, 'priceRange' | 'unit'>>; advanced: boolean; /** expenses editor (catalog.write, live product) */ canEdit?: boolean }) {
   const t = useT();
   const p = product.pricing;
   // PV 26/10 P4: a product with variants is sold at its variants' prices — those, and the margin of each variant
   const range = product.priceRange ?? null;
   const perVariant = p?.variants?.length ? p.variants : null;
-  const units = (n: number) => <Ltr className="tabular-nums">{t('products.page.units', { count: formatNumber(n) })}</Ltr>;
+  const units = (n: number) => <Ltr className="tabular-nums">{qtyText(formatNumber(n), product.unit, (count) => t('products.page.units', { count }))}</Ltr>;
   return (
     <Block title={t(advanced ? 'products.page.pricing.title' : 'products.page.pricing.titleSimple')} testId="block-pricing">
       <Rows>
@@ -304,7 +304,7 @@ export function StockBlock({ product, advanced }: { product: Product; advanced: 
   const locale = useLocaleCode() as Locale;
   const s = stockSummary(product);
   const d = product.stockDetail;
-  const units = (n: number) => <Ltr className="tabular-nums">{t('products.page.units', { count: formatNumber(n) })}</Ltr>;
+  const units = (n: number) => <Ltr className="tabular-nums">{qtyText(formatNumber(n), product.unit, (count) => t('products.page.units', { count }))}</Ltr>;
   return (
     <Block title={t('products.page.stock.title')} testId="block-stock">
       <Rows>

@@ -193,11 +193,12 @@ export const useModerationSummary = (enabled = true) => {
 };
 export const useCategories = (enabled = true) => {
   const ws = useWorkspaceId();
-  return useQuery({ queryKey: catalogKeys.categories(ws), queryFn: catalogApi.categories, enabled: !!ws && enabled, staleTime: 60_000 });
+  // UX-051 (10/11): product counts change from the product pages — Catégories always asks again when it opens
+  return useQuery({ queryKey: catalogKeys.categories(ws), queryFn: catalogApi.categories, enabled: !!ws && enabled, staleTime: 60_000, refetchOnMount: 'always' });
 };
 export const useUnits = (enabled = true) => {
   const ws = useWorkspaceId();
-  return useQuery({ queryKey: catalogKeys.units(ws), queryFn: catalogApi.units, enabled: !!ws && enabled, staleTime: 60_000 });
+  return useQuery({ queryKey: catalogKeys.units(ws), queryFn: catalogApi.units, enabled: !!ws && enabled, staleTime: 60_000, refetchOnMount: 'always' });
 };
 export const useStockOverview = (enabled = true) => {
   const ws = useWorkspaceId();

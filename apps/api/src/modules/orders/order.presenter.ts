@@ -189,7 +189,28 @@ export const presentOrderListItem = (o: OrderListRow, ctx: PresentCtx): OrderLis
   };
 };
 
-export const addressOf = (o: Pick<Order, 'wilayaId' | 'communeId' | 'communeText' | 'address' | 'isStopdesk' | 'stopdeskId'> & { wilaya?: { nameFr: string; nameAr: string } | null; commune?: { nameFr: string; nameAr: string } | null }, locale: string): AddressView | null =>
+type AddressFields = Pick<Order, 'wilayaId' | 'communeId' | 'communeText' | 'address' | 'isStopdesk' | 'stopdeskId'>;
+/** UX-046 (10/11): the order history keeps the whole address of an « Adresse » change (JSON), not only the wilaya id. */
+export const addressSnapshot = (a: AddressFields): string =>
+  JSON.stringify({ w: a.wilayaId, c: a.communeId, ct: a.communeText, a: a.address, sd: a.isStopdesk, s: a.stopdeskId });
+/** Reads a history value: the JSON snapshot above, or the wilaya id alone (rows written before 10/11). */
+export const parseAddressSnapshot = (v: string | null): { wilayaId: number | null; communeId: number | null; communeText: string | null; address: string | null; isStopdesk: boolean; stopdeskId: string | null } | null => {
+  if (!v) return null;
+  if (/^d+$/.test(v)) return { wilayaId: Number(v), communeId: null, communeText: null, address: null, isStopdesk: false, stopdeskId: null };
+  try {
+    const j = JSON.parse(v) as { w?: number | null; c?: number | null; ct?: string | null; a?: string | null; sd?: boolean; s?: string | null };
+    return { wilayaId: j.w ?? null, communeId: j.c ?? null, communeText: j.ct ?? null, address: j.a ?? null, isStopdesk: !!j.sd, stopdeskId: j.s ?? null };
+  } catch {
+    return null;
+  }
+};
+
+/** `stopdeskName`: the relay point's name (+ address) looked up by the caller (UX-049); null when unknown. */
+export const addressOf = (
+  o: Pick<Order, 'wilayaId' | 'communeId' | 'communeText' | 'address' | 'isStopdesk' | 'stopdeskId'> & { wilaya?: { nameFr: string; nameAr: string } | null; commune?: { nameFr: string; nameAr: string } | null },
+  locale: string,
+  stopdeskName: string | null = null,
+): AddressView | null =>
   o.wilayaId
     ? {
         wilayaId: o.wilayaId,
@@ -199,7 +220,7 @@ export const addressOf = (o: Pick<Order, 'wilayaId' | 'communeId' | 'communeText
         address: o.address,
         isStopdesk: o.isStopdesk,
         stopdeskId: o.stopdeskId,
-        stopdeskName: null,
+        stopdeskName: o.isStopdesk ? stopdeskName : null,
       }
     : null;
 
@@ -209,6 +230,10 @@ export type DetailExtras = {
   payments: { id: string; amount: number; method: OrderView['paymentMethod']; reference: string | null; note: string | null; paidAt: Date; createdBy: OrderUserRef | null }[];
   actorNames: Map<string, string>;
   feeExplanation: string;
+  /** UX-049: name (+ address) of the order's relay point */
+  stopdeskName?: string | null;
+  /** UX-046: readable « Adresse » history values (history row id → from / to), in the request's language */
+  historyText?: Map<string, { from: string | null; to: string | null }>;
 };
 
 export const presentOrder = (o: OrderDetailRow, extras: DetailExtras, ctx: PresentCtx): OrderView => {
@@ -222,7 +247,7 @@ export const presentOrder = (o: OrderDetailRow, extras: DetailExtras, ctx: Prese
     clientName: o.clientName,
     clientPhone: o.clientPhone,
     clientPhone2: o.clientPhone2,
-    address: addressOf(o, ctx.locale),
+    address: addressOf(o, ctx.locale, extras.stopdeskName ?? null),
     items: o.items.map((i) => {
       const stock = i.variant ? i.variant.stock : i.product.trackStock ? (i.product.stock ?? 0) : null;
       const open = ['new', 'confirmed', 'preparing'].includes(o.status);
@@ -261,11 +286,11 @@ export const presentOrder = (o: OrderDetailRow, extras: DetailExtras, ctx: Prese
       effectiveAt: h.effectiveAt?.toISOString() ?? null,
       actor: { type: h.actorType, id: h.actorId, name: (h.actorId && extras.actorNames.get(h.actorId)) || ACTOR_NAMES[h.actorType] || '' },
       field: h.field,
-      from: h.from,
-      to: h.to,
+      from: extras.historyText?.get(h.id)?.from ?? h.from,
+      to: extras.historyText?.get(h.id)?.to ?? h.to,
       reason: h.reason,
     })),
-    shipments: o.shipments.map((s) => presentShipment(s as unknown as ShipmentRow, o, base.client, addressOf(o, ctx.locale), { publicWebUrl: ctx.publicWebUrl, syncAvailableAt: ctx.syncAvailableAt?.(s.id) ?? null })),
+    shipments: o.shipments.map((s) => presentShipment(s as unknown as ShipmentRow, o, base.client, addressOf(o, ctx.locale, extras.stopdeskName ?? null), { publicWebUrl: ctx.publicWebUrl, syncAvailableAt: ctx.syncAvailableAt?.(s.id) ?? null })),
     orderNotes: o.orderNotes.map((n) => ({ id: n.id, author: n.author, body: n.body, createdAt: n.createdAt.toISOString() })),
     sheetsSynced: !!o.sheetsRow,
     agent: o.agent,

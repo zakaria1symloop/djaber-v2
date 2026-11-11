@@ -5,6 +5,7 @@ import {
   planIntentOf,
   supportMailto,
   bestYearlyDiscount,
+  canStartExport,
   cardPrice,
   cheapestPack,
   deletionView,
@@ -130,6 +131,12 @@ describe('account deletion & keys', () => {
     expect(isDeletionToken('a'.repeat(43))).toBe(true);
     expect(exportPollMs('running')).toBe(3000);
     expect(exportPollMs('done')).toBe(false);
+    // UX-047: the export can be (re)started while none is running or ready
+    expect(canStartExport(null)).toBe(true);
+    expect(canStartExport({ status: 'failed', url: null })).toBe(true);
+    expect(canStartExport({ status: 'done', url: null })).toBe(true);
+    expect(canStartExport({ status: 'running', url: null })).toBe(false);
+    expect(canStartExport({ status: 'done', url: 'https://x/e.zip' })).toBe(false);
   });
   it('accepts CMS slugs only', () => {
     expect(isCmsKey('terms')).toBe(true);

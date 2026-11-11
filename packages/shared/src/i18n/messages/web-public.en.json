@@ -136,7 +136,7 @@
   "public.deletion.export.expires": "link valid until {date}",
   "public.deletion.export.failed": "The export could not be prepared. Contact support to receive it.",
   "public.deletion.cancelled.title": "Deletion cancelled",
-  "public.deletion.cancelled.text": "Your account is active again. Sign in to get back to your workspaces.",
+  "public.deletion.cancelled.text": "Your account is active again. Your own shop stays available; access to the shops where you were a member is not restored: ask their owner to invite you again.",
   "public.deletion.expired.title": "This link has expired (24 h).",
   "public.deletion.expired.text": "Confirmation links are valid for 24 h and can be used only once.",
   "public.deletion.expired.action": "Request a new link",

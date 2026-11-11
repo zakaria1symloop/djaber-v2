@@ -98,3 +98,10 @@ export function variantPatch(current: VariantValues, draft: VariantDraft, withCo
   }
   return { patch, errors };
 }
+
+/**
+ * UX-050 (10/11): a quantity in the product's own unit, in the app language (« 10 pc », « 10 قطعة », « 2 kg »); the
+ * generic « u » (`generic`) only for a product without a unit.
+ */
+export const qtyText = (count: string, unit: { abbreviation: string } | null | undefined, generic: (count: string) => string): string =>
+  unit?.abbreviation?.trim() ? `${count} ${unit.abbreviation.trim()}` : generic(count);

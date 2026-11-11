@@ -1,5 +1,5 @@
 // PUB-06 / FL-22 1b / 06 §12 — public account deletion (`/account/deletion`): e-mail link (24 h, single use), confirmation,
-// cancel. Every route is public; the request is rate limited 3 / h / IP (api-contract §1.9) and always answers the same.
+// cancel, export during the grace (UX-047). Every route is public; the request is rate limited 3 / h / IP (api-contract §1.9) and always answers the same.
 import { Body, Controller, Get, HttpCode, Param, Post, Req } from '@nestjs/common';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
@@ -35,6 +35,15 @@ export class AccountDeletionPublicController {
   @HttpCode(200)
   confirm(@Param('token') token: string, @Body() dto: ConfirmDto, @Req() req: any) {
     return this.deletion.publicConfirm(token, dto, clientOf(req));
+  }
+
+  /** UX-047: « Exporter mes données » during the grace (the cancel token of the confirmation e-mail / page). */
+  @Public()
+  @Post('export/:token')
+  @HttpCode(200)
+  @RateLimit({ name: 'account-deletion-export', max: 5, windowSeconds: 3600, by: 'ip' })
+  exportData(@Param('token') token: string, @Body() _dto: EmptyDto, @Req() req: any) {
+    return this.deletion.publicExport(token, clientOf(req));
   }
 
   @Public()

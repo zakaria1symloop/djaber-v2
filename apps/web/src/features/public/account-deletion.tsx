@@ -8,14 +8,14 @@
 // (valid until the date) so a reload keeps the page.
 import { AccountDeletionPublicRequestSchema, formatDate, formatNumber, type AccountDeletionPublicDto, type AppLocale } from '@djaber/shared';
 import { Banner, Button, Card, Checkbox, EmailInput, ErrorState, Field, FormAlert, NumberedSteps, ProgressBar, Skeleton, StateBlock, buttonClass } from '@djaber/ui';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Clock, Lock, MailCheck } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { api, ApiError } from '@/lib/api';
 import { useLocaleCode, useT } from '@/lib/i18n';
-import { deletionView, exportPollMs, isBlockingCode, isDeletionToken, supportMailto } from './logic';
+import { canStartExport, deletionView, exportPollMs, isBlockingCode, isDeletionToken, supportMailto } from './logic';
 
 type Dto = AccountDeletionPublicDto;
 type Blocked = { code: 'ACCOUNT_OWNS_WORKSPACE' | 'WORKSPACE_HAS_DEBT' | 'ACCOUNT_DELETION_PENDING'; params: Record<string, string | number> };
@@ -25,17 +25,20 @@ const deletionApi = {
   state: (token: string) => api<Dto>(`/account-deletion/confirm/${encodeURIComponent(token)}`),
   confirm: (token: string, exportData: boolean) => api<Dto>(`/account-deletion/confirm/${encodeURIComponent(token)}`, { method: 'POST', body: { exportData } }),
   cancel: (token: string) => api<Dto>(`/account-deletion/cancel/${encodeURIComponent(token)}`, { method: 'POST', body: {} }),
+  // UX-047: « Exporter mes données » during the grace (button of the page / of the confirmation e-mail, `&export=1`)
+  exportData: (token: string) => api<Dto>(`/account-deletion/export/${encodeURIComponent(token)}`, { method: 'POST', body: {} }),
 };
 
 const Column = ({ children }: { children: ReactNode }) => <div className="mx-auto flex w-full max-w-[640px] flex-col gap-4 px-4 py-10">{children}</div>;
 
 export function AccountDeletionPage() {
   const t = useT();
-  const token = useSearchParams().get('token');
+  const params = useSearchParams();
+  const token = params.get('token');
   return (
     <Column>
       <h1 className="ts-display-m">{t('public.deletion.title')}</h1>
-      {token !== null ? <TokenFlow token={token} /> : <RequestFlow />}
+      {token !== null ? <TokenFlow token={token} wantsExport={params.get('export') === '1'} /> : <RequestFlow />}
     </Column>
   );
 }
@@ -150,8 +153,9 @@ function PartialLink() {
 }
 
 /* ---------- steps 2–3: the e-mail link ---------- */
-function TokenFlow({ token: initial }: { token: string }) {
+function TokenFlow({ token: initial, wantsExport }: { token: string; wantsExport: boolean }) {
   const t = useT();
+  const qc = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
   const [token, setToken] = useState(initial);
@@ -187,6 +191,21 @@ function TokenFlow({ token: initial }: { token: string }) {
     onError: fail,
   });
   const cancel = useMutation({ mutationFn: () => deletionApi.cancel(token), onSuccess: (r) => setAfter(r), onError: fail });
+  const startExport = useMutation({
+    mutationFn: () => deletionApi.exportData(token),
+    // the query keeps polling the export until the file is ready
+    onSuccess: (r) => (setAfter(null), qc.setQueryData(['public', 'account-deletion', token], r)),
+    onError: fail,
+  });
+  // the e-mail button « Exporter mes données » opens the page with `&export=1`: the export starts once, then the URL drops it
+  const autoExport = useRef(false);
+  const graceData = q.data?.status === 'grace' ? q.data : null;
+  useEffect(() => {
+    if (!wantsExport || autoExport.current || !graceData) return;
+    autoExport.current = true;
+    if (canStartExport(graceData.export)) startExport.mutate();
+    router.replace(`${pathname}?token=${encodeURIComponent(token)}`, { scroll: false });
+  }, [wantsExport, graceData, startExport, router, pathname, token]);
 
   const expired = !valid || (q.error instanceof ApiError && (q.error.code === 'ACCOUNT_DELETION_TOKEN_EXPIRED' || q.error.status === 410 || q.error.status === 404));
   if (blocked) return <BlockedView blocked={blocked} />;
@@ -205,7 +224,17 @@ function TokenFlow({ token: initial }: { token: string }) {
   if (view === 'blocked') return <BlockedView blocked={{ code: d.blockedReason ?? 'ACCOUNT_OWNS_WORKSPACE', params: {} }} />;
   if (view === 'cancelled') return <CancelledView />;
   if (view === 'done') return <ExpiredView />;
-  if (view === 'grace') return <GraceView d={d} busy={cancel.isPending} error={actionError} onCancel={() => (setActionError(null), cancel.mutate())} />;
+  if (view === 'grace')
+    return (
+      <GraceView
+        d={d}
+        busy={cancel.isPending}
+        exporting={startExport.isPending}
+        error={actionError}
+        onCancel={() => (setActionError(null), cancel.mutate())}
+        onExport={() => (setActionError(null), startExport.mutate())}
+      />
+    );
   return <ConfirmView d={d} exportData={exportData} setExportData={setExportData} busy={confirm.isPending} error={actionError} onConfirm={() => (setActionError(null), confirm.mutate())} />;
 }
 
@@ -245,7 +274,7 @@ function ConfirmView({ d, exportData, setExportData, busy, error, onConfirm }: {
   );
 }
 
-function GraceView({ d, busy, error, onCancel }: { d: Dto; busy: boolean; error: string | null; onCancel: () => void }) {
+function GraceView({ d, busy, exporting, error, onCancel, onExport }: { d: Dto; busy: boolean; exporting: boolean; error: string | null; onCancel: () => void; onExport: () => void }) {
   const t = useT();
   const locale = useLocaleCode() as AppLocale;
   const x = d.export;
@@ -277,6 +306,11 @@ function GraceView({ d, busy, error, onCancel }: { d: Dto; busy: boolean; error:
         <Button loading={busy} onClick={onCancel} data-testid="del-cancel">
           {t('public.deletion.grace.cancel')}
         </Button>
+        {canStartExport(x) ? (
+          <Button variant="ghost" loading={exporting} onClick={onExport} data-testid="del-export-start">
+            {t('public.deletion.export.download')}
+          </Button>
+        ) : null}
         <Link href="/login" className="text-[13px] text-text-secondary underline decoration-line-lit underline-offset-4 hover:text-text-primary">
           {t('public.deletion.grace.login')}
         </Link>

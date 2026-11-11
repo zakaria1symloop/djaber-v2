@@ -136,7 +136,7 @@
   "public.deletion.export.expires": "lien valable jusqu’au {date}",
   "public.deletion.export.failed": "L’export n’a pas pu être préparé. Contactez le support pour le recevoir.",
   "public.deletion.cancelled.title": "Suppression annulée",
-  "public.deletion.cancelled.text": "Votre compte est réactivé. Reconnectez-vous pour retrouver vos espaces.",
+  "public.deletion.cancelled.text": "Votre compte est réactivé. Votre propre boutique reste accessible ; l’accès aux boutiques où vous étiez membre n’est pas rétabli : demandez à leur propriétaire de vous inviter à nouveau.",
   "public.deletion.expired.title": "Ce lien a expiré (24 h).",
   "public.deletion.expired.text": "Les liens de confirmation sont valables 24 h et ne servent qu’une fois.",
   "public.deletion.expired.action": "Refaire une demande",

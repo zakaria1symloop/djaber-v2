@@ -16,7 +16,7 @@ import { withinWindow } from '../messaging/window-rules';
 import { codPlan, callPlan, checkEffectiveAt, checkTransition, isTerminal, transitionPlan } from './order-rules';
 import type { Actor } from './order-effects.service';
 export type LockedOrder = Locked;
-import { hasDeliveryAddress, stateOf } from './order.presenter';
+import { addressSnapshot, hasDeliveryAddress, stateOf } from './order.presenter';
 import { OrderService, refuse, StaleVersion } from './order.service';
 
 export type TransitionOptions = {
@@ -329,7 +329,9 @@ export class OrderWorkflowService implements OnModuleInit {
         data: { wilayaId: input.wilayaId, communeId: commune?.id ?? null, communeText: commune ? null : (input.communeText ?? null), address: input.address ?? null, isStopdesk: input.isStopdesk, stopdeskId: input.stopdeskId ?? null, ...(input.phone2 !== undefined ? { clientPhone2: input.phone2 } : {}), deliveryFee, total, ...paid, version: { increment: 1 } },
       });
       if (active && active.provider === 'manual') await tx.shipment.update({ where: { id: active.id }, data: { codAmount: Math.max(0, total - paid.amountPaid) } });
-      await tx.orderStatusHistory.create({ data: { orderId: id, field: 'address', from: o.wilayaId ? `${o.wilayaId}` : null, to: `${input.wilayaId}`, actorType: actor.type, actorId: actor.id } });
+      // UX-046 (10/11): the whole address before / after (wilaya, commune, home address or relay point), shown with names
+      const to = { wilayaId: input.wilayaId, communeId: commune?.id ?? null, communeText: commune ? null : (input.communeText ?? null), address: input.address ?? null, isStopdesk: input.isStopdesk, stopdeskId: input.stopdeskId ?? null };
+      await tx.orderStatusHistory.create({ data: { orderId: id, field: 'address', from: o.wilayaId ? addressSnapshot(o) : null, to: addressSnapshot(to), actorType: actor.type, actorId: actor.id } });
       await this.effects.emitUpdated(tx, updated, ['address', 'deliveryFee', 'total']);
       await this.effects.sheets(tx, updated);
       // 04 §21: the customer is told through the conversation when it is open and inside 24 h (thread event for the AI and the team)

@@ -123,7 +123,11 @@ export class HomeService {
       revenueIn(current, true),
       revenueIn(previous, true),
       prisma.order.aggregate({ where: { status: { in: ['new', 'confirmed', 'preparing', 'shipped'] } }, _sum: { total: true } }),
-      prisma.order.aggregate({ where: { orderedAt: { gte: current.gte, lt: current.lt } }, _sum: { amountPaid: true } }),
+      // 04 §4 Cash collected (UX-052): orders placed in the period + completed counter sales of the period
+      Promise.all([
+        prisma.order.aggregate({ where: { orderedAt: { gte: current.gte, lt: current.lt } }, _sum: { amountPaid: true } }),
+        prisma.sale.aggregate({ where: { status: 'completed', soldAt: { gte: current.gte, lt: current.lt } }, _sum: { amountPaid: true } }),
+      ]).then(([o, s]) => (o._sum.amountPaid ?? 0) + (s._sum.amountPaid ?? 0)),
       prisma.order.count({ where: { orderedAt: { gte: current.gte, lt: current.lt } } }),
       prisma.order.count({ where: { orderedAt: { gte: previous.gte, lt: previous.lt } } }),
       prisma.order.count({ where: { source: 'ai', orderedAt: { gte: current.gte, lt: current.lt } } }),
@@ -181,7 +185,7 @@ export class HomeService {
         revenue30d: kpi(rev, revPrev),
         aiRevenue30d: kpi(aiRev, aiRevPrev),
         pipeline: pipeline._sum.total ?? 0,
-        cashCollected30d: cash._sum.amountPaid ?? 0,
+        cashCollected30d: cash,
         orders30d: kpi(orders, ordersPrev),
         aiOrders30d: aiOrders,
         ordersToConfirm: toConfirm,

@@ -5,7 +5,8 @@
 import { Prisma, prisma } from '@djaber/db';
 
 /** Bump when the shape or a formula changes: older rollup rows are then ignored (recomputed live, rewritten at night). */
-export const METRICS_VERSION = 1;
+// 2: `revenue.salesPaid` (UX-052, 10/11) — cached days of version 1 are computed again
+export const METRICS_VERSION = 2;
 
 type Num = Record<string, number>;
 export type ChannelDay = { conv: number; handoffs: number; in: number; out: number; orders: number; aiOrders: number; aiRevenue: number; aiReplies: number };
@@ -26,7 +27,7 @@ export type DayMetrics = {
   status: Num;
   cancelReasons: Num;
   payment: Num;
-  revenue: { sales: number; salesCount: number; orders: number; ordersAi: number; deliveryFees: number; salesDiscount: number; ordersDiscount: number; salesTax: number; ordersTax: number };
+  revenue: { sales: number; salesCount: number; salesPaid: number; orders: number; ordersAi: number; deliveryFees: number; salesDiscount: number; ordersDiscount: number; salesTax: number; ordersTax: number };
   conv: { created: number; handoffs: number; purchaseIntent: number; abandoned: number };
   msgPerConv: number[];
   msg: { in: number; out: number; ai: number; human: number };
@@ -79,7 +80,7 @@ export const emptyDay = (): DayMetrics => ({
   v: METRICS_VERSION,
   orders: { created: 0, ai: 0, confirmed: 0, confirmedAi: 0, shipped: 0, delivered: 0, deliveredCod: 0, cancelled: 0, returned: 0, calls: 0, orderedValue: 0, cashCollected: 0 },
   srcCreated: {}, srcDelivered: {}, srcRevenue: {}, status: {}, cancelReasons: {}, payment: {},
-  revenue: { sales: 0, salesCount: 0, orders: 0, ordersAi: 0, deliveryFees: 0, salesDiscount: 0, ordersDiscount: 0, salesTax: 0, ordersTax: 0 },
+  revenue: { sales: 0, salesCount: 0, salesPaid: 0, orders: 0, ordersAi: 0, deliveryFees: 0, salesDiscount: 0, ordersDiscount: 0, salesTax: 0, ordersTax: 0 },
   conv: { created: 0, handoffs: 0, purchaseIntent: 0, abandoned: 0 },
   msgPerConv: zeros(HIST.msgPerConv.edges.length + 1),
   msg: { in: 0, out: 0, ai: 0, human: 0 },
@@ -180,9 +181,9 @@ export async function computeDays(s: ComputeScope): Promise<Map<string, DayMetri
       GROUP BY 1,2`),
     // 04 §4 Revenue (sales part) = Σ total of completed counter sales on soldAt (no page: excluded under a page filter)
     s.channelId
-      ? Promise.resolve([] as { d: string; c: number; total: bigint; disc: bigint; tax: bigint }[])
-      : q<{ d: string; c: number; total: bigint; disc: bigint; tax: bigint }>(Prisma.sql`
-      SELECT ${D('s."soldAt"')} d, count(*)::int c, coalesce(sum(s."total"),0)::bigint total, coalesce(sum(s."discount"),0)::bigint disc, coalesce(sum(s."tax"),0)::bigint tax
+      ? Promise.resolve([] as { d: string; c: number; total: bigint; disc: bigint; tax: bigint; paid: bigint }[])
+      : q<{ d: string; c: number; total: bigint; disc: bigint; tax: bigint; paid: bigint }>(Prisma.sql`
+      SELECT ${D('s."soldAt"')} d, count(*)::int c, coalesce(sum(s."total"),0)::bigint total, coalesce(sum(s."discount"),0)::bigint disc, coalesce(sum(s."tax"),0)::bigint tax, coalesce(sum(s."amountPaid"),0)::bigint paid
       FROM "Sale" s WHERE s."workspaceId" = ${ws} AND s."status" = 'completed' AND s."soldAt" >= ${gte} AND s."soldAt" < ${lt} GROUP BY 1`),
     q<{ d: string; pid: string; qty: bigint; rev: bigint; cogs: bigint }>(Prisma.sql`
       SELECT d, pid, sum(qty)::bigint qty, sum(rev)::bigint rev, sum(cogs)::bigint cogs FROM (
@@ -343,6 +344,8 @@ export async function computeDays(s: ComputeScope): Promise<Map<string, DayMetri
     m.revenue.salesCount += r.c;
     m.revenue.salesDiscount += n(r.disc);
     m.revenue.salesTax += n(r.tax);
+    // UX-052: money paid on counter sales counts in « Cash collected » (04 §4)
+    m.revenue.salesPaid += n(r.paid);
   }
   for (const r of lines) {
     const p = entry(day(r.d).products, r.pid, pr0);

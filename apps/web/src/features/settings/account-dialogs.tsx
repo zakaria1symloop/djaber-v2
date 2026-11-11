@@ -149,7 +149,7 @@ export function DeleteAccountSection() {
   );
 }
 
-function DeleteAccountDialog({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+export function DeleteAccountDialog({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
   const pathname = usePathname();
   const t = useT();
   const { me, membership } = useSession();

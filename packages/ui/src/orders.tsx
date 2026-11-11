@@ -185,6 +185,10 @@ export function ChecksNote({ items, text, tone = 'success', className }: { items
 export type A5Line = { key: string; label: string; amount?: string };
 export type A5SlipProps = {
   shop: string;
+  /** UX-048: the shop's logo, phone and address from Paramètres › Boutique (same as the PDF) */
+  shopLogoUrl?: string | null;
+  shopPhone?: string | null;
+  shopAddress?: string | null;
   heading: string;
   client: string;
   address: string;
@@ -196,7 +200,7 @@ export type A5SlipProps = {
   lang?: string;
   className?: string;
 };
-export function A5OrderSlip({ shop, heading, client, address, lines, extra = [], total, footer = [], dir = 'ltr', lang, className }: A5SlipProps) {
+export function A5OrderSlip({ shop, shopLogoUrl, shopPhone, shopAddress, heading, client, address, lines, extra = [], total, footer = [], dir = 'ltr', lang, className }: A5SlipProps) {
   const row = (l: A5Line, strong?: boolean) => (
     <div key={l.key} className={cn('flex items-baseline gap-2', strong ? 'text-[15px] font-semibold' : 'text-[13px]')}>
       <span className="shrink-0">{l.label}</span>
@@ -212,7 +216,18 @@ export function A5OrderSlip({ shop, heading, client, address, lines, extra = [],
   );
   return (
     <article dir={dir} lang={lang} data-testid="a5-slip" className={cn('a5-slip flex flex-col gap-2 bg-white p-6 text-black', className)}>
-      <h1 className="text-[16px] font-semibold uppercase">{shop}</h1>
+      <header className="flex items-start gap-3">
+        {shopLogoUrl ? <img src={shopLogoUrl} alt="" className="size-12 shrink-0 object-contain" data-testid="a5-slip-logo" /> : null}
+        <div className="flex min-w-0 flex-col">
+          <h1 className="text-[16px] font-semibold uppercase">{shop}</h1>
+          {shopPhone ? (
+            <bdi dir="ltr" className="text-[12px] tabular-nums">
+              {shopPhone}
+            </bdi>
+          ) : null}
+          {shopAddress ? <p className="text-[12px]">{shopAddress}</p> : null}
+        </div>
+      </header>
       <p className="font-mono text-[10px]">{heading}</p>
       <p className="text-[13px]">{client}</p>
       <p className="text-[13px]">{address}</p>

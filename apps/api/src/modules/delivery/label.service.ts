@@ -14,6 +14,7 @@ import { AppException, notFound } from '../../core/errors/app.exception';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { StorageService } from '../../core/storage/storage.service';
 import { JobService } from '../jobs/job.service';
+import { stopdeskLabels } from './stopdesk-names';
 import { CourierAdapters } from './adapters/courier-registry';
 import { isCourierError, PROVIDER_NAMES, type CourierProvider } from './adapters/courier-adapter';
 import { CourierAccountService } from './courier-account.service';
@@ -79,8 +80,8 @@ export class LabelService implements OnModuleInit {
   private async labelData(shipments: (Shipment & { order: Awaited<ReturnType<LabelService['orderFor']>> })[], lang: LabelLang): Promise<Map<string, DjaberLabelData>> {
     const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: TenantContext.workspaceId() }, select: { name: true, phone: true, address: true, senderWilaya: { select: { code: true, nameFr: true, nameAr: true } } } });
     const accounts = new Map((await prisma.courierAccount.findMany({ where: { id: { in: shipments.map((s) => s.courierAccountId).filter((x): x is string => !!x) } } })).map((a) => [a.id, a]));
-    const stopdeskIds = shipments.map((s) => s.stopdeskId).filter((x): x is string => !!x);
-    const stopdesks = new Map((stopdeskIds.length ? await prisma.courierStopdesk.findMany({ where: { externalId: { in: stopdeskIds } } }) : []).map((d) => [d.externalId, d.name]));
+    // UX-049: the desk's name whether the shipment holds Djaber's row id or the courier's desk id
+    const stopdesks = await stopdeskLabels(shipments.map((s) => s.stopdeskId));
     const web = this.config.get('PUBLIC_WEB_URL').replace(/\/$/, '');
     const name = (x: { nameFr: string; nameAr: string } | null | undefined) => (x ? (lang === 'ar' ? x.nameAr : x.nameFr) : null);
     const out = new Map<string, DjaberLabelData>();
@@ -102,7 +103,7 @@ export class LabelService implements OnModuleInit {
         commune: o.communeText ?? name(o.commune),
         address: o.address,
         isStopdesk: o.isStopdesk,
-        stopdeskName: s.stopdeskId ? (stopdesks.get(s.stopdeskId) ?? s.stopdeskId) : null,
+        stopdeskName: s.stopdeskId ? (stopdesks.get(s.stopdeskId)?.name ?? null) : null,
         codAmount: s.codAmount,
         itemsSummary: s.contentSummary ?? o.items.map((i) => `${i.productName}${i.variantName ? ` ${i.variantName}` : ''} ×${i.quantity}`).join(', '),
         trackingUrl: `${web}/s/${s.publicTrackingToken}`,

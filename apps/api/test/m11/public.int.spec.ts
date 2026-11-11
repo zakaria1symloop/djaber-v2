@@ -128,10 +128,19 @@ describe('public account deletion (PUB-06, FL-22 1b)', () => {
     expect(after.export).toMatchObject({ status: 'done', url: expect.stringContaining('.zip?exp=') });
     expect(await db.auditLog.count({ where: { actorId: member.userId, action: 'account.deletion_requested' } })).toBe(1);
 
+    // UX-047: « Exporter mes données » from the page / e-mail keeps a running or ready export, starts one otherwise
+    expect((await pub(app).post(`/api/v1/account-deletion/export/${done.cancelToken}`).send({}).expect(200)).body.data.export).toMatchObject({ jobId: after.export.jobId, status: 'done' });
+    await db.job.update({ where: { id: after.export.jobId }, data: { status: 'failed' } });
+    const restarted = (await pub(app).post(`/api/v1/account-deletion/export/${done.cancelToken}`).send({}).expect(200)).body.data;
+    expect(restarted.export).toMatchObject({ status: 'queued' });
+    expect(restarted.export.jobId).not.toBe(after.export.jobId);
+    expect(await db.auditLog.count({ where: { actorId: member.userId, action: 'account.data_export_requested' } })).toBe(1);
+
     const cancelled = (await pub(app).post(`/api/v1/account-deletion/cancel/${done.cancelToken}`).send({}).expect(200)).body.data;
     expect(cancelled).toMatchObject({ status: 'cancelled', cancelToken: null });
     expect((await db.user.findUniqueOrThrow({ where: { id: member.userId } })).status).toBe('active');
     await pub(app).post(`/api/v1/account-deletion/cancel/${done.cancelToken}`).send({}).expect(410);
+    await pub(app).post(`/api/v1/account-deletion/export/${done.cancelToken}`).send({}).expect(410);
   });
 
   it('owner of a live workspace ⇒ ACCOUNT_OWNS_WORKSPACE, request recorded BLOQUÉE with the owned workspace listed; a second request during grace ⇒ no new link', async () => {

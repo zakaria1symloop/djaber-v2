@@ -1,4 +1,5 @@
 // Auth & account calls (06 §2 "Auth & account", §8.1). Tokens are stored by `useSession().signIn`.
+import type { DataExportDto } from '@djaber/shared';
 import { api } from '@/lib/api';
 import type { AuthTokens, InvitationPreview, LegalPending, LoginResult, MeDto, RecoveryCodes, SessionDto, TwoFaSetup } from '@/lib/contracts';
 
@@ -37,6 +38,9 @@ export const authApi = {
   deletionRequest: () => api<DeletionRequest | null>('/me/deletion-request'),
   requestDeletion: (b: { password: string; totpCode?: string }) => api<DeletionRequest | null>('/me/deletion-request', { method: 'POST', body: b }),
   cancelDeletion: () => api<null>('/me/deletion-request', { method: 'DELETE' }),
+  /** DEL-01 « Exporter mes données » (JSON + CSV, 7 days): 202 { jobId }, an export of the last hour is reused */
+  startDataExport: () => api<{ jobId: string }>('/me/data-export'),
+  dataExport: (jobId: string) => api<DataExportDto>(`/me/data-export/${encodeURIComponent(jobId)}`),
 
   legalPending: () => api<LegalPending[]>('/legal/pending'),
   legalAccept: (b: { key: string; version: number }) => api<null>('/legal/accept', { method: 'POST', body: b }),

@@ -18,12 +18,13 @@ import { fold } from '../ai/tools/wilaya-aliases';
 import { ClientService } from '../clients/client.service';
 import { feeExplanation, FeeService, quoteFee } from '../delivery/fee.service';
 import { GeoService } from '../delivery/geo.service';
+import { stopdeskLabels, stopdeskText } from '../delivery/stopdesk-names';
 import { ExportService } from '../jobs/export.service';
 import { contextOf, type ConversationContext } from '../messaging/messaging.presenter';
 import { SafetyService } from '../messaging/safety.service';
 import { OrderEffects, type Actor } from './order-effects.service';
 import { checkOrderedAt, checkPaymentPatch, isTerminal, orderTotals, type Refusal, type StockLine } from './order-rules';
-import { ACTIVE_SHIPMENT, hasDeliveryAddress, ORDER_DETAIL_INCLUDE, ORDER_LIST_INCLUDE, presentOrder, presentOrderListItem, type PresentCtx } from './order.presenter';
+import { ACTIVE_SHIPMENT, hasDeliveryAddress, ORDER_DETAIL_INCLUDE, ORDER_LIST_INCLUDE, parseAddressSnapshot, presentOrder, presentOrderListItem, type PresentCtx } from './order.presenter';
 import { orderOrderBy, orderStats, orderWhere, type OrderFilters } from './order.query';
 
 const MIN = 60_000;
@@ -138,9 +139,39 @@ export class OrderService implements OnModuleInit {
     if (o.wilayaId) {
       const grid = quoteFee(rule, { wilayaId: o.wilayaId, isStopdesk: o.isStopdesk, subtotal: o.subtotal, threshold: ws.freeDeliveryThreshold });
       const q = grid.fee === o.deliveryFee || !grid.wilayaServed ? grid : quoteFee(rule, { wilayaId: o.wilayaId, isStopdesk: o.isStopdesk, subtotal: o.subtotal, threshold: ws.freeDeliveryThreshold, override: o.deliveryFee });
-      explanation = feeExplanation(q, o.wilaya?.nameFr ?? null);
+      explanation = feeExplanation(q, o.wilaya ?? null, ctx.locale);
     }
-    return presentOrder(o, { payments, actorNames, feeExplanation: explanation }, ctx);
+    const [desks, historyText] = await Promise.all([stopdeskLabels([o.isStopdesk ? o.stopdeskId : null]), this.addressHistory(o.history, ctx.locale)]);
+    const stopdeskName = o.isStopdesk && o.stopdeskId ? stopdeskText(desks.get(o.stopdeskId)) : null;
+    return presentOrder(o, { payments, actorNames, feeExplanation: explanation, stopdeskName, historyText }, ctx);
+  }
+
+  /**
+   * UX-046 (10/11): « Adresse » history rows read « Sétif · El Eulma · point relais Yalidine El Eulma → … » in the
+   * request's language (wilaya / commune names of that language), instead of the raw wilaya ids (« 19 → 19 »).
+   */
+  private async addressHistory(rows: { id: string; field: string; from: string | null; to: string | null }[], locale: string) {
+    const out = new Map<string, { from: string | null; to: string | null }>();
+    const parsed = rows.filter((h) => h.field === 'address').map((h) => ({ id: h.id, from: parseAddressSnapshot(h.from), to: parseAddressSnapshot(h.to) }));
+    if (!parsed.length) return out;
+    const all = parsed.flatMap((p) => [p.from, p.to]).filter((x): x is NonNullable<typeof x> => !!x);
+    const ids = <T>(f: (a: (typeof all)[number]) => T | null) => [...new Set(all.map(f).filter((x): x is T => x !== null))];
+    const [wilayas, communes, desks] = await Promise.all([
+      prisma.wilaya.findMany({ where: { id: { in: ids((a) => a.wilayaId) } }, select: { id: true, nameFr: true, nameAr: true } }),
+      prisma.commune.findMany({ where: { id: { in: ids((a) => a.communeId) } }, select: { id: true, nameFr: true, nameAr: true } }),
+      stopdeskLabels(all.map((a) => (a.isStopdesk ? a.stopdeskId : null))),
+    ]);
+    const name = (x: { nameFr: string; nameAr: string } | undefined) => (x ? (locale === 'ar' ? x.nameAr || x.nameFr : x.nameFr) : null);
+    const w = new Map(wilayas.map((x) => [x.id, x]));
+    const c = new Map(communes.map((x) => [x.id, x]));
+    const relay = locale === 'ar' ? 'نقطة استلام' : locale === 'en' ? 'pickup point' : 'point relais';
+    const text = (a: (typeof all)[number] | null) => {
+      if (!a) return null;
+      const where = a.isStopdesk ? [relay, a.stopdeskId ? (desks.get(a.stopdeskId)?.name ?? null) : null].filter(Boolean).join(' ') : a.address;
+      return [name(a.wilayaId !== null ? w.get(a.wilayaId) : undefined) ?? (a.wilayaId !== null ? String(a.wilayaId) : null), a.communeText ?? name(a.communeId !== null ? c.get(a.communeId) : undefined), where].filter(Boolean).join(' · ') || null;
+    };
+    for (const p of parsed) out.set(p.id, { from: text(p.from), to: text(p.to) });
+    return out;
   }
 
   async history(id: string, locale: string) {

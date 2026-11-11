@@ -64,6 +64,7 @@ export function MerchantShell({ children }: { children: ReactNode }) {
     role: s.role,
     workspace: s.workspace,
     workspaceLoading: s.workspaceLoading,
+    deletionScheduled: !s.impersonating && !!s.me?.deletionScheduledAt,
   });
   const to = decision.kind === 'redirect' ? decision.to : null;
   useEffect(() => {
@@ -451,6 +452,7 @@ export function LanguageDialog({ open, onClose }: { open: boolean; onClose: () =
 export function LegalInterstitial() {
   const t = useT();
   const s = useSession();
+  const router = useRouter();
   const qc = useQueryClient();
   const key = ['session', 'legal-pending', s.me?.id] as const;
   const pending = useQuery({ queryKey: key, queryFn: authApi.legalPending, enabled: !!s.me, initialData: s.me?.pendingLegal, staleTime: 60_000 });
@@ -490,7 +492,7 @@ export function LegalInterstitial() {
       hideClose
       footer={
         <>
-          <Button variant="ghost" onClick={() => void s.logout()} disabled={accept.isPending}>
+          <Button variant="ghost" onClick={() => void s.logout().then(() => router.replace('/login'))} disabled={accept.isPending}>
             {t('userMenu.logout')}
           </Button>
           <Button variant="primary" onClick={onAccept} loading={accept.isPending} disabled={!checked}>

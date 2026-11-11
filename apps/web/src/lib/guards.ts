@@ -57,6 +57,8 @@ export type GuardInput = {
   role: MemberRole | null;
   workspace: { onboardingStep: number; status: 'active' | 'suspended' | 'deletion_scheduled' } | null;
   workspaceLoading?: boolean;
+  /** UX-047: the account is in its 30-day deletion grace — « Compte désactivé » (cancel / export) comes first */
+  deletionScheduled?: boolean;
 };
 export type GuardDecision =
   | { kind: 'render' }
@@ -88,7 +90,8 @@ export const decideApp = (i: GuardInput): GuardDecision => {
   if (i.status === 'expired') return { kind: 'state', state: 'session-expired' };
   if (i.status === 'error') return { kind: 'state', state: 'error' };
   if (i.status === 'anonymous') return { kind: 'redirect', to: publicHelpHref(i.pathname, i.search) ?? loginHref(i.pathname, i.search) };
-  if (i.membershipCount === 0) return { kind: 'redirect', to: '/workspaces/new' };
+  // 04 §16 / AT-DEL-02: logging in during the grace shows « Compte désactivé » (on /workspaces/new, which needs no shop)
+  if (i.deletionScheduled || i.membershipCount === 0) return { kind: 'redirect', to: '/workspaces/new' };
   if (i.workspaceLoading || !i.workspace) return { kind: 'wait' };
   // a suspended workspace keeps Settings and Help reachable (api-contract §1.3: /workspace, /me*, /support/*)
   if (i.workspace.status === 'suspended' && !/^\/(settings|help)(\/|$)/.test(i.pathname)) return { kind: 'state', state: 'suspended' };
@@ -112,7 +115,7 @@ export const decideOnboarding = (i: GuardInput & { slug: string }): GuardDecisio
   if (i.status === 'expired') return { kind: 'state', state: 'session-expired' };
   if (i.status === 'error') return { kind: 'state', state: 'error' };
   if (i.status === 'anonymous') return { kind: 'redirect', to: loginHref(i.pathname, i.search) };
-  if (i.membershipCount === 0) return { kind: 'redirect', to: '/workspaces/new' };
+  if (i.deletionScheduled || i.membershipCount === 0) return { kind: 'redirect', to: '/workspaces/new' };
   if (i.workspaceLoading || !i.workspace) return { kind: 'wait' };
   if (!isOnboardingSlug(i.slug)) return { kind: 'redirect', to: onboardingPath(i.workspace.onboardingStep) };
   if (i.role !== 'owner' || i.workspace.onboardingStep === ONBOARDING_SKIPPED) return { kind: 'redirect', to: '/home' };

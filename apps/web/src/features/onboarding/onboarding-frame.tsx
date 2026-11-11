@@ -30,6 +30,7 @@ export function OnboardingFrame({ children }: { children: ReactNode }) {
     role: s.role,
     workspace: s.workspace,
     workspaceLoading: s.workspaceLoading,
+    deletionScheduled: !!s.me?.deletionScheduledAt,
     slug: step,
   });
   const to = decision.kind === 'redirect' ? decision.to : null;

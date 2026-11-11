@@ -76,7 +76,11 @@ export class AccountDeletionService {
   }
 
   /** Guards + grace (shared by the in-app request and the public confirmation). Throws the guard error after recording it. */
-  private async schedule(user: User, source: 'app' | 'public_page', client: ClientInfo, o: { exportData?: boolean; cancelTokenHash?: string } = {}): Promise<AccountDeletionRequest> {
+  private async schedule(user: User, source: 'app' | 'public_page', client: ClientInfo, o: { exportData?: boolean; cancelToken?: string } = {}): Promise<AccountDeletionRequest> {
+    // UX-047 (10/11): every grace gets a cancel token; the confirmation e-mail links to the public page with it (cancel /
+    // export without a password, also for an account without a shop). The public confirmation passes the one it returns.
+    const cancelToken = o.cancelToken ?? randomBytes(32).toString('base64url');
+    const deletionPage = (extra = '') => this.web(`/account/deletion?token=${encodeURIComponent(cancelToken)}${extra}`);
     const outcome = await TenantContext.runSystem(async () => {
       const open = await prisma.accountDeletionRequest.findFirst({ where: { userId: user.id, status: { in: [...OPEN] } } });
       if (open?.status === 'grace') {
@@ -107,7 +111,7 @@ export class AccountDeletionService {
       const scheduledAt = new Date(now.getTime() + days * DAY);
       const memberships = await prisma.membership.findMany({ where: { userId: user.id, role: { not: 'owner' } } });
       const row = await prisma.$transaction(async (tx) => {
-        const data = { status: 'grace' as const, source, blockedReason: null, confirmedAt: now, scheduledAt, ip: client.ip ?? null, tokenHash: o.cancelTokenHash ?? null };
+        const data = { status: 'grace' as const, source, blockedReason: null, confirmedAt: now, scheduledAt, ip: client.ip ?? null, tokenHash: this.crypto.sha256(cancelToken) };
         const req = open
           ? await tx.accountDeletionRequest.update({ where: { id: open.id }, data })
           : await tx.accountDeletionRequest.create({ data: { userId: user.id, ...data } });
@@ -127,7 +131,9 @@ export class AccountDeletionService {
             to: user.email,
             template: 'auth/account-deletion-confirm',
             locale: user.locale,
-            params: { scheduledAt: scheduledAt.toISOString(), url: this.web('/login') },
+            params: { scheduledAt: scheduledAt.toISOString() },
+            // links carrying the cancel token: encrypted at rest like every token link
+            secret: { url: deletionPage(), url2: deletionPage('&export=1') },
             key: `account-deletion:${req.id}:${now.getTime()}`,
           },
           tx,
@@ -240,8 +246,24 @@ export class AccountDeletionService {
     if (row.status === 'grace') return this.publicDto(row, user, token); // replayed confirmation: same answer
     if (row.status !== 'pending_confirmation') throw new AppException('ACCOUNT_DELETION_TOKEN_EXPIRED');
     const cancelToken = randomBytes(32).toString('base64url');
-    const scheduled = await this.schedule(user, 'public_page', client, { exportData: input.exportData, cancelTokenHash: this.crypto.sha256(cancelToken) });
+    const scheduled = await this.schedule(user, 'public_page', client, { exportData: input.exportData, cancelToken });
     return this.publicDto(scheduled, user, cancelToken);
+  }
+
+  /**
+   * `POST /account-deletion/export/:token` — UX-047 (10/11): « Exporter mes données » during the grace (button of the
+   * confirmation e-mail / of the page) when it was not ticked at confirmation. A running or ready export is kept (7 days).
+   */
+  async publicExport(token: string, client: ClientInfo): Promise<AccountDeletionPublicDto> {
+    const { row, user } = await this.byToken(token);
+    if (row.status !== 'grace') throw new AppException('ACCOUNT_DELETION_TOKEN_EXPIRED');
+    const current = row.exportJobId ? await this.exports.view(row.exportJobId) : null;
+    const usable = current && (current.status === 'queued' || current.status === 'running' || (current.status === 'done' && !!current.url));
+    if (usable) return this.publicDto(row, user, token);
+    const job = await this.exports.start(user.id);
+    const updated = await TenantContext.runSystem(() => prisma.accountDeletionRequest.update({ where: { id: row.id }, data: { exportJobId: job.jobId } }));
+    await this.audit.write({ actorType: 'user', actorId: user.id, action: 'account.data_export_requested', entity: 'User', entityId: user.id, after: { source: 'public_page', jobId: job.jobId }, ip: client.ip, userAgent: client.userAgent });
+    return this.publicDto(updated, user, token);
   }
 
   /** `POST /account-deletion/cancel/:token` — the cancel token of the confirmation (or the pending link itself). */

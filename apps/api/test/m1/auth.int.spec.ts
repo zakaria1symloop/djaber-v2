@@ -582,7 +582,11 @@ describe('AUTH-07 account deletion request', () => {
     expect(Math.round((new Date(res.body.data.scheduledAt).getTime() - Date.now()) / DAY)).toBe(30);
     expect(await db.membership.count({ where: { userId: member.userId } })).toBe(0);
     await api(app).post('/api/v1/auth/refresh').set('Cookie', `djaber_rt=${refreshCookie(session)}`).send({}).expect(401);
-    expect(await mailsTo(app, email, 'auth/account-deletion-confirm')).toHaveLength(1);
+    const confirmMail = await mailsTo(app, email, 'auth/account-deletion-confirm');
+    expect(confirmMail).toHaveLength(1);
+    // UX-047: the e-mail links to the public page with a cancel token (« Annuler la suppression », « Exporter mes données »)
+    expect(String(confirmMail[0]!.params?.url2)).toMatch(/\/account\/deletion\?token=[^&]+&export=1$/);
+    expect((await api(app).get(`/api/v1/account-deletion/confirm/${tokenOf(confirmMail[0])}`).expect(200)).body.data).toMatchObject({ status: 'grace', export: null });
     // the workspace is no longer reachable with the old access token
     await member.get('/workspace').expect(401);
 

@@ -17,6 +17,7 @@ import { JobService } from '../jobs/job.service';
 import type { Actor } from '../orders/order-effects.service';
 import type { LockedOrder } from '../orders/order-workflow.service';
 import { addressOf, clientRefOf, hasDeliveryAddress } from '../orders/order.presenter';
+import { stopdeskLabels, stopdeskText } from './stopdesk-names';
 import { CourierAdapters } from './adapters/courier-registry';
 import { COURIER_ERROR_CODE, isCourierError, type CreateShipmentInput as AdapterInput } from './adapters/courier-adapter';
 import { CourierAccountService } from './courier-account.service';
@@ -131,7 +132,8 @@ export class ShipmentService implements OnModuleInit {
         portalUrl = null;
       }
     }
-    return presentShipment(s as unknown as ShipmentRow, s.order, client, addressOf(s.order, locale), { publicWebUrl: this.config.get('PUBLIC_WEB_URL'), syncAvailableAt: await this.syncAvailableAt(id), portalUrl });
+    const desk = s.order.isStopdesk && s.order.stopdeskId ? stopdeskText((await stopdeskLabels([s.order.stopdeskId])).get(s.order.stopdeskId)) : null;
+    return presentShipment(s as unknown as ShipmentRow, s.order, client, addressOf(s.order, locale, desk), { publicWebUrl: this.config.get('PUBLIC_WEB_URL'), syncAvailableAt: await this.syncAvailableAt(id), portalUrl });
   }
 
   // --- send (DLV-05) ----------------------------------------------------------------------------------------------------------
