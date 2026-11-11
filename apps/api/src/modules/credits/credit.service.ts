@@ -274,6 +274,15 @@ export class CreditService implements OnModuleInit {
   }
 
   // --- reads (HTTP) ---------------------------------------------------------------------------------------------------------
+  /**
+   * Pack credits bought or granted, minus what was taken back (store refund, admin adjustment): with `packs.remaining` the
+   * screens show « used / total » counting up like the plan (recette 11/11, Badro).
+   */
+  async packTotal(workspaceId: string): Promise<number> {
+    const r = await prisma.creditLedger.aggregate({ where: { workspaceId, bucket: 'pack', OR: [{ kind: 'credit' }, { action: { in: ['store_refund', 'adjustment'] } }] }, _sum: { credits: true } });
+    return r._sum.credits ?? 0;
+  }
+
   /** `GET /credits` (also the header pill). */
   async summary(): Promise<CreditsDto> {
     const workspaceId = TenantContext.workspaceId();
@@ -283,9 +292,10 @@ export class CreditService implements OnModuleInit {
     const burn = Math.round((-(week._sum.credits ?? 0) / 7) * 10) / 10;
     const pricing = await TenantContext.runSystem(() => prisma.creditPricing.findFirst({ where: { effectiveAt: { lte: new Date() } }, orderBy: { version: 'desc' } }));
     const pack = await TenantContext.runSystem(() => prisma.creditPack.findFirst({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }).catch(() => null));
+    const packTotal = await this.packTotal(workspaceId);
     return {
       plan: { used: b.planUsed, limit: b.planLimit, remaining: b.unlimited ? -1 : Math.max(0, b.plan), periodStart: b.periodStart.toISOString(), periodEnd: b.periodEnd.toISOString() },
-      packs: { remaining: Math.max(0, b.pack) },
+      packs: { remaining: Math.max(0, b.pack), total: Math.max(0, packTotal, b.pack) },
       total: b.unlimited ? -1 : b.total,
       reserved: b.reserved,
       negative: !b.unlimited && b.total < 0,

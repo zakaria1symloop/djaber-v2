@@ -114,7 +114,7 @@ describe('credit packs (PCK-01 / PCK-02)', () => {
     expect((await db.creditLedger.findFirstOrThrow({ where: { idempotencyKey: `run:${run.id}:reserve` } })).bucket).toBe('pack');
     await inTenant(app, owner.workspaceId, () => credits.settle(run, 'image_recognition'));
     expect((await balanceOf(app, owner.workspaceId)).pack).toBe(495);
-    expect((await owner.get('/credits').expect(200)).body.data).toMatchObject({ plan: { remaining: 0 }, packs: { remaining: 495 }, exhausted: false });
+    expect((await owner.get('/credits').expect(200)).body.data).toMatchObject({ plan: { remaining: 0 }, packs: { remaining: 495, total: 500 }, exhausted: false }); // retest 11/11: packs count up « 5 / 500 »
     // next month: a new plan period opens, the pack part is untouched
     const sub = await db.subscription.findFirstOrThrow({ where: { workspaceId: owner.workspaceId, status: 'active' } });
     await db.subscription.update({ where: { id: sub.id }, data: { currentPeriodStart: new Date(sub.currentPeriodStart.getTime() - 32 * DAY) } });

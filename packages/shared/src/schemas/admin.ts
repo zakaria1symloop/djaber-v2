@@ -132,7 +132,7 @@ export type AdminWorkspaceRowDto = {
   status: 'active' | 'suspended' | 'deletion_scheduled';
   trustLevel: 'new' | 'standard' | 'trusted' | 'watch';
   /** used / limit = credits of the plan this month (grants included); pack = bought pack credits left (recette 11/11 M-31) */
-  credits: { used: number; limit: number; exhausted: boolean; pack: number };
+  credits: { used: number; limit: number; exhausted: boolean; pack: number; packTotal?: number };
   pages: { count: number; platforms: string[] };
   orders30d: number;
   conversations30d: number;

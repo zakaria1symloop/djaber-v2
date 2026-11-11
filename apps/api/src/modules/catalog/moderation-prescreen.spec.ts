@@ -94,6 +94,24 @@ describe('moderation pre-screen', () => {
     for (const ok of ['Sara', 'Agent technique', 'Salopette Store', 'Assistant unique', 'Amina — Boutique Dar El Kendil', 'Conseiller', null, '']) expect(await svc.bannedInName(ok, r)).toBeNull();
   });
 
+  it('recette 11/11 (Badro): disguised spellings are read back — symbols / digits as letters, spaced letters, repeated letters, digits glued', async () => {
+    const r = { ...rules, words: ['arnaque'], prohibited: ['arme'] };
+    expect(await svc.bannedInName('C0nnard', r)).toBe('connard');
+    expect(await svc.bannedInName('conn@rd', r)).toBe('connard');
+    expect(await svc.bannedInName('$al0pe', r)).toBe('salope');
+    expect(await svc.bannedInName('c.o.n.n.a.r.d', r)).toBe('connard');
+    expect(await svc.bannedInName('Agent N I Q U E', r)).toBe('nique');
+    expect(await svc.bannedInName('Connnnnard', r)).toBe('connard');
+    expect(await svc.bannedInName('zebi16', r)).toBe('zebi');
+    expect(await svc.bannedInName('Fuuuck shop', r)).toBe('fuck');
+    expect(await svc.bannedInName('ZAMEL', r)).toBe('zamel');
+    expect(await svc.bannedInName('الخنزير', r)).toBe('خنزير');
+    expect(await svc.bannedInName('زبببي', r)).toBe('زبي');
+    expect(await svc.bannedInName('Agent 4rn4que', r)).toBe('arnaque');
+    // ordinary names, Algerian first names and darija numerals stay allowed
+    for (const ok of ['Nazim', 'Assia', 'Hassiba', '3issa', 'Cocktail Bar', 'Unisex Store', 'Culture Shop', 'Sara 2026', 'Amine 16', 'Boutique Kelthoum', 'Agent technique', 'Salopette Store']) expect(await svc.bannedInName(ok, r)).toBeNull();
+  });
+
   it('folds Arabic diacritics and tatweel', () => {
     expect(foldText('تَقْلِيـــد')).toBe('تقليد');
     expect(svc.isSensitive('مستحضرات التجميل', rules)).toBe(true);

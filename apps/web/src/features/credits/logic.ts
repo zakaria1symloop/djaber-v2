@@ -56,6 +56,15 @@ export const packsShown = (c: Pick<Credits, 'packs' | 'total' | 'negative'>): nu
  * (« 2 000 / 2 000 + 5 000 ») — before, a pack only changed the pill's colour. Never negative (a debt is the banner's job).
  */
 export const packLeft = (c: Pick<Credits, 'packs'> | null | undefined): number => Math.max(0, c?.packs.remaining ?? 0);
+/**
+ * Retest 11/11 (Badro): the packs count up like the plan — « used / bought » (« packs 27 / 6 000 »), not the credits left
+ * counting down. `total` = bought / granted minus refunds (API); an older API without it ⇒ what is left is the total.
+ */
+export const packUsage = (c: Pick<Credits, 'packs'> | null | undefined): { used: number; total: number } => {
+  const left = packLeft(c);
+  const total = Math.max(left, c?.packs.total ?? left);
+  return { used: total - left, total };
+};
 /** The plan of the month is used up while packs keep the AI running: the banner says so instead of « 80 % ». */
 export const runningOnPacks = (c: Pick<Credits, 'plan' | 'packs' | 'exhausted'> | null | undefined): boolean => !!c && !c.exhausted && c.plan.limit > 0 && c.plan.used >= c.plan.limit && packLeft(c) > 0;
 

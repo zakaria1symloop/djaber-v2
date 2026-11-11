@@ -488,7 +488,8 @@ export type AnalysisImportResult = { created: { key: string; productId: string; 
 
 export type CreditsDto = {
   plan: { used: number; limit: number; remaining: number; periodStart: string; periodEnd: string };
-  packs: { remaining: number };
+  /** remaining = pack credits left; total = pack credits bought / granted, minus store refunds and take-backs (recette 11/11: « used / total » counts up like the plan) */
+  packs: { remaining: number; total?: number };
   total: number;
   reserved: number;
   negative: boolean;

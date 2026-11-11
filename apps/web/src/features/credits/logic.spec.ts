@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Credits } from './contracts';
-import { actionLabelKey, applyCreditsEvent, burnRate, creditsBanner, creditsLevel, creditsTone, isBookkeeping, levelOf, orderedRange, packLeft, packsShown, pricePerCredit, runningOnPacks, signedCredits, usedPct, warningDate } from './logic';
+import { actionLabelKey, applyCreditsEvent, burnRate, creditsBanner, creditsLevel, creditsTone, isBookkeeping, levelOf, orderedRange, packLeft, packsShown, packUsage, pricePerCredit, runningOnPacks, signedCredits, usedPct, warningDate } from './logic';
 
 const credits = (o: Partial<Credits> & { used?: number; limit?: number } = {}): Credits => {
   const { used = 3_760, limit = 5_000, ...rest } = o;
@@ -119,5 +119,15 @@ describe('pack credits in the top-bar pill (recette 11/11, Badro / M-31)', () =>
     expect(runningOnPacks(credits({ used: 2_000, limit: 2_000, packs: { remaining: 5_000 }, exhausted: false }))).toBe(true);
     expect(runningOnPacks(credits({ used: 1_200, limit: 2_000, packs: { remaining: 5_000 } }))).toBe(false);
     expect(runningOnPacks(credits({ used: 2_000, limit: 2_000, packs: { remaining: 0 }, exhausted: true }))).toBe(false);
+  });
+});
+
+describe('packs count up like the plan (retest 11/11, Badro)', () => {
+  it('« used / bought »: what was consumed out of what was bought', () => {
+    expect(packUsage(credits({ packs: { remaining: 5_973, total: 6_000 } }))).toEqual({ used: 27, total: 6_000 });
+    expect(packUsage(credits({ packs: { remaining: 6_000, total: 6_000 } }))).toEqual({ used: 0, total: 6_000 });
+    // an API without the total: what is left is the total
+    expect(packUsage(credits({ packs: { remaining: 500 } }))).toEqual({ used: 0, total: 500 });
+    expect(packUsage(null)).toEqual({ used: 0, total: 0 });
   });
 });

@@ -42,7 +42,7 @@ import { ProvisioningService } from '../workspace/provisioning.service';
 import { DAY, assertUuid, iso, freePlanName, pickLocal, requireReason, userSelect, type AdminActor } from './admin.util';
 
 const ROW_SORTS = ['createdAt', 'name'] as const;
-type CreditFig = { planNet: number; planLimit: number; planUsed: number; pack: number };
+type CreditFig = { planNet: number; planLimit: number; planUsed: number; pack: number; packTotal?: number };
 
 @Injectable()
 export class AdminWorkspacesService {
@@ -66,16 +66,17 @@ export class AdminWorkspacesService {
   /** Plan credits of the current period (latest plan credit period) + pack balance, per workspace. */
   async creditFigures(ids: string[] | null): Promise<Map<string, CreditFig>> {
     const filter = ids ? Prisma.sql`AND l."workspaceId" IN (${ids.length ? Prisma.join(ids.map((i) => Prisma.sql`${i}::uuid`)) : Prisma.sql`NULL`})` : Prisma.empty;
-    const rows = await prisma.$queryRaw<{ workspaceId: string; planNet: bigint | null; planLimit: bigint | null; planUsed: bigint | null; pack: bigint | null }[]>`
+    const rows = await prisma.$queryRaw<{ workspaceId: string; planNet: bigint | null; planLimit: bigint | null; planUsed: bigint | null; pack: bigint | null; packTotal: bigint | null }[]>`
       WITH p AS (SELECT "workspaceId", max("periodStart") AS ps FROM "CreditLedger" l WHERE "bucket" = 'plan' AND "kind" = 'credit' ${filter} GROUP BY "workspaceId")
       SELECT l."workspaceId",
         sum(l."credits") FILTER (WHERE l."bucket" = 'plan' AND l."periodStart" = p.ps) AS "planNet",
         sum(l."credits") FILTER (WHERE l."bucket" = 'plan' AND l."periodStart" = p.ps AND l."kind" = 'credit') AS "planLimit",
         -sum(l."credits") FILTER (WHERE l."bucket" = 'plan' AND l."periodStart" = p.ps AND l."kind" = 'debit') AS "planUsed",
-        sum(l."credits") FILTER (WHERE l."bucket" = 'pack') AS "pack"
+        sum(l."credits") FILTER (WHERE l."bucket" = 'pack') AS "pack",
+        sum(l."credits") FILTER (WHERE l."bucket" = 'pack' AND (l."kind" = 'credit' OR l."action" IN ('store_refund', 'adjustment'))) AS "packTotal"
       FROM "CreditLedger" l JOIN p ON p."workspaceId" = l."workspaceId" WHERE true ${filter}
       GROUP BY l."workspaceId"`;
-    return new Map(rows.map((r) => [r.workspaceId, { planNet: Number(r.planNet ?? 0), planLimit: Number(r.planLimit ?? 0), planUsed: Number(r.planUsed ?? 0), pack: Number(r.pack ?? 0) }]));
+    return new Map(rows.map((r) => [r.workspaceId, { planNet: Number(r.planNet ?? 0), planLimit: Number(r.planLimit ?? 0), planUsed: Number(r.planUsed ?? 0), pack: Number(r.pack ?? 0), packTotal: Number(r.packTotal ?? 0) }]));
   }
 
   private async idsMatchingCounts(q: AdminWorkspacesQuery): Promise<string[] | null> {
@@ -168,7 +169,7 @@ export class AdminWorkspacesService {
       const plan = sub?.plan ?? free;
       const lastPaid = lastSubs.find((s) => s.workspaceId === id);
       const subscriptionStatus = (sub && sub.plan.slug !== 'free' ? sub.status : lastPaid && lastPaid.status !== 'cancelled' ? 'expired' : sub?.status ?? 'expired') as AdminWorkspaceRowDto['subscriptionStatus'];
-      const f = figs.get(id) ?? { planNet: 0, planLimit: plan?.monthlyCredits ?? 0, planUsed: 0, pack: 0 };
+      const f = figs.get(id) ?? { planNet: 0, planLimit: plan?.monthlyCredits ?? 0, planUsed: 0, pack: 0, packTotal: 0 };
       const unlimited = (plan?.monthlyCredits ?? 0) < 0;
       const myChans = chans.filter((c) => c.workspaceId === id);
       out.push({
@@ -179,7 +180,7 @@ export class AdminWorkspacesService {
         subscriptionStatus,
         status: w.status,
         trustLevel: w.trustLevel,
-        credits: { used: f.planUsed, limit: unlimited ? -1 : f.planLimit, exhausted: !unlimited && f.planNet + f.pack <= 0, pack: Math.max(0, f.pack) },
+        credits: { used: f.planUsed, limit: unlimited ? -1 : f.planLimit, exhausted: !unlimited && f.planNet + f.pack <= 0, pack: Math.max(0, f.pack), packTotal: Math.max(0, f.packTotal ?? 0, f.pack) },
         pages: { count: myChans.length, platforms: [...new Set(myChans.map((c) => c.platform))] },
         orders30d: orders.find((o) => o.workspaceId === id)?._count._all ?? 0,
         conversations30d: convs.find((c) => c.workspaceId === id)?._count._all ?? 0,

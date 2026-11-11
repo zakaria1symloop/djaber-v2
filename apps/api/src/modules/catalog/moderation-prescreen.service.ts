@@ -66,23 +66,70 @@ export const containsWord = (hay: string, needles: readonly string[]) =>
  * the super admin's lists (Modération › Mots & catégories interdits) are added to it.
  */
 export const NAME_INSULTS = [
+  // French
   'connard', 'connasse', 'salope', 'salaud', 'pute', 'putain', 'encule', 'enfoire', 'batard', 'merde', 'nique', 'niquer', 'fdp', 'ntm', 'pd', 'abruti', 'debile',
+  'bite', 'couille', 'chienne', 'petasse', 'pouffiasse', 'grognasse', 'tapette', 'pede', 'gouine', 'negre', 'bougnoule', 'branleur', 'suceur', 'suceuse',
+  'cocu', 'imbecile', 'cretin', 'gogol', 'trou du cul', 'cul', 'porno', 'sexe', 'nazi', 'hitler', 'terroriste',
+  // English
   'fuck', 'fucker', 'fucking', 'shit', 'bitch', 'asshole', 'bastard', 'cunt', 'whore', 'slut', 'motherfucker',
-  'zebi', 'zbi', 'qahba', 'kahba', '9a7ba', '9ahba', 'nikmok', 'nik mok', 'tabon', 'mnayek', 'hmar', '7mar', 'kelb',
+  'dick', 'cock', 'pussy', 'nigger', 'nigga', 'faggot', 'fag', 'wanker', 'twat', 'prick', 'dumbass', 'jackass', 'porn', 'sex', 'terrorist', 'scammer',
+  // darija (Latin letters)
+  'zebi', 'zbi', 'zebbi', 'qahba', 'kahba', '9a7ba', '9ahba', 'nikmok', 'nik mok', 'nik', 'tabon', 'mnayek', 'manyouk', 'mnyouk', 'hmar', '7mar', 'hmara', 'kelb', 'kelba', 'kalb',
+  'zamel', 'zamal', 'khanzir', 'hallouf', '9awad', 'qawad', 'kawad', 'kess', 'ksomk', 'daech', 'daesh',
+  // Arabic
   'قحبة', 'زبي', 'نيك', 'نيكمك', 'طبون', 'منايك', 'حمار', 'كلب', 'شرموطة', 'عاهرة', 'لعنة',
+  'خنزير', 'حقير', 'وسخ', 'زامل', 'قواد', 'منيوك', 'كس', 'زب', 'عرص', 'شاذ', 'لوطي', 'كلبة', 'حمارة', 'طيز', 'سكس', 'داعش', 'ارهابي',
 ];
+
+/*
+ * Recette 11/11 (Badro: « you can still use some inappropriate names »): disguised spellings are read back before the
+ * comparison — digits / symbols used as letters (« c0nnard », « conn@rd », « $alope »), letters spaced or dotted out
+ * (« c.o.n.n.a.r.d »), letters repeated (« connnnard »), digits glued to the word (« zebi16 »). Darija numerals 7 / 9 stay
+ * letters (« 9a7ba ») and the words of the lists written with digits are compared with the text as typed.
+ */
+const LEET: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '8': 'b', '@': 'a', $: 's', '€': 'e', '!': 'i', '|': 'i' };
+const deLeet = (s: string) => s.replace(/[013458@$€!|]/g, (c) => LEET[c] ?? c);
+const SEP = /[^\p{L}\p{N}]+/u;
+/** « c . o n n a r d » ⇒ « connard »: runs of one-letter pieces are joined. */
+const joinSingles = (s: string) => {
+  const out: string[] = [];
+  let run = '';
+  for (const tok of s.split(SEP).filter(Boolean)) {
+    if ([...tok].length === 1) run += tok;
+    else {
+      if (run) out.push(run);
+      run = '';
+      out.push(tok);
+    }
+  }
+  if (run) out.push(run);
+  return out.join(' ');
+};
+const squeeze = (s: string) => s.replace(/(\p{L})\1+/gu, '$1');
+const stripDigits = (s: string) =>
+  s
+    .split(/([^\p{L}\p{N}]+)/u)
+    .map((tok) => (/\p{L}/u.test(tok) ? tok.replace(/\d+/g, '') : tok))
+    .join('');
+
 /**
  * A word of 7 letters or more is caught glued inside another one too (« SuperConnard », « BigBastard »); shorter ones only
- * as words (« nique » must not hit « technique », « salope » not « salopette »).
+ * as words (« nique » must not hit « technique », « salope » not « salopette »). Each reading of the text (as typed,
+ * symbols read as letters, spaced letters joined, digits removed — repeated letters squeezed in each) is compared.
  */
 export const nameHit = (text: string, needles: readonly string[]) => {
-  const hay = foldText(text);
-  const tokens = hay.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const raw = foldText(text);
+  const plain = [raw, deLeet(raw), joinSingles(deLeet(raw)), stripDigits(raw)];
+  const readings = [...new Set([...plain, ...plain.map(squeeze)])];
+  const hit = (hay: string, w: string, long: boolean) => (long ? hay.split(SEP).some((tok) => tok.includes(w)) : !!containsWord(hay, [w]));
   return (
     needles.find((n) => {
       const w = foldText(n).trim();
-      if (w.length >= 7 && !ARABIC.test(w) && !/\s/.test(w)) return tokens.some((tok) => tok.includes(w));
-      return !!containsWord(hay, [n]);
+      if (!w) return false;
+      const long = w.length >= 7 && !ARABIC.test(w) && !/\s/.test(w);
+      // a word written with digits (darija « 9a7ba ») or in Arabic: the text as typed, repeated letters squeezed
+      if (ARABIC.test(w) || /\d/.test(w)) return [raw, squeeze(raw)].some((h) => hit(h, w, long) || hit(h, squeeze(w), long));
+      return readings.some((h) => hit(h, w, long) || hit(h, squeeze(w), long));
     }) ?? null
   );
 };

@@ -12,11 +12,12 @@ import { useSession, useWorkspaceId } from '@/lib/session';
 import { useWsEvent } from '@/lib/ws';
 import { creditKeys, useCredits } from './api';
 import type { Credits, WsCreditsUpdated } from './contracts';
-import { applyCreditsEvent, creditsBanner, creditsLevel, levelOf, packLeft, runningOnPacks, warningDate } from './logic';
+import { applyCreditsEvent, creditsBanner, creditsLevel, levelOf, packLeft, packUsage, runningOnPacks, warningDate } from './logic';
 
 /**
  * "⚡ 3 760 / 5 000" — `GET /credits`, or the plan usage of `GET /workspace` until it answers; with bought packs left
- * "⚡ 2 000 / 2 000 + 5 000" (recette 11/11: a pack used to change the colour only).
+ * "⚡ 2 000 / 2 000 · packs 27 / 5 000", both counting up (recette 11/11: a pack used to change the colour only; retest:
+ * the packs counted down).
  */
 export function CreditsPillLink() {
   const t = useT();
@@ -30,7 +31,8 @@ export function CreditsPillLink() {
   if (used === undefined || limit === undefined || limit < 0) return null;
   const level = q.data ? levelOf(q.data) : creditsLevel(used, limit);
   const pack = packLeft(q.data);
-  const p = { used: formatNumber(used), limit: formatNumber(limit), pack: formatNumber(pack) };
+  const pu = packUsage(q.data);
+  const p = { used: formatNumber(used), limit: formatNumber(limit), pack: formatNumber(pack), packUsed: formatNumber(pu.used), packTotal: formatNumber(pu.total) };
   const text = pack > 0 ? t('topbar.creditsPacks', p) : t('topbar.credits', p);
   const title = level === 'exhausted' ? t('credits.pill.exhausted') : pack > 0 ? t('credits.pill.packs', p) : level === 'warning' ? t('credits.pill.warning') : t('credits.pill.title');
   return (

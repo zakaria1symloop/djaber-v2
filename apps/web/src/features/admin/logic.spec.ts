@@ -87,9 +87,10 @@ describe('promo code validity in the edit dialog (tester report 22/10 UX-028)', 
 
 describe('workspace credits figure (recette 11/11 M-31)', () => {
   const num = (n: number) => String(n);
-  const t = (key: string, p?: Record<string, string | number>) => (key === 'admin.common.unlimited' ? 'illimité' : `${p?.count} (packs)`);
-  it('plan of the month, then the bought pack credits left', () => {
-    expect(creditsText({ used: 2000, limit: 2000, pack: 5000 }, num, t)).toBe('2000 / 2000 + 5000 (packs)');
+  const t = (key: string, p?: Record<string, string | number>) => (key === 'admin.common.unlimited' ? 'illimité' : `packs ${p?.used} / ${p?.count}`);
+  it('plan of the month, then the packs used / bought — both counting up (retest 11/11)', () => {
+    expect(creditsText({ used: 2000, limit: 2000, pack: 4973, packTotal: 5000 }, num, t)).toBe('2000 / 2000 · packs 27 / 5000');
+    expect(creditsText({ used: 2000, limit: 2000, pack: 5000 }, num, t)).toBe('2000 / 2000 · packs 0 / 5000');
     expect(creditsText({ used: 120, limit: 3000, pack: 0 }, num, t)).toBe('120 / 3000');
   });
   it('an unlimited plan reads « illimité », never « / -1 »', () => {

@@ -7,11 +7,16 @@ import { AdminPill } from '../ui';
 
 /**
  * Recette 11/11 M-31 / Badro: « 2 000 / 2 000 » stayed the same after a pack was bought (only the colour changed) — the
- * figure is the plan of the month (grants included), then the bought pack credits left: « 2 000 / 2 000 + 5 000 (packs) »;
+ * figure is the plan of the month (grants included), then the packs « used / bought »: « 2 000 / 2 000 · packs 27 / 5 000 »;
  * an unlimited plan reads « illimité ».
  */
-export const creditsText = (c: Pick<AdminWorkspaceRowDto['credits'], 'used' | 'limit' | 'pack'>, num: (n: number) => string, t: (key: string, params?: Record<string, string | number>) => string): string =>
-  `${c.limit < 0 ? `${num(c.used)} / ${t('admin.common.unlimited')}` : `${num(c.used)} / ${num(c.limit)}`}${c.pack > 0 ? ` + ${t('admin.ws.credits.packs', { count: num(c.pack) })}` : ''}`;
+export const creditsText = (c: Pick<AdminWorkspaceRowDto['credits'], 'used' | 'limit' | 'pack' | 'packTotal'>, num: (n: number) => string, t: (key: string, params?: Record<string, string | number>) => string): string => {
+  const plan = c.limit < 0 ? `${num(c.used)} / ${t('admin.common.unlimited')}` : `${num(c.used)} / ${num(c.limit)}`;
+  if (c.pack <= 0) return plan;
+  // retest 11/11 (Badro): the packs count up like the plan — « packs used / bought »
+  const total = Math.max(c.pack, c.packTotal ?? c.pack);
+  return `${plan} · ${t('admin.ws.credits.packs', { used: num(total - c.pack), count: num(total) })}`;
+};
 
 export const workspacePill = (ws: Pick<AdminWorkspaceRowDto, 'status' | 'subscriptionStatus'>): { group: string; value: string; key: string } =>
   ws.status !== 'active'
