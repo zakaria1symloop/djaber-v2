@@ -25,6 +25,8 @@ import {
 import { prisma, Prisma, TenantContext, type BlockReason, type Conversation, type ConversationStatus, type Tx } from '@djaber/db';
 import { AuditService } from '../../core/audit/audit.service';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
+import { CreditService } from '../credits/credit.service';
+import { impersonating, maskName, maskText } from '../../core/privacy/mask';
 import type { BulkResult, CursorPage } from '../../core/http/pagination';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { OutboxService } from '../../core/outbox/outbox.service';
@@ -64,6 +66,7 @@ export class ConversationService implements OnModuleInit {
     private readonly notifications: NotificationProducer,
     private readonly outbound: OutboundSendService,
     private readonly safety: SafetyService,
+    private readonly credits: CreditService,
   ) {}
 
   onModuleInit() {
@@ -198,7 +201,7 @@ export class ConversationService implements OnModuleInit {
     };
   }
 
-  private actions(c: ConversationRow, blocked: boolean, unblockable: boolean): ActionDescriptor[] {
+  private actions(c: ConversationRow, blocked: boolean, unblockable: boolean, creditsOut = false): ActionDescriptor[] {
     const t = TenantContext.get();
     const write = !t.readOnly;
     const a = (key: string, enabled: boolean, reasonCode?: string): ActionDescriptor => ({ key, enabled: write && enabled, ...(!write ? { reasonCode: 'READ_ONLY_MEMBER' } : !enabled && reasonCode ? { reasonCode } : {}) });
@@ -210,7 +213,8 @@ export class ConversationService implements OnModuleInit {
       a('archive', c.status !== 'archived'),
       // no agent on the page (and none answered this conversation): there is no AI to pause or resume
       a('pauseAi', !c.aiPaused && hasAgent, hasAgent ? undefined : 'CONVERSATION_NO_AGENT'),
-      a('resumeAi', (c.aiPaused || c.status === 'needs_human') && hasAgent, hasAgent ? undefined : 'CONVERSATION_NO_AGENT'),
+      // recette 11/11 (Badro): no credit left ⇒ the AI cannot answer, « Reprendre l'IA » waits for a top-up / the renewal
+      a('resumeAi', (c.aiPaused || c.status === 'needs_human') && hasAgent && !creditsOut, !hasAgent ? 'CONVERSATION_NO_AGENT' : creditsOut ? 'INSUFFICIENT_CREDITS' : undefined),
       a('assign', true),
       a('markUnread', c.unreadCount === 0),
       a('block', !blocked),
@@ -255,18 +259,18 @@ export class ConversationService implements OnModuleInit {
           ? {
               ...item.client,
               tags: c.client.tags,
-              notes: c.client.notes,
+              notes: impersonating() ? maskText(c.client.notes) : c.client.notes,
               totalSpent: c.client.totalSpent,
               lastOrderAt: c.client.lastOrderAt?.toISOString() ?? null,
               mergedIntoId: c.client.mergedIntoId,
-              defaultAddress: address ? { wilayaId: address.wilayaId, communeText: address.communeText, address: address.address } : null,
+              defaultAddress: address ? { wilayaId: address.wilayaId, communeText: address.communeText, address: impersonating() ? '••••' : address.address } : null,
             }
           : null,
-        identity: { displayName: identity?.displayName ?? ctx.displayName ?? null, avatarUrl: identity?.avatarUrl ?? ctx.avatarUrl ?? null, externalSenderId: c.externalSenderId },
+        identity: { displayName: ((n) => (n && impersonating() ? maskName(n) : n))(identity?.displayName ?? ctx.displayName ?? null), avatarUrl: identity?.avatarUrl ?? ctx.avatarUrl ?? null, externalSenderId: c.externalSenderId },
         orders: orders.map((o) => ({ id: o.id, number: o.number, status: o.status, total: o.total, orderedAt: (o.orderedAt ?? o.createdAt).toISOString() })),
         block: block ? { id: block.id, reason: block.reason, source: block.source, blockedAt: block.blockedAt.toISOString(), unblockable: block.source !== 'platform' } : null,
       },
-      actions: this.actions(c, !!block, block ? block.source !== 'platform' : true),
+      actions: this.actions(c, !!block, block ? block.source !== 'platform' : true, (c.aiPaused || c.status === 'needs_human') && (await this.creditsOut(c.workspaceId))),
     };
   }
 
@@ -328,6 +332,16 @@ export class ConversationService implements OnModuleInit {
     await this.outbox.ws(tx, `ws:${c.workspaceId}`, 'conversation.updated', { id: c.id, conversation: conversationHead(c, blocked ?? false) }, `conversation.updated:${c.id}:${c.version}:${Date.now()}`);
   }
 
+  /** The workspace has no credit left (plan + packs; never for an unlimited plan): the AI cannot answer. */
+  private async creditsOut(workspaceId: string): Promise<boolean> {
+    return (await this.credits.balance(workspaceId)).exhausted;
+  }
+
+  /** Recette 11/11 (Badro): resuming the AI is refused while the credits are exhausted (`402 INSUFFICIENT_CREDITS`). */
+  private async assertCanResume(c: Pick<Conversation, 'workspaceId' | 'aiPaused' | 'status'>) {
+    if ((c.aiPaused || c.status === 'needs_human') && (await this.creditsOut(c.workspaceId))) throw new AppException('INSUFFICIENT_CREDITS');
+  }
+
   /** `PATCH /conversations/:id` — optimistic concurrency: a stale `version` answers 409 with the current resource (FL-06 F-3). */
   async update(id: string, dto: UpdateConversationInput): Promise<ConversationView> {
     await prisma.$transaction(async (db) => {
@@ -337,6 +351,7 @@ export class ConversationService implements OnModuleInit {
       const c = await tx.conversation.findFirst({ where: { id, deletedAt: null } });
       if (!c) throw notFound();
       if (c.version !== dto.version) throw conflict({ changedBy: null, changedAt: c.updatedAt.toISOString(), current: await this.view(await this.row(id, tx)) });
+      if (dto.aiPaused === false) await this.assertCanResume(c);
       await this.apply(tx, c, { status: dto.status, aiPaused: dto.aiPaused, assigneeId: dto.assigneeId });
     });
     return this.get(id);
@@ -397,6 +412,7 @@ export class ConversationService implements OnModuleInit {
             const c = await tx.conversation.findFirst({ where: { id, deletedAt: null } });
             if (!c) throw notFound();
             const changes: Changes = action === 'resolve' ? { status: 'resolved' } : action === 'archive' ? { status: 'archived' } : action === 'assign' ? { assigneeId: o.assigneeId ?? null } : { aiPaused: false };
+            if (changes.aiPaused === false) await this.assertCanResume(c);
             await this.apply(tx, c, changes);
           });
         }

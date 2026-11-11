@@ -5,6 +5,7 @@
 import { BulkBar, Button, Dialog, FormAlert, Pill, Select, toast, type BulkAction } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { useCredits } from '@/features/credits/api';
 import { useMembers } from '@/features/workspace/api';
 import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
@@ -19,6 +20,7 @@ type Run = { action: InboxBulkAction; title: string; body: { assigneeId?: string
 export function InboxBulkBar({ ids, names, visibleIds, onSelect, onClear }: { ids: string[]; names: Record<string, string>; visibleIds: string[]; onSelect: (ids: string[]) => void; onClear: () => void }) {
   const t = useT();
   const { me, can, readOnly } = useSession();
+  const creditsOut = !!useCredits().data?.exhausted;
   const refresh = useInboxRefresh();
   const members = useMembers(true);
   const [busy, setBusy] = useState<InboxBulkAction | null>(null);
@@ -63,7 +65,7 @@ export function InboxBulkBar({ ids, names, visibleIds, onSelect, onClear }: { id
     { key: 'resolve', label: t('action.markResolved'), onSelect: () => void exec('resolve', t('action.markResolved')), disabledReason: forbidden },
     { key: 'archive', label: t('action.archive'), onSelect: () => void exec('archive', t('action.archive')), disabledReason: forbidden },
     { key: 'assign', label: t('action.assign'), onSelect: () => setAssign(true), disabledReason: forbidden },
-    { key: 'resume-ai', label: t('action.resumeAi'), onSelect: () => void exec('resume-ai', t('action.resumeAi')), disabledReason: forbidden },
+    { key: 'resume-ai', label: t('action.resumeAi'), onSelect: () => void exec('resume-ai', t('action.resumeAi')), disabledReason: forbidden ?? (creditsOut ? t('error.INSUFFICIENT_CREDITS') : undefined) },
     ...(can('safety.block') ? [{ key: 'block', label: t('inbox.bulk.block'), onSelect: () => setBlock(true), destructive: true, disabledReason: forbidden }] : []),
   ];
   const allVisible = visibleIds.length > 0 && visibleIds.every((id) => ids.includes(id));

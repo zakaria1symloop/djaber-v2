@@ -131,6 +131,12 @@ export class AiAdminService {
     }
     if (input.isActive !== undefined) data.isActive = input.isActive;
     if (input.isPrimary !== undefined) data.isPrimary = input.isPrimary;
+    // recette 11/11 (Badro): a provider is switched on only with a key (stored or env) that its last test did not reject;
+    // the card pill says « SANS CLÉ » / « CLÉ REFUSÉE » / « CLÉ NON TESTÉE » for one already on
+    const env = (this.config.get(ENV_KEYS[p.key] as never) as string | undefined) || null;
+    const keyAfter = input.apiKey !== undefined ? (input.apiKey ?? env) : this.keyOf(p).key;
+    if ((input.isActive === true || input.isPrimary === true) && !keyAfter) throw new AppException('AI_PROVIDER_NO_KEY');
+    if (input.isActive === true && !p.isActive && input.apiKey === undefined && p.lastTestOk === false) throw new AppException('AI_PROVIDER_KEY_REJECTED', { provider: p.displayName });
     await prisma.$transaction(async (db) => {
       if (input.isPrimary) await db.aiProvider.updateMany({ where: { id: { not: p.id } }, data: { isPrimary: false } });
       await db.aiProvider.update({ where: { id: p.id }, data });

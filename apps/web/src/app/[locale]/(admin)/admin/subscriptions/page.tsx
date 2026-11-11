@@ -266,7 +266,7 @@ export default function AdminSubscriptionsPage() {
         }}
       />
       <SubscriptionActionDialog sub={action?.sub ?? null} action={action?.action ?? null} onClose={() => setAction(null)} />
-      <ChangePlanDialog ws={planFor ? { id: planFor.workspace.id, name: planFor.workspace.name, plan: { slug: planFor.plan.slug, name: planFor.plan.name }, credits: { used: 0, limit: 0, exhausted: false }, subscriptionStatus: planFor.status, trustLevel: 'standard' } : null} open={!!planFor} onClose={() => setPlanFor(null)} />
+      <ChangePlanDialog ws={planFor ? { id: planFor.workspace.id, name: planFor.workspace.name, plan: { slug: planFor.plan.slug, name: planFor.plan.name }, credits: { used: 0, limit: 0, exhausted: false, pack: 0 }, subscriptionStatus: planFor.status, trustLevel: 'standard' } : null} open={!!planFor} onClose={() => setPlanFor(null)} />
       <AccountingExportDialog open={exporting} onClose={() => setExporting(false)} />
     </AdminPage>
   );

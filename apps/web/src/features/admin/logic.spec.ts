@@ -6,7 +6,7 @@ import { decideAdmin } from '@/lib/guards';
 import { impersonation, minutesLeft } from '@/lib/impersonation';
 import { reasonOk } from './dialog-kit';
 import { EMPTY_PLAN, hasOneLimit, yearlyDiscount } from './plans/form';
-import { workspacePill } from './workspaces/status';
+import { creditsText, workspacePill } from './workspaces/status';
 
 describe('decideAdmin (02 §2.3)', () => {
   const base = { pathname: '/admin/plans', search: '' };
@@ -82,5 +82,17 @@ describe('promo code validity in the edit dialog (tester report 22/10 UX-028)', 
   it('a bound stored as Algiers midnight in UTC is shown as its Algiers day, never the day before', () => {
     expect(algiersDayOf('2026-10-21T23:00:00.000Z')).toBe('2026-10-22');
     expect(algiersDayOf('2026-10-29T22:59:59.000Z')).toBe('2026-10-29');
+  });
+});
+
+describe('workspace credits figure (recette 11/11 M-31)', () => {
+  const num = (n: number) => String(n);
+  const t = (key: string, p?: Record<string, string | number>) => (key === 'admin.common.unlimited' ? 'illimité' : `${p?.count} (packs)`);
+  it('plan of the month, then the bought pack credits left', () => {
+    expect(creditsText({ used: 2000, limit: 2000, pack: 5000 }, num, t)).toBe('2000 / 2000 + 5000 (packs)');
+    expect(creditsText({ used: 120, limit: 3000, pack: 0 }, num, t)).toBe('120 / 3000');
+  });
+  it('an unlimited plan reads « illimité », never « / -1 »', () => {
+    expect(creditsText({ used: 40, limit: -1, pack: 0 }, num, t)).toBe('40 / illimité');
   });
 });

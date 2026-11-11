@@ -13,7 +13,7 @@ import { fullName, Num, ShortDate, useFormats } from '@/features/admin/ui';
 import { useWorkspaceActions } from '@/features/admin/workspaces/actions';
 import { CreateWorkspaceDialog } from '@/features/admin/workspaces/dialogs';
 import { WorkspaceSheet } from '@/features/admin/workspaces/sheet';
-import { WorkspaceStateCell, WorkspaceSubscriptionCell } from '@/features/admin/workspaces/status';
+import { creditsText, WorkspaceStateCell, WorkspaceSubscriptionCell } from '@/features/admin/workspaces/status';
 import { WORKSPACES_LIST } from '@/features/admin/specs';
 import { useGeoWilayas } from '@/features/delivery/api';
 import { wilayaLabel } from '@/features/delivery/geo';
@@ -92,7 +92,7 @@ export default function AdminWorkspacesPage() {
       header: t('admin.ws.col.creditsMonth'),
       cell: (r) => (
         <span dir="ltr" className={r.credits.exhausted ? 'whitespace-nowrap tabular-nums text-accent-alert' : 'whitespace-nowrap tabular-nums'}>
-          {f.num(r.credits.used)} / {f.num(r.credits.limit)}
+          {creditsText(r.credits, f.num, t)}
           {r.credits.exhausted ? ` · ${t('admin.ws.credits.exhausted')}` : ''}
         </span>
       ),

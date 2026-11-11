@@ -63,6 +63,8 @@ describe('ADM-06 AI providers, models, routes, pricing', () => {
     const g = await sa.post('/admin/ai-providers/google/test', {});
     if (saved !== undefined) process.env.GOOGLE_AI_API_KEY = saved;
     if (!saved) expect(g.body.error.code).toBe('AI_PROVIDER_NO_KEY');
+    // recette 11/11 (Badro): no key ⇒ the provider cannot be switched on
+    if (!saved) expect((await sa.patch('/admin/ai-providers/google', { isActive: true }).expect(422)).body.error.code).toBe('AI_PROVIDER_NO_KEY');
     // remove the stored key again (env bootstrap)
     await sa.patch('/admin/ai-providers/openai', { apiKey: null }).expect(200);
   });

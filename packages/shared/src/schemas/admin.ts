@@ -131,7 +131,8 @@ export type AdminWorkspaceRowDto = {
   subscriptionStatus: 'trial' | 'active' | 'dunning' | 'expired' | 'cancelled';
   status: 'active' | 'suspended' | 'deletion_scheduled';
   trustLevel: 'new' | 'standard' | 'trusted' | 'watch';
-  credits: { used: number; limit: number; exhausted: boolean };
+  /** used / limit = credits of the plan this month (grants included); pack = bought pack credits left (recette 11/11 M-31) */
+  credits: { used: number; limit: number; exhausted: boolean; pack: number };
   pages: { count: number; platforms: string[] };
   orders30d: number;
   conversations30d: number;

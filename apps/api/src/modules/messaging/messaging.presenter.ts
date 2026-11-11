@@ -1,6 +1,7 @@
 // Read models of the inbox (api-contract §3.3): rows → `MessageView`, `ConversationListItemView`, `ConversationHead`.
 import { isWithin24h, type ConversationHead, type ConversationListItemView, type InboxAgentRef, type MessageAttachmentView, type MessagePayloadView, type MessageView } from '@djaber/shared';
 import type { Conversation, Message, Prisma } from '@djaber/db';
+import { impersonating, maskName, maskPhone, maskText } from '../../core/privacy/mask';
 import { channelRef } from '../channels/channel.service';
 
 export const userRef = { select: { id: true, firstName: true, lastName: true, avatarUrl: true } } as const;
@@ -47,6 +48,8 @@ export const attachmentsOf = (m: Pick<Message, 'attachments'>): StoredAttachment
 const publicAttachment = ({ sourceUrl: _s, storageKey: _k, ...a }: StoredAttachment): MessageAttachmentView => a;
 
 export const presentMessage = (m: MessageRow, agent: InboxAgentRef | null = null): MessageView => {
+  // recette 11/11 (Badro): a platform admin reading the inbox as the merchant sees phone numbers in texts masked
+  const mask = impersonating();
   const raw = (m.payload && typeof m.payload === 'object' && !Array.isArray(m.payload) ? m.payload : null) as Record<string, unknown> | null;
   // keys starting with `_` are internal (send bookkeeping)
   const payload = raw ? (Object.fromEntries(Object.entries(raw).filter(([k]) => !k.startsWith('_'))) as NonNullable<MessagePayloadView>) : null;
@@ -58,9 +61,9 @@ export const presentMessage = (m: MessageRow, agent: InboxAgentRef | null = null
     author: m.author,
     authorUser: m.authorUser ?? null,
     agent: m.author === 'ai' ? agent : null,
-    text: m.text,
+    text: mask ? maskText(m.text) : m.text,
     attachments: attachmentsOf(m).map(publicAttachment),
-    transcript: m.transcript,
+    transcript: mask ? maskText(m.transcript) : m.transcript,
     transcriptStatus: m.transcriptStatus,
     payload: payload && Object.keys(payload).length ? payload : null,
     sentAt: m.sentAt.toISOString(),
@@ -88,14 +91,18 @@ export const conversationHead = (c: Pick<Conversation, 'id' | 'status' | 'aiPaus
 
 export const presentConversation = (c: ConversationRow, blocked: boolean, now = new Date()): ConversationListItemView => {
   const ctx = contextOf(c);
+  // recette 11/11 (Badro): read through « Se connecter en tant que », the customer's name and phone are masked like in
+  // the admin viewers (04 §17 « Viewers »: « Mehdi H. », « 06•• •• •• 54 »)
+  const mask = impersonating();
+  const nameOf = (n: string) => (mask ? maskName(n) : n);
   const last6 = c.externalSenderId.slice(-6);
   const cart = ctx.cart && typeof ctx.cart === 'object' ? { items: Number(ctx.cart.items ?? 0), recapShownAt: ctx.cart.recapShownAt ?? null, orderId: ctx.cart.orderId ?? null } : null;
   return {
     id: c.id,
     channel: channelRef(c.channel),
     client: c.client
-      ? { id: c.client.id, name: c.client.name, phone: c.client.phone, riskLevel: c.client.riskLevel, isPlaceholder: c.client.isPlaceholder, blocked, orderCount: c.client.orderCount, avatarUrl: ctx.avatarUrl ?? null }
-      : { id: '', name: ctx.displayName ?? `${c.channel.platform === 'instagram' ? 'IG' : 'FB'} User ·${last6}`, phone: null, riskLevel: 'normal', isPlaceholder: true, blocked, orderCount: 0, avatarUrl: ctx.avatarUrl ?? null },
+      ? { id: c.client.id, name: nameOf(c.client.name), phone: mask ? maskPhone(c.client.phone) : c.client.phone, riskLevel: c.client.riskLevel, isPlaceholder: c.client.isPlaceholder, blocked, orderCount: c.client.orderCount, avatarUrl: ctx.avatarUrl ?? null }
+      : { id: '', name: ctx.displayName ? nameOf(ctx.displayName) : `${c.channel.platform === 'instagram' ? 'IG' : 'FB'} User ·${last6}`, phone: null, riskLevel: 'normal', isPlaceholder: true, blocked, orderCount: 0, avatarUrl: ctx.avatarUrl ?? null },
     status: c.status,
     aiPaused: c.aiPaused,
     agent: c.agent,
@@ -103,7 +110,7 @@ export const presentConversation = (c: ConversationRow, blocked: boolean, now = 
     assignee: c.assignee,
     unreadCount: c.unreadCount,
     lastMessageAt: (c.lastMessageAt ?? c.createdAt).toISOString(),
-    lastMessagePreview: c.lastMessagePreview ?? '',
+    lastMessagePreview: (mask ? maskText(c.lastMessagePreview) : c.lastMessagePreview) ?? '',
     lastMessageDirection: ctx.lastDirection ?? 'in',
     lastCustomerMessageAt: c.lastCustomerMessageAt?.toISOString() ?? null,
     within24h: isWithin24h(c.lastCustomerMessageAt, now),

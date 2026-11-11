@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Credits } from './contracts';
-import { actionLabelKey, applyCreditsEvent, burnRate, creditsBanner, creditsLevel, creditsTone, isBookkeeping, levelOf, orderedRange, packsShown, pricePerCredit, signedCredits, usedPct, warningDate } from './logic';
+import { actionLabelKey, applyCreditsEvent, burnRate, creditsBanner, creditsLevel, creditsTone, isBookkeeping, levelOf, orderedRange, packLeft, packsShown, pricePerCredit, runningOnPacks, signedCredits, usedPct, warningDate } from './logic';
 
 const credits = (o: Partial<Credits> & { used?: number; limit?: number } = {}): Credits => {
   const { used = 3_760, limit = 5_000, ...rest } = o;
@@ -106,5 +106,18 @@ describe('packs tile (AT-PCK-03)', () => {
     expect(packsShown({ packs: { remaining: 0 }, total: -120, negative: true })).toBe(-120);
     expect(packsShown({ packs: { remaining: 500 }, total: 1200, negative: false })).toBe(500);
     expect(packsShown({ packs: { remaining: -40 }, total: -40, negative: true })).toBe(-40);
+  });
+});
+
+describe('pack credits in the top-bar pill (recette 11/11, Badro / M-31)', () => {
+  it('the bought pack credits left are shown after the plan figure, never negative', () => {
+    expect(packLeft(credits({ packs: { remaining: 5_000 } }))).toBe(5_000);
+    expect(packLeft(credits({ packs: { remaining: -40 }, negative: true }))).toBe(0);
+    expect(packLeft(null)).toBe(0);
+  });
+  it('the month is used up but packs keep the AI running: banner « crédits de packs », not « 80 % »', () => {
+    expect(runningOnPacks(credits({ used: 2_000, limit: 2_000, packs: { remaining: 5_000 }, exhausted: false }))).toBe(true);
+    expect(runningOnPacks(credits({ used: 1_200, limit: 2_000, packs: { remaining: 5_000 } }))).toBe(false);
+    expect(runningOnPacks(credits({ used: 2_000, limit: 2_000, packs: { remaining: 0 }, exhausted: true }))).toBe(false);
   });
 });

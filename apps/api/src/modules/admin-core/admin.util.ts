@@ -25,21 +25,7 @@ export const assertUuid = (id: string) => {
   return id;
 };
 
-/** PII masking of admin viewers and lists (07-non-functional: masked in admin viewers and logs). `0661987654` ⇒ `06•• •• •• 54`. */
-export const maskPhone = (p: string | null | undefined): string | null => {
-  if (!p) return null;
-  const d = p.replace(/\s+/g, '');
-  if (d.length < 5) return '••••';
-  return `${d.slice(0, 2)}•• •• •• ${d.slice(-2)}`;
-};
-/** "Mehdi Hadj" ⇒ "Mehdi H." */
-export const maskName = (n: string | null | undefined): string => {
-  const parts = (n ?? '').trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return '—';
-  return parts.length === 1 ? parts[0]! : `${parts[0]} ${parts[parts.length - 1]![0]}.`;
-};
-/** Phone-like digit runs inside a text (≥ 8 digits) are masked too. */
-export const maskText = (t: string | null | undefined): string | null => (t ? t.replace(/(\+?\d[\d .-]{7,}\d)/g, (m) => maskPhone(m.replace(/[ .-]/g, '')) ?? m) : t ?? null);
+export { maskName, maskPhone, maskText } from '../../core/privacy/mask';
 export const maskEmail = (e: string): string => {
   const [u, d] = e.split('@');
   return `${(u ?? '').slice(0, 1)}•••@${d ?? ''}`;

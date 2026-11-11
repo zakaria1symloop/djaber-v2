@@ -6,6 +6,7 @@ import { ConfirmDialog, toast, type MenuAction } from '@djaber/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 import { ConflictDialog } from '@/components/global-states';
+import { useCredits } from '@/features/credits/api';
 import { BlockCustomerDialog, ReportCustomerDialog, type ReportTarget } from '@/features/safety/dialogs';
 import { useRouter } from '@/i18n/navigation';
 import { toMenuActions, type ActionHandler } from '@/lib/actions';
@@ -22,7 +23,7 @@ import type { ActionDescriptor, Conversation, ConversationListItem, Conversation
 type Row = ConversationListItem | Conversation;
 
 /** The rule of `ConversationService.actions` for a list row (no descriptors on rows): same keys, same order. */
-export const localActions = (row: Pick<ConversationListItem, 'status' | 'aiPaused' | 'unreadCount' | 'blocked'> & Partial<Pick<ConversationListItem, 'pageHasAgent' | 'agent'>>, may: { block: boolean; unblock: boolean; remove: boolean }): ActionDescriptor[] => {
+export const localActions = (row: Pick<ConversationListItem, 'status' | 'aiPaused' | 'unreadCount' | 'blocked'> & Partial<Pick<ConversationListItem, 'pageHasAgent' | 'agent'>>, may: { block: boolean; unblock: boolean; remove: boolean }, creditsOut = false): ActionDescriptor[] => {
   // no agent on the page and none answered the conversation: no AI to pause or resume (`CONVERSATION_NO_AGENT`)
   const hasAgent = row.pageHasAgent !== false || !!row.agent;
   const noAgent = hasAgent ? {} : { reasonCode: 'CONVERSATION_NO_AGENT' };
@@ -31,7 +32,8 @@ export const localActions = (row: Pick<ConversationListItem, 'status' | 'aiPause
     { key: 'reopen', enabled: row.status === 'resolved' || row.status === 'archived' },
     { key: 'archive', enabled: row.status !== 'archived' },
     { key: 'pauseAi', enabled: !row.aiPaused && hasAgent, ...noAgent },
-    { key: 'resumeAi', enabled: (row.aiPaused || row.status === 'needs_human') && hasAgent, ...noAgent },
+    // recette 11/11 (Badro): no credit left ⇒ « Reprendre l'IA » waits for a top-up (`INSUFFICIENT_CREDITS`, like the API)
+    { key: 'resumeAi', enabled: (row.aiPaused || row.status === 'needs_human') && hasAgent && !creditsOut, ...(hasAgent && creditsOut ? { reasonCode: 'INSUFFICIENT_CREDITS' } : noAgent) },
     { key: 'assign', enabled: true },
     { key: 'markUnread', enabled: row.unreadCount === 0 },
     { key: 'block', enabled: !row.blocked && may.block },
@@ -50,6 +52,7 @@ export function useConversationActions(o: { onDeleted?: (id: string) => void } =
   const qc = useQueryClient();
   const router = useRouter();
   const { me, can } = useSession();
+  const creditsOut = !!useCredits().data?.exhausted;
   const refresh = useInboxRefresh();
   const [busy, setBusy] = useState<string | null>(null);
   const [conflict, setConflict] = useState<Conflict | null>(null);
@@ -160,7 +163,7 @@ export function useConversationActions(o: { onDeleted?: (id: string) => void } =
     if (!can('inbox.read')) return [];
     const mine = row.assignee?.id === me?.id;
     const name = row.client?.name ?? '';
-    const descriptors: ActionDescriptor[] = 'actions' in row && row.actions?.length ? row.actions : localActions(row, { block: can('safety.block'), unblock: can('safety.manage'), remove: can('inbox.delete') });
+    const descriptors: ActionDescriptor[] = 'actions' in row && row.actions?.length ? row.actions : localActions(row, { block: can('safety.block'), unblock: can('safety.manage'), remove: can('inbox.delete') }, creditsOut);
     // a role that may not delete / unblock does not see the item at all (permission ⇒ hidden, state ⇒ greyed)
     const hidden = (key: string, allowed: boolean) => !allowed || descriptors.some((d) => d.key === key && !d.enabled && d.reasonCode === 'FORBIDDEN');
     const handlers: Record<string, ActionHandler> = {

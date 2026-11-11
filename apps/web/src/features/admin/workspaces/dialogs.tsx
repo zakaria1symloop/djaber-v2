@@ -14,6 +14,7 @@ import { useAdminSettings } from '../../admin-ops/api';
 import { adminWrite, useAdminGet, useAdminInvalidate } from '../api';
 import { AdminDialog, NO_ERRORS, ReasonField, reasonOk, toServerErrors, useOnOpen, type ServerErrors } from '../dialog-kit';
 import { useFormats } from '../ui';
+import { creditsText } from './status';
 
 type Ws = Pick<AdminWorkspaceRowDto, 'id' | 'name' | 'plan' | 'credits' | 'subscriptionStatus' | 'trustLevel'>;
 
@@ -130,7 +131,7 @@ export function CreditsDialog({ ws, open, onClose }: { ws: Ws | null; open: bool
     s.setErrors(NO_ERRORS);
   });
   if (!ws) return null;
-  const context = `${ws.name} · ${f.num(ws.credits.used)} / ${f.num(ws.credits.limit)}${ws.credits.exhausted ? ` (${t('admin.ws.credits.exhausted')})` : ''}`;
+  const context = `${ws.name} · ${creditsText(ws.credits, f.num, t)}${ws.credits.exhausted ? ` (${t('admin.ws.credits.exhausted')})` : ''}`;
   return (
     <AdminDialog
       open={open}
@@ -188,7 +189,7 @@ export function RemoveCreditsDialog({ ws, open, onClose }: { ws: Ws | null; open
       testId="dlg-credits-remove"
       size="sm"
       title={t('admin.ws.creditsRemove.title')}
-      context={`${ws.name} · ${f.num(ws.credits.used)} / ${f.num(ws.credits.limit)}`}
+      context={`${ws.name} · ${creditsText(ws.credits, f.num, t)}`}
       submitLabel={t('admin.ws.creditsRemove.submit')}
       disabled={!Number(credits) || !reasonOk(reason)}
       pending={s.pending}

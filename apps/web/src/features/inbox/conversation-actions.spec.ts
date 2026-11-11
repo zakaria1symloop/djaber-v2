@@ -8,6 +8,12 @@ const of = (actions: ReturnType<typeof localActions>, key: string) =>
   actions.find((a) => a.key === key)!;
 
 describe('localActions — pause / resume the AI', () => {
+  it('recette 11/11 (Badro): no credit left ⇒ « Reprendre l’IA » greyed with INSUFFICIENT_CREDITS until a top-up', () => {
+    expect(of(localActions({ ...row, status: 'needs_human', aiPaused: true, pageHasAgent: true }, may, true), 'resumeAi')).toEqual({ key: 'resumeAi', enabled: false, reasonCode: 'INSUFFICIENT_CREDITS' });
+    expect(of(localActions({ ...row, aiPaused: true, pageHasAgent: true }, may, false), 'resumeAi').enabled).toBe(true);
+    // pausing stays possible without credits
+    expect(of(localActions({ ...row, pageHasAgent: true }, may, true), 'pauseAi').enabled).toBe(true);
+  });
   it('a page with an agent: pause while it answers, resume once paused', () => {
     expect(of(localActions({ ...row, pageHasAgent: true }, may), 'pauseAi')).toEqual({
       key: 'pauseAi',

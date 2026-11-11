@@ -109,6 +109,19 @@ export const goToCheckout = (url: string) => {
   window.location.assign(url);
 };
 
+/** Saves a PDF answered by the API under its own name (« F-2026-00008.pdf »), without leaving the page. */
+export async function savePdf(load: () => Promise<Blob>, fileName: string) {
+  const b = await load();
+  const url = URL.createObjectURL(b.type ? b : new Blob([b], { type: 'application/pdf' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 /** Opens a PDF answered by the API in a new tab (blob URL, revoked after a minute). */
 export async function openPdf(load: () => Promise<Blob>, fileName: string) {
   // the tab is opened synchronously (popup blockers), then pointed at the file once it arrived

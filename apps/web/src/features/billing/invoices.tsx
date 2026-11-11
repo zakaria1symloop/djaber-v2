@@ -6,7 +6,7 @@
 import { BillingInfoSchema, formatDate, formatMoney, type AppLocale } from '@djaber/shared';
 import { ActionsMenu, ActiveFilters, Button, Card, cn, CodeInput, Dialog, EmptyState, Field, FilterChips, FilterDropdown, FormAlert, Input, Ltr, StatusPill, Table, Td, Textarea, Th, toast, Tr, type ActiveFilter, type MenuAction } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
-import { FileText } from 'lucide-react';
+import { Download, FileText } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ListFilteredEmpty, ListLoading, QueryError } from '@/components/global-states';
 import { ListPagination } from '@/features/catalog/ui';
@@ -16,7 +16,7 @@ import { filterList, type ApiQuery, type ListSpec } from '@/lib/list-state';
 import { useSession } from '@/lib/session';
 import { useListState } from '@/lib/use-list-state';
 import { uuid } from '@/lib/uuid';
-import { billingApi, goToCheckout, openPdf, useBillingInfo, useBillingRefresh, useInvoices } from './api';
+import { billingApi, goToCheckout, openPdf, savePdf, useBillingInfo, useBillingRefresh, useInvoices } from './api';
 import type { Invoice } from './contracts';
 import { canPayInvoice, INVOICE_STATUSES, methodGroup } from './logic';
 
@@ -62,18 +62,30 @@ export function InvoicesCard({ owner }: { owner: boolean }) {
     ? [{ key: 'status', label: `${t('billing.invoices.filter.status')} : ${statuses.map((v) => statusOptions.find((o) => o.value === v)?.label ?? v).join(', ')}`, onRemove: () => list.setFilter('status', null) }]
     : [];
 
-  const pdf = async (i: Invoice) => {
+  // `pdfUrl` is the authenticated API route itself: the file is fetched with the bearer, then opened in a new tab or
+  // saved as « <number>.pdf ». Recette 11/11 M-20: both were only in the row's « Actions » menu — the number now opens
+  // the invoice and a visible « PDF » button downloads it (Figma BIL-04 « PDF ↓ »).
+  const [saving, setSaving] = useState<string | null>(null);
+  const pdf = async (i: Invoice, mode: 'open' | 'save') => {
     try {
-      // `pdfUrl` is the authenticated API route itself: the file is fetched with the bearer and opened as a blob
-      await openPdf(() => billingApi.invoicePdf(i.id), `${i.number}.pdf`);
+      if (mode === 'open') await openPdf(() => billingApi.invoicePdf(i.id), `${i.number}.pdf`);
+      else {
+        setSaving(i.id);
+        await savePdf(() => billingApi.invoicePdf(i.id), `${i.number}.pdf`);
+      }
     } catch (e) {
       toast({ tone: 'danger', message: errorMessage(e, t) });
+    } finally {
+      if (mode === 'save') setSaving(null);
     }
   };
   const menu = (i: Invoice): MenuAction[] => {
     const out: MenuAction[] = [];
     if (i.status === 'unpaid') out.push({ key: 'pay', label: t('billing.invoices.payNow'), primary: true, onSelect: () => void pay.run(i.id), disabledReason: !canPay ? t('billing.writeOnly') : !canPayInvoice(i) ? t('error.CONFLICT') : undefined });
-    if (i.status !== 'upcoming') out.push({ key: 'pdf', label: t('billing.invoices.pdf'), onSelect: () => void pdf(i), hint: 'PDF' });
+    if (i.status !== 'upcoming') {
+      out.push({ key: 'open', label: t('billing.invoices.open'), onSelect: () => void pdf(i, 'open') });
+      out.push({ key: 'pdf', label: t('billing.invoices.pdf'), onSelect: () => void pdf(i, 'save'), hint: 'PDF' });
+    }
     return out;
   };
 
@@ -122,7 +134,13 @@ export function InvoicesCard({ owner }: { owner: boolean }) {
                 return (
                   <Tr key={i.id} data-testid="invoice-row" data-status={i.status} data-number={i.number}>
                     <Td className="whitespace-nowrap">
-                      <Ltr>{i.status === 'upcoming' && !i.number ? '—' : i.number}</Ltr>
+                      {i.status === 'upcoming' ? (
+                        <Ltr>{i.number || '—'}</Ltr>
+                      ) : (
+                        <button type="button" className="font-medium text-accent-inbound hover:underline" title={t('billing.invoices.open')} onClick={() => void pdf(i, 'open')} data-testid="invoice-open">
+                          <Ltr>{i.number}</Ltr>
+                        </button>
+                      )}
                     </Td>
                     <Td className="whitespace-nowrap">{formatDate(i.date, locale)}</Td>
                     <Td className="max-w-[24rem]">
@@ -146,6 +164,12 @@ export function InvoicesCard({ owner }: { owner: boolean }) {
                         {i.status === 'unpaid' ? (
                           <Button size="sm" variant="primary" onClick={() => void pay.run(i.id)} loading={pay.pending === i.id} disabled={!canPayInvoice(i)} disabledReason={canPay ? undefined : t('billing.writeOnly')} data-testid="invoice-pay">
                             {t('billing.invoices.payNow')}
+                          </Button>
+                        ) : null}
+                        {i.status !== 'upcoming' ? (
+                          <Button size="sm" variant="ghost" onClick={() => void pdf(i, 'save')} loading={saving === i.id} aria-label={`${t('billing.invoices.pdf')} ${i.number}`} title={t('billing.invoices.pdf')} data-testid="invoice-pdf">
+                            <Download className="size-4" aria-hidden />
+                            PDF
                           </Button>
                         ) : null}
                         {menu(i).length ? <ActionsMenu label={t('action.actions')} actions={menu(i)} /> : null}

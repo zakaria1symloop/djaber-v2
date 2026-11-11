@@ -12,9 +12,12 @@ import { useSession, useWorkspaceId } from '@/lib/session';
 import { useWsEvent } from '@/lib/ws';
 import { creditKeys, useCredits } from './api';
 import type { Credits, WsCreditsUpdated } from './contracts';
-import { applyCreditsEvent, creditsBanner, creditsLevel, levelOf, warningDate } from './logic';
+import { applyCreditsEvent, creditsBanner, creditsLevel, levelOf, packLeft, runningOnPacks, warningDate } from './logic';
 
-/** "⚡ 3 760 / 5 000" — `GET /credits`, or the plan usage of `GET /workspace` until it answers. */
+/**
+ * "⚡ 3 760 / 5 000" — `GET /credits`, or the plan usage of `GET /workspace` until it answers; with bought packs left
+ * "⚡ 2 000 / 2 000 + 5 000" (recette 11/11: a pack used to change the colour only).
+ */
 export function CreditsPillLink() {
   const t = useT();
   const { can, workspace } = useSession();
@@ -26,10 +29,12 @@ export function CreditsPillLink() {
   // an unlimited plan (-1) has no pill
   if (used === undefined || limit === undefined || limit < 0) return null;
   const level = q.data ? levelOf(q.data) : creditsLevel(used, limit);
-  const text = t('topbar.credits', { used: formatNumber(used), limit: formatNumber(limit) });
-  const title = level === 'exhausted' ? t('credits.pill.exhausted') : level === 'warning' ? t('credits.pill.warning') : t('credits.pill.title');
+  const pack = packLeft(q.data);
+  const p = { used: formatNumber(used), limit: formatNumber(limit), pack: formatNumber(pack) };
+  const text = pack > 0 ? t('topbar.creditsPacks', p) : t('topbar.credits', p);
+  const title = level === 'exhausted' ? t('credits.pill.exhausted') : pack > 0 ? t('credits.pill.packs', p) : level === 'warning' ? t('credits.pill.warning') : t('credits.pill.title');
   return (
-    <Link href="/settings/credits" aria-label={t('credits.pill.label', { used: formatNumber(used), limit: formatNumber(limit) })} className="inline-flex rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-inbound">
+    <Link href="/settings/credits" aria-label={pack > 0 ? t('credits.pill.labelPacks', p) : t('credits.pill.label', p)} className="inline-flex rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-inbound">
       <CreditsPill text={text} level={level} title={title} />
     </Link>
   );
@@ -52,6 +57,7 @@ export function useCreditsBanners(): ShellBanner[] {
   const see = () => router.push('/settings/credits');
   if (id === 'negativeCredits') return [{ id, tone: 'danger', content: t('banner.negativeCredits'), action: can('billing.write') ? open : { label: t('credits.banner.see'), onClick: see } }];
   if (id === 'credits100') return [{ id, tone: 'danger', content: t('banner.credits100', { used, limit, date: formatDate(c.plan.periodEnd, locale) }), action: open }];
+  if (runningOnPacks(c)) return [{ id, tone: 'warning', content: t('banner.creditsPacks', { used, limit, pack: formatNumber(packLeft(c)), date: formatDate(c.plan.periodEnd, locale) }), action: { label: t('credits.banner.see'), onClick: see } }];
   return [{ id, tone: 'warning', content: t('banner.credits80', { used, limit, date: formatDate(warningDate(c), locale) }), action: { label: t('credits.banner.see'), onClick: see } }];
 }
 
@@ -68,5 +74,7 @@ export function useCreditsEvents() {
     qc.setQueryData<Credits>(creditKeys.balance(ws), (old) => (old ? applyCreditsEvent(old, p) : old));
     void qc.invalidateQueries({ queryKey: creditKeys.all(ws) });
     void qc.invalidateQueries({ queryKey: [ws, 'workspace'] });
+    // the open conversation's « Reprendre l'IA » follows the balance (INSUFFICIENT_CREDITS descriptor, recette 11/11)
+    if (p.exhausted !== undefined) void qc.invalidateQueries({ queryKey: [ws, 'conversation'] });
   });
 }

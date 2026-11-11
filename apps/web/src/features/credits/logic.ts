@@ -51,6 +51,14 @@ export const applyCreditsEvent = (old: Credits, e: WsCreditsUpdated): Credits =>
 /** Packs tile: the pack balance, or the (negative) total after a store refund — the API keeps `packs.remaining ≥ 0`. */
 export const packsShown = (c: Pick<Credits, 'packs' | 'total' | 'negative'>): number => (c.negative && c.total < 0 ? c.total : c.packs.remaining);
 
+/**
+ * Recette 11/11 (Badro, M-31): bought pack credits left, shown after the plan figure of the top-bar pill
+ * (« 2 000 / 2 000 + 5 000 ») — before, a pack only changed the pill's colour. Never negative (a debt is the banner's job).
+ */
+export const packLeft = (c: Pick<Credits, 'packs'> | null | undefined): number => Math.max(0, c?.packs.remaining ?? 0);
+/** The plan of the month is used up while packs keep the AI running: the banner says so instead of « 80 % ». */
+export const runningOnPacks = (c: Pick<Credits, 'plan' | 'packs' | 'exhausted'> | null | undefined): boolean => !!c && !c.exhausted && c.plan.limit > 0 && c.plan.used >= c.plan.limit && packLeft(c) > 0;
+
 /* ---------- ledger rows ---------- */
 /** "−5" / "+500" / "0" — a real minus sign; `format` groups the thousands. */
 export const signedCredits = (n: number, format: (abs: number) => string): string => (n > 0 ? `+${format(n)}` : n < 0 ? `−${format(-n)}` : '0');

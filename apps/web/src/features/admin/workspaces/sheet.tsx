@@ -15,7 +15,7 @@ import { AdminPill, fullName, useFormats } from '../ui';
 import { ReleaseDialog } from './dialogs';
 import type { WsDialog } from './actions';
 import type { MenuAction } from '@djaber/ui';
-import { WorkspaceStatusPill } from './status';
+import { creditsText, WorkspaceStatusPill } from './status';
 
 const TABS = ['summary', 'members', 'subscription', 'credits', 'channels', 'agents', 'audit'] as const;
 type Tab = (typeof TABS)[number];
@@ -127,7 +127,7 @@ function Summary({ ws, onAction }: { ws: AdminWorkspaceDetailDto; onAction: (kin
           {sub ? [sub.cycle === 'none' ? sub.planName : `${sub.planName} ${t(`admin.common.cycleOpt.${sub.cycle}`).toLowerCase()}`, sub.cycle === 'none' && !sub.appliedPrice ? null : f.money(sub.appliedPrice), sub.trialEndsAt ? t('admin.ws.trialEnds', { date: f.short(sub.trialEndsAt) }) : t('admin.ws.renews', { date: f.short(sub.currentPeriodEnd) }), sub.dunningStage ? t(`enum.Subscription.dunningStage.${sub.dunningStage}`) : null, sub.method].filter(Boolean).join(' · ') : '—'}
         </Row>
         <Row label={t('admin.ws.row.credits')}>
-          {[`${f.num(ws.credits.used)} / ${f.num(ws.credits.limit)}`, t('admin.ws.packsBought', { count: ws.creditsDetail.packsBought }), ws.creditsDetail.lastGrant ? t('admin.ws.lastGrant', { credits: f.num(ws.creditsDetail.lastGrant.credits), reason: ws.creditsDetail.lastGrant.reason ?? '—', date: f.short(ws.creditsDetail.lastGrant.at) }) : null].filter(Boolean).join(' · ')}
+          {[creditsText(ws.credits, f.num, t), t('admin.ws.packsBought', { count: ws.creditsDetail.packsBought }), ws.creditsDetail.lastGrant ? t('admin.ws.lastGrant', { credits: f.num(ws.creditsDetail.lastGrant.credits), reason: ws.creditsDetail.lastGrant.reason ?? '—', date: f.short(ws.creditsDetail.lastGrant.at) }) : null].filter(Boolean).join(' · ')}
         </Row>
         <Row label={t('admin.ws.row.channels')}>{ws.channels.length ? ws.channels.map((c) => `${c.name} (${t(`enum.Channel.platform.${c.platform}`)}, ${t(`enum.Channel.status.${c.status}`)})`).join(' · ') : '—'}</Row>
         <Row label={t('admin.ws.row.agents')}>{ws.agents.length ? ws.agents.map((a) => `${a.name} (${t(`enum.Agent.status.${a.status}`)})`).join(' · ') : '—'}</Row>

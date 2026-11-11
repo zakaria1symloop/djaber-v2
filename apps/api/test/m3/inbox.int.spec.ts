@@ -100,6 +100,25 @@ describe('INB-03 / INB-04 composer', () => {
     expect((await owner.get('/conversations').expect(200)).body.data.find((c: any) => c.id === conversation.id).pageHasAgent).toBe(true);
   });
 
+  it('recette 11/11 (Badro): no credit left ⇒ « Reprendre l’IA » greyed with INSUFFICIENT_CREDITS and refused (single and bulk)', async () => {
+    const { owner, channel } = await setup();
+    const agent = await testAgent(owner.workspaceId);
+    await db.agentChannel.create({ data: { agentId: agent.id, channelId: channel.id } });
+    const { conversation } = await receive(app, channel, newSender(), { text: 'Salam' });
+    await owner.patch(`/conversations/${conversation.id}`, { aiPaused: true, version: (await detail(owner, conversation.id)).version }).expect(200);
+    expect((await detail(owner, conversation.id)).actions.find((a: any) => a.key === 'resumeAi')).toEqual({ key: 'resumeAi', enabled: true });
+    // the balance is used up (plan of the month, no pack)
+    const c = (await owner.get('/credits').expect(200)).body.data;
+    await db.creditLedger.create({ data: { workspaceId: owner.workspaceId, periodStart: new Date(c.plan.periodStart), bucket: 'plan', action: 'adjustment', kind: 'debit', credits: -c.total, balanceAfter: 0, reason: 'test', idempotencyKey: `test-exhaust:${owner.workspaceId}` } });
+    const d = await detail(owner, conversation.id);
+    expect(d.actions.find((a: any) => a.key === 'resumeAi')).toEqual({ key: 'resumeAi', enabled: false, reasonCode: 'INSUFFICIENT_CREDITS' });
+    expect((await owner.patch(`/conversations/${conversation.id}`, { aiPaused: false, version: d.version }).expect(402)).body.error.code).toBe('INSUFFICIENT_CREDITS');
+    expect((await owner.post('/conversations/bulk/resume-ai', { ids: [conversation.id] }).expect(200)).body.data.results[0]).toMatchObject({ ok: false, error: { code: 'INSUFFICIENT_CREDITS' } });
+    expect(await detail(owner, conversation.id)).toMatchObject({ aiPaused: true });
+    // pausing / other changes are not blocked by the balance
+    await owner.patch(`/conversations/${conversation.id}`, { status: 'resolved', version: d.version }).expect(200);
+  });
+
   it('AT-INB-02 human reply ⇒ AI paused; customer replies ⇒ AI silent, notification to the assignee; Resume ⇒ AI back on', async () => {
     const { owner, channel } = await setup();
     const agent = await testAgent(owner.workspaceId);

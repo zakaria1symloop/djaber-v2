@@ -66,6 +66,8 @@ export function ProviderKeyDialog({ providers, initial, open, onClose }: { provi
     setErrors(NO_ERRORS);
     try {
       await save.mutateAsync({ key, apiKey: apiKey.trim() });
+      // recette 11/11: the saved key is tested at once (stored result ⇒ the card pill says whether it works)
+      await adminWrite(`/admin/ai-providers/${key}/test`, 'POST', {}).catch(() => null);
       void invalidate('/admin/ai-providers', '/admin/ai-routes', '/admin/ai-pricing');
       toast(t('admin.ai.key.saved', { name: provider?.displayName ?? key }));
       onClose();

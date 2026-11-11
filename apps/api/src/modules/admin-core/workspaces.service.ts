@@ -179,7 +179,7 @@ export class AdminWorkspacesService {
         subscriptionStatus,
         status: w.status,
         trustLevel: w.trustLevel,
-        credits: { used: f.planUsed, limit: unlimited ? -1 : f.planLimit, exhausted: !unlimited && f.planNet + f.pack <= 0 },
+        credits: { used: f.planUsed, limit: unlimited ? -1 : f.planLimit, exhausted: !unlimited && f.planNet + f.pack <= 0, pack: Math.max(0, f.pack) },
         pages: { count: myChans.length, platforms: [...new Set(myChans.map((c) => c.platform))] },
         orders30d: orders.find((o) => o.workspaceId === id)?._count._all ?? 0,
         conversations30d: convs.find((c) => c.workspaceId === id)?._count._all ?? 0,

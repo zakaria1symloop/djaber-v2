@@ -75,8 +75,15 @@ export default function AdminAiPage() {
     }
   };
 
-  const pill = (p: AiProviderAdminDto) =>
-    p.state === 'disabled' ? <MonoChip>{t('admin.ai.state.disabled')}</MonoChip> : <MonoChip tone={p.state === 'primary' ? 'success' : 'info'}>{t(`admin.ai.state.${p.state}`)}</MonoChip>;
+  // recette 11/11 (Badro): « ACTIF » alone only when the key works — no key / rejected by the last test / never tested is said
+  const pill = (p: AiProviderAdminDto) => {
+    if (p.state === 'disabled') return <MonoChip>{t('admin.ai.state.disabled')}</MonoChip>;
+    const label = t(`admin.ai.state.${p.state}`);
+    if (!p.keyHint) return <MonoChip tone="danger">{`${label} · ${t('admin.ai.state.noKey')}`}</MonoChip>;
+    if (p.lastTestOk === false) return <MonoChip tone="danger">{`${label} · ${t('admin.ai.state.keyRejected')}`}</MonoChip>;
+    if (p.lastTestOk === null) return <MonoChip tone="warning">{`${label} · ${t('admin.ai.state.untested')}`}</MonoChip>;
+    return <MonoChip tone={p.state === 'primary' ? 'success' : 'info'}>{label}</MonoChip>;
+  };
   const health = (p: AiProviderAdminDto) => {
     const h = p.health;
     if (!p.isActive || h.errorRatePct === null) return { value: '—' };
@@ -175,6 +182,7 @@ export default function AdminAiPage() {
                         // disabling a provider moves every route using it to its fallback: confirmed first
                         onClick={() => (p.isActive ? confirm.ask({ title: t('admin.ai.disableConfirm.title', { name: p.displayName }), description: t('admin.ai.disableConfirm.description'), confirmLabel: t('admin.ai.card.disable'), destructive: true, run: () => toggle(p) }) : void toggle(p))}
                         disabled={patch.isPending}
+                        disabledReason={!p.isActive && !p.keyHint ? t('error.AI_PROVIDER_NO_KEY') : !p.isActive && p.lastTestOk === false ? t('admin.ai.state.keyRejectedHint') : undefined}
                       >
                         {p.isActive ? t('admin.ai.card.disable') : t('admin.ai.card.enable')}
                       </Button>
