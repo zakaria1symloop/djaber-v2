@@ -149,7 +149,7 @@ export type ModerationItemDto = {
     images: { url: string; flag: string | null }[];
     description: string | null;
   } | null;
-  agent: { id: string; name: string; excerpt: string } | null;
+  agent: { id: string; name: string; excerpt: string; /** type agent_name (owner request 11/11) */ displayName?: string | null; approvedName?: string | null; approvedDisplayName?: string | null } | null;
   category: { id: string; name: string } | null;
   aiScore: number | null;
   aiFlags: ModerationAiFlagView[];

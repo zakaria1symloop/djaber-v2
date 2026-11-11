@@ -26,8 +26,9 @@ const obj = <T>(v: unknown, fallback: T): T => (v && typeof v === 'object' ? (v 
 
 /** `Agent` row → what the sections read (JSON columns typed, defaults applied). */
 export const promptAgentOf = (a: Agent): PromptAgent => ({
-  name: a.name,
-  displayName: a.displayName,
+  // owner request 11/11: the AI only uses names a moderator approved (none yet ⇒ no personal name)
+  name: a.approvedName ?? '',
+  displayName: a.approvedDisplayName,
   personality: a.personality,
   customInstructions: a.customInstructions,
   productCardTemplate: a.productCardTemplate,

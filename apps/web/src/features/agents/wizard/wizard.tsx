@@ -357,7 +357,7 @@ function WizardBody({ step, agent, crumb, inTunnel, exitTo, initialStart }: { st
     onSelect: canOpenStep(k, savedStep, !!agent) && k !== step && (!inTunnel || inTunnelSteps(k)) ? () => void leaveTo(k) : undefined,
   }));
   const errors = issueMap(issues);
-  const fields = { draft, set, errors, readOnly: saving === 'next' || saving === 'quit' || finishing, inTunnel };
+  const fields = { draft, set, errors, readOnly: saving === 'next' || saving === 'quit' || finishing, inTunnel, nameReview: agent?.nameReview };
   const presetName = draft.presetKey ? (presets.data?.find((p) => p.key === draft.presetKey)?.name ?? agent?.preset?.name ?? draft.presetKey) : agent || start === SCRATCH ? t('agents.start.scratch') : '';
   // no conversation this month yet: the monthly estimate is not invented ("—"), only the cost per conversation is shown
   const conversations = workspace?.plan?.usage.conversationsThisMonth ?? 0;

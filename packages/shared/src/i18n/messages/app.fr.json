@@ -283,7 +283,7 @@
  "adminMod.subtitle": "Obligatoire pour la publication sur Google Play / App Store (contenu généré par les marchands). Pré-filtrage IA, puis validation humaine pour les cas à risque. Objectif : < 2 h en heures ouvrées.",
  "adminMod.tab.appeals": "Appels du marchand",
  "adminMod.tab.label": "Files de modération",
- "adminMod.tab.prompts": "Agents IA (prompts)",
+ "adminMod.tab.prompts": "Agents IA (noms & prompts)",
  "adminMod.tab.rejected": "Rejetés",
  "adminMod.tab.sample": "Auto-approuvés",
  "adminMod.tab.todo": "À vérifier",

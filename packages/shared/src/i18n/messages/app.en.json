@@ -283,7 +283,7 @@
  "adminMod.subtitle": "Required for publication on Google Play / App Store (merchant-generated content). AI pre-screen, then human review for risky cases. Target: < 2 h in business hours.",
  "adminMod.tab.appeals": "Merchant appeals",
  "adminMod.tab.label": "Moderation queues",
- "adminMod.tab.prompts": "AI agents (prompts)",
+ "adminMod.tab.prompts": "AI agents (names & prompts)",
  "adminMod.tab.rejected": "Rejected",
  "adminMod.tab.sample": "Auto-approved",
  "adminMod.tab.todo": "To review",

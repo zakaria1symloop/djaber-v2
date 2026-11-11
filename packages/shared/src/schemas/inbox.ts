@@ -289,6 +289,8 @@ export const NOTIFICATION_CHANNELS: Record<NotificationTypeName, NotificationCha
   product_approved: ch(true, N, N),
   product_rejected: ch(true, A, A),
   product_changes_requested: ch(true, A, N),
+  agent_name_approved: ch(true, N, N),
+  agent_name_rejected: ch(true, A, A),
   moderation_appeal_result: ch(true, A, N),
   report_resolved: ch(true, A, N),
   customer_auto_blocked: ch(true, N, N),

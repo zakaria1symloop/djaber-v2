@@ -1,6 +1,6 @@
 // 04-ai-pipeline §3 — every prompt section is a pure function with a snapshot; the builder keeps their order and the
 // token budget. A change of wording shows up here as a snapshot diff (and triggers the evals in CI).
-import { PromptBuilder, SECTION_ORDER, isOutOfHours, estimateTokens, type HistoryMessage } from './prompt-builder';
+import { PromptBuilder, SECTION_ORDER, isOutOfHours, estimateTokens, promptAgentOf, type HistoryMessage } from './prompt-builder';
 import type { PromptContext } from './prompt.types';
 import { cardTemplateSection, closingSection, crossSellSection, handoffSection, imageRuleSection } from './sections/behaviour';
 import { catalogueSection, productBlock } from './sections/catalogue';
@@ -64,6 +64,16 @@ describe('prompt sections (04-ai-pipeline §3)', () => {
   it('§3.1 identity & personality', () => {
     expect(identitySection(ctx())).toMatchSnapshot();
     expect(identitySection(ctx({}, { displayName: null, personality: 'technical' }))).toContain('You are "Vendeur Pro", the sales assistant of "Boutique Yasmine". Personality: technical');
+    // owner request 11/11: no approved name yet ⇒ no personal name
+    const unnamed = identitySection(ctx({}, { name: '', displayName: null }));
+    expect(unnamed).toContain('You are the sales assistant of "Boutique Yasmine". You have no personal name');
+    expect(unnamed).not.toContain('Vendeur Pro');
+  });
+
+  it('owner request 11/11: the prompt carries the approved names only (promptAgentOf)', () => {
+    const row = { name: 'Nouveau nom', displayName: 'Sara', approvedName: 'Vendeur Pro', approvedDisplayName: 'Lina' } as unknown as Parameters<typeof promptAgentOf>[0];
+    expect(promptAgentOf({ ...row, policies: null, capabilities: null, orderFields: null, handoffRules: null, businessHours: null } as never)).toMatchObject({ name: 'Vendeur Pro', displayName: 'Lina' });
+    expect(promptAgentOf({ ...row, approvedName: null, approvedDisplayName: null, policies: null, capabilities: null, orderFields: null, handoffRules: null, businessHours: null } as never)).toMatchObject({ name: '', displayName: null });
   });
 
   it('§3.2 shop policies (empty ⇒ omitted; out of hours appended)', () => {

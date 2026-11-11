@@ -449,6 +449,35 @@ describe('agent prompts (MOD-08)', () => {
     expect(await db.agent.findUniqueOrThrow({ where: { id: agent.id } })).toMatchObject({ status: 'paused', pausedReason: 'moderation' });
     expect((await mod.get('/admin/moderation/stats').expect(200)).body.data.agentPrompts).toEqual(expect.any(Number));
   });
+
+  it('owner request 11/11: an agent name waits for a moderator; the AI keeps the approved one; approve / reject tell the merchant; back to the approved name ⇒ approved', async () => {
+    const owner = await merchant('standard');
+    const agent = await testAgent(owner.workspaceId, 'Vendeur');
+    const get = async () => (await owner.get(`/agents/${agent.id}`).expect(200)).body.data;
+    const items = async () => (await mod.get(`/admin/moderation/items?type=agent_name&workspaceId=${owner.workspaceId}&status=pending`).expect(200)).body.data;
+    await owner.patch(`/agents/${agent.id}`, { name: 'Vendeuse Lina', wizard: { displayName: 'Lina' }, version: (await get()).version }).expect(200);
+    expect((await get()).nameReview).toEqual({ status: 'pending', approvedName: 'Vendeur', approvedDisplayName: null, reason: null });
+    const [first] = await items();
+    expect(first).toMatchObject({ type: 'agent_name', status: 'pending', agent: { id: agent.id, name: 'Vendeuse Lina', displayName: 'Lina', approvedName: 'Vendeur' } });
+    await mod.post(`/admin/moderation/items/${first.id}/approve`, {}).expect(200);
+    expect(await db.agent.findUniqueOrThrow({ where: { id: agent.id } })).toMatchObject({ approvedName: 'Vendeuse Lina', approvedDisplayName: 'Lina', nameStatus: 'approved' });
+    expect(await db.outbox.count({ where: { workspaceId: owner.workspaceId, topic: 'notification', key: `agent_name_approved:${first.id}` } })).toBe(1);
+
+    // a new display name waits; the approved one stays in use; refused with a reason
+    await owner.patch(`/agents/${agent.id}`, { wizard: { displayName: 'Sara' }, version: (await get()).version }).expect(200);
+    const [second] = await items();
+    expect(second.agent).toMatchObject({ displayName: 'Sara', approvedDisplayName: 'Lina' });
+    await mod.post(`/admin/moderation/items/${second.id}/reject`, { decision: 'other', merchantMessage: 'Nom trompeur' }).expect(200);
+    expect((await get()).nameReview).toEqual({ status: 'rejected', approvedName: 'Vendeuse Lina', approvedDisplayName: 'Lina', reason: 'Nom trompeur' });
+    expect(await db.outbox.count({ where: { workspaceId: owner.workspaceId, topic: 'notification', key: `agent_name_rejected:${second.id}` } })).toBe(1);
+    // saving something else keeps it refused (no new request); back to the approved name ⇒ approved, nothing pending
+    await owner.patch(`/agents/${agent.id}`, { description: 'Conseillère', version: (await get()).version }).expect(200);
+    expect(await items()).toHaveLength(0);
+    expect((await get()).nameReview.status).toBe('rejected');
+    await owner.patch(`/agents/${agent.id}`, { wizard: { displayName: 'Lina' }, version: (await get()).version }).expect(200);
+    expect((await get()).nameReview).toMatchObject({ status: 'approved', reason: null });
+    expect(await items()).toHaveLength(0);
+  });
 });
 
 describe('rules, stats, sample, SLA', () => {

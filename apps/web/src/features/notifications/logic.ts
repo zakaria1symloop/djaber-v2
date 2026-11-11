@@ -49,6 +49,8 @@ export const TYPE_GROUP: Partial<Record<NotificationType, NotificationGroup>> = 
   product_approved: 'moderation',
   product_rejected: 'moderation',
   product_changes_requested: 'moderation',
+  agent_name_approved: 'moderation',
+  agent_name_rejected: 'moderation',
   moderation_appeal_result: 'moderation',
   report_resolved: 'safety',
   customer_auto_blocked: 'safety',

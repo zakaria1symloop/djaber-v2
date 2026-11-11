@@ -24,7 +24,7 @@ export const textRoute = () => db.aiRoute.findUniqueOrThrow({ where: { capabilit
 /** An active agent (model of the text route) linked to the given channels. */
 export const linkedAgent = async (workspaceId: string, channelIds: string[], over: Partial<Agent> = {}): Promise<Agent> => {
   const route = await textRoute();
-  const agent = await db.agent.create({ data: { workspaceId, name: 'Vendeur', modelId: route.primaryModelId, status: 'active', isActive: true, responseDelaySec: 3, ...(over as object) } });
+  const agent = await db.agent.create({ data: { workspaceId, name: 'Vendeur', approvedName: 'Vendeur', nameStatus: 'approved', modelId: route.primaryModelId, status: 'active', isActive: true, responseDelaySec: 3, ...(over as object) } });
   for (const channelId of channelIds) await db.agentChannel.create({ data: { agentId: agent.id, channelId } });
   return agent;
 };

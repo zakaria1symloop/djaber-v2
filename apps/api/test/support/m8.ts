@@ -21,7 +21,7 @@ export const aiModel = async () => db.aiModel.findFirstOrThrow({ where: { isActi
 
 export const agent = async (workspaceId: string, name = 'Vendeur Pro') => {
   const m = await aiModel();
-  return db.agent.create({ data: { workspaceId, name, modelId: m.id, status: 'active', customInstructions: '' } as never });
+  return db.agent.create({ data: { workspaceId, name, approvedName: name, nameStatus: 'approved', modelId: m.id, status: 'active', customInstructions: '' } as never });
 };
 
 export const client = (workspaceId: string, over: Record<string, unknown> = {}) =>

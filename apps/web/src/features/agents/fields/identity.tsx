@@ -7,7 +7,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { errorMessage } from '@/lib/forms';
 import { useT, type TFunction } from '@/lib/i18n';
 import { agentsApi } from '../api';
-import type { AgentLanguage, AvatarMode } from '../contracts';
+import type { Agent, AgentLanguage, AvatarMode } from '../contracts';
 import { EMOJI_LEVELS, FORMALITIES, LANGUAGES, TONES } from '../contracts';
 import { DESCRIPTION_MAX, NAME_MAX, previewLanguage, previewReply, type AgentDraft, type Issue } from '../logic';
 
@@ -20,13 +20,38 @@ export type SectionProps = {
   badge?: ReactNode;
   /** the wizard runs inside the onboarding tunnel: links to other app pages are hidden (the tunnel guard sends them back) */
   inTunnel?: boolean;
+  /** owner request 11/11: where the names stand with the moderators (none for a new, unsaved agent) */
+  nameReview?: Agent['nameReview'];
 };
 export const issueText = (t: TFunction, issue: Issue | undefined): string | undefined => (issue ? t(issue.key, issue.params) : undefined);
 
 const AVATAR_MODES: AvatarMode[] = ['page', 'upload', 'initials'];
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 
-export function IdentityFields({ draft: d, set, errors, readOnly, badge }: SectionProps) {
+/**
+ * Owner request 11/11: the names customers read wait for a Djaber moderator. Pending ⇒ which name the agent uses meanwhile;
+ * refused ⇒ the moderator's reason and « change it to submit it again ».
+ */
+export function NameReviewNote({ review }: { review?: Agent['nameReview'] }) {
+  const t = useT();
+  if (!review || review.status === 'approved') return null;
+  const current = review.approvedDisplayName?.trim() || review.approvedName?.trim() || '';
+  const text =
+    review.status === 'rejected'
+      ? review.reason?.trim()
+        ? t('agents.nameReview.rejected', { reason: review.reason.trim() })
+        : t('agents.nameReview.rejectedNoReason')
+      : current
+        ? t('agents.nameReview.pending', { name: current })
+        : t('agents.nameReview.pendingNone');
+  return (
+    <p role="status" data-testid="agent-name-review" data-status={review.status} className={`md:col-span-2 rounded-card border px-3 py-2 text-[13px] ${review.status === 'rejected' ? 'border-accent-alert/40 text-accent-alert' : 'border-accent-starred/40 text-accent-starred'}`}>
+      {text}
+    </p>
+  );
+}
+
+export function IdentityFields({ draft: d, set, errors, readOnly, badge, nameReview }: SectionProps) {
   const t = useT();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -67,6 +92,7 @@ export function IdentityFields({ draft: d, set, errors, readOnly, badge }: Secti
             <Field label={t('agents.identity.displayName')} htmlFor="agent-display-name" error={issueText(t, errors.displayName)} hint={t('agents.identity.displayName.hint')}>
               <Input id="agent-display-name" dir="auto" maxLength={NAME_MAX + 20} value={d.displayName} disabled={readOnly} placeholder={t('agents.identity.displayName.placeholder')} aria-invalid={!!errors.displayName || undefined} onChange={(e) => set({ displayName: e.target.value })} />
             </Field>
+            <NameReviewNote review={nameReview} />
             <Field label={t('agents.identity.description')} htmlFor="agent-description" error={issueText(t, errors.description)}>
               <Textarea id="agent-description" dir="auto" className="!min-h-16" maxLength={DESCRIPTION_MAX + 50} value={d.description} disabled={readOnly} placeholder={t('agents.identity.description.placeholder')} aria-invalid={!!errors.description || undefined} onChange={(e) => set({ description: e.target.value })} />
             </Field>

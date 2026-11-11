@@ -346,6 +346,8 @@ export type AgentDto = {
   status: AgentStatusName;
   pausedReason: 'manual' | 'plan' | null;
   isActive: boolean;
+  /** owner request 11/11: name + display name approved by a moderator before customers read them (approved* = what the AI uses) */
+  nameReview?: { status: 'pending' | 'approved' | 'rejected'; approvedName: string | null; approvedDisplayName: string | null; reason: string | null };
   personality: 'professional' | 'friendly' | 'casual' | 'technical';
   customInstructions: string;
   productCardTemplate: string | null;

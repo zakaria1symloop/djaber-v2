@@ -109,7 +109,12 @@ export class ModerationService {
             description: typeof snap.description === 'string' ? snap.description : r.product.description,
           }
         : null,
-      agent: r.agent ? { id: r.agent.id, name: r.agent.name, excerpt: (typeof snap.excerpt === 'string' ? snap.excerpt : r.agent.customInstructions).slice(0, 400) } : null,
+      agent: r.agent
+        ? r.type === 'agent_name'
+          ? // owner request 11/11: the names to approve, and the ones customers read today
+            { id: r.agent.id, name: typeof snap.name === 'string' ? snap.name : r.agent.name, excerpt: '', displayName: typeof snap.displayName === 'string' ? snap.displayName : null, approvedName: typeof snap.approvedName === 'string' ? snap.approvedName : null, approvedDisplayName: typeof snap.approvedDisplayName === 'string' ? snap.approvedDisplayName : null }
+          : { id: r.agent.id, name: r.agent.name, excerpt: (typeof snap.excerpt === 'string' ? snap.excerpt : r.agent.customInstructions).slice(0, 400) }
+        : null,
       category: r.category ? { id: r.category.id, name: r.category.name } : null,
       aiScore: r.aiScore === null ? null : Number(r.aiScore),
       aiFlags: Array.isArray(r.aiFlags) ? (r.aiFlags as ModerationItemDto['aiFlags']) : [],
@@ -229,6 +234,24 @@ export class ModerationService {
   /** Product / agent / category effects of a decision + merchant notifications (04 §12 "Merchant notifications"). */
   private async applyEffects(tx: Tx, item: ModerationItem, kind: DecisionKind) {
     const ws = item.workspaceId;
+    if (item.type === 'agent_name' && item.agentId) {
+      // owner request 11/11: approved ⇒ the names customers read; refused / changes asked ⇒ the AI keeps the last approved
+      // names (or none) and the merchant is told why
+      const snap = (item.snapshot ?? {}) as { name?: string; displayName?: string | null };
+      const agent = await tx.agent.findFirst({ where: { id: item.agentId, workspaceId: ws }, select: { id: true, name: true, displayName: true } });
+      if (!agent) return;
+      const shown = (snap.displayName ?? '').trim() || snap.name || agent.name;
+      if (kind === 'approve') {
+        await tx.agent.update({ where: { id: agent.id }, data: { approvedName: snap.name ?? agent.name, approvedDisplayName: snap.displayName ?? null, nameStatus: 'approved', nameRejectReason: null } });
+        await this.notifications.emit(tx, { type: 'agent_name_approved', workspaceId: ws, target: { roles: ['owner', 'admin'] }, key: `agent_name_approved:${item.id}`, data: { agentId: agent.id, name: shown } });
+      } else {
+        const reason = item.merchantMessage?.trim() || null;
+        await tx.agent.update({ where: { id: agent.id }, data: { nameStatus: 'rejected', nameRejectReason: reason } });
+        await this.notifications.emit(tx, { type: 'agent_name_rejected', workspaceId: ws, target: { roles: ['owner', 'admin'] }, key: `agent_name_rejected:${item.id}`, data: { agentId: agent.id, name: shown, reason: reason ?? '' } });
+      }
+      await this.outbox.ws(tx, `ws:${ws}`, 'agent.updated', { id: agent.id, agent: { id: agent.id } });
+      return;
+    }
     if (item.type === 'agent_prompt' && item.agentId) {
       if (kind === 'reject') {
         await tx.agent.update({ where: { id: item.agentId }, data: { status: 'paused', pausedReason: 'moderation' } });
@@ -425,7 +448,7 @@ export class ModerationService {
         prisma.moderationItem.count({ where: { status: { in: ['rejected', 'appealed', 'appeal_rejected'] }, decidedAt: { gte: since7 } } }),
         prisma.moderationItem.groupBy({ by: ['decision'], where: { decision: { not: null }, decidedAt: { gte: from, lte: to } }, _count: { _all: true } }),
         prisma.moderationItem.groupBy({ by: ['status'], where: { decidedAt: { gte: from, lte: to }, reviewerId: { not: null } }, _count: { _all: true } }),
-        prisma.moderationItem.count({ where: { status: 'pending', type: 'agent_prompt' } }),
+        prisma.moderationItem.count({ where: { status: 'pending', type: { in: ['agent_prompt', 'agent_name'] } } }),
         prisma.$queryRaw<{ median: number | null }[]>`SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM ("decidedAt" - "submittedAt")) / 60)::float AS median FROM "ModerationItem" WHERE "reviewerId" IS NOT NULL AND "decidedAt" BETWEEN ${from} AND ${to}`,
       ]);
       const total = decided.reduce((n, g) => n + g._count._all, 0);

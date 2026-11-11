@@ -82,7 +82,7 @@ export const testAgent = async (workspaceId: string, name = 'Vendeur') => {
     create: { providerId: provider.id, modelId: 'test-model', displayName: 'Test model', capabilities: ['text'], inputPricePerM: 1, outputPricePerM: 1 },
     update: {},
   });
-  return db.agent.create({ data: { workspaceId, name, modelId: model.id, status: 'active' } });
+  return db.agent.create({ data: { workspaceId, name, modelId: model.id, status: 'active', approvedName: name, nameStatus: 'approved' } });
 };
 
 /** An order with one line on a product (orders arrive in M5): enough for "has orders" / reserved / sales figures. */

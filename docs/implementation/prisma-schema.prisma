@@ -365,6 +365,12 @@ enum Personality {
   technical
 }
 
+enum AgentNameStatus {
+  pending
+  approved
+  rejected
+}
+
 enum AgentStatus {
   draft
   active
@@ -867,6 +873,8 @@ enum NotificationType {
   product_approved
   product_rejected
   product_changes_requested
+  agent_name_approved
+  agent_name_rejected
   moderation_appeal_result
   report_resolved
   customer_auto_blocked
@@ -977,6 +985,7 @@ enum ModerationItemType {
   product_image
   agent_prompt
   category
+  agent_name
 }
 
 enum ModerationItemStatus {
@@ -2171,6 +2180,12 @@ model Agent {
   version             Int           @default(1)
   // --- 05 §15 wizard fields (D54; compiled into customInstructions / humanHandoffRules at save) ---
   displayName         String?
+  // owner request 11/11: the names customers read are approved by a moderator first (ModerationItem type agent_name);
+  // the AI introduces itself with the approved ones (none yet ⇒ no personal name)
+  approvedName        String?
+  approvedDisplayName String?
+  nameStatus          AgentNameStatus @default(pending)
+  nameRejectReason    String?
   avatarUploadId      String?       @db.Uuid
   avatarMode          String?       // page | upload | initials
   languages           String[]      @default([])

@@ -201,6 +201,15 @@ function PanelBody({
                 </FlaggedField>
               ) : null}
             </>
+          ) : item.agent && item.type === 'agent_name' ? (
+            // owner request 11/11: the names customers will read, and the ones the AI uses today
+            <>
+              <FlaggedField label={t('adminMod.panel.agentName')} data-testid="mod-field-agent-name">{item.agent.name}</FlaggedField>
+              <FlaggedField label={t('adminMod.panel.agentDisplayName')}>{item.agent.displayName?.trim() || '—'}</FlaggedField>
+              <FlaggedField label={t('adminMod.panel.agentApproved')}>
+                {item.agent.approvedName ? [item.agent.approvedName, item.agent.approvedDisplayName].filter(Boolean).join(' · ') : t('adminMod.panel.agentApprovedNone')}
+              </FlaggedField>
+            </>
           ) : item.agent ? (
             <>
               <FlaggedField label={t('adminMod.panel.agent')}>{item.agent.name}</FlaggedField>

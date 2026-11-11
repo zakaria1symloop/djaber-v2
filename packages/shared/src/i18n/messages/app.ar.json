@@ -283,7 +283,7 @@
  "adminMod.subtitle": "إلزامي للنشر على Google Play / App Store (محتوى ينشئه التجار). فرز أولي بالذكاء الاصطناعي ثم مراجعة بشرية للحالات الخطرة. الهدف: أقل من ساعتين في ساعات العمل.",
  "adminMod.tab.appeals": "طعون التاجر",
  "adminMod.tab.label": "قوائم المراجعة",
- "adminMod.tab.prompts": "وكلاء الذكاء (التعليمات)",
+ "adminMod.tab.prompts": "وكلاء الذكاء (الأسماء والتعليمات)",
  "adminMod.tab.rejected": "مرفوضة",
  "adminMod.tab.sample": "معتمدة تلقائيًا",
  "adminMod.tab.todo": "للمراجعة",

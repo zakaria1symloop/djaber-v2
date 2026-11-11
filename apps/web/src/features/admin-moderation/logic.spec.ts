@@ -14,7 +14,7 @@ describe('ADM-10 tabs', () => {
   it('gives each tab its API preset', () => {
     expect(tabQuery('todo')).toEqual({ status: ['pending'] });
     expect(tabQuery('urgent')).toMatchObject({ status: ['pending'], priority: 'urgent' });
-    expect(tabQuery('prompts')).toEqual({ type: ['agent_prompt'] });
+    expect(tabQuery('prompts')).toEqual({ type: ['agent_prompt', 'agent_name'] }); // owner request 11/11: agent names too
     expect(tabQuery('rejected')).toMatchObject({ status: ['rejected', 'appeal_rejected'], sort: '-submittedAt' });
   });
   it('reads the tab counts from the KPIs (« Auto-approuvés » = the 7-day KPI, PV 09/11)', () => {

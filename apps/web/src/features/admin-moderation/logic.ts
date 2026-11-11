@@ -24,7 +24,8 @@ export function tabQuery(tab: ModTab): ApiQuery {
     case 'rejected':
       return { status: ['rejected', 'appeal_rejected'], sort: '-submittedAt' };
     case 'prompts':
-      return { type: ['agent_prompt'] };
+      // owner request 11/11: agent names wait in the same tab as the agent prompts
+      return { type: ['agent_prompt', 'agent_name'] };
     case 'appeals':
       return { status: 'pending' };
     case 'sample':

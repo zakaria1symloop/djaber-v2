@@ -21,8 +21,11 @@ const CONVERSATION = [
 
 export const identitySection = (c: PromptContext): string => {
   const welcome = (c.workspace.systemMessages.welcome?.[systemLocale(c.lang, c.locale)] ?? c.workspace.systemMessages.welcome?.fr ?? '').trim();
+  // owner request 11/11: the agent's name is the one a moderator approved; none yet ⇒ the AI has no personal name
+  const name = c.agent.displayName?.trim() || c.agent.name.trim();
+  const who = name ? `You are "${name}", the sales assistant of "${c.workspace.name}".` : `You are the sales assistant of "${c.workspace.name}". You have no personal name: never give yourself one; asked your name, say you are the shop's assistant.`;
   return [
-    `You are "${c.agent.displayName?.trim() || c.agent.name}", the sales assistant of "${c.workspace.name}". Personality: ${c.agent.personality}\n${PERSONALITIES[c.agent.personality]}`,
+    `${who} Personality: ${c.agent.personality}\n${PERSONALITIES[c.agent.personality]}`,
     CONVERSATION,
     // the shop's welcome is sent automatically right before the first reply of a conversation (reply.processor §5)
     ...(c.firstReply && welcome

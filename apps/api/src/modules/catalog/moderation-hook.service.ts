@@ -423,6 +423,44 @@ export class ModerationHookService implements OnModuleInit {
     return item;
   }
 
+  /**
+   * Owner request 11/11 (« the AI agent name should be confirmed from the admin dashboard »): the names customers read —
+   * the agent's name and display name — wait for a moderator (`ModerationItem(type=agent_name)`, tab « Agents IA »).
+   * Called after every save that touches an agent: names equal to the approved ones ⇒ approved, a pending request withdrawn;
+   * names a moderator already refused, unchanged ⇒ they stay refused; other names ⇒ one pending item per agent (refreshed).
+   * Until a name is approved the AI introduces itself with the last approved one, or with no personal name.
+   */
+  async syncAgentName(tx: Tx, agentId: string) {
+    const a = await tx.agent.findFirst({ where: { id: agentId }, select: { id: true, workspaceId: true, name: true, displayName: true, approvedName: true, approvedDisplayName: true, nameStatus: true, deletedAt: true } });
+    if (!a || a.deletedAt) return null;
+    const norm = (s: string | null | undefined) => (s ?? '').trim();
+    const same = (x: { name?: unknown; displayName?: unknown }) => norm(x.name as string) === norm(a.name) && norm(x.displayName as string) === norm(a.displayName);
+    const open = await tx.moderationItem.findFirst({ where: { agentId, type: 'agent_name', status: 'pending' } });
+    if (a.approvedName !== null && same({ name: a.approvedName, displayName: a.approvedDisplayName })) {
+      if (open) await tx.moderationItem.delete({ where: { id: open.id } });
+      if (a.nameStatus !== 'approved') await tx.agent.update({ where: { id: agentId }, data: { nameStatus: 'approved', nameRejectReason: null } });
+      if (open) await this.emitQueue(tx);
+      return null;
+    }
+    const snapshot = { name: a.name, displayName: a.displayName, approvedName: a.approvedName, approvedDisplayName: a.approvedDisplayName };
+    if (open) {
+      if (same(open.snapshot as Record<string, unknown>)) return open;
+      const item = await tx.moderationItem.update({ where: { id: open.id }, data: { snapshot: snapshot as Prisma.InputJsonValue, contentVersion: { increment: 1 }, submittedAt: new Date() } });
+      await this.emitQueue(tx);
+      return item;
+    }
+    const last = await tx.moderationItem.findFirst({ where: { agentId, type: 'agent_name' }, orderBy: { submittedAt: 'desc' } });
+    if (a.nameStatus === 'rejected' && last && last.status !== 'pending' && same(last.snapshot as Record<string, unknown>)) return null;
+    const item = await tx.moderationItem.create({
+      data: { workspaceId: a.workspaceId, type: 'agent_name', agentId, snapshot: snapshot as Prisma.InputJsonValue, status: 'pending', aiScore: null, aiFlags: [] as unknown as Prisma.InputJsonValue, slaDueAt: moderationSlaDueAt(new Date()), source: a.approvedName === null ? 'create' : 'update' } as Prisma.ModerationItemUncheckedCreateInput,
+    });
+    await tx.agent.update({ where: { id: agentId }, data: { nameStatus: 'pending', nameRejectReason: null } });
+    const shop = await tx.workspace.findUnique({ where: { id: a.workspaceId }, select: { name: true } });
+    await this.admins.notify(tx, { kind: 'moderation_pending', key: `moderation_pending:${item.id}:agent_name`, params: { workspace: shop?.name ?? '—', product: `🤖 ${norm(a.displayName) || a.name}` }, ids: { workspaceId: a.workspaceId, itemId: item.id } });
+    await this.emitQueue(tx);
+    return item;
+  }
+
   // --- merchant-side reads and actions (06 §8.2) ---------------------------------------------------------------------------
   async detail(productId: string): Promise<ModerationDetailView | null> {
     const items = await prisma.moderationItem.findMany({ where: { productId, type: 'product' }, orderBy: { submittedAt: 'asc' }, include: { appeal: true } });

@@ -229,6 +229,8 @@ export class AgentService implements OnModuleInit {
         status: a.status,
         pausedReason: a.pausedReason === 'moderation' ? 'manual' : a.pausedReason,
         isActive: a.status === 'active',
+        // owner request 11/11: the names customers read are approved by a moderator
+        nameReview: { status: a.nameStatus, approvedName: a.approvedName, approvedDisplayName: a.approvedDisplayName, reason: a.nameRejectReason },
         personality: a.personality,
         customInstructions: merchantInstructions(a.customInstructions),
         productCardTemplate: a.productCardTemplate,
@@ -351,7 +353,8 @@ export class AgentService implements OnModuleInit {
       const updated = await tx.agent.update({ where: { id }, data: { ...data, customInstructions: compileInstructions(merged, snapshot.customInstructions ?? ''), modelId: await this.routing.agentModelId(), version: { increment: 1 } } });
       if (Array.isArray(snapshot.productIds)) await this.setProducts(tx, id, snapshot.productIds);
       await this.recordVersion(tx, id, 'restore', { restoredFromVersion: version, note: null });
-      await this.emit(tx, updated);
+      await this.moderation.syncAgentName(tx, id);
+      await this.emit(tx, await tx.agent.findUniqueOrThrow({ where: { id: updated.id } }));
     });
     return this.get(id, locale);
   }
@@ -454,7 +457,9 @@ export class AgentService implements OnModuleInit {
         },
       });
       await this.recordVersion(tx, agent.id, 'wizard', { note: preset ? `preset:${preset.key}` : null });
-      await this.emit(tx, agent);
+      // owner request 11/11: the names customers read wait for a moderator
+      await this.moderation.syncAgentName(tx, agent.id);
+      await this.emit(tx, await tx.agent.findUniqueOrThrow({ where: { id: agent.id } }));
       return agent.id;
     });
     return this.get(id, locale);
@@ -494,7 +499,8 @@ export class AgentService implements OnModuleInit {
       await this.recordVersion(tx, id, before.status === 'draft' ? 'wizard' : 'manual', { note: note ?? null });
       const saved = await tx.agent.findUniqueOrThrow({ where: { id } });
       await this.moderation.submitAgentPrompt(tx, id, saved.customInstructions); // MOD-08 (M10)
-      await this.emit(tx, saved);
+      await this.moderation.syncAgentName(tx, id); // owner request 11/11: names approved by a moderator
+      await this.emit(tx, await tx.agent.findUniqueOrThrow({ where: { id } }));
       return true;
     });
     if (!ok) throw await stale();
@@ -667,7 +673,8 @@ export class AgentService implements OnModuleInit {
       if (faqs.length) await tx.agentFaq.createMany({ data: faqs.map((f) => ({ workspaceId: f.workspaceId, agentId: copy.id, question: f.question, answer: f.answer, source: f.source, sortOrder: f.sortOrder, isActive: f.isActive })) });
       if (products.length) await tx.agentProduct.createMany({ data: products.map((p) => ({ agentId: copy.id, productId: p.productId })) });
       await this.recordVersion(tx, copy.id, 'manual', { note: `duplicate:${id}` });
-      await this.emit(tx, copy);
+      await this.moderation.syncAgentName(tx, copy.id);
+      await this.emit(tx, await tx.agent.findUniqueOrThrow({ where: { id: copy.id } }));
       return copy.id;
     });
     return this.get(copyId, locale);

@@ -137,7 +137,7 @@ export function AgentConfiguration() {
   const readOnly = !manage || saving;
   const errors = issueMap(issues);
   const badge = (s: SectionKey) => (dirty.includes(s) ? <MonoChip tone="warning">{t('agents.config.modified')}</MonoChip> : undefined);
-  const section = { draft, set, errors, readOnly };
+  const section = { draft, set, errors, readOnly, nameReview: agent.nameReview };
   const dirtyNames = dirty.map((s) => t(`agents.wizard.step.${s}`)).join(` ${t('agents.config.and')} `);
 
   return (
