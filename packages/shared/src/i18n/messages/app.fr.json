@@ -6414,5 +6414,11 @@
  "adminMod.filter.type.product_image": "Images produit",
  "adminMod.filter.type.category": "Catégories",
  "adminMod.filter.type.agent_name": "Noms d’agents IA",
- "adminMod.filter.type.agent_prompt": "Prompts d’agents IA"
+ "adminMod.filter.type.agent_prompt": "Prompts d’agents IA",
+ "products.ai.excludedWhy.pending": "En attente de validation Djaber : l’IA le proposera une fois validé",
+ "products.ai.excludedWhy.rejected": "Refusé par Djaber : l’IA ne le propose pas (modifiez-le et resoumettez, ou contestez)",
+ "products.ai.excludedWhy.appealed": "Contestation en cours : l’IA le proposera si Djaber l’accepte",
+ "products.ai.excludedWhy.inactive": "Produit désactivé : l’IA ne le propose pas",
+ "products.ai.excludedWhy.archived": "Produit archivé : l’IA ne le propose pas",
+ "products.toast.addedToAgentExcluded": "« {name} » ajouté à l’agent — pas encore proposé aux clients. {reason}"
 }

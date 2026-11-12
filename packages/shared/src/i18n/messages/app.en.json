@@ -6414,5 +6414,11 @@
  "adminMod.filter.type.product_image": "Product pictures",
  "adminMod.filter.type.category": "Categories",
  "adminMod.filter.type.agent_name": "AI agent names",
- "adminMod.filter.type.agent_prompt": "AI agent prompts"
+ "adminMod.filter.type.agent_prompt": "AI agent prompts",
+ "products.ai.excludedWhy.pending": "Waiting for Djaber's review: the AI offers it once approved",
+ "products.ai.excludedWhy.rejected": "Refused by Djaber: the AI does not offer it (edit and resubmit it, or appeal)",
+ "products.ai.excludedWhy.appealed": "Appeal in progress: the AI offers it if Djaber accepts it",
+ "products.ai.excludedWhy.inactive": "Product switched off: the AI does not offer it",
+ "products.ai.excludedWhy.archived": "Product archived: the AI does not offer it",
+ "products.toast.addedToAgentExcluded": "“{name}” added to the agent — not offered to customers yet. {reason}"
 }

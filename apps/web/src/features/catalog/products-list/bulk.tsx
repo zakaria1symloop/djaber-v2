@@ -14,6 +14,7 @@ import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
 import { useSession } from '@/lib/session';
 import { catalogApi, useCatalogRefresh, useCategories } from '../api';
 import { flattenCategories, type BulkResponse, type ProductListItem } from '../contracts';
+import { aiExclusion } from '../ui';
 import { addToAgentOutcome } from './spec';
 import { ProductLabelsDialog } from '../product-labels-dialog';
 
@@ -368,8 +369,12 @@ function BulkAgentDialog(p: DialogProps) {
   );
 }
 
-/** Row "Actions" menu › "Ajouter à un agent": the same dialog for one product; the outcome is a toast. */
-export function AddToAgentDialog({ product, onClose }: { product: Pick<ProductListItem, 'id' | 'name'> | null; onClose: () => void }) {
+/**
+ * Row "Actions" menu › "Ajouter à un agent": the same dialog for one product; the outcome is a toast. Report 12/11 (« casque »):
+ * a product the AI does not propose yet (waiting for Djaber, refused, contested, switched off) is added, and the toast says why
+ * the AI will not offer it yet.
+ */
+export function AddToAgentDialog({ product, onClose }: { product: (Pick<ProductListItem, 'id' | 'name'> & Partial<Pick<ProductListItem, 'aiState' | 'archived' | 'isActive' | 'moderation'>>) | null; onClose: () => void }) {
   const t = useT();
   const refresh = useCatalogRefresh();
   const [last, setLast] = useState(product);
@@ -386,7 +391,8 @@ export function AddToAgentDialog({ product, onClose }: { product: Pick<ProductLi
         onClose();
         await refresh({ productId: target?.id });
         const o = addToAgentOutcome(response);
-        if (o.kind === 'done') toast(t('products.toast.addedToAgent', { name: target?.name ?? '' }));
+        const why = target ? aiExclusion(target) : null;
+        if (o.kind === 'done') toast(why ? { tone: 'info', message: t('products.toast.addedToAgentExcluded', { name: target?.name ?? '', reason: t(`products.ai.excludedWhy.${why}`) }) } : t('products.toast.addedToAgent', { name: target?.name ?? '' }));
         else if (o.kind === 'failed') toast({ tone: 'danger', message: o.message });
         else toast({ tone: 'warning', message: t('products.bulk.result.summary', { ok: o.ok, failed: o.failed }) });
       }}

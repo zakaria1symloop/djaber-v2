@@ -73,13 +73,40 @@ export function ModerationPill({ status, long }: { status: ModerationStatus | st
   );
 }
 
-/** PROPOSÉ / EXCLU (IA column) */
-export function AiPill({ state, long }: { state: 'proposed' | 'excluded' | string; long?: boolean }) {
+/**
+ * Why the AI does not propose a product (04 §12 « Visibility while pending »): archived, switched off, or not validated by
+ * Djaber — waiting, refused, contested. Report 12/11 (« casque »: IA « EXCLU » + « CONTESTATION » after « Ajouter à un
+ * agent », read as a bug): the screens now say it.
+ */
+export type AiExclusion = 'archived' | 'inactive' | 'pending' | 'rejected' | 'appealed';
+export function aiExclusion(p: { aiState?: string; archived?: boolean; isActive?: boolean; moderation?: { status: string } | null }): AiExclusion | null {
+  if (p.aiState !== 'excluded') return null;
+  if (p.archived) return 'archived';
+  if (p.isActive === false) return 'inactive';
+  const s = p.moderation?.status;
+  return s === 'pending' || s === 'rejected' || s === 'appealed' ? s : null;
+}
+
+/** PROPOSÉ / EXCLU (IA column); an excluded product says why (hover in the lists, written next to it on the product page). */
+export function AiPill({ state, long, reason }: { state: 'proposed' | 'excluded' | string; long?: boolean; reason?: AiExclusion | null }) {
   const t = useT();
-  return (
+  const why = reason ? t(`products.ai.excludedWhy.${reason}`) : null;
+  const pill = (
     <StatusPill enumKey="Product.ai" value={state} className="!rounded-[4px]">
       {t(long ? `enum.Product.ai.${state}` : `products.ai.${state}`)}
     </StatusPill>
+  );
+  if (!why) return pill;
+  return long ? (
+    <span className="inline-flex flex-wrap items-center gap-2" data-testid="ai-excluded-why">
+      {pill}
+      <span className="ts-label-meta text-text-muted">{why}</span>
+    </span>
+  ) : (
+    <span className="inline-flex" title={why} data-testid="ai-excluded-why">
+      {pill}
+      <span className="sr-only">{why}</span>
+    </span>
   );
 }
 

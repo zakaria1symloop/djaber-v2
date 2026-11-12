@@ -16,7 +16,7 @@ import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 import { catalogApi, useCatalogRefresh, useProduct } from '../api';
 import type { Product } from '../contracts';
-import { AiPill, ModerationPill, ProductStatePill } from '../ui';
+import { AiPill, aiExclusion, ModerationPill, ProductStatePill } from '../ui';
 import { AgentsBlock, DetailsBlock, GalleryBlock, MovementsBlock, PricingBlock, StockBlock } from './blocks';
 import { moderationView } from './logic';
 import { AppealDialog, RejectedBanner, ValidationBlock } from './moderation';
@@ -150,7 +150,7 @@ export function ProductPage({ id }: { id: string }) {
         <span className="flex flex-wrap items-center gap-1.5" data-testid="product-pills">
           <ProductStatePill product={product} />
           <ModerationPill status={view.kind === 'none' ? null : view.kind} long />
-          {live ? <AiPill state={product.aiState} long /> : null}
+          {live ? <AiPill state={product.aiState} long reason={aiExclusion(product)} /> : null}
         </span>
       }
       description={

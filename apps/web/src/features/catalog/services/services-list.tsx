@@ -14,7 +14,7 @@ import { useListState } from '@/lib/use-list-state';
 import { useProducts } from '../api';
 import type { ProductListItem } from '../contracts';
 import { useProductActions } from '../product-page/use-product-actions';
-import { AiPill, CategoryPill, ListPagination, Money, ProductStatePill, ProductThumb } from '../ui';
+import { AiPill, aiExclusion, CategoryPill, ListPagination, Money, ProductStatePill, ProductThumb } from '../ui';
 
 const SPEC: ListSpec = { filters: {}, sorts: ['name', 'price'], defaultSort: 'name' };
 const NEW_SERVICE = '/products/new?type=service';
@@ -50,7 +50,7 @@ export function ServicesList() {
       { key: 'name', header: t('services.column.service'), sortKey: 'name', hideable: false, cell: name },
       { key: 'price', header: t('common.price'), sortKey: 'price', cell: (row) => <Money value={row.price} /> },
       { key: 'category', header: t('services.column.category'), hideBelow: 'lg', cell: (row) => <CategoryPill category={row.category} /> },
-      { key: 'ai', header: t('services.column.ai'), cell: (row) => <AiPill state={row.aiState} /> },
+      { key: 'ai', header: t('services.column.ai'), cell: (row) => <AiPill state={row.aiState} reason={aiExclusion(row)} /> },
     ],
     [t],
   );
@@ -112,7 +112,7 @@ export function ServicesList() {
               </Link>
               <span className="flex shrink-0 flex-col items-end gap-1">
                 <Money value={row.price} className="font-medium" />
-                <AiPill state={row.aiState} />
+                <AiPill state={row.aiState} reason={aiExclusion(row)} />
               </span>
               {menu(row)}
             </div>

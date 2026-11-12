@@ -21,7 +21,7 @@ import { AddToAgentDialog, ProductsBulkBar, useProductsExport } from '@/features
 import { ProductsActiveFilters, ProductsFilterBar, ProductsFilterPanel, useCategoryOptions } from '@/features/catalog/products-list/filters';
 import { QuickEditSheet } from '@/features/catalog/products-list/quick-edit-sheet';
 import { PRODUCTS_LIST, productsQuery } from '@/features/catalog/products-list/spec';
-import { AiPill, CategoryPill, ListPagination, ModerationPill, Money, Num, Pct, ProductStatePill, ProductThumb, StockPill, stockTone } from '@/features/catalog/ui';
+import { AiPill, aiExclusion, CategoryPill, ListPagination, ModerationPill, Money, Num, Pct, ProductStatePill, ProductThumb, StockPill, stockTone } from '@/features/catalog/ui';
 import { Link, useRouter } from '@/i18n/navigation';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
@@ -157,7 +157,7 @@ export default function ProductsPage() {
       : []),
     { key: 'stock', header: t('action.stock'), sortKey: 'stock', cell: stockCell },
     { key: 'unit', header: t('products.col.unit'), hideBelow: 'xl', cell: (r) => <span className="ts-label-meta text-text-muted">{r.unit?.abbreviation ?? '—'}</span> },
-    { key: 'ai', header: t('products.col.ai'), hideBelow: 'xl', cell: (r) => <AiPill state={r.aiState} /> },
+    { key: 'ai', header: t('products.col.ai'), hideBelow: 'xl', cell: (r) => <AiPill state={r.aiState} reason={aiExclusion(r)} /> },
     {
       key: 'moderation',
       header: t('products.col.moderation'),
