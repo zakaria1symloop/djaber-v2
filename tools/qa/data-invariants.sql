@@ -2,9 +2,9 @@
 -- reconciled » family (docs/audit/2026-11-12-weak-points.md §2). Run against a copy or read-only:
 --   docker exec -i djaber-v2-pg psql -U djaber -d djaber -q < tools/qa/data-invariants.sql
 \pset footer off
-\echo '== I1 finished order (delivered/cancelled/returned) still showing a failed or open delivery'
+\echo '== I1 finished order (delivered/cancelled/returned) with a parcel still on its way (a failed send is handled once the order is closed — UX-064)'
 select o.number, o.status, o."deliveryStatus", (select string_agg(s.status::text, ',') from "Shipment" s where s."orderId"=o.id) shipments from "Order" o
-where o.status in ('delivered','cancelled','returned') and (o."deliveryStatus" in ('failed','pending','sent','in_transit','out_for_delivery') or exists (select 1 from "Shipment" s where s."orderId"=o.id and s.status in ('failed','pending','sent','picked_up','in_transit','out_for_delivery'))) limit 20;
+where o.status in ('delivered','cancelled','returned') and (o."deliveryStatus" in ('pending','sent','in_transit','out_for_delivery') or exists (select 1 from "Shipment" s where s."orderId"=o.id and s.status in ('pending','sent','picked_up','in_transit','out_for_delivery'))) limit 20;
 \echo '== I2 order status and delivery status disagree'
 select o.status, o."deliveryStatus", count(*) from "Order" o where (o.status='shipped' and o."deliveryStatus" in ('not_sent','delivered','returned')) or (o.status in ('new','confirmed','preparing') and o."deliveryStatus" in ('in_transit','out_for_delivery','delivered','returned')) or (o.status='delivered' and o."deliveryStatus" in ('in_transit','out_for_delivery','returned')) group by 1,2;
 \echo '== I3 delivered order not paid'
