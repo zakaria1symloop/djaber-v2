@@ -46,7 +46,9 @@ export const closingSection = (c: PromptContext): string => {
 };
 
 const BUILT_IN: Record<string, string> = {
-  human_request: 'customer_request: the customer asks for a human, a manager or a phone call',
+  // retest 12/11 (Badro: « blocked after giving the phone number, again after the address »): the number given for the
+  // order read as « call me » — order details are never a request for the team
+  human_request: 'customer_request: the customer asks for a human, a manager or to be called back by the team (a phone number, an address or a name given for the order is order information, never a call request)',
   // PV 08/11: the rules were so wide that ordinary questions (an exchange, an impatient « alors ? ») handed the thread over
   refund: 'refund: the customer wants their money back (a question about exchanges or returns is answered from the RETURNS policy when there is one)',
   complaint: 'complaint: a problem with an order already placed or received (damaged, wrong item, never arrived after the expected delay) or a complaint about the shop — not a question about a product, and not a question about where an order is or when it arrives (answer that with lookup_order)',

@@ -10,7 +10,7 @@ import { ConversationService } from '../../src/modules/messaging/conversation.se
 import { asOwner, type Actor } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
 import { createProduct, image, upload, drain } from '../support/m2';
-import { connectedPage, delivery, fakeMeta, forbidNetwork, newSender, postWebhook, receive, work } from '../support/m3';
+import { connectedPage, delivery, fakeMeta, forbidNetwork, newSender, postWebhook, receive, reply, work } from '../support/m3';
 import { closeOutbox, withLimits, aiMessages, answer, balanceOf, db, fakeAi, feeRule, inTenant, ledger, linkedAgent, outMessages, replyJob, runReply, runsOf, setCredits, textRoute } from '../support/m4';
 
 let app: TestApp;
@@ -607,6 +607,44 @@ describe('handoff, insights, safety', () => {
     expect(again.conversation.status).toBe('needs_human');
     expect(again.out.filter((m) => m.text === handoffText)).toHaveLength(1);
     expect(again.out.filter((m) => m.text === 'Un conseiller de la boutique vous répond (texte modifié).')).toHaveLength(1);
+  });
+
+  it('retest 12/11: a thread the AI handed off comes back to the AI — a greeting at once, any message after 30 min of team silence; asked-for handoffs wait the delay, member replies keep it', async () => {
+    const s = await shop();
+    const sender = newSender();
+    fakeAi(app).script('reply', { reply: '', status: 'HANDOFF', statusDetail: 'off_catalogue', intent: 'OTHER' });
+    const t = await turn(s, sender, { text: 'vous faites des prix de gros ?' });
+    expect(t.conversation).toMatchObject({ status: 'needs_human', aiPaused: true });
+    // anything but a greeting right away stays with the team …
+    await receive(app, s.page, sender, { text: 'allo ?' });
+    expect(await replyJob(app, t.conversationId)).toBeNull();
+    // … a greeting is a new conversation: the AI answers it, the thread shows « IA reprise »
+    fakeAi(app).script('reply', { reply: 'Bonjour ! Comment puis-je vous aider ?', intent: 'GREETING' });
+    const back = await turn(s, sender, { text: 'Salam alikoum 👋' });
+    expect(back.conversation).toMatchObject({ status: 'active', aiPaused: false });
+    expect((back.conversation.context as any).handoffReason).toBeNull();
+    expect(back.out.at(-1)).toMatchObject({ author: 'ai', text: 'Bonjour ! Comment puis-je vous aider ?' });
+    expect(back.out.some((m) => (m.payload as any)?.system?.kind === 'ai_resumed')).toBe(true);
+
+    // the customer asked for the team: a greeting does not undo it, 30 min without an answer does
+    const asked = newSender();
+    fakeAi(app).script('reply', { reply: '', status: 'HANDOFF', statusDetail: 'customer_request', intent: 'OTHER' });
+    const a = await turn(s, asked, { text: 'je veux parler à un conseiller' });
+    await receive(app, s.page, asked, { text: 'bonjour' });
+    expect(await replyJob(app, a.conversationId)).toBeNull();
+    const ctx = (await db.conversation.findUniqueOrThrow({ where: { id: a.conversationId } })).context as any;
+    await db.conversation.update({ where: { id: a.conversationId }, data: { context: { ...ctx, handoffAt: new Date(Date.now() - 31 * 60_000).toISOString() } } });
+    fakeAi(app).script('reply', { reply: 'Un conseiller va vous répondre, puis-je vous aider en attendant ?', intent: 'OTHER' });
+    expect((await turn(s, asked, { text: 'toujours là ?' })).conversation).toMatchObject({ status: 'active', aiPaused: false });
+
+    // a member answered after the handoff: the thread stays with the team whatever the customer writes
+    const kept = newSender();
+    fakeAi(app).script('reply', { reply: '', status: 'HANDOFF', statusDetail: 'off_catalogue', intent: 'OTHER' });
+    const k = await turn(s, kept, { text: 'prix de gros ?' });
+    await reply(s.owner, k.conversationId, { text: 'Je regarde pour vous' }).expect(201);
+    await receive(app, s.page, kept, { text: 'salam' });
+    expect(await replyJob(app, k.conversationId)).toBeNull();
+    expect((await db.conversation.findUniqueOrThrow({ where: { id: k.conversationId } })).status).toBe('needs_human');
   });
 
   it('UNCLEAR ⇒ insight only; 3 unclear turns in a row ⇒ handoff; UNKNOWN ⇒ reply sent, insight, the AI keeps the conversation (PV 08/11)', async () => {

@@ -6,9 +6,18 @@ import type { ApiQuery, ListSpec } from '@/lib/list-state';
 export const MOD_TABS = ['todo', 'urgent', 'appeals', 'sample', 'rejected', 'prompts'] as const;
 export type ModTab = (typeof MOD_TABS)[number];
 
+/**
+ * Retest 12/11 (Badro: « the page still says "product moderation"; filters to tell products from AI agent names »): the
+ * « Type » filter of the queue — what a moderator reviews. The « Agents IA » tab only offers the agent types.
+ */
+export const MOD_TYPES = ['product', 'product_image', 'category', 'agent_name', 'agent_prompt'] as const;
+export type ModType = (typeof MOD_TYPES)[number];
+const AGENT_TYPES: readonly ModType[] = ['agent_name', 'agent_prompt'];
+export const typeOptions = (tab: ModTab): readonly ModType[] => (tab === 'prompts' ? AGENT_TYPES : MOD_TYPES);
+
 /** URL state: tab, search, filters with the API names (AdminModerationQuery), the reviewed item in `sheet`. */
 export const MOD_SPEC: ListSpec = {
-  filters: { aiFlag: 'list', scoreMin: 'text', scoreMax: 'text', trustLevel: 'list', categoryId: 'text', waitingOver: 'int' },
+  filters: { type: 'list', aiFlag: 'list', scoreMin: 'text', scoreMax: 'text', trustLevel: 'list', categoryId: 'text', waitingOver: 'int' },
   sorts: ['urgency', 'submittedAt'],
   defaultSort: 'urgency',
   tabs: MOD_TABS.filter((t) => t !== 'todo'),
@@ -33,6 +42,17 @@ export function tabQuery(tab: ModTab): ApiQuery {
     default:
       return { status: ['pending'] };
   }
+}
+
+/**
+ * Request of the queue: the URL filters with the tab preset over them. On « Agents IA » the chosen types narrow the
+ * preset (agent names only, prompts only); a choice with no agent type there keeps both.
+ */
+export function queueQuery(tab: ModTab, base: ApiQuery): ApiQuery {
+  const preset = tabQuery(tab);
+  if (tab !== 'prompts') return { ...base, ...preset };
+  const chosen = (Array.isArray(base.type) ? base.type : typeof base.type === 'string' ? [base.type] : []).filter((x) => AGENT_TYPES.includes(x as ModType));
+  return { ...base, ...preset, type: chosen.length ? chosen : (preset.type as string[]) };
 }
 
 /** Tab counts from the KPIs. */

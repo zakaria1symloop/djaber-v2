@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toAssignees } from './api';
-import { decisionState, flaggedFields, formatDelay, formatScore, formatWaiting, normaliseField, priceGapPct, refusableFields, rejectReady, scoreBucketOf, scoreTone, tabCount, tabOf, tabQuery } from './logic';
+import { decisionState, flaggedFields, formatDelay, formatScore, formatWaiting, normaliseField, priceGapPct, queueQuery, refusableFields, rejectReady, scoreBucketOf, scoreTone, tabCount, tabOf, tabQuery, typeOptions } from './logic';
 import { ruleKey } from './rules-logic';
 
 const stats = { pending: 23, overSla: 6, urgent: 2, appealsPending: 3, autoApproved7d: 412, rejected7d: 31, rejectedByReason: [], rejectionRatePct: 4.2, medianDelayMinutes: 38, agentPrompts: 1, suspensionProposed: [] };
@@ -16,6 +16,15 @@ describe('ADM-10 tabs', () => {
     expect(tabQuery('urgent')).toMatchObject({ status: ['pending'], priority: 'urgent' });
     expect(tabQuery('prompts')).toEqual({ type: ['agent_prompt', 'agent_name'] }); // owner request 11/11: agent names too
     expect(tabQuery('rejected')).toMatchObject({ status: ['rejected', 'appeal_rejected'], sort: '-submittedAt' });
+  });
+  it('retest 12/11: the « Type » filter tells products from agent names; « Agents IA » narrows to the agent types', () => {
+    expect(typeOptions('todo')).toEqual(['product', 'product_image', 'category', 'agent_name', 'agent_prompt']);
+    expect(typeOptions('prompts')).toEqual(['agent_name', 'agent_prompt']);
+    expect(queueQuery('todo', { q: 'robe', type: ['agent_name'] })).toEqual({ q: 'robe', type: ['agent_name'], status: ['pending'] });
+    expect(queueQuery('urgent', { type: ['product'] })).toMatchObject({ type: ['product'], status: ['pending'], priority: 'urgent' });
+    expect(queueQuery('prompts', { type: ['agent_name'] })).toEqual({ type: ['agent_name'] });
+    expect(queueQuery('prompts', { type: ['product'] })).toEqual({ type: ['agent_prompt', 'agent_name'] });
+    expect(queueQuery('prompts', {})).toEqual({ type: ['agent_prompt', 'agent_name'] });
   });
   it('reads the tab counts from the KPIs (« Auto-approuvés » = the 7-day KPI, PV 09/11)', () => {
     expect(tabCount('todo', stats)).toBe(23);

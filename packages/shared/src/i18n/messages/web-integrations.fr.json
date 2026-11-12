@@ -178,5 +178,6 @@
   "settings.integrations.webhooks.journal.noResponse": "sans réponse",
   "settings.integrations.webhooks.journal.replayed": "rejouée",
   "settings.integrations.webhooks.journal.sentAt": "Envoyée",
-  "settings.integrations.webhooks.journal.error": "Erreur"
+  "settings.integrations.webhooks.journal.error": "Erreur",
+  "settings.integrations.sheets.dialog.picked": "Feuille choisie : {name} — cliquez sur « Connecter »"
 }

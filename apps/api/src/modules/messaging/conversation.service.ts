@@ -37,6 +37,7 @@ import { NotificationProducer } from '../notifications/notification.producer';
 import { contextOf, conversationHead, conversationInclude, messageInclude, presentConversation, presentMessage, userRef, type ConversationContext, type ConversationRow, type StoredAttachment } from './messaging.presenter';
 import { OutboundSendService } from './outbound-send.service';
 import { BlockIndex, SafetyService } from './safety.service';
+import { isGreetingOnly } from './greeting';
 import { decideWindow, withinWindow } from './window-rules';
 
 type Changes = { status?: ConversationStatus; aiPaused?: boolean; assigneeId?: string | null };
@@ -55,6 +56,15 @@ const dec = <T>(cursor: string | undefined): T | null => {
 
 /** A3: how long a thread handed off by an AI failure waits before the next customer message gives it back to the AI. */
 export const AI_ERROR_RETRY_AFTER_MS = 2 * 60_000;
+/** Retest 12/11: a thread the AI handed off, left unanswered by the team this long, goes back to the AI with the next customer message. */
+export const HANDOFF_IDLE_RESUME_MS = 30 * 60_000;
+/**
+ * Handoffs the next customer message never undoes: decided by a member (`manual`, AGV-07 pause), the flood guard, the
+ * credits / quota gate (the AI cannot answer until they are back) or a blocked / risky customer the shop sends to the team.
+ */
+const HANDOFF_KEPT = new Set(['manual', 'abuse_guard', 'credits_exhausted', 'quota_exceeded', 'risky_client']);
+/** The customer (or a shop rule) asked for the team: a greeting does not undo it, only the idle delay does. */
+const HANDOFF_ASKED = new Set(['customer_request', 'human_request', 'refund', 'complaint', 'angry', 'anger', 'keyword', 'order_limits', 'over_limits']);
 
 @Injectable()
 export class ConversationService implements OnModuleInit {
@@ -546,22 +556,41 @@ export class ConversationService implements OnModuleInit {
   }
 
   /**
-   * A3 (tester report 2026-10-20: the bot "stopped answering" in the middle of a conversation): a thread handed to the team
-   * only because the AI failed (provider down / malformed answers, `handoffReason = ai_error`) goes back to the AI with the
-   * next customer message — once the failure is `AI_ERROR_RETRY_AFTER_MS` old and as long as nobody of the team has
-   * written since. Returns true when the AI may answer again.
+   * Is a handed-off thread given back to the AI by this customer message? Only while nobody of the team has written since
+   * the handoff and no member paused the AI, and:
+   * - A3 (tester report 2026-10-20: the bot "stopped answering"): a handoff only because the AI failed (`ai_error`) — once
+   *   the failure is `AI_ERROR_RETRY_AFTER_MS` old;
+   * - retest 12/11 (Badro: « after a handoff the bot never recovers; even a "hello" meant as a new conversation goes to a
+   *   team member »): another handoff the AI decided — when the message only greets (a new conversation), or once the
+   *   handoff is `HANDOFF_IDLE_RESUME_MS` old (the team did not answer, the customer comes back). When the customer asked
+   *   for the team (`HANDOFF_ASKED`) only the delay counts. `HANDOFF_KEPT` reasons never come back on their own.
    */
-  async resumeAfterAiError(conversationId: string, now = new Date()): Promise<boolean> {
+  resumableAfterHandoff(ctx: ConversationContext, text: string | null, now: Date): boolean {
+    const reason = ctx.handoffReason ?? null;
+    const at = ctx.handoffAt ? new Date(ctx.handoffAt) : null;
+    if (!reason || !at || Number.isNaN(at.getTime()) || HANDOFF_KEPT.has(reason) || ctx.aiPausedById) return false;
+    const age = now.getTime() - at.getTime();
+    if (reason === 'ai_error') return age >= AI_ERROR_RETRY_AFTER_MS;
+    if (age >= HANDOFF_IDLE_RESUME_MS) return true;
+    return !HANDOFF_ASKED.has(reason) && isGreetingOnly(text);
+  }
+
+  /**
+   * Gives the thread back to the AI when `resumableAfterHandoff` says so: `active`, AI on, the handoff marks cleared (the
+   * next handoff is a new episode with its own handoff text), the unclear streak reset, the thread event « IA reprise »
+   * for the team. Returns true when the AI may answer this message.
+   */
+  async resumeAfterHandoff(conversationId: string, text: string | null, now = new Date()): Promise<boolean> {
     return prisma.$transaction(async (db) => {
       const tx = db as Tx;
       const c = await tx.conversation.findFirst({ where: { id: conversationId, deletedAt: null } });
       if (!c || c.status !== 'needs_human') return false;
       const ctx = contextOf(c);
-      const at = ctx.handoffAt ? new Date(ctx.handoffAt) : null;
-      if (ctx.handoffReason !== 'ai_error' || !at || now.getTime() - at.getTime() < AI_ERROR_RETRY_AFTER_MS) return false;
-      if (await tx.message.count({ where: { conversationId: c.id, author: 'human', createdAt: { gt: at } } })) return false;
-      const context: ConversationContext = { ...ctx, handoffAt: null, handoffReason: null, handoffRemindedAt: null, handoffMessageSentAt: null, aiPausedById: null, aiUnavailable: null };
+      if (!this.resumableAfterHandoff(ctx, text, now)) return false;
+      if (await tx.message.count({ where: { conversationId: c.id, author: 'human', createdAt: { gt: new Date(ctx.handoffAt!) } } })) return false;
+      const context: ConversationContext = { ...ctx, handoffAt: null, handoffReason: null, handoffRemindedAt: null, handoffMessageSentAt: null, aiPausedById: null, aiUnavailable: null, unclearStreak: 0 };
       const updated = await tx.conversation.update({ where: { id: c.id }, data: { status: 'active', aiPaused: false, version: { increment: 1 }, context: context as Prisma.InputJsonValue } });
+      await this.outbound.addThreadEvent(tx, updated, 'ai_resumed', { reason: ctx.handoffReason });
       await this.emitUpdated(tx, updated);
       return true;
     });

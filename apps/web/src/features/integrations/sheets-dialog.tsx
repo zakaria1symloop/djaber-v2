@@ -6,6 +6,7 @@
 import { OrderSourceValues, SheetsBackfillSchema, SPREADSHEET_URL_RE, type OrderSource, type SheetsFilters, type SheetsIntegrationDto } from '@djaber/shared';
 import { Button, Checkbox, CheckChip, Dialog, Field, FormAlert, Input, toast, UrlInput } from '@djaber/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useChannels } from '@/features/channels/api';
 import { ApiError } from '@/lib/api';
@@ -144,13 +145,22 @@ export function SheetsDialog({ mode, data, onClose }: { mode: SheetsDialogMode |
     }
   };
 
+  // retest 12/11 (Badro: « choose from Drive: the sheet does not change after choosing it »): the Google Picker opens over
+  // the page, outside this modal dialog — its first click counted as a click outside and closed the dialog, so the file
+  // chosen next landed nowhere. The dialog steps aside while the Picker is open (its state is kept) and comes back with
+  // the chosen file selected, ready for « Connecter ».
+  const [pickerOpen, setPickerOpen] = useState(false);
   const openPicker = async () => {
     if (!picker.data) return;
+    setFormError(null);
+    setPickerOpen(true);
     try {
       const file = await openGooglePicker({ accessToken: picker.data.accessToken, developerKey: picker.data.developerKey, appId: picker.data.appId, locale });
       if (file) setPicked(file);
     } catch {
       setFormError(t('settings.integrations.sheets.dialog.pickerFailed'));
+    } finally {
+      setPickerOpen(false);
     }
   };
 
@@ -163,8 +173,8 @@ export function SheetsDialog({ mode, data, onClose }: { mode: SheetsDialogMode |
 
   return (
     <Dialog
-      open={open}
-      onOpenChange={(o) => !o && !busy && onClose()}
+      open={open && !pickerOpen}
+      onOpenChange={(o) => !o && !busy && !pickerOpen && onClose()}
       title={title}
       description={mode === 'choose' ? t('settings.integrations.sheets.dialog.context', { email: data.googleEmail ?? '' }) : mode === 'backfill' ? t('settings.integrations.sheets.backfill.context') : undefined}
       closeLabel={t('action.close')}
@@ -210,14 +220,17 @@ export function SheetsDialog({ mode, data, onClose }: { mode: SheetsDialogMode |
                     </p>
                   )
                 ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button size="sm" onClick={() => void openPicker()}>
+                  <div className="flex flex-col items-start gap-2">
+                    <Button size="sm" onClick={() => void openPicker()} data-testid="sheets-open-picker">
                       {t('settings.integrations.sheets.dialog.openPicker')}
                     </Button>
                     {picked ? (
-                      <span className="truncate text-[13px]" dir="auto">
-                        {picked.name}
-                      </span>
+                      <p className="flex max-w-full items-center gap-1.5 text-[13px]" role="status" data-testid="sheets-picked">
+                        <Check className="size-3.5 shrink-0 text-accent-money" aria-hidden />
+                        <span className="truncate" dir="auto" title={picked.name}>
+                          {t('settings.integrations.sheets.dialog.picked', { name: picked.name })}
+                        </span>
+                      </p>
                     ) : null}
                   </div>
                 )

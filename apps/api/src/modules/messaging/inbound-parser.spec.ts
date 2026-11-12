@@ -106,4 +106,15 @@ describe('small helpers', () => {
     expect(containsBlockedWord(null, ['arnaque'])).toBe(false);
     expect(containsBlockedWord('texte', [])).toBe(false);
   });
+
+  it('containsBlockedWord matches whole words only (retest 12/11: replies with the phone / address were discarded)', () => {
+    expect(containsBlockedWord('Pour confirmer : 0555 12 34 56, Cité 200 logements, Bab Ezzouar', ['con', 'ezz', '200'])).toBe(true); // « 200 » is a whole word
+    expect(containsBlockedWord('Pour confirmer : 0555 12 34 56, Cité Bab Ezzouar', ['con', 'ezz', 'firm', 'zou'])).toBe(false);
+    expect(containsBlockedWord('Une fiche technique complète', ['nique'])).toBe(false);
+    expect(containsBlockedWord('Quel con !', ['con'])).toBe(true);
+    expect(containsBlockedWord('ce sont des arnaques', ['arnaque'])).toBe(true);
+    expect(containsBlockedWord('pas de virement d’avance', ['virement d’avance'])).toBe(true);
+    expect(containsBlockedWord('هذا منصب جديد', ['نصب'])).toBe(false);
+    expect(containsBlockedWord('هذا نصب', ['نصب'])).toBe(true);
+  });
 });

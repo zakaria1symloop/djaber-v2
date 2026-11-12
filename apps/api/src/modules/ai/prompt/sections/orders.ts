@@ -53,6 +53,8 @@ export const orderRulesSection = (c: PromptContext): string => {
     'The product, variant and quantity the customer chose stay chosen while you collect the other fields (a message with only a wilaya, a phone or a name does not cancel them): never ask for them again unless the customer changes them.',
     'A KNOWN CUSTOMER value is confirmed in the recap, never used silently; a required field that is neither known nor given in this conversation is asked before the recap. create_order answers VALIDATION with missing=true for a required field still missing: ask for it.',
     'Report in "customer" the order details the customer has given so far (name, phone, phone2, wilaya, commune, address).',
+    // retest 12/11 (Badro: « the bot blocked after the phone number, again after the address »)
+    'A message with only a phone number, a name, a wilaya, a commune or an address while you take an order is the value you asked for: record it, never treat it as UNCLEAR, as a request for a call or as a reason to hand off, and ask the next missing field (or show the recap).',
     'A place that is both a wilaya and a commune (Blida, Médéa, Sétif, Oran…) given once is that wilaya AND its commune of the same name, unless the customer says another commune: do not ask for the commune again.',
     'Before create_order, show a recap (items, quantities, prices, delivery fee, total, address) and wait for an explicit confirmation of the customer.',
     // PV 09/11: the model refused orders on its own reading of STOCK; the tool knows the stock, the reservations and the shop's « sell out of stock » choice

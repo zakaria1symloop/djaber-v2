@@ -178,5 +178,6 @@
   "settings.integrations.webhooks.journal.noResponse": "بلا رد",
   "settings.integrations.webhooks.journal.replayed": "أُعيد إرسالها",
   "settings.integrations.webhooks.journal.sentAt": "أُرسلت",
-  "settings.integrations.webhooks.journal.error": "الخطأ"
+  "settings.integrations.webhooks.journal.error": "الخطأ",
+  "settings.integrations.sheets.dialog.picked": "الورقة المختارة: {name} — اضغط على «ربط»"
 }

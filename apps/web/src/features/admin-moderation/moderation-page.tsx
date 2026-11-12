@@ -1,7 +1,7 @@
 'use client';
 // /admin/moderation — Figma "ADM-10 — Platform admin — moderation queue (products) + review panel" (03 MOD-06…09,
 // 12 §26 Moderation): 5 KPI tiles, tabs À vérifier / Urgents / Appels du marchand / Auto-approuvés (échantillon) /
-// Rejetés / Agents IA (prompts), filters in the URL (search, Motif IA, Score, Confiance marchand, Catégorie, Attente;
+// Rejetés / Agents IA (noms & prompts), filters in the URL (search, Type, Motif IA, Score, Confiance marchand, Catégorie, Attente;
 // sort urgency then age), queue rows with ✓ / ✕ / ⋯, bulk Approuver / Rejeter (motif commun) / Assigner, the review panel
 // of the item in `?sheet=` (first row by default), the legend blocks. Writes need `admin.moderation.write`.
 import { formatNumber, MODERATION_AI_FLAGS, TrustLevelValues, type ModerationItemDto, type ModerationStatsDto } from '@djaber/shared';
@@ -42,7 +42,7 @@ import { useListState } from '@/lib/use-list-state';
 import { modApi, useAppeals, useModerationCategories, useModerationEvents, useModerationItems, useModerationRefresh, useModerationSample, useModerationStats } from './api';
 import { AppealPanel, AppealRow } from './appeal-panel';
 import { AssignDialog, BulkRejectDialog } from './dialogs';
-import { decisionState, formatDelay, MOD_SPEC, SCORE_BUCKETS, scoreBucketOf, tabCount, tabOf, tabQuery, WAITING_PRESETS, type ModTab } from './logic';
+import { decisionState, formatDelay, MOD_SPEC, queueQuery, SCORE_BUCKETS, scoreBucketOf, tabCount, tabOf, tabQuery, typeOptions, WAITING_PRESETS, type ModTab } from './logic';
 import { ReviewPanel } from './review-panel';
 import { RulesSheet } from './rules-sheet';
 import { ItemRow, itemTitle, trustLabel } from './ui';
@@ -121,7 +121,7 @@ function Queue({ canWrite }: { canWrite: boolean }) {
   const stats = useModerationStats();
   const offline = useOffline();
   const refresh = useModerationRefresh();
-  const query = useMemo(() => ({ ...list.apiQuery(), ...tabQuery(tab) }), [list, tab]);
+  const query = useMemo(() => queueQuery(tab, list.apiQuery()), [list, tab]);
   const items = useModerationItems(query, tab !== 'appeals' && tab !== 'sample');
   const sample = useModerationSample({ page: s.page, pageSize: s.pageSize }, tab === 'sample');
   const appeals = useAppeals({ ...tabQuery('appeals'), page: s.page, pageSize: s.pageSize }, tab === 'appeals');
@@ -177,6 +177,9 @@ function Queue({ canWrite }: { canWrite: boolean }) {
     ];
   };
 
+  // retest 12/11: what is reviewed (products, pictures, categories, agent names, agent prompts); « Agents IA » offers the agent types only
+  const typeChoices = typeOptions(tab);
+  const types = filterList(s, 'type').filter((v) => (typeChoices as readonly string[]).includes(v));
   const flags = filterList(s, 'aiFlag');
   const trust = filterList(s, 'trustLevel');
   const bucket = scoreBucketOf(filterText(s, 'scoreMin'), filterText(s, 'scoreMax'));
@@ -184,6 +187,7 @@ function Queue({ canWrite }: { canWrite: boolean }) {
   const categoryId = filterText(s, 'categoryId');
   const categories = useModerationCategories();
   const chips = [
+    ...(types.length ? [{ key: 'type', label: `${t('adminMod.filter.type')} : ${types.map((v) => t(`adminMod.filter.type.${v}`)).join(', ')}`, onRemove: () => list.setFilter('type', null) }] : []),
     ...(flags.length ? [{ key: 'aiFlag', label: `${t('adminMod.filter.flag')} : ${flags.map((f) => t(`adminMod.flag.${f}`)).join(', ')}`, onRemove: () => list.setFilter('aiFlag', null) }] : []),
     ...(bucket ? [{ key: 'score', label: `${t('adminMod.filter.score')} : ${t(`adminMod.filter.score.${bucket}`)}`, onRemove: () => list.setFilters({ scoreMin: null, scoreMax: null }) }] : []),
     ...(trust.length ? [{ key: 'trustLevel', label: `${t('adminMod.filter.trust')} : ${trust.map((v) => trustLabel(t, v)).join(', ')}`, onRemove: () => list.setFilter('trustLevel', null) }] : []),
@@ -210,13 +214,16 @@ function Queue({ canWrite }: { canWrite: boolean }) {
       <PillTabs
         label={t('adminMod.tab.label')}
         value={tab}
-        onChange={(k) => list.set({ tab: k === 'todo' ? null : k, sheet: null })}
+        onChange={(k) => list.set({ tab: k === 'todo' ? null : k, sheet: null, filters: { type: filterList(s, 'type').filter((v) => (typeOptions(tabOf(k)) as readonly string[]).includes(v)) } })}
         tabs={(['todo', 'urgent', 'appeals', 'sample', 'rejected', 'prompts'] as ModTab[]).map((k) => ({ key: k, label: t(`adminMod.tab.${k}`), count: tabCount(k, stats.data) }))}
       />
       {filtersDisabled ? null : (
         <>
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput value={s.q} onChange={(v) => list.set({ q: v })} label={t('action.search')} placeholder={t('adminMod.search')} clearLabel={t('list.clearSearch')} className="min-w-64 flex-1 sm:max-w-72" />
+            <FilterDropdown label={t('adminMod.filter.type')} count={types.length}>
+              <FilterChips label={t('adminMod.filter.type')} multiple options={typeChoices.map((v) => ({ value: v, label: t(`adminMod.filter.type.${v}`) }))} value={types} onChange={(v) => list.setFilter('type', v)} />
+            </FilterDropdown>
             <FilterDropdown label={t('adminMod.filter.flag')} count={flags.length}>
               <FilterChips label={t('adminMod.filter.flag')} multiple options={MODERATION_AI_FLAGS.map((f) => ({ value: f, label: t(`adminMod.flag.${f}`) }))} value={flags} onChange={(v) => list.setFilter('aiFlag', v)} />
             </FilterDropdown>
@@ -262,7 +269,7 @@ function Queue({ canWrite }: { canWrite: boolean }) {
             <AdminQueryError error={source.error} onRetry={() => void source.refetch()} />
           ) : (tab === 'appeals' ? appealRows.length : rows.length) === 0 ? (
             list.filtered && !filtersDisabled && (s.q.trim() || chips.length) ? (
-              <ListFilteredEmpty entity={t('adminMod.entity')} filters={[s.q.trim(), ...chips.map((c) => c.label)].filter(Boolean).join(' · ')} onClear={() => list.set({ q: '', filters: { aiFlag: null, scoreMin: null, scoreMax: null, trustLevel: null, categoryId: null, waitingOver: null } })} />
+              <ListFilteredEmpty entity={t('adminMod.entity')} filters={[s.q.trim(), ...chips.map((c) => c.label)].filter(Boolean).join(' · ')} onClear={() => list.set({ q: '', filters: { type: null, aiFlag: null, scoreMin: null, scoreMax: null, trustLevel: null, categoryId: null, waitingOver: null } })} />
             ) : (
               <ListEmpty title={t(`adminMod.empty.${tab}.title`)} description={t(`adminMod.empty.${tab}.description`)} />
             )

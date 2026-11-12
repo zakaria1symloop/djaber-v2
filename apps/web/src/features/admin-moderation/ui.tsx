@@ -64,7 +64,8 @@ export function ItemRow({
       thumbnail={thumb ? <img src={thumb} alt="" className="size-full object-cover" /> : <span aria-hidden className="block size-full" />}
       title={title}
       urgentLabel={item.priority === 'urgent' || item.slaBreached ? t('enum.Admin.urgent') : undefined}
-      meta={`${item.workspace.name} · ${t('adminMod.row.trust', { level: trustLabel(t, item.workspace.trustLevel) })}`}
+      // retest 12/11 (Badro): each row says what is reviewed — « Nom d'agent », « Produit », « Prompt d'agent »…
+      meta={`${t(`adminMod.type.${item.type}`)} · ${item.workspace.name} · ${t('adminMod.row.trust', { level: trustLabel(t, item.workspace.trustLevel) })}`}
       reason={aiReason(t, item)}
       score={formatScore(item.aiScore, locale)}
       scoreTone={scoreTone(item.aiScore)}

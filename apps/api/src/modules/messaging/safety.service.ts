@@ -19,6 +19,7 @@ import { page, toSkipTake, type Page } from '../../core/http/pagination';
 import { MailOutbox } from '../../core/mail/mail.outbox';
 import { OutboxService } from '../../core/outbox/outbox.service';
 import { algiersDay, algiersDayStart } from '../../core/time/algiers';
+import { containsWord, foldText } from '../catalog/moderation-prescreen.service';
 import { conversationHead, userRef } from './messaging.presenter';
 import { AdminNotifier } from '../notifications/admin-notifier.service';
 
@@ -376,17 +377,11 @@ export class SafetyService {
   }
 }
 
-const fold = (s: string) =>
-  s
-    .normalize('NFD')
-    .replace(/[̀-ًͯ-ْـ]/g, '')
-    .toLowerCase();
-/** 04 §13: case / diacritic-insensitive match of the workspace and platform word lists (Arabic + Latin). */
-export const containsBlockedWord = (text: string | null | undefined, words: readonly string[]): boolean => {
-  if (!text || !words.length) return false;
-  const hay = fold(text);
-  return words.some((w) => {
-    const needle = fold(w).trim();
-    return needle.length > 0 && hay.includes(needle);
-  });
-};
+/**
+ * 04 §13: case / diacritic-insensitive match of the workspace and platform word lists (Arabic + Latin), as whole words —
+ * the matching of the moderation lists (`containsWord`: a letter or digit next to it ends the match; common endings and
+ * Arabic particles count). Retest 12/11 (Badro: « the bot blocked after the phone number, again after the address »): a
+ * listed word found inside another one (« con » in « confirmez », « nique » in « technique ») no longer discards the AI
+ * reply nor flags the customer's message.
+ */
+export const containsBlockedWord = (text: string | null | undefined, words: readonly string[]): boolean => !!text && words.length > 0 && containsWord(foldText(text), words) !== null;
