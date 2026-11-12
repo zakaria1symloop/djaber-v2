@@ -89,7 +89,7 @@ test.describe('with a shop (fake pages, catalogue, active agent)', () => {
   });
 });
 
-test('AT-ANA-01 card kinds COLIS / STOCK / PAGE / INSIGHT / CONVERSATION / RAPPEL / TÂCHE, "+ n autres", page badges, disabled quick action', async ({ page }) => {
+test('AT-ANA-01 card kinds COLIS / STOCK / PAGE / INSIGHT / CONVERSATION / RAPPEL / TÂCHE, "+ n …" per hidden kind, page badges, disabled quick action', async ({ page }) => {
   // mock: failed parcels need a courier (M6) and a reconnect card a revoked Meta token — the fake drivers produce neither
   await mockHome(page, fixtureHome());
   await loginHome(page, fresh);
@@ -97,8 +97,14 @@ test('AT-ANA-01 card kinds COLIS / STOCK / PAGE / INSIGHT / CONVERSATION / RAPPE
   for (const label of ['COLIS', 'STOCK', 'PAGE', 'INSIGHT', 'CONVERSATION', 'RAPPEL', 'TÂCHE']) await expect(queue.getByText(label, { exact: true })).toBeVisible();
   // urgency first, then the oldest: the reconnect card (2 h) comes before the failed parcel (1 h)
   await expect(queue.locator('[data-kind]').first()).toHaveAttribute('data-kind', 'page');
-  await expect(page.getByTestId('home-queue-more')).toContainText('+ 2 autres');
-  await expect(page.getByTestId('home-queue-more')).toHaveAttribute('href', /\/fr\/queue$/);
+  // UX-065: one "+ n …" link per hidden kind, to the page where all the cards of that kind are
+  await expect(page.getByTestId('home-queue-more')).toHaveCount(2);
+  const moreParcel = page.locator('[data-testid=home-queue-more][data-more-kind=parcel]');
+  await expect(moreParcel).toContainText('+ 1 colis en échec');
+  await expect(moreParcel).toHaveAttribute('href', /\/fr\/delivery\?tab=failed$/);
+  const moreStock = page.locator('[data-testid=home-queue-more][data-more-kind=stock]');
+  await expect(moreStock).toContainText('+ 1 alerte stock');
+  await expect(moreStock).toHaveAttribute('href', /\/fr\/products\?lowStock=1$/);
   const pages = page.getByTestId('home-pages');
   await expect(pages.locator('[data-page="11111111-1111-7111-8111-111111111111"]')).toContainText('ACTIVE');
   await expect(pages.locator('[data-page="22222222-2222-7222-8222-222222222222"]')).toContainText('EN ATTENTE META');
@@ -106,6 +112,8 @@ test('AT-ANA-01 card kinds COLIS / STOCK / PAGE / INSIGHT / CONVERSATION / RAPPE
   await expect(pages.locator('[data-page="44444444-4444-7444-8444-444444444444"]')).toContainText('EN PAUSE (PLAN)');
   await expect(pages.locator('[data-page="11111111-1111-7111-8111-111111111111"]')).toContainText('IA');
   await expect(page.getByTestId('home-kpis').locator('[data-kpi=revenue]')).toContainText('1,18 M');
+  // UX-063: the line under the amount says what it is made of
+  await expect(page.getByTestId('home-kpis').locator('[data-kpi=revenue]')).toContainText('90 commandes livrées · 6 ventes');
   await expect(page.getByTestId('home-kpis').locator('[data-kpi=pages]')).toContainText('1 à reconnecter');
   // AT-UX-03: a refused quick action is not a dead link — greyed with its reason
   const agents = page.locator('[data-action=create_agent]');

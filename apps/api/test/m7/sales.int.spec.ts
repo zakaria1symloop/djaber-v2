@@ -190,6 +190,7 @@ describe('AT-CLI-05 / AT-ORD-10 aggregates and revenue', () => {
     expect(pending.body.data.total).toBe(500);
     const home = (await owner.get('/dashboard/home').expect(200)).body.data;
     expect(home.kpis.revenue30d.value).toBe(3000);
+    expect(home.kpis.revenueSources30d).toEqual({ deliveredOrders: 1, sales: 1 }); // UX-063: the pending order is not in the amount
     expect(home.kpis.pipeline).toBe(500);
     expect(home.kpis.aiRevenue30d.value).toBe(0);
     expect((await owner.get('/sales/stats').expect(200)).body.data.revenue).toBe(1000);

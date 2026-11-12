@@ -147,6 +147,11 @@ describe('Home (ANA-01)', () => {
     expect(h.kpis.products).toMatchObject({ total: 2, lowStock: 1 });
     expect(h.queue.counts).toMatchObject({ parcel: 1, stock: 1, page: 1, callback: 1 });
     expect(h.queue.items[0].urgency).toBe(0);
+    // UX-063: the line under the Revenue tile counts what the amount is made of (1 delivered order + 1 counter sale)
+    expect(h.kpis.revenueSources30d).toEqual({ deliveredOrders: 1, sales: 1 });
+    // UX-062: the STOCK card is as old as the movement that brought "Robe" to its threshold (2 → 1, min 1), not "now"
+    const crossing = await db.stockMovement.findFirstOrThrow({ where: { productId: p.id, quantityBefore: 2, quantityAfter: 1 } });
+    expect(h.queue.items.find((i: any) => i.kind === 'stock').since).toBe(crossing.createdAt.toISOString());
     expect(h.banners.map((b: any) => b.kind)).toContain('reconnect');
     expect(h.pages[0]).toMatchObject({ id: page.id, status: 'needs_reconnect', conversations: { total: 1, active: 1 }, messages7d: { inbound: 2 } });
     expect(h.pages[0].messages7d.total).toBeGreaterThanOrEqual(2);

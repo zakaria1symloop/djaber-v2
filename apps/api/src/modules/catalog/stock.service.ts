@@ -12,7 +12,7 @@ import { OutboxService } from '../../core/outbox/outbox.service';
 import { algiersDay, algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
 import { exportDateTime, exportLabel } from '../jobs/export-cells';
 import { ExportService } from '../jobs/export.service';
-import { action, likePattern, stockStateOf } from './catalog.util';
+import { action, likePattern, shortageSince, stockStateOf } from './catalog.util';
 import type { MovementsQuery, SnapshotQuery } from './dto';
 import { LowStockEvaluator } from './low-stock.evaluator';
 import { thumbUrlOf } from './product-image.util';
@@ -565,6 +565,44 @@ export class StockService implements OnModuleInit {
       state: stockStateOf(r.stock, r.minStock),
       primaryImageUrl: r.imageUrl ? thumbUrlOf(r.imageUrl) : null,
     }));
+  }
+
+  /**
+   * Home "À traiter" STOCK cards (ANA-01, UX-062 / UX-065): every alert line (same set as `lowStockLines`) with `since` =
+   * the moment it reached its threshold / 0 (`shortageSince`), read from the stock movements in ONE grouped query
+   * (index `StockMovement(workspaceId, productId, createdAt)`), sorted out first, then oldest first.
+   */
+  async shortageLines(now = new Date()) {
+    const ws = TenantContext.workspaceId();
+    const rows = await prisma.$queryRaw<{ productId: string; variantId: string | null; name: string; variantName: string | null; stock: number; minStock: number; createdAt: Date; outAt: Date | null; lowAt: Date | null }[]>`
+      WITH lines AS (
+        SELECT p."id" AS pid, NULL::uuid AS vid, p."name", NULL::text AS vname, COALESCE(p."stock", 0) AS stock, p."minStock" AS min, p."createdAt" AS created
+        FROM "Product" p
+        WHERE p."workspaceId" = ${ws}::uuid AND p."deletedAt" IS NULL AND p."trackStock" AND NOT p."hasVariants" AND COALESCE(p."stock", 0) <= p."minStock"
+        UNION ALL
+        SELECT p."id", v."id", p."name", v."name", v."stock", v."minStock", v."createdAt"
+        FROM "ProductVariant" v JOIN "Product" p ON p."id" = v."productId"
+        WHERE p."workspaceId" = ${ws}::uuid AND p."deletedAt" IS NULL AND p."trackStock" AND p."hasVariants" AND v."deletedAt" IS NULL AND v."isActive" AND v."stock" <= v."minStock"
+      )
+      SELECT l.pid AS "productId", l.vid AS "variantId", l."name", l.vname AS "variantName", l.stock::int AS "stock", l.min::int AS "minStock", l.created AS "createdAt",
+             max(m."createdAt") FILTER (WHERE m."quantityBefore" > 0 AND m."quantityAfter" <= 0) AS "outAt",
+             max(m."createdAt") FILTER (WHERE m."quantityBefore" > l.min AND m."quantityAfter" <= l.min) AS "lowAt"
+      FROM lines l
+      LEFT JOIN "StockMovement" m ON m."workspaceId" = ${ws}::uuid AND m."productId" = l.pid AND m."variantId" IS NOT DISTINCT FROM l.vid
+        AND m."quantityAfter" <= GREATEST(l.min, 0) AND m."quantityBefore" > m."quantityAfter"
+      GROUP BY l.pid, l.vid, l."name", l.vname, l.stock, l.min, l.created`;
+    return rows
+      .map((r) => ({
+        productId: r.productId,
+        variantId: r.variantId,
+        name: r.name,
+        variantName: r.variantName,
+        stock: r.stock,
+        minStock: r.minStock,
+        state: stockStateOf(r.stock, r.minStock),
+        since: shortageSince({ stock: r.stock, minStock: r.minStock, createdAt: r.createdAt }, r, now),
+      }))
+      .sort((a, b) => Number(b.state === 'out') - Number(a.state === 'out') || a.since.getTime() - b.since.getTime() || `${a.productId}:${a.variantId ?? ''}`.localeCompare(`${b.productId}:${b.variantId ?? ''}`));
   }
 
   // --- GET /stock/snapshot?date (06 §8.6) -----------------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 // stock state and margin helpers.
 import { formatMoney } from '@djaber/shared';
 import { OutboundSendService } from '../messaging/outbound-send.service';
-import { marginPct, productStockState, stockStateOf } from './catalog.util';
+import { marginPct, productStockState, shortageSince, stockStateOf } from './catalog.util';
 import { crossing } from './low-stock.evaluator';
 import { computeMargins } from './margin.calculator';
 import { moderationSlaDueAt, needsReview, unreviewedVariants } from './moderation-hook.service';
@@ -23,6 +23,28 @@ describe('CAT-09 low-stock crossing (quantity ≤ minStock, alerts on the way do
     [4, 4, 4, null],
   ])('%i → %i with min %i ⇒ %s', (before, after, min, expected) => {
     expect(crossing(before, after, min)).toBe(expected);
+  });
+});
+
+describe('UX-062 age of a Home STOCK card (shortageSince)', () => {
+  const now = new Date('2026-11-12T11:00:00.000Z');
+  const created = new Date('2026-10-01T09:00:00.000Z');
+  const outAt = new Date('2026-11-11T14:37:00.000Z'); // #CMD-1008 « 47 → 0 »
+  const lowAt = new Date('2026-11-10T15:33:00.000Z'); // Breakage « 20 → 4 », threshold 5
+  it('out of stock: from the movement that brought it to 0 (≈ 20 h, not « just now »)', () => {
+    expect(shortageSince({ stock: 0, minStock: 10, createdAt: created }, { outAt, lowAt: null }, now)).toEqual(outAt);
+    expect(shortageSince({ stock: -2, minStock: 0, createdAt: created }, { outAt, lowAt }, now)).toEqual(outAt);
+  });
+  it('under the threshold: from the movement that brought it to / under the threshold, even if it reached 0 in between', () => {
+    expect(shortageSince({ stock: 4, minStock: 5, createdAt: created }, { outAt: null, lowAt }, now)).toEqual(lowAt);
+    expect(shortageSince({ stock: 3, minStock: 5, createdAt: created }, { outAt, lowAt }, now)).toEqual(lowAt);
+  });
+  it('no crossing movement (created at 0 or under its threshold): from the creation of the product / variant', () => {
+    expect(shortageSince({ stock: 0, minStock: 5, createdAt: created }, { outAt: null, lowAt }, now)).toEqual(created);
+    expect(shortageSince({ stock: 2, minStock: 5, createdAt: created }, { outAt, lowAt: null }, now)).toEqual(created);
+  });
+  it('never in the future (clock skew)', () => {
+    expect(shortageSince({ stock: 0, minStock: 5, createdAt: created }, { outAt: new Date(now.getTime() + 60_000), lowAt: null }, now)).toEqual(now);
   });
 });
 

@@ -19,7 +19,7 @@ export type HomeQueueItem = {
   urgency: 0 | 1 | 2;
   title: string;
   subtitle: string | null;
-  /** when the item started waiting (handoff time, failure time, low-stock movement, callback time …) */
+  /** when the item started waiting (handoff time, failure time, callback time …; STOCK = the movement that brought the line to its threshold / 0, UX-062) */
   since: string;
   /** web path of the target (mobile = `djaber://` + path) */
   path: string;
@@ -28,6 +28,13 @@ export type HomeQueueItem = {
   /** M8 (03 §37 ANA-01): an item handled in the last 24 h stays greyed with "fait par …"; open items have no `handled` */
   handled?: { at: string; by: { id: string; name: string } | null };
 };
+/**
+ * 12 §18 order of the "À traiter" cards (UX-065): urgency first (0 = most urgent), then age (oldest `since` first), then
+ * `key` so the 8 slots are deterministic. Shared by the API (which picks the cards) and the web (which draws them).
+ */
+export const compareHomeQueueItems = (a: Pick<HomeQueueItem, 'urgency' | 'since' | 'key'>, b: Pick<HomeQueueItem, 'urgency' | 'since' | 'key'>): number =>
+  a.urgency - b.urgency || Date.parse(a.since) - Date.parse(b.since) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+
 export type HomeKpi = { value: number; previous: number | null; deltaPct: number | null };
 export type HomePageCard = ChannelRefView & {
   pausedReason: 'manual' | 'plan' | 'moderation' | null;
@@ -52,6 +59,11 @@ export type HomeView = {
     products: { total: number; lowStock: number; outOfStock: number };
     /** 04 §4 Revenue = Σ completed sales (soldAt) + Σ delivered orders (deliveredAt), 30 d */
     revenue30d: HomeKpi;
+    /**
+     * UX-063: what `revenue30d.value` is made of, same period and same definitions (04 §4 Revenue): delivered orders
+     * (status delivered, deliveredAt in the 30 d) and completed counter sales (soldAt in the 30 d). Line under the tile.
+     */
+    revenueSources30d: { deliveredOrders: number; sales: number };
     /** 04 §4 AI revenue = Revenue restricted to AI orders, 30 d */
     aiRevenue30d: HomeKpi;
     /** 04 §4 Pipeline = Σ Order.total, status ∈ new / confirmed / preparing / shipped (now) */

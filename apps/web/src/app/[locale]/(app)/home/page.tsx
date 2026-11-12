@@ -193,16 +193,14 @@ function Queue({ view }: { view: HomeView }) {
               </li>
             );
           })}
-          {more ? (
-            <li>
-              <Link href="/queue" className="block rounded-card" data-testid="home-queue-more">
-                <HomeQueueMore>
-                  {t('home.queue.more', { count: more.count })}
-                  {more.kinds.length ? (
-                    <> · {more.kinds.map((k) => t(`home.queue.kindLower.${k}`)).join(', ')}</>
-                  ) : null}
-                </HomeQueueMore>
-              </Link>
+          {/* UX-065: one "+ n …" link per hidden kind, to the page that lists all the cards of that kind */}
+          {more.length ? (
+            <li className="flex flex-wrap gap-2">
+              {more.map((m) => (
+                <Link key={m.kind} href={m.href} className="block rounded-card" data-testid="home-queue-more" data-more-kind={m.kind}>
+                  <HomeQueueMore>{t(m.key, { count: m.count })}</HomeQueueMore>
+                </Link>
+              ))}
             </li>
           ) : null}
         </ul>
@@ -234,7 +232,7 @@ function Overview({ view, advanced }: { view: HomeView; advanced: boolean }) {
             label={label[tile.key]!}
             value={tile.money ? compactAmount(tile.value, locale) : formatNumber(tile.value)}
             unit={tile.money ? t('common.currency') : undefined}
-            sub={tile.sub ? t(tile.sub.key, { count: tile.sub.count }) : undefined}
+            sub={tile.sub.length ? tile.sub.map((x) => t(x.key, { count: x.count })).join(' · ') : undefined}
             title={tile.money ? formatMoney(tile.value) : undefined}
           />
         ))}

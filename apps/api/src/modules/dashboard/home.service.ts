@@ -2,7 +2,7 @@
 // RAPPEL · TÂCHE, sorted by urgency then age, max 8), KPI tiles with the 04 §4 named figures over 30 days (Africa/Algiers),
 // quick actions, my pages, Get Started, credits and banners. Everything computed live from the rows.
 import { Injectable } from '@nestjs/common';
-import { HOME_QUEUE_KINDS, HOME_QUEUE_MAX, ORDER_SEND_CLOSED_STATUSES, type HomeBannerKind, type HomeKpi, type HomeQueueItem, type HomeQueueKind, type HomeView } from '@djaber/shared';
+import { compareHomeQueueItems, HOME_QUEUE_KINDS, HOME_QUEUE_MAX, ORDER_SEND_CLOSED_STATUSES, type HomeBannerKind, type HomeKpi, type HomeQueueItem, type HomeQueueKind, type HomeView } from '@djaber/shared';
 import { prisma, TenantContext } from '@djaber/db';
 import { can, type MerchantPermission } from '../../core/rbac/permission-matrix';
 import { algiersClock, algiersDayEnd, algiersDay } from '../../core/time/algiers';
@@ -19,13 +19,27 @@ type Range = { gte: Date; lt: Date };
 const DAY = 86_400_000;
 const kpi = (value: number, previous: number | null): HomeKpi => ({ value, previous, deltaPct: previous ? Math.round(((value - previous) * 1000) / previous) / 10 : null });
 
+/** 04 §4 "Revenue" rows: delivered orders (deliveredAt) and completed counter sales (soldAt); `aiOnly` = "AI revenue" (orders only). */
+const revenueWhere = (r: Range, aiOnly = false) => ({
+  order: { status: 'delivered' as const, deliveredAt: { gte: r.gte, lt: r.lt }, ...(aiOnly ? { source: 'ai' as const } : {}) },
+  sale: { status: 'completed' as const, soldAt: { gte: r.gte, lt: r.lt } },
+});
+
 /** 04 §4 "Revenue" = Σ completed counter sales (soldAt) + Σ delivered orders (deliveredAt); `aiOnly` = "AI revenue". */
 export const revenueIn = async (r: Range, aiOnly = false) => {
+  const w = revenueWhere(r, aiOnly);
   const [orders, sales] = await Promise.all([
-    prisma.order.aggregate({ where: { status: 'delivered', deliveredAt: { gte: r.gte, lt: r.lt }, ...(aiOnly ? { source: 'ai' } : {}) }, _sum: { total: true } }),
-    aiOnly ? Promise.resolve({ _sum: { total: 0 } }) : prisma.sale.aggregate({ where: { status: 'completed', soldAt: { gte: r.gte, lt: r.lt } }, _sum: { total: true } }),
+    prisma.order.aggregate({ where: w.order, _sum: { total: true } }),
+    aiOnly ? Promise.resolve({ _sum: { total: 0 } }) : prisma.sale.aggregate({ where: w.sale, _sum: { total: true } }),
   ]);
   return (orders._sum.total ?? 0) + (sales._sum.total ?? 0);
+};
+
+/** UX-063 — what the Revenue amount is made of: the delivered orders and the counter sales it sums (same rows as `revenueIn`). */
+export const revenueSourcesIn = async (r: Range) => {
+  const w = revenueWhere(r);
+  const [deliveredOrders, sales] = await Promise.all([prisma.order.count({ where: w.order }), prisma.sale.count({ where: w.sale })]);
+  return { deliveredOrders, sales };
 };
 
 @Injectable()
@@ -46,7 +60,7 @@ export class HomeService {
       // UX-064: a failed parcel is to handle only while its order can still be sent and it is the order's latest parcel
       // (an order delivered / cancelled / returned meanwhile, or sent again, has handled it) — same rule as Livraison › Échecs
       prisma.shipment.findMany({ where: { status: 'failed', order: { status: { notIn: [...ORDER_SEND_CLOSED_STATUSES] } } }, include: { order: { select: { id: true, number: true, clientName: true, shipments: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1, select: { id: true } } } } }, orderBy: { updatedAt: 'asc' }, take: 50 }),
-      this.stock.lowStockLines(50),
+      this.stock.shortageLines(now),
       prisma.channel.findMany({ where: { status: 'needs_reconnect' }, select: { id: true, name: true, platform: true, updatedAt: true } }),
       prisma.agentInsight.findMany({ where: { status: 'pending' }, include: { agent: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' }, take: 50 }),
       prisma.order.findMany({ where: { confirmationStatus: 'callback', callbackAt: { lte: endOfToday }, status: { in: ['new', 'confirmed', 'preparing'] } }, select: { id: true, number: true, clientName: true, callbackAt: true, assigneeId: true }, orderBy: { callbackAt: 'asc' }, take: 50 }),
@@ -59,12 +73,12 @@ export class HomeService {
       items.push({ key: `conversation:${c.id}`, kind: 'conversation', urgency: 0, title: c.client?.name ?? '', subtitle: c.lastMessagePreview, since: ctx.handoff?.at ?? (c.lastMessageAt ?? c.updatedAt).toISOString(), path: `/inbox/${c.id}`, ref: { conversationId: c.id, ...(ctx.handoff?.reason || ctx.handoffReason ? { reason: String(ctx.handoff?.reason ?? ctx.handoffReason) } : {}) } });
     }
     for (const s of failed) if (s.order.shipments[0]?.id === s.id) items.push({ key: `parcel:${s.id}`, kind: 'parcel', urgency: 0, title: `${s.order.number} · ${s.order.clientName}`, subtitle: s.failureReason, since: s.updatedAt.toISOString(), path: parcelPath({ orderId: s.order.id, shipmentId: s.id }), ref: { shipmentId: s.id, orderId: s.order.id } });
-    for (const l of low) items.push({ key: `stock:${l.productId}:${l.variantId ?? ''}`, kind: 'stock', urgency: l.state === 'out' ? 0 : 1, title: l.variantName ? `${l.name} · ${l.variantName}` : l.name, subtitle: `${l.stock} / ${l.minStock}`, since: now.toISOString(), path: '/products?lowStock=1', ref: { productId: l.productId, ...(l.variantId ? { variantId: l.variantId } : {}) } });
+    for (const l of low) items.push({ key: `stock:${l.productId}:${l.variantId ?? ''}`, kind: 'stock', urgency: l.state === 'out' ? 0 : 1, title: l.variantName ? `${l.name} · ${l.variantName}` : l.name, subtitle: `${l.stock} / ${l.minStock}`, since: l.since.toISOString(), path: '/products?lowStock=1', ref: { productId: l.productId, ...(l.variantId ? { variantId: l.variantId } : {}) } });
     for (const c of reconnect) items.push({ key: `page:${c.id}`, kind: 'page', urgency: 0, title: c.name, subtitle: c.platform, since: c.updatedAt.toISOString(), path: `/channels/${c.id}`, ref: { channelId: c.id } });
     for (const i of insights) items.push({ key: `insight:${i.id}`, kind: 'insight', urgency: i.type === 'error' ? 1 : 2, title: i.agent.name, subtitle: i.type, since: i.createdAt.toISOString(), path: `/agents/${i.agent.id}/insights`, ref: { insightId: i.id, agentId: i.agent.id, conversationId: i.conversationId } });
     for (const o of callbacks) items.push({ key: `callback:${o.id}`, kind: 'callback', urgency: o.callbackAt!.getTime() <= now.getTime() ? 0 : 2, title: `${o.number} · ${o.clientName}`, subtitle: o.callbackAt!.toISOString(), since: o.callbackAt!.toISOString(), path: `/orders/${o.id}#calls`, ref: { orderId: o.id } });
     for (const j of jobs) items.push({ key: `task:${j.id}`, kind: 'task', urgency: 1, title: j.kind, subtitle: null, since: j.updatedAt.toISOString(), path: jobPath({ jobId: j.id, kind: j.kind, ...jobRefs(j.payload) }), ref: { jobId: j.id } });
-    items.sort((a, b) => a.urgency - b.urgency || a.since.localeCompare(b.since));
+    items.sort(compareHomeQueueItems); // 12 §18 urgency then age (UX-065): the oldest shortages keep their slot
     const counts = Object.fromEntries(HOME_QUEUE_KINDS.map((k) => [k, 0])) as Record<HomeQueueKind, number>;
     for (const i of items) counts[i.kind]++;
     void locale;
@@ -125,7 +139,7 @@ export class HomeService {
     const t = TenantContext.get();
     const now = new Date();
     const { current, previous } = lastDays(30, now);
-    const [user, ws, queue, channels, products, overview, rev, revPrev, aiRev, aiRevPrev, pipeline, cash, orders, ordersPrev, aiOrders, toConfirm, conversations, getStarted, balance, aiOrdersByChannel, subscription] = await Promise.all([
+    const [user, ws, queue, channels, products, overview, rev, revSources, revPrev, aiRev, aiRevPrev, pipeline, cash, orders, ordersPrev, aiOrders, toConfirm, conversations, getStarted, balance, aiOrdersByChannel, subscription] = await Promise.all([
       t.userId ? prisma.user.findUnique({ where: { id: t.userId }, select: { firstName: true } }) : null,
       prisma.workspace.findUniqueOrThrow({ where: { id: t.workspaceId }, select: { name: true, onboardingStep: true } }),
       this.queue(now, locale),
@@ -133,6 +147,7 @@ export class HomeService {
       prisma.product.count({ where: { deletedAt: null } }),
       this.stock.overview(),
       revenueIn(current),
+      revenueSourcesIn(current),
       revenueIn(previous),
       revenueIn(current, true),
       revenueIn(previous, true),
@@ -197,6 +212,7 @@ export class HomeService {
         channels: { active: channels.filter((c) => c.status === 'active').length, total: channels.length, needsReconnect },
         products: { total: products, lowStock: overview.lowStockCount, outOfStock: overview.outOfStockCount },
         revenue30d: kpi(rev, revPrev),
+        revenueSources30d: revSources,
         aiRevenue30d: kpi(aiRev, aiRevPrev),
         pipeline: pipeline._sum.total ?? 0,
         cashCollected30d: cash,

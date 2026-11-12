@@ -1,6 +1,6 @@
 // Home dashboard rules (Figma "ANA-01 — Home — default", "ANA-01 — Home — new workspace + banners", "ANA-01b — Home &
 // Notifications — states catalogue"; 12 §3, §18; `HomeView` of `GET /dashboard/home`). Pure functions, unit tested.
-import { HOME_QUEUE_MAX, type HomePageCard, type HomeQueueItem, type HomeQueueKind, type HomeView } from '@djaber/shared';
+import { compareHomeQueueItems, HOME_QUEUE_KINDS, HOME_QUEUE_MAX, type HomePageCard, type HomeQueueItem, type HomeQueueKind, type HomeView } from '@djaber/shared';
 
 /* ---------- "À TRAITER" cards ---------- */
 /** Tone key of the `Home.queue` pill map (the API kind `task` is the TÂCHE card = `job` colour). */
@@ -8,11 +8,11 @@ export const queueToneKey = (kind: HomeQueueKind): string => (kind === 'task' ? 
 /** COLIS · STOCK · PAGE · INSIGHT · CONVERSATION · RAPPEL · TÂCHE */
 export const queueLabelKey = (kind: HomeQueueKind): string => `home.queue.kind.${kind}`;
 
-/** 12 §18: sort urgency first (0 = most urgent), then age (oldest waiting first); at most 8 cards. */
+/** 12 §18: sort urgency first (0 = most urgent), then age (oldest waiting first), then key (same order as the API); at most 8 cards. */
 export function sortQueue(items: readonly HomeQueueItem[], max = HOME_QUEUE_MAX): HomeQueueItem[] {
   const open = items
     .filter((i) => !i.handled)
-    .sort((a, b) => a.urgency - b.urgency || Date.parse(a.since) - Date.parse(b.since) || a.key.localeCompare(b.key))
+    .sort(compareHomeQueueItems)
     .slice(0, max);
   return [...open, ...handledQueue(items)];
 }
@@ -27,17 +27,27 @@ export function handledQueue(items: readonly HomeQueueItem[], max = HANDLED_MAX)
 }
 
 /**
- * "+ 2 autres · colis échoué, rupture de stock": items counted by the server but not drawn, and the kinds they belong
- * to (in the order of the kinds). `null` when every item is on screen.
+ * UX-065 — "Tout voir" of 12 §18: one link per kind that has cards counted by the server but not drawn, to the page
+ * where ALL the cards of that kind are ("+ 2 alertes stock" → Produits › Stock bas, "+ 1 colis en échec" → Livraison ›
+ * Échecs, conversations / insights → File d'attente …), in the order of the kinds. Empty when every card is on screen.
  */
-export function queueOverflow(queue: HomeView['queue'], shown: readonly HomeQueueItem[]): { count: number; kinds: HomeQueueKind[] } | null {
-  const open = shown.filter((i) => !i.handled);
-  const count = Math.max(0, queue.total - open.length);
-  if (count === 0) return null;
+export const QUEUE_MORE_HREF: Record<HomeQueueKind, string> = {
+  parcel: '/delivery?tab=failed',
+  stock: '/products?lowStock=1',
+  page: '/channels',
+  insight: '/queue',
+  conversation: '/queue',
+  callback: '/orders?confirmationStatus=callback',
+  task: '/notifications?group=jobs&types=job_failed',
+};
+export type QueueMore = { kind: HomeQueueKind; count: number; key: string; href: string };
+export function queueOverflow(queue: HomeView['queue'], shown: readonly HomeQueueItem[]): QueueMore[] {
   const drawn = new Map<HomeQueueKind, number>();
-  for (const i of open) drawn.set(i.kind, (drawn.get(i.kind) ?? 0) + 1);
-  const kinds = (Object.keys(queue.counts) as HomeQueueKind[]).filter((k) => (queue.counts[k] ?? 0) > (drawn.get(k) ?? 0));
-  return { count, kinds };
+  for (const i of shown) if (!i.handled) drawn.set(i.kind, (drawn.get(i.kind) ?? 0) + 1);
+  return HOME_QUEUE_KINDS.flatMap((kind) => {
+    const count = Math.max(0, (queue.counts?.[kind] ?? 0) - (drawn.get(kind) ?? 0));
+    return count > 0 ? [{ kind, count, key: `home.queue.moreKind.${kind}`, href: QUEUE_MORE_HREF[kind] }] : [];
+  });
 }
 
 /** Internal path of a card (`path` comes from the server: only same-origin absolute paths are followed). */
@@ -89,7 +99,7 @@ export function shortAge(iso: string, now = Date.now()): { key: string; count: n
 }
 
 /* ---------- "APERÇU" KPI tiles ---------- */
-export type HomeTile = { key: 'pages' | 'products' | 'revenue' | 'stock'; value: number; money: boolean; sub: { key: string; count: number } | null };
+export type HomeTile = { key: 'pages' | 'products' | 'revenue' | 'stock'; value: number; money: boolean; sub: { key: string; count: number }[] };
 /**
  * The four tiles of the frame, from the named figures of 04 §4 (AT-ANA-01): PAGES CONNECTÉES = active channels,
  * PRODUITS = catalogue size (+ low stock), CHIFFRE D'AFFAIRES (30 J) = Revenue 30 d, VALEUR DU STOCK = stock value
@@ -98,11 +108,22 @@ export type HomeTile = { key: 'pages' | 'products' | 'revenue' | 'stock'; value:
 export function homeTiles(k: HomeView['kpis']): HomeTile[] {
   const low = k.products.lowStock + k.products.outOfStock;
   return [
-    { key: 'pages', value: k.channels.active, money: false, sub: k.channels.needsReconnect > 0 ? { key: 'home.kpi.pages.reconnect', count: k.channels.needsReconnect } : null },
-    { key: 'products', value: k.products.total, money: false, sub: low > 0 ? { key: 'home.kpi.products.low', count: low } : null },
-    { key: 'revenue', value: k.revenue30d.value, money: true, sub: { key: 'home.kpi.revenue.orders', count: k.orders30d.value } },
-    { key: 'stock', value: k.stockValue.cost ?? k.stockValue.retail, money: true, sub: null },
+    { key: 'pages', value: k.channels.active, money: false, sub: k.channels.needsReconnect > 0 ? [{ key: 'home.kpi.pages.reconnect', count: k.channels.needsReconnect }] : [] },
+    { key: 'products', value: k.products.total, money: false, sub: low > 0 ? [{ key: 'home.kpi.products.low', count: low }] : [] },
+    { key: 'revenue', value: k.revenue30d.value, money: true, sub: revenueSources(k.revenueSources30d) },
+    { key: 'stock', value: k.stockValue.cost ?? k.stockValue.retail, money: true, sub: [] },
   ];
+}
+
+/**
+ * UX-063 — line under CHIFFRE D'AFFAIRES (30 J): what the amount is made of, from the server counts (same rows as the
+ * amount, 04 §4 Revenue): "1 commande livrée · 1 vente"; only the non-zero parts; nothing when both are 0.
+ */
+export function revenueSources(s: HomeView['kpis']['revenueSources30d'] | undefined): { key: string; count: number }[] {
+  const parts: { key: string; count: number }[] = [];
+  if (s && s.deliveredOrders > 0) parts.push({ key: 'home.kpi.revenue.deliveredOrders', count: s.deliveredOrders });
+  if (s && s.sales > 0) parts.push({ key: 'home.kpi.revenue.sales', count: s.sales });
+  return parts;
 }
 
 /* ---------- "ACTIONS RAPIDES" ---------- */

@@ -1,6 +1,6 @@
 import type { HomeQueueItem, HomeView } from '@djaber/shared';
 import { describe, expect, it } from 'vitest';
-import { agentCta, agentState, aiLive, checklistDone, homeTiles, QUICK_ACTION_HREF, queueHref, queueLabelKey, queueOverflow, queueText, queueToneKey, quickActionsOf, shortAge, sortQueue } from './logic';
+import { agentCta, agentState, aiLive, checklistDone, homeTiles, QUICK_ACTION_HREF, QUEUE_MORE_HREF, queueHref, queueLabelKey, queueOverflow, queueText, queueToneKey, quickActionsOf, revenueSources, shortAge, sortQueue } from './logic';
 
 const item = (key: string, kind: HomeQueueItem['kind'], urgency: 0 | 1 | 2, minAgo: number, now = Date.parse('2026-10-12T12:00:00Z')): HomeQueueItem => ({
   key,
@@ -16,6 +16,7 @@ const kpis = (o: Partial<HomeView['kpis']> = {}): HomeView['kpis'] => ({
   channels: { active: 2, total: 3, needsReconnect: 0 },
   products: { total: 128, lowStock: 2, outOfStock: 1 },
   revenue30d: { value: 1_184_000, previous: null, deltaPct: null },
+  revenueSources30d: { deliveredOrders: 9, sales: 1 },
   aiRevenue30d: { value: 0, previous: null, deltaPct: null },
   pipeline: 0,
   cashCollected30d: 0,
@@ -39,11 +40,34 @@ describe('home queue cards (12 §18)', () => {
     const many = Array.from({ length: 12 }, (_, i) => item(`k${i}`, 'conversation', 1, i));
     expect(sortQueue(many)).toHaveLength(8);
   });
-  it('summarises the cards not drawn ("+ 2 autres · colis échoué, rupture de stock")', () => {
-    const shown = [item('a', 'conversation', 0, 1), item('b', 'conversation', 0, 2)];
-    const counts = { parcel: 1, stock: 1, page: 0, insight: 0, conversation: 2, callback: 0, task: 0 };
-    expect(queueOverflow({ items: shown, total: 4, counts }, shown)).toEqual({ count: 2, kinds: ['parcel', 'stock'] });
-    expect(queueOverflow({ items: shown, total: 2, counts: { ...counts, parcel: 0, stock: 0 } }, shown)).toBeNull();
+  it('UX-065: a new stock-out never pushes an older one out of the 8 slots; equal ages are ordered by key', () => {
+    const old = Array.from({ length: 9 }, (_, i) => item(`stock:old${i}`, 'stock', 0, 1_200 + i));
+    const shown = sortQueue(old).map((i) => i.key);
+    const fresh = [item('stock:new1', 'stock', 0, 1), item('stock:new2', 'stock', 0, 0)];
+    expect(sortQueue([...fresh, ...old]).map((i) => i.key)).toEqual(shown);
+    expect(shown).not.toContain('stock:old0'); // the youngest of the 9 old ones is the hidden one
+    expect(sortQueue([item('z', 'stock', 0, 5), item('a', 'stock', 0, 5)]).map((i) => i.key)).toEqual(['a', 'z']);
+  });
+  it('UX-065: one "+ n …" link per hidden kind, to the page that lists all the cards of that kind', () => {
+    const shown = [item('a', 'conversation', 0, 1), item('b', 'stock', 0, 2)];
+    const counts = { parcel: 1, stock: 3, page: 0, insight: 4, conversation: 1, callback: 0, task: 0 };
+    expect(queueOverflow({ items: shown, total: 9, counts }, shown)).toEqual([
+      { kind: 'parcel', count: 1, key: 'home.queue.moreKind.parcel', href: '/delivery?tab=failed' },
+      { kind: 'stock', count: 2, key: 'home.queue.moreKind.stock', href: '/products?lowStock=1' },
+      { kind: 'insight', count: 4, key: 'home.queue.moreKind.insight', href: '/queue' },
+    ]);
+    expect(queueOverflow({ items: shown, total: 2, counts: { ...counts, parcel: 0, stock: 1, insight: 0 } }, shown)).toEqual([]);
+  });
+  it('every kind has a "Tout voir" destination (the Queue only lists conversations and insights, 12 §4)', () => {
+    expect(QUEUE_MORE_HREF).toEqual({
+      parcel: '/delivery?tab=failed',
+      stock: '/products?lowStock=1',
+      page: '/channels',
+      insight: '/queue',
+      conversation: '/queue',
+      callback: '/orders?confirmationStatus=callback',
+      task: '/notifications?group=jobs&types=job_failed',
+    });
   });
   it('follows only internal paths (locale prefix removed), else the queue / home', () => {
     expect(queueHref({ path: '/inbox/abc', kind: 'conversation' })).toBe('/inbox/abc');
@@ -84,17 +108,26 @@ describe('home KPI tiles (AT-ANA-01 named figures)', () => {
       ['revenue', 1_184_000],
       ['stock', 1_240_000],
     ]);
-    expect(tiles[1]!.sub).toEqual({ key: 'home.kpi.products.low', count: 3 });
-    expect(tiles[2]!.sub).toEqual({ key: 'home.kpi.revenue.orders', count: 12 });
-    expect(tiles[0]!.sub).toBeNull();
+    expect(tiles[1]!.sub).toEqual([{ key: 'home.kpi.products.low', count: 3 }]);
+    expect(tiles[2]!.sub).toEqual([
+      { key: 'home.kpi.revenue.deliveredOrders', count: 9 },
+      { key: 'home.kpi.revenue.sales', count: 1 },
+    ]);
+    expect(tiles[0]!.sub).toEqual([]);
+  });
+  it('UX-063: the revenue line explains the amount — only the parts that exist, nothing when both are 0', () => {
+    expect(revenueSources({ deliveredOrders: 3, sales: 0 })).toEqual([{ key: 'home.kpi.revenue.deliveredOrders', count: 3 }]);
+    expect(revenueSources({ deliveredOrders: 0, sales: 2 })).toEqual([{ key: 'home.kpi.revenue.sales', count: 2 }]);
+    expect(revenueSources({ deliveredOrders: 0, sales: 0 })).toEqual([]);
+    expect(revenueSources(undefined)).toEqual([]); // older API without the field
   });
   it('uses the stock value at cost when the server gives it (advanced mode)', () => {
     expect(homeTiles(kpis({ stockValue: { retail: 10, cost: 7 } }))[3]!.value).toBe(7);
   });
   it('flags pages to reconnect and hides an empty low-stock line', () => {
     const tiles = homeTiles(kpis({ channels: { active: 1, total: 2, needsReconnect: 1 }, products: { total: 4, lowStock: 0, outOfStock: 0 } }));
-    expect(tiles[0]!.sub).toEqual({ key: 'home.kpi.pages.reconnect', count: 1 });
-    expect(tiles[1]!.sub).toBeNull();
+    expect(tiles[0]!.sub).toEqual([{ key: 'home.kpi.pages.reconnect', count: 1 }]);
+    expect(tiles[1]!.sub).toEqual([]);
   });
 });
 
@@ -131,7 +164,7 @@ describe('home handled cards (M8 carry-over, 03 §37 ANA-01)', () => {
     const sorted = sortQueue([h1, open, h2]);
     expect(sorted.map((i) => i.key)).toEqual(['open', 'h2', 'h1']);
     // handled cards never count in the "+ n autres" line
-    expect(queueOverflow({ items: [h1, open, h2], total: 1, counts: { stock: 1 } } as unknown as HomeView['queue'], sorted)).toBeNull();
+    expect(queueOverflow({ items: [h1, open, h2], total: 1, counts: { stock: 1 } } as unknown as HomeView['queue'], sorted)).toEqual([]);
   });
 });
 

@@ -80,6 +80,7 @@ export const fixtureHome = (over: Json = {}): Json => ({
     channels: { active: 2, total: 3, needsReconnect: 1 },
     products: { total: 128, lowStock: 2, outOfStock: 0 },
     revenue30d: { value: 1_184_000, previous: null, deltaPct: null },
+    revenueSources30d: { deliveredOrders: 90, sales: 6 },
     aiRevenue30d: { value: 700_000, previous: null, deltaPct: null },
     pipeline: 0,
     cashCollected30d: 0,

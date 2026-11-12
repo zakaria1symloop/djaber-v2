@@ -30,7 +30,10 @@ export const QueueCards: Story = {
             <HomeQueueCard key={c.kind} kind={c.kind} kindLabel={c.label} tone={pillTone('Home.queue', c.tone)} age={c.age} title={c.title} subtitle={c.subtitle} />
           ))}
           <HomeQueueCard kind="conversation" kindLabel="CONVERSATION" tone={pillTone('Home.queue', 'conversation')} age="1 H" title="Traité · Karim D." subtitle="question sur la taille" handledLabel="fait par Nadia F." />
-          <HomeQueueMore>+ 2 autres · colis échoué, rupture de stock</HomeQueueMore>
+          <div className="flex flex-wrap gap-2">
+            <HomeQueueMore>+ 1 colis en échec</HomeQueueMore>
+            <HomeQueueMore>+ 2 alertes stock</HomeQueueMore>
+          </div>
         </div>
       </HomeSection>
     </Frame>
@@ -54,7 +57,7 @@ export const KpiTiles: Story = {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <HomeKpiTile label="Pages connectées" value="2" />
           <HomeKpiTile label="Produits" value="128" sub="2 stock faible" />
-          <HomeKpiTile label="Chiffre d'affaires (30j)" value="0" unit="DA" sub="0 commande" />
+          <HomeKpiTile label="Chiffre d'affaires (30j)" value="0" unit="DA" />
           <HomeKpiTile label="Valeur du stock" value="1,24 M" unit="DA" />
         </div>
       </HomeSection>
