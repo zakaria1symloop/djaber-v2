@@ -1,5 +1,6 @@
 // 04 §8 — "today", periods and date-only inputs are read in Africa/Algiers (UTC+1, no DST since 1981); stored values are UTC.
-const OFFSET_MS = 3600_000;
+export const ALGIERS_OFFSET_MS = 3600_000;
+const OFFSET_MS = ALGIERS_OFFSET_MS;
 
 /** `YYYY-MM-DD` of an instant in Africa/Algiers. */
 export const algiersDay = (at: Date = new Date()): string => new Date(at.getTime() + OFFSET_MS).toISOString().slice(0, 10);

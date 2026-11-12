@@ -27,6 +27,8 @@ import { StorageService } from '../../../core/storage/storage.service';
 import { TenantResolver } from '../../../core/tenancy/tenant.resolver';
 import { DailyStatsService } from '../../analytics/daily-stats.service';
 import { deltaPct, resolveRange, type DayRange } from '../../analytics/range';
+import { algiersDay } from '../../../core/time/algiers';
+import { exportDate, exportDateTime } from '../../jobs/export-cells';
 import { ExportService, type ExportFormat, type ExportTable } from '../../jobs/export.service';
 import { money } from '../gds-document.pdf';
 import type { TableColumn } from '../../jobs/table-file';
@@ -248,16 +250,19 @@ export class ReportService implements OnModuleInit {
         if (v === null || v === undefined) return null;
         if (c.type === 'enum') return this.label(locale, c, v);
         if (typeof v === 'object') return null;
+        // UX-058: Algiers wall-clock date cells (« 11/11/2026 15:38 » / « 11/11/2026 »), not the ISO text
+        if (c.type === 'datetime' && typeof v === 'string') return exportDateTime(v) ?? v;
+        if (c.type === 'date' && typeof v === 'string') return exportDate(v) ?? v;
         return v;
       },
       kind: c.type === 'money' ? 'money' : c.type === 'int' || c.type === 'pct' || c.type === 'days' ? 'number' : 'text',
       width: c.type === 'text' ? 3 : c.type === 'datetime' ? 2.4 : 2,
     }));
     const totals = this.totals(run.def, run.rows);
-    const period = run.range ? `${run.range.from} → ${run.range.to}` : this.i18n.t(locale, 'report.snapshot', { date: new Date().toISOString().slice(0, 10) });
+    const period = run.range ? `${run.range.from} → ${run.range.to}` : this.i18n.t(locale, 'report.snapshot', { date: algiersDay() });
     return {
       sheetName: title.slice(0, 31),
-      fileName: `${run.def.key.replace(/_/g, '-')}-${run.range ? `${run.range.from}_${run.range.to}` : new Date().toISOString().slice(0, 10)}`,
+      fileName: `${run.def.key.replace(/_/g, '-')}-${run.range ? `${run.range.from}_${run.range.to}` : algiersDay()}`,
       columns,
       rows,
       pdf: {

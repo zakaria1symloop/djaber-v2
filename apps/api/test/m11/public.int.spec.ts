@@ -8,6 +8,8 @@ import { mailsTo, tokenOf } from '../support/m1';
 import { forbidNetwork } from '../support/m3';
 import { db, pub, withKey, work } from '../support/m11';
 import { TokenService } from '../../src/core/auth/token.service';
+import { RedisService } from '../../src/core/redis/redis.provider';
+import { deletionMailCooldownKey } from '../../src/modules/auth/account-deletion.service';
 
 let app: TestApp;
 let net: ReturnType<typeof forbidNetwork>;
@@ -158,6 +160,48 @@ describe('public account deletion (PUB-06, FL-22 1b)', () => {
     await pub(app).post(`/api/v1/account-deletion/confirm/${t2}`).send({}).expect(200);
     await ask(user.email, ip()).expect(200);
     expect(await mailsTo(app, user.email, 'auth/account-deletion-request')).toHaveLength(1);
+  });
+
+  it('UX-061 a second request while the link is valid ⇒ no new e-mail, the first link keeps working; one deletion e-mail per address per 24 h; always the same answer', async () => {
+    const user = await createUser();
+    // three connections: the 3 / h / IP limit of the route never applies here
+    const first = await ask(user.email, ip()).expect(200);
+    const second = await ask(user.email, ip()).expect(200);
+    const third = await ask(user.email, ip()).expect(200);
+    const unknown = await ask(`nobody-${randomUUID().slice(0, 6)}@test.local`, ip()).expect(200);
+    expect([second.body, third.body, unknown.body]).toEqual([first.body, first.body, first.body]);
+    const mails = await mailsTo(app, user.email, 'auth/account-deletion-request');
+    expect(mails).toHaveLength(1);
+    const token = tokenOf(mails[0]);
+    expect((await pub(app).get(`/api/v1/account-deletion/confirm/${token}`).expect(200)).body.data).toMatchObject({ status: 'pending_confirmation' });
+    expect(await db.auditLog.count({ where: { actorId: user.id, action: 'account.deletion_link_sent' } })).toBe(1);
+
+    // the link is cancelled: a new request the same day still sends nothing (24 h per address)
+    await pub(app).post(`/api/v1/account-deletion/cancel/${token}`).send({}).expect(200);
+    await ask(user.email, ip()).expect(200);
+    expect(await mailsTo(app, user.email, 'auth/account-deletion-request')).toHaveLength(1);
+
+    // 24 h later (cooldown over) ⇒ a new link, the old one stays dead
+    await app.app.get(RedisService).client.del(deletionMailCooldownKey(user.id));
+    await ask(user.email, ip()).expect(200);
+    const after = await mailsTo(app, user.email, 'auth/account-deletion-request');
+    expect(after).toHaveLength(2);
+    const token2 = tokenOf(after[1]);
+    expect(token2).not.toBe(token);
+    await pub(app).get(`/api/v1/account-deletion/confirm/${token}`).expect(410);
+    await pub(app).get(`/api/v1/account-deletion/confirm/${token2}`).expect(200);
+  });
+
+  it('UX-061 an expired link (> 24 h) does not block a new one', async () => {
+    const user = await createUser();
+    await ask(user.email, ip()).expect(200);
+    const token = tokenOf((await mailsTo(app, user.email, 'auth/account-deletion-request'))[0]);
+    await db.accountDeletionRequest.updateMany({ where: { userId: user.id }, data: { requestedAt: new Date(Date.now() - 25 * 3600_000) } });
+    await app.app.get(RedisService).client.del(deletionMailCooldownKey(user.id));
+    await ask(user.email, ip()).expect(200);
+    const mails = await mailsTo(app, user.email, 'auth/account-deletion-request');
+    expect(mails).toHaveLength(2);
+    expect(tokenOf(mails[1])).not.toBe(token);
   });
 });
 

@@ -13,6 +13,7 @@ import { OutboxService } from '../../core/outbox/outbox.service';
 import { StorageService } from '../../core/storage/storage.service';
 import { algiersDay, algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
 import { action } from '../catalog/catalog.util';
+import { exportDateTime, exportLabel } from '../jobs/export-cells';
 import { ExportService } from '../jobs/export.service';
 import { emitCash } from './cash-rows';
 import { checkBusinessDate, lockRow, rangeOf, USER_SELECT, userRef } from './gds.util';
@@ -484,11 +485,11 @@ export class CashService implements OnModuleInit {
       fileName: `caisse-${sel.from ?? 'debut'}-${sel.to}`,
       rows: views,
       columns: [
-        { header: h.date, value: (r: R) => r.date },
+        { header: h.date, value: (r: R) => exportDateTime(r.date) },
         { header: h.description, value: (r: R) => r.description ?? '' },
         { header: h.reference, value: (r: R) => r.reference?.label ?? '' },
-        { header: h.category, value: (r: R) => r.category },
-        { header: h.method, value: (r: R) => cashDisplayMethod(r.category, r.method) },
+        { header: h.category, value: (r: R) => exportLabel(locale, 'enum.Cash.category', r.category) },
+        { header: h.method, value: (r: R) => exportLabel(locale, 'orders.payment.method', cashDisplayMethod(r.category, r.method)) },
         { header: h.amount, value: (r: R) => (r.type === 'income' ? r.amount : -r.amount) },
         { header: h.balance, value: (r: R) => r.balanceAfter },
         { header: h.auto, value: (r: R) => (r.isAutomatic ? 'AUTO' : '') },

@@ -24,6 +24,7 @@ import { can } from '../../core/rbac/permission-matrix';
 import { algiersDay, algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
 import { channelRef } from '../channels/channel.service';
 import { GeoService } from '../delivery/geo.service';
+import { exportDateTime, exportLabel } from '../jobs/export-cells';
 import { ExportService } from '../jobs/export.service';
 import { conversationHead, conversationInclude, presentConversation } from '../messaging/messaging.presenter';
 import { SafetyService, type BlockIndex } from '../messaging/safety.service';
@@ -519,10 +520,10 @@ export class ClientService implements OnModuleInit {
         { header: h.name, value: (r: R) => r.name },
         { header: h.phone, value: (r: R) => r.phone ?? '' },
         { header: h.email, value: (r: R) => r.email ?? '' },
-        { header: h.source, value: (r: R) => r.source },
+        { header: h.source, value: (r: R) => exportLabel(locale, 'clients.source', r.source) },
         { header: h.orders, value: (r: R) => r.orderCount },
         { header: h.spent, value: (r: R) => r.totalSpent },
-        { header: h.lastOrder, value: (r: R) => (r.lastOrderAt ? algiersDay(r.lastOrderAt) : '') },
+        { header: h.lastOrder, value: (r: R) => exportDateTime(r.lastOrderAt) },
         { header: h.tags, value: (r: R) => r.tags.join(', ') },
       ],
     };

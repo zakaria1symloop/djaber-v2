@@ -10,6 +10,7 @@ import { page, toSkipTake, type Page } from '../../core/http/pagination';
 import { originSessionId } from '../../core/tenancy/tenant.guard';
 import { OutboxService } from '../../core/outbox/outbox.service';
 import { algiersDay, algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
+import { exportDateTime, exportLabel } from '../jobs/export-cells';
 import { ExportService } from '../jobs/export.service';
 import { action, likePattern, stockStateOf } from './catalog.util';
 import type { MovementsQuery, SnapshotQuery } from './dto';
@@ -451,15 +452,15 @@ export class StockService implements OnModuleInit {
       fileName: `mouvements-${algiersDay()}`,
       rows,
       columns: [
-        { header: h.date, value: (r: R) => r.createdAt },
+        { header: h.date, value: (r: R) => exportDateTime(r.createdAt) },
         { header: h.product, value: (r: R) => r.product.name },
         { header: 'SKU', value: (r: R) => r.product.sku },
         { header: h.variant, value: (r: R) => r.variant?.name ?? '' },
-        { header: h.type, value: (r: R) => r.type },
+        { header: h.type, value: (r: R) => exportLabel(locale, 'enum.StockMovement.type', r.type) },
         { header: h.quantity, value: (r: R) => r.quantity },
         { header: h.before, value: (r: R) => r.before },
         { header: h.after, value: (r: R) => r.after },
-        { header: h.reason, value: (r: R) => r.reason ?? '' },
+        { header: h.reason, value: (r: R) => exportLabel(locale, 'enum.StockMovement.reason', r.reason) },
         { header: h.note, value: (r: R) => r.note ?? '' },
         { header: h.reference, value: (r: R) => r.reference?.label ?? '' },
         { header: h.actor, value: (r: R) => (r.actor ? `${r.actor.firstName} ${r.actor.lastName}`.trim() : '') },

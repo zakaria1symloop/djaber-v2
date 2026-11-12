@@ -386,7 +386,8 @@ describe('exports and jobs', () => {
     expect(job).toMatchObject({ status: 'done', result: { kind: 'movements', rows: 1 } });
     const sheet = readXlsx((await download(job.resultUrl).expect(200)).body);
     expect(sheet[0]).toEqual(['Date', 'Produit', 'SKU', 'Variante', 'Type', 'Quantité', 'Avant', 'Après', 'Motif', 'Note', 'Référence', 'Par']);
-    expect(sheet[1]!.slice(1)).toEqual(['Miel', 'MIEL', '', 'adjustment_out', '-4', '10', '6', 'breakage', 'Pot cassé', '', 'Test User']);
+    expect(Number(sheet[1]![0])).toBeGreaterThan(46000); // UX-058: a real date cell (Excel serial), not ISO text
+    expect(sheet[1]!.slice(1)).toEqual(['Miel', 'MIEL', '', 'AJUST. −', '-4', '10', '6', 'Casse', 'Pot cassé', '', 'Test User']); // UX-058: screen labels
 
     // list: Admin+ (reports.read); filters kind / status; other workspaces never listed
     expect((await operator.get('/jobs').expect(403)).body.error.code).toBe('FORBIDDEN');

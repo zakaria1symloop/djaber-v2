@@ -4,6 +4,8 @@
 import request from 'supertest';
 import sharp from 'sharp';
 import { algiersDay, algiersDayEnd, algiersDayStart } from '../../src/core/time/algiers';
+import { exportDateTime } from '../../src/modules/jobs/export-cells';
+import { parseCsv } from '../../src/modules/jobs/table-file';
 import { asAdmin, asOperator, asOwner } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
 import { eventually } from '../support/m1';
@@ -206,6 +208,10 @@ describe('09 §4 regression: period selection ↔ table ↔ KPIs', () => {
     const link = new URL(done.resultUrl);
     const file = await request(app.http()).get(`${link.pathname}${link.search}&dl=caisse.csv`).expect(200);
     expect(file.headers['content-disposition']).toBe(`attachment; filename="caisse.csv"; filename*=UTF-8''caisse.csv`);
+    // UX-058: Algiers wall-clock date « dd/mm/yyyy hh:mm » and the screen labels (Type « Apport », Mode « Espèces »)
+    const lines = parseCsv(String(file.text ?? file.body));
+    expect(lines[1]).toEqual([exportDateTime(row.body.data.date)!.text, 'Apport ouverture', '', 'Apport', 'Espèces', '1000', expect.any(String), '', expect.any(String)]);
+    expect(lines[1]![0]).toMatch(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
     await request(app.http()).get(`${link.pathname}${link.search.replace(/sig=[^&]+/, 'sig=nope')}`).expect(404);
     await request(app.http()).get(`${link.pathname}${link.search.replace(/exp=\d+/, 'exp=1')}`).expect(404);
     const op = await asOperator(app, owner.workspaceId);

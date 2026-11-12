@@ -12,6 +12,7 @@ import { can } from '../../core/rbac/permission-matrix';
 import { checkTransition } from '../orders/order-rules';
 import { clientRefOf, stateOf } from '../orders/order.presenter';
 import { SafetyService } from '../messaging/safety.service';
+import { exportDateTime, exportLabel } from '../jobs/export-cells';
 import { ExportService } from '../jobs/export.service';
 import { PROVIDER_NAMES, type CourierProvider } from './adapters/courier-adapter';
 import { isNoMovement, isReturnPending, parseShipmentError, shipmentActions, errorCodeOf } from './shipment.presenter';
@@ -59,13 +60,13 @@ export class DeliveryOverviewService implements OnModuleInit {
         { header: h.stopdesk, value: (r: R) => (r.isStopdesk ? 1 : 0) },
         { header: h.courier, value: (r: R) => r.shipment?.courierAccount?.displayName ?? (r.shipment ? PROVIDER_NAMES[r.shipment.provider as CourierProvider] ?? r.shipment.provider : '') },
         { header: h.tracking, value: (r: R) => r.shipment?.trackingNumber ?? '' },
-        { header: h.status, value: (r: R) => r.shipment?.status ?? 'not_sent' },
+        { header: h.status, value: (r: R) => exportLabel(locale, ['enum.Shipment.status', 'enum.Order.deliveryStatus'], r.shipment?.status ?? 'not_sent') },
         { header: h.attempts, value: (r: R) => r.shipment?.deliveryAttempts ?? 0 },
-        { header: h.failure, value: (r: R) => r.shipment?.failureReason ?? '' },
+        { header: h.failure, value: (r: R) => exportLabel(locale, 'enum.Shipment.failureReason', r.shipment?.failureReason) },
         { header: h.cod, value: (r: R) => r.shipment?.codAmount ?? r.remaining },
         { header: h.total, value: (r: R) => r.total },
-        { header: h.sentAt, value: (r: R) => (r.shipment?.createdAt ? algiersDay(new Date(r.shipment.createdAt)) : '') },
-        { header: h.lastEventAt, value: (r: R) => (r.shipment?.lastEventAt ? algiersDay(new Date(r.shipment.lastEventAt)) : '') },
+        { header: h.sentAt, value: (r: R) => exportDateTime(r.shipment?.createdAt) },
+        { header: h.lastEventAt, value: (r: R) => exportDateTime(r.shipment?.lastEventAt) },
       ],
     };
   }

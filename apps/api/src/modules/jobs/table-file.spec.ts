@@ -1,6 +1,7 @@
 // CSV / XLSX readers and writers used by imports and exports.
-import { strToU8, zipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { detectFormat, parseCsv, readTable, TableFileError, writeTable } from './table-file';
+import { exportDateTime } from './export-cells';
 import { readXlsx, writeXlsx, XLSX_MIME } from './xlsx';
 
 const BOM = String.fromCharCode(0xfeff);
@@ -97,5 +98,31 @@ describe('XLSX', () => {
     ]);
     expect(mime).toBe(XLSX_MIME);
     expect(readTable(body, 'export.xlsx', mime)).toEqual({ format: 'xlsx', headers: ['SKU', 'Stock'], rows: [['A-1', '4'], ["'+33", '0']] });
+  });
+
+  it('UX-058: a date cell is a real Excel date (dd/mm/yyyy hh:mm, Algiers wall clock); CSV writes the same text', () => {
+    type R = { at: string; label: string };
+    const columns = [
+      { header: 'Date', value: (r: R) => exportDateTime(r.at) },
+      { header: 'Libellé', value: (r: R) => r.label },
+    ];
+    const rows = [{ at: '2026-11-11T14:38:00.000Z', label: 'Commande #CMD-1008 livrée (COD)' }];
+    const xlsx = writeTable('xlsx', 'Caisse', columns, rows).body;
+    const files = unzipSync(new Uint8Array(xlsx));
+    const sheet = strFromU8(files['xl/worksheets/sheet1.xml']!);
+    const styles = strFromU8(files['xl/styles.xml']!);
+    expect(sheet).toMatch(/<c r="A2" s="1"><v>46337\.65\d*<\/v><\/c>/);
+    expect(sheet).toContain('<cols><col min="1" max="1" width="17" customWidth="1"/></cols><sheetData>');
+    expect(styles).toContain('<numFmt numFmtId="164" formatCode="dd/mm/yyyy hh:mm"/>');
+    expect(styles).toMatch(/<cellXfs count="3">.*numFmtId="164"[^>]*applyNumberFormat="1".*numFmtId="165"/);
+    expect(strFromU8(files['xl/_rels/workbook.xml.rels']!)).toContain('Target="styles.xml"');
+    expect(strFromU8(files['[Content_Types].xml']!)).toContain('PartName="/xl/styles.xml"');
+    // still readable by the import reader (the serial number as text)
+    expect(readXlsx(xlsx)[1]![0]).toMatch(/^46337\.65/);
+
+    const csv = writeTable('csv', 'Caisse', columns, rows).body.toString('utf8');
+    expect(csv).toBe(`${BOM}Date,Libellé\r\n11/11/2026 15:38,Commande #CMD-1008 livrée (COD)\r\n`);
+    // no date column ⇒ no <cols>
+    expect(strFromU8(unzipSync(new Uint8Array(writeXlsx('S', [['a']])))['xl/worksheets/sheet1.xml']!)).not.toContain('<cols>');
   });
 });

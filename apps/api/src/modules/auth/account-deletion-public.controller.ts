@@ -1,5 +1,5 @@
 // PUB-06 / FL-22 1b / 06 §12 — public account deletion (`/account/deletion`): e-mail link (24 h, single use), confirmation,
-// cancel, export during the grace (UX-047). Every route is public; the request is rate limited 3 / h / IP (api-contract §1.9) and always answers the same.
+// cancel, export during the grace (UX-047). Every route is public; the request is rate limited 3 / h / IP (api-contract §1.9), sends at most one e-mail per address per 24 h and none while a link is valid (UX-061, in the service), and always answers the same.
 import { Body, Controller, Get, HttpCode, Param, Post, Req } from '@nestjs/common';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';

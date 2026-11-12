@@ -1,6 +1,6 @@
 // Tabular files in and out: CSV / XLSX parser for imports, CSV / XLSX writer for exports (06 §7).
 // Generic on purpose: products now, orders / clients / reports in later milestones.
-import { readXlsx, writeXlsx, XLSX_MIME, type Cell } from './xlsx';
+import { isDateCell, readXlsx, writeXlsx, XLSX_MIME, type Cell } from './xlsx';
 
 export type TableFormat = 'csv' | 'xlsx';
 export type ParsedTable = { format: TableFormat; headers: string[]; rows: string[][] };
@@ -84,7 +84,8 @@ const safe = (v: Cell): Cell => (typeof v === 'string' && /^[=+\-@\t\r]/.test(v)
 
 const csvCell = (v: Cell) => {
   if (v === null || v === undefined) return '';
-  const s = String(safe(v));
+  // UX-058: a date is written as the Algiers wall-clock text (« 11/11/2026 15:38 »)
+  const s = isDateCell(v) ? v.text : String(safe(v));
   return /[",;\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 

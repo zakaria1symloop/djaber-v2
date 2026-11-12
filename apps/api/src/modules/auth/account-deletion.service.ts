@@ -9,6 +9,7 @@ import { ConfigService } from '../../core/config/config.service';
 import { CryptoService } from '../../core/crypto/crypto.service';
 import { AppException, notFound } from '../../core/errors/app.exception';
 import { MailOutbox } from '../../core/mail/mail.outbox';
+import { RedisService } from '../../core/redis/redis.provider';
 import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { DataExportService } from './data-export.service';
 import { ReauthService } from './reauth.service';
@@ -20,6 +21,22 @@ const DAY = 86_400_000;
 const LINK_TTL_MS = DAY;
 type BlockedReason = 'ACCOUNT_OWNS_WORKSPACE' | 'WORKSPACE_HAS_DEBT';
 const OPEN = ['pending_confirmation', 'grace', 'blocked'] as const;
+/** UX-061 (12/11): one public deletion e-mail per address per 24 h, on top of 3 / h / IP on the route. */
+export const LINK_MAIL_COOLDOWN_S = 24 * 3600;
+export const deletionMailCooldownKey = (userId: string) => `cooldown:account-deletion:${userId}`;
+/** UX-061: every answer of `POST /account-deletion/request` takes at least this long (sent or not, known address or not). */
+const PUBLIC_REQUEST_FLOOR_MS = 400;
+
+/**
+ * 04 §16 — what a public request does with the open request of the account: `grace` ⇒ nothing (already scheduled);
+ * `pending` ⇒ nothing, the confirmation link of the previous e-mail stays the valid one (`ACCOUNT_DELETION_PENDING`,
+ * answered with the neutral 200 of the page); `send` ⇒ a new link (no open request, a blocked one, or an expired link).
+ */
+export const publicLinkOutcome = (open: Pick<AccountDeletionRequest, 'status' | 'requestedAt' | 'tokenHash'> | null, now: Date): 'send' | 'pending' | 'grace' => {
+  if (open?.status === 'grace') return 'grace';
+  if (open?.status === 'pending_confirmation' && open.tokenHash && now.getTime() - open.requestedAt.getTime() <= LINK_TTL_MS) return 'pending';
+  return 'send';
+};
 
 export const toDeletionDto = (r: AccountDeletionRequest, exportUrl: string | null = null) => ({
   id: r.id,
@@ -38,6 +55,8 @@ export const maskEmail = (email: string) => {
 @Injectable()
 export class AccountDeletionService {
   private readonly log = new Logger(AccountDeletionService.name);
+  /** Minimum duration of a public request answer (UX-061); lowered in unit tests. */
+  requestFloorMs = PUBLIC_REQUEST_FLOOR_MS;
   constructor(
     private readonly reauth: ReauthService,
     private readonly sessions: SessionService,
@@ -48,6 +67,7 @@ export class AccountDeletionService {
     private readonly config: ConfigService,
     private readonly admins: AdminNotifier,
     private readonly exports: DataExportService,
+    private readonly redis: RedisService,
   ) {}
 
   private web(path: string) {
@@ -178,28 +198,51 @@ export class AccountDeletionService {
   /**
    * `POST /account-deletion/request { email }` — always the same answer (no account enumeration); a known, active account
    * without a running grace gets a single-use confirmation link (24 h). The rate limit (3 / h / IP) is on the route.
+   * UX-061 (12/11, 04 §16): a request while a link is still valid sends nothing and keeps that link (`ACCOUNT_DELETION_PENDING`,
+   * answered with the same neutral 200), and an address gets at most one deletion e-mail per 24 h (Redis cooldown, like
+   * « Mot de passe oublié »). Every answer takes at least `requestFloorMs`, so its timing does not tell whether a mail left.
    */
   async publicRequest(email: string, locale: string | undefined, client: ClientInfo): Promise<{ sent: true }> {
+    const started = Date.now();
+    try {
+      await this.sendDeletionLink(email, locale, client);
+    } finally {
+      const wait = this.requestFloorMs - (Date.now() - started);
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+    return { sent: true };
+  }
+
+  private async sendDeletionLink(email: string, locale: string | undefined, client: ClientInfo): Promise<void> {
     const token = randomBytes(32).toString('base64url');
     const tokenHash = this.crypto.sha256(token);
     await TenantContext.runSystem(async () => {
       const user = await prisma.user.findFirst({ where: { email: email.toLowerCase(), deletedAt: null } });
       if (!user || user.status === 'blocked') return;
       const open = await prisma.accountDeletionRequest.findFirst({ where: { userId: user.id, status: { in: [...OPEN] } } });
-      if (open?.status === 'grace') return;
-      await prisma.$transaction(async (tx) => {
-        const now = new Date();
-        const req = open
-          ? await tx.accountDeletionRequest.update({ where: { id: open.id }, data: { status: 'pending_confirmation', source: 'public_page', tokenHash, requestedAt: now, blockedReason: null, ip: client.ip ?? null } })
-          : await tx.accountDeletionRequest.create({ data: { userId: user.id, source: 'public_page', status: 'pending_confirmation', tokenHash, requestedAt: now, ip: client.ip ?? null } });
-        await this.mail.send(
-          { to: user.email, template: 'auth/account-deletion-request', locale: locale ?? user.locale, secret: { url: this.web(`/account/deletion?token=${token}`) }, key: `account-deletion-request:${req.id}:${now.getTime()}` },
-          tx,
-        );
-      });
+      if (publicLinkOutcome(open, new Date()) !== 'send') return;
+      // at most one deletion e-mail per address per 24 h, whatever happened to the previous link (cancelled, blocked…)
+      const cooldownKey = deletionMailCooldownKey(user.id);
+      const free = await this.redis.client.set(cooldownKey, '1', 'EX', LINK_MAIL_COOLDOWN_S, 'NX');
+      if (!free) return;
+      try {
+        await prisma.$transaction(async (tx) => {
+          const now = new Date();
+          const req = open
+            ? await tx.accountDeletionRequest.update({ where: { id: open.id }, data: { status: 'pending_confirmation', source: 'public_page', tokenHash, requestedAt: now, blockedReason: null, ip: client.ip ?? null } })
+            : await tx.accountDeletionRequest.create({ data: { userId: user.id, source: 'public_page', status: 'pending_confirmation', tokenHash, requestedAt: now, ip: client.ip ?? null } });
+          await this.mail.send(
+            { to: user.email, template: 'auth/account-deletion-request', locale: locale ?? user.locale, secret: { url: this.web(`/account/deletion?token=${token}`) }, key: `account-deletion-request:${req.id}:${now.getTime()}` },
+            tx,
+          );
+        });
+      } catch (e) {
+        // nothing was sent: the address is not locked out for 24 h by a failure
+        await this.redis.client.del(cooldownKey).catch(() => undefined);
+        throw e;
+      }
       await this.audit.write({ actorType: 'user', actorId: user.id, action: 'account.deletion_link_sent', entity: 'User', entityId: user.id, ip: client.ip, userAgent: client.userAgent });
     });
-    return { sent: true };
   }
 
   /** Request of a confirmation link (pending, < 24 h) or of a cancel token (grace, before `scheduledAt`); 410 otherwise. */

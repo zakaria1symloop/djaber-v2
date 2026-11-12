@@ -268,7 +268,7 @@ One scenario per rule; IDs `AT-<area>-nn`. Columns: scenario (Given / When / The
 | AT-PUB-01 | Pricing page lists `Plan.isActive && visibleOnPricing` only (Agence hidden), yearly toggle shows −17 %, FAQ, CTA → sign-up with 14 d trial (`/signup?plan=&cycle=` shows the plan note; after onboarding the shell offers "Voir ce plan" once); visitors' "Contact" links are `mailto:` the support mailbox | PUB-02, D60 | E |
 | AT-PUB-02 | Legal page `?lang=ar` without AR version ⇒ FR content + banner "non disponible en العربية"; unpublished slug ⇒ 404; admin signed preview link works 24 h; version history shows v3 → v4 diff | PUB-03 | E |
 | AT-PUB-03 | Meta data-deletion status: unknown code ⇒ 404 INTROUVABLE; pending ⇒ EN COURS with date; done ⇒ TERMINÉ listing anonymised items | PUB-05, MSG-08 | I/E |
-| AT-PUB-04 | Public deletion page: unknown e-mail ⇒ same "si un compte existe…" (timing ±50 ms); 4th request in an hour from one IP ⇒ `RATE_LIMITED` with the same neutral text; expired link ⇒ `ACCOUNT_DELETION_TOKEN_EXPIRED` page | PUB-06, DEL-01, FL-22 F-1/F-2 | I/E |
+| AT-PUB-04 | Public deletion page: unknown e-mail ⇒ same "si un compte existe…" (timing ±50 ms); 4th request in an hour from one IP ⇒ `RATE_LIMITED` with the same neutral text; a second request for the same address (any IP) while its link is valid ⇒ same answer, no new e-mail, the first link still works; one deletion e-mail per address per 24 h (UX-061); expired link ⇒ `ACCOUNT_DELETION_TOKEN_EXPIRED` page | PUB-06, DEL-01, FL-22 F-1/F-2 | I/E |
 | AT-PUB-05 | Public tracking page `/s/:code` shows the mapped timeline only (no phone), "Signaler ce vendeur" creates `Report(reporterKind=end_customer)` | PUB-08, SAFE-09 | I/E |
 
 ### Billing, packs, promo, plans, dunning

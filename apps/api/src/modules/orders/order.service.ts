@@ -19,6 +19,7 @@ import { ClientService } from '../clients/client.service';
 import { feeExplanation, FeeService, quoteFee } from '../delivery/fee.service';
 import { GeoService } from '../delivery/geo.service';
 import { stopdeskLabels, stopdeskText } from '../delivery/stopdesk-names';
+import { exportDateTime, exportLabel } from '../jobs/export-cells';
 import { ExportService } from '../jobs/export.service';
 import { contextOf, type ConversationContext } from '../messaging/messaging.presenter';
 import { SafetyService } from '../messaging/safety.service';
@@ -563,11 +564,11 @@ export class OrderService implements OnModuleInit {
     }
     const standard = [
       { header: h.number, value: (r: R) => r.number },
-      { header: h.date, value: (r: R) => algiersDay(r.orderedAt) },
+      { header: h.date, value: (r: R) => exportDateTime(r.orderedAt) },
       // creation time (PV 22/10: « la date et l'heure de chaque commande »)
       { header: h.time, value: (r: R) => algiersTime(r.orderedAt) },
       { header: h.channel, value: (r: R) => r.channel?.name ?? '' },
-      { header: h.source, value: (r: R) => r.source },
+      { header: h.source, value: (r: R) => exportLabel(locale, 'enum.Order.source', r.source) },
       { header: h.client, value: (r: R) => r.clientName },
       { header: h.phone, value: (r: R) => r.clientPhone },
       { header: h.wilaya, value: wilaya },
@@ -580,11 +581,11 @@ export class OrderService implements OnModuleInit {
       { header: h.total, value: (r: R) => r.total },
       { header: h.paid, value: (r: R) => r.amountPaid },
       { header: h.remaining, value: (r: R) => Math.max(0, r.total - r.amountPaid) },
-      { header: h.paymentMethod, value: (r: R) => r.paymentMethod },
-      { header: h.status, value: (r: R) => r.status },
-      { header: h.confirmation, value: (r: R) => r.confirmationStatus },
-      { header: h.delivery, value: (r: R) => r.deliveryStatus },
-      { header: h.courier, value: (r: R) => r.shipments[0]?.provider ?? '' },
+      { header: h.paymentMethod, value: (r: R) => exportLabel(locale, 'enum.Order.paymentMethod', r.paymentMethod) },
+      { header: h.status, value: (r: R) => exportLabel(locale, 'enum.Order.status', r.status) },
+      { header: h.confirmation, value: (r: R) => exportLabel(locale, 'enum.Order.confirmationStatus', r.confirmationStatus, { attempts: r.callAttempts, time: '' }) },
+      { header: h.delivery, value: (r: R) => exportLabel(locale, ['enum.Order.deliveryStatus', 'enum.Shipment.status'], r.deliveryStatus) },
+      { header: h.courier, value: (r: R) => exportLabel(locale, 'couriers.provider', r.shipments[0]?.provider) },
       { header: h.tracking, value: (r: R) => r.shipments[0]?.trackingNumber ?? '' },
     ];
     if (q.format === 'pdf') {

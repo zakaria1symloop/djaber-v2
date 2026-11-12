@@ -595,6 +595,8 @@ describe('AUTH-07 account deletion request', () => {
     expect(back.body.data.user).toMatchObject({ status: 'deletion_scheduled', deletionScheduledAt: res.body.data.scheduledAt });
     const again = withToken(app, back.body.data.accessToken);
     expect((await again.post('/me/deletion-request', { password: PASSWORD }).expect(409)).body.error.code).toBe('ACCOUNT_DELETION_PENDING');
+    // UX-061: the refused second request sends no second e-mail
+    expect(await mailsTo(app, email, 'auth/account-deletion-confirm')).toHaveLength(1);
     expect((await again.delete('/me/deletion-request').expect(200)).body.data.status).toBe('cancelled');
     expect((await again.get('/me').expect(200)).body.data).toMatchObject({ status: 'active', deletionScheduledAt: null, memberships: [] });
     await again.delete('/me/deletion-request').expect(404);

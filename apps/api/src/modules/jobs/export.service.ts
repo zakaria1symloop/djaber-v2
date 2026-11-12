@@ -8,7 +8,9 @@ import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { StorageService } from '../../core/storage/storage.service';
 import { money, renderGdsDocument } from '../gds/gds-document.pdf';
 import { JobService } from './job.service';
+import { exportDateTime } from './export-cells';
 import { writeTable, type TableColumn, type TableFormat } from './table-file';
+import { isDateCell } from './xlsx';
 import { logoBytes } from '../uploads/logo-bytes';
 
 export type ExportTable<T = any> = {
@@ -31,7 +33,8 @@ const EXPORT_TTL_MS = 7 * 24 * 3600 * 1000;
 const pdfCell = (v: unknown, kind?: TableColumn<unknown>['kind']) => {
   if (v === null || v === undefined || v === '') return '';
   if (typeof v === 'number') return kind === 'money' ? money(v) : v.toLocaleString('fr-FR').replace(/\s/g, ' ');
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (isDateCell(v)) return v.text;
+  if (v instanceof Date) return exportDateTime(v)?.text ?? '';
   return String(v);
 };
 

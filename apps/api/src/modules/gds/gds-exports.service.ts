@@ -3,12 +3,12 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import type { PurchaseListItemView, PurchasesQuery, SaleListItemView, SalesQuery } from '@djaber/shared';
 import { algiersDay } from '../../core/time/algiers';
+import { exportDate, exportDateTime, exportLabel } from '../jobs/export-cells';
 import { ExportService } from '../jobs/export.service';
 import { PurchaseService } from './purchase.service';
 import { SaleService } from './sale.service';
 
 const MAX_ROWS = 50_000;
-const day = (iso: string | null | undefined) => (iso ? algiersDay(new Date(iso)) : '');
 
 @Injectable()
 export class GdsExportsService implements OnModuleInit {
@@ -33,15 +33,15 @@ export class GdsExportsService implements OnModuleInit {
       rows,
       columns: [
         { header: h.number, value: (r: R) => r.number },
-        { header: h.date, value: (r: R) => day(r.purchasedAt) },
+        { header: h.date, value: (r: R) => exportDateTime(r.purchasedAt) },
         { header: h.supplier, value: (r: R) => r.supplier?.name ?? '' },
-        { header: h.status, value: (r: R) => r.status },
+        { header: h.status, value: (r: R) => exportLabel(locale, 'enum.Purchase.status', r.status) },
         { header: h.items, value: (r: R) => r.itemCount },
         { header: h.total, value: (r: R) => r.total },
         { header: h.paid, value: (r: R) => r.amountPaid },
         { header: h.remaining, value: (r: R) => r.remaining },
-        { header: h.payment, value: (r: R) => r.paymentStatus },
-        { header: h.expected, value: (r: R) => day(r.expectedAt) },
+        { header: h.payment, value: (r: R) => exportLabel(locale, 'enum.Purchase.paymentStatus', r.paymentStatus) },
+        { header: h.expected, value: (r: R) => exportDate(r.expectedAt) },
       ],
     };
   }
@@ -56,16 +56,16 @@ export class GdsExportsService implements OnModuleInit {
       rows,
       columns: [
         { header: h.number, value: (r: R) => r.number },
-        { header: h.date, value: (r: R) => day(r.soldAt) },
+        { header: h.date, value: (r: R) => exportDateTime(r.soldAt) },
         { header: h.client, value: (r: R) => r.client?.name ?? r.customerName ?? '' },
         { header: h.phone, value: (r: R) => r.client?.phone ?? '' },
-        { header: h.status, value: (r: R) => r.status },
+        { header: h.status, value: (r: R) => exportLabel(locale, 'enum.Sale.status', r.status) },
         { header: h.items, value: (r: R) => r.items.map((i) => `${i.name}${i.variant ? ` · ${i.variant}` : ''} × ${i.qty}`).join(' ; ') },
         { header: h.total, value: (r: R) => r.total },
         { header: h.paid, value: (r: R) => r.amountPaid },
         { header: h.remaining, value: (r: R) => r.remaining },
-        { header: h.payment, value: (r: R) => r.paymentStatus },
-        { header: h.method, value: (r: R) => r.paymentMethod },
+        { header: h.payment, value: (r: R) => exportLabel(locale, 'enum.Sale.paymentStatus', r.paymentStatus) },
+        { header: h.method, value: (r: R) => exportLabel(locale, ['sales.method', 'orders.payment.method'], r.paymentMethod) },
         { header: h.seller, value: (r: R) => (r.seller ? `${r.seller.firstName} ${r.seller.lastName}`.trim() : '') },
       ],
     };

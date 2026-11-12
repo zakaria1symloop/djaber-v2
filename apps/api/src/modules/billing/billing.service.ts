@@ -6,8 +6,9 @@ import { prisma, Prisma, TenantContext, type BillingPayment } from '@djaber/db';
 import { AuditService } from '../../core/audit/audit.service';
 import { AppException } from '../../core/errors/app.exception';
 import { I18nService } from '../../core/i18n/i18n.service';
-import { algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
+import { algiersDay, algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
 import { CreditService } from '../credits/credit.service';
+import { exportDateTime } from '../jobs/export-cells';
 import { ExportService } from '../jobs/export.service';
 import { InvoiceService } from './invoice.service';
 import { PaymentService } from './payment.service';
@@ -119,9 +120,9 @@ export class BillingService implements OnModuleInit {
     type Row = (typeof rows)[number];
     return {
       sheetName: t('billingDoc.ledger.sheet'),
-      fileName: `credits-${new Date().toISOString().slice(0, 10)}`,
+      fileName: `credits-${algiersDay()}`,
       columns: [
-        { header: t('billingDoc.date'), value: (r: Row) => r.createdAt.toISOString().replace('T', ' ').slice(0, 19) },
+        { header: t('billingDoc.date'), value: (r: Row) => exportDateTime(r.createdAt) },
         { header: t('billingDoc.ledger.action'), value: (r: Row) => t(`enum.CreditLedger.action.${r.action}`) },
         { header: t('billingDoc.ledger.bucket'), value: (r: Row) => t(`billingDoc.ledger.bucket.${r.bucket}`) },
         { header: t('billingDoc.ledger.credits'), value: (r: Row) => r.credits, kind: 'number' as const },
