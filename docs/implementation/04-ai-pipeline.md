@@ -151,9 +151,10 @@ Scope: orders of `conversation.clientId` with `status ∈ new|confirmed|preparin
 
 ```json
 { "name": "lookup_order", "aliases": ["get_order_status"], "parameters": { "type": "object", "properties": { "orderNumber": { "type": "string" }, "phone": { "type": "string" }, "trackingNumber": { "type": "string" } } },
-  "returns": { "orders": [ { "number": "", "status": "shipped", "deliveryStatus": "in_transit", "courier": "zrexpress", "trackingNumber": "", "trackingUrl": "{PUBLIC_WEB_URL}/s/{publicTrackingToken}", "lastEvent": { "at": "", "label": "", "location": "" }, "total": 0, "orderedAt": "" } ] } }
+  "returns": { "orders": [ { "number": "", "status": "shipped", "deliveryStatus": "in_transit", "courier": "zrexpress", "trackingNumber": "", "trackingUrl": "{PUBLIC_WEB_URL}/s/{publicTrackingToken}", "lastEvent": { "at": "2026-11-11 15:05 (Algeria time)", "label": "out for delivery", "location": "" }, "total": 0, "orderedAt": "2026-11-11 00:38 (Algeria time)" } ] } }
 ```
 This client's orders not in `delivered|cancelled|returned` older than 30 d; empty ⇒ model says so (AI-13).
+`lastEvent.label` = the courier's own sentence of a courier event (`source ∈ webhook|poll`) when it is not its status code, else the plain words of the mapped shipment status (`in transit`, `out for delivery`, `delivery attempt failed`, …), else `null`: the courier's raw status code and the notes of manual / system events never reach the model (weak-points audit 12/11).
 
 ```json
 { "name": "handoff_to_human", "description": "Escalate to the merchant team, only when one of the HANDOFF rules applies (reason = that rule id; reason=other only for a « Shop rules » item). Never for a question you cannot answer (status=UNKNOWN) or a stock problem (offer what is available).",
@@ -170,8 +171,10 @@ Calling it is equivalent to `status=HANDOFF`; the processor treats either as FL-
 Creates/increments `AgentFaqCandidate(agentId, normalizedQuestion, count, lastConversationId)`; surfaced as "SUGGÉRÉ PAR L'IA (n clients l'ont demandé)" in the wizard and as insight `unknown_topic` when `count ≥ 3`.
 
 ```json
-{ "name": "create_payment_link", "enabledWhen": "workspace.onlinePaymentEnabled && flag online_payment", "parameters": { "type": "object", "required": ["orderId"], "properties": { "orderId": { "type": "string" } } }, "returns": { "ok": true, "url": "", "expiresAt": "" } }
+{ "name": "create_payment_link", "enabledWhen": "workspace.onlinePaymentEnabled && flag online_payment", "parameters": { "type": "object", "required": ["orderId"], "properties": { "orderId": { "type": "string" } } }, "returns": { "ok": true, "url": "", "expiresAt": "2026-11-11 15:58 (Algeria time)" } }
 ```
+
+**Dates in tool results** (weak-points audit 12/11): every date the model receives is the Africa/Algiers wall clock `YYYY-MM-DD HH:mm (Algeria time)` (`aiDateTime`, `core/time/algiers.ts`) — `lookup_order` `orderedAt` / `lastEvent.at`, `cancel_order` candidates `orderedAt`, `create_payment_link` `expiresAt` — never a UTC ISO value (the model could tell a customer a time one hour off, or the wrong day between 00:00 and 01:00). The prompt sections carry no date.
 
 Tool availability per run: `search_products`, `get_product`, `quote_delivery`, `lookup_order`, `add_faq_candidate`, `handoff_to_human` always; `create_order`, `cancel_order` always (order-taking always on, D23); `create_payment_link` conditional. Playground (§8) swaps `create_order`/`cancel_order`/`create_payment_link` for dry-run implementations.
 

@@ -2,6 +2,7 @@
 // `cancel_order` of 04-ai-pipeline §4.2 run through the orders service (OrderEffects inside one transaction).
 import { Injectable } from '@nestjs/common';
 import { prisma } from '@djaber/db';
+import { aiDateTime } from '../../core/time/algiers';
 import type { CancellableOrder, CreateOrderRequest, OrderToolContext, OrderTools, ToolResult } from '../ai/tools/order-tools';
 import { OrderWorkflowService } from './order-workflow.service';
 import { OrderService } from './order.service';
@@ -25,7 +26,7 @@ export class OrderToolsService implements OrderTools {
     const old = await prisma.order.findFirst({ where: { id: req.replaces.id }, select: { id: true, number: true, total: true, status: true, orderedAt: true, clientId: true } });
     if (old?.status === 'cancelled') return { ...r, replaced: { number: old.number } };
     if (!old) return { ...r, replaced: null };
-    const cancelled = await this.workflow.cancelFromAi({ ...ctx, clientId: old.clientId }, { id: old.id, number: old.number, total: old.total, status: old.status, orderedAt: old.orderedAt.toISOString() }, `remplacée par ${String(r.number)}`);
+    const cancelled = await this.workflow.cancelFromAi({ ...ctx, clientId: old.clientId }, { id: old.id, number: old.number, total: old.total, status: old.status, orderedAt: aiDateTime(old.orderedAt) }, `remplacée par ${String(r.number)}`);
     return { ...r, replaced: cancelled.ok === true ? { number: old.number } : null, ...(cancelled.ok === true ? {} : { hint: 'handoff' }) };
   }
 

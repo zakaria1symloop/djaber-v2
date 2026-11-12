@@ -16,6 +16,15 @@ export const algiersDayEnd = (day: string): Date => new Date(Date.parse(`${day}T
 /** `HH:mm` of an instant in Africa/Algiers. */
 export const algiersTime = (at: Date): string => new Date(at.getTime() + OFFSET_MS).toISOString().slice(11, 16);
 
+/** `YYYY-MM-DD HH:mm` wall clock of an instant in Africa/Algiers. */
+export const algiersStamp = (at: Date): string => `${algiersDay(at)} ${algiersTime(at)}`;
+
+/**
+ * A date as the AI model receives it in tool results (04-ai-pipeline §4.2): Algiers wall clock, labelled, never UTC ISO — a
+ * UTC value let the model tell a customer an hour off, or the wrong day between 00:00 and 01:00.
+ */
+export const aiDateTime = (at: Date): string => `${algiersStamp(at)} (Algeria time)`;
+
 /** Hour (0–23) and weekday (0 = Sunday) of an instant in Africa/Algiers. */
 export const algiersClock = (at: Date) => {
   const local = new Date(at.getTime() + OFFSET_MS);

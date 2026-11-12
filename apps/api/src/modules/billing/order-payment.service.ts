@@ -18,6 +18,7 @@ import { AppException, notFound } from '../../core/errors/app.exception';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { QueueOutbox } from '../../core/queue/queue.outbox';
 import { TenantResolver } from '../../core/tenancy/tenant.resolver';
+import { aiDateTime } from '../../core/time/algiers';
 import { OrderEffects } from '../orders/order-effects.service';
 import { isTerminal } from '../orders/order-rules';
 import { OrderService } from '../orders/order.service';
@@ -246,7 +247,7 @@ export class OrderPaymentService implements OnModuleInit {
     if (!order) return { ok: false, error: { code: 'ORDER_NOT_FOUND' } };
     if (ctx.dryRun) return { ok: true, simulated: true, url: 'https://pay.chargily.net/test/checkout/simulated', amount: order.total - order.amountPaid, minutes: PAYMENT_LINK_MINUTES };
     const open = await prisma.orderPayment.findFirst({ where: { orderId: order.id, status: 'pending', checkoutUrl: { not: null }, expiresAt: { gt: new Date() } }, orderBy: { createdAt: 'desc' } });
-    if (open) return { ok: true, orderNumber: order.number, url: open.checkoutUrl, amount: open.amount, expiresAt: open.expiresAt!.toISOString(), minutes: PAYMENT_LINK_MINUTES };
+    if (open) return { ok: true, orderNumber: order.number, url: open.checkoutUrl, amount: open.amount, expiresAt: aiDateTime(open.expiresAt!), minutes: PAYMENT_LINK_MINUTES };
     let p: OrderPayment;
     try {
       p = await prisma.$transaction(async (db) => (await this.open(db as Tx, order.id, { send: false, source: 'ai', createdBy: null })).payment);
@@ -255,13 +256,14 @@ export class OrderPaymentService implements OnModuleInit {
       throw e;
     }
     try {
+      // the payment page is the customer's: shop language, not the member's screen language (07 §4 Language source)
       const created = await this.checkout(p, order.number, TenantContext.get().locale);
       await prisma.orderPayment.update({ where: { id: p.id }, data: { checkoutUrl: created.url, providerRef: created.checkoutId, expiresAt: created.expiresAt } });
       await prisma.$transaction(async (db) => {
         const o = await (db as Tx).order.update({ where: { id: order.id }, data: { version: { increment: 1 } } });
         await this.effects.emitUpdated(db as Tx, o, ['paymentLink']);
       });
-      return { ok: true, orderNumber: order.number, url: created.url, amount: p.amount, expiresAt: created.expiresAt.toISOString(), minutes: PAYMENT_LINK_MINUTES };
+      return { ok: true, orderNumber: order.number, url: created.url, amount: p.amount, expiresAt: aiDateTime(created.expiresAt), minutes: PAYMENT_LINK_MINUTES };
     } catch (e) {
       await prisma.$transaction(async (db) => {
         await (db as Tx).orderPayment.update({ where: { id: p.id }, data: { status: 'failed' } });

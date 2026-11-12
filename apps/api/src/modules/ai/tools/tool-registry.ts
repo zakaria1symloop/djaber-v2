@@ -12,6 +12,7 @@ import { stockWord } from '../prompt/sections/catalogue';
 import type { AiToolDef } from '../provider/ai.gateway';
 import { ORDER_TOOLS, PAYMENT_LINK_TOOL, type CancellableOrder, type CreateOrderRequest, type OrderTools, type PaymentLinkTool, type ToolResult } from './order-tools';
 import { ConfigService } from '../../../core/config/config.service';
+import { aiDateTime } from '../../../core/time/algiers';
 import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
 import { fold, WILAYA_ALIASES } from './wilaya-aliases';
@@ -31,6 +32,30 @@ export type ToolRunContext = {
   customerText?: string;
   /** unclear turns in a row before this one */
   unclearStreak?: number;
+};
+
+/** Plain status words the model may relay (04-ai-pipeline §4.2) — never the courier's raw status code. */
+const SHIPMENT_STATUS_FOR_AI: Record<string, string> = {
+  pending: 'being handed to the courier',
+  sent: 'registered with the courier, waiting for pick-up',
+  picked_up: 'picked up by the courier',
+  in_transit: 'in transit',
+  out_for_delivery: 'out for delivery',
+  delivered: 'delivered',
+  failed: 'delivery attempt failed',
+  returned: 'returned to the shop',
+  cancelled: 'shipment cancelled',
+  stale: 'no recent update from the courier',
+};
+
+/**
+ * `lookup_order` `lastEvent.label`: the courier's own sentence when a courier event carries one that is not its status
+ * code, else the plain words of the mapped status, else null. Staff notes (manual / system events) and raw courier codes
+ * never reach the model, so never a customer.
+ */
+export const shipmentEventLabel = (e: { rawStatus: string; mappedStatus: string | null; description: string | null; source: string }): string | null => {
+  const courierText = (e.source === 'webhook' || e.source === 'poll') && e.description?.trim() && e.description.trim() !== e.rawStatus.trim() ? e.description.trim() : null;
+  return courierText ?? (e.mappedStatus ? (SHIPMENT_STATUS_FOR_AI[e.mappedStatus] ?? null) : null);
 };
 
 const ALIASES: Record<string, ToolName> = { get_shipping_fee: 'quote_delivery', get_order_status: 'lookup_order' };
@@ -333,9 +358,9 @@ export class ToolRegistry {
           courier: s ? s.provider : null,
           trackingNumber: s?.trackingNumber ?? null,
           trackingUrl: s?.publicTrackingToken ? `${web}/s/${s.publicTrackingToken}` : null,
-          lastEvent: e ? { at: e.at.toISOString(), label: e.description ?? e.rawStatus, location: e.location ?? null } : null,
+          lastEvent: e ? { at: aiDateTime(e.at), label: shipmentEventLabel(e), location: e.location ?? null } : null,
           ...(mine ? { total: o.total } : {}),
-          orderedAt: o.orderedAt.toISOString(),
+          orderedAt: aiDateTime(o.orderedAt),
         };
       }),
     };
@@ -451,7 +476,7 @@ export class ToolRegistry {
     const number = typeof args.orderNumber === 'string' && args.orderNumber.trim() ? args.orderNumber.trim().toLowerCase() : null;
     // A8 (tester report 2026-10-20): only orders the shop has not confirmed yet; a confirmed one is the team's to cancel
     const open = await prisma.order.findMany({ where: { clientId: ctx.clientId, status: 'new', deliveryStatus: 'not_sent' }, orderBy: { orderedAt: 'desc' }, take: 10 });
-    const candidates: CancellableOrder[] = open.map((o) => ({ id: o.id, number: o.number, total: o.total, status: o.status, orderedAt: o.orderedAt.toISOString() }));
+    const candidates: CancellableOrder[] = open.map((o) => ({ id: o.id, number: o.number, total: o.total, status: o.status, orderedAt: aiDateTime(o.orderedAt) }));
     const publicList = candidates.map(({ id: _id, ...c }) => c);
     const confirmed = await prisma.order.findFirst({ where: { clientId: ctx.clientId, status: { in: ['confirmed', 'preparing'] }, deliveryStatus: 'not_sent', ...(number ? { number: { equals: number, mode: 'insensitive' } } : {}) }, select: { number: true } });
     if (confirmed && (!candidates.length || (number && !candidates.some((c) => c.number.toLowerCase() === number)))) return { ok: false, error: { code: 'ORDER_CONFIRMED_BY_SELLER', number: confirmed.number }, hint: 'handoff' };

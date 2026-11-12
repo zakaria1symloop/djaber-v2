@@ -32,6 +32,7 @@ export type CreateOrderRequest = {
   /** A9: the customer's order (still `new`) this one replaces — created first, then that one is cancelled */
   replaces?: { id: string; number: string } | null;
 };
+/** `orderedAt`: Algiers wall clock for the model (`aiDateTime`), never UTC ISO. */
 export type CancellableOrder = { id: string; number: string; total: number; status: string; orderedAt: string };
 export type ToolResult = Record<string, unknown>;
 
