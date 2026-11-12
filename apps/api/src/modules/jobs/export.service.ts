@@ -12,6 +12,7 @@ import { exportDateTime } from './export-cells';
 import { writeTable, type TableColumn, type TableFormat } from './table-file';
 import { isDateCell } from './xlsx';
 import { logoBytes } from '../uploads/logo-bytes';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 
 export type ExportTable<T = any> = {
   sheetName: string;
@@ -58,11 +59,11 @@ export class ExportService implements OnModuleInit {
 
   /** `202 { jobId }` — the file is produced by the worker. `label` = initial `Job.result` (kept on retry). */
   async request(kind: ExportKind, filters: Record<string, unknown>, format: ExportFormat = 'xlsx', label?: Record<string, unknown>) {
-    const t = TenantContext.get();
     const job = await this.jobs.create({
       kind: 'export',
       name: 'export',
-      payload: { kind, filters, format, locale: t.locale, ...(label ? { label } : {}) },
+      // the file is read by the member who asked for it: their page language (weak-points audit 12/11, language source)
+      payload: { kind, filters, format, locale: viewerLocale(), ...(label ? { label } : {}) },
       expiresAt: new Date(Date.now() + EXPORT_TTL_MS),
       ...(label ? { result: label } : {}),
     });
@@ -102,7 +103,7 @@ export class ExportService implements OnModuleInit {
       if (!source) throw new AppException('REPORT_EXPORT_FAILED');
       const t = TenantContext.get();
       const format: ExportFormat = p.format === 'csv' || p.format === 'pdf' ? p.format : 'xlsx';
-      const locale = p.locale ?? t.locale;
+      const locale = p.locale ?? viewerLocale();
       const table = await source(p.filters ?? {}, { locale, jobId, format });
       if (await this.jobs.isCancelled(jobId)) return;
       const file = await this.render(table, format, locale);
