@@ -5,6 +5,7 @@
 //  2. a small rule-based "brain" (dev UI, evals): keywords of the last customer message decide the tool call or the
 //     answer, tool results are turned into the final structured output. It validates the plumbing, not model quality.
 import { createHash } from 'node:crypto';
+import { HANDOFF_REFUSED_MARK } from '../handoff-judge';
 import { detectLanguage, type AiLanguage } from '../language';
 import {
   AiProviderError,
@@ -22,7 +23,7 @@ import {
 } from './ai.gateway';
 
 export type FakeStep =
-  | { reply: string; status?: 'OK' | 'UNCLEAR' | 'UNKNOWN' | 'HANDOFF'; statusDetail?: string; intent?: string; productCards?: string[]; recommendations?: { sourceId: string; recommendedId: string }[]; confidence?: number; language?: string; customer?: Record<string, string> }
+  | { reply: string; status?: 'OK' | 'UNCLEAR' | 'UNKNOWN' | 'HANDOFF'; statusDetail?: string; evidence?: string; intent?: string; productCards?: string[]; recommendations?: { sourceId: string; recommendedId: string }[]; confidence?: number; language?: string; customer?: Record<string, string> }
   | { object: unknown }
   | { text: string }
   | { toolCalls: { name: string; args: Record<string, unknown>; id?: string }[] }
@@ -223,6 +224,7 @@ export class FakeAiGateway implements AiGateway {
               reply: step.reply,
               status: step.status ?? 'OK',
               ...(step.statusDetail ? { statusDetail: step.statusDetail } : {}),
+              ...(step.evidence ? { evidence: step.evidence } : {}),
               intent: step.intent ?? 'INFO',
               productCards: step.productCards ?? [],
               recommendations: step.recommendations ?? [],
@@ -363,6 +365,8 @@ export class FakeAiGateway implements AiGateway {
     const lang: AiLanguage = (said ? detectLanguage(said) : undefined) ?? fromPrompt;
     const t = T[lang];
     const out = (reply: string, o: Partial<Extract<FakeStep, { reply: string }>> = {}): FakeStep => ({ reply, language: lang, ...o });
+    // retest 12/11: the platform refused the handoff of the previous answer (handoff-judge) — answer the customer instead
+    if (user.startsWith(HANDOFF_REFUSED_MARK)) return { reply: T[fromPrompt].greeting!, language: fromPrompt, intent: 'OTHER' };
     const tools = new Set((req.tools ?? []).map((x) => x.name));
     const last = req.messages[req.messages.length - 1]!;
 
@@ -388,12 +392,13 @@ export class FakeAiGateway implements AiGateway {
           if (r.ok && r.cancelled) return out(fill(t.cancelled!, { number: r.cancelled.number }), { intent: 'OTHER' });
           const c = (r.candidates ?? []) as { number: string }[];
           if (r.ok && c.length) return out(fill(t.whichCancel!, { list: c.map((x) => x.number).join(', ') }), { intent: 'OTHER' });
-          return out(t.handoff!, { status: 'HANDOFF', statusDetail: 'customer_request', intent: 'COMPLAINT' });
+          return out(t.handoff!, { status: 'HANDOFF', statusDetail: 'customer_request', evidence: said, intent: 'COMPLAINT' });
         }
         case 'create_order':
           return r.ok ? out(fill(t.ordered!, { number: r.number, total: r.total }), { intent: 'SALE' }) : out(t.handoff!, { status: 'HANDOFF', statusDetail: String(r.hint ?? r.error?.code ?? 'other'), intent: 'SALE' });
         case 'handoff_to_human':
-          return out(t.handoff!, { status: 'HANDOFF', statusDetail: 'customer_request', intent: 'COMPLAINT' });
+          // retest 12/11: a handoff the platform refused (HANDOFF_NOT_NEEDED) ⇒ the model answers instead
+          return r.ok === false ? out(t.greeting!, { intent: 'OTHER' }) : out(t.handoff!, { status: 'HANDOFF', statusDetail: 'customer_request', evidence: said, intent: 'COMPLAINT' });
         default:
           return out(t.greeting!, { intent: 'OTHER' });
       }
@@ -412,11 +417,11 @@ export class FakeAiGateway implements AiGateway {
       }
       return out(t.photoUnsure!, { intent: 'INFO', confidence: 0.5 });
     }
-    if (RX.refund.test(said)) return out(t.handoff!, { status: 'HANDOFF', statusDetail: 'refund', intent: 'COMPLAINT' });
-    if (RX.anger.test(said)) return out(t.handoff!, { status: 'HANDOFF', statusDetail: 'angry', intent: 'COMPLAINT' });
-    if (RX.human.test(said)) return out(t.handoff!, { status: 'HANDOFF', statusDetail: 'customer_request', intent: 'OTHER' });
+    if (RX.refund.test(said)) return out(t.handoff!, { status: 'HANDOFF', statusDetail: 'refund', evidence: said, intent: 'COMPLAINT' });
+    if (RX.anger.test(said)) return out(t.handoff!, { status: 'HANDOFF', statusDetail: 'angry', evidence: said, intent: 'COMPLAINT' });
+    if (RX.human.test(said)) return out(t.handoff!, { status: 'HANDOFF', statusDetail: 'customer_request', evidence: said, intent: 'OTHER' });
     const keyword = /HANDOFF_KEYWORDS: (.+)/.exec(req.system)?.[1]?.split(',').map((k) => k.trim().toLowerCase()).filter(Boolean) ?? [];
-    if (keyword.some((k) => said.toLowerCase().includes(k))) return out(t.handoff!, { status: 'HANDOFF', statusDetail: 'keyword', intent: 'OTHER' });
+    if (keyword.some((k) => said.toLowerCase().includes(k))) return out(t.handoff!, { status: 'HANDOFF', statusDetail: 'keyword', evidence: said, intent: 'OTHER' });
     if (RX.cancel.test(said) && tools.has('cancel_order')) return { toolCalls: [{ name: 'cancel_order', args: { customerConfirmed: false } }] };
     if (RX.tracking.test(said) && tools.has('lookup_order')) return { toolCalls: [{ name: 'lookup_order', args: {} }] };
     if (RX.confirm.test(said) && tools.has('create_order')) {

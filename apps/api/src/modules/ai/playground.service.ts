@@ -160,7 +160,8 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       const result = await this.runs.turn({
         runId: run.id,
         prompt,
-        toolCtx: { workspaceId: agent.workspaceId, agent, conversationId: null, clientId: null, channelId: null, runId: run.id, dryRun: true },
+        // retest 12/11: the same handoff check as the live replies (handoff-judge)
+        toolCtx: { workspaceId: agent.workspaceId, agent, conversationId: null, clientId: null, channelId: null, runId: run.id, dryRun: true, customerText: said },
         temperature: turnCtx.temperature,
         maxTokens: turnCtx.maxTokens,
         deadline: Date.now() + RUN_BUDGET_MS,

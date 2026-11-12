@@ -71,15 +71,17 @@ export const handoffSection = (c: PromptContext): string => {
   const handoffText = (c.workspace.systemMessages.handoff?.[systemLocale(c.lang, c.locale)] ?? c.workspace.systemMessages.handoff?.fr ?? '').trim();
   return [
     'HANDOFF TO A HUMAN',
-    'Hand the conversation to the team when one of these rules applies:',
+    'Hand the conversation to the team when the customer\'s CURRENT message itself matches one of these rules:',
     ...lines,
+    // retest 12/11 (« transfers for no reason, even after a hello; once confused it keeps doing it »): checked by the platform
+    'Never hand off for a greeting, a photo, a message from earlier in the conversation, or a question you cannot answer. Put in "evidence" (handoff_to_human: the evidence argument) the customer\'s exact words from their current message that match the rule: the platform refuses a handoff without them and you must then answer the customer yourself.',
     ...(keywords.length ? [`HANDOFF_KEYWORDS: ${keywords.join(', ')}`] : []),
     ...(custom ? [`Shop rules:\n${custom}`] : []),
     ...(c.unclearStreak >= UNCLEAR_STREAK_HANDOFF - 1 ? [`UNCLEAR_STREAK=${c.unclearStreak}: if this message is unclear too, hand off (unclear_streak).`] : []),
     handoffText
-      ? `Instruction: status=HANDOFF with statusDetail=<rule id> (or call handoff_to_human). The shop's HANDOFF_MESSAGE is sent automatically right after your reply: do not announce the handoff yourself (no « je vous passe un conseiller », « a team member will contact you »); "reply" only answers what else the customer asked, or stays empty — when they only asked for a human, "reply" is empty.
+      ? `Instruction: status=HANDOFF with statusDetail=<rule id> and evidence=<the customer's words> (or call handoff_to_human). The shop's HANDOFF_MESSAGE is sent automatically right after your reply: do not announce the handoff yourself (no « je vous passe un conseiller », « a team member will contact you »); "reply" only answers what else the customer asked, or stays empty — when they only asked for a human, "reply" is empty.
 HANDOFF_MESSAGE: "${handoffText}"`
-      : 'Instruction: status=HANDOFF with statusDetail=<rule id> (or call handoff_to_human). Tell the customer briefly that a team member will follow up; do not promise a delay.',
+      : 'Instruction: status=HANDOFF with statusDetail=<rule id> and evidence=<the customer\'s words> (or call handoff_to_human). Tell the customer briefly that a team member will follow up; do not promise a delay.',
     'status=UNKNOWN when you have no answer but no rule applies: say briefly that you will check with the team (call add_faq_candidate with the question) and keep helping with the rest — the conversation stays with you. status=UNCLEAR when you did not understand: say so politely in the customer language and ask them to rephrase.',
   ].join('\n');
 };

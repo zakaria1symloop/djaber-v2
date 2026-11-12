@@ -18,6 +18,7 @@ import { AI_GATEWAY, AiProviderError, type AiGateway, type AiMessage, type AiToo
 import { RoutingService, type RoutedModel } from './routing.service';
 import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
+import { handoffRefusedInstruction, judgeHandoff, type HandoffRefusal } from './handoff-judge';
 
 export type ExecutedTool = { callId: string; name: string; args: Record<string, unknown>; result: unknown; simulated: boolean; replayed: boolean };
 export type TurnRequest = {
@@ -33,7 +34,7 @@ export type TurnRequest = {
 };
 type TurnBase = { tools: ExecutedTool[]; usage: AiUsage; model: RoutedModel | null; usedFallback: boolean };
 export type TurnResult =
-  | (TurnBase & { ok: true; output: AiReplyOutput; model: RoutedModel; forcedHandoff: string | null; repaired: boolean; salvaged?: boolean })
+  | (TurnBase & { ok: true; output: AiReplyOutput; model: RoutedModel; forcedHandoff: string | null; repaired: boolean; salvaged?: boolean; /** retest 12/11: a handoff of the model was refused by the server this turn (handoff-judge) */ handoffRefused?: HandoffRefusal })
   | (TurnBase & { ok: false; kind: 'provider' | 'format'; error: string });
 export type RunMeta = { language?: string; toolNames?: string[]; cardsSent?: number; handoff?: boolean; costUsd?: number; plannedCost?: number; vision?: Record<string, unknown>; sessionId?: string; turn?: unknown; evalFlag?: unknown; scenario?: string };
 
@@ -140,6 +141,8 @@ export class AiRunService implements OnModuleInit {
     let firstAnswer = '';
     let forcedHandoff: string | null = null;
     let toolRounds = 0;
+    let handoffAsked = false;
+    let handoffRefused: HandoffRefusal | undefined;
     for (let step = 0; step < MAX_STEPS + 1; step++) {
       const left = req.deadline - Date.now();
       if (left <= 0) return { ok: false, kind: 'provider', error: 'timeout', tools: executed, usage, model, usedFallback };
@@ -176,7 +179,27 @@ export class AiRunService implements OnModuleInit {
         continue;
       }
       const parsed = parseReplyOutput(res.value.text);
-      if (parsed.ok) return { ok: true, output: parsed.value, tools: executed, usage, model, usedFallback, forcedHandoff, repaired };
+      if (parsed.ok) {
+        // retest 12/11: `status = HANDOFF` is checked like the tool (handoff-judge) — the customer's words of this turn must
+        // ask for it. Refused ⇒ the model is told why and answers (once); insisting with a reply ⇒ that reply is sent and the
+        // conversation stays with the AI; insisting with nothing to send ⇒ the handoff goes through (silence would be worse)
+        const out = parsed.value;
+        const ctx = req.toolCtx;
+        const verdict = out.status === 'HANDOFF' && !forcedHandoff && ctx.customerText !== undefined ? judgeHandoff({ reason: out.statusDetail, evidence: out.evidence, customerText: ctx.customerText, shopRules: ctx.agent.humanHandoffRules, keywords: ctx.agent.handoffKeywords, unclearStreak: ctx.unclearStreak }) : null;
+        if (verdict && !verdict.ok) {
+          handoffRefused = verdict.why;
+          if (!handoffAsked && step < MAX_STEPS) {
+            handoffAsked = true;
+            messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: handoffRefusedInstruction(verdict.why) });
+            continue;
+          }
+          if (out.reply.trim()) {
+            const { statusDetail: _dropped, evidence: _evidence, ...kept } = out;
+            return { ok: true, output: { ...kept, status: 'OK' }, tools: executed, usage, model, usedFallback, forcedHandoff, repaired, handoffRefused };
+          }
+        }
+        return { ok: true, output: out, tools: executed, usage, model, usedFallback, forcedHandoff, repaired, ...(handoffRefused ? { handoffRefused } : {}) };
+      }
       if (repaired) {
         // tester report 26/10: the first answer, when it is a plain message to the customer, is sent rather than the
         // conversation handed to the team in silence (F-6 only when there is nothing to send)

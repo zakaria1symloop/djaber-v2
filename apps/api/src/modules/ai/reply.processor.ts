@@ -29,7 +29,7 @@ import { META_GATEWAY, type MetaGateway } from '../meta/meta.gateway';
 import { AdminNotifier } from '../notifications/admin-notifier.service';
 import { NotificationProducer } from '../notifications/notification.producer';
 import { CrossSellService } from '../recommendations/cross-sell.service';
-import { AI_ERROR_ALERT_FAILURES, AI_ERROR_ALERT_WINDOW_S, LAST_PRODUCTS_MAX, MEDIA_WAIT_MS, MEDIA_WAIT_STEP_MS, NEW_VISIT_AFTER_MS, NEW_VISIT_NOTE, plannedCost, RUN_BUDGET_MS, UNCLEAR_STREAK_HANDOFF } from './ai.constants';
+import { AI_ERROR_ALERT_FAILURES, AI_ERROR_ALERT_WINDOW_S, LAST_PRODUCTS_MAX, MEDIA_WAIT_MS, MEDIA_WAIT_STEP_MS, NEW_VISIT_AFTER_MS, NEW_VISIT_NOTE, plannedCost, RESUMED_NOTE, RUN_BUDGET_MS, UNCLEAR_STREAK_HANDOFF } from './ai.constants';
 import { AiRunService, intentOf, type RunMeta, type TurnResult } from './ai-run.service';
 import { CatalogueService } from './catalogue.service';
 import { InsightService } from './insight.service';
@@ -129,16 +129,24 @@ export class ReplyProcessor implements OnModuleInit {
     return { messages, text: lines.join('\n'), plain: plain.join('\n'), hasAudio, images };
   }
 
-  /** The earlier messages (oldest first); a customer message after a long pause carries the NEW_VISIT note. */
-  private async history(conv: Conversation, before: Date): Promise<{ messages: HistoryMessage[]; newVisit: boolean }> {
+  /**
+   * The earlier messages (oldest first); a customer message after a long pause carries the NEW_VISIT note, the first one
+   * after the team gave the thread back (`context.resumedAt`, retest 12/11) the RESUMED note — `resumed`: the batch itself
+   * is the first customer message after it.
+   */
+  private async history(conv: Conversation, before: Date): Promise<{ messages: HistoryMessage[]; newVisit: boolean; resumed: boolean }> {
     const rows = (await prisma.message.findMany({ where: { conversationId: conv.id, createdAt: { lt: before }, type: { not: 'system' }, author: { in: ['customer', 'ai', 'human'] } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 30, include: { authorUser: { select: { firstName: true } } } })).reverse();
     const gap = (i: number) => i > 0 && rows[i]!.createdAt.getTime() - rows[i - 1]!.createdAt.getTime() > NEW_VISIT_AFTER_MS;
+    const stamp = contextOf(conv).resumedAt;
+    const resumedAt = stamp ? new Date(stamp).getTime() : null;
+    const backAt = resumedAt === null ? -1 : rows.findIndex((m) => m.author === 'customer' && m.createdAt.getTime() >= resumedAt);
     const messages = rows.map((m, i) => {
       const text = [m.text?.trim() ?? '', m.transcript ? `[voice note transcript]: ${m.transcript}` : '', ...attachmentsOf(m).filter((a) => a.type === 'image').map(() => '[image]'), m.type === 'product_cards' ? `[product cards: ${CARD_NAMES(m)}]` : ''].filter(Boolean).join('\n');
-      return { author: m.author as HistoryMessage['author'], humanName: m.authorUser?.firstName ?? null, text: m.author === 'customer' && text && gap(i) ? `${NEW_VISIT_NOTE}\n${text}` : text };
+      const note = m.author !== 'customer' || !text ? null : i === backAt ? RESUMED_NOTE : gap(i) ? NEW_VISIT_NOTE : null;
+      return { author: m.author as HistoryMessage['author'], humanName: m.authorUser?.firstName ?? null, text: note ? `${note}\n${text}` : text };
     });
     const last = rows[rows.length - 1];
-    return { messages, newVisit: !!last && before.getTime() - last.createdAt.getTime() > NEW_VISIT_AFTER_MS };
+    return { messages, newVisit: !!last && before.getTime() - last.createdAt.getTime() > NEW_VISIT_AFTER_MS, resumed: resumedAt !== null && resumedAt <= before.getTime() && backAt < 0 };
   }
 
   // --- the job -----------------------------------------------------------------------------------------------------------------
@@ -268,13 +276,15 @@ export class ReplyProcessor implements OnModuleInit {
     const matchedIds = Object.values(notes).flatMap((n) => (n.kind === 'match' ? [n.productId] : []));
     const turnCtx = await this.context.load(agent, { text: batch.plain, lastProductIds: [...matchedIds, ...(ctx.lastProductIds ?? [])], lang, unclearStreak: ctx.unclearStreak ?? 0, clientId: conv.clientId, customer: ctx.customer });
     const history = await this.history(conv, batch.messages[0]!.createdAt);
-    const prompt = PromptBuilder.build(turnCtx.prompt, history.messages, history.newVisit ? `${NEW_VISIT_NOTE}\n${batchText}` : batchText, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });
+    const lead = history.resumed ? RESUMED_NOTE : history.newVisit ? NEW_VISIT_NOTE : null;
+    const prompt = PromptBuilder.build(turnCtx.prompt, history.messages, lead ? `${lead}\n${batchText}` : batchText, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });
 
     // --- model loop ------------------------------------------------------------------------------------------------------------
     const turn = await this.runs.turn({
       runId: run.id,
       prompt,
-      toolCtx: { workspaceId: conv.workspaceId, agent, conversationId: conv.id, clientId: conv.clientId, channelId: conv.channelId, runId: run.id, dryRun: false },
+      // retest 12/11: a handoff is checked against the customer's words of this batch (handoff-judge)
+      toolCtx: { workspaceId: conv.workspaceId, agent, conversationId: conv.id, clientId: conv.clientId, channelId: conv.channelId, runId: run.id, dryRun: false, customerText: batch.plain, unclearStreak: ctx.unclearStreak ?? 0 },
       temperature: turnCtx.temperature,
       maxTokens: turnCtx.maxTokens,
       deadline,
@@ -380,7 +390,7 @@ export class ReplyProcessor implements OnModuleInit {
       // the run is closed first: a second execution of the same batch stops here and stores nothing
       const closed = await this.runs.finish(
         run.id,
-        { status, turn, intent: intentOf(out.intent), confidence: out.confidence, startedAt: run.startedAt, flags: [...(blocked ? ['blocked_word'] : []), ...(turn.salvaged ? ['format_salvaged'] : [])], meta: { language: out.language ?? o.lang, cardsSent: cards.length, handoff: status === 'handoff' } },
+        { status, turn, intent: intentOf(out.intent), confidence: out.confidence, startedAt: run.startedAt, flags: [...(blocked ? ['blocked_word'] : []), ...(turn.salvaged ? ['format_salvaged'] : []), ...(turn.handoffRefused ? ['handoff_refused'] : [])], meta: { language: out.language ?? o.lang, cardsSent: cards.length, handoff: status === 'handoff' } },
         tx,
       );
       if (!closed) return 'noop';

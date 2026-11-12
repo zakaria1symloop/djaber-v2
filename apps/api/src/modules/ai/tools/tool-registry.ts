@@ -15,9 +15,23 @@ import { ConfigService } from '../../../core/config/config.service';
 import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
 import { fold, WILAYA_ALIASES } from './wilaya-aliases';
+import { handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
 
 export type ToolName = 'search_products' | 'get_product' | 'quote_delivery' | 'create_order' | 'cancel_order' | 'lookup_order' | 'handoff_to_human' | 'add_faq_candidate' | 'create_payment_link';
-export type ToolRunContext = { workspaceId: string; agent: Agent; conversationId: string | null; clientId: string | null; channelId: string | null; runId: string; callId: string; dryRun: boolean };
+export type ToolRunContext = {
+  workspaceId: string;
+  agent: Agent;
+  conversationId: string | null;
+  clientId: string | null;
+  channelId: string | null;
+  runId: string;
+  callId: string;
+  dryRun: boolean;
+  /** retest 12/11: the customer's words of the message(s) being answered — a handoff is checked against them (handoff-judge) */
+  customerText?: string;
+  /** unclear turns in a row before this one */
+  unclearStreak?: number;
+};
 
 const ALIASES: Record<string, ToolName> = { get_shipping_fee: 'quote_delivery', get_order_status: 'lookup_order' };
 export const canonicalTool = (name: string): string => ALIASES[name] ?? name;
@@ -80,8 +94,8 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
   },
   handoff_to_human: {
     name: 'handoff_to_human',
-    description: 'Escalate to the merchant team, only when one of the HANDOFF rules applies (reason = that rule id; reason=other only for a « Shop rules » item). Never for a question you cannot answer (status=UNKNOWN) or a stock problem (offer what is available).',
-    parameters: { type: 'object', required: ['reason'], additionalProperties: false, properties: { reason: { enum: [...HANDOFF_REASONS] }, detail: { type: 'string', maxLength: 200 } } },
+    description: "Escalate to the merchant team, only when the customer's CURRENT message matches one of the HANDOFF rules (reason = that rule id; reason=other only for a « Shop rules » item). evidence = the customer's exact words from that message. Never for a greeting, a photo, an earlier message, a question you cannot answer (status=UNKNOWN) or a stock problem (offer what is available).",
+    parameters: { type: 'object', required: ['reason', 'evidence'], additionalProperties: false, properties: { reason: { enum: [...HANDOFF_REASONS] }, evidence: { type: 'string', maxLength: 300, description: "the customer's exact words, from their current message, that match the rule" }, detail: { type: 'string', maxLength: 200 } } },
   },
   add_faq_candidate: {
     name: 'add_faq_candidate',
@@ -188,21 +202,24 @@ export class ToolRegistry {
   }
 
   /**
-   * Retest 11/11 (Badro: « the AI sometimes sends the discussion to a team member for no reason »): the 2 handoffs « other »
-   * of the day were a product question it had no answer to and an ORDER_INSUFFICIENT_STOCK — both cases the prompt says to
-   * keep. A handoff whose reason is no rule (« other », or unknown) is refused when the shop wrote no rule of its own
-   * (« Shop rules » are the only use of « other »): the model gets the instruction back and answers in the same turn.
+   * Retest 11/11 (Badro: « the AI sometimes sends the discussion to a team member for no reason »): a handoff whose reason is
+   * no rule (« other », or unknown) is refused when the shop wrote no rule of its own. Retest 12/11 (« even after a hello;
+   * once confused it keeps doing it »): with the customer's words of the turn known (`customerText`, every reply run), the
+   * handoff is checked by `judgeHandoff` — the evidence must be the customer's words of the current message. Refused ⇒
+   * `HANDOFF_NOT_NEEDED` with the instruction: the model answers in the same turn.
    */
   private handoff(args: Record<string, unknown>, ctx: ToolRunContext): ToolResult {
     const reason = typeof args.reason === 'string' ? args.reason : '';
+    const refuse = (instruction: string, why?: string) => ({ ok: false, error: { code: 'HANDOFF_NOT_NEEDED', ...(why ? { why } : {}) }, instruction }) as ToolResult;
+    if (ctx.customerText !== undefined) {
+      const v = judgeHandoff({ reason, evidence: typeof args.evidence === 'string' ? args.evidence : null, customerText: ctx.customerText, shopRules: ctx.agent.humanHandoffRules, keywords: ctx.agent.handoffKeywords, unclearStreak: ctx.unclearStreak });
+      return v.ok ? { ok: true } : refuse(handoffRefusedInstruction(v.why), v.why);
+    }
     const known = (HANDOFF_REASONS as readonly string[]).includes(reason) && reason !== 'other';
     if (known || (ctx.agent.humanHandoffRules ?? '').trim()) return { ok: true };
-    return {
-      ok: false,
-      error: { code: 'HANDOFF_NOT_NEEDED' },
-      instruction:
-        'No handoff rule applies: keep the conversation and answer now. A question you have no answer to ⇒ status=UNKNOWN, call add_faq_candidate and say briefly you will check with the team. A stock problem (ORDER_INSUFFICIENT_STOCK, out of stock) ⇒ offer the quantity available, the other variants or a similar product. Hand off only for a listed rule (customer_request, refund, complaint, angry, unclear_streak, off_catalogue, order_limits, risky_client, keyword).',
-    } as ToolResult;
+    return refuse(
+      'No handoff rule applies: keep the conversation and answer now. A question you have no answer to ⇒ status=UNKNOWN, call add_faq_candidate and say briefly you will check with the team. A stock problem (ORDER_INSUFFICIENT_STOCK, out of stock) ⇒ offer the quantity available, the other variants or a similar product. Hand off only for a listed rule (customer_request, refund, complaint, angry, unclear_streak, off_catalogue, order_limits, risky_client, keyword).',
+    );
   }
 
   private view(p: CatalogueProduct) {

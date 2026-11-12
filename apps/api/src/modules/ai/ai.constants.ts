@@ -12,6 +12,13 @@ export const HISTORY_MESSAGES = 30;
 export const NEW_VISIT_AFTER_MS = 6 * 3_600_000;
 export const NEW_VISIT_NOTE =
   '[NEW VISIT: the customer writes again after a long pause. The messages above are an earlier visit: answer this new message for itself — do not resume, recap or continue the earlier product, order or question unless the customer refers to it. Keep only what you know of them (name, phone, address) for a new order.]';
+/**
+ * Retest 12/11 (« once confused in a chat it keeps behaving abnormally »): when the team gives a handed-off thread back to
+ * the AI (a member's « Reprendre », or the automatic return of ConversationService.resumeAfterHandoff), the first
+ * customer message after it carries this note — the model stops re-reading the earlier trouble as its current task.
+ */
+export const RESUMED_NOTE =
+  '[BACK TO YOU: this conversation was passed to the shop team earlier and is yours again. Treat the messages above as closed: answer this message for itself, like the start of a new conversation, keeping only what you know of the customer (name, phone, address). Never hand off again because of an earlier message.]';
 /** §3.5 (D34): above this many products in scope the catalogue is retrieved instead of listed. */
 export const FULL_CATALOGUE_MAX = 60;
 export const RETRIEVAL_TOP = 30;

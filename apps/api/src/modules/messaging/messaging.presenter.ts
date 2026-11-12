@@ -34,6 +34,8 @@ export type ConversationContext = {
   lastProductIds?: string[];
   /** 3 unclear turns in a row ⇒ handoff rule */
   unclearStreak?: number;
+  /** retest 12/11: when the thread was last given back to the AI by the team — the next customer message carries the RESUMED note */
+  resumedAt?: string | null;
   /** why the AI does not answer this thread (banner "IA indisponible" / "Crédits épuisés"); cleared when it answers again */
   aiUnavailable?: 'credits' | 'quota' | 'error' | null;
   /** A4: order details the customer gave (reported by the AI turn after turn), shown to the next turns as KNOWN CUSTOMER */

@@ -231,10 +231,10 @@ export class InboundProcessor implements OnModuleInit {
    */
   private async afterInbound(channel: Channel, s: Stored, unsupportedOnly: boolean) {
     let conv = s.conversation;
-    const message = await prisma.message.findFirst({ where: { id: s.messageId }, select: { text: true, attachments: true } });
+    const message = await prisma.message.findFirst({ where: { id: s.messageId }, select: { text: true, attachments: true, createdAt: true } });
     // A3 + retest 12/11: a thread the AI handed off (its failure, or a rule while nobody of the team answered) goes back to
     // the AI with this customer message — a greeting starts a new conversation (ConversationService.resumeAfterHandoff)
-    if (!s.blocked && conv.status === 'needs_human' && (await this.conversations.resumeAfterHandoff(conv.id, message?.text ?? null))) conv = { ...conv, status: 'active', aiPaused: false };
+    if (!s.blocked && conv.status === 'needs_human' && (await this.conversations.resumeAfterHandoff(conv.id, message?.text ?? null, new Date(), message?.createdAt))) conv = { ...conv, status: 'active', aiPaused: false };
     if (s.blocked || conv.status === 'needs_human' || conv.aiPaused) return;
     const link = await prisma.agentChannel.findUnique({ where: { channelId: channel.id }, include: { agent: { select: { id: true, status: true, deletedAt: true, responseDelaySec: true, imageRecognition: true, voiceTranscription: true } } } });
     if (!link || link.agent.status !== 'active' || link.agent.deletedAt) return;

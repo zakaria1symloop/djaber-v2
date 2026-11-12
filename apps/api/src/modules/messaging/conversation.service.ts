@@ -313,6 +313,9 @@ export class ConversationService implements OnModuleInit {
       data.aiPaused = aiPaused;
       ctx.aiPausedById = aiPaused ? (t.userId ?? null) : null;
     }
+    // retest 12/11 (« once confused it keeps behaving abnormally »): given back to the AI (« Reprendre l'IA »), the next
+    // customer message starts afresh for the model (RESUMED note in its history, unclear streak reset)
+    if ((c.status === 'needs_human' || c.aiPaused) && status !== 'needs_human' && !aiPaused) Object.assign(ctx, { resumedAt: new Date().toISOString(), unclearStreak: 0 });
     let assigned: string | null | undefined;
     if (ch.assigneeId !== undefined && ch.assigneeId !== c.assigneeId) {
       if (ch.assigneeId) {
@@ -580,7 +583,7 @@ export class ConversationService implements OnModuleInit {
    * next handoff is a new episode with its own handoff text), the unclear streak reset, the thread event « IA reprise »
    * for the team. Returns true when the AI may answer this message.
    */
-  async resumeAfterHandoff(conversationId: string, text: string | null, now = new Date()): Promise<boolean> {
+  async resumeAfterHandoff(conversationId: string, text: string | null, now = new Date(), messageAt?: Date): Promise<boolean> {
     return prisma.$transaction(async (db) => {
       const tx = db as Tx;
       const c = await tx.conversation.findFirst({ where: { id: conversationId, deletedAt: null } });
@@ -588,7 +591,7 @@ export class ConversationService implements OnModuleInit {
       const ctx = contextOf(c);
       if (!this.resumableAfterHandoff(ctx, text, now)) return false;
       if (await tx.message.count({ where: { conversationId: c.id, author: 'human', createdAt: { gt: new Date(ctx.handoffAt!) } } })) return false;
-      const context: ConversationContext = { ...ctx, handoffAt: null, handoffReason: null, handoffRemindedAt: null, handoffMessageSentAt: null, aiPausedById: null, aiUnavailable: null, unclearStreak: 0 };
+      const context: ConversationContext = { ...ctx, handoffAt: null, handoffReason: null, handoffRemindedAt: null, handoffMessageSentAt: null, aiPausedById: null, aiUnavailable: null, unclearStreak: 0, ...(ctx.handoffReason !== 'ai_error' ? { resumedAt: (messageAt ?? now).toISOString() } : {}) };
       const updated = await tx.conversation.update({ where: { id: c.id }, data: { status: 'active', aiPaused: false, version: { increment: 1 }, context: context as Prisma.InputJsonValue } });
       await this.outbound.addThreadEvent(tx, updated, 'ai_resumed', { reason: ctx.handoffReason });
       await this.emitUpdated(tx, updated);

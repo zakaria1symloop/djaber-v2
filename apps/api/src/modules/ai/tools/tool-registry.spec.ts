@@ -33,3 +33,19 @@ describe('handoff_to_human without a rule (retest 11/11, Badro « hands off for 
     expect(reg.forcedHandoff('handoff_to_human', { reason: 'other' }, shopRule)).toBe('other');
   });
 });
+
+describe('handoff_to_human checked against the customer words of the turn (retest 12/11, « even after a hello »)', () => {
+  const reg = Object.create(ToolRegistry.prototype) as ToolRegistry;
+  const ctx = (customerText: string) => ({ workspaceId: 'w', agent: { humanHandoffRules: null, handoffKeywords: [] } as never, conversationId: 'c', clientId: null, channelId: 'ch', runId: 'r', callId: 'c', dryRun: false, customerText });
+
+  it('a greeting or words that are not in the current message ⇒ refused with the reason; the quoted request ⇒ handed off', async () => {
+    const hello = await reg.execute('handoff_to_human', { reason: 'customer_request', evidence: 'salam' }, ctx('salam'));
+    expect(hello).toMatchObject({ ok: false, error: { code: 'HANDOFF_NOT_NEEDED', why: 'greeting' } });
+    expect(reg.forcedHandoff('handoff_to_human', { reason: 'customer_request' }, hello)).toBeNull();
+    const earlier = await reg.execute('handoff_to_human', { reason: 'customer_request', evidence: 'je veux un conseiller' }, ctx('et la livraison à Oran ?'));
+    expect(earlier).toMatchObject({ ok: false, error: { why: 'evidence_not_in_message' } });
+    const asked = await reg.execute('handoff_to_human', { reason: 'customer_request', evidence: 'je veux un conseiller' }, ctx('svp je veux un conseiller'));
+    expect(asked).toEqual({ ok: true });
+    expect(reg.forcedHandoff('handoff_to_human', { reason: 'customer_request' }, asked)).toBe('customer_request');
+  });
+});

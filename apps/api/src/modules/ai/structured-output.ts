@@ -9,6 +9,8 @@ export const AiReplyOutputSchema = z
     reply: z.string().max(2000),
     status: z.enum(AI_REPLY_STATUSES),
     statusDetail: z.string().max(200).optional(),
+    /** retest 12/11: status=HANDOFF — the customer's own words, from the message being answered, that match the rule (checked by the server) */
+    evidence: z.string().max(300).optional(),
     intent: z.enum(AI_REPLY_INTENTS),
     productCards: z.array(z.string()).max(5),
     /** PV 09/11: products whose every picture is sent (a gallery) — when the customer asks for more / other photos */
@@ -33,6 +35,7 @@ export const AI_REPLY_JSON_SCHEMA = {
     reply: { type: 'string', maxLength: 2000 },
     status: { enum: [...AI_REPLY_STATUSES] },
     statusDetail: { type: 'string', maxLength: 200 },
+    evidence: { type: 'string', maxLength: 300, description: "status=HANDOFF only: the customer's exact words, from their current message, that match the handoff rule" },
     intent: { enum: [...AI_REPLY_INTENTS] },
     productCards: { type: 'array', maxItems: 5, items: { type: 'string', description: 'productId' } },
     productPhotos: { type: 'array', maxItems: 2, items: { type: 'string', description: 'productId whose every photo is sent' } },
@@ -111,10 +114,12 @@ export const normalizeReplyObject = (o: Record<string, unknown>): Record<string,
   const kept = customer ? Object.fromEntries(Object.entries(CUSTOMER_MAX).flatMap(([k, max]) => (str(customer[k])?.trim() ? [[k, str(customer[k])!.trim().slice(0, max)]] : []))) : {};
   const language = str(o.language)?.trim().toLowerCase();
   const detail = str(o.statusDetail)?.trim();
+  const evidence = str(o.evidence)?.trim();
   return {
     reply: o.reply.slice(0, 2000),
     status: upper(o.status, AI_REPLY_STATUSES) ?? 'OK',
     ...(detail ? { statusDetail: detail.slice(0, 200) } : {}),
+    ...(evidence ? { evidence: evidence.slice(0, 300) } : {}),
     intent: upper(o.intent, AI_REPLY_INTENTS) ?? 'OTHER',
     productCards: ids(o.productCards).slice(0, 5),
     ...(ids(o.productPhotos).length ? { productPhotos: ids(o.productPhotos).slice(0, 2) } : {}),

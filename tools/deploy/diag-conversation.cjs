@@ -40,6 +40,9 @@ async function overview() {
   for (const [cause, n] of tally(runs.filter((r) => r.status === 'error'), (r) => `${cut(r.error, 120)}  ·  ${model(r.modelId)}`)) console.log(`${String(n).padStart(4)}  ${cause}`);
   const salvaged = runs.filter((r) => (r.flags ?? []).includes('format_salvaged')).length;
   if (salvaged) console.log(`== answers saved from a bad format (sent anyway): ${salvaged}`);
+  // retest 12/11: handoffs the platform refused (greeting, no words of the customer asking for it, earlier message…)
+  const refused = runs.filter((r) => (r.flags ?? []).includes('handoff_refused')).length;
+  console.log(`== handoffs refused by the platform (the AI answered instead): ${refused} · models: ${[...new Set(runs.map((r) => model(r.modelId)))].join(', ') || '—'}`);
   const insights = await db.agentInsight.findMany({ where: { createdAt: { gte: since }, type: { in: ['handoff', 'unknown_topic', 'error'] } }, select: { type: true, detail: true } });
   console.log('== handoff / unknown / error insights in the last 24 h');
   for (const [k, n] of tally(insights, (i) => `${i.type}  ${cut(i.detail, 80)}`)) console.log(`${String(n).padStart(4)}  ${k}`);

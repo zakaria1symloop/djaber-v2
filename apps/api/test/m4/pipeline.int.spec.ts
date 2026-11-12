@@ -438,7 +438,7 @@ describe('tools', () => {
     expect(cancel).not.toHaveBeenCalled();
     expect(ask.out.at(-1)!.text).toContain('CMD-2001');
     // confirmed ⇒ the port cancels THIS order through OrderEffects (M5); the model then hands off as scripted
-    fakeAi(app).script('reply', { toolCalls: [{ name: 'cancel_order', args: { orderNumber: 'CMD-2001', customerConfirmed: true, reason: 'changed mind' } }] }, { reply: 'Je transmets à un conseiller.', status: 'HANDOFF', statusDetail: 'customer_request', intent: 'OTHER' });
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'cancel_order', args: { orderNumber: 'CMD-2001', customerConfirmed: true, reason: 'changed mind' } }] }, { reply: 'Je transmets à un conseiller.', status: 'HANDOFF', statusDetail: 'customer_request', evidence: 'oui annulez la', intent: 'OTHER' });
     const confirm = await turn(s, sender, { text: 'oui annulez la' });
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(cancel.mock.calls[0]![1]).toMatchObject({ id: order.id, number: 'CMD-2001' });
@@ -612,7 +612,7 @@ describe('handoff, insights, safety', () => {
   it('retest 12/11: a thread the AI handed off comes back to the AI — a greeting at once, any message after 30 min of team silence; asked-for handoffs wait the delay, member replies keep it', async () => {
     const s = await shop();
     const sender = newSender();
-    fakeAi(app).script('reply', { reply: '', status: 'HANDOFF', statusDetail: 'off_catalogue', intent: 'OTHER' });
+    fakeAi(app).script('reply', { reply: '', status: 'HANDOFF', statusDetail: 'off_catalogue', evidence: 'prix de gros', intent: 'OTHER' });
     const t = await turn(s, sender, { text: 'vous faites des prix de gros ?' });
     expect(t.conversation).toMatchObject({ status: 'needs_human', aiPaused: true });
     // anything but a greeting right away stays with the team …
@@ -625,10 +625,18 @@ describe('handoff, insights, safety', () => {
     expect((back.conversation.context as any).handoffReason).toBeNull();
     expect(back.out.at(-1)).toMatchObject({ author: 'ai', text: 'Bonjour ! Comment puis-je vous aider ?' });
     expect(back.out.some((m) => (m.payload as any)?.system?.kind === 'ai_resumed')).toBe(true);
+    // the model reads the greeting as a fresh start, not the earlier trouble (RESUMED note on the message it answers)
+    expect(String((fakeAi(app).callsOf('reply').at(-1)!.messages.at(-1) as { content?: unknown }).content)).toContain('[BACK TO YOU');
+    // a handoff quoting a greeting is refused by the platform: the AI answers and keeps the thread (retest 12/11)
+    fakeAi(app).script('reply', { reply: '', status: 'HANDOFF', statusDetail: 'customer_request', evidence: 'salam', intent: 'OTHER' }, { reply: 'Je vous écoute.', intent: 'GREETING' });
+    const hello = await turn(s, sender, { text: 'salam' });
+    expect(hello.conversation).toMatchObject({ status: 'active', aiPaused: false });
+    expect(hello.runs.at(-1)).toMatchObject({ status: 'ok', flags: ['handoff_refused'] });
+    expect(hello.out.at(-1)).toMatchObject({ author: 'ai', text: 'Je vous écoute.' });
 
     // the customer asked for the team: a greeting does not undo it, 30 min without an answer does
     const asked = newSender();
-    fakeAi(app).script('reply', { reply: '', status: 'HANDOFF', statusDetail: 'customer_request', intent: 'OTHER' });
+    fakeAi(app).script('reply', { reply: '', status: 'HANDOFF', statusDetail: 'customer_request', evidence: 'parler à un conseiller', intent: 'OTHER' });
     const a = await turn(s, asked, { text: 'je veux parler à un conseiller' });
     await receive(app, s.page, asked, { text: 'bonjour' });
     expect(await replyJob(app, a.conversationId)).toBeNull();
@@ -639,7 +647,7 @@ describe('handoff, insights, safety', () => {
 
     // a member answered after the handoff: the thread stays with the team whatever the customer writes
     const kept = newSender();
-    fakeAi(app).script('reply', { reply: '', status: 'HANDOFF', statusDetail: 'off_catalogue', intent: 'OTHER' });
+    fakeAi(app).script('reply', { reply: '', status: 'HANDOFF', statusDetail: 'off_catalogue', evidence: 'prix de gros', intent: 'OTHER' });
     const k = await turn(s, kept, { text: 'prix de gros ?' });
     await reply(s.owner, k.conversationId, { text: 'Je regarde pour vous' }).expect(201);
     await receive(app, s.page, kept, { text: 'salam' });
