@@ -20,6 +20,7 @@ import { RoutingService } from '../ai/routing.service';
 import { parseJsonObject } from '../ai/structured-output';
 import { fold } from '../ai/tools/wilaya-aliases';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { CategoryService } from '../catalog/category.service';
 import { ProductImageService } from '../catalog/product-image.service';
 import { ProductService } from '../catalog/product.service';
@@ -475,7 +476,7 @@ export class PageService implements OnModuleInit {
       const fromPost = item.postId ? imported.get(item.postId) : undefined;
       const twin = (fromPost && liveIds.has(fromPost) ? live.find((p) => p.id === fromPost) : undefined) ?? live.find((p) => sameProductName(p.name, item.name));
       if (twin) {
-        out.failed.push({ index, code: 'ANALYSIS_PRODUCT_EXISTS', message: this.i18n.t(TenantContext.get().locale, 'error.ANALYSIS_PRODUCT_EXISTS', { name: twin.name }) });
+        out.failed.push({ index, code: 'ANALYSIS_PRODUCT_EXISTS', message: this.i18n.t(viewerLocale(), 'error.ANALYSIS_PRODUCT_EXISTS', { name: twin.name }) });
         continue;
       }
       // unknown category names are created ("catégories créées si nouvelles" of the CHN-08 review footer)
@@ -514,7 +515,7 @@ export class PageService implements OnModuleInit {
         if (item.postId) added[item.postId] = product.id;
       } catch (e) {
         if (!(e instanceof AppException)) throw e;
-        out.failed.push({ index, code: e.code, message: this.i18n.t(TenantContext.get().locale, `error.${e.code}`, e.params) });
+        out.failed.push({ index, code: e.code, message: this.i18n.t(viewerLocale(), `error.${e.code}`, e.params) });
       }
     }
     // the imported posts are remembered on the page's last analysis (the next analysis flags them, A1)

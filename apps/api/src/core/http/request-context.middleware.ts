@@ -1,7 +1,7 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { TenantContext, NO_LIMITS, type TenantInfo } from '@djaber/db';
-import { resolveLocale } from '../i18n/i18n.service';
+import { requestedLocale } from '../i18n/i18n.service';
 
 /**
  * First middleware of every request:
@@ -15,12 +15,14 @@ export class RequestContextMiddleware implements NestMiddleware {
     const incoming = req.headers['x-request-id'];
     req.id = typeof incoming === 'string' && /^[\w-]{8,64}$/.test(incoming) ? incoming : randomUUID();
     res.setHeader('X-Request-Id', req.id);
-    req.locale = resolveLocale(req.headers['accept-language'], req.query?.lang);
+    const requested = requestedLocale(req.headers['accept-language'], req.query?.lang);
+    req.locale = requested ?? 'fr';
     const placeholder: TenantInfo = {
       workspaceId: '',
       readOnly: false,
       locale: req.locale,
-      requestLocale: req.locale,
+      // the page's language when the client names one; otherwise screen texts fall back to the account / workspace language
+      requestLocale: requested,
       stockMode: 'simple',
       suspended: false,
       limits: NO_LIMITS,

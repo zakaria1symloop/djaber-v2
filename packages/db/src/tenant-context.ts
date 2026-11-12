@@ -23,8 +23,14 @@ export type TenantInfo = {
   hiddenSections?: string[];
   platformRole?: string;
   locale: 'fr' | 'ar' | 'en';
-  /** language of the request (`?lang` / `Accept-Language`); `locale` becomes the account's or workspace's once resolved */
+  /**
+   * `locale` is the WORKSPACE language (account language on account / platform routes). Screen texts use the viewer's
+   * language instead: `viewerLocale()` (apps/api core/i18n) = `requestLocale` ?? `userLocale` ?? `locale`.
+   */
+  /** language of the page being viewed (`?lang` / `Accept-Language`), unset when the request names no supported language */
   requestLocale?: 'fr' | 'ar' | 'en';
+  /** account language of the signed-in user (also the job creator's inside a worker job) */
+  userLocale?: 'fr' | 'ar' | 'en';
   stockMode: 'simple' | 'advanced';
   suspended: boolean;
   deletionScheduledAt?: Date | null;
@@ -72,14 +78,14 @@ export const TenantContext = {
   /** System / platform code that must read across workspaces (schedulers, admin lists, auth before a workspace is known). */
   runSystem: <T>(fn: () => T) =>
     als.run(
-      // the request's language survives the switch (admin lists show names in the language they are viewed in)
-      { workspaceId: '', readOnly: false, locale: 'fr', stockMode: 'simple', suspended: false, limits: NO_LIMITS, bypass: true, requestLocale: als.getStore()?.requestLocale },
+      // the viewer's languages survive the switch (admin lists show names in the language they are viewed in)
+      { workspaceId: '', readOnly: false, locale: 'fr', stockMode: 'simple', suspended: false, limits: NO_LIMITS, bypass: true, requestLocale: als.getStore()?.requestLocale, userLocale: als.getStore()?.userLocale },
       () => settleInside(fn),
     ),
   /** Runs `fn` scoped to one workspace (worker jobs, admin acting on a target workspace). */
   runAs: <T>(workspaceId: string, fn: () => T, extra: Partial<TenantInfo> = {}) =>
     als.run(
-      { workspaceId, readOnly: false, locale: 'fr', stockMode: 'simple', suspended: false, limits: NO_LIMITS, requestLocale: als.getStore()?.requestLocale, ...extra },
+      { workspaceId, readOnly: false, locale: 'fr', stockMode: 'simple', suspended: false, limits: NO_LIMITS, requestLocale: als.getStore()?.requestLocale, userLocale: als.getStore()?.userLocale, ...extra },
       () => settleInside(fn),
     ),
 };

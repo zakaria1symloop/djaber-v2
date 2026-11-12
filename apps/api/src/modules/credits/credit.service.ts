@@ -9,6 +9,7 @@ import { Injectable, OnModuleInit, Optional } from '@nestjs/common';
 import { CREDIT_COST, type CreditLedgerRowDto, type CreditsCalculatorDto, type CreditsDto, type CreditsUpdatedEvent, type LedgerQuery } from '@djaber/shared';
 import { prisma, Prisma, TenantContext, type CreditAction, type CreditBucket, type Tx } from '@djaber/db';
 import { page, toSkipTake, type Page } from '../../core/http/pagination';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { MetricsService } from '../../core/metrics/metrics.service';
 import { OutboxService } from '../../core/outbox/outbox.service';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
@@ -349,7 +350,7 @@ export class CreditService implements OnModuleInit {
         prisma.creditPack.findMany({ where: { isActive: true, visibleWeb: true }, orderBy: [{ credits: 'asc' }] }),
       ]),
     );
-    const locale = TenantContext.maybe()?.locale ?? 'fr';
+    const locale = viewerLocale();
     const pick = (v: unknown) => (v && typeof v === 'object' ? String((v as Record<string, string>)[locale] ?? (v as Record<string, string>).fr ?? '') : String(v ?? ''));
     const rows = plans.map((p) => ({ planId: p.id, slug: p.slug, name: pick(p.name), monthlyCredits: p.monthlyCredits, priceMonthly: p.priceMonthly, coversPct: p.monthlyCredits < 0 ? 100 : credits === 0 ? 100 : Math.min(100, Math.round((p.monthlyCredits / credits) * 1000) / 10), missingCredits: p.monthlyCredits < 0 ? 0 : Math.max(0, credits - p.monthlyCredits) }));
     let suggestion: CreditsCalculatorDto['suggestion'] = null;

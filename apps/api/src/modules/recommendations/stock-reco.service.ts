@@ -8,6 +8,7 @@ import { AppException, notFound } from '../../core/errors/app.exception';
 import { page } from '../../core/http/pagination';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { RedisService } from '../../core/redis/redis.provider';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { algiersDayStart, algiersDay } from '../../core/time/algiers';
 import { action } from '../catalog/catalog.util';
 import { thumbUrlOf } from '../catalog/product-image.util';
@@ -43,8 +44,9 @@ export class StockRecoService implements OnModuleInit {
     this.registry.register('jobs', STOCK_RECO_JOB, (data: { jobId: string }) => this.process(data.jobId));
   }
 
+  /** the cards are read in the viewer's language (an Arabic page of an English shop shows the Arabic sentences) */
   private lang(): Lang {
-    const l = TenantContext.get().locale;
+    const l = viewerLocale();
     return l === 'ar' || l === 'en' ? l : 'fr';
   }
 

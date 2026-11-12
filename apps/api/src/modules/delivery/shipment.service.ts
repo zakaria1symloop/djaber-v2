@@ -10,6 +10,7 @@ import { ConfigService } from '../../core/config/config.service';
 import { AppException, notFound } from '../../core/errors/app.exception';
 import { runBulk, type BulkCtx } from '../../core/http/bulk';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { QueueOutbox } from '../../core/queue/queue.outbox';
 import { RedisService } from '../../core/redis/redis.provider';
@@ -116,7 +117,7 @@ export class ShipmentService implements OnModuleInit {
     return ttl > 0 ? new Date(Date.now() + ttl * 1000).toISOString() : null;
   }
 
-  async view(id: string, locale: string = TenantContext.get().locale): Promise<ShipmentView> {
+  async view(id: string, locale: string = viewerLocale()): Promise<ShipmentView> {
     const s = await prisma.shipment.findFirst({ where: { id }, include: { ...SHIPMENT_INCLUDE, order: { select: SHIPMENT_ORDER_SELECT } } });
     if (!s) throw notFound();
     const index = await this.orders.safety.index();
@@ -230,7 +231,8 @@ export class ShipmentService implements OnModuleInit {
     await this.jobs.run(jobId, async (job: Job) => {
       const p = (job.payload ?? {}) as { orderIds?: string[]; courierAccountId?: string | null; weightKg?: number | null };
       const ids = p.orderIds ?? [];
-      const locale = TenantContext.get().locale;
+      // row errors are read on the job screen: the language of whoever queued it (JobService.run restores it)
+      const locale = viewerLocale();
       const actor: Actor = { type: 'user', id: job.createdById };
       const results: BulkSendRowResult[] = [];
       let i = 0;

@@ -145,6 +145,7 @@ export class TenantResolver {
         hiddenSections: membership.role === 'owner' ? [] : membership.hiddenSections,
         platformRole: u.platformRole === 'none' ? undefined : u.platformRole,
         emailVerified: !!u.emailVerifiedAt,
+        userLocale: u.locale,
       });
     });
   }
@@ -160,6 +161,7 @@ export class TenantResolver {
         readOnly: false,
         platformRole: u.platformRole === 'none' ? undefined : u.platformRole,
         locale: u.locale,
+        userLocale: u.locale,
         stockMode: 'simple' as const,
         suspended: false,
         limits: NO_LIMITS,
@@ -210,7 +212,7 @@ export class TenantResolver {
         },
       });
       return {
-        ...this.toInfo(ctx, { userId: u.id, role: 'admin' as MembershipRole, readOnly: true, platformRole: u.platformRole, emailVerified: true }),
+        ...this.toInfo(ctx, { userId: u.id, role: 'admin' as MembershipRole, readOnly: true, platformRole: u.platformRole, emailVerified: true, userLocale: u.locale }),
         suspended: false,
         impersonation: { sessionId: session.id, adminId: u.id },
       };

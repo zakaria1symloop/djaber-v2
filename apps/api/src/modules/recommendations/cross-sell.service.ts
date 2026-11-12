@@ -9,6 +9,7 @@ import { AppException, conflict, notFound, validationError } from '../../core/er
 import { page, type Page } from '../../core/http/pagination';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { RedisService } from '../../core/redis/redis.provider';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { algiersDay, algiersDayStart } from '../../core/time/algiers';
 import { action, isUnique } from '../catalog/catalog.util';
 import { thumbUrlOf } from '../catalog/product-image.util';
@@ -42,7 +43,7 @@ export class CrossSellService implements OnModuleInit {
     if (!r) return null;
     const m = /^(co_purchase|same_category|keywords)(?::(\d+))?$/.exec(r);
     if (!m) return r;
-    const l = TenantContext.get().locale;
+    const l = viewerLocale();
     const lang = l === 'ar' || l === 'en' ? l : 'fr';
     return REASONS[m[1]!]![lang].replace('{n}', m[2] ?? '');
   }

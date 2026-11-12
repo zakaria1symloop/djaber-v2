@@ -3,6 +3,7 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import { ADMIN_REASON_MIN, type AdminUserRef } from '@djaber/shared';
 import { TenantContext } from '@djaber/db';
 import { AppException, notFound } from '../../core/errors/app.exception';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 
 export type AdminActor = { userId: string; platformRole: string; ip: string | null; userAgent: string | null };
 
@@ -45,8 +46,8 @@ export const fromLocalized = (v: unknown): { fr: string; ar: string; en: string 
   const o = (v ?? {}) as Record<string, unknown>;
   return { fr: String(o.fr ?? ''), ar: String(o.ar ?? ''), en: String(o.en ?? '') };
 };
-/** Language the admin is viewed in (request `Accept-Language`), French by default. */
-export const adminLocale = (): 'fr' | 'ar' | 'en' => TenantContext.maybe()?.requestLocale ?? 'fr';
+/** Language the admin is viewed in (request `Accept-Language`, else the admin's account language), French by default. */
+export const adminLocale = (): 'fr' | 'ar' | 'en' => viewerLocale();
 /** Localized name in the admin's language, French when that translation is empty. */
 export const pickLocal = (v: unknown) => {
   const l = fromLocalized(v);

@@ -27,6 +27,7 @@ export class QuickReplyService {
   }
 
   async create(input: CreateQuickReply) {
+    // a quick reply is sent to customers: it defaults to the shop's language, not the member's screen (07 §4 Language source)
     const locale = input.locale ?? TenantContext.get().locale;
     if (await this.repo.titleExists(input.title, locale)) throw titleTaken();
     const sortOrder = (await this.repo.maxSortOrder()) + 1;

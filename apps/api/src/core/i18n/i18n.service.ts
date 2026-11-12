@@ -34,8 +34,8 @@ export class I18nService {
   }
 }
 
-/** `Accept-Language` / `?lang` → fr | ar | en (default fr). */
-export const resolveLocale = (header: unknown, query: unknown): AppLocale => {
+/** `?lang` / `Accept-Language` → fr | ar | en, undefined when neither names a supported language. */
+export const requestedLocale = (header: unknown, query: unknown): AppLocale | undefined => {
   if (isAppLocale(query)) return query;
   if (typeof header === 'string') {
     for (const part of header.split(',')) {
@@ -43,5 +43,8 @@ export const resolveLocale = (header: unknown, query: unknown): AppLocale => {
       if (isAppLocale(tag)) return tag;
     }
   }
-  return 'fr';
+  return undefined;
 };
+
+/** `Accept-Language` / `?lang` → fr | ar | en (default fr). */
+export const resolveLocale = (header: unknown, query: unknown): AppLocale => requestedLocale(header, query) ?? 'fr';

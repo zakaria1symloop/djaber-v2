@@ -9,7 +9,7 @@ One REST API serves the web app, the mobile app and API clients `[CDC §8]`.
 | Base | `/api/v1` |
 | Auth | `Authorization: Bearer <access JWT>` (users) or `X-API-Key: <key>` (API clients). Refresh `POST /auth/refresh` (cookie on web, body on mobile). |
 | Tenant | `X-Workspace-Id` (users; default owned workspace, else last used, else `400 WORKSPACE_REQUIRED`). API keys bound to one workspace. |
-| Language | `Accept-Language: fr|ar|en` (or `?lang=`) → error messages, localized fields, exports. |
+| Language | `Accept-Language: fr|ar|en` (or `?lang=`) → error messages, localized fields, exports, every text rendered for the screen; when no supported language is named, the account's then the workspace's (07 §4 « Language source »). |
 | Format | JSON, camelCase, ISO-8601 UTC, integer DZD. |
 | Success envelope | Single resource `{ data: T, meta?: { warnings?: Warning[] } }`. Every success response is wrapped this way; shorthand shapes written after `→` in §2–§12 (e.g. `→ { url }`) are the content of `data`. |
 | Pagination | Offset lists `?page&pageSize` (25/50/100, default 25) → `{ data: T[], meta: { page, pageSize, total, warnings? } }`; cursor lists (messages, notifications, inbox) `?cursor` → `{ data: T[], meta: { nextCursor, hasMore } }`. |

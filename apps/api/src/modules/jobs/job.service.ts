@@ -6,6 +6,7 @@ import { prisma, TenantContext, type Job, type JobKind, type JobStatus, type Pri
 import { AppException, notFound } from '../../core/errors/app.exception';
 import { page, toSkipTake, type Page } from '../../core/http/pagination';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { OutboxService } from '../../core/outbox/outbox.service';
 import { QueueOutbox } from '../../core/queue/queue.outbox';
 import { StorageService } from '../../core/storage/storage.service';
@@ -76,7 +77,8 @@ export class JobService {
           queue: 'jobs',
           status: 'queued',
           total: input.total ?? null,
-          payload: { ...(input.payload ?? {}), name: input.name } as Prisma.InputJsonValue,
+          // the page language of the request that queues the job: texts the job writes for the screen use it (viewerLocale)
+          payload: { ...(input.payload ?? {}), name: input.name, ...(t.requestLocale ? { viewerLocale: t.requestLocale } : {}) } as Prisma.InputJsonValue,
           expiresAt: input.expiresAt ?? null,
           ...(input.result ? { result: input.result as Prisma.InputJsonValue } : {}),
           createdById: t.userId ?? null,
@@ -118,10 +120,18 @@ export class JobService {
     const workspaceId = job.workspaceId;
     const tenant = await this.tenants.forWorker(workspaceId);
     const createdById = job.createdById;
-    const membership = createdById
-      ? await TenantContext.runSystem(() => prisma.membership.findUnique({ where: { workspaceId_userId: { workspaceId, userId: createdById } } }))
-      : null;
-    await TenantContext.run({ ...tenant, userId: createdById ?? undefined, role: membership?.role }, async () => {
+    const [membership, creator] = createdById
+      ? await TenantContext.runSystem(() =>
+          Promise.all([
+            prisma.membership.findUnique({ where: { workspaceId_userId: { workspaceId, userId: createdById } } }),
+            prisma.user.findUnique({ where: { id: createdById }, select: { locale: true } }),
+          ]),
+        )
+      : [null, null];
+    // screen texts written by the job (row errors, results) follow the person who queued it, not the shop (viewerLocale)
+    const queuedIn = (job.payload as { viewerLocale?: unknown } | null)?.viewerLocale;
+    const requestLocale = queuedIn === 'fr' || queuedIn === 'ar' || queuedIn === 'en' ? queuedIn : undefined;
+    await TenantContext.run({ ...tenant, userId: createdById ?? undefined, role: membership?.role, requestLocale, userLocale: creator?.locale }, async () => {
       const running = await this.transition(job.id, OPEN, { status: 'running' });
       if (!running) return;
       try {
@@ -226,7 +236,7 @@ export class JobService {
     }
   }
 
-  async toDto(job: Job, locale: string = TenantContext.get().locale): Promise<JobDto> {
+  async toDto(job: Job, locale: string = viewerLocale()): Promise<JobDto> {
     const err = this.parseError(job.error);
     let resultUrl: string | null = null;
     if (job.resultUploadId && (!job.expiresAt || job.expiresAt > new Date())) {

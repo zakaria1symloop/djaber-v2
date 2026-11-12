@@ -33,6 +33,7 @@ export class OrderPrintService implements OnModuleInit {
   }
 
   private lang(l: string | undefined): SlipLang {
+    // a document for the courier / end customer: the shop's language by default, never the viewer's (07 §4 Language source)
     const t = l ?? TenantContext.get().locale;
     return t === 'ar' || t === 'en' ? t : 'fr';
   }

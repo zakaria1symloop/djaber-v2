@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { ORDER_IMPORT_FIELDS, ORDER_IMPORT_MAX_ROWS, IMPORT_MAX_BYTES, type OrderImportMappingInput, type OrderImportPreviewResult, type OrderImportPreviewRow } from '@djaber/shared';
 import { prisma, TenantContext, type Job, type Prisma, type Tx } from '@djaber/db';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { StorageService } from '../../core/storage/storage.service';
 import { fold } from '../ai/tools/wilaya-aliases';
@@ -191,7 +192,7 @@ export class OrderImportService implements OnModuleInit {
       const failed: { row: number; code: string; params?: Record<string, string | number> }[] = [];
       const orderIds: string[] = [];
       const valid = preview.rows.filter((r) => r.ok);
-      const locale = TenantContext.get().locale;
+      const locale = viewerLocale();
       for (const [n, r] of valid.entries()) {
         const v = r.values;
         const sig = signature(v.phone!, v.items);

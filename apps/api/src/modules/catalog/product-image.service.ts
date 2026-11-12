@@ -214,6 +214,7 @@ export class ProductImageService implements OnModuleInit {
       const img = await this.image(data);
       if (!img || img.aiCaption) return;
       const file = await this.storage.get(img.storageKey);
+      // stored catalogue text the AI quotes to customers: the shop's language (07 §4 Language source)
       const caption = await this.captions.caption({ image: file.body, mime: file.mime, productName: img.product.name, locale: tenant.locale });
       await prisma.productImage.updateMany({ where: { id: img.id }, data: { aiCaption: caption ? caption.slice(0, 1000) : null } });
     });

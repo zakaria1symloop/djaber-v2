@@ -1,7 +1,7 @@
 // api-contract §3.5 — read models of a product (list row, variant, image) and the `Actions ⌄` descriptors.
 import type { Prisma, ProductImage, ProductVariant } from '@djaber/db';
 import { systemUnitText, type ProductImageView, type ProductListItemView, type ProductModerationPill, type VariantView } from '@djaber/shared';
-import { TenantContext } from '@djaber/db';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { action, marginPct, productStockState, stockStateOf } from './catalog.util';
 import { isProcessed, thumbUrlOf } from './product-image.util';
 
@@ -61,8 +61,8 @@ export const variantMargins = (p: { price: number; costPrice: number | null; has
   return { marginPct: Math.min(...all), marginRange: { min: Math.min(...all), max: Math.max(...all) } };
 };
 
-/** The language the request is viewed in (system units are shown in it). */
-export const viewLocale = () => TenantContext.maybe()?.requestLocale ?? TenantContext.maybe()?.locale ?? 'fr';
+/** The language the request is viewed in (system units are shown in it) — `viewerLocale`. */
+export const viewLocale = viewerLocale;
 /** A unit as shown to the merchant: a system unit in the viewer's language, a shop unit as the shop wrote it. */
 export const unitOf = (u: { id: string; abbreviation: string; isSystem: boolean; workspaceId: string | null } | null, locale = viewLocale()) =>
   u ? { id: u.id, abbreviation: (u.isSystem || !u.workspaceId ? systemUnitText(u.abbreviation, locale)?.abbreviation : null) ?? u.abbreviation } : null;
