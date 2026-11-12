@@ -34,6 +34,7 @@ import {
   type Shop,
 } from './support/m4-real';
 import { observe, openFresh, signInFresh, spendDailyRuns, toast } from './support/m4-real-channels';
+import { errText } from './support/error-text';
 
 // shared dev server: every route compiles on its first hit, so the tests get room
 test.describe.configure({ mode: 'serial', timeout: 420_000 });
@@ -121,7 +122,7 @@ test('AT-AGT-07 queue insight cards: "Ouvrir la conversation", "Ajouter aux inst
     .click({ timeout: 5_000 })
     .then(() => true)
     .catch(() => false);
-  if (clicked) await expect(page.getByText('Déjà traité. (INSIGHT_ALREADY_RESOLVED)')).toBeVisible();
+  if (clicked) await expect(page.getByText('Déjà traité.')).toBeVisible();
   await expect(card(handoff.id)).toHaveCount(0);
   await expect(column.locator('[data-insight]')).toHaveCount(0);
   expect((await insightsOf(page.request, owner, '?status=pending')).length).toBe(0);
@@ -149,7 +150,7 @@ test('AT-AGT-07 queue: an insight already resolved while the dialog is open clos
   await realPost(page.request, owner, `/agent-insights/${one!.id}/resolve`, { action: 'ignored_30d' });
   await dialog.locator('#insight-instruction').fill('Nous ne vendons pas de tablettes.');
   await dialog.getByTestId('resolve-insight-submit').click();
-  await expect(page.getByText('Déjà traité. (INSIGHT_ALREADY_RESOLVED)')).toBeVisible();
+  await expect(page.getByText('Déjà traité.')).toBeVisible();
   await expect(dialog).toHaveCount(0);
   await expect(card).toHaveCount(0);
   expect(resolves).toHaveLength(1);
@@ -212,7 +213,7 @@ test.describe('products', () => {
     // row from the rows on screen, so it falls back to the id (see report: names should be kept from the selection)
     const refused = result.getByTestId('bulk-results').locator('li[data-ok="false"]');
     await expect(refused).toContainText(new RegExp(`M4 Parfum Oud|${parfum.id}`));
-    await expect(refused).toContainText('Introuvable ou accès refusé. (NOT_FOUND)');
+    await expect(refused).toContainText('Introuvable ou accès refusé.');
     expect((bulk[1] as { agentId: string }).agentId).toBe(service.id);
     // the robe now belongs to the draft's selection (GET /products?agentId=)
     const listed = await realGet<{ id: string }[]>(page.request, owner, `/products?agentId=${service.id}&pageSize=50`);
@@ -234,7 +235,7 @@ test.describe('products', () => {
     await page.getByRole('option', { name: /Agent supprimé/ }).click();
     await realDelete(page.request, owner, `/agents/${gone.id}`);
     await dialog.getByTestId('bulk-submit').click();
-    await expect(dialog.getByRole('alert').filter({ hasText: 'NOT_FOUND' })).toHaveText('Introuvable ou accès refusé. (NOT_FOUND)');
+    await expect(dialog.getByRole('alert').filter({ hasText: errText('NOT_FOUND') })).toHaveText('Introuvable ou accès refusé.');
     await expect(dialog).toContainText('1 produit sélectionné');
     // another agent, and the same dialog goes through
     await dialog.locator('#bulk-agent').click();
@@ -341,7 +342,7 @@ test.describe('products', () => {
       // 402: inline, with the way out
       await analyse.click();
       await expect(dialog).toHaveAttribute('data-phase', 'credits', { timeout: 30_000 });
-      await expect(dialog.getByRole('alert')).toContainText('Crédits épuisés. (INSUFFICIENT_CREDITS)');
+      await expect(dialog.getByRole('alert')).toContainText('Crédits épuisés.');
       await expect(dialog.getByRole('link', { name: 'Acheter des crédits' })).toHaveAttribute('href', '/fr/settings/credits');
       await setCredits(page.request, owner, 300);
 
@@ -350,7 +351,7 @@ test.describe('products', () => {
       await analyse.click();
       await expect(dialog).toHaveAttribute('data-phase', 'provider', { timeout: 30_000 });
       await expect(dialog).toContainText('FOURNISSEUR IA');
-      await expect(dialog.getByRole('alert')).toContainText('Le fournisseur IA ne répond pas, réessayez dans un instant. (AI_PROVIDER_ERROR) · crédits non débités');
+      await expect(dialog.getByRole('alert')).toContainText('Le fournisseur IA ne répond pas, réessayez dans un instant. · crédits non débités');
       await expect(dialog.locator('img[alt="robe.png"]')).toBeVisible();
 
       // 429: 3 analyses a day (shared with page analysis and FAQ extraction) — the button is disabled and says why
@@ -359,9 +360,9 @@ test.describe('products', () => {
       await analyse.click();
       await expect(dialog).toHaveAttribute('data-phase', 'limited', { timeout: 30_000 });
       await expect(dialog).toContainText('LIMITE');
-      await expect(dialog).toContainText('3 analyses par jour max. (ANALYSIS_RATE_LIMITED) · saisissez les champs manuellement');
+      await expect(dialog).toContainText('3 analyses par jour max. · saisissez les champs manuellement');
       await expect(analyse).toBeDisabled();
-      await expect(analyse).toHaveAttribute('title', '3 analyses par jour max. (ANALYSIS_RATE_LIMITED)');
+      await expect(analyse).toHaveAttribute('title', '3 analyses par jour max.');
       expect(calls).toHaveLength(3);
 
       // the form behind the dialog kept what was typed

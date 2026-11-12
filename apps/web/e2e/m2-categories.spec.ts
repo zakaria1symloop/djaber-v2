@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test';
 import { expectNoA11yViolations } from './support/a11y';
 import { apiReady, createAccount, loginHome, type Account } from './support/m1';
 import { catalogReady, seedCategory, seedProduct, setStockMode } from './support/m2';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial' });
 let account: Account;
@@ -110,7 +111,7 @@ test('CAT-04 units: system units are read-only, a custom unit is created then de
   await piece.getByRole('button', { name: 'Actions' }).click();
   await expect(page.getByRole('menuitem', { name: 'Modifier' })).toHaveAttribute('aria-disabled', 'true');
   await expect(page.getByRole('menuitem', { name: 'Supprimer' })).toHaveAttribute('aria-disabled', 'true');
-  await expect(page.getByRole('menu')).toContainText('UNIT_SYSTEM_READONLY');
+  await expect(page.getByRole('menu')).toContainText(errText('UNIT_SYSTEM_READONLY'));
   await page.keyboard.press('Escape');
 
   // create: required fields inline, then "6 × <first system unit>"

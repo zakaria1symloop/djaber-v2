@@ -66,7 +66,7 @@ export function ResolveInsightDialog({
       onDone(insight, { action, already: false });
     } catch (e) {
       if (isAlreadyResolved(e)) {
-        toast({ tone: 'info', message: `${t('error.INSIGHT_ALREADY_RESOLVED')} (INSIGHT_ALREADY_RESOLVED)` });
+        toast({ tone: 'info', message: t('error.INSIGHT_ALREADY_RESOLVED') });
         onDone(insight, { action, already: true });
       } else if (e instanceof ApiError && Object.keys(e.body.fields).length) setFields(e.body.fields);
       else setError(errorMessage(e, t));

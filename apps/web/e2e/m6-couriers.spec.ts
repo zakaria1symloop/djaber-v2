@@ -7,6 +7,7 @@ import { apiReady, type Account } from './support/m1';
 import { signIn } from './support/m4-agents';
 import { apiCall, dialog, open, seedProduct, shopOwner } from './support/m5-orders';
 import { confirmedOrder, deliveryReady, seedCourier, sendOrder } from './support/m6';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 240_000 });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -77,7 +78,7 @@ test('AT-DLV-01 (couriers) — test states: refused credentials (COURIER_CREDENT
   await page.locator('#cr-apiToken').fill('invalid-token');
   await page.getByTestId('courier-dialog-test').click();
   await expect(d.getByTestId('courier-test')).toHaveAttribute('data-state', 'rejected', { timeout: 30_000 });
-  await expect(d.getByTestId('courier-test')).toContainText('COURIER_CREDENTIALS_INVALID');
+  await expect(d.getByTestId('courier-test')).toContainText(errText('COURIER_CREDENTIALS_INVALID'));
   // the account exists (saved before the test): the dialog stays in edit mode
   await page.getByRole('button', { name: 'Annuler' }).click();
   await expect(page.locator('[data-testid="courier-card"][data-courier="yalidine"]')).toContainText(/identifiants refusés/i);
@@ -87,7 +88,7 @@ test('AT-DLV-01 (couriers) — test states: refused credentials (COURIER_CREDENT
   await page.locator('#cr-token').fill('down-token');
   await page.getByTestId('dialog-submit').click();
   await expect(d.getByTestId('courier-test')).toHaveAttribute('data-state', 'unreachable', { timeout: 30_000 });
-  await expect(d.getByTestId('courier-test')).toContainText('COURIER_UNAVAILABLE');
+  await expect(d.getByTestId('courier-test')).toContainText(errText('COURIER_UNAVAILABLE'));
   await page.getByRole('button', { name: 'Annuler' }).click();
   await expect(page.locator('[data-testid="courier-card"][data-courier="ecotrack"]')).toBeVisible();
 });
@@ -103,7 +104,7 @@ test('AT-DLV-01 (couriers) — delete blocked while parcels are on the way (COUR
   const card = page.locator('[data-testid="courier-card"][data-courier="zrexpress"]');
   await card.getByTestId('courier-delete').click();
   await expect(page.getByTestId('delete-courier-dialog')).toHaveAttribute('data-blocked', 'true');
-  await expect(page.getByTestId('courier-delete-blocked')).toContainText('COURIER_HAS_ACTIVE_SHIPMENTS');
+  await expect(page.getByTestId('courier-delete-blocked')).toContainText(errText('COURIER_HAS_ACTIVE_SHIPMENTS'));
   await page.getByTestId('courier-deactivate').click();
   await expect(card).toContainText(/inactif/i);
   // back on for the next specs

@@ -38,7 +38,7 @@ export function useOrdersJob() {
           message: kind === 'export' ? t('toast.export.done', { file: t('orders.export.file') }) : t('orders.print.done'),
           action: job.resultUrl ? { label: kind === 'export' ? t('action.download') : t('action.open'), onClick: () => downloadUrl(job.resultUrl!, jobFileName(job)) } : undefined,
         }),
-        failed: (job, error) => (job?.error ? `${job.error.message} (${job.error.code})` : refusal(error, t)),
+        failed: (job, error) => (job?.error ? job.error.message : refusal(error, t)),
       });
     } catch (e) {
       toast({ tone: 'danger', message: refusal(e, t) });
@@ -288,7 +288,7 @@ export function OrdersBulkBar({
   const chosen = rows.filter((r) => selected.has(r.id));
   const sendTargets = chosen.map((r) => {
     const a = actionState(r.actions, ORDER_ACTION.sendToCourier, t);
-    return { id: r.id, number: r.number, label: `#${r.number} · ${r.client.name}`, blocked: a.present && a.enabled ? null : (a.reason ?? `${t('error.DELIVERY_ORDER_NOT_CONFIRMED')} (DELIVERY_ORDER_NOT_CONFIRMED)`) };
+    return { id: r.id, number: r.number, label: `#${r.number} · ${r.client.name}`, blocked: a.present && a.enabled ? null : (a.reason ?? t('error.DELIVERY_ORDER_NOT_CONFIRMED')) };
   });
   const sendForbidden = !can('delivery.send') ? t('toast.forbidden') : offline ? t('banner.offline') : undefined;
   const actions: BulkAction[] = [

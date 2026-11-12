@@ -7,7 +7,6 @@ import { useMutation } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useCredits } from '@/features/credits/api';
 import { useMembers } from '@/features/workspace/api';
-import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
@@ -51,7 +50,7 @@ export function InboxBulkBar({ ids, names, visibleIds, onSelect, onClear }: { id
       }
       return true;
     } catch (e) {
-      const text = e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t);
+      const text = errorMessage(e, t);
       if (inDialog) setError(text);
       else toast({ tone: 'danger', message: text });
       return false;
@@ -60,7 +59,7 @@ export function InboxBulkBar({ ids, names, visibleIds, onSelect, onClear }: { id
     }
   };
 
-  const forbidden = readOnly ? `${t('error.READ_ONLY_MEMBER')} (READ_ONLY_MEMBER)` : undefined;
+  const forbidden = readOnly ? t('error.READ_ONLY_MEMBER') : undefined;
   const actions: BulkAction[] = [
     { key: 'resolve', label: t('action.markResolved'), onSelect: () => void exec('resolve', t('action.markResolved')), disabledReason: forbidden },
     { key: 'archive', label: t('action.archive'), onSelect: () => void exec('archive', t('action.archive')), disabledReason: forbidden },
@@ -186,7 +185,7 @@ function BulkResultDialog({ run, names, onClose, onRetried }: { run: Run | null;
       const results = run!.outcome.results.map((r) => byId.get(r.id) ?? r);
       onRetried({ results, ok: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length });
     } catch (e) {
-      setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setError(errorMessage(e, t));
     }
   };
   return (
@@ -218,7 +217,7 @@ function BulkResultDialog({ run, names, onClose, onRetried }: { run: Run | null;
             <span className="min-w-0 flex-1 truncate" dir="auto">
               {names[r.id] ?? r.id}
             </span>
-            {r.error ? <span className="max-w-[55%] text-end ts-label-meta text-accent-alert">{`${r.error.message} (${r.error.code})`}</span> : null}
+            {r.error ? <span className="max-w-[55%] text-end ts-label-meta text-accent-alert">{r.error.message}</span> : null}
           </li>
         ))}
       </ul>

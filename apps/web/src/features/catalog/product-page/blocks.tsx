@@ -37,7 +37,7 @@ export function GalleryBlock({ product, canEdit }: { product: Pick<Product, 'id'
   const input = useRef<HTMLInputElement>(null);
   const uploads = editor.tiles.filter((tile) => editor.isLocal(tile.id));
   const full = images.length >= PRODUCT_IMAGES_MAX;
-  const fullReason = full ? `${t('error.IMAGES_LIMIT')} (IMAGES_LIMIT)` : undefined;
+  const fullReason = full ? t('error.IMAGES_LIMIT') : undefined;
   return (
     <Block
       title={t('products.page.gallery.title', { max: PRODUCT_IMAGES_MAX })}

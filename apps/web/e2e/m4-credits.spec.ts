@@ -361,7 +361,7 @@ test.describe('Operator', () => {
     await expect(page.getByTestId('tile-packs')).toContainText('0');
     await expect(page.getByTestId('tile-used')).toContainText(rx(n(c.plan.used)));
     await expect(page.getByTestId('credits-meter')).toHaveAttribute('data-level', 'ok');
-    await expect(page.getByTestId('ledger-forbidden')).toHaveText('L’historique détaillé est réservé aux admins de l’espace (FORBIDDEN).');
+    await expect(page.getByTestId('ledger-forbidden')).toHaveText('L’historique détaillé est réservé aux admins de l’espace.');
     await expect(page.getByTestId('credits-ledger')).toHaveCount(0);
     await expect(rows(page)).toHaveCount(0);
     await expect(page.locator('a[aria-current="page"][href$="/settings/credits"]')).toHaveText('Crédits');

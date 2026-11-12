@@ -16,7 +16,6 @@ import { clientsApi, useClientsRefresh, useClientTags, type BulkResponse } from 
 import { ClientTagInput } from './client-tag-input';
 import { CLIENT_TAG_MAX_CHARS, type Client, type ClientListItem, type ClientMergePreview } from './contracts';
 
-const errText = (e: unknown, t: ReturnType<typeof useT>) => (e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
 
 /** Id of the client that owns the phone, from `409 CLIENT_PHONE_EXISTS` (`details.clientId` / `details.client.id`). */
 export const phoneOwnerId = (e: unknown): string | null => {
@@ -99,7 +98,7 @@ export function ClientFormDialog({ open, client, onClose, onSaved, onUseExisting
         setErrors(next);
         if (Object.keys(next).length === Object.keys(e.body.fields).length) return;
       }
-      setFormError(errText(e, t));
+      setFormError(errorMessage(e, t));
     }
   };
   const fe = (k: (typeof FIELDS)[number]) => fieldError(t, errors[k]);
@@ -207,7 +206,7 @@ export function DeleteClientDialog({ client, onClose, onDone }: { client: Pick<C
       onDone();
     } catch (e) {
       if (e instanceof ApiError && e.code === 'CUSTOMER_HAS_ORDERS') setArchive(true);
-      setError(errText(e, t));
+      setError(errorMessage(e, t));
     }
   };
   const context = client ? [t('clients.dialog.delete.orders', { count: client.orderCount }), client.conversations !== undefined ? t('clients.dialog.delete.conversations', { count: client.conversations }) : null, client.blocked ? t('enum.Client.blocked').toLowerCase() : null].filter(Boolean).join(' · ') : undefined;
@@ -291,7 +290,7 @@ export function MergeClientsDialog({ client, onClose, onDone }: { client: Pick<C
         setPreview(d && d.keep ? d : { keep: { id: keepId!, name: '', phone: null, riskLevel: 'normal', isPlaceholder: false, blocked: false, orderCount: 0, conversations: 0 }, merge: { id: '', name: '', phone: null, riskLevel: 'normal', isPlaceholder: false, blocked: false, orderCount: 0, conversations: 0 } });
         return;
       }
-      setError(errText(e, t));
+      setError(errorMessage(e, t));
     }
   };
   const card = (c: { id: string; name: string; phone: string | null; orderCount: number; isPlaceholder: boolean; riskLevel: string }, conversations?: number) => (
@@ -341,7 +340,7 @@ export function MergeClientsDialog({ client, onClose, onDone }: { client: Pick<C
           <p className="ts-label-meta text-text-muted">{t('clients.dialog.merge.note')}</p>
           {preview ? (
             <FormAlert tone="warning">
-              {t('error.CUSTOMER_MERGE_IRREVERSIBLE')} (CUSTOMER_MERGE_IRREVERSIBLE)
+              {t('error.CUSTOMER_MERGE_IRREVERSIBLE')}
             </FormAlert>
           ) : null}
           {error ? <FormAlert>{error}</FormAlert> : null}
@@ -387,7 +386,7 @@ export function TagsDialog({ ids, known, onClose, onDone }: { ids: string[] | nu
       await refresh();
       onDone(r, (retryIds) => clientsApi.bulkTags({ ids: retryIds, add, remove }));
     } catch (e) {
-      setError(errText(e, t));
+      setError(errorMessage(e, t));
     }
   };
   const newTag = () => {

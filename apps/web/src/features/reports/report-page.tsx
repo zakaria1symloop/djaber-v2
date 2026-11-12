@@ -129,7 +129,7 @@ function ReportView({ reportKey }: { reportKey: ReportKey }) {
           started: t('reports.export.started', { format: format.toUpperCase() }),
           progress: (job) => t('toast.export.progress', { entity: t(`report.${reportKey}.title`), pct: job.progress, rows: formatNumber(job.total ?? 0) }),
           done: (job) => ({ message: t('toast.export.done', { file: `${t(`report.${reportKey}.title`)} · ${format.toUpperCase()}` }), action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!, jobFileName(job)) } : undefined }),
-          failed: (job, error) => (job?.error ? `${job.error.message} (${job.error.code})` : refusal(error, t)),
+          failed: (job, error) => (job?.error ? job.error.message : refusal(error, t)),
         });
       }
     } catch (e) {
@@ -269,7 +269,7 @@ function ReportView({ reportKey }: { reportKey: ReportKey }) {
         <EmptyState icon={<FileBarChart className="size-5" />} title={t('analytics.range.REPORT_CUSTOM_RANGE_REQUIRED')} description={t('analytics.range.pickBoth')} />
       ) : rq.isError && !rq.data ? (
         rq.error instanceof ApiError && ['REPORT_RANGE_TOO_LONG', 'REPORT_CUSTOM_RANGE_REQUIRED', 'INVALID_DATE_RANGE'].includes(rq.error.code) ? (
-          <EmptyState icon={<FileBarChart className="size-5" />} title={`${t(`analytics.range.${rq.error.code}`)} (${rq.error.code})`} description={rq.error.message} action={{ label: t('analytics.range.reset'), onClick: () => setPeriod({ ...period, period: '30d', from: '', to: '' }) }} />
+          <EmptyState icon={<FileBarChart className="size-5" />} title={t(`analytics.range.${rq.error.code}`)} description={rq.error.message} action={{ label: t('analytics.range.reset'), onClick: () => setPeriod({ ...period, period: '30d', from: '', to: '' }) }} />
         ) : (
           <QueryError error={rq.error} onRetry={() => void rq.refetch()} backHref="/reports" />
         )
@@ -337,7 +337,7 @@ function PeriodChip({ period, onChange }: { period: PeriodState; onChange: (p: P
             }}
             onApply={() => {
               const code = customRangeError(draft.from, draft.to);
-              if (code) return setError(`${t(`analytics.range.${code}`)} (${code})`);
+              if (code) return setError(t(`analytics.range.${code}`));
               onChange({ ...period, period: 'custom', from: draft.from, to: draft.to });
             }}
             error={error}
@@ -468,7 +468,7 @@ function ExportJobBanner({ jobId, onClose }: { jobId: string | null; onClose: ()
   }
   return (
     <JobBanner state="failed" pill={t('reports.jobs.failedShort')} action={<Button size="sm" variant="ghost" onClick={onClose}>{t('action.close')}</Button>}>
-      {j.error ? `${j.error.message} (${j.error.code})` : t('error.REPORT_EXPORT_FAILED', { ref: '—' })}
+      {j.error ? j.error.message : t('error.REPORT_EXPORT_FAILED', { ref: '—' })}
     </JobBanner>
   );
 }

@@ -8,7 +8,6 @@ import { useMutation } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAgents } from '@/features/agents/api';
 import { Link } from '@/i18n/navigation';
-import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
@@ -37,10 +36,10 @@ export function useProductsExport() {
           message: t('toast.export.done', { file: t('products.export.file') }),
           action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!, jobFileName(job)) } : undefined,
         }),
-        failed: (job, error) => (job?.error ? `${job.error.message} (${job.error.code})` : errorMessage(error, t)),
+        failed: (job, error) => (job?.error ? job.error.message : errorMessage(error, t)),
       });
     } catch (e) {
-      toast({ tone: 'danger', message: e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t) });
+      toast({ tone: 'danger', message: errorMessage(e, t) });
     }
   };
 }
@@ -128,7 +127,7 @@ function useBulk(run: (ids: string[]) => Promise<BulkResponse>, p: DialogProps, 
     try {
       await p.onDone(title, await m.mutateAsync(p.ids), run);
     } catch (e) {
-      setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setError(errorMessage(e, t));
     }
   };
   return { submit, busy: m.isPending, error };
@@ -388,7 +387,7 @@ export function AddToAgentDialog({ product, onClose }: { product: Pick<ProductLi
         await refresh({ productId: target?.id });
         const o = addToAgentOutcome(response);
         if (o.kind === 'done') toast(t('products.toast.addedToAgent', { name: target?.name ?? '' }));
-        else if (o.kind === 'failed') toast({ tone: 'danger', message: `${o.message} (${o.code})` });
+        else if (o.kind === 'failed') toast({ tone: 'danger', message: o.message });
         else toast({ tone: 'warning', message: t('products.bulk.result.summary', { ok: o.ok, failed: o.failed }) });
       }}
     />
@@ -469,7 +468,7 @@ function BulkResultDialog({ outcome, names, onClose, onRetried }: { outcome: Out
               {r.ok ? t('products.bulk.result.ok') : t('products.bulk.result.error')}
             </Pill>
             <span className="min-w-0 flex-1 truncate">{names[r.id] ?? r.id}</span>
-            {r.error ? <span className="max-w-[55%] text-end ts-label-meta text-accent-alert">{`${r.error.message} (${r.error.code})`}</span> : null}
+            {r.error ? <span className="max-w-[55%] text-end ts-label-meta text-accent-alert">{r.error.message}</span> : null}
           </li>
         ))}
       </ul>

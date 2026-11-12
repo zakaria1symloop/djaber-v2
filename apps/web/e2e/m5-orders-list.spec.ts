@@ -6,6 +6,7 @@ import { expectNoA11yViolations } from './support/a11y';
 import { apiReady, expectUrl, type Account } from './support/m1';
 import { signIn } from './support/m4-agents';
 import { dialog, open, ordersReady, row, rowAction, seedOrder, seedProduct, setStatus, shopOwner, type SeedOrder } from './support/m5-orders';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 240_000 });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -76,7 +77,7 @@ test('AT-ORD-12 / AT-ORD-30 — bulk confirm answers per order; the error row of
   const results = page.getByTestId('bulk-results');
   await expect(results).toBeVisible();
   await expect(results.locator('[data-ok="true"]')).toHaveCount(1);
-  await expect(results.locator('[data-ok="false"]')).toContainText('ORDER_ADDRESS_REQUIRED');
+  await expect(results.locator('[data-ok="false"]')).toContainText(errText('ORDER_ADDRESS_REQUIRED'));
   await expect(page.getByTestId('bulk-retry')).toHaveText(/Réessayer/);
   await dialog(page).getByRole('button', { name: 'Fermer' }).last().click();
   await expect(row(page, o.a.id)).toHaveCount(0); // confirmed: left the "Nouvelles" tab

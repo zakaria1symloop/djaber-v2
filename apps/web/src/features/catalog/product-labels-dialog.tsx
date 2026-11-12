@@ -40,7 +40,7 @@ export function ProductLabelsDialog({ open, ids, onClose, onStarted }: { open: b
         started: t('toast.jobStarted'),
         progress: (job) => t('products.labels.progress', { pct: job.progress }),
         done: (job) => ({ message: t('products.labels.done'), action: job.resultUrl ? { label: t('action.open'), onClick: () => downloadUrl(job.resultUrl!, jobFileName(job)) } : undefined }),
-        failed: (job, e) => (job?.error ? `${job.error.message} (${job.error.code})` : refusal(e, t)),
+        failed: (job, e) => (job?.error ? job.error.message : refusal(e, t)),
       });
       onStarted?.();
       onClose();

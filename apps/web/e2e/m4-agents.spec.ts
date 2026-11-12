@@ -12,6 +12,7 @@ import { apiReady, type Account } from './support/m1';
 import { agentCard, expectRoute, NAV, openPage, signIn, toastOf } from './support/m4-agents';
 import { activateAgent, createAgent, customerSays, insightsOf, linkPage, listAgents, nextSender, realPost, setupShop, type Shop } from './support/m4-real';
 import { agentByName, agentRow, agentsWorld, dropAgents, patchAgentsList, pausedAgent, rawCall, recordWrites, seedInsight, type AgentRow, type AgentsWorld, type InsightRow } from './support/m4-real-agents';
+import { errText } from './support/error-text';
 
 // one shared `next dev` server: first hits compile, so every test gets room for a repeated navigation
 test.describe.configure({ timeout: 240_000 });
@@ -99,7 +100,7 @@ test.describe('list — states, summary, plan limit', () => {
     const strip = agentCard(page, w.service.id).getByTestId('agent-no-channel');
     await expect(strip).toContainText('AUCUNE PAGE LIÉE');
     await expect(strip).toContainText("Rattachez au moins une page avant d'activer.");
-    await expect(strip).toContainText('(AGENT_NO_CHANNEL)');
+    await expect(strip).toContainText(errText('AGENT_NO_CHANNEL'));
     await expect(strip.getByRole('link', { name: 'Rattacher une page' })).toHaveAttribute('href', `/fr/agents/${w.service.id}/configuration?section=channels`);
     await expect(agentCard(page, w.service.id)).toContainText('IA SILENCIEUSE');
 
@@ -151,7 +152,7 @@ test.describe('list — states, summary, plan limit', () => {
       await expect(dialog.getByRole('heading', { name: "Limite d'agents atteinte" })).toBeVisible();
       await expect(dialog).toContainText('5 / 5 agents actifs ou en pause');
       await expect(dialog.getByTestId('agents-limit-dialog')).toContainText("Votre plan ne permet pas d'activer un agent de plus.");
-      await expect(dialog.getByTestId('agents-limit-dialog')).toContainText('(PLAN_LIMIT)');
+      await expect(dialog.getByTestId('agents-limit-dialog')).toContainText(errText('PLAN_LIMIT'));
       await expect(dialog.getByTestId('limit-create-draft')).toHaveText('Créer un brouillon');
       await dialog.getByTestId('limit-create-draft').click();
       await expectRoute(page, '**/fr/agents/new');
@@ -294,7 +295,7 @@ test.describe('row actions', () => {
     await expect(menu.getByRole('menuitem').first()).toHaveText('Modifier (assistant 5 étapes)');
     // forbidden by the server descriptor: visible, greyed, reason + code in the footer
     await expect(menu.getByRole('menuitem', { name: 'Supprimer', exact: true })).toHaveAttribute('aria-disabled', 'true');
-    await expect(menu).toContainText("pages rattachées : changez les canaux d'abord. (AGENT_HAS_CHANNELS)");
+    await expect(menu).toContainText("pages rattachées : changez les canaux d'abord.");
     await expect(menu.getByRole('menuitem', { name: 'Mettre en pause', exact: true })).not.toHaveAttribute('aria-disabled', 'true');
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menu')).toHaveCount(0);
@@ -303,7 +304,7 @@ test.describe('row actions', () => {
     const serviceMenu = await openMenu(page, w.service.id);
     await expect(serviceMenu.getByRole('menuitem', { name: 'Supprimer', exact: true })).not.toHaveAttribute('aria-disabled', 'true');
     await expect(serviceMenu.getByRole('menuitem', { name: 'Reprendre', exact: true })).toBeVisible();
-    await expect(serviceMenu).not.toContainText('AGENT_HAS_CHANNELS');
+    await expect(serviceMenu).not.toContainText(errText('AGENT_HAS_CHANNELS'));
     await page.keyboard.press('Escape');
     // paused by the plan ("Reprendre" refused PLAN_LIMIT): real plan expiry in m9-carryovers.spec.ts
 
@@ -347,7 +348,7 @@ test.describe('row actions', () => {
 
       // 409 AGENT_PAUSED_WITH_OPEN_THREADS is a confirmation, not an error: the dialog stays open with the count
       await expect(dialog.getByTestId('pause-open-threads')).toHaveText(`${open} conversations attendent une réponse : elles passeront en « À traiter ».`);
-      await expect(dialog).toContainText('(AGENT_PAUSED_WITH_OPEN_THREADS)');
+      await expect(dialog).toContainText(errText('AGENT_PAUSED_WITH_OPEN_THREADS'));
       await expect(dialog.getByTestId('pause-agent-confirm')).toHaveText('Mettre en pause quand même');
       await expect(vendeur).toHaveAttribute('data-state', 'active');
       expect(writes.map((x) => x.body)).toEqual([{}]);
@@ -408,7 +409,7 @@ test.describe('row actions', () => {
       await confirm.click();
       const alert = dialog.getByRole('alert');
       await expect(alert).toContainText("pages rattachées : changez les canaux d'abord.");
-      await expect(alert).toContainText('(AGENT_HAS_CHANNELS)');
+      await expect(alert).toContainText(errText('AGENT_HAS_CHANNELS'));
       await expect(alert.getByRole('link', { name: 'Changer les canaux' })).toHaveAttribute('href', `/fr/agents/${doomed.id}/configuration?section=channels`);
       await expect(dialog.getByRole('heading', { name: `Supprimer l'agent « ${NAME} » ?` })).toBeVisible();
       await expect(name).toHaveValue(NAME);
@@ -618,7 +619,7 @@ test.describe('pending insights column', () => {
     const [answer] = await Promise.all([page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/agent-insights/${ins.handoff.id}/resolve`)), dialog.getByTestId('resolve-insight-submit').click()]);
     expect(answer.status()).toBe(422);
     expect(((await answer.json()) as { error: { code: string } }).error.code).toBe('INSIGHT_ALREADY_RESOLVED');
-    await expect(toastOf(page, 'Déjà traité. (INSIGHT_ALREADY_RESOLVED)')).toBeVisible();
+    await expect(toastOf(page, 'Déjà traité.')).toBeVisible();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(row(page, ins.handoff)).toHaveCount(0);
     await expect(insights(page).locator('[data-insight]')).toHaveCount(Math.min(5, total - 1));

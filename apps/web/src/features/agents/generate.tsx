@@ -179,12 +179,6 @@ export function GenerateAgent() {
           <FormAlert>
             <span data-testid="generate-failed">
               {job.isError ? errorMessage(job.error, t) : (jobError?.message ?? t('agents.generate.failed'))}
-              {jobError?.code ? (
-                <>
-                  {' '}
-                  <Ltr>({jobError.code})</Ltr>
-                </>
-              ) : null}
             </span>
             <span className="mt-1 block text-text-secondary">{t('agents.generate.failedNote')}</span>
           </FormAlert>
@@ -220,12 +214,6 @@ export function GenerateAgent() {
           <FormAlert tone={error.code === 'ANALYSIS_RATE_LIMITED' ? 'warning' : 'danger'}>
             <span data-testid="generate-error" data-code={error.code ?? ''}>
               {error.message}
-              {error.code ? (
-                <>
-                  {' '}
-                  <Ltr>({error.code})</Ltr>
-                </>
-              ) : null}
             </span>
           </FormAlert>
         ) : null}

@@ -28,7 +28,7 @@ function JobBanner({ jobId, className }: { jobId: string; className?: string }) 
   const close = () =>
     router.replace(withoutJobParam(pathname, params.toString()), { scroll: false });
   const failure = job?.error
-    ? `${job.error.message || errorMessage(q.error, t)}${job.error.code ? ` (${job.error.code})` : ''}`
+    ? `${job.error.message || errorMessage(q.error, t)}`
     : '';
   return (
     <Banner

@@ -139,11 +139,11 @@ describe('server actions → menu', () => {
     expect(menu[0]).toMatchObject({ primary: true, hint: 'Enter' });
   });
 
-  it('greys a disabled action with its reason and code, and never runs it', () => {
+  it('greys a disabled action with its reason (never the code — retest 11/11 UX-056), and never runs it', () => {
     const menu = toMenuActions(descriptors, { adjust_stock: { label: 'Ajuster', onSelect: noop, hint: 'DIALOGUE' }, delete: { label: 'Supprimer', onSelect: noop, destructive: true } }, t);
-    expect(menu[0]).toMatchObject({ key: 'adjust_stock', hint: 'DIALOGUE', disabledReason: "Ce produit n'a pas de stock (service). (PRODUCT_NOT_STOCK_TRACKED)" });
+    expect(menu[0]).toMatchObject({ key: 'adjust_stock', hint: 'DIALOGUE', disabledReason: "Ce produit n'a pas de stock (service)." });
     expect(menu[0]!.onSelect).toBeUndefined();
-    expect(menu[1]).toMatchObject({ destructive: true, disabledReason: 'Référencé par commandes/ventes : archivez-le. (PRODUCT_HAS_ORDERS)' });
+    expect(menu[1]).toMatchObject({ destructive: true, disabledReason: 'Référencé par commandes/ventes : archivez-le.' });
   });
 
   it('adds local navigation items without a descriptor and drops hidden ones', () => {

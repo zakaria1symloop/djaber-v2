@@ -95,7 +95,7 @@ function Journal() {
           message: t('toast.export.done', { file: t('movements.export.file') }),
           action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!, jobFileName(job)) } : undefined,
         }),
-        failed: (job, error) => (job?.error?.message ? `${job.error.message} (${job.error.code})` : errorMessage(error, t)),
+        failed: (job, error) => (job?.error?.message ? job.error.message : errorMessage(error, t)),
       });
     } catch (e) {
       toast({ tone: 'danger', message: errorMessage(e, t) });

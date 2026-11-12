@@ -9,6 +9,7 @@ import { apiReady, createAccount, expectUrl, loginHome, type Account } from './s
 import { catalogReady, seedProduct, sku } from './support/m2';
 import { inviteOperator } from './support/m3-inbox';
 import { addProduct, firstCommune, formatMobile, getOrder, markRisky, ordersReady, pickCombo, seedClient, seedFeeGrid, uniqueMobile } from './support/m5-order-form';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -95,7 +96,7 @@ test('AT-ORD-09 fee: grid 400, free from 5 000 DA, stop-desk, wilaya not served,
   // wilaya 33 is inactive in the grid
   await pickCombo(page, 'wilayaId', '33 ·');
   await expect(page.getByTestId('fee-title')).toHaveText('Wilaya non desservie');
-  await expect(page.getByTestId('fee-quote')).toContainText('WILAYA_NOT_SERVED');
+  await expect(page.getByTestId('fee-quote')).toContainText(errText('WILAYA_NOT_SERVED'));
   await expect(page.locator('[data-check="notServed"]')).toBeVisible();
   // back to Alger, stop-desk, then the Admin override
   await pickCombo(page, 'wilayaId', '16 ·');
@@ -122,7 +123,7 @@ test('AT-CLI-02 phone conflict: "+213 …" of an existing client ⇒ notice + "U
   await expect(page.locator('[data-section="client"]')).toContainText(`Normalisé : ${amina.phone} · mobile DZ valide`);
   const notice = page.getByTestId('phone-conflict');
   await expect(notice).toContainText('Ce numéro appartient déjà à Amina Belkacem');
-  await expect(notice).toContainText('CLIENT_PHONE_EXISTS');
+  await expect(notice).toContainText(errText('CLIENT_PHONE_EXISTS'));
   await page.getByRole('button', { name: 'Utiliser ce client' }).click();
   await expect(page.getByTestId('picked-client')).toContainText('Amina Belkacem');
   await expect(page.getByTestId('picked-client')).toContainText(formatMobile(amina.phone));

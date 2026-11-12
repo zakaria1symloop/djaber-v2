@@ -170,7 +170,7 @@ function InventoriesList() {
       description={t('inventory.subtitle')}
       permission="stock.count"
       actions={
-        <Button variant="primary" onClick={() => setStart(true)} disabledReason={!canStart ? t('toast.forbidden') : offline ? t('banner.offline') : open ? `${t('error.INVENTORY_IN_PROGRESS', { number: open.number })} (INVENTORY_IN_PROGRESS)` : undefined} data-testid="inventory-start">
+        <Button variant="primary" onClick={() => setStart(true)} disabledReason={!canStart ? t('toast.forbidden') : offline ? t('banner.offline') : open ? t('error.INVENTORY_IN_PROGRESS', { number: open.number }) : undefined} data-testid="inventory-start">
           {t('inventory.start.action')}
         </Button>
       }
@@ -588,7 +588,7 @@ export function ValidateInventoryDialog({ inventoryId, onClose }: { inventoryId:
         ) : (
           <p className="text-[13px] text-text-secondary">{t('inventory.validate.noGap')}</p>
         )}
-        {missing.length ? <FormAlert>{`${t('error.INVENTORY_VARIANCE_NOTE_REQUIRED')} (INVENTORY_VARIANCE_NOTE_REQUIRED)`}</FormAlert> : null}
+        {missing.length ? <FormAlert>{t('error.INVENTORY_VARIANCE_NOTE_REQUIRED')}</FormAlert> : null}
         <Field label={t('inventory.validate.noteLabel')} htmlFor="iv-note">
           <Input id="iv-note" value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} placeholder={t('inventory.validate.notePlaceholder')} />
         </Field>

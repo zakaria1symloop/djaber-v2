@@ -10,6 +10,7 @@ import { expectNoHorizontalOverflow, openPage, signIn } from './support/m4-agent
 import { idem, realGet, realPost } from './support/m4-real';
 import { seedOrder, seedProduct, setStatus } from './support/m5-orders';
 import { inviteMember, subscribe } from './support/m9';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 240_000 });
 const expect = baseExpect.configure({ timeout: 20_000 });
@@ -72,7 +73,7 @@ test('AT-ST-10 / AT-GSH-01 — Sheets: not connected → simulated Google consen
   const unknown = 'https://docs.google.com/spreadsheets/d/fakeDoesNotExist0000000000000/edit';
   await page.getByTestId('sheets-url').fill(unknown);
   await page.getByTestId('sheets-submit').click();
-  await expect(page.getByRole('dialog')).toContainText('SHEETS_SPREADSHEET_NOT_FOUND');
+  await expect(page.getByRole('dialog')).toContainText(errText('SHEETS_SPREADSHEET_NOT_FOUND'));
   await expect(page.getByTestId('sheets-url')).toHaveValue(unknown);
   // create "Djaber · Commandes <boutique>"
   await page.getByTestId('sheets-option-create').click();
@@ -196,7 +197,7 @@ test('AT-ST-10 / AT-API-01 — API key: create (name, scopes) → shown once →
   // revoke (one Actions ⌄ per row) ⇒ RÉVOQUÉE, the key answers 401 API_KEY_REVOKED, the menu item is greyed
   await page.getByTestId('api-key-row').filter({ hasText: 'ERP interne' }).getByRole('button', { name: 'Actions' }).click();
   await page.getByRole('menuitem', { name: 'Révoquer' }).click();
-  await expect(page.getByRole('dialog')).toContainText('API_KEY_REVOKED');
+  await expect(page.getByRole('dialog')).toContainText(errText('API_KEY_REVOKED'));
   await page.getByRole('dialog').getByRole('button', { name: 'Révoquer' }).click();
   const revoked = page.getByTestId('api-key-row').filter({ hasText: 'ERP interne' });
   await expect(revoked).toHaveAttribute('data-status', 'revoked');
@@ -262,7 +263,7 @@ test('AT-ST-10 / AT-API-02 — webhooks: add (events, secret once), test ping de
   // "Tester" is greyed with the server reason on the disabled endpoint
   await page.getByTestId('webhook-row').filter({ hasText: badName }).getByRole('button', { name: 'Actions' }).click();
   await expect(page.getByRole('menuitem', { name: 'Tester' })).toHaveAttribute('aria-disabled', 'true');
-  await expect(page.getByRole('menu')).toContainText('(WEBHOOK_ENDPOINT_DISABLED)');
+  await expect(page.getByRole('menu')).toContainText(errText('WEBHOOK_ENDPOINT_DISABLED'));
   await page.keyboard.press('Escape');
 
   // journal filters live in the URL: endpoint + status (filtered-empty), then another status from the select
@@ -309,7 +310,7 @@ test('plan without api_keys / webhooks (Starter): create disabled with PLAN_FEAT
   await subscribe(request, starter, 'starter');
   await signIn(page, starter);
   await openPage(page, '/fr/settings/integrations/api-keys', () => page.getByTestId('api-keys-card'));
-  await expect(page.locator('[data-testid="plan-gate"][data-feature="api_keys"]')).toContainText('PLAN_FEATURE_REQUIRED');
+  await expect(page.locator('[data-testid="plan-gate"][data-feature="api_keys"]')).toContainText(errText('PLAN_FEATURE_REQUIRED'));
   await expect(page.getByTestId('api-key-create')).toHaveAttribute('aria-disabled', 'true');
   await expect(page.getByTestId('api-key-create')).toHaveAttribute('title', /PLAN_FEATURE_REQUIRED/);
   await page.getByTestId('integrations-tabs').locator('[data-tab="webhooks"]').click();

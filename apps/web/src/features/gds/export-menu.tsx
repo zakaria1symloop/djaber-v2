@@ -22,7 +22,7 @@ export function ListExportMenu({ path, filters, entity, file, disabledReason }: 
         started: t('toast.jobStarted'),
         progress: (j) => t('toast.export.progress', { entity, pct: j.progress, rows: formatNumber(j.total ?? 0) }),
         done: (j) => ({ message: t('toast.export.done', { file: `${file} · ${format.toUpperCase()}` }), action: j.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(j.resultUrl!, jobFileName(j)) } : undefined }),
-        failed: (j, e) => (j?.error ? `${j.error.message} (${j.error.code})` : refusal(e, t)),
+        failed: (j, e) => (j?.error ? j.error.message : refusal(e, t)),
       });
     } catch (e) {
       toast({ tone: 'danger', message: refusal(e, t) });

@@ -507,7 +507,7 @@ type MovementsQuery = Paging & { productId?: string; variantId?: string; type?: 
 type PurchasesQuery = Paging & { status?: string[]; supplierId?: string[]; paymentStatus?: string[]; late?: boolean; from?: string; to?: string; q?: string };
 type SalesQuery = Paging & { paymentStatus?: string[]; status?: string[]; createdById?: string[]; clientId?: string; from?: string; to?: string; q?: string };
 type SuppliersQuery = Paging & { hasBalance?: boolean; lastPurchase?: Period; isActive?: boolean; q?: string };
-type CashQuery = { day?: string; direction?: 'income'|'expense'; category?: CashCategory[]; method?: string[]; createdById?: string[]; source?: 'auto'|'manual'; q?: string; from?: string; to?: string };
+type CashQuery = { day?: string; direction?: 'income'|'expense'; category?: CashCategory[]; method?: ('cash'|'cod'|'ccp'|'card'|'transfer'|'other')[] /* retest 11/11 UX-055: cod = cash rows of category order, cash = the other cash rows */; createdById?: string[]; source?: 'auto'|'manual'; q?: string; from?: string; to?: string };
 type StockRecosQuery = { type?: string[]; priority?: ('high'|'medium'|'low')[]; status?: string; categoryId?: string };
 type NotificationsQuery = { types?: NotificationType[]; unread?: boolean; from?: string; to?: string; cursor?: string; limit?: number };
 type MembersQuery = { role?: MemberRole[]; state?: ('active'|'invited'|'read_only')[]; q?: string };

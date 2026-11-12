@@ -14,6 +14,7 @@ import { sidebar, signIn, toastOf } from './support/m4-agents';
 import { open } from './support/m5-orders';
 import { gdsOwner, product, sale, type SeedProduct } from './support/m7';
 import { algiersDay, apiGet, digits, reportsReady, waitJob } from './support/m8';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -204,5 +205,5 @@ test('ANA-04 — unknown report key ⇒ 404; a range refused by the API keeps th
   await page.goto('/fr/reports/not_a_report');
   await expect(page.getByText(/introuvable|404/i).first()).toBeVisible({ timeout: 30_000 });
   await page.goto(`/fr/reports/sales_by_period?period=custom&from=2020-01-01&to=${algiersDay(0)}`);
-  await expect(page.getByText(/REPORT_RANGE_TOO_LONG/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(errText('REPORT_RANGE_TOO_LONG'))).toBeVisible({ timeout: 30_000 });
 });

@@ -23,7 +23,6 @@ import { QuickEditSheet } from '@/features/catalog/products-list/quick-edit-shee
 import { PRODUCTS_LIST, productsQuery } from '@/features/catalog/products-list/spec';
 import { AiPill, CategoryPill, ListPagination, ModerationPill, Money, Num, Pct, ProductStatePill, ProductThumb, StockPill, stockTone } from '@/features/catalog/ui';
 import { Link, useRouter } from '@/i18n/navigation';
-import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { compactAmount } from '@/lib/money';
@@ -74,7 +73,7 @@ export default function ProductsPage() {
       await refresh({ productId: row.id });
       toast(t(r.data.isActive ? 'products.toast.activated' : 'products.toast.deactivated', { name: row.name }));
     } catch (e) {
-      toast({ tone: 'danger', message: e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t) });
+      toast({ tone: 'danger', message: errorMessage(e, t) });
     }
   };
 

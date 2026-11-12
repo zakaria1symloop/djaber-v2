@@ -212,7 +212,7 @@ test('Operator on /settings/credits: balance tiles visible, the ledger is reserv
   await expect(page.getByTestId('tile-plan')).toContainText('restants (plan)');
   await expect(page.getByTestId('tile-packs')).toContainText(num(c.packs.remaining));
   await expect(page.getByTestId('tile-used')).toContainText(num(c.plan.used));
-  await expect(page.getByTestId('ledger-forbidden')).toHaveText('L’historique détaillé est réservé aux admins de l’espace (FORBIDDEN).');
+  await expect(page.getByTestId('ledger-forbidden')).toHaveText('L’historique détaillé est réservé aux admins de l’espace.');
   await expect(page.getByTestId('credits-ledger')).toHaveCount(0);
   await expect(page.getByTestId('ledger-row')).toHaveCount(0);
   await expectNoA11yViolations(page);

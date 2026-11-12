@@ -25,6 +25,13 @@ export type SaleStatusName = (typeof SaleStatusValues)[number];
 export type CashTypeName = (typeof CashTypeValues)[number];
 export type CashCategoryName = (typeof CashCategoryValues)[number];
 export type CashMethodName = (typeof CashMethodValues)[number];
+/**
+ * Retest 11/11 UX-055: the mode shown for a cash row — cash collected on a delivered order is « COD », as in the reports
+ * (UX-052); the counter, purchases and the till keep « Espèces ». Also a value of the `method` filter of `GET /cash`.
+ */
+export type CashDisplayMethod = CashMethodName | 'cod';
+export const CASH_DISPLAY_METHODS = ['cash', 'cod', 'ccp', 'card', 'transfer', 'other'] as const satisfies readonly CashDisplayMethod[];
+export const cashDisplayMethod = (category: string, method: CashMethodName): CashDisplayMethod => (method === 'cash' && category === 'order' ? 'cod' : method);
 export type InventoryScopeName = (typeof InventoryScopeValues)[number];
 export type InventoryStatusName = (typeof InventoryStatusValues)[number];
 
@@ -586,7 +593,7 @@ const cashFilters = {
   day: day.optional(),
   direction: z.enum(CashTypeValues).optional(),
   category: csv(z.enum(CashCategoryValues)).optional(),
-  method: csv(z.enum(CashMethodValues)).optional(),
+  method: csv(z.enum(CASH_DISPLAY_METHODS)).optional(),
   createdById: csv(id).optional(),
   /** auto = automatic rows (`sourceType` set), manual = rows typed by a person */
   source: z.enum(['auto', 'manual']).optional(),

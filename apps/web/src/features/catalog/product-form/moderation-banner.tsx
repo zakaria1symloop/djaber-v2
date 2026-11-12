@@ -56,7 +56,7 @@ export function ModerationBanner({ product, dirty, canWrite }: { product: Produc
       setSent(true);
       await refresh({ productId: product.id });
     } catch (e) {
-      setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setError(errorMessage(e, t));
       // MODERATION_NOT_REJECTED: the decision changed meanwhile — show the current status
       if (e instanceof ApiError && e.code === 'MODERATION_NOT_REJECTED') void refresh({ productId: product.id });
     }

@@ -9,6 +9,7 @@ import { expectNoHorizontalOverflow, signIn } from './support/m4-agents';
 import { open, seedOrder, setStatus, shopOwner } from './support/m5-orders';
 import { gdsOwner, product, sale, type SeedProduct } from './support/m7';
 import { algiersDay, analyticsReady, apiGet, digits, kpi } from './support/m8';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -76,11 +77,11 @@ test('AT-ANA-02 — period picker: 733 d refused inline, end before start, custo
   await expect(form).toContainText('Choisissez maintenant la date de fin');
   await form.locator('input[name="to"]').fill(algiersDay(0));
   await page.getByTestId('range-apply').click();
-  await expect(page.getByTestId('range-error')).toContainText('REPORT_RANGE_TOO_LONG');
+  await expect(page.getByTestId('range-error')).toContainText(errText('REPORT_RANGE_TOO_LONG'));
   await form.locator('input[name="from"]').fill(algiersDay(0));
   await form.locator('input[name="to"]').fill(algiersDay(3));
   await page.getByTestId('range-apply').click();
-  await expect(page.getByTestId('range-error')).toContainText('INVALID_DATE_RANGE');
+  await expect(page.getByTestId('range-error')).toContainText(errText('INVALID_DATE_RANGE'));
   await form.locator('input[name="from"]').fill(algiersDay(731));
   await form.locator('input[name="to"]').fill(algiersDay(0));
   await page.getByTestId('range-apply').click();
@@ -92,7 +93,7 @@ test('AT-ANA-02 — period picker: 733 d refused inline, end before start, custo
   await page.goto('/fr/analytics?period=custom');
   await expect(page.getByText('Choisissez une date de début et une date de fin')).toBeVisible();
   await page.goto(`/fr/analytics?period=custom&from=2020-01-01&to=${algiersDay(0)}`);
-  await expect(page.getByText(/REPORT_RANGE_TOO_LONG/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(errText('REPORT_RANGE_TOO_LONG'))).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: 'Revenir à 30 j' }).click();
   await expect(kpi(page, 'revenue')).toBeVisible();
   await expect(page).not.toHaveURL(/period=custom/);

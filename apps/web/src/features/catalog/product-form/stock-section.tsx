@@ -9,7 +9,6 @@ import { ActionsMenu, Button, cn, CodeInput, ConfirmDialog, Field, FormAlert, In
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Controller, type UseFieldArrayReturn, type UseFormReturn } from 'react-hook-form';
-import { ApiError } from '@/lib/api';
 import { errorMessage, fieldError } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { catalogApi, useCatalogRefresh } from '../api';
@@ -50,7 +49,7 @@ export function StockSection({ form, rows, values, mode, product, advanced, lock
 
   const total = totalVariantStock(variants.map((r) => ({ stock: num(r.stock), isActive: r.isActive })));
   const atLimit = variants.length >= VARIANTS_MAX;
-  const limitReason = atLimit ? `${t('error.VARIANT_LIMIT')} (VARIANT_LIMIT)` : undefined;
+  const limitReason = atLimit ? t('error.VARIANT_LIMIT') : undefined;
   const addRow = () => {
     const row = emptyVariantRow({ price: values.price, costPrice: advanced ? values.costPrice : '' });
     rows.append(row, { shouldFocus: false });
@@ -64,7 +63,7 @@ export function StockSection({ form, rows, values, mode, product, advanced, lock
       setToDelete(null);
       await refresh({ productId: product.id });
     } catch (e) {
-      setDeleteError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setDeleteError(errorMessage(e, t));
     }
   };
 

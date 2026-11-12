@@ -7,6 +7,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { expectNoA11yViolations } from './support/a11y';
 import { apiReady, createAccount, expectUrl, loginHome, type Account } from './support/m1';
 import { channelsReady, fixtureChannels, IDS, listChannels, mockChannels, verifyEmail, type ChannelsMock } from './support/m3-channels';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial' });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -58,7 +59,7 @@ test.describe('fixtures — statuses, report rows, dialogs', () => {
     await expect(outlet.getByTestId('state-strip').getByRole('button', { name: 'Reconnecter' })).toBeVisible();
     await expect(outlet.getByTestId('ai-state')).toHaveText('SANS IA');
     // banner `reconnect` of the shell (priority above e-mail unverified)
-    await expect(page.getByText('Page « Amel Outlet » : jeton Meta expiré (PAGE_TOKEN_EXPIRED).', { exact: false })).toBeVisible();
+    await expect(page.getByText('Page « Amel Outlet » : jeton Meta expiré.', { exact: false })).toBeVisible();
 
     const ig = card(page, IDS.cosmetics);
     await expect(ig).toHaveAttribute('data-state', 'pending_review');
@@ -80,7 +81,7 @@ test.describe('fixtures — statuses, report rows, dialogs', () => {
     const menu = page.getByRole('menu');
     await expect(menu.getByRole('menuitem', { name: 'Reconnecter (nouveau jeton Meta)' })).toBeVisible();
     await expect(menu.getByRole('menuitem', { name: 'Synchroniser les infos de page' })).toHaveAttribute('aria-disabled', 'true');
-    await expect(menu).toContainText('(PAGE_TOKEN_EXPIRED)');
+    await expect(menu).toContainText(errText('PAGE_TOKEN_EXPIRED'));
     await expect(menu.getByRole('menuitem', { name: 'Déconnecter la page' })).toBeVisible();
     await page.keyboard.press('Escape');
   });
@@ -99,15 +100,15 @@ test.describe('fixtures — statuses, report rows, dialogs', () => {
     await expect(rows.nth(0)).toContainText('CONNECTÉE');
     await expect(rows.nth(1)).toContainText('@amel.store (IG)');
     await expect(rows.nth(1)).toContainText('EN ATTENTE META');
-    await expect(rows.nth(1)).toContainText('PAGE_INSTAGRAM_PENDING_APPROVAL');
+    await expect(rows.nth(1)).toContainText(errText('PAGE_INSTAGRAM_PENDING_APPROVAL'));
     await expect(rows.nth(2)).toContainText('IGNORÉE');
-    await expect(rows.nth(2)).toContainText('PAGE_ALREADY_CONNECTED_ELSEWHERE');
+    await expect(rows.nth(2)).toContainText(errText('PAGE_ALREADY_CONNECTED_ELSEWHERE'));
     await expect(rows.nth(2)).toContainText('Page déjà connectée à un autre espace.');
-    await expect(rows.nth(3)).toContainText('PAGE_MESSAGING_PERMISSION_MISSING');
+    await expect(rows.nth(3)).toContainText(errText('PAGE_MESSAGING_PERMISSION_MISSING'));
     await expect(rows.nth(4)).toContainText('LIMITE');
-    await expect(rows.nth(4)).toContainText('PLAN_LIMIT');
+    await expect(rows.nth(4)).toContainText(errText('PLAN_LIMIT'));
     await expect(rows.nth(5)).toContainText('AVERTISSEMENT');
-    await expect(rows.nth(5)).toContainText('PAGE_WEBHOOK_SUBSCRIBE_FAILED');
+    await expect(rows.nth(5)).toContainText(errText('PAGE_WEBHOOK_SUBSCRIBE_FAILED'));
     await expect(dialog.getByRole('link', { name: 'Comparer les plans' })).toBeVisible();
     await expectNoA11yViolations(page);
     await dialog.getByRole('button', { name: 'Fermer' }).last().click();
@@ -121,7 +122,7 @@ test.describe('fixtures — statuses, report rows, dialogs', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: 'Connexion expirée' })).toBeVisible();
     await expect(dialog).toContainText('La session de connexion a expiré, recommencez.');
-    await expect(dialog).toContainText('OAUTH_STATE_INVALID');
+    await expect(dialog).toContainText(errText('OAUTH_STATE_INVALID'));
     await dialog.getByRole('button', { name: 'Annuler' }).click();
 
     await page.goto('/fr/channels?connectError=OAUTH_CANCELLED');
@@ -136,7 +137,7 @@ test.describe('fixtures — statuses, report rows, dialogs', () => {
     await expect(explainer).toContainText('Jamais : publier, voir vos amis, vos données personnelles');
     await expect(explainer.getByTestId('connect-plan')).toHaveText('Plan : 3 / 3 pages');
     // FL-05 F-2: at the limit the new pages will be skipped (PLAN_LIMIT); "Continuer" stays (reconnecting a page works)
-    await expect(explainer.getByTestId('connect-at-limit')).toContainText('(PLAN_LIMIT)');
+    await expect(explainer.getByTestId('connect-at-limit')).toContainText(errText('PLAN_LIMIT'));
     await expect(explainer.getByTestId('connect-continue')).toBeEnabled();
     await explainer.getByRole('radio', { name: 'Instagram (DM)' }).click();
     await expect(explainer.getByTestId('connect-continue')).toHaveText('Continuer avec Instagram');
@@ -144,7 +145,7 @@ test.describe('fixtures — statuses, report rows, dialogs', () => {
     await explainer.getByTestId('connect-continue').click();
     const unverified = page.getByRole('dialog');
     await expect(unverified.getByRole('heading', { name: 'Vérifiez votre e-mail' })).toBeVisible();
-    await expect(unverified).toContainText('AUTH_EMAIL_UNVERIFIED');
+    await expect(unverified).toContainText(errText('AUTH_EMAIL_UNVERIFIED'));
     await expect(unverified.getByRole('button', { name: 'Renvoyer' })).toBeVisible();
     await unverified.getByRole('button', { name: 'OK' }).click();
   });
@@ -162,7 +163,7 @@ test.describe('fixtures — statuses, report rows, dialogs', () => {
 
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: 'Réactiver « Amel Cosmétiques »' })).toBeVisible();
-    await expect(dialog).toContainText('Réactiver cette page mettra en pause une autre page (CHANNEL_PAUSED_BY_PLAN).');
+    await expect(dialog).toContainText('Réactiver cette page mettra en pause une autre page.');
     await expect(dialog.getByRole('radio')).toHaveCount(1);
     await expect(dialog.getByRole('radio', { name: /Mettre en pause « Boutique Amel »/ })).toBeChecked();
     await expect(dialog.getByRole('link', { name: 'Comparer les plans' })).toBeVisible();
@@ -180,7 +181,7 @@ test.describe('fixtures — statuses, report rows, dialogs', () => {
     await expect(page.getByRole('heading', { name: 'Boutique Amel', level: 1 })).toBeVisible();
     await expect(page.getByTestId('meta-insights')).toHaveAttribute('data-state', 'unavailable');
     await expect(page.getByTestId('meta-insights')).toContainText('Statistiques Meta indisponibles pour cette page ; les compteurs Djaber restent visibles.');
-    await expect(page.getByTestId('meta-insights')).toContainText('INBOX_INSIGHTS_UNAVAILABLE');
+    await expect(page.getByTestId('meta-insights')).toContainText(errText('INBOX_INSIGHTS_UNAVAILABLE'));
     await expect(page.getByTestId('channel-counts')).toContainText('128');
     await expect(page.getByTestId('channel-counts')).toContainText('12 actives · 3 à traiter');
     await expect(page.getByTestId('channel-counts')).toContainText('210 entrants · 130 sortants');
@@ -195,7 +196,7 @@ test.describe('fixtures — statuses, report rows, dialogs', () => {
     await tabs.getByRole('link', { name: 'IA & agent' }).click();
     await expectUrl(page, `**/fr/channels/${IDS.amel}/ai`);
     await expect(page.getByTestId('channel-ai')).toContainText('Vendeur Pro');
-    await expect(page.getByTestId('channel-ai')).toContainText('AGENT_CHANNEL_SWITCH_NEXT_THREAD');
+    await expect(page.getByTestId('channel-ai')).toContainText(errText('AGENT_CHANNEL_SWITCH_NEXT_THREAD'));
     await expect(page.getByTestId('channel-welcome')).toBeVisible();
     await tabs.getByRole('link', { name: /Messages/ }).click();
     await expectUrl(page, `**/fr/channels/${IDS.amel}/messages`);
@@ -226,7 +227,7 @@ test.describe('fixtures — statuses, report rows, dialogs', () => {
     await dialog.getByRole('radio', { name: '7 jours' }).check();
     await dialog.getByTestId('sync-submit').click();
     await expect(dialog.getByRole('alert')).toContainText('Synchronisation impossible : page à reconnecter.');
-    await expect(dialog.getByRole('alert')).toContainText('PAGE_SYNC_TOKEN_EXPIRED');
+    await expect(dialog.getByRole('alert')).toContainText(errText('PAGE_SYNC_TOKEN_EXPIRED'));
     await expect(dialog.getByRole('radio', { name: '7 jours' })).toBeChecked();
   });
 
@@ -326,7 +327,7 @@ test.describe('real API (fake Meta adapter) — connect, report, page, pause, re
     const stored = await listChannels(request, account);
     expect(stored.length).toBeGreaterThan(0);
     const limited = await dialog.locator('li[data-row="limit"]').count();
-    if (limited > 0) await expect(dialog.locator('li[data-row="limit"]').first()).toContainText('PLAN_LIMIT');
+    if (limited > 0) await expect(dialog.locator('li[data-row="limit"]').first()).toContainText(errText('PLAN_LIMIT'));
     await dialog.getByRole('button', { name: 'Fermer' }).last().click();
 
     const first = stored.find((c) => c.platform === 'facebook' && c.parentChannelId === null)!;

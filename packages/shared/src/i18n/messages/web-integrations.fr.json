@@ -11,7 +11,6 @@
   "settings.integrations.planGate.google_sheets": "Google Sheets n’est pas inclus dans votre plan.",
   "settings.integrations.planGate.api_keys": "Les clés API ne sont pas incluses dans votre plan.",
   "settings.integrations.planGate.webhooks": "Les webhooks sortants ne sont pas inclus dans votre plan.",
-
   "settings.integrations.sheets.title": "Google Sheets",
   "settings.integrations.sheets.description": "Chaque commande est ajoutée dans l’onglet « Commandes » et mise à jour à chaque changement (statut, suivi, contact). Sens unique Djaber → Sheets.",
   "settings.integrations.sheets.pill.synced": "Connecté · synchro {ago}",
@@ -94,7 +93,6 @@
   "settings.integrations.sheets.dialog.rangeHint": "Facultatif : laissez vide pour n’envoyer que les nouvelles commandes.",
   "settings.integrations.sheets.dialog.rangeInvalid": "Période invalide : la date de début doit précéder la date de fin.",
   "settings.integrations.sheets.dialog.connect": "Connecter",
-
   "settings.integrations.apiKeys.title": "Clés API",
   "settings.integrations.apiKeys.description": "Accès serveur à serveur, limité par portées. La clé n’est affichée qu’une fois. {rate} requêtes / min par clé.",
   "settings.integrations.apiKeys.allowance": "{used} / {limit} clés actives",
@@ -122,9 +120,8 @@
   "settings.integrations.apiKeys.onceNote": "Copiez-la maintenant : elle ne sera plus jamais affichée.",
   "settings.integrations.apiKeys.headerHint": "Envoyez-la dans l’en-tête X-API-Key. Une clé perdue se révoque et se recrée.",
   "settings.integrations.apiKeys.revokeTitle": "Révoquer « {name} » ?",
-  "settings.integrations.apiKeys.revokeText": "Les appels avec cette clé sont refusés immédiatement (API_KEY_REVOKED). Irréversible.",
+  "settings.integrations.apiKeys.revokeText": "Les appels avec cette clé sont refusés immédiatement. Irréversible.",
   "settings.integrations.apiKeys.revokedToast": "Clé « {name} » révoquée",
-
   "settings.integrations.webhooks.title": "Webhooks sortants",
   "settings.integrations.webhooks.description": "Signature HMAC (X-Djaber-Signature), 7 tentatives (1 min → 24 h), désactivation après 50 échecs consécutifs avec notification.",
   "settings.integrations.webhooks.allowance": "{used} / {limit} endpoints",
@@ -153,7 +150,7 @@
   "settings.integrations.webhooks.payloadTitle": "Livraison {event}",
   "settings.integrations.webhooks.dialog.context": "Intégrations › Webhooks",
   "settings.integrations.webhooks.dialog.url": "URL",
-  "settings.integrations.webhooks.dialog.urlHint": "HTTPS obligatoire · WEBHOOK_URL_INVALID",
+  "settings.integrations.webhooks.dialog.urlHint": "HTTPS obligatoire",
   "settings.integrations.webhooks.dialog.events": "Événements",
   "settings.integrations.webhooks.dialog.eventsRequired": "Choisissez au moins un événement.",
   "settings.integrations.webhooks.dialog.secret": "Secret (HMAC)",

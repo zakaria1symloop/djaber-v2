@@ -225,7 +225,7 @@ export function ProductForm(props: Props) {
     }
     // the row editor is rendered by the state change above: focus once it is there
     if (first) window.setTimeout(() => form.setFocus(first as Path<ProductFormValues>), 50);
-    setFormError(mapped > 0 && unknown === 0 ? null : `${errorMessage(e, t)} (${e.code})`);
+    setFormError(mapped > 0 && unknown === 0 ? null : errorMessage(e, t));
   };
   const applyRowError = (index: number, row: VariantRow, e: unknown) => {
     toggleRow(row.key, true);
@@ -239,7 +239,7 @@ export function ProductForm(props: Props) {
         }
       }
     }
-    if (!mapped) form.setError(`variants.${index}.name`, { type: 'server', message: e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t) });
+    if (!mapped) form.setError(`variants.${index}.name`, { type: 'server', message: errorMessage(e, t) });
   };
   const afterSave = (warnings: { code: string; params?: Record<string, unknown> }[]) => {
     setServerBelowCost(warnings.some((w) => w.code === 'SELLING_BELOW_COST'));
@@ -268,7 +268,7 @@ export function ProductForm(props: Props) {
       void refresh();
       toast(t('toast.saved'));
       afterSave(r.warnings);
-      if (r.warnings.some((w) => w.code === 'SELLING_BELOW_COST')) toast({ tone: 'warning', message: `${t('error.SELLING_BELOW_COST')} (SELLING_BELOW_COST)` });
+      if (r.warnings.some((w) => w.code === 'SELLING_BELOW_COST')) toast({ tone: 'warning', message: t('error.SELLING_BELOW_COST') });
       router.push(failed.length ? `/products/${id}/edit` : `/products/${id}`);
     } catch (e) {
       setSaving(false);
@@ -442,9 +442,9 @@ export function ProductForm(props: Props) {
   const photoButton =
     locked || aiOff ? (
       aiOff && !locked ? (
-        <Tooltip content={`${t('error.IMAGE_ANALYSIS_UNAVAILABLE')} (IMAGE_ANALYSIS_UNAVAILABLE)`}>
+        <Tooltip content={t('error.IMAGE_ANALYSIS_UNAVAILABLE')}>
           <span tabIndex={0} className="inline-flex" data-testid="photo-fill-off">
-            <Button disabledReason={`${t('error.IMAGE_ANALYSIS_UNAVAILABLE')} (IMAGE_ANALYSIS_UNAVAILABLE)`}>
+            <Button disabledReason={t('error.IMAGE_ANALYSIS_UNAVAILABLE')}>
               <Sparkles className="size-4" aria-hidden />
               {t('products.form.photo.button')}
             </Button>

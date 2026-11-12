@@ -75,7 +75,7 @@ export function AgentInsights() {
       await ignoreInsight(i);
       toast(t('agents.insights.toast.ignored'));
     } catch (e) {
-      toast({ tone: isAlreadyResolved(e) ? 'info' : 'danger', message: isAlreadyResolved(e) ? `${t('error.INSIGHT_ALREADY_RESOLVED')} (INSIGHT_ALREADY_RESOLVED)` : errorMessage(e, t) });
+      toast({ tone: isAlreadyResolved(e) ? 'info' : 'danger', message: isAlreadyResolved(e) ? t('error.INSIGHT_ALREADY_RESOLVED') : errorMessage(e, t) });
     } finally {
       setBusy(null);
       void after();

@@ -213,7 +213,7 @@ export function NewOrderForm() {
           if (!off) await applyClient(card);
         }
       } catch (e) {
-        if (!off) setPrefillError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+        if (!off) setPrefillError(errorMessage(e, t));
       } finally {
         if (!off) setPrefilling(false);
       }
@@ -304,7 +304,7 @@ export function NewOrderForm() {
     }
     const params = e.body.params ?? {};
     const details = e.body.details;
-    const message = `${errorMessage(e, t)} (${e.code})`;
+    const message = errorMessage(e, t);
     switch (e.code) {
       case 'CLIENT_PHONE_EXISTS': {
         const d = (details ?? {}) as { clientId?: string; client?: { id?: string; name?: string } };
@@ -432,7 +432,7 @@ export function NewOrderForm() {
             required={values.status === 'confirmed' || submitted === 'confirmed'}
             quote={quote}
             quoting={quoteQ.isFetching}
-            quoteError={quoteQ.isError && values.wilayaId ? `${errorMessage(quoteQ.error, t)}${quoteQ.error instanceof ApiError ? ` (${quoteQ.error.code})` : ''}` : null}
+            quoteError={quoteQ.isError && values.wilayaId ? errorMessage(quoteQ.error, t) : null}
             wilayaName={wilayaName}
             canOverride={canMoney}
             prefilled={addressPrefilled}
@@ -598,7 +598,7 @@ export function NewOrderForm() {
         open={!!blocked}
         onOpenChange={(o) => !o && setBlocked(null)}
         title={t('orderForm.blocked.title')}
-        description={`${t('error.CUSTOMER_BLOCKED', { clientName: blocked?.name ?? '' })} (CUSTOMER_BLOCKED)`}
+        description={t('error.CUSTOMER_BLOCKED', { clientName: blocked?.name ?? '' })}
         confirmLabel={t('orderForm.blocked.confirm')}
         cancelLabel={t('action.cancel')}
         closeLabel={t('action.close')}

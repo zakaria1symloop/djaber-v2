@@ -74,9 +74,9 @@ export function QueueView() {
       dropInsight(insight.id);
     } catch (e) {
       if (isAlreadyResolved(e)) {
-        toast({ tone: 'info', message: `${t('error.INSIGHT_ALREADY_RESOLVED')} (INSIGHT_ALREADY_RESOLVED)` });
+        toast({ tone: 'info', message: t('error.INSIGHT_ALREADY_RESOLVED') });
         dropInsight(insight.id);
-      } else toast({ tone: 'danger', message: e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t) });
+      } else toast({ tone: 'danger', message: errorMessage(e, t) });
     } finally {
       setIgnoring(null);
     }

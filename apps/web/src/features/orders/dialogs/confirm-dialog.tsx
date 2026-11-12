@@ -24,7 +24,7 @@ function ContactCard({ order }: { order: Order }) {
   const t = useT();
   const misses = unansweredCalls(order);
   const a = order.address;
-  const region = a ? [`${a.wilayaName}`, a.communeText, a.isStopdesk ? (a.stopdeskName ?? t('common.stopdesk')) : a.address].filter(Boolean).join(' · ') : t('orders.confirm.noAddress');
+  const region = a ? [a.wilayaName, a.communeText, a.isStopdesk ? (a.stopdeskName ?? t('common.stopdesk')) : a.address].filter(Boolean).join(' · ') : t('orders.confirm.noAddress');
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 rounded-card bg-ink-raised px-4 py-3" data-testid="confirm-contact">
       <div className="min-w-0">
@@ -72,7 +72,7 @@ export function ConfirmOrderDialog({ order, open, onClose, onDone, onAddress, on
   const logCall = async () => {
     setTouched(true);
     if (Object.keys(outcomeErrors(outcome)).length) return;
-    if (outcome.result === 'picked_up' && missing) return s.setError(`${t('error.ORDER_ADDRESS_REQUIRED')} (ORDER_ADDRESS_REQUIRED)`);
+    if (outcome.result === 'picked_up' && missing) return s.setError(t('error.ORDER_ADDRESS_REQUIRED'));
     const next = await s.submit();
     if (!next) return;
     setFresh(next);
@@ -158,7 +158,7 @@ export function ConfirmOrderDialog({ order, open, onClose, onDone, onAddress, on
             {missing ? (
               <FormAlert>
                 <span className="flex flex-wrap items-center justify-between gap-2">
-                  <span>{`${t('orders.confirm.addressMissing')} (ORDER_ADDRESS_REQUIRED)`}</span>
+                  <span>{t('orders.confirm.addressMissing')}</span>
                   <Button size="sm" onClick={onAddress} data-testid="confirm-address">
                     {t('orders.confirm.completeAddress')}
                   </Button>

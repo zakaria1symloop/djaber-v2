@@ -2,8 +2,10 @@
 // 04 §16 / FL-22 step 4 / AT-DEL-02 — logging in during the 30-day deletion grace: « Compte désactivé — suppression le … »
 // with « Annuler la suppression » and « Exporter mes données » (UX-047, 10/11/2026). Shown on /workspaces/new, the page
 // every account without a shop lands on (the guards send a deletion-scheduled account there first), before the form.
+// Retest 11/11 UX-057: a ready export reads « Télécharger mes données » + « Fichier prêt · … » (the same « Exporter » label
+// looked like nothing happened); the cancel confirmation is handed to the page, which keeps it until it is closed.
 import { formatDate, formatNumber, type AppLocale } from '@djaber/shared';
-import { Button, buttonClass, FormAlert, ProgressBar, toast } from '@djaber/ui';
+import { Button, buttonClass, FormAlert, ProgressBar } from '@djaber/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { AuthCard } from '@/components/auth/auth-card';
@@ -13,7 +15,7 @@ import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 
-export function DeactivatedAccount({ scheduledAt, onLogout }: { scheduledAt: string; onLogout: () => void }) {
+export function DeactivatedAccount({ scheduledAt, onLogout, onCancelled }: { scheduledAt: string; onLogout: () => void; onCancelled: () => void }) {
   const t = useT();
   const locale = useLocaleCode() as AppLocale;
   const { refetchMe } = useSession();
@@ -33,8 +35,8 @@ export function DeactivatedAccount({ scheduledAt, onLogout }: { scheduledAt: str
     setError(null);
     try {
       await cancel.mutateAsync();
+      onCancelled();
       await refetchMe();
-      toast(t('auth.deactivated.cancelled'));
     } catch (e) {
       setError(errorMessage(e, t));
     }
@@ -58,9 +60,11 @@ export function DeactivatedAccount({ scheduledAt, onLogout }: { scheduledAt: str
         {x && x.status === 'done' && x.url ? (
           <div className="flex flex-col gap-1">
             <a href={x.url} className={buttonClass({ className: 'w-full' })} data-testid="deactivated-export-link">
-              {t('public.deletion.export.download')}
+              {t('public.deletion.export.ready')}
             </a>
-            {x.expiresAt ? <span className="ts-label-meta text-center text-text-muted">{t('public.deletion.export.expires', { date: formatDate(x.expiresAt, locale) })}</span> : null}
+            <span className="ts-label-meta text-center text-accent-money" data-testid="deactivated-export-ready">
+              {x.expiresAt ? t('public.deletion.export.readyNote', { date: formatDate(x.expiresAt, locale) }) : t('public.deletion.export.readyShort')}
+            </span>
           </div>
         ) : jobId && (!x || x.status === 'queued' || x.status === 'running') ? (
           <ProgressBar value={x?.progress ?? 0} label={t('public.deletion.export.running', { progress: formatNumber(x?.progress ?? 0) })} />

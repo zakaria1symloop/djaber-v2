@@ -82,6 +82,18 @@ describe('moderation pre-screen', () => {
     expect(svc.score({ ...base, name: 'Drugstore kit' }, fr, null).aiFlags[0]).toMatchObject({ code: 'blocked_word' });
   });
 
+  it('retest 11/11 UX-053: a word listed in the plural rejects its singular too (« drogues » → « drogue », « drugs » → « drug »)', () => {
+    const pl = { ...rules, words: ['drogues', 'drugs', 'couteaux', 'gas', 'kiss'] };
+    expect(svc.score({ ...base, name: 'Recette UX-043 drogue' }, pl, null).banned).toMatchObject({ code: 'blocked_word', word: 'drogues', field: 'name' });
+    expect(svc.score({ ...base, name: 'Recette UX-043 drogues' }, pl, null).banned).toMatchObject({ word: 'drogues' });
+    expect(svc.score({ ...base, name: 'drug' }, pl, null).banned).toMatchObject({ word: 'drugs' });
+    expect(svc.score({ ...base, name: 'Couteau de chasse' }, pl, null).banned).toMatchObject({ word: 'couteaux' });
+    // a short word or a double s keeps its whole form; longer words still only flag
+    expect(svc.score({ ...base, name: 'Ga 16' }, pl, null).banned).toBeUndefined();
+    expect(svc.score({ ...base, name: 'Kis 16' }, pl, null).banned).toBeUndefined();
+    expect(svc.score({ ...base, name: 'Droguerie du centre' }, pl, null).banned).toBeUndefined();
+  });
+
   it('recette 09/11 (Badro): an agent name with an insult or a banned word is refused; ordinary words are not', async () => {
     const r = { ...rules, words: ['arnaque'], prohibited: ['arme'] };
     expect(await svc.bannedInName('Connard', r)).toBe('connard');

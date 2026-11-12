@@ -5,7 +5,7 @@
 // Filters Sens / Type / Mode / Par / source in the URL; AUTO 🔒 rows open their reference and are locked
 // (`CAISSE_EDIT_AUTOMATIC` / `CAISSE_DELETE_AUTOMATIC`), MANUEL rows ⋯ Modifier ≤ 24 h · Supprimer · Dupliquer;
 // "Clôturer la journée" (theoretical vs counted) locks the day (`CASH_DAY_CLOSED`), "Rouvrir" (Admin+); export job.
-import { formatDateTime, formatMoney, formatNumber, type AppLocale } from '@djaber/shared';
+import { CASH_DISPLAY_METHODS, cashDisplayMethod, formatDateTime, formatMoney, formatNumber, type AppLocale } from '@djaber/shared';
 import {
   ActionsMenu,
   ActiveFilters,
@@ -48,7 +48,7 @@ import { useListState } from '@/lib/use-list-state';
 import { gdsApi, useCash, useCashDays, useCashStats, useGdsRefresh } from './api';
 import { CashCategoryPill, AdvancedOnly, KpiSkeleton, shortName, useDayLabel } from './ui';
 import { CloseDayDialog, ManualEntryDialog, ReopenDayDialog, type ManualMode } from './cash-dialogs';
-import { CASH_CATEGORIES, PAYMENT_METHODS, type CashRow, type GdsPeriodKey } from './contracts';
+import { CASH_CATEGORIES, type CashRow, type GdsPeriodKey } from './contracts';
 import { cashSelection, cashSelectionQuery, daysList, selectionDay } from './logic';
 
 export const CASH_SPEC: ListSpec = {
@@ -159,7 +159,7 @@ function CashLedger() {
         started: t('toast.jobStarted'),
         progress: (job) => t('toast.export.progress', { entity: t('cash.export.entity'), pct: job.progress, rows: formatNumber(job.total ?? 0) }),
         done: (job) => ({ message: t('toast.export.done', { file: t('cash.export.file') }), action: job.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(job.resultUrl!, jobFileName(job)) } : undefined }),
-        failed: (job, error) => (job?.error?.message ? `${job.error.message} (${job.error.code})` : errorMessage(error, t)),
+        failed: (job, error) => (job?.error?.message ? job.error.message : errorMessage(error, t)),
       });
     } catch (e) {
       toast({ tone: 'danger', message: refusal(e, t) });
@@ -198,7 +198,8 @@ function CashLedger() {
       ),
     },
     { key: 'type', header: t('cash.col.type'), cell: (r) => <CashCategoryPill category={r.category} /> },
-    { key: 'method', header: t('cash.col.method'), hideBelow: 'lg', cell: (r) => t(`orders.payment.method.${r.method}`) },
+    // retest 11/11 UX-055: cash collected on a delivered order reads « COD », as in the reports
+    { key: 'method', header: t('cash.col.method'), hideBelow: 'lg', cell: (r) => t(`orders.payment.method.${cashDisplayMethod(r.category, r.method)}`) },
     { key: 'amount', header: t('cash.col.amount'), align: 'end', cell: (r) => <SignedAmount value={r.type === 'income' ? r.amount : -r.amount} formatted={formatNumber(r.amount)} /> },
     { key: 'balance', header: t('cash.col.balance'), align: 'end', hideBelow: 'lg', cell: (r) => <Ltr className="tabular-nums text-text-secondary">{formatNumber(r.balanceAfter)}</Ltr> },
     { key: 'by', header: t('cash.col.by'), hideBelow: 'xl', cell: (r) => shortName(r.createdBy) ?? <span className="text-text-secondary">{t('cash.system')}</span> },
@@ -225,7 +226,7 @@ function CashLedger() {
           </Button>
           <Button
             onClick={() => oneDay && setClosing(oneDay)}
-            disabledReason={writeBlocked ?? (!oneDay ? t('cash.close.pickDay') : closed ? `${t('error.CASH_DAY_CLOSED', { date: day(oneDay) })} (CASH_DAY_CLOSED)` : closeAction.present && !closeAction.enabled ? closeAction.reason : undefined)}
+            disabledReason={writeBlocked ?? (!oneDay ? t('cash.close.pickDay') : closed ? t('error.CASH_DAY_CLOSED', { date: day(oneDay) }) : closeAction.present && !closeAction.enabled ? closeAction.reason : undefined)}
             data-testid="cash-close"
           >
             {t('cash.close.action')}
@@ -288,7 +289,7 @@ function CashLedger() {
           </div>
         </FilterDropdown>
         <FilterDropdown label={t('cash.col.method')} count={methods.length}>
-          <FilterChips label={t('cash.col.method')} multiple options={PAYMENT_METHODS.map((m) => ({ value: m, label: t(`orders.payment.method.${m}`) }))} value={methods} onChange={(v) => list.setFilter('method', v)} />
+          <FilterChips label={t('cash.col.method')} multiple options={CASH_DISPLAY_METHODS.map((m) => ({ value: m, label: t(`orders.payment.method.${m}`) }))} value={methods} onChange={(v) => list.setFilter('method', v)} />
         </FilterDropdown>
         <FilterDropdown label={t('cash.col.by')} count={by.length}>
           <FilterChips label={t('cash.col.by')} multiple options={memberOptions} value={by} onChange={(v) => list.setFilter('createdById', v)} />

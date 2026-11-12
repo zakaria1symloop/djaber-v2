@@ -4,6 +4,7 @@ import { expect, test, type APIRequestContext } from '@playwright/test';
 import { expectNoA11yViolations } from './support/a11y';
 import { API, apiReady, authHeaders, createAccount, loginHome, type Account } from './support/m1';
 import { catalogReady } from './support/m2';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial' });
 let account: Account;
@@ -110,7 +111,7 @@ test('AT-CAT-09 adjust on a variant product: variant and reason required, "Défi
   await dialog.locator('#adj-qty').fill('4');
   const submit = dialog.getByRole('button', { name: /Enregistrer l.ajustement/ });
   await submit.click();
-  await expect(dialog.getByText('Ajustez le stock par variante. (PRODUCT_HAS_VARIANTS)')).toBeVisible();
+  await expect(dialog.getByText('Ajustez le stock par variante.')).toBeVisible();
   await expect(dialog.getByText('Champ requis')).toBeVisible();
   expect(sent).toBe(0);
 
@@ -139,7 +140,7 @@ test('AT-CAT-09 adjust on a variant product: variant and reason required, "Défi
   await row.getByRole('button', { name: 'Actions' }).click();
   await expect(page.getByRole('menuitem', { name: 'Modifier' })).toBeDisabled();
   await expect(page.getByRole('menuitem', { name: 'Supprimer' })).toBeDisabled();
-  await expect(page.getByRole('menu')).toContainText('GDS_MOVEMENT_IMMUTABLE');
+  await expect(page.getByRole('menu')).toContainText(errText('GDS_MOVEMENT_IMMUTABLE'));
   await page.getByRole('menuitem', { name: 'Voir le stock à cette date' }).click();
   await expect(page.getByRole('dialog').getByTestId('snapshot')).toContainText(VARIANT_PRODUCT);
   await page.getByRole('dialog').getByRole('button', { name: 'Fermer' }).last().click();

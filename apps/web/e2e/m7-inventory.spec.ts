@@ -9,6 +9,7 @@ import { apiReady, type Account } from './support/m1';
 import { signIn } from './support/m4-agents';
 import { apiCall, open } from './support/m5-orders';
 import { gdsOwner, gdsReady, getJson, product, type SeedProduct } from './support/m7';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -42,7 +43,7 @@ test('AT-INV-01 / AT-DLG-33 — start on "alerts" scope (sizes shown), blocking 
   await expect(page).toHaveURL(/\/fr\/inventory\/[0-9a-f-]{36}$/, { timeout: 30_000 });
   inventoryId = page.url().split('/').pop()!;
   await expect(page.getByTestId('inventory-lines').locator('tbody tr')).toHaveCount(2);
-  await expect(page.getByText(/SALE_BLOCKED_BY_INVENTORY/)).toBeVisible();
+  await expect(page.getByText(errText('SALE_BLOCKED_BY_INVENTORY'))).toBeVisible();
 
   // one open count per workspace; counter sales are blocked while it counts
   const again = await apiCall(request, owner, 'POST', '/inventories', { scope: 'all' });
@@ -71,7 +72,7 @@ test('AT-INV-02 / AT-DLG-33 — count, note required above 10 %, validate ⇒ IN
   await expect(page.getByRole('dialog')).toContainText('2 écarts');
   await expect(page.getByRole('dialog').getByTestId('dialog-submit')).toContainText('Valider (2 mouvements)');
   await page.getByRole('dialog').getByTestId('dialog-submit').click();
-  await expect(dlg).toContainText('INVENTORY_VARIANCE_NOTE_REQUIRED');
+  await expect(dlg).toContainText(errText('INVENTORY_VARIANCE_NOTE_REQUIRED'));
   await dlg.locator(`li[data-line="${baskets.id}:"]`).getByRole('textbox').fill('Paire abîmée retirée');
   await dlg.locator(`li[data-line="${sac.id}:"]`).getByRole('textbox').fill('2 pièces en vitrine non comptées');
   await page.getByRole('dialog').getByTestId('dialog-submit').click();

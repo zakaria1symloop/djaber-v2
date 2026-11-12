@@ -91,7 +91,7 @@ export function PeriodPicker({ period, onChange, range, showCompare = true, extr
   }, [open, period.from, period.to]);
   const apply = () => {
     const code = customRangeError(draft.from, draft.to);
-    if (code) return setError(`${t(`analytics.range.${code}`)} (${code})`);
+    if (code) return setError(t(`analytics.range.${code}`));
     setOpen(false);
     onChange({ ...period, period: 'custom', from: draft.from, to: draft.to });
   };

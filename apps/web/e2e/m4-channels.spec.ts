@@ -13,6 +13,7 @@ import { failWith, inviteOperator } from './support/m3-inbox';
 import { fail } from './support/m4';
 import { activeAgent, createAgent, getAgent, linkPage, pauseAgent, realDelete, realPut, refreshToken, setupShop, type RealAgent, type Shop } from './support/m4-real';
 import { analysisDone, analysisOf, channelOf, observe, patchWhile, productsNamed, rerunLabel, openFresh, signInFresh, spendDailyRuns, toast } from './support/m4-real-channels';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 400_000 });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -78,7 +79,7 @@ test.describe('channel page — IA & agent tab', () => {
     await expect(card).toContainText('ACTIF');
     await expect(card.getByTestId('channel-ai-live')).toHaveText('IA active sur cette page');
     await expect(card).toContainText("Le changement s'applique aux nouvelles conversations.");
-    await expect(card).toContainText('(AGENT_CHANNEL_SWITCH_NEXT_THREAD)');
+    await expect(card).toContainText(errText('AGENT_CHANNEL_SWITCH_NEXT_THREAD'));
     await expect(card.getByTestId('agent-change')).toHaveText('Changer');
     await expect(card.getByTestId('agent-detach')).toHaveText('Détacher');
     await expect(page.getByTestId('channel-ai-readonly')).toHaveCount(0);
@@ -112,7 +113,7 @@ test.describe('channel page — IA & agent tab', () => {
 
     const dialog = page.getByRole('dialog', { name: `Déplacer « ${fbName()} » vers « Service Client » ?` });
     await expect(dialog.getByTestId('move-dialog')).toContainText('« Vendeur Pro » ne répondra plus sur cette page.');
-    await expect(dialog.getByTestId('move-dialog')).toContainText('(AGENT_CHANNEL_SWITCH_NEXT_THREAD)');
+    await expect(dialog.getByTestId('move-dialog')).toContainText(errText('AGENT_CHANNEL_SWITCH_NEXT_THREAD'));
     await dialog.getByRole('button', { name: 'Annuler' }).click();
     await expect(dialog).toHaveCount(0);
     expect(sent).toEqual([]);
@@ -376,7 +377,7 @@ test.describe('AT-CHN-10 page analysis', () => {
     const card = page.getByTestId('analysis-permission');
     await expect(card).toHaveAttribute('role', 'alert');
     await expect(card).toContainText('PERMISSION REQUISE');
-    await expect(card).toContainText('Reconnectez la page avec « contenu de la page » (PAGE_ANALYSIS_PERMISSION_REQUIRED)');
+    await expect(card).toContainText('Reconnectez la page avec « contenu de la page »');
     await expect(card.getByTestId('analysis-reconnect')).toHaveText('Reconnecter');
     await expect(card.getByTestId('analysis-reconnect')).toBeEnabled();
     await expect(page.getByTestId('analysis-run')).toHaveCount(0);
@@ -389,7 +390,7 @@ test.describe('AT-CHN-10 page analysis', () => {
     await expect(page.getByTestId('channel-analysis')).toHaveAttribute('data-state', 'idle');
     await page.getByTestId('analysis-run').click();
     await expect(page.getByTestId('channel-analysis')).toHaveAttribute('data-state', 'permission');
-    await expect(page.getByTestId('analysis-permission')).toContainText('(PAGE_ANALYSIS_PERMISSION_REQUIRED)');
+    await expect(page.getByTestId('analysis-permission')).toContainText(errText('PAGE_ANALYSIS_PERMISSION_REQUIRED'));
     await expect(page.getByTestId('analysis-reconnect')).toBeVisible();
     expect(posts).toHaveLength(1);
   });
@@ -572,7 +573,7 @@ test.describe('AT-CHN-10 page analysis', () => {
     });
     await item(page, sac).getByLabel('PRIX *').fill('7000');
     await page.getByTestId('analysis-import').click();
-    await expect(page.getByTestId('channel-analysis').getByRole('alert').filter({ hasText: 'PLAN_LIMIT' })).toHaveText('Limite du plan atteinte (500/500 produits). (PLAN_LIMIT)');
+    await expect(page.getByTestId('channel-analysis').getByRole('alert').filter({ hasText: errText('PLAN_LIMIT') })).toHaveText('Limite du plan atteinte (500/500 produits).');
     await expect(page.getByTestId('analysis-import-result')).toHaveCount(0);
     await expect(item(page, sac)).toHaveAttribute('data-status', 'new');
     await expect(item(page, sac)).toHaveAttribute('data-selected', 'true');
@@ -581,7 +582,7 @@ test.describe('AT-CHN-10 page analysis', () => {
     // the same click goes through once the plan has room
     await page.getByTestId('analysis-import').click();
     await expect(page.getByTestId('analysis-import-result')).toHaveText('1 produit importé dans le catalogue', FIRST);
-    await expect(page.getByTestId('channel-analysis').getByRole('alert').filter({ hasText: 'PLAN_LIMIT' })).toHaveCount(0);
+    await expect(page.getByTestId('channel-analysis').getByRole('alert').filter({ hasText: errText('PLAN_LIMIT') })).toHaveCount(0);
     const created = (await productsNamed(page.request, owner, 'Sac à main cuir noir')).filter((p) => p.name === 'Sac à main cuir noir');
     expect(created.map((p) => p.price)).toEqual([7000]);
   });
@@ -609,7 +610,7 @@ test.describe('AT-CHN-10 page analysis', () => {
     await expect(page.getByTestId('analysis-import-result')).toHaveText('1 importé(s) · 1 en échec Corrigez les lignes en rouge puis réessayez.', FIRST);
     expect(createdSku).toMatch(/^FB-\d{4}$/);
     await expect(item(page, sac)).toContainText(`IMPORTÉ · ${createdSku}`);
-    await expect(item(page, ensemble).getByTestId('analysis-item-error')).toHaveText('Import impossible pour ce produit. (PLAN_LIMIT)');
+    await expect(item(page, ensemble).getByTestId('analysis-item-error')).toHaveText('Import impossible pour ce produit.');
     await expect(item(page, ensemble)).toHaveAttribute('data-selected', 'true');
     await expect(page.getByTestId('analysis-import')).toHaveText('Réessayer le 1 restant');
   });
@@ -631,7 +632,7 @@ test.describe('AT-CHN-10 page analysis', () => {
     await openFresh(page, page.url(), () => rerun);
     await expect(rerun).toHaveText(rerunLabel(1));
     await rerun.click();
-    await expect(toast(page, '3 analyses par jour max. (ANALYSIS_RATE_LIMITED)')).toBeVisible();
+    await expect(toast(page, '3 analyses par jour max.')).toBeVisible();
     expect(posts).toHaveLength(1);
     await expect(rerun).toBeDisabled();
     await expect(rerun).toHaveAttribute('title', /ANALYSIS_RATE_LIMITED/);

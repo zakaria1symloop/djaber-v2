@@ -11,7 +11,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { AppPage } from '@/components/app-page';
 import { QueryError } from '@/components/global-states';
-import { ApiError } from '@/lib/api';
 import { errorMessage, useLeaveGuard } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useWorkspaceId } from '@/lib/session';
@@ -106,7 +105,7 @@ function ReplyForm({ ticket, onDone }: { ticket: Ticket; onDone: (t: Ticket) => 
       attachments.clear();
       toast({ tone: 'success', message: t('help.ticket.reply.sent') });
     } catch (e) {
-      setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setError(errorMessage(e, t));
     }
   };
   const doClose = async () => {

@@ -158,16 +158,17 @@ const csvCell = (v: unknown): string => {
 };
 
 /**
- * CSV of the rows in error (`;` separator, CRLF, BOM: opens directly in Excel FR): line number, the imported values,
- * then one "CODE — text" per error.
+ * CSV of the rows in error (`;` separator, CRLF, BOM: opens directly in Excel FR): line number, the imported values (a
+ * value that is not a number stays as typed, « abc »), the readable reasons, then the codes in a last column for support
+ * (retest 11/11 UX-054: the code no longer comes before the reason).
  */
 export function buildErrorsCsv(
   rows: readonly ImportPreviewRow[],
-  o: { fields: readonly ImportField[]; headers: { row: string; errors: string; field: (f: ImportField) => string }; describe: (e: ImportPreviewRow['errors'][number]) => string },
+  o: { fields: readonly ImportField[]; headers: { row: string; errors: string; code: string; field: (f: ImportField) => string }; describe: (e: ImportPreviewRow['errors'][number]) => string },
 ): string {
-  const lines = [[o.headers.row, ...o.fields.map(o.headers.field), o.headers.errors].map(csvCell).join(';')];
+  const lines = [[o.headers.row, ...o.fields.map(o.headers.field), o.headers.errors, o.headers.code].map(csvCell).join(';')];
   for (const r of invalidRows(rows)) {
-    lines.push([r.row, ...o.fields.map((f) => r.values[f] ?? ''), r.errors.map(o.describe).join(' | ')].map(csvCell).join(';'));
+    lines.push([r.row, ...o.fields.map((f) => r.values[f] ?? ''), r.errors.map(o.describe).join(' | '), r.errors.map((e) => e.code).join(' | ')].map(csvCell).join(';'));
   }
   return `${BOM}${lines.join('\r\n')}\r\n`;
 }

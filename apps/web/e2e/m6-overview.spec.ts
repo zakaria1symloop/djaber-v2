@@ -7,6 +7,7 @@ import { apiReady, type Account } from './support/m1';
 import { signIn } from './support/m4-agents';
 import { apiCall, open, row, seedProduct, shopOwner } from './support/m5-orders';
 import { confirmedOrder, deliveryReady, getParcel, markFailed, seedCourier, sendOrder, waitParcel, type Courier, type Parcel } from './support/m6';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 240_000 });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -59,7 +60,7 @@ test('DLV-08 / MECH — rows, tabs and filters in the URL, row menu greyed with 
   await expect(row(page, sent.id)).toContainText(/ZR-/);
   // ZR Express cannot cancel a parcel: the item stays visible, greyed, with its code in the footer
   await row(page, sent.id).getByRole('button', { name: /Actions/ }).click();
-  await expect(page.getByRole('menu')).toContainText('COURIER_CANCEL_NOT_ALLOWED');
+  await expect(page.getByRole('menu')).toContainText(errText('COURIER_CANCEL_NOT_ALLOWED'));
   await page.keyboard.press('Escape');
 
   // filter panel → URL
@@ -89,7 +90,7 @@ test('AT-DLV-12 — "Actualiser" in the tracking panel: à jour, then limited to
   // reopened: the panel reads the cooldown of the parcel
   await page.reload();
   await expect(page.getByTestId('tracking-sync')).toHaveAttribute('data-state', 'limited', { timeout: 30_000 });
-  await expect(page.getByTestId('tracking-sync')).toContainText('TRACKING_SYNC_RATE_LIMITED');
+  await expect(page.getByTestId('tracking-sync')).toContainText(errText('TRACKING_SYNC_RATE_LIMITED'));
   await expect(page.getByTestId('tracking-timeline')).toBeVisible();
 });
 
@@ -108,7 +109,7 @@ test('AT-DLV-11 — failure flow: Échecs row (reason + attempt n/3), "Relancer"
   await expect(row(page, a.id)).toContainText('tentative 1/3');
   await row(page, a.id).getByRole('button', { name: /Actions/ }).click();
   await expect(page.getByRole('menuitem', { name: 'Relancer la livraison' })).toHaveAttribute('aria-disabled', 'true');
-  await expect(page.getByRole('menu')).toContainText('COURIER_CANCEL_NOT_ALLOWED');
+  await expect(page.getByRole('menu')).toContainText(errText('COURIER_CANCEL_NOT_ALLOWED'));
   await page.keyboard.press('Escape');
 
   // EcoTrack parcel: failure recorded from the UI ("Échec de livraison" dialog), then "Relancer la livraison"
@@ -173,7 +174,7 @@ test('MECH — bulk send results from the notification link (/delivery?job=): pe
   await open(page, `/fr/delivery?job=${jobId}`, () => page.getByTestId('bulk-send-results'));
   const results = page.getByTestId('bulk-send-results');
   await expect(results).toContainText('#1201');
-  await expect(results).toContainText('ORDER_ADDRESS_REQUIRED');
+  await expect(results).toContainText(errText('ORDER_ADDRESS_REQUIRED'));
   await page.getByTestId('bulk-send-retry').click();
   await expect(page).toHaveURL(new RegExp(`tab=to_send.*ids=${failedOrder}|ids=${failedOrder}.*tab=to_send`));
   await expect(page).not.toHaveURL(/job=/);

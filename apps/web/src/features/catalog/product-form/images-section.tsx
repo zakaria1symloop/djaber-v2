@@ -20,7 +20,7 @@ import { checkImageBatch, IMAGE_ACCEPT, imageHandover, readImageSize, smallSide,
 const FINAL_CODES: readonly string[] = ['IMAGE_TYPE_INVALID', 'IMAGE_TOO_LARGE', 'IMAGES_LIMIT'];
 let seq = 0;
 const localKey = () => `local-${Date.now().toString(36)}-${++seq}`;
-const withCode = (t: TFunction, code: string) => `${t(`error.${code}`)} (${code})`;
+const reasonOf = (t: TFunction, code: string) => t(`error.${code}`);
 const smallWarning = (t: TFunction, px: number | null | undefined) => (px ? t('error.IMAGE_SMALL', { px }) : undefined);
 
 export const useImageGridLabels = (): ImageGridLabels => {
@@ -51,7 +51,7 @@ const localTile = (t: TFunction, img: LocalImage, primary: boolean): ImageTile =
   primary,
   status: img.status === 'uploading' ? 'uploading' : img.status === 'error' ? 'error' : 'ready',
   progress: img.progress,
-  error: img.error ? (img.rejected || FINAL_CODES.includes(img.error) ? withCode(t, img.error) : img.error) : undefined,
+  error: img.error ? (img.rejected || FINAL_CODES.includes(img.error) ? reasonOf(t, img.error) : img.error) : undefined,
   warning: smallWarning(t, img.smallPx),
   retryable: !img.rejected && !(img.error && FINAL_CODES.includes(img.error)),
 });
@@ -214,7 +214,7 @@ export function useProductImageEditor(product: Pick<Product, 'id' | 'name' | 'im
       await job();
       await refresh({ productId });
     } catch (e) {
-      note(id, { error: e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t) });
+      note(id, { error: errorMessage(e, t) });
     }
   };
   const remove = (id: string) => {

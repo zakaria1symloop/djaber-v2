@@ -166,7 +166,7 @@ test('PLAYGROUND_RATE_LIMITED ⇒ rate-limited state with a countdown, composer 
   await expect(shared(page)).toHaveAttribute('data-state', 'rate-limited');
   const error = page.getByTestId('playground-error');
   await expect(error).toHaveAttribute('data-code', 'PLAYGROUND_RATE_LIMITED');
-  await expect(error).toContainText('Limite de test atteinte (60/h). (PLAYGROUND_RATE_LIMITED)');
+  await expect(error).toContainText('Limite de test atteinte (60/h).');
   // no Retry-After on this answer: the page waits one minute
   await expect(page.getByTestId('playground-rate-limited')).toContainText(/réessayez dans (1:00|0:[0-5]\d)/);
   await expect(composer(page)).toBeDisabled();

@@ -323,7 +323,7 @@ function NewSaleSheet({ draftId, onClose }: { draftId: string | null; onClose: (
     setError(null);
     setFields({});
     if (!lines.length || missingVariant || (status === 'completed' && partialBlocked)) {
-      setError(partialBlocked && status === 'completed' ? `${t('error.SALE_PARTIAL_REQUIRES_CUSTOMER')} (SALE_PARTIAL_REQUIRES_CUSTOMER)` : missingVariant ? `${t('error.VARIANT_REQUIRED')} (VARIANT_REQUIRED)` : t('sales.form.noLines'));
+      setError(partialBlocked && status === 'completed' ? t('error.SALE_PARTIAL_REQUIRES_CUSTOMER') : missingVariant ? t('error.VARIANT_REQUIRED') : t('sales.form.noLines'));
       return;
     }
     setBusy(status);
@@ -376,7 +376,7 @@ function NewSaleSheet({ draftId, onClose }: { draftId: string | null; onClose: (
             onClick={() => void save('completed')}
             loading={busy === 'completed'}
             disabled={busy !== null}
-            disabledReason={blocked ?? (partialBlocked ? `${t('error.SALE_PARTIAL_REQUIRES_CUSTOMER')} (SALE_PARTIAL_REQUIRES_CUSTOMER)` : undefined)}
+            disabledReason={blocked ?? (partialBlocked ? t('error.SALE_PARTIAL_REQUIRES_CUSTOMER') : undefined)}
             data-testid="sale-validate"
           >
             {t('sales.form.validate', { amount: formatMoney(live.total) })}

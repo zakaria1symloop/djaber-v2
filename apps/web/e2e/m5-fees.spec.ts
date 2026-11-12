@@ -5,6 +5,7 @@ import { expectNoA11yViolations } from './support/a11y';
 import { apiReady, createAccount, expectUrl, loginHome, type Account } from './support/m1';
 import { failWith, inviteOperator } from './support/m3-inbox';
 import { feesReady, getFees, putFee } from './support/m5-clients';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial' });
 let owner: Account;
@@ -90,7 +91,7 @@ test('AT-UX-04 · a refused write shows the error on the row and restores the va
   const before = await home.inputValue();
   await home.fill('1234');
   await home.blur();
-  await expect(row.getByRole('alert').last()).toContainText('VALIDATION_ERROR');
+  await expect(row.getByRole('alert').last()).toContainText(errText('VALIDATION_ERROR'));
   await expect(home).toHaveValue(before);
 });
 

@@ -129,7 +129,7 @@ export function ThreadInsightsDialog({ conversationId, onClose }: { conversation
       await ignoreInsight(insight);
       toast(t('inbox.insights.ignored'));
     } catch (e) {
-      toast(isAlreadyResolved(e) ? { tone: 'info', message: `${t('error.INSIGHT_ALREADY_RESOLVED')} (INSIGHT_ALREADY_RESOLVED)` } : { tone: 'danger', message: errorMessage(e, t) });
+      toast(isAlreadyResolved(e) ? { tone: 'info', message: t('error.INSIGHT_ALREADY_RESOLVED') } : { tone: 'danger', message: errorMessage(e, t) });
     } finally {
       setBusy(null);
       void refresh();

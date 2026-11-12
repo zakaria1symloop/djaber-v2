@@ -123,12 +123,6 @@ export function ActivateStep({ agent, activation }: { agent: Agent; activation: 
           <FormAlert>
             <span data-testid="activation-error" data-code={error.code ?? ''}>
               {error.missing.length ? t('agents.activate.incomplete') : error.message}
-              {error.code ? (
-                <>
-                  {' '}
-                  <Ltr>({error.code})</Ltr>
-                </>
-              ) : null}
             </span>
             {error.missing.length ? (
               <ul className="mt-1.5 list-inside list-disc" data-testid="activation-missing">

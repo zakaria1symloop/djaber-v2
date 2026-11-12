@@ -96,7 +96,7 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
       {sending ? (
         <p role="status" className="flex items-center gap-2 text-[13px] text-text-secondary" data-testid="parcel-sending">
           {queued ? null : <Loader2 className="size-3.5 animate-spin" aria-hidden />}
-          {queued ? `${t('send.queued', { courier: active?.courierAccount?.displayName ?? '' })} (COURIER_UNAVAILABLE)` : t('send.pending', { courier: active?.courierAccount?.displayName ?? '' })}
+          {queued ? t('send.queued', { courier: active?.courierAccount?.displayName ?? '' }) : t('send.pending', { courier: active?.courierAccount?.displayName ?? '' })}
         </p>
       ) : null}
 
@@ -114,7 +114,7 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
             )}
             {active.deliveryAttempts > 0 ? <span className="ts-label-micro text-text-muted">{t('delivery.row.attempt', { n: active.deliveryAttempts, max: MAX_ATTEMPTS })}</span> : null}
           </div>
-          {active.error ? <p className="text-[13px] text-accent-alert">{`${active.error.message ?? t(`error.${active.error.code}`, { message: '' })} (${active.error.code})`}</p> : null}
+          {active.error ? <p className="text-[13px] text-accent-alert">{`${active.error.message ?? t(`error.${active.error.code}`, { message: '' })}`}</p> : null}
           {fixable ? <p className="ts-label-micro !normal-case text-text-muted">{t('parcel.nothingCreated')}</p> : null}
           {active.deliveryAttempts >= MAX_ATTEMPTS ? <p className="ts-label-micro !normal-case text-accent-starred">{t('tracking.panel.proposeReturn', { max: MAX_ATTEMPTS })}</p> : null}
         </div>

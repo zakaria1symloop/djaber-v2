@@ -10,6 +10,7 @@ import { API, apiReady, authHeaders } from './support/m1';
 import { signIn } from './support/m4-agents';
 import { activeAgent, listAgents, setupShop } from './support/m4-real';
 import { billingClock, billingReady, subscribe, subscriptionOf } from './support/m9';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 300_000 });
 const expect = baseExpect.configure({ timeout: 20_000 });
@@ -44,11 +45,11 @@ test('M4 carry-over — agent paused by the plan after expiry: PAUSE (PLAN), "Re
   const menu = page.getByRole('menu');
   const resume = menu.getByRole('menuitem', { name: 'Reprendre', exact: true });
   if ((await resume.getAttribute('aria-disabled')) === 'true') {
-    await expect(menu).toContainText('(PLAN_LIMIT)');
+    await expect(menu).toContainText(errText('PLAN_LIMIT'));
     await page.keyboard.press('Escape');
   } else {
     await resume.click();
-    await expect(page.getByTestId('agents-limit-dialog')).toContainText('(PLAN_LIMIT)');
+    await expect(page.getByTestId('agents-limit-dialog')).toContainText(errText('PLAN_LIMIT'));
     await page.keyboard.press('Escape');
   }
   expect((await listAgents(request, s.owner)).find((a) => a.id === recent.id)?.status).toBe('paused');
@@ -76,7 +77,7 @@ test('M8 carry-over — Starter has no scheduled reports: upgrade state, real PL
   }).toPass({ timeout: 120_000 });
   // the plan of the workspace has no `scheduled_reports`: the dialog opens on the upgrade state (the API refuses as well)
   await page.getByTestId('report-schedule').click();
-  await expect(page.getByTestId('schedule-gated')).toContainText('PLAN_FEATURE_REQUIRED');
+  await expect(page.getByTestId('schedule-gated')).toContainText(errText('PLAN_FEATURE_REQUIRED'));
   await expect(page.getByTestId('schedule-submit')).toHaveCount(0);
   await page.getByTestId('schedule-upgrade').click();
   await expect(page).toHaveURL(/\/fr\/settings\/billing$/);

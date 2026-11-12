@@ -186,7 +186,7 @@ export function FaqSection({ agentId, readOnly, hasInsights }: { agentId: string
       setExtract(false);
     } catch (e) {
       // ANALYSIS_RATE_LIMITED is a toast (11 §4); the rest stays inline
-      if (e instanceof ApiError && e.code === 'ANALYSIS_RATE_LIMITED') toast({ tone: 'warning', message: `${errorMessage(e, t)} (ANALYSIS_RATE_LIMITED)` });
+      if (e instanceof ApiError && e.code === 'ANALYSIS_RATE_LIMITED') toast({ tone: 'warning', message: errorMessage(e, t) });
       else setError(errorMessage(e, t));
       setExtract(false);
     } finally {
@@ -319,7 +319,7 @@ function FaqDialog({ agentId, entry, onClose, onSaved }: { agentId: string | nul
       onSaved();
     } catch (e) {
       if (e instanceof ApiError && Object.keys(e.body.fields).length) setFields(e.body.fields);
-      else setError(e instanceof ApiError && e.code === 'AGENT_FAQ_LIMIT' ? `${errorMessage(e, t)} (AGENT_FAQ_LIMIT)` : errorMessage(e, t));
+      else setError(errorMessage(e, t));
     } finally {
       setPending(false);
     }

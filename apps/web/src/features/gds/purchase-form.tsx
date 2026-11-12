@@ -150,8 +150,8 @@ function PurchaseForm({ purchase }: { purchase?: Purchase }) {
   if (!f.supplierId) errs.supplierId = t('validation.required');
   if (!f.lines.length) errs.items = t('purchases.form.noLines');
   f.lines.forEach((l, i) => {
-    if (!l.trackStock) errs[`items.${i}.productId`] = `${t('error.PURCHASE_UNTRACKED_PRODUCT', { product: l.name })} (PURCHASE_UNTRACKED_PRODUCT)`;
-    else if (l.hasVariants && !l.variantId) errs[`items.${i}.variantId`] = `${t('error.VARIANT_REQUIRED')} (VARIANT_REQUIRED)`;
+    if (!l.trackStock) errs[`items.${i}.productId`] = t('error.PURCHASE_UNTRACKED_PRODUCT', { product: l.name });
+    else if (l.hasVariants && !l.variantId) errs[`items.${i}.variantId`] = t('error.VARIANT_REQUIRED');
   });
   if (totals.overpaid) errs.amountPaid = t('purchases.form.overpaid');
   const shown = (k: string) => (touched ? errs[k] : undefined) ?? (fields[k] ? (t.has(fields[k]!) ? t(fields[k]!, { max: '', min: '' }) : fields[k]) : undefined);

@@ -208,7 +208,7 @@ function SyncDialog({ open, name, channelId, onClose, onStarted, onExpired }: { 
       <p className="ts-label-meta mt-4 text-text-muted">{t('channels.sync.note')}</p>
       {error ? (
         <FormAlert className="mt-4">
-          {error.message} {error.code ? <Ltr>({error.code})</Ltr> : null}
+          {error.message}
         </FormAlert>
       ) : null}
     </Dialog>

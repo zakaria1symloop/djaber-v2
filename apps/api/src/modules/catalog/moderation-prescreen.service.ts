@@ -49,6 +49,15 @@ const AR_SUFFIX = '(?:ات|ين|ون|ان|ه|ي)?';
 // « interdite »). A word already ending in « e » only takes « s » (« arme » → « armes », never « armee » = « armée »).
 const latinSuffix = (w: string) => (w.endsWith('e') ? '(?:s)?' : w.endsWith('s') || w.endsWith('x') ? '(?:es)?' : '(?:s|x|e|es)?');
 /**
+ * Retest 11/11 UX-053: a word listed in the plural catches its singular too (« drogues » → « drogue », « drugs » → « drug »,
+ * « couteaux » → « couteau »). The stem keeps 4 letters at least (« gas », « jeux » stay whole) and « ss » is no plural.
+ */
+const latinForms = (w: string): string[] => (/\p{L}{4}[sx]$/u.test(w) && !w.endsWith('ss') ? [w, w.slice(0, -1)] : [w]);
+const latinCore = (w: string) => {
+  const forms = latinForms(w).map((f) => `${escapeRe(f)}${/\p{L}$/u.test(f) ? latinSuffix(f) : ''}`);
+  return forms.length > 1 ? `(?:${forms.join('|')})` : forms[0]!;
+};
+/**
  * Whole-word hit (a letter or digit next to it ends the match): « drug » in « drug test » and « drugs », not in
  * « drugstore »; an Arabic word with its attached article / particles / endings too (« الخمر », « بالخمر », « مخدراتهم »).
  */
@@ -56,7 +65,7 @@ export const containsWord = (hay: string, needles: readonly string[]) =>
   needles.find((n) => {
     const w = foldText(n).trim();
     if (w.length <= 1) return false;
-    const core = ARABIC.test(w) ? `${AR_PREFIX}${escapeRe(w.replace(/^ال/, ''))}${AR_SUFFIX}` : `${escapeRe(w)}${/\p{L}$/u.test(w) ? latinSuffix(w) : ''}`;
+    const core = ARABIC.test(w) ? `${AR_PREFIX}${escapeRe(w.replace(/^ال/, ''))}${AR_SUFFIX}` : latinCore(w);
     return new RegExp(`(?:^|[^\\p{L}\\p{N}])${core}(?:$|[^\\p{L}\\p{N}])`, 'u').test(hay);
   }) ?? null;
 

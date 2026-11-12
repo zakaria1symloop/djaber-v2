@@ -79,7 +79,7 @@ function Timeline({ view }: { view: ModerationView }) {
   const windowLine =
     view.kind === 'rejected' && view.appeal?.deadlineAt
       ? appealExpired(view)
-        ? { tone: 'neutral' as const, title: `${t('error.MODERATION_APPEAL_WINDOW_EXPIRED')} (MODERATION_APPEAL_WINDOW_EXPIRED)`, sub: null }
+        ? { tone: 'neutral' as const, title: t('error.MODERATION_APPEAL_WINDOW_EXPIRED'), sub: null }
         : { tone: 'warning' as const, title: t('products.moderation.appeal.until', { date: formatDate(view.appeal.deadlineAt, locale) }), sub: t('products.moderation.appeal.rules') }
       : null;
   if (!entries.length && !windowLine) return null;
@@ -242,8 +242,8 @@ export function AppealDialog({ product, open, onClose, onSent }: { product: Pick
     setFileError(null);
     if (!file) return;
     const problem = appealFileProblem(file);
-    if (problem === 'type') return setFileError(`${t('error.UPLOAD_TYPE_INVALID')} (UPLOAD_TYPE_INVALID)`);
-    if (problem === 'size') return setFileError(`${t('error.UPLOAD_TOO_LARGE', { max: t('help.attachments.maxSize') })} (UPLOAD_TOO_LARGE)`);
+    if (problem === 'type') return setFileError(t('error.UPLOAD_TYPE_INVALID'));
+    if (problem === 'size') return setFileError(t('error.UPLOAD_TOO_LARGE', { max: t('help.attachments.maxSize') }));
     try {
       setUploading(0);
       const fd = new FormData();
@@ -252,7 +252,7 @@ export function AppealDialog({ product, open, onClose, onSent }: { product: Pick
       const r = await uploadWithProgress<{ id: string }>('/uploads', fd, { onProgress: setUploading });
       setAttachment({ id: r.data.id, name: file.name });
     } catch (e) {
-      setFileError(e instanceof ApiError ? `${e.message || t('error.INTERNAL')} (${e.code})` : t('toast.noConnection'));
+      setFileError(e instanceof ApiError ? `${e.message || t('error.INTERNAL')}` : t('toast.noConnection'));
     } finally {
       setUploading(null);
     }
@@ -268,7 +268,7 @@ export function AppealDialog({ product, open, onClose, onSent }: { product: Pick
       onClose();
     } catch (e) {
       const text = applyServerErrors(form, e, t, { fields: ['message'] });
-      if (text) setError(e instanceof ApiError ? `${text} (${e.code})` : text);
+      if (text) setError(text);
       // the appeal is no longer possible: the page hides the button once the product is refreshed
       if (e instanceof ApiError && (e.code === 'MODERATION_APPEAL_ALREADY_USED' || e.code === 'MODERATION_APPEAL_WINDOW_EXPIRED' || e.code === 'MODERATION_NOT_REJECTED')) void refresh({ productId: product.id });
     }

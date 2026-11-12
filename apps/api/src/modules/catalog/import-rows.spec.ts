@@ -109,6 +109,12 @@ describe('preview', () => {
     expect(r.totals).toMatchObject({ valid: 0, invalid: 1 });
   });
 
+  it('retest 11/11 UX-054: a value that is not a number is kept as typed for the error screen and file', () => {
+    const r = preview(headers, [['A', 'Tapis', 'abc', '12x', '-3', '', '', '']]);
+    expect(r.rows[0]!.values).toMatchObject({ price: 'abc', costPrice: '12x', stock: -3 });
+    expect(r.rows[0]!.errors.map((e) => e.field)).toEqual(['price', 'costPrice', 'stock']);
+  });
+
   it('duplicate SKU in the file points at the first row; a SKU of the catalogue is an error unless updateExisting', () => {
     const rows = [
       ['A', 'Un', '10', '', '', '', '', ''],

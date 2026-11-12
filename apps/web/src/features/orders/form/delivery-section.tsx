@@ -154,7 +154,7 @@ export function DeliverySection({
           quoteError ? (
             <span className="text-accent-alert">{quoteError}</span>
           ) : notServed ? (
-            `${t('error.WILAYA_NOT_SERVED')} (WILAYA_NOT_SERVED)`
+            t('error.WILAYA_NOT_SERVED')
           ) : quote && value.wilayaId && !quoting ? (
             <Ltr className="!inline">{feeExplanation(t, quote, wilayaName, override)}</Ltr>
           ) : undefined

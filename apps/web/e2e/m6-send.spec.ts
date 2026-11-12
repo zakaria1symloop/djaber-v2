@@ -7,6 +7,7 @@ import { apiReady, type Account } from './support/m1';
 import { signIn } from './support/m4-agents';
 import { dialog, getOrder, open, row, seedOrder, seedProduct, shopOwner } from './support/m5-orders';
 import { confirmedOrder, deliveryReady, orderWithUnknownCommune, seedCourier, sendOrder, type Courier } from './support/m6';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 240_000 });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -34,7 +35,7 @@ test('AT-DLV-01 — "Envoyer au transporteur" greyed on a new order (DELIVERY_OR
   const fresh = await seedOrder(request, owner, { productId: product.id });
   await orderPage(page, fresh.id);
   await expect(page.getByTestId('send-to-courier')).toBeDisabled();
-  await expect(page.getByTestId('send-reason')).toContainText('DELIVERY_ORDER_NOT_CONFIRMED');
+  await expect(page.getByTestId('send-reason')).toContainText(errText('DELIVERY_ORDER_NOT_CONFIRMED'));
 
   const o = await confirmedOrder(request, owner, product.id);
   await orderPage(page, o.id);
@@ -132,7 +133,7 @@ test('AT-DLV-03 — courier down (503) ⇒ parcel queued: "mis en attente", retr
   await expect(page.getByTestId('send-queued')).toContainText('mis en attente');
   await page.getByTestId('send-close').click();
   await expect(page.getByTestId('delivery-block')).toHaveAttribute('data-parcel', 'queued');
-  await expect(page.getByTestId('parcel-sending')).toContainText('COURIER_UNAVAILABLE');
+  await expect(page.getByTestId('parcel-sending')).toContainText(errText('COURIER_UNAVAILABLE'));
   expect((await getOrder(request, owner2, o.id)).status).toBe('confirmed');
 });
 
@@ -163,7 +164,7 @@ test('AT-DLV-07 — cancel the parcel before pickup ⇒ a second shipment is all
   await row(page, other.id).getByRole('checkbox').check();
   await page.getByRole('button', { name: 'Envoyer au transporteur' }).click();
   const d = page.getByTestId('bulk-send-dialog');
-  await expect(d.getByTestId('bulk-send-invalid')).toContainText('DELIVERY_ORDER_ALREADY_SENT');
+  await expect(d.getByTestId('bulk-send-invalid')).toContainText(errText('DELIVERY_ORDER_ALREADY_SENT'));
   await page.getByTestId('bulk-send-submit').click();
   const results = page.getByTestId('bulk-send-results');
   await expect(results).toHaveAttribute('data-state', 'done', { timeout: 90_000 });

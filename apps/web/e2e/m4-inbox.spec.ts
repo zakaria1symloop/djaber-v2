@@ -287,7 +287,7 @@ test('IA INDISPONIBLE banner (AI_PROVIDER_ERROR) on a handoff; the credits banne
   await open(page, conv.angry.id);
   const down = page.locator('[data-banner="aiUnavailable"]');
   await expect(down).toContainText('IA indisponible');
-  await expect(down).toContainText('AI_PROVIDER_ERROR : l’IA ne répond pas, la conversation passe en file d’attente.');
+  await expect(down).toContainText('L’IA ne répond pas : la conversation passe en file d’attente.');
   await expect(banners(page)).toHaveCount(1);
   await expect(thread(page).locator('[data-composer="ready"]')).toBeVisible();
 

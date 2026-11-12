@@ -247,10 +247,10 @@ export class ImportService implements OnModuleInit {
       const text = this.i18n.t(locale, key, { min: '', max: '', row: '', count: '', ...(params ?? {}) }).replace(/\s+/g, ' ').trim();
       return text && text !== key && text !== code ? text : code;
     };
-    type Line = { row: number; sku: string; name: string; field: string; reason: string; code: string };
+    type Line = { row: number; sku: string; name: string; field: string; value: string; reason: string; code: string };
     const lines: Line[] = preview.rows
       .filter((r) => !r.ok)
-      .flatMap((r) => r.errors.map((e) => ({ row: r.row, sku: String(r.values.sku ?? ''), name: String(r.values.name ?? ''), field: e.field ? (preview.mapping[e.field] ?? e.field) : '', reason: reason(e.code, e.params), code: e.code })));
+      .flatMap((r) => r.errors.map((e) => ({ row: r.row, sku: String(r.values.sku ?? ''), name: String(r.values.name ?? ''), field: e.field ? (preview.mapping[e.field] ?? e.field) : '', value: e.field ? String(r.values[e.field] ?? '') : '', reason: reason(e.code, e.params), code: e.code })));
     const file = writeTable<Line>(
       'csv',
       'Erreurs',
@@ -259,6 +259,8 @@ export class ImportService implements OnModuleInit {
         { header: 'sku', value: (l) => l.sku },
         { header: 'name', value: (l) => l.name },
         { header: 'column', value: (l) => l.field },
+        // retest 11/11 UX-054: the value as typed (« abc »), so the merchant finds what to correct
+        { header: 'value', value: (l) => l.value },
         { header: 'error', value: (l) => l.reason },
         { header: 'code', value: (l) => l.code },
       ],

@@ -90,9 +90,9 @@ export function SendToCourierDialog({
     setTouched(false);
     const e = initialError ?? null;
     const msg = e ? (e.message ?? t(`error.${e.code}`, { message: '' })) : '';
-    setBanner(e ? { tone: 'danger', text: e.code === 'COURIER_VALIDATION' ? t('send.courierRefused', { message: msg }) : `${msg} (${e.code})` } : null);
+    setBanner(e ? { tone: 'danger', text: e.code === 'COURIER_VALIDATION' ? t('send.courierRefused', { message: msg }) : msg } : null);
     const f = e ? courierErrorField(e.field) : null;
-    setFields(e && f ? { [f]: `${msg} (${e.code})` } : {});
+    setFields(e && f ? { [f]: msg } : {});
     setPendingId(null);
     key.current = uuid();
   });
@@ -127,7 +127,7 @@ export function SendToCourierDialog({
       if (code === 'COURIER_UNAVAILABLE' && parcel.status === 'pending') return; // queued: shown below, retries running
       const f = courierErrorField(err?.field);
       setBanner({ tone: 'danger', text: t('send.courierRefused', { message: err?.message ?? t(`error.${code}`, { message: '' }) }) });
-      if (f) setFields({ [f]: `${err?.message ?? t(`error.${code}`, { message: '' })} (${code})` });
+      if (f) setFields({ [f]: `${err?.message ?? t(`error.${code}`, { message: '' })}` });
       setPendingId(null);
       void refresh({ orderId: order.id });
       return;
@@ -200,10 +200,10 @@ export function SendToCourierDialog({
         const f = courierErrorField((e.body.params as Record<string, unknown>)?.field ?? (e.body.details as { field?: string } | null)?.field);
         if (e.code === 'COURIER_VALIDATION') {
           setBanner({ tone: 'danger', text: t('send.courierRefused', { message: String(e.body.params?.message ?? e.message) }) });
-          if (f) map[f] = `${e.message} (${e.code})`;
+          if (f) map[f] = e.message;
         } else if (e.code === 'COURIER_UNAVAILABLE') {
-          setBanner({ tone: 'warning', text: `${errorMessage(e, t)} (${e.code})` });
-        } else if (!Object.keys(map).length) setBanner({ tone: 'danger', text: `${errorMessage(e, t)} (${e.code})` });
+          setBanner({ tone: 'warning', text: errorMessage(e, t) });
+        } else if (!Object.keys(map).length) setBanner({ tone: 'danger', text: errorMessage(e, t) });
         setFields(map);
       } else setBanner({ tone: 'danger', text: errorMessage(e, t) });
     } finally {
@@ -244,7 +244,7 @@ export function SendToCourierDialog({
           </div>
         ) : noCourier ? (
           <div className="flex flex-col gap-3" data-testid="send-no-courier">
-            <FormAlert tone="info">{`${t('error.DELIVERY_NO_COURIER')} (DELIVERY_NO_COURIER)`}</FormAlert>
+            <FormAlert tone="info">{t('error.DELIVERY_NO_COURIER')}</FormAlert>
             <p className="text-[13px] text-text-secondary">{t('delivery.noCourier.description')}</p>
             {/* configured right here (nested dialog): the shipment being prepared is not left behind */}
             {can('delivery.manage') ? (

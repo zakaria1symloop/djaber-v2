@@ -8,6 +8,7 @@ import { apiReady, type Account } from './support/m1';
 import { signIn } from './support/m4-agents';
 import { open, row, uniquePhone } from './support/m5-orders';
 import { algiersToday, gdsOwner, gdsReady, getJson, openRowMenu, product, sale, type SeedProduct } from './support/m7';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -95,7 +96,7 @@ test('AT-GDS-12 — cancel a paid sale: delete greyed SALE_DELETE_PAID, cancel r
   await signIn(page, owner);
   await open(page, '/fr/sales', () => row(page, s.id));
   const menu = await openRowMenu(page, s.id);
-  await expect(menu).toContainText('SALE_DELETE_PAID');
+  await expect(menu).toContainText(errText('SALE_DELETE_PAID'));
   await menu.locator('[data-action="cancel"]').click();
   const dlg = page.getByTestId('cancel-sale-dialog');
   await expect(dlg).toContainText(/Rembourser les 5\s?000/);
@@ -121,7 +122,7 @@ test('AT-ERR-07 — sale older than 7 days: "Annuler la vente" greyed with SALE_
   await open(page, '/fr/sales', () => row(page, s.id));
   const menu = await openRowMenu(page, s.id);
   await expect(menu.locator('[data-action="cancel"]')).toHaveAttribute('data-disabled', '');
-  await expect(menu).toContainText('SALE_CANNOT_CANCEL_AFTER_7D');
+  await expect(menu).toContainText(errText('SALE_CANNOT_CANCEL_AFTER_7D'));
 });
 
 test('GDS-08 — list: KPIs, payment chip in the URL, walk-in rows, draft opens the sheet', async ({ page, request }) => {

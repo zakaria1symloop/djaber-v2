@@ -6,6 +6,7 @@ import { apiReady, type Account } from './support/m1';
 import { signIn } from './support/m4-agents';
 import { apiCall, getOrder, open, row, seedProduct, shopOwner } from './support/m5-orders';
 import { confirmedOrder, deliveryReady, seedCourier, sendOrder, type Courier } from './support/m6';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 300_000 });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -35,7 +36,7 @@ test('AT-DLV-08 — ZR Express has no label API ⇒ LABEL_UNAVAILABLE + Djaber f
   await page.getByTestId('order-label').click();
   const viewer = page.getByTestId('label-viewer');
   await expect(viewer).toHaveAttribute('data-state', 'fallback', { timeout: 30_000 });
-  await expect(page.getByTestId('label-unavailable')).toContainText('LABEL_UNAVAILABLE');
+  await expect(page.getByTestId('label-unavailable')).toContainText(errText('LABEL_UNAVAILABLE'));
   await expect(viewer).toContainText('Bordereau Djaber');
   await expect(page.getByTestId('label-frame')).toHaveAttribute('src', /\S+/);
   await page.keyboard.press('Escape');
@@ -79,14 +80,14 @@ test('AT-DLV-13 — cancel the parcel before pickup (back to Confirmée); labels
   for (const id of all) await row(page, id).getByRole('checkbox').check();
   await page.getByRole('button', { name: 'Bordereaux' }).click();
   await expect(page.getByTestId('labels-ignored')).toContainText('2 commandes ignorées');
-  await expect(page.getByTestId('labels-dialog')).toContainText('SHIPMENT_NOT_CREATED');
+  await expect(page.getByTestId('labels-dialog')).toContainText(errText('SHIPMENT_NOT_CREATED'));
   await page.getByTestId('labels-dialog').getByRole('radio', { name: /100 × 150/ }).click();
   await expect(page.getByTestId('labels-submit')).toHaveText('Imprimer (4)');
   await page.getByTestId('labels-submit').click();
   const job = page.getByTestId('labels-job');
   await expect(job).toHaveAttribute('data-state', 'partial', { timeout: 120_000 });
   await expect(page.getByTestId('labels-skipped').locator('li')).toHaveCount(2);
-  await expect(page.getByTestId('labels-skipped')).toContainText('SHIPMENT_NOT_CREATED');
+  await expect(page.getByTestId('labels-skipped')).toContainText(errText('SHIPMENT_NOT_CREATED'));
   // "Marquer « bordereau imprimé »" (ticked by default) ⇒ labelPrintedAt on the printed orders
   const rows = await apiCall<{ orderId: string; labelPrintedAt: string | null }[]>(request, owner, 'GET', `/shipments?ids=${all.join(',')}&pageSize=25`);
   for (const id of sent) expect(rows.data.find((r) => r.orderId === id)?.labelPrintedAt, id).toBeTruthy();

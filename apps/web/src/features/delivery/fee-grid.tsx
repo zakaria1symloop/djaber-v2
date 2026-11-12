@@ -11,7 +11,6 @@ import { useMemo, useState } from 'react';
 import { QueryError } from '@/components/global-states';
 import { conflictOf, usePatchWorkspace, useWorkspaceCache } from '@/features/workspace/api';
 import { actionState, reasonText } from '@/lib/actions';
-import { ApiError } from '@/lib/api';
 import type { WorkspaceDto } from '@/lib/contracts';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
@@ -70,7 +69,7 @@ export function FeeGridView() {
       void refreshCounters();
     } catch (e) {
       setRow(row);
-      mark(row.wilayaId, 'error', e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      mark(row.wilayaId, 'error', errorMessage(e, t));
     }
   };
   const reset = async (row: FeeRule) => {
@@ -82,7 +81,7 @@ export function FeeGridView() {
       void refreshCounters();
     } catch (e) {
       mark(row.wilayaId, 'idle');
-      toast({ tone: 'danger', message: e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t) });
+      toast({ tone: 'danger', message: errorMessage(e, t) });
     }
   };
   const seed = async (overwrite: boolean) => {
@@ -97,7 +96,7 @@ export function FeeGridView() {
       toast(overwrite ? t('fees.toast.resetAll') : n > 0 ? t('fees.toast.filled', { count: n }) : t('fees.toast.nothingMissing'));
       setConfirmReset(false);
     } catch (e) {
-      toast({ tone: 'danger', message: e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t) });
+      toast({ tone: 'danger', message: errorMessage(e, t) });
     } finally {
       setSeeding(null);
     }

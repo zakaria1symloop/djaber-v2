@@ -5,6 +5,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { expectNoA11yViolations } from './support/a11y';
 import { apiReady, createAccount, loginHome, type Account } from './support/m1';
 import { catalogReady, getProduct, seedCategory, seedProduct, setStockMode, sku, type SeedProduct } from './support/m2';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 120_000 });
 /** a valid 1 × 1 PNG (accepted with the IMAGE_SMALL warning) */
@@ -144,7 +145,7 @@ test('row Actions ⌄ comes from the server: a service cannot be adjusted (reaso
   const menu = page.getByRole('menu');
   await expect(menu.getByRole('menuitem', { name: /Ouvrir la fiche/ })).toBeVisible();
   await expect(menu.getByRole('menuitem', { name: /Ajuster le stock/ })).toHaveAttribute('aria-disabled', 'true');
-  await expect(menu).toContainText('PRODUCT_NOT_STOCK_TRACKED');
+  await expect(menu).toContainText(errText('PRODUCT_NOT_STOCK_TRACKED'));
   await page.keyboard.press('Escape');
 
   await rowOf(page, sac).getByRole('button', { name: 'Actions' }).click();
@@ -172,7 +173,7 @@ test('row Actions ⌄ comes from the server: a service cannot be adjusted (reaso
   expect(((await getProduct(request, account, sac.id)) as unknown as { images: unknown[] }).images).toHaveLength(imagesBefore + 1);
   // a file of the wrong type is refused under its tile, inside the sheet
   await sheet.getByTestId('quick-images').locator('input[data-upload="product-image"]').setInputFiles([{ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('x') }]);
-  await expect(sheet.getByTestId('quick-images').getByRole('alert')).toContainText('IMAGE_TYPE_INVALID');
+  await expect(sheet.getByTestId('quick-images').getByRole('alert')).toContainText(errText('IMAGE_TYPE_INVALID'));
 
   // ‹ › walk the rows, Esc closes and cleans the URL
   await sheet.getByRole('button', { name: 'Précédent' }).click();

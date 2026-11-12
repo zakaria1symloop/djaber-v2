@@ -17,7 +17,6 @@ import { catalogApi, useCatalogRefresh } from './api';
 import type { Product, ProductListItem } from './contracts';
 import { ProductThumb } from './ui';
 
-const withCode = (e: unknown, message: string) => (e instanceof ApiError ? `${message} (${e.code})` : message);
 
 /* ---------- PLAN_LIMIT {resource, limit, current} ---------- */
 export type PlanLimitInfo = { resource: string; current: number | null; limit: number | null };
@@ -92,9 +91,9 @@ export function ArchiveProductDialog({ product, onClose, onDone }: { product: Ar
     } catch (e) {
       if (e instanceof ApiError && e.code === 'PRODUCT_HAS_ORDERS') {
         // hard delete refused: the archive option stays available
-        setBlocked(withCode(e, errorMessage(e, t)));
+        setBlocked(errorMessage(e, t));
         setMode('archive');
-      } else setError(withCode(e, errorMessage(e, t)));
+      } else setError(errorMessage(e, t));
     }
   };
   const busy = remove.isPending;
@@ -185,7 +184,7 @@ export function DuplicateProductDialog({ product, onClose, onDone }: { product: 
       const plan = planLimitOf(e);
       if (plan) return setLimit(plan);
       if (e instanceof ApiError && e.body.fields?.name) return setNameError(t.has(e.body.fields.name) ? t(e.body.fields.name, { max: 255, min: 1 }) : e.body.fields.name);
-      setError(withCode(e, errorMessage(e, t)));
+      setError(errorMessage(e, t));
     }
   };
   const busy = duplicate.isPending;
@@ -274,11 +273,11 @@ export function RestoreProductDialog({ product, onClose, onDone }: { product: Pi
       if (plan) return setLimit(plan);
       if (e instanceof ApiError && e.code === 'PRODUCT_SKU_ALREADY_EXISTS') {
         // first refusal: ask for a new SKU; a refusal of the new SKU is shown under the field
-        if (conflict) setError(withCode(e, errorMessage(e, t)));
+        if (conflict) setError(errorMessage(e, t));
         setConflict(true);
         return;
       }
-      setError(withCode(e, errorMessage(e, t)));
+      setError(errorMessage(e, t));
     }
   };
   const busy = restore.isPending;

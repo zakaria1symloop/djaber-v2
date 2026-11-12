@@ -8,6 +8,7 @@ import { apiReady, type Account } from './support/m1';
 import { signIn } from './support/m4-agents';
 import { open, row } from './support/m5-orders';
 import { algiersDaysAgo, algiersToday, cashEntry, gdsOwner, gdsReady, getJson, openRowMenu, product, sale } from './support/m7';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -69,10 +70,10 @@ test('AT-CSH-02 — AUTO 🔒 row: edit / delete greyed (CAISSE_EDIT_AUTOMATIC),
   await expect(row(page, saleRowId).locator('[data-source="auto"]')).toBeVisible();
   let menu = await openRowMenu(page, saleRowId);
   await expect(menu.locator('[data-action="edit"]')).toHaveAttribute('data-disabled', '');
-  await expect(menu).toContainText('CAISSE_EDIT_AUTOMATIC');
+  await expect(menu).toContainText(errText('CAISSE_EDIT_AUTOMATIC'));
   await page.keyboard.press('Escape');
   menu = await openRowMenu(page, manual.id);
-  await expect(menu).toContainText('CASH_ENTRY_EDIT_WINDOW_EXPIRED');
+  await expect(menu).toContainText(errText('CASH_ENTRY_EDIT_WINDOW_EXPIRED'));
   await page.keyboard.press('Escape');
   await row(page, saleRowId).click();
   await expect(page).toHaveURL(/\/fr\/sales\/[0-9a-f-]{36}$/, { timeout: 30_000 });
@@ -102,7 +103,7 @@ test('AT-CSH-01 / AT-DLG-75 — close the day: gap needs a note, CORRECTION row,
   await manual.getByLabel('Montant (DA)').fill('500');
   await manual.getByLabel('Libellé').fill('Ticket parking');
   await page.getByRole('dialog').getByTestId('dialog-submit').click();
-  await expect(manual).toContainText('CASH_DAY_CLOSED');
+  await expect(manual).toContainText(errText('CASH_DAY_CLOSED'));
   await expect(manual.getByLabel('Libellé')).toHaveValue('Ticket parking');
   // typed content: closing asks first ("Quitter sans enregistrer ?")
   await page.keyboard.press('Escape');

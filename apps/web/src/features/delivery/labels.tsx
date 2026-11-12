@@ -98,7 +98,7 @@ export function LabelViewer({ shipmentId, title, open, onClose, manual }: { ship
         {unavailable ? (
           <div className="flex flex-col gap-2 rounded-card border border-line-edge bg-ink-raised p-3" data-testid="label-unavailable">
             <p className="text-[14px] font-medium">{t('dialog.labelUnavailable.title')}</p>
-            <p className="ts-label-micro !normal-case text-text-muted">{`${t('error.LABEL_UNAVAILABLE')} (LABEL_UNAVAILABLE)`}</p>
+            <p className="ts-label-micro !normal-case text-text-muted">{t('error.LABEL_UNAVAILABLE')}</p>
             <RadioList<'retry' | 'djaber'>
               label={t('dialog.labelUnavailable.title')}
               value={choice}
@@ -175,7 +175,7 @@ export function LabelJobViewer({ jobId, open, onClose, onRetry }: { jobId: strin
           <LabelJobRow
             state="failed"
             label={t('labels.job.failed')}
-            text={job?.error ? `${job.error.message} (${job.error.code})` : `${t('error.REPORT_EXPORT_FAILED', { ref: '—' })} (REPORT_EXPORT_FAILED)`}
+            text={job?.error ? job.error.message : t('error.REPORT_EXPORT_FAILED', { ref: '—' })}
             actions={
               onRetry ? (
                 <Button size="sm" onClick={onRetry} data-testid="labels-retry">
@@ -218,7 +218,7 @@ export function LabelJobViewer({ jobId, open, onClose, onRetry }: { jobId: strin
                 <ul className="ms-1 flex flex-col gap-0.5">
                   {result.skipped.map((s) => (
                     <li key={s.id} className="ts-label-micro !normal-case text-accent-starred">
-                      {`${s.orderNumber ? `#${s.orderNumber}` : s.id} : ${t(`error.${s.code}`)} (${s.code})`}
+                      {`${s.orderNumber ? `#${s.orderNumber}` : s.id} : ${t(`error.${s.code}`)}`}
                     </li>
                   ))}
                 </ul>
@@ -317,7 +317,7 @@ export function PrintLabelsDialog({ open, orders, courier, onClose }: { open: bo
             <ul className="flex flex-col gap-0.5 rounded-card border border-line-edge p-2.5">
               {ignored.map((o) => (
                 <li key={o.id} className="ts-label-micro !normal-case text-text-muted">
-                  {`${o.label} · ${t('error.SHIPMENT_NOT_CREATED')} (SHIPMENT_NOT_CREATED)`}
+                  {`${o.label} · ${t('error.SHIPMENT_NOT_CREATED')}`}
                 </li>
               ))}
             </ul>

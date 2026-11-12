@@ -42,9 +42,9 @@ export function QuickCategoryDialog({ open, onClose, onCreated }: { open: boolea
       onClose();
     } catch (e) {
       if (e instanceof ApiError && (e.code === 'CATEGORY_ALREADY_EXISTS' || e.body.fields?.name)) {
-        return setErrors({ name: e.code === 'CATEGORY_ALREADY_EXISTS' ? `${errorMessage(e, t)} (${e.code})` : fieldError(t, e.body.fields.name, { max: 80 }) });
+        return setErrors({ name: e.code === 'CATEGORY_ALREADY_EXISTS' ? errorMessage(e, t) : fieldError(t, e.body.fields.name, { max: 80 }) });
       }
-      setErrors({ form: e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t) });
+      setErrors({ form: errorMessage(e, t) });
     }
   };
   const busy = create.isPending;
@@ -125,7 +125,7 @@ export function QuickUnitDialog({ open, onClose, onCreated }: { open: boolean; o
           abbreviation: e.body.fields.abbreviation ? fieldError(t, e.body.fields.abbreviation, { max: 10 }) : undefined,
         });
       }
-      setErrors({ form: e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t) });
+      setErrors({ form: errorMessage(e, t) });
     }
   };
   const busy = create.isPending;

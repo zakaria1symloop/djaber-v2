@@ -10,7 +10,7 @@ import { useCredits } from '@/features/credits/api';
 import { BlockCustomerDialog, ReportCustomerDialog, type ReportTarget } from '@/features/safety/dialogs';
 import { useRouter } from '@/i18n/navigation';
 import { toMenuActions, type ActionHandler } from '@/lib/actions';
-import { api, ApiError } from '@/lib/api';
+import { api } from '@/lib/api';
 import { conflictOf } from '@/lib/conflict';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
@@ -81,7 +81,7 @@ export function useConversationActions(o: { onDeleted?: (id: string) => void } =
         if (c) {
           setConflict({ name: c.changedBy || t('inbox.conflict.someone'), ago: c.changedAt ? relativeTime(c.changedAt, locale) : '—', current: c.current });
         } else {
-          toast({ tone: 'danger', message: e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t) });
+          toast({ tone: 'danger', message: errorMessage(e, t) });
         }
         return false;
       } finally {
@@ -99,7 +99,7 @@ export function useConversationActions(o: { onDeleted?: (id: string) => void } =
         void refresh({ id });
         if (done) toast(done);
       } catch (e) {
-        toast({ tone: 'danger', message: e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t) });
+        toast({ tone: 'danger', message: errorMessage(e, t) });
       } finally {
         setBusy(null);
       }
@@ -148,7 +148,7 @@ export function useConversationActions(o: { onDeleted?: (id: string) => void } =
       o.onDeleted?.(id);
     } catch (e) {
       // shown inside the dialog, which stays open
-      setDeleteError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setDeleteError(errorMessage(e, t));
     } finally {
       setDeleting(false);
     }

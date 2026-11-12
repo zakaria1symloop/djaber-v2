@@ -228,7 +228,7 @@ function StockSection({ product, setStatus }: { product: Product; setStatus: (s:
       await refresh({ productId: product.id });
       setStatus({ tone: 'ok', text: t('products.quick.saved.stock', { name: line.variantId ? line.name : product.name }) });
     } catch (e) {
-      setStatus({ tone: 'error', text: e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t) });
+      setStatus({ tone: 'error', text: errorMessage(e, t) });
     } finally {
       setPending(({ [line.id]: _drop, ...rest }) => rest);
     }

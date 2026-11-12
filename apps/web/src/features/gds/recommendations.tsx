@@ -119,7 +119,7 @@ function RegenerateButton({ list, reason }: { list: ReturnType<typeof useListSta
       variant="primary"
       onClick={() => void run()}
       loading={busy}
-      disabledReason={reason ?? (wait > 0 ? `${t('error.RECO_RATE_LIMITED', { retryAfter: `${Math.ceil(wait / 60)} min` })} (RECO_RATE_LIMITED)` : undefined)}
+      disabledReason={reason ?? (wait > 0 ? `${t('error.RECO_RATE_LIMITED', { retryAfter: `${Math.ceil(wait / 60)} min` })}` : undefined)}
       data-testid="reco-generate"
     >
       {t('recos.generate')}
@@ -152,7 +152,7 @@ function GenerationBanner({ jobId, lastRunAt, onDone }: { jobId: string | null; 
     );
   return (
     <JobBanner state="failed" pill={t('recos.job.failed')}>
-      <span data-testid="reco-job">{j.error ? `${j.error.message} (${j.error.code})` : t('recos.job.failedText')}</span>
+      <span data-testid="reco-job">{j.error ? j.error.message : t('recos.job.failedText')}</span>
     </JobBanner>
   );
 }
@@ -334,7 +334,7 @@ function Cards({ list, offline, simple }: { list: ReturnType<typeof useListState
                   r.status === 'active' || r.status === 'snoozed' ? (
                     <>
                       {applyAction ? (
-                        <Button size="sm" variant="primary" onClick={() => void apply(r)} disabledReason={writeReason ?? (applyAction.enabled ? undefined : `${t(`error.${applyAction.reasonCode ?? 'FORBIDDEN'}`)} (${applyAction.reasonCode})`)} data-testid="reco-apply">
+                        <Button size="sm" variant="primary" onClick={() => void apply(r)} disabledReason={writeReason ?? (applyAction.enabled ? undefined : t(`error.${applyAction.reasonCode ?? 'FORBIDDEN'}`))} data-testid="reco-apply">
                           {t(`recos.apply.${r.suggestedAction.kind}`)}
                         </Button>
                       ) : null}
@@ -607,7 +607,7 @@ function CrossJobBanner({ jobId, onDone }: { jobId: string | null; onDone: () =>
     );
   return (
     <JobBanner state={j.status === 'failed' ? 'failed' : 'done'} pill={j.status === 'failed' ? t('recos.job.failed') : t('recos.job.done')}>
-      <span data-testid="cross-job">{j.status === 'failed' ? (j.error ? `${j.error.message} (${j.error.code})` : t('recos.job.failedText')) : t('recos.job.doneText', { created: j.result?.created ?? 0, removed: j.result?.removed ?? 0 })}</span>
+      <span data-testid="cross-job">{j.status === 'failed' ? (j.error ? j.error.message : t('recos.job.failedText')) : t('recos.job.doneText', { created: j.result?.created ?? 0, removed: j.result?.removed ?? 0 })}</span>
     </JobBanner>
   );
 }

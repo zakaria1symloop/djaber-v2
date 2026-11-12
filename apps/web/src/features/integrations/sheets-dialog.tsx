@@ -137,10 +137,10 @@ export function SheetsDialog({ mode, data, onClose }: { mode: SheetsDialogMode |
     } catch (e) {
       // the sheet may be saved while the backfill was refused: keep the card fresh
       void qc.invalidateQueries({ queryKey: integrationKeys.sheets(ws) });
-      if (e instanceof ApiError && e.code === 'SHEETS_SPREADSHEET_NOT_FOUND' && source === 'url') setUrlError(`${errorMessage(e, t)} (${e.code})`);
+      if (e instanceof ApiError && e.code === 'SHEETS_SPREADSHEET_NOT_FOUND' && source === 'url') setUrlError(errorMessage(e, t));
       else if (e instanceof ApiError && e.body.fields?.spreadsheetUrl) setUrlError(t('settings.integrations.sheets.dialog.urlInvalid'));
-      else if (e instanceof ApiError && (e.body.fields?.to || e.body.fields?.from || e.code === 'REPORT_RANGE_TOO_LONG')) setRangeError(`${errorMessage(e, t)} (${e.code})`);
-      else setFormError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      else if (e instanceof ApiError && (e.body.fields?.to || e.body.fields?.from || e.code === 'REPORT_RANGE_TOO_LONG')) setRangeError(errorMessage(e, t));
+      else setFormError(errorMessage(e, t));
     }
   };
 
@@ -189,7 +189,7 @@ export function SheetsDialog({ mode, data, onClose }: { mode: SheetsDialogMode |
                 picker.isPending ? (
                   <p className="ts-label-meta text-text-muted">{t('settings.integrations.sheets.dialog.pickerLoading')}</p>
                 ) : picker.isError ? (
-                  <FormAlert>{picker.error instanceof ApiError ? `${errorMessage(picker.error, t)} (${picker.error.code})` : errorMessage(picker.error, t)}</FormAlert>
+                  <FormAlert>{errorMessage(picker.error, t)}</FormAlert>
                 ) : picker.data?.driver === 'fake' ? (
                   pickerFiles.length ? (
                     <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-card border border-line-edge p-1" aria-label={t('settings.integrations.sheets.dialog.files')} data-testid="sheets-files">

@@ -7,7 +7,6 @@ import { GenerateVariantsSchema, VARIANTS_MAX } from '@djaber/shared';
 import { Button, Dialog, Field, FormAlert, Input, MoneyInput, NumberInput, toast } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { digitsToInt, moneyDigits } from '@/lib/money';
@@ -80,7 +79,7 @@ export function GenerateVariantsDialog({
       onGenerated?.(variants);
       onClose();
     } catch (e) {
-      setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setError(errorMessage(e, t));
     }
   };
 
@@ -99,7 +98,7 @@ export function GenerateVariantsDialog({
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             {t('action.cancel')}
           </Button>
-          <Button variant="primary" onClick={submit} loading={busy} disabledReason={overLimit ? `${t('error.VARIANT_LIMIT')} (VARIANT_LIMIT)` : undefined}>
+          <Button variant="primary" onClick={submit} loading={busy} disabledReason={overLimit ? t('error.VARIANT_LIMIT') : undefined}>
             {t('products.variants.generate.submit', { count: created.length })}
           </Button>
         </>
@@ -145,7 +144,7 @@ export function GenerateVariantsDialog({
           </Field>
         </div>
         {overLimit ? (
-          <FormAlert>{`${t('error.VARIANT_LIMIT')} (VARIANT_LIMIT)`}</FormAlert>
+          <FormAlert>{t('error.VARIANT_LIMIT')}</FormAlert>
         ) : total > 0 ? (
           <p className="rounded-card border border-line-edge bg-ink-raised px-3 py-2.5 ts-label-meta text-text-secondary" data-testid="generate-preview">
             {t('products.variants.generate.preview', { count: created.length, sample })}

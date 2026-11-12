@@ -2,6 +2,7 @@
 // /workspaces/new — Figma "AUTH — States catalogue" (Créer mon espace, utilisateur invité seulement): form · saving · blocked if already owner.
 // UX-047 (10/11): an account in its deletion grace sees « Compte désactivé » (cancel / export) first; an account without a
 // shop opens « Supprimer mon compte… » from here (Paramètres › Profil needs a shop). UX-045: « Se déconnecter » opens the login.
+// UX-057 (retest 11/11): after « Annuler la suppression » the confirmation stays above the form until it is closed.
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CreateWorkspaceSchema, type CreateWorkspaceInput } from '@djaber/shared';
 import { Button, buttonClass, Field, FormAlert, Input, Select } from '@djaber/ui';
@@ -26,6 +27,7 @@ export default function CreateWorkspacePage() {
   const form = useForm<CreateWorkspaceInput>({ resolver: zodResolver(CreateWorkspaceSchema), defaultValues: { name: '', senderWilayaId: '', stockMode: 'simple' } });
   const [formError, setFormError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [reactivated, setReactivated] = useState(false);
   const create = useMutation({ mutationFn: workspaceApi.create });
 
   // UX-045: same as the user menu — the session closes and the login page opens at once
@@ -34,7 +36,7 @@ export default function CreateWorkspacePage() {
     router.replace('/login');
   };
 
-  if (me?.deletionScheduledAt) return <DeactivatedAccount scheduledAt={me.deletionScheduledAt} onLogout={() => void leave()} />;
+  if (me?.deletionScheduledAt) return <DeactivatedAccount scheduledAt={me.deletionScheduledAt} onLogout={() => void leave()} onCancelled={() => setReactivated(true)} />;
 
   if (me?.ownedWorkspaceId) {
     // D30: one owned workspace per user
@@ -81,6 +83,14 @@ export default function CreateWorkspacePage() {
       }
     >
       <form onSubmit={submit} noValidate className="flex flex-col gap-4" aria-busy={busy}>
+        {reactivated ? (
+          <FormAlert tone="success">
+            <span data-testid="account-reactivated">{t('auth.deactivated.cancelled')}</span>
+            <button type="button" className="ms-2 underline underline-offset-2 hover:text-text-primary" onClick={() => setReactivated(false)}>
+              {t('action.close')}
+            </button>
+          </FormAlert>
+        ) : null}
         <Field label={t('auth.createWorkspace.name')} htmlFor="name" required error={fieldError(t, errors.name?.message, { max: 80 })}>
           <Input id="name" placeholder={t('auth.createWorkspace.namePlaceholder')} disabled={busy} aria-invalid={!!errors.name} {...form.register('name')} />
         </Field>

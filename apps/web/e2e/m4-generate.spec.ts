@@ -11,6 +11,7 @@ import { clickForRoute, clickForUrl } from './support/m4-agent-page';
 import { signIn } from './support/m4-agents';
 import { activeAgent, linkPage, listAgents, nextSender, realGet, setupShop, type Shop } from './support/m4-real';
 import { ANY_JOB, bodyOf, clearGenerationLimits, failJob, fullAgent, holdJobRunning, load, questionAnswered, recordRequests, startGeneration, versionsOf, waitJob, type RealJob } from './support/m4-real-agent-page';
+import { errText } from './support/error-text';
 
 // the dev server is shared with the other suites (transitions can take seconds)
 const expect = baseExpect.configure({ timeout: 20_000 });
@@ -293,7 +294,7 @@ test('failed job: message with its code, "Réessayer" analyses the same page aga
   const cancels = recordRequests(page, 'POST', /\/jobs\/[0-9a-f-]{36}\/cancel$/);
   await open(page, `?channel=${shop.facebook.id}&job=${done.id}`);
   await expect(root(page)).toHaveAttribute('data-phase', 'failed', FIRST);
-  await expect(page.getByTestId('generate-failed')).toHaveText("L'IA ne répond pas ; la conversation passe en file. (AI_PROVIDER_ERROR)");
+  await expect(page.getByTestId('generate-failed')).toHaveText("L'IA ne répond pas ; la conversation passe en file.");
   await expect(root(page).getByRole('alert')).toContainText('Réessayez : une analyse échouée ne compte pas et ne coûte rien.');
   await expect(page.getByTestId('generate-review')).toHaveCount(0);
   await expect(page.getByTestId('generate-reconnect')).toHaveCount(0);
@@ -316,7 +317,7 @@ test('a job that failed without detail says "Analyse interrompue."; one that lac
   await page.unrouteAll({ behavior: 'wait' });
   await failJob(page, ANY_JOB, { code: 'PAGE_ANALYSIS_PERMISSION_REQUIRED', message: 'Reconnectez la page avec la permission "contenu".', params: {}, ref: done.id });
   await load(page, () => page.reload());
-  await expect(page.getByTestId('generate-failed')).toHaveText('Reconnectez la page avec la permission "contenu". (PAGE_ANALYSIS_PERMISSION_REQUIRED)', FIRST);
+  await expect(page.getByTestId('generate-failed')).toHaveText('Reconnectez la page avec la permission "contenu".', FIRST);
   await expect(page.getByTestId('generate-reconnect')).toHaveAttribute('href', new RegExp(`/fr/channels/${shop.facebook.id}$`));
 });
 
@@ -334,9 +335,9 @@ test('ANALYSIS_RATE_LIMITED on start: inline warning with the code, still on the
     // the global setup of another spec run cleared the limiter counters in between: once more
   }
   await expect(error).toHaveAttribute('data-code', 'ANALYSIS_RATE_LIMITED');
-  await expect(error).toHaveText('3 analyses par jour max. (ANALYSIS_RATE_LIMITED)');
+  await expect(error).toHaveText('3 analyses par jour max.');
   // a warning, not an error: announced as a status
-  await expect(root(page).getByRole('status').filter({ hasText: 'ANALYSIS_RATE_LIMITED' })).toBeVisible();
+  await expect(root(page).getByRole('status').filter({ hasText: errText('ANALYSIS_RATE_LIMITED') })).toBeVisible();
   await expect(root(page)).toHaveAttribute('data-phase', 'choose');
   await expect(page).not.toHaveURL(/job=/);
   await expect(page.getByTestId('generate-reconnect')).toHaveCount(0);
@@ -361,8 +362,8 @@ test('PAGE_ANALYSIS_PERMISSION_REQUIRED on start: message and "Reconnecter la pa
   await page.getByTestId('generate-start').click();
   const error = page.getByTestId('generate-error');
   await expect(error).toHaveAttribute('data-code', 'PAGE_ANALYSIS_PERMISSION_REQUIRED');
-  await expect(error).toHaveText('Reconnectez la page avec la permission "contenu". (PAGE_ANALYSIS_PERMISSION_REQUIRED)');
-  await expect(root(page).getByRole('alert').filter({ hasText: 'PAGE_ANALYSIS_PERMISSION_REQUIRED' })).toBeVisible();
+  await expect(error).toHaveText('Reconnectez la page avec la permission "contenu".');
+  await expect(root(page).getByRole('alert').filter({ hasText: errText('PAGE_ANALYSIS_PERMISSION_REQUIRED') })).toBeVisible();
   await expect(root(page)).toHaveAttribute('data-phase', 'choose');
   const reconnect = page.getByTestId('generate-reconnect');
   await expect(reconnect).toHaveText('Reconnecter la page avec la permission de lecture');
@@ -401,7 +402,7 @@ test('a refused apply is shown inline and the review stays', async ({ page, requ
     await page.getByTestId('generate-apply-update').click();
     await page.getByRole('dialog', { name: `Mettre à jour « ${LINKED} » ?` }).getByRole('button', { name: 'Mettre à jour (crée une version)' }).click();
     await expect(page.getByTestId('generate-error')).toHaveAttribute('data-code', 'NOT_FOUND', POLL);
-    await expect(page.getByTestId('generate-error')).toHaveText('Introuvable ou accès refusé. (NOT_FOUND)');
+    await expect(page.getByTestId('generate-error')).toHaveText('Introuvable ou accès refusé.');
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(root(page)).toHaveAttribute('data-phase', 'review');
     expect(await page.getByTestId('generate-instructions').inputValue()).toContain('- Vous livrez à Sétif ?');

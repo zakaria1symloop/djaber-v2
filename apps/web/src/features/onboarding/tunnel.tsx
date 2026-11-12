@@ -218,7 +218,7 @@ function FirstProduct() {
   const pick = (file: File | undefined) => {
     if (!file) return;
     const code = checkImageFile(file);
-    if (code) return setErrors((e) => ({ ...e, photo: `${t(`error.${code}`)} (${code})` }));
+    if (code) return setErrors((e) => ({ ...e, photo: t(`error.${code}`) }));
     setErrors((e) => ({ ...e, photo: undefined }));
     setPhoto({ file, url: URL.createObjectURL(file) });
   };
@@ -248,7 +248,7 @@ function FirstProduct() {
           if (field === 'name' || field === 'price' || field === 'stock') next[field] = fieldError(t, key, { max: 255 });
         }
         // PRODUCT_SKU_ALREADY_EXISTS, PLAN_LIMIT and every other refusal: inline, the typed values stay
-        if (!Object.keys(next).length) next.form = `${errorMessage(e, t)} (${e.code})`;
+        if (!Object.keys(next).length) next.form = errorMessage(e, t);
         return setErrors(next);
       }
       setErrors({ form: errorMessage(e, t) });
@@ -258,7 +258,7 @@ function FirstProduct() {
   // the list only prevents a duplicate: while it loads the step waits, when it fails the form is offered
   const checking = products.isLoading;
   const existing = !adding && !create.isSuccess ? (products.data?.rows[0] ?? null) : null;
-  const aiReason = aiOff ? `${t('error.IMAGE_ANALYSIS_UNAVAILABLE')} (IMAGE_ANALYSIS_UNAVAILABLE)` : undefined;
+  const aiReason = aiOff ? t('error.IMAGE_ANALYSIS_UNAVAILABLE') : undefined;
   return (
     <Shell slug="first-product" title={t('onboarding.product.title')} description={t('onboarding.product.description')}>
       {checking ? (
@@ -422,7 +422,7 @@ function AgentPreset() {
       await go();
       void refreshAgents();
     } catch (e) {
-      setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setError(errorMessage(e, t));
     }
   };
 
@@ -648,8 +648,8 @@ function Ready() {
   const plan = workspace?.plan;
   const membersFull = limitReached(plan, 'members');
   const productsFull = limitReached(plan, 'products');
-  const limitReason = (l: { current: number; limit: number }, resource: string) => `${t('error.PLAN_LIMIT', { current: l.current, limit: l.limit, resource })} (PLAN_LIMIT)`;
-  const testReason = agents.isError ? errorMessage(agents.error, t) : !agent ? t('onboarding.ready.noAgent') : !can('agents.test') ? `${t('error.FORBIDDEN')} (FORBIDDEN)` : undefined;
+  const limitReason = (l: { current: number; limit: number }, resource: string) => t('error.PLAN_LIMIT', { current: l.current, limit: l.limit, resource });
+  const testReason = agents.isError ? errorMessage(agents.error, t) : !agent ? t('onboarding.ready.noAgent') : !can('agents.test') ? t('error.FORBIDDEN') : undefined;
   const rows: { key: string; done: boolean; title: string; hint: string }[] = [
     { key: 'stock', done: true, title: t('onboarding.ready.stock', { mode: t(`settings.stockMode.${workspace?.stockMode ?? 'simple'}.title`) }), hint: t('onboarding.ready.stockHint') },
     { key: 'product', done: list.product, title: t(list.product ? 'onboarding.ready.productDone' : 'onboarding.ready.productTodo'), hint: t('onboarding.ready.productHint') },
@@ -680,10 +680,10 @@ function Ready() {
         <NextAction href={agent ? agentTestPath(agent) : null} reason={testReason} loading={agents.isLoading} testId="ready-test-agent">
           {t('onboarding.ready.testAgent')}
         </NextAction>
-        <NextAction href="/products/import" reason={!can('catalog.write') ? `${t('error.FORBIDDEN')} (FORBIDDEN)` : productsFull ? limitReason(productsFull, t('products.form.planResource')) : undefined} testId="ready-import">
+        <NextAction href="/products/import" reason={!can('catalog.write') ? t('error.FORBIDDEN') : productsFull ? limitReason(productsFull, t('products.form.planResource')) : undefined} testId="ready-import">
           {t('onboarding.ready.importCatalogue')}
         </NextAction>
-        <NextAction href="/settings/members" variant="ghost" reason={!can('members.write') ? `${t('error.FORBIDDEN')} (FORBIDDEN)` : membersFull ? limitReason(membersFull, t('onboarding.ready.membersResource')) : undefined} testId="ready-invite">
+        <NextAction href="/settings/members" variant="ghost" reason={!can('members.write') ? t('error.FORBIDDEN') : membersFull ? limitReason(membersFull, t('onboarding.ready.membersResource')) : undefined} testId="ready-invite">
           {t('onboarding.ready.inviteTeam')}
         </NextAction>
       </div>

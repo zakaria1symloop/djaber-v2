@@ -6,6 +6,7 @@ import { expectNoA11yViolations } from './support/a11y';
 import { apiReady, expectUrl, type Account } from './support/m1';
 import { signIn } from './support/m4-agents';
 import { apiCall, dialog, getOrder, money, open, ordersReady, seedOrder, seedProduct, setStatus, shopOwner } from './support/m5-orders';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 240_000 });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -30,7 +31,7 @@ test('AT-ORD-04 / AT-ORD-20 — confirm dialog: blocked without address, then pi
   await page$(page, o.id);
   await page.getByTestId('call-confirm').click();
   await expect(page.getByTestId('confirm-dialog')).toHaveAttribute('data-step', 'review');
-  await expect(dialog(page)).toContainText('ORDER_ADDRESS_REQUIRED');
+  await expect(dialog(page)).toContainText(errText('ORDER_ADDRESS_REQUIRED'));
 
   // complete the address from the dialog, back to the confirm dialog
   await page.getByTestId('confirm-address').click();
@@ -178,7 +179,7 @@ test('AT-ORD-28 / AT-ORD-31 / AT-UX-04 — returned dialog; delete: typed number
     await expect(page.getByTestId('dialog-submit')).toBeDisabled();
     await page.locator('#del-typed').fill(o.number);
     await page.getByTestId('dialog-submit').click();
-    await expect(page.getByTestId('delete-dialog')).toContainText('ORDER_DELETE_DELIVERED');
+    await expect(page.getByTestId('delete-dialog')).toContainText(errText('ORDER_DELETE_DELIVERED'));
     await expect(page.locator('#del-typed')).toHaveValue(o.number);
     await page.keyboard.press('Escape');
   } else {

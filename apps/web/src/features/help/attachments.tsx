@@ -28,7 +28,7 @@ export function useTicketAttachments() {
         break;
       }
       if (f.size > ATTACHMENT_MAX_BYTES) {
-        setError(`${t('error.UPLOAD_TOO_LARGE', { max: t('help.attachments.maxSize') })} (UPLOAD_TOO_LARGE)`);
+        setError(t('error.UPLOAD_TOO_LARGE', { max: t('help.attachments.maxSize') }));
         continue;
       }
       try {

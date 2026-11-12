@@ -7,7 +7,6 @@ import { useConfirmAction } from '@/components/confirm-action';
 import { safetyApi, safetyKeys } from '@/features/safety/api';
 import { BlockCustomerDialog } from '@/features/safety/dialogs';
 import { useRouter } from '@/i18n/navigation';
-import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { useSession, useWorkspaceId } from '@/lib/session';
@@ -35,7 +34,7 @@ export function useClientActions(o: { openSheet: (id: string) => void; afterDele
   const ws = useWorkspaceId();
 
   const perms = { write: can('clients.write'), remove: can('clients.delete'), orders: can('orders.read'), ordersWrite: can('orders.write'), inbox: can('inbox.read') };
-  const fail = (e: unknown) => toast({ tone: 'danger', message: e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t) });
+  const fail = (e: unknown) => toast({ tone: 'danger', message: errorMessage(e, t) });
 
   const edit = async (c: Row) => {
     try {

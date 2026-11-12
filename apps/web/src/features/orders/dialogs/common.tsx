@@ -15,7 +15,7 @@ import type { Order } from '../contracts';
 export type DialogBaseProps = { order: Order; onClose: () => void; onDone: (order?: Order | null) => void | Promise<void> };
 
 /** Message of a refused write: the localized server message + its code ("… (ORDER_PAYMENT_LOCKED)"). */
-export const refusal = (e: unknown, t: TFunction): string => (e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+export const refusal = (e: unknown, t: TFunction): string => errorMessage(e, t);
 
 /**
  * One submit of a dialog: busy flag, inline error, field errors of the envelope, conflict (409 CONFLICT) and the

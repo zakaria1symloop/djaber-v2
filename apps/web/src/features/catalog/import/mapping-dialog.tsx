@@ -7,7 +7,6 @@ import { Button, Checkbox, Dialog, FormAlert, Select } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
 import { ArrowLeft, Check } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { catalogApi } from '../api';
@@ -57,7 +56,7 @@ export function MappingDialog({
       onSaved(ref?.jobId ?? jobId);
     } catch (e) {
       // shown inside the dialog, the choices stay
-      setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setError(errorMessage(e, t));
     }
   };
 
@@ -119,7 +118,7 @@ export function MappingDialog({
           {t('import.mapping.save')}
         </label>
 
-        {touched && missing.length ? <FormAlert>{`${t('error.IMPORT_COLUMNS_MISSING', { columns: missing.map((f) => t(`import.field.${f}`)).join(', ') })} (IMPORT_COLUMNS_MISSING)`}</FormAlert> : null}
+        {touched && missing.length ? <FormAlert>{`${t('error.IMPORT_COLUMNS_MISSING', { columns: missing.map((f) => t(`import.field.${f}`)).join(', ') })}`}</FormAlert> : null}
         {touched && duplicates.length ? <FormAlert>{t('import.mapping.duplicate', { columns: duplicates.join(', ') })}</FormAlert> : null}
         {error ? <FormAlert>{error}</FormAlert> : null}
       </div>

@@ -174,7 +174,7 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
   // "Reconnecter" of the banner starts the Meta flow for this page at once (same flow as the channel page)
   const connect = useConnectFlow();
   // a read-only member sees the header actions greyed with the reason (same text as the bulk bar)
-  const readOnlyReason = readOnly ? `${t('error.READ_ONLY_MEMBER')} (READ_ONLY_MEMBER)` : undefined;
+  const readOnlyReason = readOnly ? t('error.READ_ONLY_MEMBER') : undefined;
   const [draft, setDraft] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -209,7 +209,7 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
           outbox.current.delete(key);
           writeMessages(qc, ws, c.id, (list) => dropOptimistic(list, key));
           setDraft((d) => d || o.text);
-          setInlineError(`${errorMessage(e, t)} (${code})`);
+          setInlineError(errorMessage(e, t));
           if (code === 'REPLY_OUTSIDE_WINDOW' || code === 'REPLY_CHANNEL_INACTIVE' || code === 'CUSTOMER_BLOCKED') void refresh({ id: c.id });
         } else {
           writeMessages(qc, ws, c.id, (list) => markSendFailed(list, key, code || 'META_UNAVAILABLE'));
@@ -273,7 +273,7 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
         void refresh({ id: c.id });
       }
     } catch (e) {
-      toast({ tone: 'danger', message: e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t) });
+      toast({ tone: 'danger', message: errorMessage(e, t) });
     } finally {
       setRetrying(null);
     }
@@ -283,7 +283,7 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
     const code = imageError(f);
     setFile(f);
     setPreview(URL.createObjectURL(f));
-    setFileError(code ? `${t(`error.${code}`)} (${code})` : null);
+    setFileError(code ? t(`error.${code}`) : null);
     setInlineError(null);
   };
 
@@ -479,7 +479,7 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
           actions={
             can('safety.manage') ? (
               c.blockSource === 'platform' ? (
-                <Tooltip content={`${t('error.CUSTOMER_BLOCKED_BY_PLATFORM')} (CUSTOMER_BLOCKED_BY_PLATFORM)`}>
+                <Tooltip content={t('error.CUSTOMER_BLOCKED_BY_PLATFORM')}>
                   <span tabIndex={0} className="ts-label-meta uppercase text-text-muted">
                     {t('inbox.banner.blocked.platform')}
                   </span>
@@ -573,7 +573,7 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
               ? {
                   tone: 'danger',
                   tag: t('inbox.composer.inactive.tag'),
-                  reason: `${t('error.REPLY_CHANNEL_INACTIVE')} (REPLY_CHANNEL_INACTIVE)`,
+                  reason: t('error.REPLY_CHANNEL_INACTIVE'),
                   action: can('channels.manage') ? (
                     <Link href={`/channels/${c.channel.id}`} className="ts-label-meta uppercase text-accent-inbound hover:underline" data-testid="composer-reconnect">
                       {state.reconnect ? t('action.reconnect') : t('inbox.composer.inactive.open')}
@@ -609,7 +609,7 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
           canSend={check.ok && slash === null}
           counter={check.length > REPLY_MAX_CHARS - 200 ? t('inbox.composer.counter', { count: check.length, max: REPLY_MAX_CHARS }) : undefined}
           tooLong={check.tooLong}
-          error={check.tooLong ? `${t('error.REPLY_TOO_LONG', { max: REPLY_MAX_CHARS })} (REPLY_TOO_LONG)` : inlineError}
+          error={check.tooLong ? t('error.REPLY_TOO_LONG', { max: REPLY_MAX_CHARS }) : inlineError}
           attachLabel={t('inbox.composer.attach')}
           accept={IMAGE_TYPES.join(',')}
           onAttach={onAttach}
@@ -707,7 +707,7 @@ function TemplateDialog({ open, onClose, conversation: c }: { open: boolean; onC
       onClose();
     } catch (e) {
       // inside the dialog, choice preserved
-      setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setError(errorMessage(e, t));
     } finally {
       setSending(false);
     }

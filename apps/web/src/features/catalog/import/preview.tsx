@@ -9,11 +9,14 @@ import { useLocaleCode, useT, type TFunction } from '@/lib/i18n';
 import { Money, Num } from '../ui';
 import { fileExtension, formatFileSize, IMPORT_PAGE_SIZE, IMPORT_TABS, invalidRows, newCategoryNames, windowRows, type ImportTab } from './logic';
 
-/** "PRODUCT_SKU_ALREADY_EXISTS — SKU déjà utilisé." (`error.<CODE>` or a `validation.*` key, with the row params). */
+/**
+ * "SKU déjà utilisé." (`error.<CODE>` or a `validation.*` key, with the row params). Retest 11/11 UX-054: the reason
+ * only — the code stays in `data-code` and in the last column of the error file.
+ */
 export const describeRowError = (t: TFunction, e: ImportPreviewRow['errors'][number]): string => {
   const key = e.code.startsWith('validation.') ? e.code : `error.${e.code}`;
   const text = t.has(key) ? t(key, { min: '', max: '', row: '', count: '', ...e.params }).replace(/\s+/g, ' ').trim() : '';
-  return text ? `${e.code} — ${text}` : e.code;
+  return text || e.code;
 };
 
 export function FileCard({ result, size, onChangeFile, onEditMapping, busy }: { result: ImportPreviewResult; size: number | null; onChangeFile: () => void; onEditMapping?: () => void; busy?: boolean }) {
@@ -80,7 +83,7 @@ export function PreviewTiles({ totals, plan }: { totals: ImportPreviewResult['to
       >
         {over ? (
           <p className="mt-1.5 text-[12px] text-accent-alert" role="alert">
-            {t('import.plan.over', { count: totals.overPlanLimit, plan: plan?.name ?? '' })} (PLAN_LIMIT)
+            {t('import.plan.over', { count: totals.overPlanLimit, plan: plan?.name ?? '' })}
           </p>
         ) : null}
       </Tile>

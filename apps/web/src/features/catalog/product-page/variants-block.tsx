@@ -57,7 +57,7 @@ function VariantRow({ productId, variant: v, advanced, editable, onAdjust, colum
       const fields = e instanceof ApiError ? e.body.fields : {};
       const mapped = Object.fromEntries(FIELDS.filter((f) => fields[f]).map((f) => [f, t.has(fields[f]!) ? t(fields[f]!, { max: '', min: '' }) : fields[f]!]));
       setErrors(mapped);
-      if (Object.keys(mapped).length === 0) setFormError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      if (Object.keys(mapped).length === 0) setFormError(errorMessage(e, t));
       return false;
     }
   };

@@ -12,7 +12,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { ListFilteredEmpty, ListLoading, QueryError } from '@/components/global-states';
 import { Section } from '@/features/settings/common';
 import { usePathname, useRouter } from '@/i18n/navigation';
-import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession, useWorkspaceId } from '@/lib/session';
@@ -79,7 +78,7 @@ function BlockedCustomers() {
       toast(t('safety.unblock.done', { name: blockName(target, t('safety.blocks.noName')) }));
       setTarget(null);
     } catch (e) {
-      setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setError(errorMessage(e, t));
     }
   };
 
@@ -154,7 +153,7 @@ function BlockedCustomers() {
                       {t('action.unblock')}
                     </Button>
                   ) : (
-                    <Tooltip content={`${t('error.CUSTOMER_BLOCKED_BY_PLATFORM')} (CUSTOMER_BLOCKED_BY_PLATFORM)`}>
+                    <Tooltip content={t('error.CUSTOMER_BLOCKED_BY_PLATFORM')}>
                       <span tabIndex={0} className="ts-label-meta uppercase text-text-muted" data-testid="unblock-locked">
                         {t('safety.blocks.locked')}
                       </span>
@@ -268,7 +267,7 @@ function AutoRules() {
       toast(t('toast.saved'));
       return true;
     } catch (e) {
-      setWordError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setWordError(errorMessage(e, t));
       return false;
     }
   };

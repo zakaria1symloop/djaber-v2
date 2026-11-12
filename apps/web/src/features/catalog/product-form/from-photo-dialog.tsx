@@ -57,7 +57,7 @@ export function FromPhotoDialog({
 
   const toPhoto = (file: File, i: number): Photo => {
     const code = checkImageFile(file);
-    return { key: `${Date.now()}-${i}-${file.name}`, file, url: URL.createObjectURL(file), error: code ? `${t(`error.${code}`)} (${code})` : null };
+    return { key: `${Date.now()}-${i}-${file.name}`, file, url: URL.createObjectURL(file), error: code ? t(`error.${code}`) : null };
   };
   useEffect(() => {
     if (!open) return;
@@ -113,7 +113,7 @@ export function FromPhotoDialog({
       if (e.code === 'INSUFFICIENT_CREDITS') return setPhase({ kind: 'credits' });
       if (e.code === 'ANALYSIS_RATE_LIMITED') return setPhase({ kind: 'limited' });
       if (e.code === 'AI_PROVIDER_ERROR' || e.code === 'PROVIDER_UNAVAILABLE') return setPhase({ kind: 'provider' });
-      setPhase({ kind: 'error', message: `${errorMessage(e, t)} (${e.code})` });
+      setPhase({ kind: 'error', message: errorMessage(e, t) });
     } finally {
       window.clearTimeout(timer);
     }
@@ -154,9 +154,9 @@ export function FromPhotoDialog({
               disabled={!valid.length || photos.some((p) => p.error)}
               disabledReason={
                 phase.kind === 'unavailable'
-                  ? `${t('error.IMAGE_ANALYSIS_UNAVAILABLE')} (IMAGE_ANALYSIS_UNAVAILABLE)`
+                  ? t('error.IMAGE_ANALYSIS_UNAVAILABLE')
                   : phase.kind === 'limited'
-                    ? `${t('error.ANALYSIS_RATE_LIMITED')} (ANALYSIS_RATE_LIMITED)`
+                    ? t('error.ANALYSIS_RATE_LIMITED')
                     : undefined
               }
               data-testid="photo-analyse"
@@ -251,7 +251,7 @@ export function FromPhotoDialog({
             <Pill tone="danger" className="w-fit rounded-[4px]">
               {t('products.form.photo.state.failed')}
             </Pill>
-            <FormAlert>{`${t('error.IMAGE_ANALYSIS_FAILED')} (IMAGE_ANALYSIS_FAILED) · ${t('products.form.photo.notCharged')}`}</FormAlert>
+            <FormAlert>{`${t('error.IMAGE_ANALYSIS_FAILED')} · ${t('products.form.photo.notCharged')}`}</FormAlert>
           </div>
         ) : null}
         {phase.kind === 'unavailable' ? (
@@ -259,12 +259,12 @@ export function FromPhotoDialog({
             <Pill tone="warning" className="w-fit rounded-[4px]">
               {t('products.form.photo.state.unavailable')}
             </Pill>
-            <FormAlert tone="warning">{`${t('error.IMAGE_ANALYSIS_UNAVAILABLE')} (IMAGE_ANALYSIS_UNAVAILABLE) · ${t('products.form.photo.fillManually')}`}</FormAlert>
+            <FormAlert tone="warning">{`${t('error.IMAGE_ANALYSIS_UNAVAILABLE')} · ${t('products.form.photo.fillManually')}`}</FormAlert>
           </div>
         ) : null}
         {phase.kind === 'credits' ? (
           <FormAlert>
-            {`${t('error.INSUFFICIENT_CREDITS')} (INSUFFICIENT_CREDITS) `}
+            {`${t('error.INSUFFICIENT_CREDITS')} `}
             <Link href="/settings/credits" className="normal-case text-accent-inbound underline">
               {t('action.buyCredits')}
             </Link>
@@ -275,7 +275,7 @@ export function FromPhotoDialog({
             <Pill tone="warning" className="w-fit rounded-[4px]">
               {t('products.form.photo.state.limited')}
             </Pill>
-            <FormAlert tone="warning">{`${t('error.ANALYSIS_RATE_LIMITED')} (ANALYSIS_RATE_LIMITED) · ${t('products.form.photo.fillManually')}`}</FormAlert>
+            <FormAlert tone="warning">{`${t('error.ANALYSIS_RATE_LIMITED')} · ${t('products.form.photo.fillManually')}`}</FormAlert>
           </div>
         ) : null}
         {phase.kind === 'provider' ? (
@@ -283,7 +283,7 @@ export function FromPhotoDialog({
             <Pill tone="danger" className="w-fit rounded-[4px]">
               {t('products.form.photo.state.provider')}
             </Pill>
-            <FormAlert>{`${t('products.form.photo.provider')} (AI_PROVIDER_ERROR) · ${t('products.form.photo.notCharged')}`}</FormAlert>
+            <FormAlert>{`${t('products.form.photo.provider')} · ${t('products.form.photo.notCharged')}`}</FormAlert>
           </div>
         ) : null}
         {phase.kind === 'error' ? <FormAlert>{phase.message}</FormAlert> : null}

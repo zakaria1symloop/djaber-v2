@@ -12,6 +12,7 @@ import { expectNoA11yViolations } from './support/a11y';
 import { API, apiReady, authHeaders, createAccount, totp, type Account } from './support/m1';
 import { adminHeaders, createTicket, sql } from './support/m10-help';
 import { asAdmin, loginAdmin, modAdmin, type ModAdmin } from './support/m10-mod';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial' });
 let merchant: Account;
@@ -155,7 +156,7 @@ test('AT-PFS-02 force update: raising the minimum version asks the 2FA code; wro
     await expect(page.getByTestId('dialog-submit')).toBeDisabled();
     await form.locator('#av-code').fill('000000');
     await page.getByTestId('dialog-submit').click();
-    await expect(form.getByRole('alert').last()).toContainText('TWO_FA_CONFIRMATION_REQUIRED');
+    await expect(form.getByRole('alert').last()).toContainText(errText('TWO_FA_CONFIRMATION_REQUIRED'));
     await expect(form.locator('#av-min')).toHaveValue(target);
     await form.locator('#av-code').fill(await unusedCode(sa));
     await page.getByTestId('dialog-submit').click();

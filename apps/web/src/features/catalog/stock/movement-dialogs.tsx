@@ -6,7 +6,6 @@ import { formatDate, formatNumber } from '@djaber/shared';
 import { Button, ConfirmDialog, Dialog, Field, FormAlert, Input, Ltr, Pagination, Skeleton, Table, Td, Th, toast, Tr } from '@djaber/ui';
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useWorkspaceId } from '@/lib/session';
@@ -41,7 +40,7 @@ export function ReverseMovementDialog({ movement, onClose }: { movement: StockMo
       onClose();
     } catch (e) {
       // stays open with the note; GDS_MOVEMENT_IMMUTABLE when someone reversed it meanwhile
-      setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setError(errorMessage(e, t));
     }
   };
   return (
@@ -108,7 +107,7 @@ export function SnapshotDialog({ movement, onClose }: { movement: StockMovement 
         </div>
       ) : snapshot.isError ? (
         <div className="flex flex-col items-start gap-3">
-          <FormAlert>{snapshot.error instanceof ApiError ? `${errorMessage(snapshot.error, t)} (${snapshot.error.code})` : errorMessage(snapshot.error, t)}</FormAlert>
+          <FormAlert>{errorMessage(snapshot.error, t)}</FormAlert>
           <Button onClick={() => snapshot.refetch()}>{t('action.retry')}</Button>
         </div>
       ) : rows.length === 0 ? (

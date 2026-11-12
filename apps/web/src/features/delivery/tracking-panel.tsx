@@ -43,9 +43,9 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
     const r = await parcels.sync(parcelOfShipment(x));
     if (r.ok) setSync({ state: 'syncing', since: Date.now(), until: r.shipment?.syncAvailableAt ? Date.parse(r.shipment.syncAvailableAt) : Date.now() + 300_000 });
     else if (r.code === 'TRACKING_SYNC_RATE_LIMITED') setSync({ state: 'limited', until: Date.now() + (r.retryAfter ?? 300) * 1000 });
-    else if (r.code === 'TRACKING_NOT_FOUND') setSync({ state: 'not_found', message: `${t('error.TRACKING_NOT_FOUND')} (TRACKING_NOT_FOUND)` });
-    else if (r.code === 'COURIER_UNAVAILABLE') setSync({ state: 'unavailable', message: `${t('tracking.sync.unavailable')} (COURIER_UNAVAILABLE)` });
-    else setSync({ state: 'unavailable', message: r.code && t.has(`error.${r.code}`) ? `${t(`error.${r.code}`, { message: '', retryAfter: '' })} (${r.code})` : t('toast.noConnection') });
+    else if (r.code === 'TRACKING_NOT_FOUND') setSync({ state: 'not_found', message: t('error.TRACKING_NOT_FOUND') });
+    else if (r.code === 'COURIER_UNAVAILABLE') setSync({ state: 'unavailable', message: t('tracking.sync.unavailable') });
+    else setSync({ state: 'unavailable', message: r.code && t.has(`error.${r.code}`) ? t(`error.${r.code}`, { message: '', retryAfter: '' }) : t('toast.noConnection') });
   };
 
   const copyLink = async (url: string) => {
@@ -63,7 +63,7 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
   const state: SyncState = sync?.state === 'syncing' ? 'syncing' : limited && sync?.state !== 'fresh' && sync?.state !== 'not_found' && sync?.state !== 'unavailable' ? 'limited' : (sync?.state ?? 'idle');
   const message =
     state === 'limited'
-      ? `${t('error.TRACKING_SYNC_RATE_LIMITED', { retryAfter: waitLabel(wait) })} (TRACKING_SYNC_RATE_LIMITED)`
+      ? t('error.TRACKING_SYNC_RATE_LIMITED', { retryAfter: waitLabel(wait) })
       : state === 'fresh'
         ? limited
           ? `${t('tracking.sync.fresh')} · ${t('tracking.sync.next', { wait: waitLabel(wait) })}`
@@ -137,7 +137,7 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
                   )}
                   {s.deliveryAttempts > 0 ? <span className="ts-label-micro text-text-muted">{t('delivery.row.attempt', { n: s.deliveryAttempts, max: MAX_ATTEMPTS })}</span> : null}
                 </div>
-                {s.error ? <p className="text-[13px] text-accent-alert">{`${s.error.message ?? t(`error.${s.error.code}`, { message: '' })} (${s.error.code})`}</p> : null}
+                {s.error ? <p className="text-[13px] text-accent-alert">{`${s.error.message ?? t(`error.${s.error.code}`, { message: '' })}`}</p> : null}
                 {s.deliveryAttempts >= MAX_ATTEMPTS ? <p className="ts-label-micro !normal-case text-accent-starred">{t('tracking.panel.proposeReturn', { max: MAX_ATTEMPTS })}</p> : null}
               </div>
             ) : null}

@@ -9,6 +9,7 @@ import { expectNoA11yViolations } from './support/a11y';
 import { apiReady, createAccount, expectUrl, loginHome, type Account } from './support/m1';
 import { activeAgent, customerSays, INSIGHT_TRIGGERS, nextSender, setupShop, type Shop } from './support/m4-real';
 import { dashboardReady, fixtureHome, getHome, mockHome } from './support/m5-home';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 240_000 });
 
@@ -109,7 +110,7 @@ test('AT-ANA-01 card kinds COLIS / STOCK / PAGE / INSIGHT / CONVERSATION / RAPPE
   // AT-UX-03: a refused quick action is not a dead link — greyed with its reason
   const agents = page.locator('[data-action=create_agent]');
   await expect(agents.getByRole('link')).toHaveCount(0);
-  await expect(agents.locator('[aria-disabled=true]')).toContainText('PLAN_LIMIT');
+  await expect(agents.locator('[aria-disabled=true]')).toContainText(errText('PLAN_LIMIT'));
   await queue.locator('[data-kind=callback]').click();
   await expectUrl(page, '**/fr/orders/00000000-0000-7000-8000-000000001041');
 });

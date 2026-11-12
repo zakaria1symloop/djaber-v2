@@ -155,7 +155,6 @@ export const MessageView = memo(function MessageView({ message: m, grouped, unre
     footer = (
       <DeliveryFailure retryLabel={onRetry ? t('action.retry') : undefined} onRetry={onRetry ? () => onRetry(m) : undefined} retrying={retrying}>
         {code === 'REPLY_OUTSIDE_WINDOW' ? t('customer.outsideWindowSkipped') : t('inbox.delivery.failedReason', { reason })}
-        {code ? <span className="sr-only"> ({code})</span> : null}
       </DeliveryFailure>
     );
   }

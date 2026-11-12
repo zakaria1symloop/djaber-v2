@@ -192,7 +192,7 @@ export function DeliveryOverviewPage() {
                   {t('enum.Shipment.status.failed')}
                 </Pill>
               )}
-              {code ? <span className="ts-label-micro !normal-case text-accent-alert">{sh.error?.message ? `${sh.error.message} (${code})` : reasonText(t, code)}</span> : null}
+              {code ? <span className="ts-label-micro !normal-case text-accent-alert">{sh.error?.message ? sh.error.message : reasonText(t, code)}</span> : null}
             </div>
           );
         }
@@ -233,7 +233,7 @@ export function DeliveryOverviewPage() {
   const chosen = rows.filter((r) => selected.has(r.id));
   const sendTargets: SendTarget[] = chosen.map((r) => {
     const a = actionState(r.actions, SHIPMENT_ACTION.send, t);
-    return { id: r.orderId, number: r.orderNumber, label: `#${r.orderNumber} · ${r.client.name}`, blocked: a.present && a.enabled ? null : (a.reason ?? (r.shipment ? `${t('error.DELIVERY_ORDER_ALREADY_SENT')} (DELIVERY_ORDER_ALREADY_SENT)` : t('error.FORBIDDEN'))) };
+    return { id: r.orderId, number: r.orderNumber, label: `#${r.orderNumber} · ${r.client.name}`, blocked: a.present && a.enabled ? null : (a.reason ?? (r.shipment ? t('error.DELIVERY_ORDER_ALREADY_SENT') : t('error.FORBIDDEN'))) };
   });
   const syncIds = chosen.filter((r) => r.shipment && actionState(r.actions, SHIPMENT_ACTION.sync, t).enabled).map((r) => r.shipment!.id);
   const forbidden = !canSend ? t('toast.forbidden') : offline ? t('banner.offline') : undefined;
@@ -253,7 +253,7 @@ export function DeliveryOverviewPage() {
             started: t('delivery.bulk.syncStarted', { count: syncIds.length }),
             progress: (j) => t('delivery.bulk.syncProgress', { pct: j.progress }),
             done: () => ({ message: t('delivery.bulk.syncDone') }),
-            failed: (j, e) => (j?.error ? `${j.error.message} (${j.error.code})` : refusal(e, t)),
+            failed: (j, e) => (j?.error ? j.error.message : refusal(e, t)),
           });
           setSelected(new Set());
           void refresh();
@@ -276,7 +276,7 @@ export function DeliveryOverviewPage() {
             started: t('toast.jobStarted'),
             progress: (j) => t('toast.export.progress', { entity: t('delivery.export.entity'), pct: j.progress, rows: formatNumber(j.total ?? 0) }),
             done: (j) => ({ message: t('toast.export.done', { file: t('delivery.export.file') }), action: j.resultUrl ? { label: t('action.download'), onClick: () => downloadUrl(j.resultUrl!, jobFileName(j)) } : undefined }),
-            failed: (j, e) => (j?.error ? `${j.error.message} (${j.error.code})` : refusal(e, t)),
+            failed: (j, e) => (j?.error ? j.error.message : refusal(e, t)),
           });
         } catch (e) {
           toast({ tone: 'danger', message: refusal(e, t) });

@@ -88,9 +88,11 @@ const parseRow = (cell: (f: ImportField) => string, mapped: (f: ImportField) => 
   else if (name.length > MAX.name) err('name', 'validation.length');
   values.name = name;
 
-  const price = parseInteger(cell('price'));
+  // retest 11/11 UX-054: a value that is not a number stays as typed (« abc »), so the merchant sees what to correct
+  const rawPrice = cell('price');
+  const price = parseInteger(rawPrice);
   if (price === null || price <= 0) err('price', 'validation.price');
-  values.price = price;
+  values.price = price ?? (rawPrice || null);
 
   if (mapped('sku')) {
     const sku = cell('sku');
@@ -117,7 +119,7 @@ const parseRow = (cell: (f: ImportField) => string, mapped: (f: ImportField) => 
     }
     const n = parseInteger(raw);
     if (n === null || n < (f === 'oldPrice' ? 1 : 0)) err(f, 'validation.price');
-    values[f] = n;
+    values[f] = n ?? raw;
   }
   for (const f of ['stock', 'minStock', 'weightGrams'] as const) {
     if (!mapped(f)) continue;
@@ -128,7 +130,7 @@ const parseRow = (cell: (f: ImportField) => string, mapped: (f: ImportField) => 
     }
     const n = parseInteger(raw);
     if (n === null || n < 0) err(f, f === 'weightGrams' ? 'validation.range' : 'validation.quantity');
-    values[f] = n;
+    values[f] = n ?? raw;
   }
   if (mapped('keywords')) {
     values.keywords = cell('keywords')

@@ -11,7 +11,6 @@
   "settings.integrations.planGate.google_sheets": "Google Sheets غير مشمول في خطتك.",
   "settings.integrations.planGate.api_keys": "مفاتيح API غير مشمولة في خطتك.",
   "settings.integrations.planGate.webhooks": "الـ webhooks الصادرة غير مشمولة في خطتك.",
-
   "settings.integrations.sheets.title": "Google Sheets",
   "settings.integrations.sheets.description": "تُضاف كل طلبية إلى ورقة « Commandes » وتُحدَّث عند كل تغيير (الحالة، التتبع، الاتصال). في اتجاه واحد: Djaber ← Sheets.",
   "settings.integrations.sheets.pill.synced": "متصل · مزامنة {ago}",
@@ -94,7 +93,6 @@
   "settings.integrations.sheets.dialog.rangeHint": "اختياري: اتركه فارغًا لإرسال الطلبات الجديدة فقط.",
   "settings.integrations.sheets.dialog.rangeInvalid": "فترة غير صالحة: يجب أن يسبق تاريخ البداية تاريخ النهاية.",
   "settings.integrations.sheets.dialog.connect": "ربط",
-
   "settings.integrations.apiKeys.title": "مفاتيح API",
   "settings.integrations.apiKeys.description": "وصول من خادم إلى خادم، محدود بالصلاحيات. يُعرض المفتاح مرة واحدة فقط. {rate} طلب / دقيقة لكل مفتاح.",
   "settings.integrations.apiKeys.allowance": "{used} / {limit} مفاتيح نشطة",
@@ -122,9 +120,8 @@
   "settings.integrations.apiKeys.onceNote": "انسخه الآن: لن يُعرض مرة أخرى أبدًا.",
   "settings.integrations.apiKeys.headerHint": "أرسله في الترويسة X-API-Key. المفتاح الضائع يُلغى ويُنشأ من جديد.",
   "settings.integrations.apiKeys.revokeTitle": "إلغاء « {name} »؟",
-  "settings.integrations.apiKeys.revokeText": "تُرفض الطلبات بهذا المفتاح فورًا (API_KEY_REVOKED). لا رجعة فيه.",
+  "settings.integrations.apiKeys.revokeText": "تُرفض الطلبات بهذا المفتاح فورًا. لا رجعة فيه.",
   "settings.integrations.apiKeys.revokedToast": "تم إلغاء المفتاح « {name} »",
-
   "settings.integrations.webhooks.title": "Webhooks صادرة",
   "settings.integrations.webhooks.description": "توقيع HMAC (X-Djaber-Signature)، 7 محاولات (1 دقيقة ← 24 سا)، تعطيل بعد 50 فشلًا متتاليًا مع إشعار.",
   "settings.integrations.webhooks.allowance": "{used} / {limit} نقاط استقبال",
@@ -153,7 +150,7 @@
   "settings.integrations.webhooks.payloadTitle": "عملية الإرسال {event}",
   "settings.integrations.webhooks.dialog.context": "التكاملات › Webhooks",
   "settings.integrations.webhooks.dialog.url": "الرابط",
-  "settings.integrations.webhooks.dialog.urlHint": "HTTPS إلزامي · WEBHOOK_URL_INVALID",
+  "settings.integrations.webhooks.dialog.urlHint": "HTTPS إلزامي",
   "settings.integrations.webhooks.dialog.events": "الأحداث",
   "settings.integrations.webhooks.dialog.eventsRequired": "اختر حدثًا واحدًا على الأقل.",
   "settings.integrations.webhooks.dialog.secret": "السر (HMAC)",

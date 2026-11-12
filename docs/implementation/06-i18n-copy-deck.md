@@ -486,7 +486,7 @@ Every enum value of `prisma-schema.prisma` has a key `enum.<Model>.<field>.<valu
 | state.page.403.description | Cette page est réservée aux admins de l'espace. Votre rôle : {role}. | | |
 | state.page.404.title | Introuvable ou accès refusé | | |
 | state.page.suspended.title | Espace suspendu | | |
-| state.page.suspended.description | WORKSPACE_SUSPENDED · « {reason} » · Vos données sont conservées. Contactez le support pour lever la suspension. | | |
+| state.page.suspended.description | « {reason} » · Vos données sont conservées. Contactez le support pour lever la suspension. | | |
 | state.page.sessionExpired.title | Session expirée | | |
 | state.page.sessionExpired.description | Reconnectez-vous pour continuer. Vous reviendrez sur {path}. | | |
 | state.queue.empty.title | Tout est calme | | |
@@ -499,13 +499,13 @@ Every enum value of `prisma-schema.prisma` has a key `enum.<Model>.<field>.<valu
 | Key | fr | ar | en |
 |---|---|---|---|
 | toast.order.confirmed | Commande #{number} confirmée | | |
-| toast.forbidden | Action non autorisée pour votre rôle (FORBIDDEN) | | |
-| toast.providerUnavailable | Le fournisseur IA ne répond pas (PROVIDER_UNAVAILABLE) | | |
-| toast.metaUnavailable | Meta est momentanément indisponible (META_UNAVAILABLE) — nouvel essai automatique | | |
-| toast.badRequest | Requête invalide (BAD_REQUEST) — réf. {ref} | | |
+| toast.forbidden | Action non autorisée pour votre rôle | | |
+| toast.providerUnavailable | Le fournisseur IA ne répond pas | | |
+| toast.metaUnavailable | Meta est momentanément indisponible — nouvel essai automatique | | |
+| toast.badRequest | Requête invalide — réf. {ref} | | |
 | toast.export.progress | Export des {entity} : {pct} % ({rows} lignes) | | |
 | toast.export.done | Export terminé · {file} | | |
-| toast.planNearLimit | Vous approchez de la limite : {current} / {limit} {resource} (PLAN_NEAR_LIMIT) | | |
+| toast.planNearLimit | Vous approchez de la limite : {current} / {limit} {resource} | | |
 | toast.saved | Enregistré | | |
 | toast.copied | Copié | | |
 | toast.jobStarted | Tâche lancée · vous serez notifié à la fin | | |
@@ -520,7 +520,7 @@ Every enum value of `prisma-schema.prisma` has a key `enum.<Model>.<field>.<valu
 | banner.credits80 | 80 % des crédits utilisés ({used} / {limit}). À ce rythme, épuisés le {date}. | | |
 | banner.planExpiring | Votre plan {plan} expire dans {days} jours ({date}). Renouvelez pour garder vos {pages} pages et {agents} agents. | | |
 | banner.planExpired | Plan expiré le {date} — limites du plan gratuit appliquées ({pages} page, {agents} agent). Tout redevient actif dès le renouvellement. | | |
-| banner.reconnect | Page « {page} » : jeton Meta expiré (PAGE_TOKEN_EXPIRED). L'IA ne répond plus sur cette page. | | |
+| banner.reconnect | Page « {page} » : jeton Meta expiré. L'IA ne répond plus sur cette page. | | |
 | banner.approvalPending | Instagram {account} en attente d'approbation Meta — activation automatique à l'approbation. | | |
 | banner.readOnly | Lecture seule — votre accès est limité (READ_ONLY_MEMBER : plan à la limite des membres). Demandez à un admin. | | |
 | banner.emailUnverified | Vérifiez votre e-mail pour connecter une page. | | |
@@ -537,9 +537,9 @@ Every enum value of `prisma-schema.prisma` has a key `enum.<Model>.<field>.<valu
 | Key | fr | ar | en |
 |---|---|---|---|
 | dialog.planLimit.title | Limite du plan atteinte | | |
-| dialog.planLimit.description | PLAN_LIMIT {resource} · {current} / {limit} {resource} sur {plan}. Passez à {nextPlan} pour en connecter plus. | | |
+| dialog.planLimit.description | Limite du plan atteinte · {current} / {limit} {resource} sur {plan}. Passez à {nextPlan} pour en connecter plus. | | |
 | dialog.emailUnverified.title | Vérifiez votre e-mail | | |
-| dialog.emailUnverified.description | AUTH_EMAIL_UNVERIFIED · Cette action nécessite un e-mail vérifié. Lien envoyé à {email}. | | |
+| dialog.emailUnverified.description | Cette action nécessite un e-mail vérifié. Lien envoyé à {email}. | | |
 | dialog.jobRunning.title | Tâche en cours | | |
 | dialog.jobRunning.description | {label} · {pct} % · vous pouvez quitter cette page, une notification vous préviendra. | | |
 | dialog.delete.title | Supprimer {name} ? | | |

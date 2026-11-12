@@ -159,7 +159,7 @@ export function SheetsTab() {
                 ) : undefined
               }
             >
-              {lastError.code === 'SHEETS_TOKEN_REVOKED' ? t('settings.integrations.sheets.error.revoked.text') : lastError.code === 'SHEETS_SPREADSHEET_NOT_FOUND' ? t('settings.integrations.sheets.error.missing.text') : lastError.message} ({lastError.code})
+              {lastError.code === 'SHEETS_TOKEN_REVOKED' ? t('settings.integrations.sheets.error.revoked.text') : lastError.code === 'SHEETS_SPREADSHEET_NOT_FOUND' ? t('settings.integrations.sheets.error.missing.text') : lastError.message}
             </ConnectionNote>
           </span>
         ) : null}
@@ -199,7 +199,7 @@ export function SheetsTab() {
               </span>
             </Row>
             <Row label={t('settings.integrations.sheets.row.lastError')}>
-              <span className={lastError ? 'text-accent-alert' : 'text-text-secondary'}>{lastError ? `${lastError.message} (${lastError.code})` : t('settings.integrations.sheets.noError')}</span>
+              <span className={lastError ? 'text-accent-alert' : 'text-text-secondary'}>{lastError ? lastError.message : t('settings.integrations.sheets.noError')}</span>
             </Row>
           </dl>
         )}

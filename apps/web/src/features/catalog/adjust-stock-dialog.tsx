@@ -130,7 +130,7 @@ export function AdjustStockDialog({
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             {t('action.cancel')}
           </Button>
-          <Button variant="primary" onClick={submit} loading={busy} disabled={service} disabledReason={zero ? `${t('error.STOCK_QUANTITY_ZERO')} (STOCK_QUANTITY_ZERO)` : undefined}>
+          <Button variant="primary" onClick={submit} loading={busy} disabled={service} disabledReason={zero ? t('error.STOCK_QUANTITY_ZERO') : undefined}>
             {t('stock.adjust.submit')}
           </Button>
         </>
@@ -166,13 +166,13 @@ export function AdjustStockDialog({
           </Field>
         ) : null}
 
-        {service ? <FormAlert tone="warning">{`${t('error.PRODUCT_NOT_STOCK_TRACKED')} (PRODUCT_NOT_STOCK_TRACKED)`}</FormAlert> : null}
+        {service ? <FormAlert tone="warning">{t('error.PRODUCT_NOT_STOCK_TRACKED')}</FormAlert> : null}
 
         {target && hasVariants ? (
           detail.isPending && !variants.length ? (
             <Skeleton className="h-10" />
           ) : (
-            <Field label={t('stock.adjust.variant')} htmlFor="adj-variant" required hint={t('stock.adjust.variantHint')} error={(touched && missingVariant) || error?.code === 'PRODUCT_HAS_VARIANTS' || error?.code === 'VARIANT_REQUIRED' ? `${t('error.PRODUCT_HAS_VARIANTS')} (PRODUCT_HAS_VARIANTS)` : undefined}>
+            <Field label={t('stock.adjust.variant')} htmlFor="adj-variant" required hint={t('stock.adjust.variantHint')} error={(touched && missingVariant) || error?.code === 'PRODUCT_HAS_VARIANTS' || error?.code === 'VARIANT_REQUIRED' ? t('error.PRODUCT_HAS_VARIANTS') : undefined}>
               <Select id="adj-variant" value={variant} disabled={busy} aria-invalid={touched && missingVariant} onChange={(e) => setVariant(e.target.value)}>
                 <option value="">{t('stock.adjust.variantPlaceholder')}</option>
                 {variants.map((v) => (
@@ -229,7 +229,7 @@ export function AdjustStockDialog({
             ) : null}
           </FormAlert>
         ) : null}
-        {error && !(error.code === 'PRODUCT_HAS_VARIANTS' || error.code === 'VARIANT_REQUIRED') ? <FormAlert>{error.code ? `${error.message} (${error.code})` : error.message}</FormAlert> : null}
+        {error && !(error.code === 'PRODUCT_HAS_VARIANTS' || error.code === 'VARIANT_REQUIRED') ? <FormAlert>{error.message}</FormAlert> : null}
 
         {target && current !== null && after !== null && !zero ? (
           <p className="ts-label-meta text-text-muted" data-testid="adjust-preview">

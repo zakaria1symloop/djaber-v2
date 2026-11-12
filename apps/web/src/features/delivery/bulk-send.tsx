@@ -83,7 +83,7 @@ export function BulkSendDialog({ open, orders, onClose, onFinished }: { open: bo
           ) : active.length ? (
             <RadioCards label={t('common.courier')} columns={2} value={courierId} onChange={setCourierId} options={active.map((c) => ({ value: c.id, label: c.isDefault ? `${c.displayName} · ${t('couriers.default').toUpperCase()}` : c.displayName, description: t(`couriers.provider.${c.provider}`) }))} />
           ) : (
-            <FormAlert tone="info">{`${t('error.DELIVERY_NO_COURIER')} (DELIVERY_NO_COURIER)`}</FormAlert>
+            <FormAlert tone="info">{t('error.DELIVERY_NO_COURIER')}</FormAlert>
           )}
           <p className="text-[13px] text-text-secondary">{t('send.bulk.valid', { count: valid.length })}</p>
           {invalid.length ? (
@@ -193,7 +193,7 @@ export function BulkSendResults({ jobId, open, title, names, courierName, onRetr
                         {st === 'ok'
                           ? [t('send.bulk.created'), r.data?.trackingNumber].filter(Boolean).join(' · ')
                           : st === 'queued'
-                            ? `${t('send.bulk.queued')} (COURIER_UNAVAILABLE)`
+                            ? t('send.bulk.queued')
                             : `${r.error?.code ?? ''} · ${r.error?.message ?? ''}${field ? ` · ${t(`send.field.${field}`)}` : ''}${st === 'ignored' ? ` (${t('send.bulk.ignored')})` : ''}`}
                       </span>
                     </div>
@@ -212,7 +212,7 @@ export function BulkSendResults({ jobId, open, title, names, courierName, onRetr
               })}
             </ul>
           )}
-          {job?.status === 'failed' ? <FormAlert>{job.error ? `${job.error.message} (${job.error.code})` : t('state.list.error.title')}</FormAlert> : null}
+          {job?.status === 'failed' ? <FormAlert>{job.error ? job.error.message : t('state.list.error.title')}</FormAlert> : null}
           {q.isError ? <FormAlert>{refusal(q.error, t)}</FormAlert> : null}
           {result && result.queued > 0 ? <p className="ts-label-micro !normal-case text-text-muted">{t('send.bulk.queuedNote', { count: formatNumber(result.queued) })}</p> : null}
         </div>

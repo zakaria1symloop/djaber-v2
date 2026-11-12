@@ -137,7 +137,7 @@ describe('rows', () => {
 describe('buildErrorsCsv', () => {
   const rows = [
     row(13, true, { name: 'Robe', price: 4500 }),
-    row(14, false, { name: 'RP-01', sku: 'RP-01', price: null }, [{ field: 'price', code: 'validation.price' }]),
+    row(14, false, { name: 'RP-01', sku: 'RP-01', price: 'abc' }, [{ field: 'price', code: 'validation.price' }]),
     row(57, false, { name: 'Sac "cuir"; camel', sku: 'SC-CAM', price: 7200 }, [
       { field: 'sku', code: 'PRODUCT_SKU_ALREADY_EXISTS' },
       { field: 'sku', code: 'IMPORT_DUPLICATE_SKU_IN_FILE', params: { row: 41 } },
@@ -146,23 +146,24 @@ describe('buildErrorsCsv', () => {
   ];
   const csv = buildErrorsCsv(rows, {
     fields: ['name', 'sku', 'price'],
-    headers: { row: 'Ligne', errors: 'Erreurs', field: (f) => f.toUpperCase() },
-    describe: (e) => `${e.code}${e.params?.row ? `:${e.params.row}` : ''}`,
+    headers: { row: 'Ligne', errors: 'Erreurs', code: 'Code', field: (f) => f.toUpperCase() },
+    describe: (e) => `text ${e.code.toLowerCase()}${e.params?.row ? `:${e.params.row}` : ''}`,
   });
   const lines = csv.slice(1).trimEnd().split('\r\n');
   it('starts with a BOM and a header line', () => {
     expect(csv.charCodeAt(0)).toBe(0xfeff);
-    expect(lines[0]).toBe('Ligne;NAME;SKU;PRICE;Erreurs');
+    expect(lines[0]).toBe('Ligne;NAME;SKU;PRICE;Erreurs;Code');
   });
   it('keeps only the rows in error', () => {
     expect(lines).toHaveLength(4);
-    expect(lines[1]).toBe('14;RP-01;RP-01;;validation.price');
+    // retest 11/11 UX-054: the rejected value as typed, the reason, then the code in its own last column
+    expect(lines[1]).toBe('14;RP-01;RP-01;abc;text validation.price;validation.price');
   });
   it('quotes separators and quotes, joins several errors', () => {
-    expect(lines[2]).toBe('57;"Sac ""cuir""; camel";SC-CAM;7200;PRODUCT_SKU_ALREADY_EXISTS | IMPORT_DUPLICATE_SKU_IN_FILE:41');
+    expect(lines[2]).toBe('57;"Sac ""cuir""; camel";SC-CAM;7200;text product_sku_already_exists | text import_duplicate_sku_in_file:41;PRODUCT_SKU_ALREADY_EXISTS | IMPORT_DUPLICATE_SKU_IN_FILE');
   });
   it('neutralises formula cells', () => {
-    expect(lines[3]).toBe("98;'=SUM(A1);'-12;1900;X");
+    expect(lines[3]).toBe("98;'=SUM(A1);'-12;1900;text x;X");
   });
 });
 

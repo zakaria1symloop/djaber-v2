@@ -6,6 +6,7 @@ import { expectNoA11yViolations } from './support/a11y';
 import { apiReady, createAccount, expectUrl, loginHome, type Account } from './support/m1';
 import { failWith, inviteOperator } from './support/m3-inbox';
 import { clientsReady, deliverOrder, getClient, nextMobile, seedClient, seedOrderFor, type E2eClient } from './support/m5-clients';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial' });
 let owner: Account;
@@ -201,7 +202,7 @@ test('AT-CLI-06 · merge: preview (409 CUSTOMER_MERGE_IRREVERSIBLE) then confirm
   await page.getByRole('option', { name: /Amina Belkacem/ }).click();
   await expect(dialog.getByRole('radio', { checked: true })).toContainText('CONSERVÉ');
   await dialog.getByTestId('merge-submit').click();
-  await expect(dialog).toContainText('CUSTOMER_MERGE_IRREVERSIBLE');
+  await expect(dialog).toContainText(errText('CUSTOMER_MERGE_IRREVERSIBLE'));
   await expect(dialog.getByTestId('merge-submit')).toHaveText('Confirmer la fusion');
   await dialog.getByTestId('merge-submit').click();
   await expect(page.getByText(/Fiches fusionnées dans/)).toBeVisible();
@@ -227,7 +228,7 @@ test('AT-CLI-03 · delete a client with orders ⇒ CUSTOMER_HAS_ORDERS → Archi
   await page.getByRole('menuitem', { name: 'Supprimer (soft)' }).click();
   const dialog = page.getByRole('dialog', { name: 'Supprimer le client « Amina Belkacem » ?' });
   await dialog.getByTestId('client-delete-confirm').click();
-  await expect(dialog.getByRole('alert')).toContainText('CUSTOMER_HAS_ORDERS');
+  await expect(dialog.getByRole('alert')).toContainText(errText('CUSTOMER_HAS_ORDERS'));
   await expect(dialog.getByTestId('client-delete-confirm')).toHaveText('Archiver');
   await dialog.getByTestId('client-delete-confirm').click();
   await expect(page.getByText('Client « Amina Belkacem » archivé')).toBeVisible();

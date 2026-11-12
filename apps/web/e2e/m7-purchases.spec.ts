@@ -9,6 +9,7 @@ import { apiReady, type Account } from './support/m1';
 import { signIn } from './support/m4-agents';
 import { open, row } from './support/m5-orders';
 import { gdsOwner, gdsReady, getJson, openRowMenu, product, purchase, supplier, type SeedProduct, type SeedSupplier } from './support/m7';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -66,10 +67,10 @@ test('AT-GDS-11 / AT-DLG-75 — receive 14 of 12 ⇒ PURCHASE_OVER_RECEIVE accep
   await qty.fill('0');
   await expect(page.getByRole('dialog').getByTestId('dialog-submit')).toBeDisabled();
   await qty.fill('14');
-  await expect(dlg.getByTestId('over-receive-warning')).toContainText('PURCHASE_OVER_RECEIVE');
+  await expect(dlg.getByTestId('over-receive-warning')).toContainText(errText('PURCHASE_OVER_RECEIVE'));
   await expect(page.getByRole('dialog').getByTestId('dialog-submit')).toContainText('Valider la réception (14 u)');
   await page.getByRole('dialog').getByTestId('dialog-submit').click();
-  await expect(page.locator('[data-toast]').filter({ hasText: 'PURCHASE_OVER_RECEIVE' })).toBeVisible();
+  await expect(page.locator('[data-toast]').filter({ hasText: errText('PURCHASE_OVER_RECEIVE') })).toBeVisible();
   await expect(page.getByTestId('purchase-pills')).toContainText('Reçu');
   const full = await getJson<{ items: { quantity: number; receivedQty: number }[] }>(request, owner, `/purchases/${p.id}`);
   expect(full.items[0]).toMatchObject({ quantity: 14, receivedQty: 14 });
@@ -81,8 +82,8 @@ test('AT-GDS-11 / AT-DLG-75 — receive 14 of 12 ⇒ PURCHASE_OVER_RECEIVE accep
   await page.getByRole('button', { name: /Actions/ }).last().click();
   const menu = page.getByRole('menu');
   await expect(menu.locator('[data-action="cancel"]')).toHaveAttribute('data-disabled', '');
-  await expect(menu).toContainText('PURCHASE_ALREADY_RECEIVED');
-  await expect(menu).toContainText('PURCHASE_DELETE_NOT_PENDING');
+  await expect(menu).toContainText(errText('PURCHASE_ALREADY_RECEIVED'));
+  await expect(menu).toContainText(errText('PURCHASE_DELETE_NOT_PENDING'));
 });
 
 test('AT-GDS-11 — partial purchase cancelled: received units stay, the rest is no longer due', async ({ page, request }) => {

@@ -5,6 +5,7 @@ import { expect, test } from '@playwright/test';
 import { expectNoA11yViolations } from './support/a11y';
 import { apiReady, createAccount, expectUrl, loginHome, type Account } from './support/m1';
 import { archiveProduct, catalogReady, seedCategory, seedProduct, setStockMode, sku } from './support/m2';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial' });
 let account: Account;
@@ -133,7 +134,7 @@ test('AT-CAT-13 restore an archived product whose SKU was reused: PRODUCT_SKU_AL
   const dialog = page.getByRole('dialog');
   await dialog.getByTestId('restore-submit').click();
   // the dialog asks for a new SKU
-  await expect(dialog).toContainText('PRODUCT_SKU_ALREADY_EXISTS');
+  await expect(dialog).toContainText(errText('PRODUCT_SKU_ALREADY_EXISTS'));
   await expect(dialog.locator('#restore-sku')).toBeVisible();
   await expect(page.getByTestId('archived-banner')).toBeVisible();
 

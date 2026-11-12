@@ -8,6 +8,7 @@ import { API, apiReady, authHeaders, createAccount, loginHome, type Account } fr
 import { uniquePhone } from './support/m3-misc';
 import { platformAdmin, type Admin } from './support/m10-help';
 import { asAdmin, asMerchant, moderationReady, pendingProduct } from './support/m10-mod';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial' });
 let owner: Account;
@@ -33,7 +34,7 @@ test('AT-SAFE-03 platform blacklist ⇒ PLATEFORME row without "Débloquer"; the
     await expect(platform).toContainText('PLATEFORME');
     await expect(platform.getByTestId('unblock')).toHaveCount(0);
     await platform.getByTestId('unblock-locked').hover();
-    await expect(page.getByRole('tooltip')).toContainText('CUSTOMER_BLOCKED_BY_PLATFORM');
+    await expect(page.getByRole('tooltip')).toContainText(errText('CUSTOMER_BLOCKED_BY_PLATFORM'));
     await expectNoA11yViolations(page);
 
     const blocks = (await (await request.get(`${API}/safety/blocks`, { headers: authHeaders(owner) })).json()) as { data: { id: string; source: string }[] };
@@ -69,7 +70,7 @@ test('AT-MOD-04 rejection with reason ⇒ rejected view highlights the fields; M
   await expect(dialog.getByRole('heading', { name: 'Contester le refus' })).toBeVisible();
   // a text file is refused inline (PDF or image only)
   await dialog.getByTestId('appeal-file').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
-  await expect(dialog.getByText('(UPLOAD_TYPE_INVALID)')).toBeVisible();
+  await expect(dialog.getByText(errText('UPLOAD_TYPE_INVALID'))).toBeVisible();
   const pdf = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n');
   await dialog.getByTestId('appeal-file').setInputFiles({ name: 'facture_import_sept.pdf', mimeType: 'application/pdf', buffer: pdf });
   await expect(dialog.getByTestId('appeal-file-name')).toContainText('facture_import_sept.pdf');

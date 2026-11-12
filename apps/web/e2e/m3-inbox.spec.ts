@@ -222,7 +222,7 @@ test('AT-INB-04 an image over 5 MB is refused inline; a valid image is sent as a
   await open(page, karim.id);
   const file = page.locator('[data-composer-file]');
   await file.setInputFiles({ name: 'lourde.png', mimeType: 'image/png', buffer: Buffer.alloc(6 * 1024 * 1024, 1) });
-  await expect(thread(page).getByRole('alert').filter({ hasText: 'IMAGE_TOO_LARGE' })).toContainText('Image trop lourde (5 Mo max).');
+  await expect(thread(page).getByRole('alert').filter({ hasText: errText('IMAGE_TOO_LARGE') })).toContainText('Image trop lourde (5 Mo max).');
   await expect(thread(page).getByRole('button', { name: 'Envoyer', exact: true })).toBeDisabled();
   await thread(page).getByRole('button', { name: 'Retirer l’image' }).click();
 
@@ -279,7 +279,7 @@ test('AT-INB-03 a reply refused outside the 24 h window is shown inline and the 
   await open(page, karim.id);
   await composer(page).fill('Votre commande part demain');
   await composer(page).press('Enter');
-  await expect(thread(page).getByRole('alert').filter({ hasText: 'REPLY_OUTSIDE_WINDOW' })).toContainText('Hors fenêtre de 24 h : le client doit écrire d’abord.', { timeout: 10_000 });
+  await expect(thread(page).getByRole('alert').filter({ hasText: errText('REPLY_OUTSIDE_WINDOW') })).toContainText('Hors fenêtre de 24 h : le client doit écrire d’abord.', { timeout: 10_000 });
   await expect(composer(page)).toHaveValue('Votre commande part demain');
   await expect(thread(page).locator('[data-message="human"]').filter({ hasText: 'Votre commande part demain' })).toHaveCount(0);
 
@@ -290,7 +290,7 @@ test('AT-INB-03 a reply refused outside the 24 h window is shown inline and the 
   await expect(page.locator('[data-banner="outsideWindow"]')).toContainText('HORS FENÊTRE 24 H');
   await expect(page.locator('[data-banner="outsideWindow"]')).toContainText('aucun envoi n’est possible sur Instagram');
   const disabled = thread(page).locator('[data-composer="disabled"]');
-  await expect(disabled).toContainText('REPLY_OUTSIDE_WINDOW');
+  await expect(disabled).toContainText(errText('REPLY_OUTSIDE_WINDOW'));
   await expect(disabled).toContainText('impossible sur Instagram');
   await expect(composer(page)).toHaveCount(0);
   await expect(page.getByTestId('send-template')).toHaveCount(0);
@@ -523,7 +523,7 @@ test('AT-INB-04 an image over 5 MB is refused inline; a valid image is sent as a
   await open(page, karim.id);
   const file = page.locator('[data-composer-file]');
   await file.setInputFiles({ name: 'lourde.png', mimeType: 'image/png', buffer: Buffer.alloc(6 * 1024 * 1024, 1) });
-  await expect(thread(page).getByRole('alert').filter({ hasText: 'IMAGE_TOO_LARGE' })).toContainText('Image trop lourde (5 Mo max).');
+  await expect(thread(page).getByRole('alert').filter({ hasText: errText('IMAGE_TOO_LARGE') })).toContainText('Image trop lourde (5 Mo max).');
   await expect(thread(page).getByRole('button', { name: 'Envoyer', exact: true })).toBeDisabled();
   await thread(page).getByRole('button', { name: 'Retirer l’image' }).click();
 
@@ -580,7 +580,7 @@ test('AT-INB-03 a reply refused outside the 24 h window is shown inline and the 
   await open(page, karim.id);
   await composer(page).fill('Votre commande part demain');
   await composer(page).press('Enter');
-  await expect(thread(page).getByRole('alert').filter({ hasText: 'REPLY_OUTSIDE_WINDOW' })).toContainText('Hors fenêtre de 24 h : le client doit écrire d’abord.', { timeout: 10_000 });
+  await expect(thread(page).getByRole('alert').filter({ hasText: errText('REPLY_OUTSIDE_WINDOW') })).toContainText('Hors fenêtre de 24 h : le client doit écrire d’abord.', { timeout: 10_000 });
   await expect(composer(page)).toHaveValue('Votre commande part demain');
   await expect(thread(page).locator('[data-message="human"]').filter({ hasText: 'Votre commande part demain' })).toHaveCount(0);
 
@@ -591,7 +591,7 @@ test('AT-INB-03 a reply refused outside the 24 h window is shown inline and the 
   await expect(page.locator('[data-banner="outsideWindow"]')).toContainText('HORS FENÊTRE 24 H');
   await expect(page.locator('[data-banner="outsideWindow"]')).toContainText('aucun envoi n’est possible sur Instagram');
   const disabled = thread(page).locator('[data-composer="disabled"]');
-  await expect(disabled).toContainText('REPLY_OUTSIDE_WINDOW');
+  await expect(disabled).toContainText(errText('REPLY_OUTSIDE_WINDOW'));
   await expect(disabled).toContainText('impossible sur Instagram');
   await expect(composer(page)).toHaveCount(0);
   await expect(page.getByTestId('send-template')).toHaveCount(0);
@@ -600,7 +600,7 @@ test('AT-INB-03 a reply refused outside the 24 h window is shown inline and the 
 ), (c) => ({ ...c, aiPaused: false, aiPausedBy: null, status: 'active', within24h: false, lastCustomerMessageAt: old, composer: { ...c.composer, canSend: false, reasonCode: 'REPLY_OUTSIDE_WINDOW', within24h: false, humanAgentTag: false } }));
   await open(page, yacine.id);
   await expect(page.locator('[data-banner="outsideWindow"]')).toContainText('aucun envoi n’est possible sur Messenger');
-  await expect(thread(page).locator('[data-composer="disabled"]')).toContainText('REPLY_OUTSIDE_WINDOW');
+  await expect(thread(page).locator('[data-composer="disabled"]')).toContainText(errText('REPLY_OUTSIDE_WINDOW'));
   await expect(page.getByTestId('send-template')).toHaveCount(0);
 });
 
@@ -616,6 +616,7 @@ import { expectNoA11yViolations } from './support/a11y';
 import { apiReady, createAccount, loginHome, type Account } from './support/m1';
 import { verifyEmail } from './support/m3-channels';
 import { connectFakePages, everyMessageType, failWith, getConversation, inboxReady, inject, listConversations, patchAnswer, patchConversation, reply, waitConversation, type E2eChannel, type E2eConversation } from './support/m3-inbox';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial' });
 let account: Account;
@@ -832,7 +833,7 @@ test('AT-INB-04 an image over 5 MB is refused inline; a valid image is sent as a
   await open(page, karim.id);
   const file = page.locator('[data-composer-file]');
   await file.setInputFiles({ name: 'lourde.png', mimeType: 'image/png', buffer: Buffer.alloc(6 * 1024 * 1024, 1) });
-  await expect(thread(page).getByRole('alert').filter({ hasText: 'IMAGE_TOO_LARGE' })).toContainText('Image trop lourde (5 Mo max).');
+  await expect(thread(page).getByRole('alert').filter({ hasText: errText('IMAGE_TOO_LARGE') })).toContainText('Image trop lourde (5 Mo max).');
   await expect(thread(page).getByRole('button', { name: 'Envoyer', exact: true })).toBeDisabled();
   await thread(page).getByRole('button', { name: 'Retirer l’image' }).click();
 
@@ -889,7 +890,7 @@ test('AT-INB-03 a reply refused outside the 24 h window is shown inline and the 
   await open(page, karim.id);
   await composer(page).fill('Votre commande part demain');
   await composer(page).press('Enter');
-  await expect(thread(page).getByRole('alert').filter({ hasText: 'REPLY_OUTSIDE_WINDOW' })).toContainText('Hors fenêtre de 24 h : le client doit écrire d’abord.', { timeout: 10_000 });
+  await expect(thread(page).getByRole('alert').filter({ hasText: errText('REPLY_OUTSIDE_WINDOW') })).toContainText('Hors fenêtre de 24 h : le client doit écrire d’abord.', { timeout: 10_000 });
   await expect(composer(page)).toHaveValue('Votre commande part demain');
   await expect(thread(page).locator('[data-message="human"]').filter({ hasText: 'Votre commande part demain' })).toHaveCount(0);
 
@@ -900,7 +901,7 @@ test('AT-INB-03 a reply refused outside the 24 h window is shown inline and the 
   await expect(page.locator('[data-banner="outsideWindow"]')).toContainText('HORS FENÊTRE 24 H');
   await expect(page.locator('[data-banner="outsideWindow"]')).toContainText('aucun envoi n’est possible sur Instagram');
   const disabled = thread(page).locator('[data-composer="disabled"]');
-  await expect(disabled).toContainText('REPLY_OUTSIDE_WINDOW');
+  await expect(disabled).toContainText(errText('REPLY_OUTSIDE_WINDOW'));
   await expect(disabled).toContainText('impossible sur Instagram');
   await expect(composer(page)).toHaveCount(0);
   await expect(page.getByTestId('send-template')).toHaveCount(0);
@@ -917,7 +918,7 @@ test('AT-INB-03 a reply refused outside the 24 h window is shown inline and the 
   await failWith(page, /\/api\/v1\/conversations\/[0-9a-f-]{36}\/messages$/, 'POST', 422, 'REPLY_OUTSIDE_WINDOW', 'Hors fenêtre de 24 h : le client doit écrire d’abord.');
   await dialog.getByRole('radio', { name: /Commande livrée/ }).check();
   await dialog.getByRole('button', { name: 'Envoyer', exact: true }).click();
-  await expect(dialog.getByText('REPLY_OUTSIDE_WINDOW')).toBeVisible();
+  await expect(dialog.getByText(errText('REPLY_OUTSIDE_WINDOW'))).toBeVisible();
   await expect(dialog.getByRole('radio', { name: /Commande livrée/ })).toBeChecked();
 });
 
@@ -926,10 +927,10 @@ test('AT-INB-13 page to reconnect: banner, composer disabled with the reason and
   await patchAnswer(page, new RegExp(`/api/v1/conversations/${amina.id}$`), (c) => ({ ...c, aiPaused: false, aiPausedBy: null, status: 'active', channel: { ...c.channel, status: 'needs_reconnect' }, composer: { ...c.composer, canSend: false, reasonCode: 'REPLY_CHANNEL_INACTIVE', channelStatus: 'needs_reconnect' } }));
   await open(page, amina.id);
   await expect(page.locator('[data-banner="reconnect"]')).toContainText('Reconnexion requise');
-  await expect(page.locator('[data-banner="reconnect"]')).toContainText('PAGE_TOKEN_EXPIRED');
+  await expect(page.locator('[data-banner="reconnect"]')).toContainText(errText('PAGE_TOKEN_EXPIRED'));
   const disabled = thread(page).locator('[data-composer="disabled"]');
   await expect(disabled).toContainText('CANAL INACTIF');
-  await expect(disabled).toContainText('Page en pause ou déconnectée. (REPLY_CHANNEL_INACTIVE)');
+  await expect(disabled).toContainText('Page en pause ou déconnectée.');
   await expect(page.getByTestId('composer-reconnect')).toHaveAttribute('href', new RegExp(`/fr/channels/${facebook.id}$`));
   await expect(composer(page)).toHaveCount(0);
   // reading works
@@ -1134,7 +1135,7 @@ test('bulk selection bar: per-conversation results, failed ones stay selected an
   const dialog = page.getByRole('dialog', { name: 'Marquer résolues' });
   await expect(dialog).toContainText('1 OK · 1 en erreur');
   await expect(dialog.getByTestId('bulk-results').locator('li[data-ok="true"]')).toContainText('Client 0001');
-  await expect(dialog.getByTestId('bulk-results').locator('li[data-ok="false"]')).toContainText('Page en pause ou déconnectée. (REPLY_CHANNEL_INACTIVE)');
+  await expect(dialog.getByTestId('bulk-results').locator('li[data-ok="false"]')).toContainText('Page en pause ou déconnectée.');
   // retry the failed one against the real API
   await page.unroute(BULK);
   await dialog.getByTestId('bulk-retry').click();

@@ -60,7 +60,7 @@ export function AddressDialog({ order, open, onClose, onDone }: DialogBaseProps 
     : !q
       ? t('common.loading')
       : !q.wilayaServed
-        ? `${t('error.WILAYA_NOT_SERVED')} (WILAYA_NOT_SERVED)`
+        ? t('error.WILAYA_NOT_SERVED')
         : t('orders.address.fee', { fee: formatMoney(q.fee), total: formatMoney(order.subtotal - order.discount + q.fee) });
   return (
     <Dialog

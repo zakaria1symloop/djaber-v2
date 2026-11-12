@@ -13,6 +13,7 @@ import { patchAnswer } from './support/m3-inbox';
 import { agentCard, expectNoHorizontalOverflow, expectRoute, NAV, railRow, sidebar, stepChip, toastOf } from './support/m4-agents';
 import { activeAgent, conversationOf, createAgent, getAgent, inject, linkPage, listAgents, nextSender, patchAgent, realGet, realPost, setupShop, type Shop } from './support/m4-real';
 import { addFaq, agentWrites, bodyOf, deleteAgent, expectWrites, faqsOf, presetsOf, readinessOf, recordWrites, scenariosOf, signInApi, enter, teamReplies, waitJob, writesOf, failOnce, type RealPreset, type Recorder } from './support/m4-real-wizard';
+import { errText } from './support/error-text';
 
 // one shared `next dev` server: first hits compile, so every test gets room for a repeated navigation
 test.describe.configure({ timeout: 240_000 });
@@ -626,7 +627,7 @@ test.describe('step 4 — channels', () => {
     const rec = await openWizard(page, 'channels', draft.id);
     await expect(page.getByTestId('channel-option')).toHaveCount(3, { timeout: 30_000 });
     await expect(page.locator('[data-section="channels"]')).toHaveAttribute('data-selected', '0');
-    await expect(page.locator('[data-section="channels"]')).toContainText("Le changement s'applique aux nouvelles conversations. (AGENT_CHANNEL_SWITCH_NEXT_THREAD)");
+    await expect(page.locator('[data-section="channels"]')).toContainText("Le changement s'applique aux nouvelles conversations.");
     await expectNoA11yViolations(page);
 
     // linked elsewhere: never moved silently
@@ -639,7 +640,7 @@ test.describe('step 4 — channels', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: `Déplacer « ${fb.name} » vers « ${DRAFT} » ?` })).toBeVisible();
     await expect(dialog.getByTestId('move-dialog')).toContainText(`« ${OTHER} » ne répondra plus sur cette page.`);
-    await expect(dialog.getByTestId('move-dialog')).toContainText('(AGENT_CHANNEL_SWITCH_NEXT_THREAD)');
+    await expect(dialog.getByTestId('move-dialog')).toContainText(errText('AGENT_CHANNEL_SWITCH_NEXT_THREAD'));
 
     // Annuler ⇒ nothing is written
     await dialog.getByRole('button', { name: 'Annuler', exact: true }).click();
@@ -745,9 +746,9 @@ test.describe('step 5 — test & activation', () => {
     await expect(rail.getByTestId('activate-now')).toHaveText('Activer maintenant');
     await expect(rail.getByTestId('activate-save-draft')).toHaveText('Enregistrer en brouillon');
     await expect(rail.getByTestId('activate-later')).toHaveText('Activer à une date (ex. lancement)');
-    await expect(rail).toContainText('(AGENT_CHANNEL_SWITCH_NEXT_THREAD)');
+    await expect(rail).toContainText(errText('AGENT_CHANNEL_SWITCH_NEXT_THREAD'));
     await expect(railRow(page, 'CANAUX')).toHaveText(`${shop.instagram.name} (IG)`);
-    await expect(status(page)).toContainText('Activation bloquée si : aucun canal libre (AGENT_NO_CHANNEL)');
+    await expect(status(page)).toContainText('Activation bloquée si : aucun canal libre');
     await expect(next(page)).toHaveCount(0);
     await expectNoA11yViolations(page);
     expect(agentWrites(rec)).toEqual([]);
@@ -865,7 +866,7 @@ test.describe('step 5 — test & activation', () => {
       await activate.click();
       await expect(error).toHaveAttribute('data-code', 'AGENT_DRAFT_INCOMPLETE');
       await expect(error).toContainText("Complétez avant d'activer :");
-      await expect(error).toContainText('(AGENT_DRAFT_INCOMPLETE)');
+      await expect(error).toContainText(errText('AGENT_DRAFT_INCOMPLETE'));
       const missing = page.getByTestId('activation-missing').getByRole('listitem');
       await expect(missing).toHaveCount(2);
       // each missing key is named with the label of the real readiness check
@@ -881,7 +882,7 @@ test.describe('step 5 — test & activation', () => {
       await activate.click();
       const dialog = page.getByRole('dialog');
       await expect(dialog.getByRole('heading', { name: "Limite d'agents atteinte" })).toBeVisible();
-      await expect(dialog.getByTestId('agents-limit-dialog')).toContainText('(PLAN_LIMIT)');
+      await expect(dialog.getByTestId('agents-limit-dialog')).toContainText(errText('PLAN_LIMIT'));
       await expect(dialog.getByTestId('limit-create-draft')).toHaveCount(0); // already a draft
       await dialog.getByRole('button', { name: 'Fermer' }).last().click();
       await expect(page.getByRole('dialog')).toHaveCount(0);

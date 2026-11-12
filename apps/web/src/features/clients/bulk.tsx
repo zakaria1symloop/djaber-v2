@@ -151,7 +151,7 @@ function BulkResultDialog({ outcome, names, onClose, onRetried }: { outcome: Out
               {r.ok ? t('clients.bulk.result.ok') : t('clients.bulk.result.error')}
             </Pill>
             <span className="min-w-0 flex-1 truncate">{names[r.id] ?? r.id}</span>
-            {r.error ? <span className="max-w-[55%] text-end ts-label-meta text-accent-alert">{`${r.error.message} (${r.error.code})`}</span> : null}
+            {r.error ? <span className="max-w-[55%] text-end ts-label-meta text-accent-alert">{r.error.message}</span> : null}
           </li>
         ))}
       </ul>

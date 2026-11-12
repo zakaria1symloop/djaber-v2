@@ -202,7 +202,7 @@ export function ReceiveDialog({ purchaseId, onClose }: { purchaseId: string | nu
     const over = r.warnings.filter((w) => w.code === 'PURCHASE_OVER_RECEIVE');
     toast(
       over.length
-        ? { tone: 'warning', message: `${t('purchases.receive.done', { number: r.purchase.number, count: sum.units })} · ${t('error.PURCHASE_OVER_RECEIVE', { ordered: String(over[0]!.params?.ordered ?? ''), received: String(over[0]!.params?.received ?? '') })} (PURCHASE_OVER_RECEIVE)` }
+        ? { tone: 'warning', message: `${t('purchases.receive.done', { number: r.purchase.number, count: sum.units })} · ${t('error.PURCHASE_OVER_RECEIVE', { ordered: String(over[0]!.params?.ordered ?? ''), received: String(over[0]!.params?.received ?? '') })}` }
         : t('purchases.receive.done', { number: r.purchase.number, count: sum.units }),
     );
     await refresh();
@@ -322,7 +322,7 @@ export function ReceiveDialog({ purchaseId, onClose }: { purchaseId: string | nu
             </details>
             {sum.over.length ? (
               <p className="ts-label-meta !normal-case text-accent-starred" data-testid="over-receive-warning">
-                ⚠ {t('purchases.receive.overWarning', { names: ls.filter((l) => !l.added && l.already + int(l.now) > l.ordered).map((l) => l.name).join(', ') })} (PURCHASE_OVER_RECEIVE)
+                ⚠ {t('purchases.receive.overWarning', { names: ls.filter((l) => !l.added && l.already + int(l.now) > l.ordered).map((l) => l.name).join(', ') })}
               </p>
             ) : null}
             <div className="grid gap-3 sm:grid-cols-3">
@@ -347,7 +347,7 @@ export function ReceiveDialog({ purchaseId, onClose }: { purchaseId: string | nu
                 </div>
               </Field>
             </div>
-            {missingVariant ? <FormAlert tone="warning">{t('error.VARIANT_REQUIRED')} (VARIANT_REQUIRED)</FormAlert> : null}
+            {missingVariant ? <FormAlert tone="warning">{t('error.VARIANT_REQUIRED')}</FormAlert> : null}
           </>
         ) : null}
         {s.error ? <FormAlert>{s.error}</FormAlert> : null}

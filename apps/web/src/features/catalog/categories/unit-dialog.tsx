@@ -6,7 +6,6 @@ import { Button, Dialog, Field, FormAlert, Input, NumberInput, Select, toast } f
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { ApiError } from '@/lib/api';
 import { applyServerErrors, fieldError } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { digitsToInt } from '@/lib/money';
@@ -52,7 +51,7 @@ export function UnitDialog({ unit, units, onClose }: { /** null = new unit */ un
       onClose();
     } catch (e) {
       const text = applyServerErrors(form, e, t, { fields: FIELDS });
-      setFormError(text && e instanceof ApiError ? `${text} (${e.code})` : text);
+      setFormError(text);
     }
   });
 

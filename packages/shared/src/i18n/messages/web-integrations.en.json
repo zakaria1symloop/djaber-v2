@@ -11,7 +11,6 @@
   "settings.integrations.planGate.google_sheets": "Google Sheets is not included in your plan.",
   "settings.integrations.planGate.api_keys": "API keys are not included in your plan.",
   "settings.integrations.planGate.webhooks": "Outbound webhooks are not included in your plan.",
-
   "settings.integrations.sheets.title": "Google Sheets",
   "settings.integrations.sheets.description": "Every order is added to the “Commandes” tab and updated on every change (status, tracking, contact). One way: Djaber → Sheets.",
   "settings.integrations.sheets.pill.synced": "Connected · synced {ago}",
@@ -94,7 +93,6 @@
   "settings.integrations.sheets.dialog.rangeHint": "Optional: leave empty to send only new orders.",
   "settings.integrations.sheets.dialog.rangeInvalid": "Invalid period: the start date must come before the end date.",
   "settings.integrations.sheets.dialog.connect": "Connect",
-
   "settings.integrations.apiKeys.title": "API keys",
   "settings.integrations.apiKeys.description": "Server-to-server access, limited by scopes. The key is shown only once. {rate} requests / min per key.",
   "settings.integrations.apiKeys.allowance": "{used} / {limit} active keys",
@@ -122,9 +120,8 @@
   "settings.integrations.apiKeys.onceNote": "Copy it now: it will never be shown again.",
   "settings.integrations.apiKeys.headerHint": "Send it in the X-API-Key header. A lost key is revoked and created again.",
   "settings.integrations.apiKeys.revokeTitle": "Revoke “{name}”?",
-  "settings.integrations.apiKeys.revokeText": "Calls with this key are refused immediately (API_KEY_REVOKED). Cannot be undone.",
+  "settings.integrations.apiKeys.revokeText": "Calls with this key are refused immediately. Cannot be undone.",
   "settings.integrations.apiKeys.revokedToast": "Key “{name}” revoked",
-
   "settings.integrations.webhooks.title": "Outbound webhooks",
   "settings.integrations.webhooks.description": "HMAC signature (X-Djaber-Signature), 7 attempts (1 min → 24 h), disabled after 50 consecutive failures with a notification.",
   "settings.integrations.webhooks.allowance": "{used} / {limit} endpoints",
@@ -153,7 +150,7 @@
   "settings.integrations.webhooks.payloadTitle": "Delivery {event}",
   "settings.integrations.webhooks.dialog.context": "Integrations › Webhooks",
   "settings.integrations.webhooks.dialog.url": "URL",
-  "settings.integrations.webhooks.dialog.urlHint": "HTTPS required · WEBHOOK_URL_INVALID",
+  "settings.integrations.webhooks.dialog.urlHint": "HTTPS required",
   "settings.integrations.webhooks.dialog.events": "Events",
   "settings.integrations.webhooks.dialog.eventsRequired": "Choose at least one event.",
   "settings.integrations.webhooks.dialog.secret": "Secret (HMAC)",

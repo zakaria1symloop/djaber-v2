@@ -9,6 +9,7 @@ import { signIn } from './support/m4-agents';
 import { operatorOf } from './support/m4-inbox';
 import { open, row } from './support/m5-orders';
 import { algiersToday, gdsOwner, gdsReady, getJson, openRowMenu, product, purchase, receiveAll, supplier, type SeedProduct, type SeedSupplier } from './support/m7';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 });
 test.use({ viewport: { width: 1440, height: 1000 } });
@@ -100,7 +101,7 @@ test('AT-GDS-13 — delete a supplier with purchases ⇒ SUPPLIER_HAS_PURCHASES 
   await open(page, '/fr/suppliers', () => row(page, belkacem.id));
   const menu = await openRowMenu(page, belkacem.id);
   await expect(menu.locator('[data-action="delete"]')).toHaveAttribute('data-disabled', '');
-  await expect(menu).toContainText('SUPPLIER_HAS_PURCHASES');
+  await expect(menu).toContainText(errText('SUPPLIER_HAS_PURCHASES'));
   await menu.locator('[data-action="deactivate"]').click();
   await expect(page.locator('[data-toast]').filter({ hasText: 'Belkacem Import désactivé' })).toBeVisible();
   await expect(row(page, belkacem.id)).toContainText('Inactif');

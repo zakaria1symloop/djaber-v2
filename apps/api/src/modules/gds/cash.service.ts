@@ -5,7 +5,7 @@
 // pills ↔ table in sync, `to` = end of day). Day closing: theoretical cash vs counted, correction row, day locked;
 // reopen (Admin+, audited) reverses the correction with a new correction row.
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { CASH_EDIT_WINDOW_HOURS, type CashDaysQuery, type CashDayView, type CashQuery, type CashStatsQuery, type CashStatsView, type CashTransactionView, type CloseCashInput, type CreateCashEntryInput, type ReopenCashInput, type UpdateCashEntryInput } from '@djaber/shared';
+import { CASH_EDIT_WINDOW_HOURS, cashDisplayMethod, type CashDaysQuery, type CashDayView, type CashQuery, type CashStatsQuery, type CashStatsView, type CashTransactionView, type CloseCashInput, type CreateCashEntryInput, type ReopenCashInput, type UpdateCashEntryInput } from '@djaber/shared';
 import { prisma, Prisma, TenantContext, type CashClosing, type CashTransaction, type Tx } from '@djaber/db';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
 import { page, type Page } from '../../core/http/pagination';
@@ -63,7 +63,11 @@ export class CashService implements OnModuleInit {
     const and: Prisma.CashTransactionWhereInput[] = [];
     if (q.direction) and.push({ type: q.direction });
     if (q.category?.length) and.push({ category: { in: q.category } });
-    if (q.method?.length) and.push({ method: { in: q.method } });
+    // retest 11/11 UX-055: « COD » = cash collected on an order, « Espèces » = the other cash rows (counter, till, purchases)
+    if (q.method?.length)
+      and.push({
+        OR: q.method.map((m): Prisma.CashTransactionWhereInput => (m === 'cod' ? { method: 'cash', category: 'order' } : m === 'cash' ? { method: 'cash', category: { not: 'order' } } : { method: m })),
+      });
     if (q.createdById?.length) and.push({ createdById: { in: q.createdById } });
     if (q.source === 'auto') and.push({ isAutomatic: true });
     if (q.source === 'manual') and.push({ isAutomatic: false });
@@ -484,7 +488,7 @@ export class CashService implements OnModuleInit {
         { header: h.description, value: (r: R) => r.description ?? '' },
         { header: h.reference, value: (r: R) => r.reference?.label ?? '' },
         { header: h.category, value: (r: R) => r.category },
-        { header: h.method, value: (r: R) => r.method },
+        { header: h.method, value: (r: R) => cashDisplayMethod(r.category, r.method) },
         { header: h.amount, value: (r: R) => (r.type === 'income' ? r.amount : -r.amount) },
         { header: h.balance, value: (r: R) => r.balanceAfter },
         { header: h.auto, value: (r: R) => (r.isAutomatic ? 'AUTO' : '') },

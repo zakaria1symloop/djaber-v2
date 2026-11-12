@@ -90,8 +90,8 @@ export function useParcelActions(o: { onTrack?: (shipmentId: string) => void } =
     async (p: ParcelRef) => {
       const r = await sync(p);
       if (r.ok) toast(t('tracking.sync.done', { number: p.orderNumber }));
-      else if (r.code === 'TRACKING_SYNC_RATE_LIMITED') toast({ tone: 'warning', message: `${t('error.TRACKING_SYNC_RATE_LIMITED', { retryAfter: waitLabel(r.retryAfter ?? 300) })} (TRACKING_SYNC_RATE_LIMITED)` });
-      else toast({ tone: 'danger', message: r.code && t.has(`error.${r.code}`) ? `${t(`error.${r.code}`, { message: '', retryAfter: '' })} (${r.code})` : t('toast.noConnection') });
+      else if (r.code === 'TRACKING_SYNC_RATE_LIMITED') toast({ tone: 'warning', message: t('error.TRACKING_SYNC_RATE_LIMITED', { retryAfter: waitLabel(r.retryAfter ?? 300) }) });
+      else toast({ tone: 'danger', message: r.code && t.has(`error.${r.code}`) ? t(`error.${r.code}`, { message: '', retryAfter: '' }) : t('toast.noConnection') });
     },
     [sync, t],
   );

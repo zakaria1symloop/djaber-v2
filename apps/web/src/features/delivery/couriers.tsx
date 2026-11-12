@@ -545,7 +545,7 @@ function DeleteCourierDialog({ account, onClose, onDeactivate, onDeleted }: { ac
                 {t('couriers.deactivate')}
               </Button>
             ) : null}
-            <Button variant="danger" disabled disabledReason={`${t('error.COURIER_HAS_ACTIVE_SHIPMENTS', { count: blocked })} (COURIER_HAS_ACTIVE_SHIPMENTS)`}>
+            <Button variant="danger" disabled disabledReason={t('error.COURIER_HAS_ACTIVE_SHIPMENTS', { count: blocked })}>
               {t('action.delete')}
             </Button>
           </>

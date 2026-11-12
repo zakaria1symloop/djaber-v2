@@ -557,7 +557,7 @@ test.describe('AGT-04 configuration tab', () => {
       await expect(option(shop.facebook2.id)).toContainText('À RECONNECTER');
       await expect(option(shop.facebook2.id).getByRole('checkbox')).toBeDisabled();
       await expect(option(shop.facebook2.id).getByRole('link', { name: 'Reconnecter' })).toHaveAttribute('href', `/fr/channels/${shop.facebook2.id}`);
-      await expect(page.locator('[data-section="channels"]')).toContainText("Le changement s'applique aux nouvelles conversations. (AGENT_CHANNEL_SWITCH_NEXT_THREAD)");
+      await expect(page.locator('[data-section="channels"]')).toContainText("Le changement s'applique aux nouvelles conversations.");
       // the section writes at once: it never makes the form dirty
       await expect(saveButton(page)).toBeDisabled();
 
@@ -754,7 +754,7 @@ test.describe('AGT-08 insights tab', () => {
     // "Ignorer" of the row
     await colleagueFirst(laptop, { action: 'product' });
     await page.locator(`[data-insight="${laptop}"]`).getByTestId('insight-ignore').click();
-    await expect(page.locator('[data-toast="info"]').filter({ hasText: 'Déjà traité. (INSIGHT_ALREADY_RESOLVED)' })).toBeVisible();
+    await expect(page.locator('[data-toast="info"]').filter({ hasText: 'Déjà traité.' })).toBeVisible();
     await expect(page.locator(`[data-insight="${laptop}"]`)).toHaveCount(0);
     await expect(page.getByRole('radio', { name: `En attente ${heads.length - 1}` })).toBeVisible();
 
@@ -762,10 +762,10 @@ test.describe('AGT-08 insights tab', () => {
     await colleagueFirst(hm, { action: 'ignored_30d' });
     await page.locator(`[data-insight="${hm}"]`).getByTestId('insight-resolve').click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toContainText('Déjà traité par un collègue : INSIGHT_ALREADY_RESOLVED');
+    await expect(dialog).toContainText("Si un collègue l'a déjà traité");
     await dialog.locator('#insight-instruction').fill('Demander la référence du produit.');
     await dialog.getByTestId('resolve-insight-submit').click();
-    await expect(page.locator('[data-toast="info"]').filter({ hasText: 'Déjà traité. (INSIGHT_ALREADY_RESOLVED)' }).first()).toBeVisible();
+    await expect(page.locator('[data-toast="info"]').filter({ hasText: 'Déjà traité.' }).first()).toBeVisible();
     await expect(dialog).toHaveCount(0);
     await expect(page.locator(`[data-insight="${hm}"]`)).toHaveCount(0);
     const left = heads.length - 2;
@@ -1000,7 +1000,7 @@ test.describe('AGT-07 playground', () => {
     await say(page, 'chhal le prix du foulard soie ?');
     const error = page.getByTestId('playground-error');
     await expect(error).toHaveAttribute('data-code', 'AI_PROVIDER_ERROR');
-    await expect(error.getByRole('alert')).toContainText("L'IA ne répond pas ; la conversation passe en file. (AI_PROVIDER_ERROR)");
+    await expect(error.getByRole('alert')).toContainText("L'IA ne répond pas ; la conversation passe en file.");
     await expect(page.getByTestId('playground-rate-limited')).toHaveCount(0);
     await expect(composer(page)).toBeEnabled();
     await expect(thread.locator('[data-message="customer"]')).toHaveCount(1);
@@ -1101,10 +1101,10 @@ test.describe('AGT-07 playground', () => {
     }
     const error = page.getByTestId('playground-error');
     await expect(error).toHaveAttribute('data-code', 'PLAYGROUND_RATE_LIMITED');
-    await expect(error).toContainText('Limite de test atteinte (60/h). (PLAYGROUND_RATE_LIMITED)');
+    await expect(error).toContainText('Limite de test atteinte (60/h).');
     // the API sends no Retry-After for this code: the screen counts down the default minute
     await expect(error).toContainText(/réessayez dans (1:00|0:5\d)/);
-    await expect(page.getByTestId('playground-rate-limited')).toContainText('Limite de test atteinte (60/h). (PLAYGROUND_RATE_LIMITED)');
+    await expect(page.getByTestId('playground-rate-limited')).toContainText('Limite de test atteinte (60/h).');
     await expect(page.getByTestId('playground-rate-limited')).toContainText(/réessayez dans (1:00|0:5\d)/);
     await expect(composer(page)).toBeDisabled();
     await expect(page.getByTestId('playground-send')).toBeDisabled();

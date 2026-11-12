@@ -287,9 +287,9 @@ function GraceView({ d, busy, exporting, error, onCancel, onExport }: { d: Dto; 
           {x.status === 'done' && x.url ? (
             <div className="flex flex-wrap items-center gap-3">
               <a href={x.url} className={buttonClass({ variant: 'primary' })} data-testid="deletion-export-link">
-                {t('public.deletion.export.download')}
+                {t('public.deletion.export.ready')}
               </a>
-              {x.expiresAt ? <span className="ts-label-meta text-text-muted">{t('public.deletion.export.expires', { date: formatDate(x.expiresAt, locale) })}</span> : null}
+              <span className="ts-label-meta text-text-muted">{x.expiresAt ? t('public.deletion.export.readyNote', { date: formatDate(x.expiresAt, locale) }) : t('public.deletion.export.readyShort')}</span>
             </div>
           ) : x.status === 'queued' || x.status === 'running' ? (
             <>

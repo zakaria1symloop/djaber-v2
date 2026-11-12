@@ -130,12 +130,6 @@ export function PlaygroundThread({ pg, agentName, empty, showTools = true, class
             <div key={e.id} className="mt-3" data-testid="playground-error" data-code={e.code ?? ''}>
               <FormAlert tone={e.code === 'PLAYGROUND_RATE_LIMITED' ? 'warning' : 'danger'}>
                 {e.message}
-                {e.code ? (
-                  <>
-                    {' '}
-                    <Ltr>({e.code})</Ltr>
-                  </>
-                ) : null}
                 {e.code === 'PLAYGROUND_RATE_LIMITED' && pg.wait > 0 ? <> · {t('agents.playground.retryIn', { time: formatClock(pg.wait) })}</> : null}
               </FormAlert>
               {pg.retry && pg.wait === 0 ? (

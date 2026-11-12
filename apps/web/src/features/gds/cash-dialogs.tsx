@@ -94,7 +94,7 @@ export function ManualEntryDialog({ mode, onClose, defaultDay }: { mode: ManualM
       const r = await uploadWithProgress<{ id: string }>('/uploads', fd);
       setProof({ id: r.data.id, name: file.name });
     } catch (e) {
-      s.setError(e instanceof ApiError ? `${e.message || t('error.INTERNAL')} (${e.code})` : t('error.INTERNAL'));
+      s.setError(e instanceof ApiError ? `${e.message || t('error.INTERNAL')}` : t('error.INTERNAL'));
     } finally {
       setUploading(false);
     }
@@ -173,7 +173,7 @@ export function ManualEntryDialog({ mode, onClose, defaultDay }: { mode: ManualM
             {t('cash.proof.current')}
           </a>
         ) : null}
-        {s.error ? <FormAlert>{closedError ? `${t('error.CASH_DAY_CLOSED', { date: dayLabel(day) })} (CASH_DAY_CLOSED)` : s.error}</FormAlert> : null}
+        {s.error ? <FormAlert>{closedError ? t('error.CASH_DAY_CLOSED', { date: dayLabel(day) }) : s.error}</FormAlert> : null}
       </div>
     </Dialog>
     {guard.element}

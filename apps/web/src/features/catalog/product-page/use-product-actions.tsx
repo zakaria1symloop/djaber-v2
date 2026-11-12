@@ -6,7 +6,6 @@ import { ConfirmDialog, FormAlert, toast, type MenuAction } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { useRouter } from '@/i18n/navigation';
-import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
@@ -83,7 +82,7 @@ export function useProductActions(o: {
       close();
       o.onArchived?.(p, 'hard');
     } catch (e) {
-      setDeleteError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setDeleteError(errorMessage(e, t));
     }
   };
 

@@ -120,7 +120,7 @@ export function ImportWizard() {
     } catch (e) {
       // a refused request (4xx) will be corrected: new key; a lost answer (network, 5xx) is retried with the same key
       if (e instanceof ApiError && e.status < 500) attempt.current = null;
-      setCommitError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setCommitError(errorMessage(e, t));
     }
   };
 
@@ -139,7 +139,7 @@ export function ImportWizard() {
     if (!j?.result) return;
     const csv = buildErrorsCsv(j.result.rows, {
       fields: IMPORT_FIELDS.filter((f) => !!j.result!.mapping?.[f]),
-      headers: { row: t('import.col.row'), errors: t('import.col.error'), field: (f) => t(`import.field.${f}`) },
+      headers: { row: t('import.col.row'), errors: t('import.col.error'), code: t('import.col.code'), field: (f) => t(`import.field.${f}`) },
       describe,
     });
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -192,7 +192,7 @@ export function ImportWizard() {
           <FileCard result={result} size={size} onChangeFile={startOver} />
           <Card className="flex flex-col gap-3 px-5 py-5" data-testid="import-mapping-state">
             {result.missingColumns?.length ? (
-              <FormAlert>{`${t('error.IMPORT_COLUMNS_MISSING', { columns: result.missingColumns.map((f) => t(`import.field.${f}`)).join(', ') })} (IMPORT_COLUMNS_MISSING)`}</FormAlert>
+              <FormAlert>{`${t('error.IMPORT_COLUMNS_MISSING', { columns: result.missingColumns.map((f) => t(`import.field.${f}`)).join(', ') })}`}</FormAlert>
             ) : null}
             <p className="text-[13px] text-text-secondary">{t('import.mapping.needed')}</p>
             <div className="flex flex-wrap gap-2">
@@ -238,7 +238,7 @@ export function ImportWizard() {
       ) : phase === 'importFailed' ? (
         <Card className="flex flex-col gap-3 px-5 py-6" data-testid="import-failed">
           <div className="ts-title">{t('import.failed.title')}</div>
-          <FormAlert>{job.data?.error ? `${job.data.error.message || t(`error.${job.data.error.code}`, job.data.error.params)} (${job.data.error.code})` : t('state.list.error.title')}</FormAlert>
+          <FormAlert>{job.data?.error ? `${job.data.error.message || t(`error.${job.data.error.code}`, job.data.error.params)}` : t('state.list.error.title')}</FormAlert>
           <p className="text-[13px] text-text-secondary">{t('import.failed.description')}</p>
           {commitError ? <FormAlert>{commitError}</FormAlert> : null}
           <div className="flex flex-wrap gap-2">
@@ -351,7 +351,7 @@ function UploadStep({ failure, onUploaded }: { failure: { code: string; message:
       </div>
       {shown ? (
         <div data-testid="import-error" data-code={shown.code}>
-          <FormAlert>{shown.code ? `${shown.message} (${shown.code})` : shown.message}</FormAlert>
+          <FormAlert>{shown.message}</FormAlert>
         </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

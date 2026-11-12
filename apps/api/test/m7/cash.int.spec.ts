@@ -160,6 +160,12 @@ describe('09 §4 regression: period selection ↔ table ↔ KPIs', () => {
     expect(one).toMatchObject({ from: d1, to: d1, openingBalance: 10000, income: 2000, expense: 500, currentBalance: 11500 });
     expect((await owner.get('/cash').expect(200)).body.meta).toMatchObject({ from: algiersDay(), to: algiersDay(), total: 0 });
     expect(algiersDayEnd(d2).getTime()).toBeGreaterThan(new Date(at(d2, 23.9)).getTime());
+    // retest 11/11 UX-055: « COD » = cash collected on a delivered order; « Espèces » = the other cash rows
+    await mk(d1, 12, 'income', 4500, 'order');
+    const cod = (await owner.get(`/cash?${q}&method=cod`).expect(200)).body.data;
+    expect(cod.map((r: any) => [r.category, r.method, r.amount])).toEqual([['order', 'cash', 4500]]);
+    const cashOnly = (await owner.get(`/cash?${q}&method=cash`).expect(200)).body.data;
+    expect(cashOnly.map((r: any) => r.category).sort()).toEqual(['other', 'rent']);
     await owner.get('/cash?sort=amount').expect(400);
   });
 

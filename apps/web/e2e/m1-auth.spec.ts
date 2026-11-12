@@ -3,6 +3,7 @@
 // is an API integration test; its UI side is the localized 404 of e2e/shell.spec.ts.
 import { expect, test, type Page } from '@playwright/test';
 import { API, apiReady, authHeaders, createAccount, expectUrl, freshTotp, login, loginHome, logout, mailLink, PASSWORD, uniqueEmail, waitForMail, type Account } from './support/m1';
+import { errText } from './support/error-text';
 
 test.describe.configure({ mode: 'serial' });
 test.beforeAll(async ({ request }) => {
@@ -383,7 +384,7 @@ test.describe('members, ownership and deletion', () => {
     await expect(submit).toBeDisabled(); // the name must match exactly
     // tester report 25/10: the hint names the workspace; no debt note unless the API answers WORKSPACE_HAS_DEBT
     await expect(dialog.getByText('Tapez « Atelier E2E » exactement : le nom de l'espace, pas votre e-mail.')).toBeVisible();
-    await expect(dialog.getByText(/WORKSPACE_HAS_DEBT/)).toHaveCount(0);
+    await expect(dialog.getByText(errText('WORKSPACE_HAS_DEBT'))).toHaveCount(0);
     await dialog.locator('#confirm-name').fill('Atelier E2E');
     await dialog.locator('#delete-ws-password').fill('Wrong-pass1');
     await submit.click();

@@ -86,7 +86,7 @@ export function ChannelAnalysis() {
     } catch (e) {
       const code = codeOf(e);
       if (code === 'PAGE_ANALYSIS_PERMISSION_REQUIRED' || code === 'ANALYSIS_RATE_LIMITED') setStartCode(code);
-      if (code === 'ANALYSIS_RATE_LIMITED') toast({ tone: 'danger', message: `${errorMessage(e, t)} (ANALYSIS_RATE_LIMITED)` });
+      if (code === 'ANALYSIS_RATE_LIMITED') toast({ tone: 'danger', message: errorMessage(e, t) });
       else if (code !== 'PAGE_ANALYSIS_PERMISSION_REQUIRED') setStartError(errorMessage(e, t));
     } finally {
       setStarting(false);
@@ -249,7 +249,7 @@ function Review({ channelId, dto, rerun }: { channelId: string; dto: AnalysisDto
       void qc.invalidateQueries({ queryKey: [ws, 'workspace'] });
       void qc.invalidateQueries({ queryKey: [ws, 'categories'] });
     } catch (e) {
-      setError(e instanceof ApiError && e.code === 'PLAN_LIMIT' ? `${errorMessage(e, t)} (PLAN_LIMIT)` : errorMessage(e, t));
+      setError(errorMessage(e, t));
     } finally {
       setPending(false);
     }
@@ -438,7 +438,7 @@ function ItemCard({
       </MiniField>
       {failure ? (
         <p role="alert" className="text-[12px] text-accent-alert" data-testid="analysis-item-error">
-          {failure.message && failure.message !== failure.code ? failure.message : t('channels.analysis.item.failed')} <Ltr>({failure.code})</Ltr>
+          {failure.message && failure.message !== failure.code ? failure.message : t('channels.analysis.item.failed')}
         </p>
       ) : null}
     </li>

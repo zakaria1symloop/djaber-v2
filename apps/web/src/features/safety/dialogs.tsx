@@ -15,7 +15,6 @@ import { safetyApi, safetyKeys } from './api';
 import { BLOCK_REASONS, canBlockAlso, reportReasons } from './logic';
 import { formatPhoneOnBlur, phonePreviewLine } from '@/lib/phone';
 
-const withCode = (e: unknown, text: string) => (e instanceof ApiError ? `${text} (${e.code})` : text);
 
 function ReasonSelect({ id, value, onChange, disabled }: { id: string; value: BlockReason | ''; onChange: (v: BlockReason | '') => void; disabled?: boolean }) {
   const t = useT();
@@ -77,7 +76,7 @@ export function BlockCustomerDialog({
       onDone?.();
       onClose();
     } catch (e) {
-      setError(withCode(e, errorMessage(e, t)));
+      setError(errorMessage(e, t));
     }
   };
   const busy = block.isPending;
@@ -157,8 +156,8 @@ export function ReportCustomerDialog({ open, onClose, target, name, onDone }: { 
     } catch (e) {
       const code = e instanceof ApiError ? e.code : null;
       if (code === 'ABUSE_REPORT_ALREADY_OPEN') return setAlreadyOpen(true);
-      if (code === 'ABUSE_REPORT_RATE_LIMITED' || code === 'ABUSE_REPORT_SELF') return void toast({ tone: 'danger', message: withCode(e, errorMessage(e, t)) });
-      setError(withCode(e, errorMessage(e, t)));
+      if (code === 'ABUSE_REPORT_RATE_LIMITED' || code === 'ABUSE_REPORT_SELF') return void toast({ tone: 'danger', message: errorMessage(e, t) });
+      setError(errorMessage(e, t));
     }
   };
   const busy = send.isPending;
@@ -188,7 +187,7 @@ export function ReportCustomerDialog({ open, onClose, target, name, onDone }: { 
     >
       {alreadyOpen ? (
         <FormAlert tone="warning">
-          <span data-testid="report-already-open">{t('safety.report.alreadyOpen')} (ABUSE_REPORT_ALREADY_OPEN)</span>
+          <span data-testid="report-already-open">{t('safety.report.alreadyOpen')}</span>
         </FormAlert>
       ) : (
         <div className="flex flex-col gap-4">
@@ -269,7 +268,7 @@ export function BlockNumberDialog({ open, onClose }: { open: boolean; onClose: (
     } catch (e) {
       const field = e instanceof ApiError ? e.body.fields?.phone : undefined;
       if (field) setPhoneError(field);
-      else setError(withCode(e, errorMessage(e, t)));
+      else setError(errorMessage(e, t));
     }
   };
   const busy = create.isPending;

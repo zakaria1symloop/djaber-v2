@@ -1,6 +1,6 @@
 // Row / detail `Actions ⌄` built from the server `actions: ActionDescriptor[]` (api-contract §1.12): the UI never
 // computes a business transition. A descriptor without a handler on this screen is skipped; a disabled one stays
-// visible, greyed, with its reason and code in the menu footer (D42).
+// visible, greyed, with its reason in the menu footer (D42; the error code is not shown — retest 11/11 UX-056).
 import type { ActionDescriptor } from '@djaber/shared';
 import type { MenuAction } from '@djaber/ui';
 import type { TFunction } from './i18n';
@@ -18,14 +18,17 @@ export type ActionHandler = {
   local?: boolean;
 };
 
-/** "Ce produit n'a pas de stock (service). (PRODUCT_NOT_STOCK_TRACKED)" */
+/**
+ * "Ce produit n'a pas de stock (service)." — retest 11/11 UX-056: the reason only, never the code (it stays on the
+ * descriptor's `reasonCode`).
+ */
 export const reasonText = (t: TFunction, code: string | undefined): string => {
   if (!code) return t('error.FORBIDDEN');
   const key = `error.${code}`;
   if (!t.has(key)) return code;
   // counts and limits are not known for a greyed item: placeholders are left empty
   const text = t(key, { count: '', available: '', resource: '', current: '', limit: '' }).replace(/\s+/g, ' ').trim();
-  return `${text} (${code})`;
+  return text;
 };
 
 /**

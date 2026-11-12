@@ -116,7 +116,7 @@ export function OrderImportWizard() {
       setUrl({ job: next, step: 'import', from: next === previewJobId ? null : previewJobId, tab: null });
     } catch (e) {
       if (e instanceof ApiError && e.status < 500) attempt.current = null;
-      setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setError(errorMessage(e, t));
     } finally {
       setBusy(false);
     }
@@ -234,7 +234,7 @@ export function OrderImportWizard() {
         </Card>
       ) : (
         <Card className="flex flex-col gap-3 px-5 py-6" data-testid="order-import-failed">
-          <FormAlert>{job.data?.error ? `${job.data.error.message} (${job.data.error.code})` : t('state.list.error.title')}</FormAlert>
+          <FormAlert>{job.data?.error ? job.data.error.message : t('state.list.error.title')}</FormAlert>
           {error ? <FormAlert>{error}</FormAlert> : null}
           <div className="flex flex-wrap gap-2">
             <Button variant="primary" onClick={() => void commit()} loading={busy}>
@@ -305,7 +305,7 @@ function UploadStep({ failure, onUploaded }: { failure: { code: string; message:
       </div>
       {shown ? (
         <div data-testid="order-import-error" data-code={shown.code}>
-          <FormAlert>{shown.code ? `${shown.message} (${shown.code})` : shown.message}</FormAlert>
+          <FormAlert>{shown.message}</FormAlert>
         </div>
       ) : null}
     </div>
@@ -325,7 +325,7 @@ function MappingStep({ result, jobId, onSaved, onBack }: { result: OrderImportPr
       const r = await api_.mapping(jobId, map);
       onSaved(r?.jobId ?? jobId);
     } catch (e) {
-      setError(e instanceof ApiError ? `${errorMessage(e, t)} (${e.code})` : errorMessage(e, t));
+      setError(errorMessage(e, t));
     } finally {
       setBusy(false);
     }
@@ -336,7 +336,7 @@ function MappingStep({ result, jobId, onSaved, onBack }: { result: OrderImportPr
         <h2 className="ts-title">{t('import.mapping.title')}</h2>
         <p className="ts-label-meta mt-1 text-text-muted">{t('orderImport.mapping.context', { file: result.fileName, rows: result.totals.rows })}</p>
       </div>
-      {result.missingColumns.length ? <FormAlert>{`${t('error.IMPORT_COLUMNS_MISSING', { columns: result.missingColumns.map((f) => t(`orderImport.field.${f}`)).join(', ') })} (IMPORT_COLUMNS_MISSING)`}</FormAlert> : null}
+      {result.missingColumns.length ? <FormAlert>{`${t('error.IMPORT_COLUMNS_MISSING', { columns: result.missingColumns.map((f) => t(`orderImport.field.${f}`)).join(', ') })}`}</FormAlert> : null}
       <ul className="divide-y divide-line-hairline rounded-card border border-line-edge">
         {ORDER_IMPORT_FIELDS.map((f) => (
           <li key={f} className="flex items-center gap-3 px-3 py-2 text-[13px]">

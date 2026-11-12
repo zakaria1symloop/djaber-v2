@@ -114,7 +114,7 @@ export function TabFrame<T extends { empty: boolean; hasChannels: boolean }>({ q
   if (q.isError && !q.data) {
     if (isRangeError(q.error)) {
       const e = q.error as ApiError;
-      return <ErrorState title={`${t(`analytics.range.${e.code}`)} (${e.code})`} description={e.message} action={{ label: t('analytics.range.reset'), onClick: () => setPeriod({ ...period, period: DEFAULT_PRESET, from: '', to: '' }) }} />;
+      return <ErrorState title={t(`analytics.range.${e.code}`)} description={e.message} action={{ label: t('analytics.range.reset'), onClick: () => setPeriod({ ...period, period: DEFAULT_PRESET, from: '', to: '' }) }} />;
     }
     return <QueryError error={q.error} onRetry={() => void q.refetch()} />;
   }
