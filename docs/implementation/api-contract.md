@@ -143,8 +143,10 @@ type JobDto = {
 Every handler declares `@RequirePermission('<group>.<action>')` (02 §3 + 06 §9) or `@PlatformRole(...)`; the API never relies on the UI hiding a button. "Actions ⌄" menus `[FIG ORD-05 v2]` are built from `GET …/:id` → `actions: ActionDescriptor[]` so that forbidden items are greyed with the right code:
 
 ```ts
-type ActionDescriptor = { key: string; enabled: boolean; reasonCode?: string; primary?: boolean; shortcut?: string };
+type ActionDescriptor = { key: string; enabled: boolean; reasonCode?: string; reasonParams?: Record<string, string | number>; primary?: boolean; shortcut?: string };
 ```
+
+UX-060 (retest 12/11): `reasonParams` carries the values of the reason's placeholders (`TRACKING_SYNC_RATE_LIMITED.retryAfter` in seconds, `from` / `to` status values…); the client shows the reason as a sentence, never the code. An action the state machine does not allow in the current state is **left out** of `actions` (`NOT_OFFERED_REASONS` in `@djaber/shared`: `ORDER_INVALID_TRANSITION`; parcel actions of another parcel state), whatever the member's permission. Money reasons: `ORDER_NOTHING_TO_REFUND` / `ORDER_ALREADY_REFUNDED` (refund), `ORDER_ALREADY_PAID` (record payment, payment link), `ORDER_PAYMENT_LOCKED` only on a closed order — the same codes answer `POST /orders/:id/refunds` and `/payment-link`.
 
 ---
 

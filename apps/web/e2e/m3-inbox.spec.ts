@@ -1018,7 +1018,7 @@ test('AT-INB-05 a stale change answers 409: "Modifié par quelqu’un d’autre"
   await failWith(page, new RegExp(`/api/v1/conversations/${yacine.id}$`), 'PATCH', 409, 'CONFLICT', 'Modifié entre-temps, rechargez.', { changedBy: { firstName: 'Sara', lastName: 'K.' }, changedAt: new Date(Date.now() - 120_000).toISOString(), current: { ...current, status: 'archived' } });
   await page.getByTestId('reopen').click();
   const dialog = page.getByRole('dialog', { name: 'Modifié par quelqu\'un d\'autre' });
-  await expect(dialog).toContainText('CONFLICT (409)');
+  await expect(dialog).toContainText('Modifié par');
   await expect(dialog).toContainText('Sara K.');
   await dialog.getByRole('button', { name: 'Recharger' }).click();
   await expect(dialog).toHaveCount(0);

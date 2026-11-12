@@ -37,9 +37,12 @@ export const systemText = (m: Message, t: TFunction): { text: string; handoff: b
   const time = clockOf(m.sentAt);
   if (!sys) return { text: m.text ? `${m.text} · ${time}` : time, handoff: false, warning: false };
   const key = `inbox.system.${sys.kind}`;
-  const params = Object.fromEntries(Object.entries(sys.params ?? {}).map(([k, v]) => [k, param(v)]));
+  const params: Record<string, string> = Object.fromEntries(Object.entries(sys.params ?? {}).map(([k, v]) => [k, param(v)]));
+  // UX-059 (retest 12/11): a code carried by the event is shown in words (the cancel reason)
+  if (sys.kind === 'order_cancelled') params.reason = params.reason && t.has(`enum.Order.cancelReason.${params.reason}`) ? t(`enum.Order.cancelReason.${params.reason}`) : t('orders.history.reason.other');
   const base = { name: '', number: '', reason: '', rule: '', agent: '', ...params, time };
-  const text = t.has(key) ? t(key, base) : m.text ? `${m.text} · ${time}` : `${sys.kind} · ${time}`;
+  // an event this screen does not know yet: a plain sentence, never its kind (`order_address_updated`)
+  const text = t.has(key) ? t(key, base) : m.text ? `${m.text} · ${time}` : t('inbox.system.event', { time });
   return { text, handoff: sys.kind === 'handoff', warning: sys.kind === 'skipped_window' };
 };
 

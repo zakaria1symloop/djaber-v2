@@ -164,7 +164,7 @@ export function AgentInsights() {
               count={grouped && i.occurrences > 1 ? <Ltr>{t('agents.insights.occurrences', { count: i.occurrences })}</Ltr> : relativeTime(i.createdAt, locale)}
               customer={t('agents.insights.customer', { message: i.customerMessage })}
               ai={i.aiResponse ? t('agents.insights.ai', { message: i.aiResponse }) : t('agents.insights.aiNone')}
-              cause={i.detail ? t('agents.insights.cause', { detail: insightDetail(t, i.detail) ?? i.detail }) : undefined}
+              cause={insightDetail(t, i.detail) ? t('agents.insights.cause', { detail: insightDetail(t, i.detail)! }) : undefined}
               actions={
                 <>
                   <Link href={`/inbox/${i.conversationId}`} className={buttonClass({ size: 'sm', variant: 'ghost' })}>

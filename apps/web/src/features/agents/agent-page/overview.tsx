@@ -17,6 +17,7 @@ import { agentKeys, agentsApi, useAgentMetrics, useAgentsRefresh, useAgentVersio
 import type { Agent, AgentVersion } from '../contracts';
 import { creditsPerConv, draftFromAgent, enabledCapabilities, enabledRuleCount, handledPct, policyCount, secondsLabel, type AgentDraft } from '../logic';
 import { channelLabel } from '../ui';
+import { diffFieldLabel, diffValue } from '../version-diff';
 import { useAgentPage } from './agent-shell';
 
 const PERIODS = ['7', '30', '90'] as const;
@@ -158,7 +159,6 @@ function Versions({ agent: a }: { agent: Agent }) {
     enabled: !!ws && diffOf !== null,
     retry: false,
   });
-  const show = (v: unknown): string => (v === null || v === undefined || v === '' ? '—' : typeof v === 'string' ? v : typeof v === 'number' || typeof v === 'boolean' ? String(v) : JSON.stringify(v));
 
   const run = async (fn: () => Promise<Agent>, done: (next: Agent) => string) => {
     setPending(true);
@@ -226,7 +226,7 @@ function Versions({ agent: a }: { agent: Agent }) {
                       <p className="ts-label-micro mb-2 text-text-muted">
                         <Ltr>{t('agents.versions.compare', { version: diff.data.version, against: diff.data.against })}</Ltr>
                       </p>
-                      <DiffList empty={t('agents.versions.noChange')} rows={diff.data.changes.map((c) => ({ key: c.field, label: t.has(`agents.field.${c.field}`) ? t(`agents.field.${c.field}`) : c.field, before: show(c.before), after: show(c.after) }))} />
+                      <DiffList empty={t('agents.versions.noChange')} rows={diff.data.changes.map((c) => ({ key: c.field, label: diffFieldLabel(t, c.field), before: diffValue(t, c.field, c.before), after: diffValue(t, c.field, c.after) }))} />
                     </>
                   )}
                 </div>

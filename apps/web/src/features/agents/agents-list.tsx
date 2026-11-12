@@ -385,7 +385,7 @@ function AgentCard({ agent: a, actions, selecting, selected, onToggle }: { agent
             {t('agents.card.noChannel.label')}
           </Pill>
           <span className="min-w-0 flex-1 text-text-secondary">
-            {t('error.AGENT_NO_CHANNEL')} <Ltr>(AGENT_NO_CHANNEL)</Ltr>
+            {t('error.AGENT_NO_CHANNEL')}
           </span>
           {actions.manage ? (
             <Link href={`/agents/${a.id}/configuration?section=channels`} className={buttonClass({ size: 'sm', variant: 'ghost' })}>

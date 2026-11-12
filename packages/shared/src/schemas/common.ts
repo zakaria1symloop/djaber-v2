@@ -27,6 +27,17 @@ export type ActionDescriptor = {
   key: string;
   enabled: boolean;
   reasonCode?: string;
+  /** values of the reason's placeholders (`{retryAfter}` in seconds, `{from}` / `{to}` status values…) — UX-060 */
+  reasonParams?: Record<string, string | number>;
   primary?: boolean;
   shortcut?: string;
 };
+
+/**
+ * 12 GLOBAL "Disabled reasons" (UX-060, retest 12/11): an action the state machine does not allow in the current state is
+ * not offered at all — the descriptor is left out of `actions` (API) and skipped by the menus (web, mobile). Greyed items
+ * are kept for the refusals the member can act on or should know (permission, plan, missing data, rate limit…).
+ */
+// UX-064: on a delivered / cancelled / returned order the send items are not offered either
+export const NOT_OFFERED_REASONS: readonly string[] = ['ORDER_INVALID_TRANSITION', 'DELIVERY_ORDER_DELIVERED', 'DELIVERY_ORDER_CANCELLED', 'DELIVERY_ORDER_RETURNED'];
+export const isNotOffered = (d: Pick<ActionDescriptor, 'enabled' | 'reasonCode'>): boolean => !d.enabled && !!d.reasonCode && NOT_OFFERED_REASONS.includes(d.reasonCode);

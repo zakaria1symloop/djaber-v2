@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { AppPage } from '@/components/app-page';
 import { ListLoading, QueryError } from '@/components/global-states';
 import { ignoreInsight, isAlreadyResolved, ResolveInsightDialog } from '@/features/agents/insights/resolve-dialog';
+import { insightDetail } from '@/features/agents/insight-detail';
 import type { AgentInsight } from '@/features/inbox/contracts';
 import { Link } from '@/i18n/navigation';
 import { ApiError } from '@/lib/api';
@@ -206,7 +207,7 @@ function Insight({ insight, manage, busy, disabledReason, onInstruct, onIgnore }
       who={who}
       age={relativeTime(insight.createdAt, locale)}
       quote={`« ${insight.customerMessage || '—'} »`}
-      detail={insight.detail ?? insight.aiResponse}
+      detail={insightDetail(t, insight.detail) ?? insight.aiResponse}
       actions={
         <>
           <Link href={`/inbox/${insight.conversationId}`} className={buttonClass({ size: 'sm' })} data-action="open">

@@ -1,7 +1,7 @@
 // 03-events-and-jobs §5.1 / 03 §15 — per `NotificationType`: its family (filter chips of NTF-01) and its web deep link
 // (the mobile link is `djaber://` + the same path). Titles and bodies are i18n keys rendered in the reader's locale.
 import { Logger } from '@nestjs/common';
-import { ERROR_MESSAGES, getMessages, type AppLocale, type NotificationGroup } from '@djaber/shared';
+import { ERROR_MESSAGES, getMessages, handoffReasonOf, type AppLocale, type NotificationGroup } from '@djaber/shared';
 import type { NotificationType } from '@djaber/db';
 
 /** `stock_low` → `stock.low`, `conversation_needs_human_message` → `conversation.needs_human_message` (00-build-order §0). */
@@ -230,12 +230,31 @@ const failureLabel = (value: string | number, messages: Record<string, string>, 
   const label = messages[`enum.Shipment.failureReason.${v}`] ?? (code ? (ERROR_MESSAGES[locale]?.[code] ?? ERROR_MESSAGES.fr[code] ?? v).replace(/[.。]$/, '') : v);
   return label === label.toUpperCase() ? label.charAt(0) + label.slice(1).toLowerCase() : label;
 };
-const display = (type: string, key: string, value: string | number, messages: Record<string, string>, locale: AppLocale) =>
-  type.startsWith('member_') && ROLE_PARAMS.has(key)
-    ? (messages[`enum.Membership.role.${value}`] ?? String(value))
-    : type === 'shipment_failed' && key === 'reason'
-      ? failureLabel(value, messages, locale)
-      : String(value);
+/** « CONFIRMÉE » (a pill label) inside a sentence reads « Confirmée ». */
+const inSentence = (label: string) => (label === label.toUpperCase() && label !== label.toLowerCase() ? label.charAt(0) + label.slice(1).toLowerCase() : label);
+/** UX-059 (retest 12/11): a handoff reason reads « le client demande un humain », never `customer_request`. */
+const handoffLabel = (value: string, messages: Record<string, string>) => {
+  const r = handoffReasonOf(value);
+  const label = messages[`inbox.handoff.reason.${r.kind}`] ?? value;
+  return r.detail ? `${label} · ${r.detail}` : label;
+};
+/**
+ * A parameter as the reader reads it (UX-059): roles, statuses, reasons, insight types, decisions and rules in words —
+ * `notification.value.<param>.<value>` first, then the enum label of the parameter, the value itself for free text.
+ */
+const display = (type: string, key: string, value: string | number, messages: Record<string, string>, locale: AppLocale, data: Data = {}) => {
+  const v = String(value);
+  const own = messages[`notification.value.${key}.${v}`];
+  if (own) return own;
+  if (type.startsWith('member_') && ROLE_PARAMS.has(key)) return messages[`enum.Membership.role.${v}`] ?? v;
+  if (type === 'shipment_failed' && key === 'reason') return failureLabel(value, messages, locale);
+  if (type === 'conversation_handoff' && key === 'reason') return handoffLabel(v, messages);
+  if (type === 'order_status_changed' && (key === 'from' || key === 'to')) return inSentence(messages[`enum.Order.status.${v}`] ?? v);
+  if (type === 'agent_insight' && key === 'type') return inSentence(messages[`enum.AgentInsight.type.${v}`] ?? v);
+  // a job is named by the code (`product-import-commit`, `export`): the reader sees what the task was
+  if ((type === 'job_finished' || type === 'job_failed') && key === 'label' && /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(v)) return messages[`notification.value.jobKind.${String(data.kind ?? '')}`] ?? messages['notification.value.jobKind.other'] ?? v;
+  return v;
+};
 
 /**
  * Title / body in the reader's locale. A type without a body key renders an empty body. A placeholder never reaches the
@@ -255,7 +274,7 @@ export const renderNotification = (type: string, data: Data, locale: AppLocale, 
           onMissing(type, key);
           return '';
         }
-        return display(type, key, v, messages, locale);
+        return display(type, key, v, messages, locale, data);
       })
       .replace(/\s{2,}/g, ' ')
       .trim();

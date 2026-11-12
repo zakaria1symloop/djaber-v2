@@ -23,7 +23,7 @@ export function NotificationRow({
   pill: React.ReactNode;
   title: string;
   body?: string | null;
-  /** dotted type slug in mono (`order.ai_created`) */
+  /** the notification type in words (« Rupture de stock ») — UX-059: never the dotted key */
   slug: string;
   age: string;
   /** "Ouvrir ›" link or button */
@@ -45,7 +45,7 @@ export function NotificationRow({
           </div>
         ) : null}
         <div className="mt-1 flex flex-wrap items-center gap-x-2 ts-label-micro normal-case text-text-muted">
-          <bdi dir="ltr">{slug}</bdi>
+          <bdi>{slug}</bdi>
           <span className="uppercase sm:hidden">{age}</span>
         </div>
       </div>

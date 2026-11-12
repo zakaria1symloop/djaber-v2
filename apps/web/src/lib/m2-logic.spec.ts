@@ -152,8 +152,8 @@ describe('server actions → menu', () => {
     expect(menu[1]!.onSelect).toBe(noop);
   });
 
-  it('reason text falls back to the code, and to FORBIDDEN without a code', () => {
-    expect(reasonText(t, 'SOME_NEW_CODE')).toBe('SOME_NEW_CODE');
+  it('reason text never shows an unknown code (UX-059), and falls back to FORBIDDEN without a code', () => {
+    expect(reasonText(t, 'SOME_NEW_CODE')).toBe('actions.reason.unavailable');
     expect(reasonText(t, undefined)).toBe('Action non autorisée.');
   });
 

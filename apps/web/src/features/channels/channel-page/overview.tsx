@@ -93,7 +93,7 @@ export function ChannelOverview() {
             )}
             {unavailable ? (
               <p role="status" className="rounded-card bg-ink-raised px-3 py-2.5 ts-label-meta text-text-muted">
-                {isInsightsUnavailable(insights.error) ? t('channels.overview.insightsUnavailable') : errorMessage(insights.error, t)} <Ltr>(INBOX_INSIGHTS_UNAVAILABLE)</Ltr>
+                {isInsightsUnavailable(insights.error) ? t('channels.overview.insightsUnavailable') : errorMessage(insights.error, t)}
               </p>
             ) : null}
           </section>
@@ -156,7 +156,7 @@ export function ChannelOverview() {
                   {permissionList(health).map((p) => (
                     <li key={p.scope}>
                       <StatusPill enumKey="Channel.permission" value={p.state} className="!rounded-[4px] normal-case">
-                        <Ltr>{p.scope}</Ltr> · {t(`channels.health.permission.${p.state}`)}
+                        {t.has(`channels.health.scope.${p.scope}`) ? t(`channels.health.scope.${p.scope}`) : t('channels.health.scope.other')} · {t(`channels.health.permission.${p.state}`)}
                       </StatusPill>
                     </li>
                   ))}

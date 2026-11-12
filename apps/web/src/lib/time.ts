@@ -23,3 +23,9 @@ export const relativeTime = (iso: string | Date | null | undefined, locale: stri
 
 /** Whole days until an instant (0 when past). */
 export const daysUntil = (iso: string, now = Date.now()): number => Math.max(0, Math.ceil((Date.parse(iso) - now) / 86_400_000));
+
+/** "4 min" / "45 s" — the wait before an action is possible again (rate limits, cooldowns). */
+export const waitLabel = (seconds: number): string => {
+  const s = Math.max(0, Math.ceil(seconds));
+  return s >= 60 ? `${Math.ceil(s / 60)} min` : `${s} s`;
+};

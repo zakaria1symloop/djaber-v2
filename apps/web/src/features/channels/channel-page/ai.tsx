@@ -94,7 +94,7 @@ export function ChannelAi() {
             <span className={live ? 'text-signal-live' : 'text-text-muted'}>{t(live ? 'channels.ai.liveOn' : 'channels.ai.liveOff')}</span>
           </p>
           <FormAlert tone="info">
-            {t('error.AGENT_CHANNEL_SWITCH_NEXT_THREAD')} <Ltr>(AGENT_CHANNEL_SWITCH_NEXT_THREAD)</Ltr>
+            {t('error.AGENT_CHANNEL_SWITCH_NEXT_THREAD')}
           </FormAlert>
         </Card>
         <IcebreakerCard key={c.id} channelId={c.id} pageName={c.name} value={c.icebreaker ?? ''} manage={manage} lockedReason={lockedReason} />

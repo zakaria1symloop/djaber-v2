@@ -33,7 +33,7 @@ export function PlanGate({ feature }: { feature: 'api_keys' | 'webhooks' | 'goog
   return (
     <Banner tone="warning" action={{ label: t('action.comparePlans'), onClick: () => router.push('/settings/billing') }}>
       <span data-testid="plan-gate" data-feature={feature}>
-        {t(`settings.integrations.planGate.${feature}`)} <span className="text-text-muted">(PLAN_FEATURE_REQUIRED)</span>
+        {t(`settings.integrations.planGate.${feature}`)}
       </span>
     </Banner>
   );

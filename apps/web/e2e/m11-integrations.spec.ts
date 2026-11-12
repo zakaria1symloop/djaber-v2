@@ -312,7 +312,7 @@ test('plan without api_keys / webhooks (Starter): create disabled with PLAN_FEAT
   await openPage(page, '/fr/settings/integrations/api-keys', () => page.getByTestId('api-keys-card'));
   await expect(page.locator('[data-testid="plan-gate"][data-feature="api_keys"]')).toContainText(errText('PLAN_FEATURE_REQUIRED'));
   await expect(page.getByTestId('api-key-create')).toHaveAttribute('aria-disabled', 'true');
-  await expect(page.getByTestId('api-key-create')).toHaveAttribute('title', /PLAN_FEATURE_REQUIRED/);
+  await expect(page.getByTestId('api-key-create')).toHaveAttribute('title', errText('PLAN_FEATURE_REQUIRED'));
   await page.getByTestId('integrations-tabs').locator('[data-tab="webhooks"]').click();
   await expect(page.locator('[data-testid="plan-gate"][data-feature="webhooks"]')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('webhook-add')).toHaveAttribute('aria-disabled', 'true');

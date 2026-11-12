@@ -5,6 +5,7 @@
 import { formatNumber } from '@djaber/shared';
 import { BulkBar, Button, Checkbox, Dialog, Field, FormAlert, Pill, Select, toast, type BulkAction } from '@djaber/ui';
 import { useMemo, useRef, useState } from 'react';
+import { rowErrorText } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
 import type { ApiQuery } from '@/lib/list-state';
@@ -391,7 +392,7 @@ export function BulkResultDialog({ outcome, names, onClose, onRetried }: { outco
             </Pill>
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{names[r.id] ?? r.id}</span>
-              {r.error ? <span className="block ts-label-micro !normal-case text-accent-alert">{`${r.error.code} — ${r.error.message}`}</span> : null}
+              {r.error ? <span className="block ts-label-micro !normal-case text-accent-alert" data-code={r.error.code}>{rowErrorText(t, r.error)}</span> : null}
             </span>
           </li>
         ))}

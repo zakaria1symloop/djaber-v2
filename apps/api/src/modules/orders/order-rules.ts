@@ -43,6 +43,19 @@ export const checkTransition = (o: OrderState, to: OrderStatusName, actor: { rol
   return null;
 };
 
+/**
+ * 04 §1.4 money actions (UX-060, retest 12/11): why a payment, a payment link or a refund is refused — `null` = allowed.
+ * `ORDER_PAYMENT_LOCKED` is the closed-order reason only; nothing paid yet ⇒ `ORDER_NOTHING_TO_REFUND`, fully paid ⇒
+ * `ORDER_ALREADY_PAID`, refunded ⇒ `ORDER_ALREADY_REFUNDED`. Shared by the action descriptors and the services.
+ */
+type MoneyState = { status: OrderStatusName; paymentStatus: string; total: number; amountPaid: number };
+export const recordPaymentRefusal = (o: MoneyState): Refusal | null =>
+  isTerminal(o.status) ? { code: 'ORDER_PAYMENT_LOCKED' } : o.paymentStatus === 'paid' || o.total - o.amountPaid <= 0 ? { code: 'ORDER_ALREADY_PAID' } : null;
+export const paymentLinkRefusal = (o: MoneyState): Refusal | null =>
+  isTerminal(o.status) ? { code: 'ORDER_PAYMENT_LOCKED' } : o.paymentStatus === 'refunded' ? { code: 'ORDER_ALREADY_REFUNDED' } : o.total - o.amountPaid <= 0 ? { code: 'ORDER_ALREADY_PAID' } : null;
+export const refundRefusal = (o: MoneyState): Refusal | null =>
+  o.paymentStatus === 'refunded' ? { code: 'ORDER_ALREADY_REFUNDED' } : o.amountPaid <= 0 ? { code: 'ORDER_NOTHING_TO_REFUND' } : null;
+
 /** Targets offered in the "Changer le statut" dialog / row menu for this actor (feeds `actions`). */
 export const allowedTargets = (o: OrderState, role: Role): OrderStatusName[] =>
   (['new', 'confirmed', 'preparing', 'shipped', 'delivered', 'cancelled', 'returned'] as OrderStatusName[]).filter((to) => {

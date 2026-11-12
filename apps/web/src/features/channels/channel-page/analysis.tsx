@@ -147,7 +147,7 @@ export function ChannelAnalysis() {
             </Button>
           }
         >
-          {t('channels.analysis.permission.description')} <Ltr>(PAGE_ANALYSIS_PERMISSION_REQUIRED)</Ltr>
+          {t('channels.analysis.permission.description')}
         </StateCard>
       ) : null}
 

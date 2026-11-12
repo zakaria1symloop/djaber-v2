@@ -1,7 +1,7 @@
 // UX-064 (04 §22 "Order closed", FL-25 F-8): a failed send of an order delivered / cancelled / returned meanwhile is
-// handled — the parcel menu never offers « Corriger et renvoyer » / « Changer de transporteur » again, with the readable
-// DELIVERY_ORDER_<STATUS> reason (the same refusal as ShipmentService), and `failureHandled` tells the screens.
-import { failureHandledAs, isOrderSendClosed, sendClosedCode } from '@djaber/shared';
+// handled — the parcel menu no longer offers « Corriger et renvoyer » / « Changer de transporteur » (not offered, the
+// UX-060 rule; ShipmentService refuses them with the readable DELIVERY_ORDER_<STATUS>), and `failureHandled` tells the screens.
+import { failureHandledAs, isNotOffered, isOrderSendClosed, sendClosedCode } from '@djaber/shared';
 import { TenantContext } from '@djaber/db';
 import { shipmentActions } from './shipment.presenter';
 
@@ -20,15 +20,16 @@ describe('UX-064 — send actions of a parcel whose order is closed', () => {
     ['delivered', 'DELIVERY_ORDER_DELIVERED'],
     ['cancelled', 'DELIVERY_ORDER_CANCELLED'],
     ['returned', 'DELIVERY_ORDER_RETURNED'],
-  ])('order %s: retry and change_courier greyed with %s, no primary send', (status, code) => {
+  ])('order %s: retry and change_courier are not offered (%s is a not-offered reason)', (status, code) => {
     const a = byKey({ status });
-    expect(a.get('retry')).toEqual({ key: 'retry', enabled: false, reasonCode: code });
-    expect(a.get('change_courier')).toEqual({ key: 'change_courier', enabled: false, reasonCode: code });
+    expect(a.has('retry')).toBe(false);
+    expect(a.has('change_courier')).toBe(false);
+    expect(isNotOffered({ enabled: false, reasonCode: code })).toBe(true);
   });
 
   it('a queued parcel (courier unavailable) of a delivered order cannot be re-sent either', () => {
     const queued = { ...sendFailure, status: 'pending' as const, lastError: 'COURIER_UNAVAILABLE' };
-    expect(byKey({ status: 'delivered' }, queued as never).get('retry')).toMatchObject({ enabled: false, reasonCode: 'DELIVERY_ORDER_DELIVERED' });
+    expect(byKey({ status: 'delivered' }, queued as never).has('retry')).toBe(false);
   });
 });
 

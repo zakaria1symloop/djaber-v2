@@ -196,7 +196,7 @@ export function BehaviourFields({ draft: d, set, errors, readOnly, badge, inTunn
         }
       >
         <FormAlert tone="warning">
-          <Ltr>AGENT_MODEL_UNAVAILABLE</Ltr> : {t('agents.model.unavailable')}
+          {t('agents.model.unavailable')}
         </FormAlert>
       </Dialog>
     </>

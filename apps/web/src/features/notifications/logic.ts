@@ -1,5 +1,6 @@
 // Notification centre rules (03 §15, 03-events §5.1, REF — Deep-link map). Pure functions.
 import { NOTIFICATION_GROUPS, NotificationTypeValues, type NotificationGroup, type NotificationType } from '@djaber/shared';
+import type { TFunction } from '@/lib/i18n';
 
 /** Family of every `NotificationType` shown in the app (types that are e-mail / push only have none). */
 export const TYPE_GROUP: Partial<Record<NotificationType, NotificationGroup>> = {
@@ -86,6 +87,8 @@ export const groupOfType = (type: string): NotificationGroup | null => (isNotifi
 
 /** `order_ai_created` → `order.ai_created` (only the first `_` becomes a dot — 06-i18n-copy-deck §2.10). */
 export const typeSlug = (type: string): string => type.replace('_', '.');
+/** UX-059 (retest 12/11): the type as the merchant reads it (« Rupture de stock »), never `stock.out`. */
+export const typeLabel = (t: TFunction, type: string): string => (t.has(`notifications.type.${type}`) ? t(`notifications.type.${type}`) : t('notifications.type.platform_admin'));
 
 /* ---------- filter ↔ URL (`?group=stock&unread=1&types=stock_low,stock_out`) ---------- */
 export type NotificationFilter = { group: NotificationGroup | null; unread: boolean; types: NotificationType[] };

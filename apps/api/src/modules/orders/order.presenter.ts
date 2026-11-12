@@ -1,12 +1,13 @@
 // api-contract §2, §3.7 — read models of an order (list row, detail, WS summary) and the `Actions ⌄` descriptors
-// (D42: current-state items, first = primary, forbidden ones greyed with their code; LST-01 shortcuts).
-import { ORDER_READ_ONLY_STATUSES, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, type ActionDescriptor, type AddressView, type ClientRefView, type OrderListItemView, type OrderStatusName, type OrderSummary, type OrderUserRef, type OrderView, type SourceBadge } from '@djaber/shared';
+// (D42: current-state items, first = primary, forbidden ones greyed with their reason; a transition the state machine
+// refuses is left out — UX-060; LST-01 shortcuts).
+import { isNotOffered, ORDER_READ_ONLY_STATUSES, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, type ActionDescriptor, type AddressView, type ClientRefView, type OrderListItemView, type OrderStatusName, type OrderSummary, type OrderUserRef, type OrderView, type SourceBadge } from '@djaber/shared';
 import { TenantContext, type Order, type Prisma } from '@djaber/db';
 import { can, type MerchantPermission } from '../../core/rbac/permission-matrix';
 import { thumbUrlOf } from '../catalog/product-image.util';
 import { presentShipment, type ShipmentRow } from '../delivery/shipment.presenter';
 import { channelRef } from '../channels/channel.service';
-import { allowedTargets, checkTransition, isTerminal, type OrderState } from './order-rules';
+import { allowedTargets, checkTransition, isTerminal, paymentLinkRefusal, recordPaymentRefusal, refundRefusal, type OrderState, type Refusal } from './order-rules';
 
 const userRef = { select: { id: true, firstName: true, lastName: true, avatarUrl: true } } as const;
 export const ACTIVE_SHIPMENT = ['pending', 'sent', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered'] as const;
@@ -106,9 +107,19 @@ export const hasDeliveryAddress = (o: Pick<Order, 'wilayaId' | 'communeId' | 'co
   !!o.wilayaId && (!!o.communeId || !!o.communeText?.trim()) && (o.isStopdesk ? true : (o.address ?? '').trim().length >= 10);
 
 const allowed = (permission: MerchantPermission) => can(TenantContext.get().role, permission);
-const act = (key: string, permission: MerchantPermission, o: { reasonCode?: string | null; primary?: boolean; shortcut?: string } = {}): ActionDescriptor => {
-  const reasonCode = !allowed(permission) ? 'FORBIDDEN' : (o.reasonCode ?? undefined);
-  return { key, enabled: !reasonCode, ...(reasonCode ? { reasonCode } : {}), ...(o.primary ? { primary: true } : {}), ...(o.shortcut ? { shortcut: o.shortcut } : {}) };
+type Reason = string | Refusal | null | undefined;
+/**
+ * One descriptor. `reason` = why it is refused in this state (a code, or a `Refusal` whose params become `reasonParams`).
+ * A transition the state machine refuses (`isNotOffered`, 12 GLOBAL — UX-060) gives `null`: the action is not offered,
+ * whatever the member's permission.
+ */
+const act = (key: string, permission: MerchantPermission, o: { reason?: Reason; primary?: boolean; shortcut?: string } = {}): ActionDescriptor | null => {
+  const refusal = typeof o.reason === 'string' ? { code: o.reason } : (o.reason ?? null);
+  if (refusal && isNotOffered({ enabled: false, reasonCode: refusal.code })) return null;
+  const forbidden = !allowed(permission);
+  const reasonCode = forbidden ? 'FORBIDDEN' : refusal?.code;
+  const params = !forbidden && refusal && 'params' in refusal && refusal.params && Object.keys(refusal.params).length ? refusal.params : undefined;
+  return { key, enabled: !reasonCode, ...(reasonCode ? { reasonCode } : {}), ...(params ? { reasonParams: params } : {}), ...(o.primary ? { primary: true } : {}), ...(o.shortcut ? { shortcut: o.shortcut } : {}) };
 };
 
 const PRIMARY: Partial<Record<OrderStatusName, string>> = { new: 'confirm', confirmed: 'prepare', preparing: 'ship_manual', shipped: 'deliver' };
@@ -119,34 +130,37 @@ export const orderActions = (o: Pick<Order, 'status' | 'deliveryStatus' | 'payme
   const role = TenantContext.get().role;
   const terminal = isTerminal(o.status);
   const readOnly = (ORDER_READ_ONLY_STATUSES as readonly string[]).includes(o.status);
-  const t = (to: OrderStatusName) => checkTransition(state, to, { role })?.code ?? null;
+  const t = (to: OrderStatusName) => checkTransition(state, to, { role });
+  const notAllowed = (to: OrderStatusName): Refusal => ({ code: 'ORDER_INVALID_TRANSITION', params: { from: o.status, to } });
   // with an active courier account the primary of a confirmed / preparing order is "Envoyer au transporteur"
   const courierPrimary = (o.status === 'confirmed' || o.status === 'preparing') && !activeShipment && !!ctx.hasCourier;
   const primaryKey = courierPrimary ? 'send_courier' : PRIMARY[o.status];
-  const list: ActionDescriptor[] = [
-    act('confirm', 'orders.write', { reasonCode: o.status === 'new' ? t('confirmed') === 'ORDER_ADDRESS_REQUIRED' ? null : t('confirmed') : 'ORDER_INVALID_TRANSITION', primary: primaryKey === 'confirm', shortcut: 'Enter' }),
-    act('prepare', 'orders.write', { reasonCode: t('preparing'), primary: primaryKey === 'prepare', shortcut: primaryKey === 'prepare' ? 'Enter' : undefined }),
+  const confirm = t('confirmed');
+  const list = [
+    act('confirm', 'orders.write', { reason: o.status === 'new' ? (confirm?.code === 'ORDER_ADDRESS_REQUIRED' ? null : confirm) : notAllowed('confirmed'), primary: primaryKey === 'confirm', shortcut: 'Enter' }),
+    act('prepare', 'orders.write', { reason: t('preparing'), primary: primaryKey === 'prepare', shortcut: primaryKey === 'prepare' ? 'Enter' : undefined }),
     // M6: enabled from confirmed / preparing once an active courier account exists (DELIVERY_NO_COURIER otherwise)
-    // UX-064: a delivered / cancelled / returned order is never sent again (readable DELIVERY_ORDER_<STATUS>, same as the service)
-    act('send_courier', 'delivery.send', { reasonCode: sendClosedCode(o.status) ?? (activeShipment && activeShipment.status !== 'delivered' ? 'DELIVERY_ORDER_ALREADY_SENT' : o.status === 'new' ? 'DELIVERY_ORDER_NOT_CONFIRMED' : !['confirmed', 'preparing'].includes(o.status) ? 'ORDER_INVALID_TRANSITION' : ctx.hasCourier ? null : 'DELIVERY_NO_COURIER'), primary: primaryKey === 'send_courier' }),
-    act('ship_manual', 'orders.write', { reasonCode: t('shipped'), primary: primaryKey === 'ship_manual', shortcut: primaryKey === 'ship_manual' ? 'Enter' : undefined }),
-    act('deliver', 'orders.write', { reasonCode: t('delivered'), primary: primaryKey === 'deliver', shortcut: primaryKey === 'deliver' ? 'Enter' : undefined }),
-    act('return', o.status === 'delivered' ? 'orders.money' : 'orders.write', { reasonCode: t('returned') }),
-    act('call', 'orders.write', { reasonCode: terminal ? 'ORDER_TERMINAL' : null, shortcut: 'C' }),
-    act('callback', 'orders.write', { reasonCode: terminal ? 'ORDER_TERMINAL' : !['new', 'confirmed', 'preparing'].includes(o.status) ? 'ORDER_INVALID_TRANSITION' : null, shortcut: 'R' }),
-    act('open_conversation', 'inbox.read', { reasonCode: o.conversationId ? null : 'NOT_FOUND', shortcut: 'M' }),
-    act('edit', 'orders.write', { reasonCode: readOnly ? 'ORDER_TERMINAL' : null, shortcut: 'E' }),
-    act('edit_address', 'orders.write', { reasonCode: terminal ? 'ORDER_TERMINAL' : state.courierParcel ? 'COURIER_ADDRESS_LOCKED' : null }),
+    // UX-064: a delivered / cancelled / returned order is never sent again — the send item is not offered (DELIVERY_ORDER_<STATUS>)
+    act('send_courier', 'delivery.send', { reason: sendClosedCode(o.status) ?? (activeShipment && activeShipment.status !== 'delivered' ? 'DELIVERY_ORDER_ALREADY_SENT' : o.status === 'new' ? 'DELIVERY_ORDER_NOT_CONFIRMED' : !['confirmed', 'preparing'].includes(o.status) ? notAllowed('shipped') : ctx.hasCourier ? null : 'DELIVERY_NO_COURIER'), primary: primaryKey === 'send_courier' }),
+    act('ship_manual', 'orders.write', { reason: t('shipped'), primary: primaryKey === 'ship_manual', shortcut: primaryKey === 'ship_manual' ? 'Enter' : undefined }),
+    act('deliver', 'orders.write', { reason: t('delivered'), primary: primaryKey === 'deliver', shortcut: primaryKey === 'deliver' ? 'Enter' : undefined }),
+    act('return', o.status === 'delivered' ? 'orders.money' : 'orders.write', { reason: t('returned') }),
+    act('call', 'orders.write', { reason: terminal ? 'ORDER_TERMINAL' : null, shortcut: 'C' }),
+    act('callback', 'orders.write', { reason: terminal ? 'ORDER_TERMINAL' : !['new', 'confirmed', 'preparing'].includes(o.status) ? notAllowed(o.status) : null, shortcut: 'R' }),
+    act('open_conversation', 'inbox.read', { reason: o.conversationId ? null : 'NOT_FOUND', shortcut: 'M' }),
+    act('edit', 'orders.write', { reason: readOnly ? 'ORDER_TERMINAL' : null, shortcut: 'E' }),
+    act('edit_address', 'orders.write', { reason: terminal ? 'ORDER_TERMINAL' : state.courierParcel ? 'COURIER_ADDRESS_LOCKED' : null }),
     act('assign', 'orders.write', { shortcut: 'A' }),
-    act('record_payment', 'orders.write', { reasonCode: terminal ? 'ORDER_PAYMENT_LOCKED' : o.paymentStatus === 'paid' ? 'ORDER_PAYMENT_LOCKED' : null }),
+    act('record_payment', 'orders.write', { reason: recordPaymentRefusal(o) }),
     act('print', 'orders.read', { shortcut: 'P' }),
-    act('change_status', 'orders.write', { reasonCode: allowedTargets(state, role).length ? null : 'ORDER_TERMINAL' }),
-    act('cancel', 'orders.write', { reasonCode: t('cancelled'), shortcut: 'Delete' }),
-    act('delete', 'orders.money', { reasonCode: o.status === 'delivered' ? 'ORDER_DELETE_DELIVERED' : state.courierParcel ? 'DELIVERY_ORDER_ALREADY_SENT' : null }),
-    // M9 (PAY-02 / PAY-03, P2): online payment link and recorded refund
-    act('payment_link', 'orders.money', { reasonCode: !ctx.onlinePayment ? 'FEATURE_DISABLED' : terminal || o.total - o.amountPaid <= 0 || o.paymentStatus === 'refunded' ? 'ORDER_PAYMENT_LOCKED' : null }),
-    act('refund', 'orders.money', { reasonCode: o.amountPaid <= 0 || o.paymentStatus === 'refunded' ? 'ORDER_PAYMENT_LOCKED' : null }),
-  ];
+    act('change_status', 'orders.write', { reason: allowedTargets(state, role).length ? null : 'ORDER_TERMINAL' }),
+    act('cancel', 'orders.write', { reason: t('cancelled'), shortcut: 'Delete' }),
+    act('delete', 'orders.money', { reason: o.status === 'delivered' ? 'ORDER_DELETE_DELIVERED' : state.courierParcel ? 'DELIVERY_ORDER_ALREADY_SENT' : null }),
+    // M9 (PAY-02 / PAY-03, P2): online payment link and recorded refund — UX-060: the reason fits the order (nothing paid,
+    // fully paid, refunded); « Paiement verrouillé (commande clôturée) » only for a closed order
+    act('payment_link', 'orders.money', { reason: !ctx.onlinePayment ? 'FEATURE_DISABLED' : paymentLinkRefusal(o) }),
+    act('refund', 'orders.money', { reason: refundRefusal(o) }),
+  ].filter((a): a is ActionDescriptor => !!a);
   return [...list.filter((a) => a.primary), ...list.filter((a) => !a.primary)];
 };
 

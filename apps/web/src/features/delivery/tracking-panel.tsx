@@ -58,7 +58,8 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
   };
 
   const title = s ? [`#${s.orderNumber}`, s.trackingNumber].filter(Boolean).join(' · ') : t('common.loading');
-  const syncAction = s ? actionState(s.actions, SHIPMENT_ACTION.sync, t) : null;
+  // UX-060: the greyed « Actualiser » says the live wait (« 54 s »), never `{retryAfter}`
+  const syncAction = s ? actionState(s.actions, SHIPMENT_ACTION.sync, t, wait > 0 ? { params: { retryAfter: wait } } : {}) : null;
   const limited = wait > 0;
   const state: SyncState = sync?.state === 'syncing' ? 'syncing' : limited && sync?.state !== 'fresh' && sync?.state !== 'not_found' && sync?.state !== 'unavailable' ? 'limited' : (sync?.state ?? 'idle');
   const message =

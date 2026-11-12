@@ -185,7 +185,7 @@ test.describe('fixtures — statuses, report rows, dialogs', () => {
     await expect(page.getByTestId('channel-counts')).toContainText('128');
     await expect(page.getByTestId('channel-counts')).toContainText('12 actives · 3 à traiter');
     await expect(page.getByTestId('channel-counts')).toContainText('210 entrants · 130 sortants');
-    await expect(page.getByTestId('channel-health')).toContainText('Abonné (messages, postbacks)');
+    await expect(page.getByTestId('channel-health')).toContainText('Abonné (messages, clics sur les boutons)');
     await expect(page.getByTestId('channel-health')).toContainText('instagram_manage_messages');
     await expect(page.getByTestId('channel-agent')).toContainText('Vendeur Pro');
     await expect(page.getByTestId('channel-facts')).toContainText('ID 1049…82');
@@ -348,7 +348,7 @@ test.describe('real API (fake Meta adapter) — connect, report, page, pause, re
     await page.goto(`/fr/channels/${pageId}`);
     await expect(page.getByRole('heading', { name: pageName, level: 1 })).toBeVisible();
     await expect(page.getByTestId('channel-counts')).toBeVisible();
-    await expect(page.getByTestId('channel-health')).toContainText('Abonné (messages, postbacks)');
+    await expect(page.getByTestId('channel-health')).toContainText('Abonné (messages, clics sur les boutons)');
     await expect(page.getByTestId('meta-insights')).toHaveAttribute('data-state', /ready|unavailable/);
     await expectNoA11yViolations(page);
 

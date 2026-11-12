@@ -69,7 +69,7 @@ export function ChannelHistory() {
       {expired ? (
         <Banner tone="danger" action={actions.manage ? { label: t('action.reconnect'), onClick: () => void connect.reconnect(c) } : undefined}>
           <span data-testid="sync-token-expired">
-            {t('error.PAGE_SYNC_TOKEN_EXPIRED')} <Ltr>(PAGE_SYNC_TOKEN_EXPIRED)</Ltr>
+            {t('error.PAGE_SYNC_TOKEN_EXPIRED')}
           </span>
         </Banner>
       ) : null}

@@ -14,6 +14,7 @@ import {
   courierShort,
   deliveryPill,
   effectiveDateError,
+  historyReason,
   historyValue,
   isoToLocalInput,
   isReadOnly,
@@ -141,6 +142,18 @@ describe('order page rules', () => {
     expect(actorKind({ actor: { type: 'ai', name: 'x' } } as never)).toBe('ai');
     expect(actorKind({ actor: { type: 'system', name: 'x' } } as never)).toBe('system');
     expect(actorKind({ actor: { type: 'user', name: 'x' } } as never)).toBe('user');
+  });
+  it('UX-059: history reasons in words, never a code', () => {
+    const L: Record<string, string> = { 'enum.Order.cancelReason.changed_mind': 'Le client a changé d’avis', 'delivery.lastError.COURIER_VALIDATION': 'Refusée par le transporteur (données)', 'orders.history.reason.parcel_cancelled': 'colis annulé' };
+    const t = Object.assign((k: string) => L[k] ?? k, { has: (k: string) => k in L });
+    expect(historyReason('changed_mind', t)).toBe('Le client a changé d’avis');
+    expect(historyReason('changed_mind · rappelle demain', t)).toBe('Le client a changé d’avis · rappelle demain');
+    expect(historyReason('COURIER_VALIDATION', t)).toBe('Refusée par le transporteur (données)');
+    expect(historyReason('parcel_cancelled', t)).toBe('colis annulé');
+    expect(historyReason('SOME_CODE', t)).toBe('');
+    expect(historyReason('some_unknown_code', t)).toBe('');
+    expect(historyReason('ZR Express', t)).toBe('ZR Express');
+    expect(historyReason(null, t)).toBe('');
   });
   it('payment amount: integer > 0 and ≤ remaining (AT-ORD-22)', () => {
     expect(paymentError(null, 1000)).toBe('validation.required');

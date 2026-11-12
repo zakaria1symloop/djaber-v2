@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Product } from '../contracts';
-import { appealExpired, moderationView, qtyText, rejectedField, stockSummary, timelineTone, variantPatch } from './logic';
+import { appealExpired, moderationView, qtyText, rejectedField, stockSummary, timelineTone, variantPatch, moderationRuleLabels } from './logic';
 
 const detail = (o: Partial<NonNullable<Product['moderationDetail']>> = {}): NonNullable<Product['moderationDetail']> => ({
   status: 'rejected',
@@ -114,5 +114,13 @@ describe('UX-050 quantities in the product unit', () => {
     expect(qtyText('10', { abbreviation: 'قطعة' }, generic)).toBe('10 قطعة');
     expect(qtyText('10', null, generic)).toBe('10 u');
     expect(qtyText('3', { abbreviation: '  ' }, generic)).toBe('3 u');
+  });
+});
+
+describe('moderation rules in words (UX-059)', () => {
+  it('a rule code gets its label, a typed reference stays, an unknown code is left out', () => {
+    const L: Record<string, string> = { 'products.moderation.rule.auto_banned_word': 'mot interdit dans la fiche' };
+    const t = Object.assign((k: string) => L[k] ?? k, { has: (k: string) => k in L });
+    expect(moderationRuleLabels(['auto_banned_word', '2.1', 'some_rule_code'], t)).toEqual(['mot interdit dans la fiche', '2.1']);
   });
 });

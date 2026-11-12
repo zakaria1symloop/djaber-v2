@@ -55,9 +55,9 @@ test('AT-NTF-03 list: unread count equals the server count, family and type filt
   await expect(list.locator('li[data-unread=true]')).toHaveCount(s.unread);
   const low = list.locator('li', { hasText: `Stock faible : ${s.lowName} (3 restants)` });
   await expect(low).toContainText('STOCK');
-  await expect(low).toContainText('stock.low');
+  await expect(low).toContainText('Stock faible'); // UX-059: the type in words, never `stock.low`
   await expect(low).toContainText('Seuil : 5.');
-  await expect(list.locator('li', { hasText: `Rupture : ${s.outName}` })).toContainText('stock.out');
+  await expect(list.locator('li', { hasText: `Rupture : ${s.outName}` })).toContainText('Rupture de stock');
   await expectNoA11yViolations(page);
 
   // family chip → ?group=stock: both rows stay

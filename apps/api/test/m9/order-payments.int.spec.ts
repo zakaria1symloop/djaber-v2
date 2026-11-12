@@ -49,7 +49,7 @@ describe('order payment link (PAY-02)', () => {
     await (await asOwner(app)).post(`/orders/${order.id}/payment-link`, {}).expect(404);
     const view = (await owner.get(`/orders/${order.id}`).expect(200)).body.data;
     expect(view.actions.find((a: any) => a.key === 'payment_link')).toMatchObject({ enabled: true });
-    expect(view.actions.find((a: any) => a.key === 'refund')).toMatchObject({ enabled: false, reasonCode: 'ORDER_PAYMENT_LOCKED' });
+    expect(view.actions.find((a: any) => a.key === 'refund')).toMatchObject({ enabled: false, reasonCode: 'ORDER_NOTHING_TO_REFUND' });
 
     const created = (await owner.post(`/orders/${order.id}/payment-link`, {}).expect(201)).body.data;
     expect(created).toMatchObject({ orderId: order.id, amount: order.total, status: 'creating', url: null, sentToCustomer: false });
@@ -76,7 +76,7 @@ describe('order payment link (PAY-02)', () => {
     await runPayments(app, [owner.workspaceId]);
     expect((await owner.get(`/orders/${order.id}`).expect(200)).body.data.payments).toHaveLength(1);
     // nothing left to pay
-    expect((await owner.post(`/orders/${order.id}/payment-link`, {}).expect(422)).body.error.code).toBe('ORDER_PAYMENT_LOCKED');
+    expect((await owner.post(`/orders/${order.id}/payment-link`, {}).expect(422)).body.error.code).toBe('ORDER_ALREADY_PAID');
     expect(await eventually(() => db.auditLog.count({ where: { action: 'order.payment_link', entityId: order.id } }))).toBe(1);
   });
 
@@ -115,10 +115,10 @@ describe('order payment link (PAY-02)', () => {
 });
 
 describe('refunds (PAY-03)', () => {
-  it('nothing paid ⇒ ORDER_PAYMENT_LOCKED; > amount paid ⇒ 422 fields.amount; refund ⇒ refunded, negative payment entry + locked refund expense; Operator 403; audited', async () => {
+  it('nothing paid ⇒ ORDER_NOTHING_TO_REFUND (UX-060); > amount paid ⇒ 422 fields.amount; refund ⇒ refunded, negative payment entry + locked refund expense; Operator 403; audited', async () => {
     const owner = await shop();
     const { order } = await newOrder(owner);
-    expect((await owner.post(`/orders/${order.id}/refunds`, { amount: 100, reason: 'Client mécontent' }).expect(422)).body.error.code).toBe('ORDER_PAYMENT_LOCKED');
+    expect((await owner.post(`/orders/${order.id}/refunds`, { amount: 100, reason: 'Client mécontent' }).expect(422)).body.error.code).toBe('ORDER_NOTHING_TO_REFUND');
     await owner.post(`/orders/${order.id}/payments`, { amount: 3000, method: 'cash' }).set('Idempotency-Key', crypto.randomUUID()).expect(200);
     await (await asOperator(app, owner.workspaceId)).post(`/orders/${order.id}/refunds`, { amount: 100, reason: 'x y z' }).expect(403);
     const over = await owner.post(`/orders/${order.id}/refunds`, { amount: 3500, reason: 'Trop rendu' }).expect(422);
@@ -129,8 +129,8 @@ describe('refunds (PAY-03)', () => {
     expect(r).toMatchObject({ paymentStatus: 'refunded', amountPaid: 2000 });
     expect(r.payments.map((p: any) => p.amount)).toEqual(expect.arrayContaining([3000, -1000]));
     expect(await db.cashTransaction.count({ where: { workspaceId: owner.workspaceId, type: 'expense', category: 'refund', amount: 1000, isAutomatic: true } })).toBe(1);
-    expect(r.actions.find((a: any) => a.key === 'refund')).toMatchObject({ enabled: false, reasonCode: 'ORDER_PAYMENT_LOCKED' });
-    expect((await owner.post(`/orders/${order.id}/refunds`, { amount: 100, reason: 'Encore' }).expect(422)).body.error.code).toBe('ORDER_PAYMENT_LOCKED');
+    expect(r.actions.find((a: any) => a.key === 'refund')).toMatchObject({ enabled: false, reasonCode: 'ORDER_ALREADY_REFUNDED' });
+    expect((await owner.post(`/orders/${order.id}/refunds`, { amount: 100, reason: 'Encore' }).expect(422)).body.error.code).toBe('ORDER_ALREADY_REFUNDED');
     await (await asOwner(app)).post(`/orders/${order.id}/refunds`, { amount: 100, reason: 'Autre espace' }).expect(404);
     expect(await eventually(() => db.auditLog.count({ where: { action: 'order.refund', entityId: order.id } }))).toBe(1);
   });

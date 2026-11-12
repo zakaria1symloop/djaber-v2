@@ -17,7 +17,7 @@ import { useLocaleCode, useT } from '@/lib/i18n';
 import { useWorkspaceId } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
 import { notificationKeys, notificationsApi, NOTIFICATIONS_PAGE, type NotificationPage } from './api';
-import { FAMILY_CHIPS, filterApiQuery, filterQueryString, groupOfType, isFiltered, isNotificationType, notificationHref, parseFilter, typeSlug, typesOfGroup, withGroup, type NotificationFilter } from './logic';
+import { FAMILY_CHIPS, filterApiQuery, filterQueryString, groupOfType, isFiltered, isNotificationType, notificationHref, parseFilter, typeLabel, typesOfGroup, withGroup, type NotificationFilter } from './logic';
 import { useUnreadCount } from './shell';
 
 const chip = (on: boolean) =>
@@ -87,13 +87,13 @@ export function NotificationsView() {
   };
 
   const typeOptions = useMemo(
-    () => typesOfGroup(filter.group).map((type) => ({ value: type as string, label: typeSlug(type) })),
-    [filter.group],
+    () => typesOfGroup(filter.group).map((type) => ({ value: type as string, label: typeLabel(t, type) })),
+    [filter.group, t],
   );
   const activeLabels = [
     filter.group ? t(FAMILY_CHIPS.find((c) => c.group === filter.group)?.labelKey ?? `notifications.family.${filter.group}`) : null,
     filter.unread ? t('notifications.unreadOnly') : null,
-    ...filter.types.map(typeSlug),
+    ...filter.types.map((type) => typeLabel(t, type)),
   ].filter(Boolean);
   // `platform.announcement` deep link: `?announcement=<id>` opens the announcement (UX-005)
   const announcementId = params.get('announcement');
@@ -192,7 +192,7 @@ function Row({ n, locale, onOpen }: { n: NotificationView; locale: string; onOpe
       }
       title={n.title}
       body={n.body}
-      slug={typeSlug(n.type)}
+      slug={typeLabel(t, n.type)}
       age={relativeTime(n.createdAt, locale)}
       action={
         href ? (

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FieldValues, Path, UseFormReturn } from 'react-hook-form';
 import { LeaveGuardDialog } from '@/components/global-states';
 import { ApiError } from './api';
+import { stripPlaceholders } from './format-message';
 import type { TFunction } from './i18n';
 
 /** Message of any thrown value, already localized by the API when it is an `ApiError`. */
@@ -12,11 +13,22 @@ export const errorMessage = (e: unknown, t: TFunction): string => {
   if (e instanceof ApiError) {
     const key = `error.${e.code}`;
     // the server message carries the interpolated params; the catalogue is the fallback (network / proxy errors)
-    return e.message || (t.has(key) ? t(key, e.body.params) : t('state.list.error.title'));
+    return (e.message && stripPlaceholders(e.message)) || (t.has(key) ? t(key, e.body.params) : t('state.list.error.title'));
   }
   return t('toast.noConnection');
 };
 export const errorCode = (e: unknown): string | null => (e instanceof ApiError ? e.code : null);
+
+/**
+ * The message of one error of a per-row result (bulk results window, import report) — UX-059: the sentence only, never
+ * the code first. The server message is already localized; the catalogue is the fallback.
+ */
+export const rowErrorText = (t: TFunction, e: { code: string; message?: string | null; params?: Record<string, unknown> | null } | null | undefined): string => {
+  if (!e) return '';
+  if (e.message) return stripPlaceholders(e.message);
+  const key = `error.${e.code}`;
+  return t.has(key) ? t(key, (e.params ?? undefined) as Record<string, string | number> | undefined) : t('state.list.error.title');
+};
 
 /** Translates a validation message key (`validation.length`) with the limits of the field. */
 export const fieldError = (t: TFunction, message: string | undefined, params?: Record<string, string | number>): string | undefined => {

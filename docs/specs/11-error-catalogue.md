@@ -2,6 +2,8 @@
 
 Single source for API error codes (`packages/shared/errors`). Every error: HTTP status, code, message fr / ar / en (shown to merchants), **UI behaviour** (how web & mobile present it) and **recovery** (what the user can do). Codes reuse V1 names where they existed (`errors/catalog.*.ts`). Field-level validation errors come as `fields: { field: key }` with keys from 04 §2 and are always rendered **inline next to the field, inside the dialog**.
 
+**Merchant screens never show the code** (UX-056 / UX-059, retest 11–12/11): the fr / ar / en message only, every `{param}` filled (a reason given without its value drops the slot, never `{name}` on screen); the code stays in the API envelope, in `data-code` attributes, in the « Code (support) » column of import error files and on the platform admin screens.
+
 UI behaviour legend: **inline** (field), **toast** (transient, auto-dismiss 5 s, with action), **dialog** (blocking, needs acknowledgement), **banner** (persistent until condition clears), **state** (replaces screen content), **silent** (logged only).
 
 ## 1. Generic
@@ -119,7 +121,10 @@ UI behaviour legend: **inline** (field), **toast** (transient, auto-dismiss 5 s,
 | 422 | `ORDER_INSUFFICIENT_STOCK` {product, available} | Stock insuffisant pour {product} ({available}). | المخزون غير كافٍ لـ {product} ({available}). | Insufficient stock for {product} ({available}). | inline on line | adjust |
 | 422 | `ORDER_ADDRESS_REQUIRED` | Adresse et wilaya requises pour confirmer. | العنوان والولاية مطلوبان للتأكيد. | Address and wilaya required before confirming. | dialog state "address missing" | fill |
 | 422 | `ORDER_DELETE_DELIVERED` | Commande livrée : non supprimable. | طلب مُسلَّم: لا يمكن حذفه. | Delivered order can't be deleted. | toast | mark returned instead |
-| 422 | `ORDER_PAYMENT_LOCKED` | Paiement verrouillé (commande clôturée). | الدفع مقفل (طلب مغلق). | Payment locked (closed order). | read-only | — |
+| 422 | `ORDER_PAYMENT_LOCKED` | Paiement verrouillé (commande clôturée). | الدفع مقفل (طلب مغلق). | Payment locked (closed order). | read-only — only for a closed order (cancelled / returned / delivered and settled), UX-060 | — |
+| 422 | `ORDER_NOTHING_TO_REFUND` | Aucun paiement à rembourser. | لا يوجد دفع لاسترداده. | No payment to refund. | greyed "Rembourser" reason · inline in the refund dialog (UX-060: nothing paid yet) | record a payment first |
+| 422 | `ORDER_ALREADY_REFUNDED` | Paiement déjà remboursé. | تم استرداد الدفع مسبقًا. | Payment already refunded. | greyed "Rembourser" / "Lien de paiement" reason (UX-060) | — |
+| 422 | `ORDER_ALREADY_PAID` | Commande déjà entièrement payée. | الطلب مدفوع بالكامل. | Order already fully paid. | greyed "Enregistrer un paiement" / "Lien de paiement" reason (UX-060) | — |
 | 422 | `ORDER_CALL_ON_TERMINAL` (warning) | Appel enregistré ; commande inchangée. | تم تسجيل المكالمة؛ الطلب دون تغيير. | Call logged; order unchanged. | toast (warning) | — |
 | 422 | `WILAYA_NOT_SERVED` | Livraison non assurée dans cette wilaya. | التوصيل غير متاح في هذه الولاية. | Delivery not available in this wilaya. | inline | choose stop-desk / activate wilaya |
 | 422 | `DELIVERY_ORDER_NOT_CONFIRMED` | Confirmez la commande avant l'envoi. | أكّد الطلب قبل الإرسال. | Confirm the order before sending. | dialog | confirm |

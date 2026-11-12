@@ -164,7 +164,7 @@ export function ThreadInsightsDialog({ conversationId, onClose }: { conversation
                     count={`${t(`inbox.insights.status.${i.status}`)} · ${relativeTime(i.createdAt, locale)}`}
                     customer={t('inbox.insights.customer', { message: i.customerMessage || '—' })}
                     ai={i.aiResponse ? t('inbox.insights.ai', { message: i.aiResponse }) : undefined}
-                    cause={i.detail ? t('inbox.insights.cause', { detail: insightDetail(t, i.detail) ?? i.detail }) : undefined}
+                    cause={insightDetail(t, i.detail) ? t('inbox.insights.cause', { detail: insightDetail(t, i.detail)! }) : undefined}
                     actions={
                       manage && i.status === 'pending' ? (
                         <>

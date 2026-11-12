@@ -397,7 +397,7 @@ function Relations({ productId }: { productId: string }) {
               {r.recommendations.last.map((x) => (
                 <li key={x.id} className="flex items-center gap-3 px-3 py-2 text-[14px]">
                   <span className="min-w-0 flex-1 truncate font-medium">{x.recommended?.name ?? '—'}</span>
-                  <span className="ts-label-meta uppercase text-text-muted">{x.type}</span>
+                  <span className="ts-label-meta uppercase text-text-muted">{t.has(`enum.Recommendation.type.${x.type}`) ? t(`enum.Recommendation.type.${x.type}`) : ''}</span>
                 </li>
               ))}
             </ul>

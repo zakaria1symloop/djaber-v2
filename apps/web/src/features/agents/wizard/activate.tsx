@@ -6,7 +6,7 @@
 // `AUTH_EMAIL_UNVERIFIED` block it. While a readiness row is blocking (✕) "Activer maintenant" / "Activer à une date"
 // are greyed with the list of what to fix; a scheduled activation can be cancelled (`DELETE /agents/:id/activate`).
 // Tests are free and never touch customers or orders.
-import { Button, buttonClass, Dialog, Field, FormAlert, FormSection, Input, Ltr, ReadinessRow, Skeleton, toast } from '@djaber/ui';
+import { Button, buttonClass, Dialog, Field, FormAlert, FormSection, Input, ReadinessRow, Skeleton, toast } from '@djaber/ui';
 import { formatDateTime, type AppLocale, type TestScenarioKey } from '@djaber/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { QueryError } from '@/components/global-states';
@@ -278,7 +278,7 @@ export function ActivationRail({ agent, activation, onSaveDraft }: { agent: Agen
         </p>
       ) : null}
       <p className="ts-label-meta text-text-muted">
-        {t('agents.activate.note')} <Ltr>(AGENT_CHANNEL_SWITCH_NEXT_THREAD)</Ltr>
+        {t('agents.activate.note')}
       </p>
       <Dialog
         open={schedule}

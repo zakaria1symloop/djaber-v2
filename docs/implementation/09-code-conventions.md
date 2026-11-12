@@ -894,7 +894,7 @@ Schema conventions: arrays as `z.string().transform((s) => s.split(',')).optiona
 Rule: the API returns `actions: ActionDescriptor[]` (`{ key, enabled, reasonCode?, primary?, shortcut? }`, api-contract §1.12) for every list row and detail of Order, Shipment, Conversation, Product, Agent, Channel so the UI never computes business transitions; `toRowActions(actions, handlers, t)` maps `key` → label `action.<key>` + handler, `enabled=false` → `disabledReason=reasonCode`.
 
 ### 4.3 `ActionsDropdown` behaviour (inside `packages/ui/src/actions-dropdown.tsx`)
-- Renders a chip `Actions ⌄`; menu via Radix `DropdownMenu`; items in given order; `primary` first with highlight; `disabledReason` ⇒ `aria-disabled`, greyed, and a footer line `"{label} grisé : {t('error.'+code)} ({code})"`; `destructive` ⇒ red text; `shortcut` right-aligned mono.
+- Renders a chip `Actions ⌄`; menu via Radix `DropdownMenu`; items in given order; `primary` first with highlight; `disabledReason` ⇒ `aria-disabled`, greyed, and a footer line `"{label} : {reason}"` — the reason as a sentence from `lib/actions.ts` `reasonText` / `descriptorReason` (params filled, never the code — UX-056 / UX-059 / UX-060); a descriptor refused by the state machine (`isNotOffered`) is not rendered; `destructive` ⇒ red text; `shortcut` right-aligned mono.
 - Keyboard: row focus + shortcut key fires `onSelect` without opening; `Enter` = primary.
 
 ### 4.4 Side sheet with ‹ ›

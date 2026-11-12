@@ -222,7 +222,7 @@ export function PlaygroundComposer({ pg, placeholder, media, disabledReason }: {
       {blocked ? (
         <FormAlert tone="warning">
           <span data-testid="playground-rate-limited">
-            {t('error.PLAYGROUND_RATE_LIMITED')} <Ltr>(PLAYGROUND_RATE_LIMITED)</Ltr> · {t('agents.playground.retryIn', { time: formatClock(pg.wait) })}
+            {t('error.PLAYGROUND_RATE_LIMITED')} · {t('agents.playground.retryIn', { time: formatClock(pg.wait) })}
           </span>
         </FormAlert>
       ) : null}

@@ -206,7 +206,7 @@ function CashLedger() {
     {
       key: 'source',
       header: t('cash.col.source'),
-      cell: (r) => <SourceBadge automatic={r.isAutomatic} autoLabel={t('cash.source.auto')} manualLabel={t('cash.source.manual')} reason={r.lockReason ? `${t(`error.${r.lockReason}`, { date: day(algiersDay(r.date)) })} (${r.lockReason})` : undefined} />,
+      cell: (r) => <SourceBadge automatic={r.isAutomatic} autoLabel={t('cash.source.auto')} manualLabel={t('cash.source.manual')} reason={r.lockReason ? t(`error.${r.lockReason}`, { date: day(algiersDay(r.date)) }) : undefined} />,
     },
   ];
 

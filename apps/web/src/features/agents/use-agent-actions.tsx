@@ -229,7 +229,6 @@ function DeleteAgentDialog({ agent, onClose, onDone }: { agent: Agent | null; on
               {error.channels ? (
                 <>
                   {' '}
-                  <Ltr>(AGENT_HAS_CHANNELS)</Ltr>{' '}
                   <Link href={`/agents/${agent.id}/configuration?section=channels`} className="underline">
                     {t('agents.action.changeChannels')}
                   </Link>
@@ -297,7 +296,7 @@ function PauseAgentDialog({ agent, onClose, onDone }: { agent: Agent | null; onC
         <p className="text-[13px] text-text-secondary">{t('agents.pause.description')}</p>
         {openThreads !== null ? (
           <FormAlert tone="warning">
-            <span data-testid="pause-open-threads">{t('error.AGENT_PAUSED_WITH_OPEN_THREADS', { count: openThreads })}</span> <Ltr>(AGENT_PAUSED_WITH_OPEN_THREADS)</Ltr>
+            <span data-testid="pause-open-threads">{t('error.AGENT_PAUSED_WITH_OPEN_THREADS', { count: openThreads })}</span>
           </FormAlert>
         ) : null}
         {/* AGV-07: the workspace `out_of_hours` system message is sent once to every open thread moved to « À traiter » */}
@@ -424,7 +423,7 @@ export function PlanLimitDialog({ open, limit, canDraft, onClose }: { open: bool
       }
     >
       <p className="text-[13px] text-text-secondary" data-testid="agents-limit-dialog">
-        {t('agents.limit.description')} <Ltr>(PLAN_LIMIT)</Ltr>
+        {t('agents.limit.description')}
       </p>
     </Dialog>
   );

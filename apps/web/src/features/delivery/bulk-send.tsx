@@ -11,6 +11,7 @@ import { refusal, useOnOpen } from '@/features/orders/dialogs/common';
 import { useOrderActions } from '@/features/orders/use-order-actions';
 import { useRouter } from '@/i18n/navigation';
 import { isJobRunning, useJob } from '@/lib/jobs';
+import { rowErrorText } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { uuid } from '@/lib/uuid';
 import { deliveryApi, useCouriers, useDeliveryRefresh } from './api';
@@ -194,7 +195,7 @@ export function BulkSendResults({ jobId, open, title, names, courierName, onRetr
                           ? [t('send.bulk.created'), r.data?.trackingNumber].filter(Boolean).join(' · ')
                           : st === 'queued'
                             ? t('send.bulk.queued')
-                            : `${r.error?.code ?? ''} · ${r.error?.message ?? ''}${field ? ` · ${t(`send.field.${field}`)}` : ''}${st === 'ignored' ? ` (${t('send.bulk.ignored')})` : ''}`}
+                            : `${[rowErrorText(t, r.error), field ? t(`send.field.${field}`) : null].filter(Boolean).join(' · ')}${st === 'ignored' ? ` (${t('send.bulk.ignored')})` : ''}`}
                       </span>
                     </div>
                     {st === 'failed' || st === 'ignored' ? (

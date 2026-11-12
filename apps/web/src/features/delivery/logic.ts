@@ -62,10 +62,8 @@ export function syncWait(syncAvailableAt: string | null | undefined, now = Date.
   if (!syncAvailableAt) return 0;
   return Math.max(0, Math.ceil((Date.parse(syncAvailableAt) - now) / 1000));
 }
-/** "4 min" / "45 s" */
-export function waitLabel(seconds: number): string {
-  return seconds >= 60 ? `${Math.ceil(seconds / 60)} min` : `${seconds} s`;
-}
+/** "4 min" / "45 s" (shared with every disabled reason that carries a wait — lib/time). */
+export { waitLabel } from '@/lib/time';
 
 /** Days since an ISO instant (whole days, floor). */
 export function daysSince(iso: string | null | undefined, now = Date.now()): number | null {

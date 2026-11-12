@@ -13,7 +13,7 @@ import { formatPhoneOnBlur, phonePreview, phonePreviewLine } from '@/lib/phone';
 import { relativeTime } from '@/lib/time';
 import { ORDER_ACTION } from '../action-keys';
 import type { Order, OrderItem } from '../contracts';
-import { actorKind, algiersTime, historyValue, newestFirst, shortName } from '../logic';
+import { actorKind, algiersTime, historyReason, historyValue, newestFirst, shortName } from '../logic';
 import { CallResultPill, PaymentPill, RiskPill } from '../ui';
 
 const linkClass = 'text-[13px] text-text-secondary hover:text-text-primary disabled:opacity-45';
@@ -387,7 +387,7 @@ export function HistoryBlock({ order }: { order: Order }) {
       key: `${h.at}-${i}`,
       time: algiersTime(h.at),
       title: name,
-      text: h.reason ? `${text} · ${h.reason}` : text,
+      text: [text, historyReason(h.reason, t)].filter(Boolean).join(' · '),
       meta: h.effectiveAt && h.effectiveAt !== h.at ? t('orders.history.effective', { date: formatDate(h.effectiveAt, locale) }) : formatDate(h.at, locale),
       tone: kind === 'ai' ? 'success' : kind === 'system' ? 'neutral' : 'info',
     };

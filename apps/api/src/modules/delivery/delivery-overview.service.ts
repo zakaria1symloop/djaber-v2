@@ -3,7 +3,7 @@
 // `GET /delivery/overview` (KPI tiles, tab counts, the first failures and "Sans mouvement" rows, per-courier figures —
 // also the data source of Analytics › Livraison, DLV-11). Raw SQL with the workspace filter written explicitly.
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { DELIVERY_TABS, failureHandledAs, ORDER_SEND_CLOSED_STATUSES, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, type ActionDescriptor, type DeliveryOverviewView, type DeliveryRowView, type DeliveryTab, type ShipmentsQuery } from '@djaber/shared';
+import { DELIVERY_TABS, failureHandledAs, isNotOffered, ORDER_SEND_CLOSED_STATUSES, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, type ActionDescriptor, type DeliveryOverviewView, type DeliveryRowView, type DeliveryTab, type ShipmentsQuery } from '@djaber/shared';
 import { Prisma, prisma, TenantContext, type Shipment } from '@djaber/db';
 import { AppException } from '../../core/errors/app.exception';
 import { page, type Page } from '../../core/http/pagination';
@@ -154,7 +154,11 @@ export class DeliveryOverviewService implements OnModuleInit {
       const state = stateOf(o, active);
       const sendable = ['confirmed', 'preparing'].includes(o.status) && !active;
       const orderActs: ActionDescriptor[] = [];
-      const push = (key: string, permitted: boolean, reasonCode: string | null, primary = false) => orderActs.push({ key, enabled: permitted && !reasonCode, ...(!permitted ? { reasonCode: 'FORBIDDEN' } : reasonCode ? { reasonCode } : {}), ...(primary ? { primary: true } : {}) });
+      // UX-060: a transition the state machine refuses is not offered (12 GLOBAL), whatever the member's permission
+      const push = (key: string, permitted: boolean, reasonCode: string | null, primary = false) => {
+        if (reasonCode && isNotOffered({ enabled: false, reasonCode })) return;
+        orderActs.push({ key, enabled: permitted && !reasonCode, ...(!permitted ? { reasonCode: 'FORBIDDEN' } : reasonCode ? { reasonCode } : {}), ...(primary ? { primary: true } : {}) });
+      };
       push('send_courier', can(role, 'delivery.send'), sendClosedCode(o.status) ?? (active && active.status !== 'delivered' ? 'DELIVERY_ORDER_ALREADY_SENT' : o.status === 'new' ? 'DELIVERY_ORDER_NOT_CONFIRMED' : !sendable ? 'ORDER_INVALID_TRANSITION' : couriers ? null : 'DELIVERY_NO_COURIER'), sendable && couriers > 0);
       push('ship_manual', can(role, 'orders.write'), checkTransition(state, 'shipped', { role })?.code ?? null);
       const shipActs = s ? shipmentActions(s, o, { now }) : [];

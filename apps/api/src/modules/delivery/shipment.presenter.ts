@@ -53,9 +53,13 @@ export const isNoMovement = (s: Pick<Shipment, 'status' | 'lastEventAt' | 'creat
 export const isReturnPending = (s: Pick<Shipment, 'status'>, orderStatus: string) => s.status === 'returned' && orderStatus !== 'returned';
 
 const allowed = (permission: MerchantPermission) => can(TenantContext.maybe()?.role, permission);
-const act = (key: string, permission: MerchantPermission, o: { reasonCode?: string | null; primary?: boolean } = {}): ActionDescriptor => {
+/** The parcel is not in a state where this action exists (12 GLOBAL, UX-060): the item is not offered at all. */
+const NOT_OFFERED = 'NOT_OFFERED';
+const act = (key: string, permission: MerchantPermission, o: { reasonCode?: string | null; reasonParams?: Record<string, string | number>; primary?: boolean } = {}): ActionDescriptor | null => {
+  if (o.reasonCode === NOT_OFFERED) return null;
   const reasonCode = !allowed(permission) ? 'FORBIDDEN' : (o.reasonCode ?? undefined);
-  return { key, enabled: !reasonCode, ...(reasonCode ? { reasonCode } : {}), ...(o.primary ? { primary: true } : {}) };
+  const params = reasonCode && reasonCode !== 'FORBIDDEN' ? o.reasonParams : undefined;
+  return { key, enabled: !reasonCode, ...(reasonCode ? { reasonCode } : {}), ...(params ? { reasonParams: params } : {}), ...(o.primary ? { primary: true } : {}) };
 };
 
 /** Send failure (the courier never created the parcel): retry / change courier. */
@@ -64,8 +68,11 @@ export const isSendFailure = (s: Pick<Shipment, 'status' | 'trackingNumber'>) =>
 /**
  * Parcel menu (04 §22): sync · label · retry (failed send) · retry_delivery · change_courier · cancel · mark_failed ·
  * mark_delivered · mark_returned · open_order · call_client. At 3 failed attempts "mark_returned" becomes primary.
- * UX-064: on an order delivered / cancelled / returned the send items (retry, change_courier) are greyed with the
- * readable `DELIVERY_ORDER_<STATUS>` reason, the same refusal as the services.
+ * UX-064: on an order delivered / cancelled / returned the send items (retry, change_courier) are not offered
+ * (`DELIVERY_ORDER_<STATUS>` is a not-offered reason, same refusal as the services).
+ * UX-060 (retest 12/11): an action the parcel's state does not allow (retry of a parcel that did not fail, mark delivered
+ * on a parcel not on its way…) is left out instead of greyed « Changed meanwhile, please reload. »; the wait of « Actualiser »
+ * travels as `reasonParams.retryAfter` (seconds).
  */
 export const shipmentActions = (s: Pick<Shipment, 'provider' | 'status' | 'trackingNumber' | 'lastError' | 'deliveryAttempts'> & { courierAccount?: { baseUrl?: string } | null }, order: { status: string }, o: { syncAvailableAt?: string | null; now?: number } = {}): ActionDescriptor[] => {
   const caps = capabilitiesOf(s.provider, s.courierAccount?.baseUrl);
@@ -77,22 +84,23 @@ export const shipmentActions = (s: Pick<Shipment, 'provider' | 'status' | 'track
   const orderClosed = !!closedCode;
   const now = o.now ?? Date.now();
   const coolingDown = !!o.syncAvailableAt && new Date(o.syncAvailableAt).getTime() > now;
+  const retryAfter = coolingDown ? Math.max(1, Math.ceil((new Date(o.syncAvailableAt!).getTime() - now) / 1000)) : 0;
   const queued = s.status === 'pending' && errorCodeOf(s.lastError) === 'COURIER_UNAVAILABLE';
   const proposeReturn = s.status === 'failed' && !sendFailed && s.deliveryAttempts >= SHIPMENT_MAX_ATTEMPTS;
   const inFlight = ['sent', 'picked_up', 'in_transit', 'out_for_delivery', 'failed'].includes(s.status) && !sendFailed;
-  const list: ActionDescriptor[] = [
-    act('sync', 'delivery.send', { reasonCode: !courier ? 'TRACKING_NOT_FOUND' : !created ? 'SHIPMENT_NOT_CREATED' : terminal ? 'ORDER_TERMINAL' : coolingDown ? 'TRACKING_SYNC_RATE_LIMITED' : null }),
+  const list = [
+    act('sync', 'delivery.send', { reasonCode: !courier ? 'TRACKING_NOT_FOUND' : !created ? 'SHIPMENT_NOT_CREATED' : terminal ? 'ORDER_TERMINAL' : coolingDown ? 'TRACKING_SYNC_RATE_LIMITED' : null, reasonParams: coolingDown ? { retryAfter } : undefined }),
     act('label', 'delivery.send', { reasonCode: !created || s.status === 'cancelled' ? 'SHIPMENT_NOT_CREATED' : null }),
-    act('retry', 'delivery.send', { reasonCode: closedCode ?? (sendFailed || queued ? null : 'CONFLICT'), primary: sendFailed && !orderClosed }),
-    act('retry_delivery', 'delivery.send', { reasonCode: s.status !== 'failed' || sendFailed ? 'CONFLICT' : caps.retry ? null : 'COURIER_CANCEL_NOT_ALLOWED', primary: s.status === 'failed' && !sendFailed && caps.retry && !proposeReturn }),
-    act('change_courier', 'delivery.send', { reasonCode: closedCode ? closedCode : sendFailed || queued || (s.status === 'sent' && !courier) ? null : 'COURIER_CANCEL_NOT_ALLOWED' }),
+    act('retry', 'delivery.send', { reasonCode: orderClosed ? NOT_OFFERED : sendFailed || queued ? null : NOT_OFFERED, primary: sendFailed && !orderClosed }),
+    act('retry_delivery', 'delivery.send', { reasonCode: s.status !== 'failed' || sendFailed ? NOT_OFFERED : caps.retry ? null : 'COURIER_CANCEL_NOT_ALLOWED', primary: s.status === 'failed' && !sendFailed && caps.retry && !proposeReturn }),
+    act('change_courier', 'delivery.send', { reasonCode: orderClosed ? NOT_OFFERED : sendFailed || queued || (s.status === 'sent' && !courier) ? null : 'COURIER_CANCEL_NOT_ALLOWED' }),
     act('cancel', 'delivery.send', { reasonCode: !['pending', 'sent'].includes(s.status) ? 'COURIER_CANCEL_NOT_ALLOWED' : s.status === 'sent' && courier && !caps.cancel ? 'COURIER_CANCEL_NOT_ALLOWED' : null }),
-    act('mark_failed', 'delivery.send', { reasonCode: ['sent', 'picked_up', 'in_transit', 'out_for_delivery'].includes(s.status) ? null : 'CONFLICT' }),
-    act('mark_delivered', 'orders.write', { reasonCode: order.status === 'delivered' || terminal || !inFlight ? 'CONFLICT' : null }),
-    act('mark_returned', order.status === 'delivered' && s.status !== 'returned' ? 'orders.money' : 'orders.write', { reasonCode: order.status === 'returned' || order.status === 'cancelled' ? 'ORDER_TERMINAL' : inFlight || s.status === 'returned' || (s.status === 'delivered' && order.status === 'delivered') ? null : 'CONFLICT', primary: proposeReturn || s.status === 'returned' }),
+    act('mark_failed', 'delivery.send', { reasonCode: ['sent', 'picked_up', 'in_transit', 'out_for_delivery'].includes(s.status) ? null : NOT_OFFERED }),
+    act('mark_delivered', 'orders.write', { reasonCode: order.status === 'delivered' || terminal || !inFlight ? NOT_OFFERED : null }),
+    act('mark_returned', order.status === 'delivered' && s.status !== 'returned' ? 'orders.money' : 'orders.write', { reasonCode: order.status === 'returned' || order.status === 'cancelled' ? 'ORDER_TERMINAL' : inFlight || s.status === 'returned' || (s.status === 'delivered' && order.status === 'delivered') ? null : NOT_OFFERED, primary: proposeReturn || s.status === 'returned' }),
     act('open_order', 'orders.read'),
     act('call_client', 'orders.write'),
-  ];
+  ].filter((a): a is ActionDescriptor => !!a);
   return [...list.filter((a) => a.primary), ...list.filter((a) => !a.primary)];
 };
 

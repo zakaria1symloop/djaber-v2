@@ -20,3 +20,4 @@ export * from './support';
 export * from './admin';
 export * from './integrations';
 export * from './public-pages';
+export * from './handoff';

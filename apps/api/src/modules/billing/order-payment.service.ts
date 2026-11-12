@@ -20,7 +20,7 @@ import { QueueOutbox } from '../../core/queue/queue.outbox';
 import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { aiDateTime } from '../../core/time/algiers';
 import { OrderEffects } from '../orders/order-effects.service';
-import { isTerminal } from '../orders/order-rules';
+import { paymentLinkRefusal, refundRefusal } from '../orders/order-rules';
 import { OrderService } from '../orders/order.service';
 import { PAYMENT_GATEWAY, PaymentProviderError, type CheckoutStatus, type PaymentGateway } from './gateway/payment-gateway';
 import { PaymentService } from './payment.service';
@@ -62,7 +62,9 @@ export class OrderPaymentService implements OnModuleInit {
   private async open(tx: Tx, orderId: string, raw: Raw) {
     const o = await this.orders.lock(tx, orderId);
     const remaining = o.total - o.amountPaid;
-    if (isTerminal(o.status) || remaining <= 0 || o.paymentStatus === 'refunded') throw new AppException('ORDER_PAYMENT_LOCKED');
+    // UX-060: closed order ⇒ ORDER_PAYMENT_LOCKED; refunded ⇒ ORDER_ALREADY_REFUNDED; nothing left ⇒ ORDER_ALREADY_PAID
+    const refused = paymentLinkRefusal(o);
+    if (refused) throw new AppException(refused.code);
     await tx.orderPayment.updateMany({ where: { orderId, status: 'pending' }, data: { status: 'expired' } });
     const p = await tx.orderPayment.create({ data: { workspaceId: o.workspaceId, orderId, provider: 'chargily', amount: remaining, status: 'pending', raw: raw as Prisma.InputJsonValue } });
     const updated = await tx.order.update({ where: { id: orderId }, data: { paymentStatus: 'pending_link', version: { increment: 1 } } });
@@ -214,7 +216,9 @@ export class OrderPaymentService implements OnModuleInit {
     let refundId = '';
     await this.orders.inTx(async (tx) => {
       const o = await this.orders.lock(tx, orderId);
-      if (o.amountPaid <= 0 || o.paymentStatus === 'refunded') throw new AppException('ORDER_PAYMENT_LOCKED');
+      // UX-060: nothing paid ⇒ ORDER_NOTHING_TO_REFUND, already refunded ⇒ ORDER_ALREADY_REFUNDED (not « commande clôturée »)
+      const refused = refundRefusal(o);
+      if (refused) throw new AppException(refused.code);
       if (input.amount > o.amountPaid) throw new AppException('VALIDATION_ERROR', { max: o.amountPaid }, { amount: 'validation.range' });
       const entry = await this.effects.addPayment(tx, o, { amount: -input.amount, method: input.method ?? o.paymentMethod, reference: 'refund', note: input.reason, description: `Commande #${o.number} (remboursement)` }, actor);
       refundId = entry?.id ?? '';
@@ -252,7 +256,8 @@ export class OrderPaymentService implements OnModuleInit {
     try {
       p = await prisma.$transaction(async (db) => (await this.open(db as Tx, order.id, { send: false, source: 'ai', createdBy: null })).payment);
     } catch (e) {
-      if (e instanceof AppException && e.code === 'ORDER_PAYMENT_LOCKED') return { ok: false, error: { code: 'ORDER_PAYMENT_LOCKED' }, orderNumber: order.number };
+      // the AI tool keeps its one answer for « no link possible on this order » (04-ai-pipeline §4.2)
+      if (e instanceof AppException && ['ORDER_PAYMENT_LOCKED', 'ORDER_ALREADY_PAID', 'ORDER_ALREADY_REFUNDED'].includes(e.code)) return { ok: false, error: { code: 'ORDER_PAYMENT_LOCKED' }, orderNumber: order.number };
       throw e;
     }
     try {

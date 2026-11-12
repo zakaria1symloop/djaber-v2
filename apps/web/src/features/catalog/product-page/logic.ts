@@ -66,6 +66,22 @@ export function rejectedField(raw: string): RejectedField {
   return { field: null, index: null, raw };
 }
 
+/**
+ * UX-059 (retest 12/11): the rules of a refusal in words (`auto_banned_word` → « mot interdit dans la fiche »). A rule
+ * reference typed by a moderator (« 2.1 ») stays as written; a code nobody can name is left out.
+ */
+export function moderationRuleLabels(rules: readonly string[], t: { (key: string): string; has: (key: string) => boolean }): string[] {
+  return rules
+    .map((r) => r.trim())
+    .filter(Boolean)
+    .map((r) => {
+      const key = [`products.moderation.rule.${r}`, `products.moderation.decision.${r}`].find((k) => t.has(k));
+      if (key) return t(key);
+      return /^[a-z0-9]+(?:_[a-z0-9]+)+$/i.test(r) ? null : r;
+    })
+    .filter((x): x is string => !!x);
+}
+
 /** Dot colour of a validation timeline entry. */
 export const timelineTone = (status: string): Tone =>
   status === 'approved' || status === 'auto_approved' ? 'success' : status === 'rejected' ? 'danger' : status === 'appealed' ? 'violet' : status === 'changes_requested' ? 'warning' : 'neutral';

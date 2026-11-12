@@ -137,6 +137,33 @@ export function historyValue(field: string, value: string | null, has: (key: str
   }
   return { key: null, raw: value };
 }
+/**
+ * UX-059 (retest 12/11): the reason of a history line in words — « changed_mind » → « Le client a changé d'avis »,
+ * « COURIER_VALIDATION » → « Refusée par le transporteur (données) », « parcel_cancelled » → « colis annulé ». A member's
+ * note stays as typed; a code nobody can name is left out. The server joins reason and note with « · ».
+ */
+const REASON_KEYS = ['enum.Order.cancelReason', 'enum.Order.returnReason', 'orders.history.reason'];
+export function historyReason(reason: string | null | undefined, t: { (key: string): string; has: (key: string) => boolean }): string {
+  return (reason ?? '')
+    .split(' · ')
+    .map((raw) => raw.trim())
+    .filter(Boolean)
+    .map((part) => {
+      if (/^[A-Z0-9]+(?:_[A-Z0-9]+)+$/.test(part)) {
+        const key = [`delivery.lastError.${part}`, `error.${part}`].find((k) => t.has(k));
+        return key ? t(key) : null;
+      }
+      if (/^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(part)) {
+        const key = REASON_KEYS.map((p) => `${p}.${part}`).find((k) => t.has(k));
+        // a single lowercase word may be a name (a courier account): kept; a snake_case code is not
+        return key ? t(key) : part.includes('_') ? null : part;
+      }
+      return part;
+    })
+    .filter((x): x is string => !!x)
+    .join(' · ');
+}
+
 /** IA / Système / member (history actor types of ORD-06). */
 export const actorKind = (h: Pick<OrderHistoryRow, 'actor'>): 'ai' | 'system' | 'user' => (h.actor.type === 'ai' || h.actor.type === 'agent' ? 'ai' : h.actor.type === 'system' || h.actor.type === 'courier' ? 'system' : 'user');
 

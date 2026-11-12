@@ -30,7 +30,7 @@ export const NotificationRows: Story = {
             }
             title="Nouvelle commande #CMD-1042 · 7 300 DA"
             body="Vendeur Pro a créé une commande pour Amina Belkacem (Boutique Amel)."
-            slug="order.ai_created"
+            slug="Commande créée par l'IA"
             age="2 MIN"
             action={open}
           />
@@ -44,7 +44,7 @@ export const NotificationRows: Story = {
             }
             title="Amina B. a répondu dans une conversation en attente"
             body="« راني حابة نبدل القياس » — l'IA est en pause."
-            slug="conversation.needs_human_message"
+            slug="Nouveau message en attente"
             age="2 MIN"
             action={open}
           />
@@ -58,7 +58,7 @@ export const NotificationRows: Story = {
             }
             title="Import terminé : 118 produits importés, 3 lignes ignorées"
             body="Téléchargez le rapport d'erreurs pour corriger les 3 lignes."
-            slug="job.finished"
+            slug="Tâche terminée"
             age="IL Y A 2 J"
             action={open}
           />
@@ -71,7 +71,7 @@ export const NotificationRows: Story = {
               </StatusPill>
             }
             title="Sara K. a rejoint l'espace en tant qu'opératrice"
-            slug="member.joined"
+            slug="Nouveau membre"
             age="IL Y A 3 J"
           />
         </ul>

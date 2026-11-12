@@ -40,6 +40,11 @@ describe('queueReason', () => {
   it('an AI reply withheld by the safety filter ⇒ blocked word with the word', () => {
     expect(queueReason('blocked_word:arnaque')).toEqual({ kind: 'blocked_word', detail: 'arnaque' });
   });
+  it('UX-059: an unmapped code gets no detail (never shown raw); quota_exceeded is a credits reason', () => {
+    expect(queueReason('quota_exceeded')).toEqual({ kind: 'credits', detail: null });
+    expect(queueReason('some_new_reason')).toEqual({ kind: 'transfer', detail: null });
+    expect(queueReason('rule:SOME_CODE')).toEqual({ kind: 'transfer', detail: null });
+  });
   it('free text ⇒ transfer with the text', () => {
     expect(queueReason('demande de remboursement')).toEqual({ kind: 'transfer', detail: 'demande de remboursement' });
   });

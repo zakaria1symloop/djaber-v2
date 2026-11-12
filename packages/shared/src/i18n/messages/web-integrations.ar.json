@@ -33,7 +33,7 @@
   "settings.integrations.sheets.row.columns": "الأعمدة",
   "settings.integrations.sheets.row.rows": "الأسطر",
   "settings.integrations.sheets.row.lastError": "آخر خطأ",
-  "settings.integrations.sheets.tabNote": "(تبويب « {tab} »، عمود مخفي djaber_id)",
+  "settings.integrations.sheets.tabNote": "(تبويب « {tab} » في ورقتك، عمود مخفي يتيح لـ Djaber التعرّف على كل طلب)",
   "settings.integrations.sheets.noSheet": "لم تُختر أي ورقة",
   "settings.integrations.sheets.rows": "{count} طلبية متزامنة",
   "settings.integrations.sheets.pending": "{count} قيد الانتظار",

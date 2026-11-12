@@ -473,15 +473,15 @@ Every enum value of `prisma-schema.prisma` has a key `enum.<Model>.<field>.<valu
 | state.form.leave.title | Quitter sans enregistrer ? | | |
 | state.form.leave.description | Vous avez des modifications non enregistrées sur « {name} ». | | |
 | state.form.conflict.title | Modifié par quelqu'un d'autre | | |
-| state.form.conflict.description | CONFLICT (409) · {name} il y a {ago} · votre brouillon est conservé. | | |
+| state.form.conflict.description | Modifié par {name} il y a {ago} · votre brouillon est conservé. | | |
 | state.form.conflict.descriptionLong | {name} a modifié cet élément il y a {ago} ({change}). Vos modifications non enregistrées sont conservées dans le formulaire. | | |
 | state.form.saved | Enregistré | | |
 | state.detail.notFound.title | Introuvable | | |
-| state.detail.notFound.description | Cet élément n'existe pas ou appartient à un autre espace (404). | | |
+| state.detail.notFound.description | Cet élément n'existe pas ou appartient à un autre espace. | | |
 | state.detail.deleted.title | Supprimée | | |
 | state.detail.deleted.description | Supprimée le {date} par {name} · restaurable par un admin pendant 30 j. | | |
 | state.detail.forbidden.title | Accès refusé | | |
-| state.detail.forbidden.description | Votre rôle ({role}) ne permet pas de voir {section} (403). Demandez à un admin. | | |
+| state.detail.forbidden.description | Votre rôle ({role}) ne permet pas de voir {section}. Demandez à un admin. | | |
 | state.page.403.title | 403 | | |
 | state.page.403.description | Cette page est réservée aux admins de l'espace. Votre rôle : {role}. | | |
 | state.page.404.title | Introuvable ou accès refusé | | |

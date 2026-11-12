@@ -349,7 +349,7 @@ test.describe('draft — autosave, resume, conflict', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: "Modifié par quelqu'un d'autre" })).toBeVisible();
     // the API names the author of the last version (the owner of this shop)
-    await expect(dialog).toContainText(`CONFLICT (409) · ${owner.firstName} ${owner.lastName}`);
+    await expect(dialog).toContainText(`Modifié par ${owner.firstName} ${owner.lastName}`);
     await expect(dialog).toContainText('votre brouillon est conservé.');
     await expect(dialog.getByRole('button', { name: 'Écraser', exact: true })).toBeVisible();
     expect(bodyOf(writesOf(rec, PATCH).at(-1)!).version).toBe(draft.version);

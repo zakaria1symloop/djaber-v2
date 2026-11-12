@@ -249,7 +249,7 @@ export function FaqSection({ agentId, readOnly, hasInsights }: { agentId: string
       {error ? <FormAlert>{error}</FormAlert> : null}
       {full && agentId ? (
         <FormAlert tone="warning">
-          {t('error.AGENT_FAQ_LIMIT')} <Ltr>(AGENT_FAQ_LIMIT)</Ltr>
+          {t('error.AGENT_FAQ_LIMIT')}
         </FormAlert>
       ) : null}
       {agentId && !readOnly ? (

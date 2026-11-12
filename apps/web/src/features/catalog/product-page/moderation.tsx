@@ -17,7 +17,7 @@ import { useLocaleCode, useT, type TFunction } from '@/lib/i18n';
 import { catalogApi, useCatalogRefresh } from '../api';
 import type { Product } from '../contracts';
 import { ModerationPill } from '../ui';
-import { appealExpired, rejectedField, timelineTone, type ModerationView } from './logic';
+import { appealExpired, moderationRuleLabels, rejectedField, timelineTone, type ModerationView } from './logic';
 import { Block, Note, Row, Rows } from './parts';
 
 type Locale = 'fr' | 'ar' | 'en';
@@ -46,7 +46,7 @@ export function RejectedBanner({ product, view, canWrite, onAppeal }: { product:
           <p className="mt-1 ts-label-meta text-text-secondary">{t('products.moderation.banner.fields', { fields: view.rejectedFields.map((f) => fieldLabel(t, f)).join(', ') })}</p>
         ) : null}
         <p className="mt-1 ts-label-meta text-text-muted">
-          {view.rules.length ? `${t('products.moderation.banner.rules', { rules: view.rules.join(' · ') })} ` : ''}
+          {moderationRuleLabels(view.rules, t).length ? `${t('products.moderation.banner.rules', { rules: moderationRuleLabels(view.rules, t).join(' · ') })} ` : ''}
           {t('products.moderation.banner.hidden')} {t('products.moderation.sla')}
         </p>
       </div>
@@ -166,7 +166,7 @@ export function ValidationBlock({
             </Row>
             <Row label={t('common.reason')}>{decisionLabel(t, view.decision)}</Row>
             {view.message ? <Row label={t('products.moderation.message')}>{view.message}</Row> : null}
-            {view.rules.length ? <Row label={t('products.moderation.rules')}>{view.rules.join(' · ')}</Row> : null}
+            {moderationRuleLabels(view.rules, t).length ? <Row label={t('products.moderation.rules')}>{moderationRuleLabels(view.rules, t).join(' · ')}</Row> : null}
             {view.rejectedFields.length ? (
               <Row label={t('products.moderation.fields')}>
                 <ul className="flex flex-wrap gap-1.5" data-testid="rejected-fields">

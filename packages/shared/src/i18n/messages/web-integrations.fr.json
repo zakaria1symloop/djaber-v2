@@ -33,7 +33,7 @@
   "settings.integrations.sheets.row.columns": "Colonnes",
   "settings.integrations.sheets.row.rows": "Lignes",
   "settings.integrations.sheets.row.lastError": "Dernière erreur",
-  "settings.integrations.sheets.tabNote": "(onglet « {tab} », colonne cachée djaber_id)",
+  "settings.integrations.sheets.tabNote": "(onglet « {tab} » de votre feuille, une colonne cachée permet à Djaber de reconnaître chaque commande)",
   "settings.integrations.sheets.noSheet": "Aucune feuille choisie",
   "settings.integrations.sheets.rows": "{count} commandes synchronisées",
   "settings.integrations.sheets.pending": "{count} en attente",

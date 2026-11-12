@@ -98,7 +98,7 @@ export function ChannelsFields({ agentId, agentName, readOnly, lead }: { agentId
         </ul>
       )}
       <FormAlert tone="info">
-        {t('error.AGENT_CHANNEL_SWITCH_NEXT_THREAD')} <Ltr>(AGENT_CHANNEL_SWITCH_NEXT_THREAD)</Ltr>
+        {t('error.AGENT_CHANNEL_SWITCH_NEXT_THREAD')}
       </FormAlert>
       {linker.dialogs}
     </section>

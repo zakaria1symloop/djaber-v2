@@ -129,7 +129,7 @@ export function AgentShell({ id, children }: { id: string; children: ReactNode }
           </Banner>
         ) : a.channels.length === 0 ? (
           <Banner tone="warning" action={actions.manage ? { label: t('agents.card.noChannel.link'), href: `/${locale}${base}/configuration?section=channels` } : undefined}>
-            {t('error.AGENT_NO_CHANNEL')} <Ltr>(AGENT_NO_CHANNEL)</Ltr>
+            {t('error.AGENT_NO_CHANNEL')}
           </Banner>
         ) : null}
         <nav aria-label={t('agents.page.tabs')} className="flex flex-wrap gap-1.5">

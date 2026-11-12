@@ -116,7 +116,7 @@ export function ScheduleDialog({ open, reportKey, planFeature, schedules, onClos
             <div className="text-[13px]">
               <div className="font-medium">{t('reports.schedule.gatedTitle')}</div>
               <p className="mt-1 text-text-secondary">
-                {t('reports.schedule.gatedBody')} <Ltr>(PLAN_FEATURE_REQUIRED)</Ltr>
+                {t('reports.schedule.gatedBody')}
               </p>
             </div>
           </div>

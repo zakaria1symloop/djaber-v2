@@ -283,7 +283,7 @@ export function useConnectFlow(o: { planLimit?: PlanLimit | null; onReport?: (re
         }
       >
         <FormAlert tone="warning">
-          <Ltr>OAUTH_STATE_INVALID</Ltr>
+          {t('error.OAUTH_STATE_INVALID')}
         </FormAlert>
       </Dialog>
       <UnverifiedDialog open={phase.kind === 'unverified'} onClose={close} />
@@ -381,7 +381,7 @@ function ExplainerDialog({
       {atLimit ? (
         <FormAlert tone="warning" className="mt-4">
           <span data-testid="connect-at-limit">
-            {t('gaps.channels.connect.atLimit', { current: planLimit!.current, limit: planLimit!.limit })} <Ltr>(PLAN_LIMIT)</Ltr>
+            {t('gaps.channels.connect.atLimit', { current: planLimit!.current, limit: planLimit!.limit })}
           </span>
           {can('billing.read') ? (
             <>
@@ -437,7 +437,7 @@ function UnverifiedDialog({ open, onClose }: { open: boolean; onClose: () => voi
       }
     >
       <FormAlert tone="warning">
-        <Ltr>AUTH_EMAIL_UNVERIFIED</Ltr>
+        {t('error.AUTH_EMAIL_UNVERIFIED')}
       </FormAlert>
       {error ? <FormAlert className="mt-3">{error}</FormAlert> : null}
     </Dialog>
@@ -450,16 +450,8 @@ const rowNote = (t: TFunction, p: ConnectReportPage, limit: PlanLimit): ReactNod
   const code = p.code ?? '';
   const key = `error.${code}`;
   const text = kind === 'limit' ? t('channels.report.note.limit', { current: limit.current, limit: limit.limit }) : t.has(key) ? t(key, { current: limit.current, limit: limit.limit, resource: '' }) : t(`channels.report.note.${kind}`);
-  return (
-    <>
-      {code ? (
-        <>
-          <Ltr>{code}</Ltr> ·{' '}
-        </>
-      ) : null}
-      {text}
-    </>
-  );
+  // UX-059: the sentence only, never the code before it
+  return text;
 };
 
 /** "Rapport de connexion": one row per page found on the Meta account, with its outcome and code. */

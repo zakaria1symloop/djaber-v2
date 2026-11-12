@@ -11,7 +11,12 @@ export const insightDetail = (t: TFunction, detail: string | null | undefined): 
   if (!raw) return null;
   if (raw === 'faq_candidate') return t('agents.insights.detail.faqCandidate');
   const reason = queueReason(raw);
-  // an unknown code or free text: shown as the server wrote it
-  if (reason.kind === 'transfer') return reason.detail ?? raw;
+  if (reason.kind === 'transfer') {
+    // free text: shown as the server wrote it
+    if (reason.detail) return reason.detail;
+    // UX-059: a code is never shown as such — an error code gets its sentence, any other code the plain "handed over"
+    if (/^[A-Z0-9]+(?:_[A-Z0-9]+)+$/.test(raw)) return t.has(`error.${raw}`) ? t(`error.${raw}`) : null;
+    return t('inbox.handoff.reason.transfer');
+  }
   return handoffLabel(t, raw);
 };

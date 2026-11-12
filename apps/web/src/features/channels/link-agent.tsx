@@ -4,7 +4,7 @@
 // (move dialog state)"). A `409 AGENT_PAGE_ALREADY_ASSIGNED` answered without `move` opens the same confirmation.
 // Shared by the channel page ("Changer ⌄" / "Détacher" / "Rattacher un agent"), the cards of `/channels`, the connect
 // report and the agent wizard (step 4).
-import { Button, buttonClass, Dialog, FormAlert, Ltr, StatusPill, toast } from '@djaber/ui';
+import { Button, buttonClass, Dialog, FormAlert, StatusPill, toast } from '@djaber/ui';
 import { useState, type ReactNode } from 'react';
 import { useAgents, useAgentsRefresh } from '@/features/agents/api';
 import { Link } from '@/i18n/navigation';
@@ -108,7 +108,7 @@ export function useLinkAgent(o: { onDone?: (channel: LinkChannel, agentId: strin
           <div data-testid="move-dialog" className="flex flex-col gap-3">
             <p className="text-[13px] text-text-secondary">{t('channels.link.move.description', { current: move.currentName || '—' })}</p>
             <FormAlert tone="info">
-              {t('error.AGENT_CHANNEL_SWITCH_NEXT_THREAD')} <Ltr>(AGENT_CHANNEL_SWITCH_NEXT_THREAD)</Ltr>
+              {t('error.AGENT_CHANNEL_SWITCH_NEXT_THREAD')}
             </FormAlert>
             {moveError ? <FormAlert>{moveError}</FormAlert> : null}
           </div>

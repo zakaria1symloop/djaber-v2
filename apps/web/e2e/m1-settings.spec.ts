@@ -182,7 +182,7 @@ test('members at the plan limit: "Inviter un membre" greyed with PLAN_LIMIT + "C
   await page.goto('/fr/settings/members');
   const invite = page.getByTestId('members-invite');
   await expect(invite).toBeDisabled();
-  await expect(invite).toHaveAttribute('title', /PLAN_LIMIT/);
+  await expect(invite).toHaveAttribute('title', /Limite du plan atteinte/);
   await expect(page.getByTestId('members-change-plan')).toHaveAttribute('href', '/fr/settings/billing');
 
   const row = page.locator(`[data-invitation="${invitee}"]`);

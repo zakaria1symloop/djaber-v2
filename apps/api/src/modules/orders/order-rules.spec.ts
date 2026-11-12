@@ -1,7 +1,7 @@
 // AT-ORD-01 (table-driven over every (from, to) pair of 04 §1.2 + D14 + §21), AT-ORD-02 COD plan, AT-ORD-03 / 18 / 25
 // call outcomes, AT-ORD-22 payment rules, the 04 §3 effects plan of every allowed transition, totals and stock deltas.
 import { derivePaymentStatus, ORDER_STATUS_TRANSITIONS, type OrderStatusName } from '@djaber/shared';
-import { callPlan, checkEffectiveAt, checkOrderedAt, checkPaymentPatch, checkTransition, codPlan, orderTotals, stockDeltas, transitionPlan, type OrderState } from './order-rules';
+import { callPlan, checkEffectiveAt, checkOrderedAt, checkPaymentPatch, checkTransition, codPlan, orderTotals, paymentLinkRefusal, recordPaymentRefusal, refundRefusal, stockDeltas, transitionPlan, type OrderState } from './order-rules';
 
 const ALL: OrderStatusName[] = ['new', 'confirmed', 'preparing', 'shipped', 'delivered', 'cancelled', 'returned'];
 /** 04 §1.2 as written in the spec (the matrix the code must match), + "Confirmée (retour arrière)" from shipped (04 §21). */
@@ -197,5 +197,25 @@ describe('dates, totals, stock deltas', () => {
     ]);
     // an item edit 2 → 3 takes one more
     expect(stockDeltas([{ ...lines[0]!, quantity: 3 }, lines[1]!], taken)).toEqual([{ productId: 'p1', variantId: null, delta: -1 }]);
+  });
+});
+
+describe('money actions: the reason fits the order (UX-060)', () => {
+  const o = (status: OrderStatusName, paymentStatus: string, amountPaid: number, total = 5000) => ({ status, paymentStatus, amountPaid, total });
+  it('refund: nothing paid ⇒ ORDER_NOTHING_TO_REFUND (not « commande clôturée »), refunded ⇒ ORDER_ALREADY_REFUNDED, paid ⇒ allowed', () => {
+    expect(refundRefusal(o('new', 'unpaid', 0))).toEqual({ code: 'ORDER_NOTHING_TO_REFUND' });
+    expect(refundRefusal(o('confirmed', 'unpaid', 0))).toEqual({ code: 'ORDER_NOTHING_TO_REFUND' });
+    expect(refundRefusal(o('delivered', 'refunded', 2000))).toEqual({ code: 'ORDER_ALREADY_REFUNDED' });
+    expect(refundRefusal(o('delivered', 'paid', 5000))).toBeNull();
+    expect(refundRefusal(o('cancelled', 'partial', 1000))).toBeNull();
+  });
+  it('payment / payment link: ORDER_PAYMENT_LOCKED only for a closed order', () => {
+    expect(recordPaymentRefusal(o('cancelled', 'unpaid', 0))).toEqual({ code: 'ORDER_PAYMENT_LOCKED' });
+    expect(recordPaymentRefusal(o('confirmed', 'paid', 5000))).toEqual({ code: 'ORDER_ALREADY_PAID' });
+    expect(recordPaymentRefusal(o('confirmed', 'partial', 1000))).toBeNull();
+    expect(paymentLinkRefusal(o('returned', 'unpaid', 0))).toEqual({ code: 'ORDER_PAYMENT_LOCKED' });
+    expect(paymentLinkRefusal(o('new', 'paid', 5000))).toEqual({ code: 'ORDER_ALREADY_PAID' });
+    expect(paymentLinkRefusal(o('confirmed', 'refunded', 0))).toEqual({ code: 'ORDER_ALREADY_REFUNDED' });
+    expect(paymentLinkRefusal(o('new', 'unpaid', 0))).toBeNull();
   });
 });

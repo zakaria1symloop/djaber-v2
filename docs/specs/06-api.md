@@ -120,7 +120,7 @@ POST /orders/:id/address { wilayaId, communeId|communeText, isStopdesk, stopdesk
 POST /orders/:id/duplicate → new draft payload (no write) · POST /orders/bulk/print { ids[], withPrices?, twoPerPage?, lang? } → 202
 POST /orders/import (multipart CSV; columns clientName, phone, wilaya, commune?, address, items "SKU×qty;SKU×qty", note?) → 202 preview with per-row errors · POST /orders/import/:jobId/commit → 202 (idempotent; rows create Order(source=import, status=new, importJobId), client find-or-create by phone, stock checked per row)   `[FIG ORD-05 v2 "Importer"]`
 GET /orders/:id/print (PDF slip) · GET /orders/export?…filters&format=xlsx|pdf → 202
-POST /orders/:id/payment-link (P2, link valid 15 min) · POST /orders/:id/refunds (P2) · GET /payments (P2, CDC §8.1)
+POST /orders/:id/payment-link (P2, link valid 15 min; `ORDER_PAYMENT_LOCKED` closed order · `ORDER_ALREADY_PAID` · `ORDER_ALREADY_REFUNDED`) · POST /orders/:id/refunds (P2; `ORDER_NOTHING_TO_REFUND` nothing paid · `ORDER_ALREADY_REFUNDED`, UX-060) · GET /payments (P2, CDC §8.1)
 ```
 
 ### Delivery

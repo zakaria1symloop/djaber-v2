@@ -61,7 +61,7 @@ describe('notification catalogue', () => {
     expect(renderNotification('stock_out', { product: 'Robe kabyle' }, 'fr').title).toBe('Rupture : Robe kabyle');
     // rows stored before the parameters were named like the placeholders still read correctly
     expect(renderNotification('stock_low', { name: 'Théière', stock: 1, minStock: 4 }, 'fr').title).toBe('Stock faible : Théière (1 restants)');
-    expect(renderNotification('job_finished', { name: 'export', kind: 'export' }, 'fr').title).toBe('Tâche terminée : export');
+    expect(renderNotification('job_finished', { name: 'export', kind: 'export' }, 'fr').title).toBe('Tâche terminée : Export');
     expect(renderNotification('job_finished', { label: 'product-import-commit', kind: 'import', imported: 12, skipped: 3 }, 'fr')).toEqual({
       title: 'Import terminé : 12 produits importés, 3 lignes ignorées',
       body: 'Téléchargez le rapport d\'erreurs pour corriger les 3 lignes.',
@@ -69,6 +69,27 @@ describe('notification catalogue', () => {
     // member roles are shown with their label
     expect(renderNotification('member_role_changed', { role: 'admin' }, 'fr').title).toBe(`Votre rôle est maintenant ${getMessages('fr')['enum.Membership.role.admin']}`);
     expect(renderNotification('member_joined', { name: 'Amine Benali', role: 'operator' }, 'en').title).toContain(getMessages('en')['enum.Membership.role.operator']);
+  });
+
+  it('UX-059: codes carried by the parameters are shown in words, in every locale', () => {
+    for (const locale of LOCALES) {
+      const m = getMessages(locale);
+      expect(renderNotification('conversation_handoff', { client: 'Ilyes', reason: 'customer_request' }, locale).body).toContain(m['inbox.handoff.reason.human_request']);
+      expect(renderNotification('conversation_handoff', { client: 'Ilyes', reason: 'unclear_streak' }, locale).body).toContain(m['inbox.handoff.reason.unclear']);
+      const texts = [
+        renderNotification('conversation_handoff', { client: 'Ilyes', reason: 'customer_request' }, locale),
+        renderNotification('conversation_handoff', { client: 'Ilyes', reason: 'some_new_reason' }, locale),
+        renderNotification('order_status_changed', { number: 'CMD-1003', from: 'new', to: 'cancelled' }, locale),
+        renderNotification('agent_insight', { agent: 'Nadia', type: 'unknown_topic' }, locale),
+        renderNotification('customer_auto_blocked', { client: 'Ilyes', rule: 'autoBlockAfterUncollected' }, locale),
+        renderNotification('moderation_appeal_result', { name: 'Robe', decision: 'upheld' }, locale),
+        renderNotification('report_resolved', { decision: 'block_confirmed' }, locale),
+        renderNotification('job_finished', { name: 'product-labels', kind: 'labels' }, locale),
+        renderNotification('job_failed', { name: 'faq-extract', kind: 'faq_extraction' }, locale),
+      ];
+      for (const r of texts) expect(`${r.title} ${r.body}`).not.toMatch(/customer_request|some_new_reason|unknown_topic|autoBlockAfterUncollected|upheld|block_confirmed|product-labels|faq-extract|\bnew\b|cancelled/);
+    }
+    expect(renderNotification('order_status_changed', { number: 'CMD-1003', from: 'new', to: 'cancelled' }, 'fr').title).toBe('Commande #CMD-1003 : Nouvelle → Annulée');
   });
 
   it('every type has a family and a deep link', () => {

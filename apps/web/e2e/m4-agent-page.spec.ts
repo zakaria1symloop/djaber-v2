@@ -461,7 +461,7 @@ test.describe('AGT-04 configuration tab', () => {
     await saveButton(page).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: "Modifié par quelqu'un d'autre" })).toBeVisible();
-    await expect(dialog).toContainText('CONFLICT (409) · Nadia Ferhat il y a');
+    await expect(dialog).toContainText('Modifié par Nadia Ferhat il y a');
     await expect(dialog).toContainText('votre brouillon est conservé.');
     expect(sent.map((r) => bodyOf(r).version)).toEqual([b.version]);
     // nothing of mine was written
