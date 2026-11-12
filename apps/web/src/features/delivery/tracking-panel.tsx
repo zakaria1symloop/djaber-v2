@@ -123,7 +123,16 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
               <Banner tone="warning">{t('tracking.panel.stale')}</Banner>
             ) : null}
 
-            {s.status === 'failed' ? (
+            {s.status === 'failed' && s.failureHandled ? (
+              // UX-064: the order was delivered by hand / cancelled / returned meanwhile — the failure is settled
+              <div className="flex flex-col gap-1 rounded-card border border-line-hairline p-3" data-testid="panel-handled">
+                <Pill tone="neutral" className="!rounded-[4px] self-start">
+                  {t(`parcel.handled.pill.${s.failureHandled}`)}
+                </Pill>
+                <p className="text-[13px] text-text-secondary">{t(`parcel.handled.${s.failureHandled}`)}</p>
+                {s.error ? <p className="ts-label-micro !normal-case text-text-muted">{s.error.message ?? t(`error.${s.error.code}`, { message: '' })}</p> : null}
+              </div>
+            ) : s.status === 'failed' ? (
               <div className="flex flex-col gap-2 rounded-card border border-accent-alert/40 p-3" data-testid="panel-failed">
                 <div className="flex flex-wrap items-center gap-2">
                   {s.failureReason ? (

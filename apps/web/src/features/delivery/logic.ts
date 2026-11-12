@@ -1,10 +1,28 @@
 // Delivery — pure helpers of the overview, tracking panel, couriers page, send dialog, labels and the public page
 // (unit tested in logic.spec.ts). The UI never decides a shipment transition: the server `actions` do.
+import { isOrderSendClosed, type OrderSendClosedStatus } from '@djaber/shared';
 import type { Tone } from '@djaber/ui';
 import { algiersTime } from '@/features/orders/logic';
 import type { BulkSendRow, ShipmentStatus } from './contracts';
 
 export const algiersClock = algiersTime;
+
+/* ---------- LIVRAISON block of the order page (UX-064) ---------- */
+/**
+ * What the order's LIVRAISON block shows for its current parcel. `handled` (server `failureHandled`): the order was
+ * delivered / cancelled / returned while the parcel had failed — no open failure, no « Corriger et renvoyer ».
+ * `showSend`: the send / self-delivery buttons, never on a delivered / cancelled / returned order (same shared rule as
+ * the server, which greys `send_courier` / `ship_manual` with `DELIVERY_ORDER_<STATUS>` in the menus).
+ */
+export function deliveryBlockState(
+  orderStatus: string,
+  parcel: { status: ShipmentStatus; trackingNumber: string | null; failureHandled?: OrderSendClosedStatus | null } | null,
+): { handled: OrderSendClosedStatus | null; openFailure: boolean; fixable: boolean; showSend: boolean } {
+  const handled = parcel?.status === 'failed' ? (parcel.failureHandled ?? null) : null;
+  const openFailure = parcel?.status === 'failed' && !handled;
+  const fixable = openFailure && !parcel?.trackingNumber;
+  return { handled, openFailure, fixable, showSend: !isOrderSendClosed(orderStatus) && (!parcel || fixable) };
+}
 
 /* ---------- public page steps: Créée → Ramassée → En transit → En livraison → Livrée ---------- */
 const FLOW = ['sent', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered'] as const;

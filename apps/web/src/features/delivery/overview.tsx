@@ -179,6 +179,13 @@ export function DeliveryOverviewPage() {
               {t('delivery.row.notSentPill')}
             </StatusPill>
           );
+        // UX-064: failed parcel of an order delivered by hand / cancelled / returned meanwhile — not a failure to handle
+        if (sh.status === 'failed' && sh.failureHandled)
+          return (
+            <Pill tone="neutral" className="!rounded-[4px]">
+              {t(`parcel.handled.pill.${sh.failureHandled}`)}
+            </Pill>
+          );
         if (sh.status === 'failed') {
           const code = sh.error?.code ?? (sh.failureReason ? null : sh.lastError);
           return (

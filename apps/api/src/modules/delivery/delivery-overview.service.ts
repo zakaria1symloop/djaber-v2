@@ -3,7 +3,7 @@
 // `GET /delivery/overview` (KPI tiles, tab counts, the first failures and "Sans mouvement" rows, per-courier figures —
 // also the data source of Analytics › Livraison, DLV-11). Raw SQL with the workspace filter written explicitly.
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { DELIVERY_TABS, SHIPMENT_STALE_AFTER_DAYS, type ActionDescriptor, type DeliveryOverviewView, type DeliveryRowView, type DeliveryTab, type ShipmentsQuery } from '@djaber/shared';
+import { DELIVERY_TABS, failureHandledAs, ORDER_SEND_CLOSED_STATUSES, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, type ActionDescriptor, type DeliveryOverviewView, type DeliveryRowView, type DeliveryTab, type ShipmentsQuery } from '@djaber/shared';
 import { Prisma, prisma, TenantContext, type Shipment } from '@djaber/db';
 import { AppException } from '../../core/errors/app.exception';
 import { page, type Page } from '../../core/http/pagination';
@@ -28,6 +28,11 @@ const SORTS: Record<string, Prisma.Sql> = {
   orderNumber: Prisma.sql`o."number"`,
 };
 const list = <T>(values: readonly T[], cast: string) => Prisma.join(values.map((v) => Prisma.sql`${v}::${Prisma.raw(cast)}`));
+/**
+ * UX-064: a `failed` parcel is a failure to handle only while its order can still be sent — once the order is delivered,
+ * cancelled or returned it leaves « Échecs » (tab, count, filter) and the overview failures (derived, no migration).
+ */
+const FAILED_OPEN = Prisma.sql`(s."status" = 'failed' AND o."status" NOT IN (${list(ORDER_SEND_CLOSED_STATUSES, '"OrderStatus"')}))`;
 
 @Injectable()
 export class DeliveryOverviewService implements OnModuleInit {
@@ -75,9 +80,10 @@ export class DeliveryOverviewService implements OnModuleInit {
     const ws = TenantContext.workspaceId();
     const and: Prisma.Sql[] = [Prisma.sql`o."workspaceId" = ${ws}::uuid`, Prisma.sql`(s."id" IS NOT NULL OR o."status" IN ('confirmed','preparing'))`];
     if (q.shipmentStatus?.length) {
-      const statuses = q.shipmentStatus.filter((x) => x !== 'not_sent');
+      const statuses = q.shipmentStatus.filter((x) => x !== 'not_sent' && x !== 'failed');
       const or: Prisma.Sql[] = [];
       if (q.shipmentStatus.includes('not_sent')) or.push(NOT_SENT);
+      if (q.shipmentStatus.includes('failed')) or.push(FAILED_OPEN);
       if (statuses.length) or.push(Prisma.sql`s."status" IN (${list(statuses, '"ShipmentStatus"')})`);
       and.push(Prisma.sql`(${Prisma.join(or, ' OR ')})`);
     }
@@ -149,7 +155,7 @@ export class DeliveryOverviewService implements OnModuleInit {
       const sendable = ['confirmed', 'preparing'].includes(o.status) && !active;
       const orderActs: ActionDescriptor[] = [];
       const push = (key: string, permitted: boolean, reasonCode: string | null, primary = false) => orderActs.push({ key, enabled: permitted && !reasonCode, ...(!permitted ? { reasonCode: 'FORBIDDEN' } : reasonCode ? { reasonCode } : {}), ...(primary ? { primary: true } : {}) });
-      push('send_courier', can(role, 'delivery.send'), active && active.status !== 'delivered' ? 'DELIVERY_ORDER_ALREADY_SENT' : o.status === 'new' ? 'DELIVERY_ORDER_NOT_CONFIRMED' : !sendable ? 'ORDER_INVALID_TRANSITION' : couriers ? null : 'DELIVERY_NO_COURIER', sendable && couriers > 0);
+      push('send_courier', can(role, 'delivery.send'), sendClosedCode(o.status) ?? (active && active.status !== 'delivered' ? 'DELIVERY_ORDER_ALREADY_SENT' : o.status === 'new' ? 'DELIVERY_ORDER_NOT_CONFIRMED' : !sendable ? 'ORDER_INVALID_TRANSITION' : couriers ? null : 'DELIVERY_NO_COURIER'), sendable && couriers > 0);
       push('ship_manual', can(role, 'orders.write'), checkTransition(state, 'shipped', { role })?.code ?? null);
       const shipActs = s ? shipmentActions(s, o, { now }) : [];
       if (!s) {
@@ -197,6 +203,7 @@ export class DeliveryOverviewService implements OnModuleInit {
       lastSyncedAt: s.lastSyncedAt?.toISOString() ?? null,
       noMovement: isNoMovement(s, now),
       returnPending: isReturnPending(s, orderStatus),
+      failureHandled: failureHandledAs(s.status, orderStatus),
       createdAt: s.createdAt.toISOString(),
     };
   }
@@ -211,7 +218,7 @@ export class DeliveryOverviewService implements OnModuleInit {
     const base = this.where({}, now);
     const [tabs] = await prisma.$queryRaw<Record<string, bigint>[]>`
       SELECT
-        count(*) FILTER (WHERE s."status" = 'failed') AS failed,
+        count(*) FILTER (WHERE ${FAILED_OPEN}) AS failed,
         count(*) FILTER (WHERE s."status" IN ('sent','picked_up','in_transit') AND ${lastEvent} < ${stale5}) AS no_movement,
         count(*) FILTER (WHERE ${NOT_SENT}) AS to_send,
         count(*) FILTER (WHERE s."status" IN ('pending','sent','picked_up','in_transit','out_for_delivery')) AS in_transit,
@@ -219,7 +226,7 @@ export class DeliveryOverviewService implements OnModuleInit {
         count(*) AS "all",
         count(*) FILTER (WHERE s."status" IN ('pending','sent')) AS pending_pickup,
         count(*) FILTER (WHERE s."status" IN ('picked_up','in_transit','out_for_delivery')) AS moving,
-        count(*) FILTER (WHERE s."status" = 'failed' AND s."trackingNumber" IS NOT NULL AND s."updatedAt" >= ${today}) AS failed_today
+        count(*) FILTER (WHERE ${FAILED_OPEN} AND s."trackingNumber" IS NOT NULL AND s."updatedAt" >= ${today}) AS failed_today
       FROM "Order" o ${LATEST} WHERE ${base}`;
     const [closed] = await prisma.$queryRaw<{ delivered: bigint; returned: bigint; avg_days: number | null }[]>`
       SELECT count(*) FILTER (WHERE "status" = 'delivered') AS delivered,

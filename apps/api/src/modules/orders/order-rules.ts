@@ -1,6 +1,6 @@
 // 04 §1.2 (+ D14, §21) status machine, §1.3 call outcomes, §1.4 payment / COD, §3 side-effect plan — pure functions,
 // no database. `OrderEffects` executes the plans; the unit tests (`order-rules.spec.ts`) cover every pair of the matrix.
-import { canTransition, derivePaymentStatus, ORDER_ADDRESS_REQUIRED_FOR, ORDER_BACKDATE_MAX_DAYS, ORDER_TERMINAL_STATUSES, type CallResultName, type CancelReasonName, type OrderStatusName } from '@djaber/shared';
+import { canTransition, derivePaymentStatus, ORDER_ADDRESS_REQUIRED_FOR, ORDER_BACKDATE_MAX_DAYS, ORDER_TERMINAL_STATUSES, sendClosedCode, type CallResultName, type CancelReasonName, type OrderStatusName } from '@djaber/shared';
 import type { ErrorCode } from '@djaber/shared';
 
 export type Role = 'owner' | 'admin' | 'operator' | undefined;
@@ -21,9 +21,13 @@ const ADMIN_UP: Role[] = ['owner', 'admin'];
 
 /**
  * Can `actor` move the order to `to`? `null` = allowed. `system` = courier sync / AI (no role check).
- * Order of the checks: terminal → matrix → pickup guard → role → address.
+ * Order of the checks: shipping a closed order → terminal → matrix → pickup guard → role → address.
+ * UX-064: `→ shipped` (« Marquer expédiée (livraison propre) ») on a delivered / cancelled / returned order is refused with
+ * the readable `DELIVERY_ORDER_<STATUS>` (same reason as the courier send), never « Passage delivered → shipped ».
  */
 export const checkTransition = (o: OrderState, to: OrderStatusName, actor: { role: Role; system?: boolean }): Refusal | null => {
+  const closed = to === 'shipped' ? sendClosedCode(o.status) : null;
+  if (closed) return { code: closed };
   if (isTerminal(o.status)) return { code: 'ORDER_TERMINAL' };
   if (o.status === to) return { code: 'ORDER_INVALID_TRANSITION', params: { from: o.status, to } };
   // cancelling with a live courier parcel: cancel the parcel first or mark returned (04 §9, 06 §8.5)

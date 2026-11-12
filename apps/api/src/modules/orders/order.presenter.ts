@@ -1,6 +1,6 @@
 // api-contract §2, §3.7 — read models of an order (list row, detail, WS summary) and the `Actions ⌄` descriptors
 // (D42: current-state items, first = primary, forbidden ones greyed with their code; LST-01 shortcuts).
-import { ORDER_READ_ONLY_STATUSES, SHIPMENT_STALE_AFTER_DAYS, type ActionDescriptor, type AddressView, type ClientRefView, type OrderListItemView, type OrderStatusName, type OrderSummary, type OrderUserRef, type OrderView, type SourceBadge } from '@djaber/shared';
+import { ORDER_READ_ONLY_STATUSES, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, type ActionDescriptor, type AddressView, type ClientRefView, type OrderListItemView, type OrderStatusName, type OrderSummary, type OrderUserRef, type OrderView, type SourceBadge } from '@djaber/shared';
 import { TenantContext, type Order, type Prisma } from '@djaber/db';
 import { can, type MerchantPermission } from '../../core/rbac/permission-matrix';
 import { thumbUrlOf } from '../catalog/product-image.util';
@@ -127,7 +127,8 @@ export const orderActions = (o: Pick<Order, 'status' | 'deliveryStatus' | 'payme
     act('confirm', 'orders.write', { reasonCode: o.status === 'new' ? t('confirmed') === 'ORDER_ADDRESS_REQUIRED' ? null : t('confirmed') : 'ORDER_INVALID_TRANSITION', primary: primaryKey === 'confirm', shortcut: 'Enter' }),
     act('prepare', 'orders.write', { reasonCode: t('preparing'), primary: primaryKey === 'prepare', shortcut: primaryKey === 'prepare' ? 'Enter' : undefined }),
     // M6: enabled from confirmed / preparing once an active courier account exists (DELIVERY_NO_COURIER otherwise)
-    act('send_courier', 'delivery.send', { reasonCode: activeShipment && activeShipment.status !== 'delivered' ? 'DELIVERY_ORDER_ALREADY_SENT' : o.status === 'new' ? 'DELIVERY_ORDER_NOT_CONFIRMED' : !['confirmed', 'preparing'].includes(o.status) ? 'ORDER_INVALID_TRANSITION' : ctx.hasCourier ? null : 'DELIVERY_NO_COURIER', primary: primaryKey === 'send_courier' }),
+    // UX-064: a delivered / cancelled / returned order is never sent again (readable DELIVERY_ORDER_<STATUS>, same as the service)
+    act('send_courier', 'delivery.send', { reasonCode: sendClosedCode(o.status) ?? (activeShipment && activeShipment.status !== 'delivered' ? 'DELIVERY_ORDER_ALREADY_SENT' : o.status === 'new' ? 'DELIVERY_ORDER_NOT_CONFIRMED' : !['confirmed', 'preparing'].includes(o.status) ? 'ORDER_INVALID_TRANSITION' : ctx.hasCourier ? null : 'DELIVERY_NO_COURIER'), primary: primaryKey === 'send_courier' }),
     act('ship_manual', 'orders.write', { reasonCode: t('shipped'), primary: primaryKey === 'ship_manual', shortcut: primaryKey === 'ship_manual' ? 'Enter' : undefined }),
     act('deliver', 'orders.write', { reasonCode: t('delivered'), primary: primaryKey === 'deliver', shortcut: primaryKey === 'deliver' ? 'Enter' : undefined }),
     act('return', o.status === 'delivered' ? 'orders.money' : 'orders.write', { reasonCode: t('returned') }),

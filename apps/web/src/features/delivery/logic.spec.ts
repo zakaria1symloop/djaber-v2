@@ -1,9 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import { parseListState } from '@/lib/list-state';
-import { bulkRowState, courierErrorField, credentialErrors, daysLabel, daysSince, isHttpsUrl, parcelSteps, parseWeight, shipmentTone, syncWait, waitLabel } from './logic';
+import { bulkRowState, courierErrorField, credentialErrors, daysLabel, daysSince, deliveryBlockState,isHttpsUrl, parcelSteps, parseWeight, shipmentTone, syncWait, waitLabel } from './logic';
 import { currentTab, DELIVERY_LIST, deliveryChips, panelFilterCount, shipmentsQuery, TAB_PRESETS } from './overview-spec';
 
 const params = (q: string) => new URLSearchParams(q);
+
+describe('UX-064 — LIVRAISON block of the order page', () => {
+  const failedSend = { status: 'failed' as const, trackingNumber: null };
+  it('confirmed order with a failed send: open failure, « Corriger et renvoyer » offered', () => {
+    expect(deliveryBlockState('confirmed', { ...failedSend, failureHandled: null })).toEqual({ handled: null, openFailure: true, fixable: true, showSend: true });
+  });
+  it('order delivered by hand after the failed send (#CMD-1008): failure handled, no send / self-delivery buttons', () => {
+    expect(deliveryBlockState('delivered', { ...failedSend, failureHandled: 'delivered' })).toEqual({ handled: 'delivered', openFailure: false, fixable: false, showSend: false });
+  });
+  it('cancelled / returned order: handled the same way', () => {
+    expect(deliveryBlockState('cancelled', { ...failedSend, failureHandled: 'cancelled' }).handled).toBe('cancelled');
+    expect(deliveryBlockState('returned', { ...failedSend, failureHandled: 'returned' }).showSend).toBe(false);
+  });
+  it('no parcel: the send buttons follow the order — shown while open, never on a delivered / cancelled / returned order', () => {
+    expect(deliveryBlockState('confirmed', null).showSend).toBe(true);
+    expect(deliveryBlockState('new', null).showSend).toBe(true);
+    expect(deliveryBlockState('delivered', null).showSend).toBe(false);
+    expect(deliveryBlockState('cancelled', null).showSend).toBe(false);
+  });
+  it('a courier failure (parcel created) is never « fixable » by a resend; a sent parcel hides the send buttons', () => {
+    expect(deliveryBlockState('shipped', { status: 'failed', trackingNumber: 'ZR-1', failureHandled: null })).toEqual({ handled: null, openFailure: true, fixable: false, showSend: false });
+    expect(deliveryBlockState('shipped', { status: 'sent', trackingNumber: 'ZR-1', failureHandled: null }).showSend).toBe(false);
+  });
+});
 
 describe('public parcel steps', () => {
   it('in transit: the first two are done, the third is current', () => {

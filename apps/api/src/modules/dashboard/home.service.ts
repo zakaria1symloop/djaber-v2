@@ -2,7 +2,7 @@
 // RAPPEL · TÂCHE, sorted by urgency then age, max 8), KPI tiles with the 04 §4 named figures over 30 days (Africa/Algiers),
 // quick actions, my pages, Get Started, credits and banners. Everything computed live from the rows.
 import { Injectable } from '@nestjs/common';
-import { HOME_QUEUE_KINDS, HOME_QUEUE_MAX, type HomeBannerKind, type HomeKpi, type HomeQueueItem, type HomeQueueKind, type HomeView } from '@djaber/shared';
+import { HOME_QUEUE_KINDS, HOME_QUEUE_MAX, ORDER_SEND_CLOSED_STATUSES, type HomeBannerKind, type HomeKpi, type HomeQueueItem, type HomeQueueKind, type HomeView } from '@djaber/shared';
 import { prisma, TenantContext } from '@djaber/db';
 import { can, type MerchantPermission } from '../../core/rbac/permission-matrix';
 import { algiersClock, algiersDayEnd, algiersDay } from '../../core/time/algiers';
@@ -43,7 +43,9 @@ export class HomeService {
     const endOfToday = algiersDayEnd(algiersDay(now));
     const [conversations, failed, low, reconnect, insights, callbacks, jobs] = await Promise.all([
       prisma.conversation.findMany({ where: { status: 'needs_human', deletedAt: null }, include: { client: { select: { name: true, phone: true } }, agent: { select: { name: true } } }, orderBy: { lastMessageAt: 'asc' }, take: 50 }),
-      prisma.shipment.findMany({ where: { status: 'failed' }, include: { order: { select: { id: true, number: true, clientName: true } } }, orderBy: { updatedAt: 'asc' }, take: 50 }),
+      // UX-064: a failed parcel is to handle only while its order can still be sent and it is the order's latest parcel
+      // (an order delivered / cancelled / returned meanwhile, or sent again, has handled it) — same rule as Livraison › Échecs
+      prisma.shipment.findMany({ where: { status: 'failed', order: { status: { notIn: [...ORDER_SEND_CLOSED_STATUSES] } } }, include: { order: { select: { id: true, number: true, clientName: true, shipments: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1, select: { id: true } } } } }, orderBy: { updatedAt: 'asc' }, take: 50 }),
       this.stock.lowStockLines(50),
       prisma.channel.findMany({ where: { status: 'needs_reconnect' }, select: { id: true, name: true, platform: true, updatedAt: true } }),
       prisma.agentInsight.findMany({ where: { status: 'pending' }, include: { agent: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' }, take: 50 }),
@@ -56,7 +58,7 @@ export class HomeService {
       const ctx = contextOf(c) as { handoff?: { at?: string; reason?: string }; handoffReason?: string };
       items.push({ key: `conversation:${c.id}`, kind: 'conversation', urgency: 0, title: c.client?.name ?? '', subtitle: c.lastMessagePreview, since: ctx.handoff?.at ?? (c.lastMessageAt ?? c.updatedAt).toISOString(), path: `/inbox/${c.id}`, ref: { conversationId: c.id, ...(ctx.handoff?.reason || ctx.handoffReason ? { reason: String(ctx.handoff?.reason ?? ctx.handoffReason) } : {}) } });
     }
-    for (const s of failed) items.push({ key: `parcel:${s.id}`, kind: 'parcel', urgency: 0, title: `${s.order.number} · ${s.order.clientName}`, subtitle: s.failureReason, since: s.updatedAt.toISOString(), path: parcelPath({ orderId: s.order.id, shipmentId: s.id }), ref: { shipmentId: s.id, orderId: s.order.id } });
+    for (const s of failed) if (s.order.shipments[0]?.id === s.id) items.push({ key: `parcel:${s.id}`, kind: 'parcel', urgency: 0, title: `${s.order.number} · ${s.order.clientName}`, subtitle: s.failureReason, since: s.updatedAt.toISOString(), path: parcelPath({ orderId: s.order.id, shipmentId: s.id }), ref: { shipmentId: s.id, orderId: s.order.id } });
     for (const l of low) items.push({ key: `stock:${l.productId}:${l.variantId ?? ''}`, kind: 'stock', urgency: l.state === 'out' ? 0 : 1, title: l.variantName ? `${l.name} · ${l.variantName}` : l.name, subtitle: `${l.stock} / ${l.minStock}`, since: now.toISOString(), path: '/products?lowStock=1', ref: { productId: l.productId, ...(l.variantId ? { variantId: l.variantId } : {}) } });
     for (const c of reconnect) items.push({ key: `page:${c.id}`, kind: 'page', urgency: 0, title: c.name, subtitle: c.platform, since: c.updatedAt.toISOString(), path: `/channels/${c.id}`, ref: { channelId: c.id } });
     for (const i of insights) items.push({ key: `insight:${i.id}`, kind: 'insight', urgency: i.type === 'error' ? 1 : 2, title: i.agent.name, subtitle: i.type, since: i.createdAt.toISOString(), path: `/agents/${i.agent.id}/insights`, ref: { insightId: i.id, agentId: i.agent.id, conversationId: i.conversationId } });
@@ -73,19 +75,30 @@ export class HomeService {
     return { items: [...open, ...handled], total: items.length, counts };
   }
 
-  /** Cards handled by a member during the last 24 h: insights resolved, callbacks done, failed parcels dealt with, handoffs answered. */
+  /**
+   * Cards handled by a member during the last 24 h: insights resolved, callbacks done, failed parcels dealt with (courier
+   * failure re-attempted / returned, or — UX-064 — the order delivered, cancelled or returned while its latest parcel had
+   * failed), handoffs answered.
+   */
   private async handled(now: Date): Promise<HomeQueueItem[]> {
     const ws = TenantContext.workspaceId();
     const since = new Date(now.getTime() - DAY);
     const name = (u: { firstName: string | null; lastName: string | null } | null | undefined) => (u ? `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() : '');
     const by = (id: string | null | undefined, u: { firstName: string | null; lastName: string | null } | null | undefined) => (id ? { id, name: name(u) } : null);
-    const [insights, history, convs] = await Promise.all([
+    const [insights, history, closed, convs] = await Promise.all([
       prisma.agentInsight.findMany({ where: { status: { in: ['resolved', 'dismissed'] }, resolvedAt: { gte: since } }, include: { agent: { select: { id: true, name: true } }, resolvedBy: { select: { id: true, firstName: true, lastName: true } } }, orderBy: { resolvedAt: 'desc' }, take: HOME_QUEUE_MAX }),
       prisma.$queryRaw<{ orderId: string; number: string; clientName: string; field: string; actorId: string | null; at: Date; firstName: string | null; lastName: string | null }[]>`
         SELECT h."orderId", o."number", o."clientName", h."field", h."actorId", h."at", u."firstName", u."lastName"
         FROM "OrderStatusHistory" h JOIN "Order" o ON o."id" = h."orderId" LEFT JOIN "User" u ON u."id" = h."actorId"
         WHERE o."workspaceId" = ${ws}::uuid AND h."at" >= ${since} AND h."actorType" = 'user'
           AND ((h."field" = 'confirmationStatus' AND h."from" = 'callback') OR (h."field" = 'deliveryStatus' AND h."from" = 'failed'))
+        ORDER BY h."at" DESC LIMIT ${HOME_QUEUE_MAX}`,
+      prisma.$queryRaw<{ orderId: string; number: string; clientName: string; actorType: string; actorId: string | null; at: Date; firstName: string | null; lastName: string | null }[]>`
+        SELECT h."orderId", o."number", o."clientName", h."actorType", h."actorId", h."at", u."firstName", u."lastName"
+        FROM "OrderStatusHistory" h JOIN "Order" o ON o."id" = h."orderId" LEFT JOIN "User" u ON u."id" = h."actorId" AND h."actorType" = 'user'
+        WHERE o."workspaceId" = ${ws}::uuid AND h."at" >= ${since} AND h."field" = 'status'
+          AND h."to" IN ('delivered','cancelled','returned') AND o."status"::text = h."to"
+          AND (SELECT x."status" FROM "Shipment" x WHERE x."orderId" = o."id" ORDER BY x."createdAt" DESC, x."id" DESC LIMIT 1) = 'failed'
         ORDER BY h."at" DESC LIMIT ${HOME_QUEUE_MAX}`,
       prisma.$queryRaw<{ id: string; client: string | null; at: Date; uid: string | null; firstName: string | null; lastName: string | null }[]>`
         SELECT DISTINCT ON (c."id") c."id", cl."name" client, m."sentAt" at, u."id" uid, u."firstName", u."lastName"
@@ -100,6 +113,7 @@ export class HomeService {
       const kind = h.field === 'confirmationStatus' ? 'callback' : 'parcel';
       out.push({ key: `${kind}:${h.orderId}:handled`, kind, urgency: 2, title: `${h.number} · ${h.clientName}`, subtitle: null, since: h.at.toISOString(), path: kind === 'callback' ? `/orders/${h.orderId}#calls` : `/orders/${h.orderId}#delivery`, ref: { orderId: h.orderId }, handled: { at: h.at.toISOString(), by: by(h.actorId, h) } });
     }
+    for (const h of closed) out.push({ key: `parcel:${h.orderId}:handled`, kind: 'parcel', urgency: 2, title: `${h.number} · ${h.clientName}`, subtitle: null, since: h.at.toISOString(), path: `/orders/${h.orderId}#delivery`, ref: { orderId: h.orderId }, handled: { at: h.at.toISOString(), by: h.actorType === 'user' ? by(h.actorId, h) : null } });
     for (const c of convs) out.push({ key: `conversation:${c.id}:handled`, kind: 'conversation', urgency: 2, title: c.client ?? '', subtitle: null, since: c.at.toISOString(), path: `/inbox/${c.id}`, ref: { conversationId: c.id }, handled: { at: c.at.toISOString(), by: by(c.uid, c) } });
     const seen = new Set<string>();
     return out

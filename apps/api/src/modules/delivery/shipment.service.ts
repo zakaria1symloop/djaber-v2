@@ -4,7 +4,7 @@
 // call a courier: they write the Shipment row + an outbox job in one transaction (CLAUDE.md rule 4).
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import { courierWilayaId, TRACKING_SYNC_COOLDOWN_S, type BulkSendInput, type BulkSendResult, type BulkSendRowResult, type CancelShipmentInput, type CreateShipmentInput, type MarkDeliveredInput, type MarkFailedInput, type MarkReturnedInput, type ShipmentView } from '@djaber/shared';
+import { courierWilayaId, sendClosedCode, TRACKING_SYNC_COOLDOWN_S, type BulkSendInput, type BulkSendResult, type BulkSendRowResult, type CancelShipmentInput, type CreateShipmentInput, type MarkDeliveredInput, type MarkFailedInput, type MarkReturnedInput, type ShipmentView } from '@djaber/shared';
 import { prisma, TenantContext, type Job, type Prisma, type Shipment, type Tx } from '@djaber/db';
 import { ConfigService } from '../../core/config/config.service';
 import { AppException, notFound } from '../../core/errors/app.exception';
@@ -137,12 +137,16 @@ export class ShipmentService implements OnModuleInit {
   }
 
   // --- send (DLV-05) ----------------------------------------------------------------------------------------------------------
-  /** Guards of 05-integrations §2.6 on a row-locked order. */
+  /**
+   * Guards of 05-integrations §2.6 on a row-locked order. UX-064 (04 §22 "Order closed"): a delivered / cancelled /
+   * returned order is refused first, with the readable `DELIVERY_ORDER_<STATUS>` (send, fix and resend, change courier).
+   */
   private checkSendable(o: LockedOrder) {
+    const closed = sendClosedCode(o.status);
+    if (closed) throw new AppException(closed);
     const active = this.orders.activeShipment(o);
     if (active) throw new AppException('DELIVERY_ORDER_ALREADY_SENT');
     if (o.status === 'new') throw new AppException('DELIVERY_ORDER_NOT_CONFIRMED');
-    if (o.status === 'cancelled' || o.status === 'returned') throw new AppException('ORDER_TERMINAL');
     if (!SEND_STATUSES.includes(o.status)) throw new AppException('ORDER_INVALID_TRANSITION', { from: o.status, to: 'shipped' });
   }
 
@@ -419,12 +423,13 @@ export class ShipmentService implements OnModuleInit {
     await this.orders.inTx(async (tx) => {
       const o = await this.orders.lock(tx, head.orderId);
       const s = await this.fx.lockShipment(tx, id);
+      const closed = sendClosedCode(o.status);
+      if (closed) throw new AppException(closed);
       if (s.status === 'pending' && errorCodeOf(s.lastError) === 'COURIER_UNAVAILABLE') {
         await this.enqueueCreate(tx, s, s.attempts + 1, 0, `m${Date.now()}`);
         return;
       }
       if (!isSendFailure(s)) throw new AppException('CONFLICT');
-      if (['cancelled', 'returned'].includes(o.status)) throw new AppException('ORDER_TERMINAL');
       if (this.orders.activeShipment(o)) throw new AppException('DELIVERY_ORDER_ALREADY_SENT');
       if (!SEND_STATUSES.includes(o.status)) throw new AppException('ORDER_INVALID_TRANSITION', { from: o.status, to: 'shipped' });
       const account = await this.accounts.resolveForSend(s.courierAccountId, tx);
@@ -444,7 +449,8 @@ export class ShipmentService implements OnModuleInit {
     const newId = await this.orders.inTx(async (tx) => {
       let o = await this.orders.lock(tx, head.orderId);
       const s = await this.fx.lockShipment(tx, id);
-      if (['cancelled', 'returned'].includes(o.status)) throw new AppException('ORDER_TERMINAL');
+      const closed = sendClosedCode(o.status);
+      if (closed) throw new AppException(closed);
       const queued = s.status === 'pending';
       const manualSent = s.provider === 'manual' && s.status === 'sent';
       if (!isSendFailure(s) && !queued && !manualSent) throw new AppException('COURIER_CANCEL_NOT_ALLOWED');

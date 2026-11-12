@@ -1,6 +1,6 @@
 // api-contract §3.8 `ShipmentDto` + the parcel `Actions ⌄` (04 §22, FL-25): pure functions shared by the order page
 // (orders presenter) and the delivery screens. No database access.
-import { SHIPMENT_MAX_ATTEMPTS, SHIPMENT_NO_MOVEMENT_STATUSES, SHIPMENT_STALE_AFTER_DAYS, SHIPMENT_TERMINAL_STATUSES, type ActionDescriptor, type AddressView, type ClientRefView, type ShipmentErrorView, type ShipmentEventView, type ShipmentView } from '@djaber/shared';
+import { failureHandledAs, sendClosedCode, SHIPMENT_MAX_ATTEMPTS, SHIPMENT_NO_MOVEMENT_STATUSES, SHIPMENT_STALE_AFTER_DAYS, SHIPMENT_TERMINAL_STATUSES, type ActionDescriptor, type AddressView, type ClientRefView, type ShipmentErrorView, type ShipmentEventView, type ShipmentView } from '@djaber/shared';
 import { TenantContext, type Shipment } from '@djaber/db';
 import { can, type MerchantPermission } from '../../core/rbac/permission-matrix';
 import { capabilitiesOf } from './adapters/courier-adapter';
@@ -64,6 +64,8 @@ export const isSendFailure = (s: Pick<Shipment, 'status' | 'trackingNumber'>) =>
 /**
  * Parcel menu (04 §22): sync · label · retry (failed send) · retry_delivery · change_courier · cancel · mark_failed ·
  * mark_delivered · mark_returned · open_order · call_client. At 3 failed attempts "mark_returned" becomes primary.
+ * UX-064: on an order delivered / cancelled / returned the send items (retry, change_courier) are greyed with the
+ * readable `DELIVERY_ORDER_<STATUS>` reason, the same refusal as the services.
  */
 export const shipmentActions = (s: Pick<Shipment, 'provider' | 'status' | 'trackingNumber' | 'lastError' | 'deliveryAttempts'> & { courierAccount?: { baseUrl?: string } | null }, order: { status: string }, o: { syncAvailableAt?: string | null; now?: number } = {}): ActionDescriptor[] => {
   const caps = capabilitiesOf(s.provider, s.courierAccount?.baseUrl);
@@ -71,7 +73,8 @@ export const shipmentActions = (s: Pick<Shipment, 'provider' | 'status' | 'track
   const terminal = (SHIPMENT_TERMINAL_STATUSES as readonly string[]).includes(s.status);
   const sendFailed = isSendFailure(s);
   const created = !!s.trackingNumber && s.status !== 'pending';
-  const orderClosed = ['cancelled', 'returned'].includes(order.status);
+  const closedCode = sendClosedCode(order.status);
+  const orderClosed = !!closedCode;
   const now = o.now ?? Date.now();
   const coolingDown = !!o.syncAvailableAt && new Date(o.syncAvailableAt).getTime() > now;
   const queued = s.status === 'pending' && errorCodeOf(s.lastError) === 'COURIER_UNAVAILABLE';
@@ -80,9 +83,9 @@ export const shipmentActions = (s: Pick<Shipment, 'provider' | 'status' | 'track
   const list: ActionDescriptor[] = [
     act('sync', 'delivery.send', { reasonCode: !courier ? 'TRACKING_NOT_FOUND' : !created ? 'SHIPMENT_NOT_CREATED' : terminal ? 'ORDER_TERMINAL' : coolingDown ? 'TRACKING_SYNC_RATE_LIMITED' : null }),
     act('label', 'delivery.send', { reasonCode: !created || s.status === 'cancelled' ? 'SHIPMENT_NOT_CREATED' : null }),
-    act('retry', 'delivery.send', { reasonCode: sendFailed || queued ? (orderClosed ? 'ORDER_TERMINAL' : null) : 'CONFLICT', primary: sendFailed && !orderClosed }),
+    act('retry', 'delivery.send', { reasonCode: closedCode ?? (sendFailed || queued ? null : 'CONFLICT'), primary: sendFailed && !orderClosed }),
     act('retry_delivery', 'delivery.send', { reasonCode: s.status !== 'failed' || sendFailed ? 'CONFLICT' : caps.retry ? null : 'COURIER_CANCEL_NOT_ALLOWED', primary: s.status === 'failed' && !sendFailed && caps.retry && !proposeReturn }),
-    act('change_courier', 'delivery.send', { reasonCode: orderClosed ? 'ORDER_TERMINAL' : sendFailed || queued || (s.status === 'sent' && !courier) ? null : 'COURIER_CANCEL_NOT_ALLOWED' }),
+    act('change_courier', 'delivery.send', { reasonCode: closedCode ? closedCode : sendFailed || queued || (s.status === 'sent' && !courier) ? null : 'COURIER_CANCEL_NOT_ALLOWED' }),
     act('cancel', 'delivery.send', { reasonCode: !['pending', 'sent'].includes(s.status) ? 'COURIER_CANCEL_NOT_ALLOWED' : s.status === 'sent' && courier && !caps.cancel ? 'COURIER_CANCEL_NOT_ALLOWED' : null }),
     act('mark_failed', 'delivery.send', { reasonCode: ['sent', 'picked_up', 'in_transit', 'out_for_delivery'].includes(s.status) ? null : 'CONFLICT' }),
     act('mark_delivered', 'orders.write', { reasonCode: order.status === 'delivered' || terminal || !inFlight ? 'CONFLICT' : null }),
@@ -132,6 +135,7 @@ export const presentShipment = (s: ShipmentRow, order: ShipmentOrderLike, client
     lastEventAt: (s.lastEventAt ?? s.createdAt).toISOString(),
     noMovement: isNoMovement(s, now),
     returnPending: isReturnPending(s, order.status),
+    failureHandled: failureHandledAs(s.status, order.status),
     labelSource: s.labelUrl || (caps.label && s.provider !== 'manual') ? 'courier' : 'djaber',
     events: s.events.map(presentShipmentEvent),
     createdAt: s.createdAt.toISOString(),

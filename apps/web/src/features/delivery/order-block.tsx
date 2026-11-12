@@ -2,7 +2,8 @@
 // LIVRAISON block of the order page (Figma "ORD-06 — Order page — new" delivery block variants, 12 §20): NON ENVOYÉE
 // ("Envoyer au transporteur" follows the `send_courier` descriptor, greyed with its reason, e.g. "Disponible une fois la
 // commande confirmée") · envoi… (parcel `pending`; queued while the courier is down) · envoyée + suivi (timeline,
-// Actualiser, bordereau, annuler le colis) · échec + actions · retournée. The parcel menu = `ShipmentView.actions`.
+// Actualiser, bordereau, annuler le colis) · échec + actions · échec réglé (UX-064: the order was delivered by hand /
+// cancelled / returned meanwhile — no send button) · retournée. The parcel menu = `ShipmentView.actions`.
 import { formatDate, formatMoney, type AppLocale } from '@djaber/shared';
 import { ActionsMenu, Button, DetailRows, FormAlert, Ltr, OrderBlock, Pill, StatusPill, TrackingTimeline, type TrackingStep } from '@djaber/ui';
 import { Loader2 } from 'lucide-react';
@@ -14,7 +15,7 @@ import { actionState } from '@/lib/actions';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { relativeTime } from '@/lib/time';
 import { SHIPMENT_ACTION } from './action-keys';
-import { algiersClock, shipmentTone, waitLabel } from './logic';
+import { algiersClock, deliveryBlockState, shipmentTone, waitLabel } from './logic';
 import { parcelOfShipment, type useParcelActions } from './use-parcel-actions';
 
 const MAX_ATTEMPTS = 3;
@@ -44,14 +45,18 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
         tone: i === 0 ? shipmentTone(e.mappedStatus) : undefined,
       }))
     : [];
-  const fixable = active && active.status === 'failed' && !active.trackingNumber;
+  const { handled, openFailure, fixable, showSend } = deliveryBlockState(order.status, active);
 
   return (
     <OrderBlock
       label={t('orders.page.deliveryBlock')}
       end={
         <div className="flex items-center gap-2">
-          {active ? (
+          {handled ? (
+            <Pill tone="neutral" className="!rounded-[4px]">
+              {t(`parcel.handled.pill.${handled}`)}
+            </Pill>
+          ) : active ? (
             <StatusPill enumKey="Shipment.status" value={active.status} className="!rounded-[4px]">
               {t(`enum.Shipment.status.${active.status}`)}
             </StatusPill>
@@ -63,7 +68,7 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
       }
       bodyClassName="flex flex-col gap-3 p-4"
       data-testid="delivery-block"
-      data-parcel={active ? (queued ? 'queued' : active.status) : 'none'}
+      data-parcel={active ? (queued ? 'queued' : handled ? 'handled' : active.status) : 'none'}
     >
       <DetailRows
         rows={[
@@ -100,7 +105,13 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
         </p>
       ) : null}
 
-      {active?.status === 'failed' ? (
+      {handled ? (
+        <div className="flex flex-col gap-1 rounded-card border border-line-hairline p-3" data-testid="parcel-handled">
+          <p className="text-[13px] text-text-secondary">{t(`parcel.handled.${handled}`)}</p>
+          {active?.error ? <p className="ts-label-micro !normal-case text-text-muted">{active.error.message ?? t(`error.${active.error.code}`, { message: '' })}</p> : null}
+        </div>
+      ) : null}
+      {openFailure && active ? (
         <div className="flex flex-col gap-1.5 rounded-card border border-accent-alert/40 p-3" data-testid="parcel-failed">
           <div className="flex flex-wrap items-center gap-2">
             {active.failureReason ? (
@@ -123,7 +134,7 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
       {active?.status === 'delivered' ? <p className="text-[13px] text-accent-money">{t('tracking.panel.delivered', { amount: formatMoney(active.codAmount) })}</p> : null}
 
       {/* NON ENVOYÉE (or failed creation): send / self-delivery, greyed with the reason of the descriptor */}
-      {(!active || fixable) && (send.present || ship.present) ? (
+      {showSend && (send.present || ship.present) ? (
         <div className="flex flex-col gap-2">
           {send.present ? (
             <Button className="w-full" variant={send.enabled ? 'primary' : 'secondary'} onClick={fixable && active ? () => parcels.orders.openOn('send', order.id, { error: active.error }) : onSend} disabled={!send.enabled} title={send.reason} data-testid="send-to-courier">

@@ -17,6 +17,19 @@ const SPEC: Record<OrderStatusName, OrderStatusName[]> = {
 const state = (status: OrderStatusName, over: Partial<OrderState> = {}): OrderState => ({ status, deliveryStatus: status === 'shipped' ? 'sent' : status === 'delivered' ? 'delivered' : 'not_sent', shipmentStatus: status === 'shipped' ? 'sent' : null, courierParcel: false, hasAddress: true, ...over });
 const pairs = ALL.flatMap((from) => ALL.map((to) => [from, to] as const));
 
+describe('UX-064 — a closed order is never shipped again (04 §22 "Order closed")', () => {
+  it('« Marquer expédiée (livraison propre) » on a delivered / cancelled / returned order: readable reason, never « delivered → shipped »', () => {
+    expect(checkTransition(state('delivered'), 'shipped', { role: 'owner' })).toEqual({ code: 'DELIVERY_ORDER_DELIVERED' });
+    expect(checkTransition(state('cancelled'), 'shipped', { role: 'owner' })).toEqual({ code: 'DELIVERY_ORDER_CANCELLED' });
+    expect(checkTransition(state('returned'), 'shipped', { role: 'operator' })).toEqual({ code: 'DELIVERY_ORDER_RETURNED' });
+  });
+  it('other targets of a closed order keep their refusal; open orders still ship', () => {
+    expect(checkTransition(state('cancelled'), 'delivered', { role: 'owner' })).toEqual({ code: 'ORDER_TERMINAL' });
+    expect(checkTransition(state('delivered'), 'confirmed', { role: 'owner' })).toEqual({ code: 'ORDER_INVALID_TRANSITION', params: { from: 'delivered', to: 'confirmed' } });
+    expect(checkTransition(state('confirmed'), 'shipped', { role: 'owner' })).toBeNull();
+  });
+});
+
 describe('AT-ORD-01 status matrix (04 §1.2 + D14)', () => {
   it('the shared matrix is the spec matrix', () => {
     expect(ORDER_STATUS_TRANSITIONS).toEqual(SPEC);
@@ -24,7 +37,9 @@ describe('AT-ORD-01 status matrix (04 §1.2 + D14)', () => {
 
   it.each(pairs)('%s → %s', (from, to) => {
     const r = checkTransition(state(from), to, { role: 'owner' });
-    if (from === 'cancelled' || from === 'returned') expect(r).toEqual({ code: 'ORDER_TERMINAL' });
+    // UX-064: shipping a delivered / cancelled / returned order is refused with the readable DELIVERY_ORDER_<STATUS>
+    if (to === 'shipped' && ['delivered', 'cancelled', 'returned'].includes(from)) expect(r).toEqual({ code: `DELIVERY_ORDER_${from.toUpperCase()}` });
+    else if (from === 'cancelled' || from === 'returned') expect(r).toEqual({ code: 'ORDER_TERMINAL' });
     else if (SPEC[from].includes(to)) expect(r).toBeNull();
     else expect(r).toEqual({ code: 'ORDER_INVALID_TRANSITION', params: { from, to } });
   });

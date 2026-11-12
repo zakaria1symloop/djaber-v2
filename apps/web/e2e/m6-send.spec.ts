@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
 import { expectNoA11yViolations } from './support/a11y';
 import { apiReady, type Account } from './support/m1';
 import { signIn } from './support/m4-agents';
-import { dialog, getOrder, open, row, seedOrder, seedProduct, shopOwner } from './support/m5-orders';
+import { dialog, getOrder, open, row, seedOrder, seedProduct, setStatus, shopOwner } from './support/m5-orders';
 import { confirmedOrder, deliveryReady, orderWithUnknownCommune, seedCourier, sendOrder, type Courier } from './support/m6';
 import { errText } from './support/error-text';
 
@@ -74,6 +74,35 @@ test('AT-DLV-02 — courier validation error (unknown commune) ⇒ inline on the
   await expect(page.getByTestId('send-to-courier')).toHaveText('Corriger et renvoyer');
 });
 
+test('UX-064 — failed send, then the order is marked delivered by hand: LIVRAISON block « Livrée à la main » without any send button; Livraison greys « Corriger et renvoyer » with the readable reason', async ({ page, request }) => {
+  const o = await orderWithUnknownCommune(request, owner, product.id);
+  const parcel = await sendOrder(request, owner, o.id);
+  expect(parcel.status).toBe('failed');
+  await setStatus(request, owner, o.id, 'delivered');
+
+  await orderPage(page, o.id);
+  const block = page.getByTestId('delivery-block');
+  await expect(block).toHaveAttribute('data-parcel', 'handled');
+  await expect(block).toContainText('Livrée à la main');
+  await expect(page.getByTestId('parcel-handled')).toContainText('cet envoi en échec est réglé');
+  await expect(page.getByTestId('parcel-failed')).toHaveCount(0);
+  await expect(page.getByTestId('send-to-courier')).toHaveCount(0);
+  await expect(page.getByTestId('ship-manual')).toHaveCount(0);
+
+  // Livraison › Toutes: neutral status, the send items greyed with the screen's words (never « delivered → shipped »)
+  await open(page, `/fr/delivery?tab=all&ids=${o.id}`, () => row(page, o.id));
+  await expect(row(page, o.id)).toContainText('Livrée à la main');
+  await row(page, o.id).getByRole('button', { name: /Actions/ }).click();
+  await expect(page.getByRole('menuitem', { name: 'Corriger et renvoyer' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByRole('menuitem', { name: 'Changer de transporteur' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByRole('menu')).toContainText(errText('DELIVERY_ORDER_DELIVERED'));
+  await expect(page.getByRole('menu')).not.toContainText('→');
+  await page.keyboard.press('Escape');
+  // not in « Échecs » any more
+  await open(page, '/fr/delivery', () => page.locator('[data-kpi="failed"]'));
+  await expect(row(page, o.id)).toHaveCount(0);
+});
+
 test('AT-DLV-03 — courier down (503) ⇒ parcel queued: "mis en attente", retries by the worker, order not shipped', async ({ page, request }) => {
   const owner2 = await shopOwner(request, 'm6down');
   const p2 = await seedProduct(request, owner2, 'Foulard soie', 1500);
@@ -110,6 +139,7 @@ test('AT-DLV-03 — courier down (503) ⇒ parcel queued: "mis en attente", retr
     lastEventAt: null,
     noMovement: false,
     returnPending: false,
+    failureHandled: null,
     labelSource: 'djaber',
     events: [],
     createdAt: new Date().toISOString(),

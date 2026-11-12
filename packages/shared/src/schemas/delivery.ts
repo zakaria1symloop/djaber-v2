@@ -19,6 +19,20 @@ export type FailureReasonCode = (typeof FailureReasonValues)[number];
 export const ACTIVE_SHIPMENT_STATUSES: readonly ShipmentStatusName[] = ['pending', 'sent', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered'];
 /** Courier-side terminal statuses: tracking stops (05-integrations §2.6). `failed` is not terminal (re-attempts). */
 export const SHIPMENT_TERMINAL_STATUSES: readonly ShipmentStatusName[] = ['delivered', 'returned', 'cancelled', 'stale'];
+/**
+ * UX-064 (04 §22 "Order closed"): an order delivered, cancelled or returned is never sent to a courier again (send,
+ * fix and resend, change courier, mark shipped) and a failed parcel of such an order counts as handled (it leaves Home
+ * "À traiter", Livraison › Échecs and the failure state of the order's LIVRAISON block). Derived from the current
+ * statuses — one rule for the API presenters, the services and the web.
+ */
+export const ORDER_SEND_CLOSED_STATUSES = ['delivered', 'cancelled', 'returned'] as const;
+export type OrderSendClosedStatus = (typeof ORDER_SEND_CLOSED_STATUSES)[number];
+export const isOrderSendClosed = (orderStatus: string): orderStatus is OrderSendClosedStatus => (ORDER_SEND_CLOSED_STATUSES as readonly string[]).includes(orderStatus);
+/** Error code of a send refused because the order is closed (11 §6), `null` while the order can still be sent. */
+export const sendClosedCode = (orderStatus: string): 'DELIVERY_ORDER_DELIVERED' | 'DELIVERY_ORDER_CANCELLED' | 'DELIVERY_ORDER_RETURNED' | null =>
+  orderStatus === 'delivered' ? 'DELIVERY_ORDER_DELIVERED' : orderStatus === 'cancelled' ? 'DELIVERY_ORDER_CANCELLED' : orderStatus === 'returned' ? 'DELIVERY_ORDER_RETURNED' : null;
+/** How the failure of a `failed` parcel was handled: the order was closed this way meanwhile (`null` = still to handle). */
+export const failureHandledAs = (shipmentStatus: string, orderStatus: string): OrderSendClosedStatus | null => (shipmentStatus === 'failed' && isOrderSendClosed(orderStatus) ? orderStatus : null);
 /** Statuses still polled by `sched-tracking-sync` (a failed attempt keeps being tracked: the courier re-attempts or returns). */
 export const SHIPMENT_TRACKED_STATUSES: readonly ShipmentStatusName[] = ['sent', 'picked_up', 'in_transit', 'out_for_delivery', 'failed'];
 /** Forward order of a parcel; courier events never move a shipment backwards along it (05-integrations §2.6). */
@@ -434,6 +448,8 @@ export type ShipmentView = {
   returnPending: boolean;
   /** courier label available (else the Djaber label is printed) */
   labelSource: 'courier' | 'djaber';
+  /** UX-064: `failed` parcel of an order delivered / cancelled / returned meanwhile — the failure is handled (`failureHandledAs`) */
+  failureHandled: OrderSendClosedStatus | null;
   events: ShipmentEventView[];
   createdAt: string;
   /**
@@ -534,6 +550,8 @@ export type DeliveryRowView = {
     lastSyncedAt: string | null;
     noMovement: boolean;
     returnPending: boolean;
+    /** UX-064: the order was delivered / cancelled / returned while this parcel had failed (not a failure to handle) */
+    failureHandled: OrderSendClosedStatus | null;
     createdAt: string;
   } | null;
   /** `send_courier`, `ship_manual`, `open_order`, `call_client` + the parcel actions of `ShipmentView.actions` */

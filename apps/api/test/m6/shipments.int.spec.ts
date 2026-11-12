@@ -432,3 +432,88 @@ describe('orders side', () => {
     expect((await owner.post(`/orders/${o.id}/address`, { wilayaId: 16, communeText: 'Kouba', isStopdesk: false, address: 'Rue 12, Kouba centre' }).expect(409)).body.error.code).toBe('COURIER_ADDRESS_LOCKED');
   });
 });
+
+describe('UX-064 — a failed send is handled once the order is delivered / cancelled / returned (04 §22 "Order closed", FL-25 F-8)', () => {
+  const failedSend = async () => {
+    const { owner, courier } = await shop('zrexpress');
+    const { order } = await confirmedOrder(owner, { delivery: { wilayaId: 16, communeText: 'Inconnue-sur-Mer', isStopdesk: false, address: 'Cité 200 logements, Bt 4' } });
+    const parcel = await sendAndWork(app, owner, order);
+    expect(parcel).toMatchObject({ status: 'failed', trackingNumber: null });
+    return { owner, courier, order, parcel };
+  };
+  const action = (actions: { key: string }[], key: string) => actions.find((a) => a.key === key);
+
+  it('delivered by hand: Home card handled « fait par », out of Échecs (tab, count, overview), failureHandled on the parcel and the row, every send refused with DELIVERY_ORDER_DELIVERED (422), nothing created', async () => {
+    const { owner, courier, order, parcel } = await failedSend();
+    // before: an open failure everywhere
+    expect((await owner.get('/dashboard/home').expect(200)).body.data.queue.items.some((i: any) => i.key === `parcel:${parcel.id}`)).toBe(true);
+    expect((await owner.get('/delivery/overview').expect(200)).body.data.tabs.failed).toBe(1);
+
+    await owner.post(`/orders/${order.id}/deliver`, {}).expect(200);
+
+    // Home › À traiter: the open card leaves, a greyed "handled" card « fait par <member> » takes its place for 24 h
+    const home = (await owner.get('/dashboard/home').expect(200)).body.data;
+    expect(home.queue.items.some((i: any) => i.key === `parcel:${parcel.id}`)).toBe(false);
+    expect(home.queue.counts.parcel).toBe(0);
+    expect(home.queue.items.find((i: any) => i.key === `parcel:${order.id}:handled`)).toMatchObject({ kind: 'parcel', path: `/orders/${order.id}#delivery`, handled: { by: { id: owner.userId } } });
+    // older than 24 h ⇒ the handled card disappears
+    await db.orderStatusHistory.updateMany({ where: { orderId: order.id, field: 'status', to: 'delivered' }, data: { at: new Date(Date.now() - 25 * 3_600_000) } });
+    expect((await owner.get('/dashboard/home').expect(200)).body.data.queue.items.some((i: any) => i.ref?.orderId === order.id)).toBe(false);
+
+    // Livraison › Échecs: tab, count and overview failures without it; the row (tab "Tous") says how it was handled
+    expect((await owner.get('/shipments?shipmentStatus=failed').expect(200)).body.data.map((r: any) => r.id)).not.toContain(order.id);
+    const overview = (await owner.get('/delivery/overview').expect(200)).body.data;
+    expect(overview.tabs.failed).toBe(0);
+    expect(overview.failures.map((r: any) => r.id)).not.toContain(order.id);
+    const [row] = (await owner.get(`/shipments?ids=${order.id}`).expect(200)).body.data;
+    expect(row.shipment).toMatchObject({ id: parcel.id, status: 'failed', failureHandled: 'delivered' });
+    for (const key of ['send_courier', 'ship_manual', 'retry', 'change_courier']) expect(action(row.actions, key)).toMatchObject({ enabled: false, reasonCode: 'DELIVERY_ORDER_DELIVERED' });
+    expect(row.actions.some((a: any) => a.primary && ['retry', 'change_courier', 'send_courier'].includes(a.key))).toBe(false);
+
+    // the order page agrees (same presenters, same shared rule)
+    const o = await reloadOrder(owner, order.id);
+    expect(o.status).toBe('delivered');
+    for (const key of ['send_courier', 'ship_manual']) expect(action(o.actions, key)).toMatchObject({ enabled: false, reasonCode: 'DELIVERY_ORDER_DELIVERED' });
+    const view = (await owner.get(`/shipments/${parcel.id}`).expect(200)).body.data;
+    expect(view.failureHandled).toBe('delivered');
+    for (const key of ['retry', 'change_courier']) expect(action(view.actions, key)).toMatchObject({ enabled: false, reasonCode: 'DELIVERY_ORDER_DELIVERED' });
+
+    // the server refuses every send with the readable code (never « Transition delivered → shipped »), nothing created
+    const shipments = await db.shipment.count({ where: { orderId: order.id } });
+    expect((await owner.post(`/shipments/${parcel.id}/retry`).expect(422)).body.error.code).toBe('DELIVERY_ORDER_DELIVERED');
+    expect((await owner.post(`/shipments/${parcel.id}/change-courier`, { courierAccountId: courier.id }).expect(422)).body.error.code).toBe('DELIVERY_ORDER_DELIVERED');
+    const resend = (await send(owner, o, { communeText: 'Kouba', codAmount: 100_000 }).expect(422)).body.error;
+    expect(resend).toMatchObject({ code: 'DELIVERY_ORDER_DELIVERED', message: expect.stringContaining('déjà livrée') });
+    expect((await owner.post(`/orders/${order.id}/ship-manual`, {}).expect(422)).body.error.code).toBe('DELIVERY_ORDER_DELIVERED');
+    expect(await db.shipment.count({ where: { orderId: order.id } })).toBe(shipments);
+    expect(fakeCourier(app).callsOf('create')).toHaveLength(1);
+    expect((await reloadOrder(owner, order.id)).status).toBe('delivered');
+  });
+
+  it('cancelled order: the same refusal with its own word (DELIVERY_ORDER_CANCELLED), failure handled', async () => {
+    const { owner, order, parcel } = await failedSend();
+    await owner.post(`/orders/${order.id}/cancel`, { reason: 'other' }).expect(200);
+    expect((await owner.get(`/shipments/${parcel.id}`).expect(200)).body.data.failureHandled).toBe('cancelled');
+    expect((await owner.post(`/shipments/${parcel.id}/retry`).expect(422)).body.error.code).toBe('DELIVERY_ORDER_CANCELLED');
+    expect((await send(owner, order).expect(422)).body.error.code).toBe('DELIVERY_ORDER_CANCELLED');
+    expect((await owner.post(`/orders/${order.id}/ship-manual`, {}).expect(422)).body.error.code).toBe('DELIVERY_ORDER_CANCELLED');
+    expect((await owner.get('/delivery/overview').expect(200)).body.data.tabs.failed).toBe(0);
+  });
+
+  it('existing data (#CMD-1008): an order delivered before the fix with its failed send is handled without any migration', async () => {
+    const { owner, order, parcel } = await failedSend();
+    // the state the old code left: order delivered, failed parcel untouched
+    await db.order.update({ where: { id: order.id }, data: { status: 'delivered', deliveredAt: new Date(Date.now() - 2 * 86_400_000) } });
+    expect((await owner.get('/dashboard/home').expect(200)).body.data.queue.items.some((i: any) => i.key === `parcel:${parcel.id}`)).toBe(false);
+    expect((await owner.get('/delivery/overview').expect(200)).body.data.tabs.failed).toBe(0);
+    expect((await owner.get(`/shipments/${parcel.id}`).expect(200)).body.data).toMatchObject({ status: 'failed', failureHandled: 'delivered' });
+  });
+
+  it('cross-workspace 404 on the refused routes', async () => {
+    const { owner, order, parcel } = await failedSend();
+    await owner.post(`/orders/${order.id}/deliver`, {}).expect(200);
+    const other = await asOwner(app);
+    await other.post(`/shipments/${parcel.id}/retry`).expect(404);
+    await other.post(`/orders/${order.id}/shipments`, sendBody(order)).set(idem()).expect(404);
+  });
+});
