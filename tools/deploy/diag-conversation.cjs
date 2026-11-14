@@ -24,6 +24,8 @@ const db = new PrismaClient({ datasources: { db: { url } } });
 const t = (d) => (d ? new Date(d).toISOString().replace('T', ' ').slice(0, 19) + 'Z' : '—');
 const cut = (s, n = 400) => (s ? String(s).replace(/\s+/g, ' ').slice(0, n) : '—');
 
+/** 04-ai §4.3: « unknown_amount=3900 stock_count=2 → stock_count » (rules, amounts, leak kinds — never message text). */
+const guardText = (g) => { if (!g) return '—'; const one = (v) => `${v.rule}${v.value !== undefined ? `=${v.value}` : ''}${v.kind ? `:${v.kind}` : ''}`; return `${g.violations.map(one).join(' ')}${g.retried ? ` → ${g.remaining.map(one).join(' ') || 'ok'}` : ''}`; };
 const tally = (rows, key) => Object.entries(rows.reduce((acc, r) => ((acc[key(r)] = (acc[key(r)] ?? 0) + 1), acc), {})).sort((a, b) => b[1] - a[1]);
 
 async function overview() {
@@ -31,7 +33,7 @@ async function overview() {
   const queued = await db.conversation.findMany({ where: { status: 'needs_human', deletedAt: null, updatedAt: { gte: since } }, select: { id: true, context: true } });
   console.log('== conversations handed to the team in the last 24 h, by reason');
   for (const [reason, n] of tally(queued, (c) => `${c.context?.handoffReason ?? '—'}${c.context?.aiUnavailable ? ` (banner: ${c.context.aiUnavailable})` : ''}`)) console.log(`${String(n).padStart(4)}  ${reason}`);
-  const runs = await db.aiRun.findMany({ where: { kind: 'reply', startedAt: { gte: since } }, select: { status: true, error: true, modelId: true, flags: true } });
+  const runs = await db.aiRun.findMany({ where: { kind: 'reply', startedAt: { gte: since } }, select: { id: true, startedAt: true, conversationId: true, workspaceId: true, status: true, error: true, modelId: true, flags: true, meta: true } });
   const models = await db.aiModel.findMany({ where: { id: { in: [...new Set(runs.map((r) => r.modelId))] } }, select: { id: true, modelId: true } });
   const model = (mid) => models.find((m) => m.id === mid)?.modelId ?? mid;
   console.log(`== AI reply runs in the last 24 h (${runs.length}), by status`);
@@ -43,6 +45,15 @@ async function overview() {
   // retest 12/11: handoffs the platform refused (greeting, no words of the customer asking for it, earlier message…)
   const refused = runs.filter((r) => (r.flags ?? []).includes('handoff_refused')).length;
   console.log(`== handoffs refused by the platform (the AI answered instead): ${refused} · models: ${[...new Set(runs.map((r) => model(r.modelId)))].join(', ') || '—'}`);
+  // 04-ai §4.3 (owner go-ahead 14/11): the reply guard — what it found in the replies and what it did (rules and amounts only)
+  const guarded = runs.filter((r) => r.meta?.guard);
+  console.log(`== reply guard in the last 24 h: ${guarded.length} run(s) · ${tally(guarded, (r) => r.meta.guard.action).map(([a, n]) => `${a} ${n}`).join(' · ') || '—'}`);
+  for (const [rule, n] of tally(guarded.flatMap((r) => r.meta.guard.violations.map((v) => ({ rule: v.rule }))), (v) => v.rule)) console.log(`${String(n).padStart(4)}  ${rule}`);
+  if (guarded.length) {
+    const shops = await db.workspace.findMany({ where: { id: { in: [...new Set(guarded.map((r) => r.workspaceId))] } }, select: { id: true, name: true } });
+    console.log('== last guarded replies (newest first): time · shop · conversation · guard (rule=value → after the corrective turn) · action');
+    for (const r of guarded.sort((a, b) => b.startedAt - a.startedAt).slice(0, 15)) console.log(`${t(r.startedAt)}  ${cut(shops.find((w) => w.id === r.workspaceId)?.name, 24).padEnd(24)}  ${r.conversationId}  ${guardText(r.meta.guard).padEnd(48)}  ${r.meta.guard.action}`);
+  }
   const insights = await db.agentInsight.findMany({ where: { createdAt: { gte: since }, type: { in: ['handoff', 'unknown_topic', 'error'] } }, select: { type: true, detail: true } });
   console.log('== handoff / unknown / error insights in the last 24 h');
   for (const [k, n] of tally(insights, (i) => `${i.type}  ${cut(i.detail, 80)}`)) console.log(`${String(n).padStart(4)}  ${k}`);
@@ -87,7 +98,7 @@ async function overview() {
   const models = await db.aiModel.findMany({ where: { id: { in: [...new Set(runs.map((r) => r.modelId))] } }, select: { id: true, modelId: true } });
   const model = (mid) => models.find((m) => m.id === mid)?.modelId ?? mid;
   console.log('== last AI runs of this conversation (newest first)');
-  for (const r of runs) console.log(`${t(r.startedAt)}  ${r.status.padEnd(8)} attempt ${r.attempt ?? '-'}  ${model(r.modelId)}  ${cut(r.error)}`);
+  for (const r of runs) console.log(`${t(r.startedAt)}  ${r.status.padEnd(8)} attempt ${r.attempt ?? '-'}  ${model(r.modelId)}  guard ${r.meta?.guard ? `${guardText(r.meta.guard)} (${r.meta.guard.action})` : '—'}  ${cut(r.error)}`);
 
   const msgs = await db.message.findMany({ where: { conversationId: id }, orderBy: { createdAt: 'desc' }, take: 25, select: { id: true, createdAt: true, direction: true, author: true, type: true, deliveryStatus: true, error: true, payload: true } });
   // how each outgoing message was sent (RESPONSE inside 24 h, MESSAGE_TAG + tag outside) — from its `meta-send` outbox row

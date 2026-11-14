@@ -1,4 +1,5 @@
 // Live chatbot scenarios — catalogue, prices, variants, moderation, delivery fees, policies, FAQ, languages.
+import { foldGuard, stockCounts } from '../../../src/modules/ai/reply-guard';
 import { cardsOf, closeShop, never, noOrder, openShop, play, said, usedTool, writeSummary, type Scenario, type Shop } from './harness';
 
 let s: Shop;
@@ -56,7 +57,7 @@ const SCENARIOS: Scenario[] = [
   { id: 'C27', title: 'Horaires — ouverts le vendredi ?', lang: 'latin', steps: ['Vous êtes ouverts le vendredi ? à quelle heure ?'], check: (r) => said(r, /samedi|jeudi|9\s?h/i, 'the opening hours') },
   { id: 'C28', title: 'Plusieurs questions dans un message', lang: 'latin', steps: ['Bonjour ! 1) prix de la montre 2) livraison à Blida 3) vous livrez le vendredi ? 4) il y a une garantie ?'], check: (r) => [...said(r, /12\s?000/, 'the watch price'), ...said(r, /500|350/, 'the Blida fee'), ...said(r, /6\s*mois/i, 'the 6-month warranty')] },
   { id: 'C29', title: 'Darija arabe — basket disponible ? (pas la 44)', lang: 'ar', steps: ['عندكم سبادري؟ واش من مقاسات كاين؟'], check: (r) => never(r, /\b44\b|٤٤/, 'the size 44 (pending moderation)') },
-  { id: 'C30', title: 'Stock restant', lang: 'latin', steps: ['Il vous reste combien de montres dorées ?'], review: () => ['réponse cohérente avec le stock (10), sans inventer'] },
+  { id: 'C30', title: 'Stock restant (STOCK_PRIVATE : disponible, jamais un nombre)', lang: 'latin', steps: ['Il vous reste combien de montres dorées ?'], check: (r) => (stockCounts(foldGuard(r.aiText)).some((n) => n > 0) ? ['a stock count was stated'] : []), review: () => ['doit dire que la montre est disponible, sans donner de nombre de pièces (STOCK_PRIVATE, recette 09/11)'] },
   { id: 'C31', title: 'Fautes et abréviations', lang: 'latin', steps: ['slt cv, c cmb la rob satin ? elle é dispo ?'], check: (r) => said(r, /4s?500/, 'the price 4500') },
   { id: 'C32', title: 'Wilaya donnée par son numéro (25)', lang: 'latin', steps: ['La livraison wilaya 25 à domicile c combien ?'], check: (r) => said(r, /600/, 'the Constantine home fee 600') },
   { id: 'C33', title: 'Suivi alors que le client n’a aucune commande', lang: 'latin', steps: ['Bonjour, où en est ma commande ?'], check: (r) => [...usedTool(r, 'lookup_order'), ...noOrder(r)], review: () => ['doit dire qu’aucune commande n’est trouvée, sans inventer de statut'] },

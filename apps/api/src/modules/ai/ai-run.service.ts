@@ -12,13 +12,14 @@ import { MetricsService } from '../../core/metrics/metrics.service';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { CreditService } from '../credits/credit.service';
-import { MAX_STEPS, RUN_REAP_AFTER_MS } from './ai.constants';
+import { GUARD_RETRY_MIN_MS, MAX_STEPS, RUN_REAP_AFTER_MS } from './ai.constants';
 import type { BuiltPrompt } from './prompt/prompt-builder';
 import { AI_GATEWAY, AiProviderError, type AiGateway, type AiMessage, type AiToolCallRequest, type AiUsage } from './provider/ai.gateway';
 import { RoutingService, type RoutedModel } from './routing.service';
 import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
 import { handoffRefusedInstruction, judgeHandoff, type HandoffRefusal } from './handoff-judge';
+import { checkReply, enforceReply, guardInstruction, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
 
 export type ExecutedTool = { callId: string; name: string; args: Record<string, unknown>; result: unknown; simulated: boolean; replayed: boolean };
 export type TurnRequest = {
@@ -31,12 +32,17 @@ export type TurnRequest = {
   deadline: number;
   /** false: tool calls are executed but not persisted (never used by reply runs) */
   persist?: boolean;
+  /** §4.3 reply guard: what the server knows this turn (this turn's tool results are added as they come) */
+  guard?: GuardFacts;
 };
 type TurnBase = { tools: ExecutedTool[]; usage: AiUsage; model: RoutedModel | null; usedFallback: boolean };
 export type TurnResult =
-  | (TurnBase & { ok: true; output: AiReplyOutput; model: RoutedModel; forcedHandoff: string | null; repaired: boolean; salvaged?: boolean; /** retest 12/11: a handoff of the model was refused by the server this turn (handoff-judge) */ handoffRefused?: HandoffRefusal })
+  | (TurnBase & { ok: true; output: AiReplyOutput; model: RoutedModel; forcedHandoff: string | null; repaired: boolean; salvaged?: boolean; /** retest 12/11: a handoff of the model was refused by the server this turn (handoff-judge) */ handoffRefused?: HandoffRefusal; /** §4.3: the reply guard found something (and what was done) */ guard?: GuardOutcome })
   | (TurnBase & { ok: false; kind: 'provider' | 'format'; error: string });
-export type RunMeta = { language?: string; toolNames?: string[]; cardsSent?: number; handoff?: boolean; costUsd?: number; plannedCost?: number; vision?: Record<string, unknown>; sessionId?: string; turn?: unknown; evalFlag?: unknown; scenario?: string };
+export type RunMeta = { language?: string; toolNames?: string[]; cardsSent?: number; handoff?: boolean; costUsd?: number; plannedCost?: number; vision?: Record<string, unknown>; sessionId?: string; turn?: unknown; evalFlag?: unknown; scenario?: string; /** §4.3 reply guard (rules, amounts / leak kinds, action — never message text) */ guard?: GuardOutcome };
+/** §4.3: the run flags of a guard outcome (`guard_rewritten`: the corrective turn passed; `guard_enforced`: sentences dropped or the safe sentence sent). */
+export const guardFlags = (g?: GuardOutcome): string[] => (!g ? [] : g.action === 'rewritten' ? ['guard_rewritten'] : g.action === 'kept' ? ['guard_kept'] : ['guard_enforced']);
+const slim = (v: GuardViolation[]) => v.map(({ rule, value, kind }) => ({ rule, ...(value !== undefined ? { value } : {}), ...(kind ? { kind } : {}) }));
 
 /** Stable JSON (sorted keys) for the tool-call hash. */
 export const canonicalJson = (v: unknown): string => {
@@ -143,10 +149,33 @@ export class AiRunService implements OnModuleInit {
     let toolRounds = 0;
     let handoffAsked = false;
     let handoffRefused: HandoffRefusal | undefined;
+    // §4.3 reply guard: the answer that broke a rule (its status, cards and fields are kept), and what it broke
+    let guardFirst = null as { output: AiReplyOutput; extra: { salvaged?: boolean }; violations: GuardViolation[] } | null;
+    const ok = (output: AiReplyOutput, extra: { salvaged?: boolean; guard?: GuardOutcome } = {}): TurnResult => ({ ok: true, output, tools: executed, usage, model: model!, usedFallback, forcedHandoff, repaired, ...(handoffRefused ? { handoffRefused } : {}), ...extra });
+    const factsNow = () => withToolResults(req.guard!, executed.map((t) => t.result));
+    /** The guard's last word: offending sentences dropped / greeting stripped / the safe sentence (never a handoff). */
+    const enforce = (base: AiReplyOutput, text: string, violations: GuardViolation[], first: GuardViolation[], retried: boolean, extra: { salvaged?: boolean }): TurnResult => {
+      const e = enforceReply(text, violations, factsNow(), { hasCards: base.productCards.length > 0 });
+      return ok({ ...base, reply: e.reply }, { ...extra, guard: { violations: slim(first), retried, remaining: slim(violations), action: e.action } });
+    };
+    /** The corrective turn could not run (provider failure, time): the first answer is enforced rather than lost. */
+    const guardFallback = () => (guardFirst ? enforce(guardFirst.output, guardFirst.output.reply, guardFirst.violations, guardFirst.violations, true, guardFirst.extra) : null);
+    /** Checks an answer about to be returned: clean ⇒ returned; broken ⇒ one corrective turn when there is room, else enforced. */
+    const guarded = (output: AiReplyOutput, extra: { salvaged?: boolean }, canRetry: boolean): TurnResult | 'retry' => {
+      if (!req.guard || !output.reply.trim()) return ok(output, extra);
+      const violations = checkReply(output.reply, factsNow());
+      if (!violations.length) return ok(output, extra);
+      if (canRetry && req.deadline - Date.now() > GUARD_RETRY_MIN_MS) {
+        guardFirst = { output, extra, violations };
+        return 'retry';
+      }
+      return enforce(output, output.reply, violations, violations, false, extra);
+    };
     for (let step = 0; step < MAX_STEPS + 1; step++) {
       const left = req.deadline - Date.now();
-      if (left <= 0) return { ok: false, kind: 'provider', error: 'timeout', tools: executed, usage, model, usedFallback };
-      const offerTools = toolRounds < MAX_STEPS - 1 && !forcedHandoff;
+      if (left <= 0) return guardFallback() ?? { ok: false, kind: 'provider', error: 'timeout', tools: executed, usage, model, usedFallback };
+      // the corrective turn of the guard is offered no tool: an order or a cancellation is never done twice
+      const offerTools = toolRounds < MAX_STEPS - 1 && !forcedHandoff && !guardFirst;
       let res;
       try {
         res = await this.routing.call(
@@ -155,7 +184,7 @@ export class AiRunService implements OnModuleInit {
           { only: (m) => m.supportsTools, prefer: model?.id },
         );
       } catch (e) {
-        if (e instanceof AiProviderError) return { ok: false, kind: 'provider', error: providerErrorLabel(e), tools: executed, usage, model, usedFallback };
+        if (e instanceof AiProviderError) return guardFallback() ?? { ok: false, kind: 'provider', error: providerErrorLabel(e), tools: executed, usage, model, usedFallback };
         throw e;
       }
       model = res.model;
@@ -179,6 +208,20 @@ export class AiRunService implements OnModuleInit {
         continue;
       }
       const parsed = parseReplyOutput(res.value.text);
+      if (guardFirst) {
+        // the corrective answer: only its text is taken — status, cards, handoff and every other field stay the first answer's
+        const { output: first, extra, violations } = guardFirst;
+        const rewritten = (parsed.ok ? parsed.value.reply : (salvageReply(res.value.text)?.reply ?? '')).trim();
+        if (!rewritten) return enforce(first, first.reply, violations, violations, true, extra);
+        const again = checkReply(rewritten, factsNow());
+        if (!again.length) return ok({ ...first, reply: rewritten }, { ...extra, guard: { violations: slim(violations), retried: true, remaining: [], action: 'rewritten' } });
+        return enforce(first, rewritten, again, violations, true, extra);
+      }
+      const retryOrDone = (r: TurnResult | 'retry'): TurnResult | null => {
+        if (r !== 'retry') return r;
+        messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: guardInstruction(guardFirst!.violations, factsNow()) });
+        return null;
+      };
       if (parsed.ok) {
         // retest 12/11: `status = HANDOFF` is checked like the tool (handoff-judge) — the customer's words of this turn must
         // ask for it. Refused ⇒ the model is told why and answers (once); insisting with a reply ⇒ that reply is sent and the
@@ -195,16 +238,22 @@ export class AiRunService implements OnModuleInit {
           }
           if (out.reply.trim()) {
             const { statusDetail: _dropped, evidence: _evidence, ...kept } = out;
-            return { ok: true, output: { ...kept, status: 'OK' }, tools: executed, usage, model, usedFallback, forcedHandoff, repaired, handoffRefused };
+            const done = retryOrDone(guarded({ ...kept, status: 'OK' }, {}, step < MAX_STEPS));
+            if (done) return done;
+            continue;
           }
         }
-        return { ok: true, output: out, tools: executed, usage, model, usedFallback, forcedHandoff, repaired, ...(handoffRefused ? { handoffRefused } : {}) };
+        // §4.3: the text is checked before it leaves (one corrective turn when there is a step left)
+        const done = retryOrDone(guarded(out, {}, step < MAX_STEPS));
+        if (done) return done;
+        continue;
       }
       if (repaired) {
         // tester report 26/10: the first answer, when it is a plain message to the customer, is sent rather than the
         // conversation handed to the team in silence (F-6 only when there is nothing to send)
         const salvaged = salvageReply(firstAnswer) ?? salvageReply(res.value.text);
-        if (salvaged) return { ok: true, output: salvaged, tools: executed, usage, model, usedFallback, forcedHandoff, repaired, salvaged: true };
+        // §4.3: no corrective turn after a format retry — the guard's last word applies at once
+        if (salvaged) return guarded(salvaged, { salvaged: true }, false) as TurnResult;
         return { ok: false, kind: 'format', error: `malformed_output:${parsed.reason}`, tools: executed, usage, model, usedFallback };
       }
       firstAnswer = res.value.text;

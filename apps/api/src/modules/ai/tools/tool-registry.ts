@@ -58,8 +58,8 @@ export const shipmentEventLabel = (e: { rawStatus: string; mappedStatus: string 
   return courierText ?? (e.mappedStatus ? (SHIPMENT_STATUS_FOR_AI[e.mappedStatus] ?? null) : null);
 };
 
-const ALIASES: Record<string, ToolName> = { get_shipping_fee: 'quote_delivery', get_order_status: 'lookup_order' };
-export const canonicalTool = (name: string): string => ALIASES[name] ?? name;
+export const TOOL_ALIASES: Record<string, ToolName> = { get_shipping_fee: 'quote_delivery', get_order_status: 'lookup_order' };
+export const canonicalTool = (name: string): string => TOOL_ALIASES[name] ?? name;
 
 export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
   search_products: {

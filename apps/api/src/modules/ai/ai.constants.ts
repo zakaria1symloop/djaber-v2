@@ -31,6 +31,12 @@ export const DEFAULT_CONTEXT_TOKENS = 32_000;
 export const PROMPT_RESERVE_TOKENS = 512;
 /** §6: whole-run budget (the per-call timeout is `AiRoute.timeoutSec`). */
 export const RUN_BUDGET_MS = 45_000;
+/** §4.3 reply guard: the corrective model turn is asked only with this much of the run budget left (else the guard enforces at once). */
+export const GUARD_RETRY_MIN_MS = 8_000;
+/** §4.3: tool results of the earlier turns of a conversation (or playground session) read for the guard's facts. */
+export const GUARD_EARLIER_TOOL_CALLS = 40;
+/** §4.3: first words of the corrective instruction of the reply guard. */
+export const GUARD_MARK = 'REPLY CHECK BY THE PLATFORM';
 /** PV 28/10: a customer photo still downloading when the batching window closes is waited for, at most this long. */
 export const MEDIA_WAIT_MS = 12_000;
 export const MEDIA_WAIT_STEP_MS = 1_000;

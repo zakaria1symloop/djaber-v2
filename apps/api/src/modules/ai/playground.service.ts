@@ -17,11 +17,12 @@ import { RedisService } from '../../core/redis/redis.provider';
 import { StorageService } from '../../core/storage/storage.service';
 import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { JobService } from '../jobs/job.service';
-import { plannedCost, RUN_BUDGET_MS } from './ai.constants';
-import { AiRunService, intentOf, type RunMeta } from './ai-run.service';
+import { GUARD_EARLIER_TOOL_CALLS, plannedCost, RUN_BUDGET_MS } from './ai.constants';
+import { AiRunService, guardFlags, intentOf, type RunMeta } from './ai-run.service';
 import { CatalogueService } from './catalogue.service';
 import { detectLanguage, systemLocale, type AiLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
+import { guardFactsOf } from './reply-guard';
 import { SCENARIOS, type ScenarioCheck } from './prompt/scenarios';
 import { AiProviderError } from './provider/ai.gateway';
 import { TranscriptionService } from './transcription.service';
@@ -156,6 +157,9 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       const history: HistoryMessage[] = messages.slice(0, -1).map((m) => ({ author: m.role === 'user' ? 'customer' : 'ai', text: m.text }));
       const turnCtx = await this.context.load(agent, { text: said, lastProductIds: matched, lang });
       const prompt = PromptBuilder.build(turnCtx.prompt, history, lines.join('\n') || said, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });
+      // §4.3: the same reply guard as the live replies (the earlier turns of the session give their fees / totals)
+      const earlier = await prisma.aiToolCall.findMany({ where: { executedAt: { not: null }, aiRun: { agentId: agent.id, batchKey: d.sessionId, id: { not: run.id } } }, orderBy: { executedAt: 'desc' }, take: GUARD_EARLIER_TOOL_CALLS, select: { result: true } });
+      const guard = guardFactsOf(turnCtx.prompt, { customerText: said, answeredBefore: history.some((m) => m.author === 'ai'), freshStart: false, earlierToolResults: earlier.map((c) => c.result) });
 
       const result = await this.runs.turn({
         runId: run.id,
@@ -165,6 +169,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         temperature: turnCtx.temperature,
         maxTokens: turnCtx.maxTokens,
         deadline: Date.now() + RUN_BUDGET_MS,
+        guard,
       });
       if (!result.ok) {
         await this.runs.finish(run.id, { status: 'error', error: result.error, startedAt: run.startedAt, turn: result });
@@ -202,8 +207,8 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         promptSections: prompt.sections.map((s) => ({ key: s.key, chars: s.text.length })),
         systemMessages,
       };
-      const meta: RunMeta = { language: dto.language, cardsSent: cards.length, handoff, turn: { messages, reply: out.reply, status, statusDetail: dto.statusDetail, cards: cards.map((c) => c.productId), toolCalls: dto.toolCalls.map((t) => ({ name: t.name, args: t.args })) } };
-      await this.runs.finish(run.id, { status: status === 'OK' ? 'ok' : status === 'UNCLEAR' ? 'unclear' : status === 'UNKNOWN' ? 'unknown' : 'handoff', turn: result, intent: dto.intent, confidence: out.confidence, startedAt: run.startedAt, meta });
+      const meta: RunMeta = { language: dto.language, cardsSent: cards.length, handoff, turn: { messages, reply: out.reply, status, statusDetail: dto.statusDetail, cards: cards.map((c) => c.productId), toolCalls: dto.toolCalls.map((t) => ({ name: t.name, args: t.args })) }, ...(result.guard ? { guard: result.guard } : {}) };
+      await this.runs.finish(run.id, { status: status === 'OK' ? 'ok' : status === 'UNCLEAR' ? 'unclear' : status === 'UNKNOWN' ? 'unknown' : 'handoff', turn: result, intent: dto.intent, confidence: out.confidence, startedAt: run.startedAt, meta, flags: guardFlags(result.guard) });
       return dto;
     } catch (e) {
       // a provider failure outside the model loop (vision, transcription) or any crash: the run is closed as an error

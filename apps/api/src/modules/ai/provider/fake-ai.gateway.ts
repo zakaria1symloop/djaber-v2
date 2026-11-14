@@ -5,6 +5,7 @@
 //  2. a small rule-based "brain" (dev UI, evals): keywords of the last customer message decide the tool call or the
 //     answer, tool results are turned into the final structured output. It validates the plumbing, not model quality.
 import { createHash } from 'node:crypto';
+import { GUARD_MARK } from '../ai.constants';
 import { HANDOFF_REFUSED_MARK } from '../handoff-judge';
 import { detectLanguage, type AiLanguage } from '../language';
 import {
@@ -367,6 +368,19 @@ export class FakeAiGateway implements AiGateway {
     const out = (reply: string, o: Partial<Extract<FakeStep, { reply: string }>> = {}): FakeStep => ({ reply, language: lang, ...o });
     // retest 12/11: the platform refused the handoff of the previous answer (handoff-judge) — answer the customer instead
     if (user.startsWith(HANDOFF_REFUSED_MARK)) return { reply: T[fromPrompt].greeting!, language: fromPrompt, intent: 'OTHER' };
+    // §4.3: the reply guard asks for a rewrite — the previous answer again, without its opening greeting sentence
+    if (user.startsWith(GUARD_MARK)) {
+      const prev = [...req.messages].reverse().find((m) => m.role === 'assistant');
+      const content = prev && 'content' in prev && typeof prev.content === 'string' ? prev.content : '';
+      let reply = '';
+      try {
+        reply = String((JSON.parse(content || '{}') as { reply?: unknown }).reply ?? '');
+      } catch {
+        reply = content;
+      }
+      const first = /^[^.!?؟]*[.!?؟]+\s*/u.exec(reply)?.[0] ?? '';
+      return { reply: RX.greeting.test(first.trim().replace(/[!.?؟]+$/u, '')) ? reply.slice(first.length) : reply, language: fromPrompt, intent: 'OTHER' };
+    }
     const tools = new Set((req.tools ?? []).map((x) => x.name));
     const last = req.messages[req.messages.length - 1]!;
 

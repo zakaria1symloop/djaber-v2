@@ -3,6 +3,7 @@
 import { formatMoney, getMessages } from '@djaber/shared';
 import { RedisService } from '../../src/core/redis/redis.provider';
 import { ORDER_TOOLS, type OrderTools } from '../../src/modules/ai/tools/order-tools';
+import { GUARD_MARK } from '../../src/modules/ai/ai.constants';
 import { CatalogueService } from '../../src/modules/ai/catalogue.service';
 import { RoutingService } from '../../src/modules/ai/routing.service';
 import { FORMAT_REMINDER } from '../../src/modules/ai/structured-output';
@@ -249,10 +250,10 @@ describe('FL-01 — reply turn', () => {
 
   it('AT-AI-11 product card template is part of the prompt; the cards are still sent', async () => {
     const s = await shop({ productCardTemplate: '⭐ {name} à {price} DA — {stock} en stock' });
-    fakeAi(app).script('reply', { reply: '⭐ Robe satin bordeaux à 4500 DA — 5 en stock', intent: 'SALE', productCards: [s.robe.id, s.sac.id] });
+    fakeAi(app).script('reply', { reply: '⭐ Robe satin bordeaux à 4500 DA — disponible en stock', intent: 'SALE', productCards: [s.robe.id, s.sac.id] });
     const t = await turn(s, newSender(), { text: 'la robe ?' });
     expect(fakeAi(app).callsOf('reply')[0]!.system).toContain('When presenting a product use this template: ⭐ {name} à {price} DA — {stock} en stock');
-    expect(t.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('⭐ Robe satin bordeaux à 4500 DA — 5 en stock');
+    expect(t.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('⭐ Robe satin bordeaux à 4500 DA — disponible en stock');
     expect((t.out.find((m) => m.type === 'product_cards')!.payload as any).cards.map((c: any) => c.name)).toEqual(['Robe satin bordeaux', 'Sac cuir noir']);
   });
 
@@ -704,6 +705,30 @@ describe('handoff, insights, safety', () => {
     expect(p.runs[0]!.flags).toEqual(['blocked_word']);
     expect(await db.report.findMany({ where: { workspaceId: s.owner.workspaceId } })).toMatchObject([{ type: 'ai_message', reporterKind: 'system', aiRunId: p.runs[0]!.id, details: 'blocked_word:motinterditplateforme' }]);
     await db.blockedWord.deleteMany({ where: { word: 'motinterditplateforme' } });
+  });
+
+  it('04-ai §4.3 reply guard: an invented price ⇒ one corrective turn without tools, the rewrite is sent with the cards; still wrong ⇒ the sentence is dropped; recorded on the run (meta.guard, flags); 1 credit, no handoff', async () => {
+    const s = await shop();
+    fakeAi(app).script('reply', { reply: 'La robe est à 3900 DA.', intent: 'SALE', productCards: [s.robe.id] }, { reply: 'La robe est à 4500 DA.', intent: 'SALE' });
+    const t = await turn(s, newSender(), { text: 'prix robe ?' });
+    expect(t.outcome).toBe('sent');
+    const calls = fakeAi(app).callsOf('reply');
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.tools).toBeUndefined();
+    expect(String((calls[1]!.messages.at(-1) as { content?: unknown }).content)).toContain(GUARD_MARK);
+    expect(t.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('La robe est à 4500 DA.');
+    expect(t.out.some((m) => m.type === 'product_cards')).toBe(true);
+    expect(t.runs[0]!.flags).toContain('guard_rewritten');
+    expect((t.runs[0]!.meta as any).guard).toEqual({ violations: [{ rule: 'unknown_amount', value: 3900 }], retried: true, remaining: [], action: 'rewritten' });
+    expect(t.conversation).toMatchObject({ status: 'active', aiPaused: false });
+    expect(await debits(s.owner.workspaceId)).toHaveLength(1);
+
+    await resetAi();
+    fakeAi(app).script('reply', { reply: 'Oui, elle est disponible. Il en reste 2.', intent: 'SALE' }, { reply: 'Oui, elle est disponible. Il en reste 2 pièces.', intent: 'SALE' });
+    const kept = await turn(s, newSender(), { text: 'la robe est dispo ?' });
+    expect(kept.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('Oui, elle est disponible.');
+    expect(kept.runs[0]!.flags).toContain('guard_enforced');
+    expect((kept.runs[0]!.meta as any).guard).toMatchObject({ retried: true, action: 'stripped', remaining: [{ rule: 'stock_count', value: 2 }] });
   });
 
   it('AT-AI-15 abuse guard (D33): the 50th message in 10 minutes ⇒ handoff, the AI stays silent; 20 in a minute ⇒ 10 s window', async () => {

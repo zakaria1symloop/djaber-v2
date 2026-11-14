@@ -178,6 +178,102 @@ Creates/increments `AgentFaqCandidate(agentId, normalizedQuestion, count, lastCo
 
 Tool availability per run: `search_products`, `get_product`, `quote_delivery`, `lookup_order`, `add_faq_candidate`, `handoff_to_human` always; `create_order`, `cancel_order` always (order-taking always on, D23); `create_payment_link` conditional. Playground (§8) swaps `create_order`/`cancel_order`/`create_payment_link` for dry-run implementations.
 
+### 4.3 Reply guard and rule coverage
+
+Weak-points audit 12/11, pattern 1 (owner go-ahead 14/11): about fifty « never / always / only » sentences of the prompt were held by the model alone. The **reply guard** (`modules/ai/reply-guard.ts`, pure, unit-tested in fr / ar / darija / arabizi / en, positive and negative cases) checks the reply TEXT before it is stored or sent — in `AiRunService.turn`, so the live reply job (`reply.processor.ts`, between the model loop and `finalize`) and the playground (`playground.service.ts`, and therefore the 8 wizard scenarios and the eval runner) behave the same.
+
+**Facts** (`guardFactsOf(prompt, …)` → `GuardFacts`, + `withToolResults` for every tool result of the turn as it comes):
+- prices: catalogue products without variants (+ old price and the discount old − new), every variant price (never the base price of a product sold by variant), ALSO lines, every `price` / `unitPrice` / `oldPrice` of a tool result;
+- amounts: every number of a tool result of this turn **and of the earlier turns of the conversation** (last 40 executed `AiToolCall`s of its runs; playground: of the session) except ids and stock counts; every number ≥ 10 of the texts the shop wrote (policies, FAQ, owner / closing instructions, card template, handoff rules, system messages, product descriptions); every number ≥ 50 the customer wrote in the message(s) answered (the AI may repeat « 3500 DA » to refuse it); the free-delivery threshold;
+- fees: `fee` / `stopdeskFee` / `deliveryFee` of tool results + the shop-text numbers; thresholds: `freeFrom`, `freeDeliveryThreshold`;
+- stock counts: `available` / `availableAllVariants` of a tool result (ORDER_INSUFFICIENT_STOCK) — the only counts the reply may state;
+- tokens (never a « code »): SKUs, product / variant names, order / tracking numbers, wilaya and courier names of tool results, CAPS_CODES the shop wrote (a promo code);
+- the agent name the prompt gives the AI (`approvedDisplayName`, else `approvedName`, moderated since 11/11; none ⇒ no personal name), the shop name;
+- `answeredBefore` (an AI or team message in the history), `freshStart` (the history's NEW_VISIT / RESUMED: the batch opens a new visit, or is the first message after the team gave the thread back), `customerGreets` (the batch starts with a greeting).
+
+**Rules** (`checkReply(reply, facts) → { rule, sentence, value?, kind? }[]`):
+
+| rule | what is flagged | what is not (false positives kept rare) |
+|---|---|---|
+| `unknown_amount` | an amount written as money — digits with / without spaces, dots or commas, Arabic-Indic digits, followed by `DA`, `DZD`, `dinar(s)`, `دج`, `د.ج`, `دينار` (also « 4500da ») — that is none of: an allowed amount, price × quantity 1–50, such a line + a fee, two lines (+ a fee), the sum of other amounts of the same reply (recap lines, + a fee), threshold − a line when the reply speaks of free delivery (« il vous manque … ») | numbers without a currency (phones, quantities, dates, tracking / order numbers, « 58 wilayas », « 20 % »), 0 DA, an amount of the catalogue / tools / shop texts / the customer |
+| `technical_leak` | UUID (outside a link), a tool name (`TOOL_DEFS` + aliases `get_shipping_fee`, `get_order_status`), a CODE_IN_CAPS_WITH_UNDERSCORE, an output-contract / tool-result key (`productCards`, `statusDetail`, `handoffWords`, `customerConfirmed`, `wilayaId`, …), raw JSON (`{"key":`, `"reply":`), a prompt marker (`[ID:`, `VID:`, `[tool result`, `IMAGE RESULT`, `[NEW VISIT`, `[BACK TO YOU`, `status=HANDOFF`) | links (the tracking page `/s/<token>`), SKUs, order numbers `CMD-1042`, tracking numbers, a code the shop wrote, words in capitals without `_` |
+| `stock_count` | how many units are left / in stock: fr « il en reste 3 », « il ne reste que 2 pièces », « 5 pièces disponibles », « 12 en stock », « nous en avons encore 6 », « stock : 9 », « les 2 dernières pièces »; en « we have 12 », « only 2 left », « 4 pieces in stock »; ar « باقي 3 », « بقاو 2 حبات », « متوفر 5 قطع », « 4 قطع متوفرة », « مازال 2 فالستوك »; arabizi « ba9i 3 », « b9aw 2 7abat », « kayen ghir 2 pieces » | the count a tool gave, 0, variety counts (« 2 tailles disponibles », « 3 couleurs », « we have 3 sizes », « عندنا 3 ألوان », « كاين 2 مقاسات »), time / money after the number (« il reste 2 jours », « باقي 2 أيام », « باقي 500 دج »), a size before it (« taille 38 en stock »), a quantity question (« vous voulez 3 pièces ? »), « disponible en stock » |
+| `repeat_greeting` | a greeting at the start of the reply (fr / en / Arabic / arabizi lists), or a self-introduction as the assistant, when `answeredBefore` and not `freshStart` | the first reply of a conversation (the shop's welcome is sent before it: the FIRST REPLY rule stays prompt-only), a new visit (> 6 h, NEW_VISIT), the first message after the team gave the thread back (RESUMED), a customer who greets again (« wa alaykoum salam » is polite) |
+| `self_name` | the AI gives itself a personal name other than the approved one: fr « je m'appelle X », « mon nom est X », « moi c'est X », « je suis X » (capitalised), « c'est X de la boutique »; en « my name is X », « I'm X », « this is X from »; ar « اسمي X », « معاك X من », « أنا X، المساعدة »; arabizi « smiti X », « m3ak X men » — any personal name when none is approved | the approved name (any of its words), the shop name, product names, « je suis l'assistant(e) virtuel(le) », « je suis désolée », « I'm sorry », the approved name written in the other script (Latin ↔ Arabic: not comparable, not counted) |
+
+**On a violation** (`AiRunService.turn`): **one corrective model turn** inside the same run — the model's answer as `assistant` + a `user` message `REPLY CHECK BY THE PLATFORM: …` (`guardInstruction`: the broken rules, the wrong amounts, the catalogue prices « name price DA » ≤ 40, the agent's name), **offered no tool** (an order or a cancellation is never done twice; earlier tool calls go as plain text, §6 d). Only the corrective answer's `reply` text is taken: status, statusDetail, cards, photos, recommendations, `customer` and every tool effect stay the first answer's — the guard never changes a handoff and **never hands off**. The corrective turn is asked only when a model step is left and ≥ `GUARD_RETRY_MIN_MS` (8 s) of the 45 s budget remains; after a format retry (§4.1 salvage) it is skipped. The corrective answer still breaks a rule (or is empty / malformed, or the call fails / runs out of time) ⇒ **enforcement** (`enforceReply`): the sentences holding an `unknown_amount`, `stock_count`, `technical_leak` or `self_name` are dropped and an opening greeting is stripped (`repeat_greeting`, with its companions « Bonjour Madame, », « Salam khouya, »); what remains is sent when it has ≥ 2 words; else one neutral sentence of the customer's language (`SAFE_SENTENCES`, fr / ar / arabizi / en, never a promise that the team will answer): a wrong amount with product cards ⇒ « Le prix est indiqué sur la fiche du produit ci-dessous. »; only a stock count ⇒ « Oui, ce produit est disponible. »; otherwise ⇒ « Pouvez-vous me préciser le produit (taille ou couleur) et, pour la livraison, votre wilaya ? »; only a wrong name ⇒ « Je suis {approved name}, l'assistant virtuel de la boutique. » (no name ⇒ « Je suis l'assistant virtuel de la boutique. »); only a repeated greeting with nothing after it ⇒ the reply is sent as it is (`kept`). Blocked words (§11) are checked after the guard, on the text that will be sent.
+
+**Recorded** on the run: `AiRun.meta.guard = { violations: [{ rule, value?, kind? }], retried, remaining: [...], action: rewritten | stripped | safe_sentence | kept }` (rules, amounts / counts and leak kinds only — never message text) and `AiRun.flags += guard_rewritten | guard_enforced | guard_kept`; the playground's test runs carry the same meta (the DTO is unchanged: the reply shown is the guarded one). `tools/deploy/diag-conversation.cjs` shows a « guard » column per run of a conversation and, in the 24 h overview, the guarded runs by action and rule and the last 15 guarded replies (time · shop · conversation · `unknown_amount=3900 → ok` · action).
+
+**Credits** (§7): the corrective turn is part of the same run and the same reply: no extra credit (a text reply costs 1 credit whatever the number of model calls, like the format retry and the handoff re-ask); its tokens are added to `AiRun.inputTokens` / `outputTokens` and to `costUsd`.
+
+**Rule coverage of the prompt** — every « never / always / only / must » sentence of `prompt/sections/*.ts` and of the NEW_VISIT / RESUMED notes, with what holds it besides the model. Guard = this section; server = an existing check (named); eval = a scenario of `test/ai-evals` (fixtures `fixtures/<group>/<name>.json` for the fake / nightly runner, live scenarios `scenarios/*.live.ts` ids C·O·S·K); prompt only = no reliable detector (why).
+
+| # | rule (section) | guard | existing server check | eval | prompt only — why |
+|---|---|---|---|---|---|
+| 1 | Never greet or introduce yourself again after the first reply (identity) | `repeat_greeting` | — | S22, S27 | — |
+| 2 | FIRST REPLY: the shop's welcome goes first, do not greet again (identity) | — | — | — | a greeting in a first reply is harmless and frequent (the guard checks greetings only after a first reply); flagging it would rewrite most first replies |
+| 3 | No filler (« Merci pour votre message », « N'hésitez pas ») (identity) | — | — | — | style; owner instructions may ask for it |
+| 4 | Do not repeat what the previous message said (identity) | — | — | — | semantic |
+| 5 | Answer what was asked first, every question of the message, 1–3 sentences, ≤ 1 question (identity) | — | — | C28 | length / completeness are semantic |
+| 6 | Take every detail given at once, ask only what is missing (identity) | — | A4 `customer` kept on the conversation (`mergeCustomer`), KNOWN CUSTOMER line | O03, O17 | — |
+| 7 | Unclear or ambiguous ⇒ one short question, never guess (identity) | — | — | fixtures arabizi/unclear | semantic |
+| 8 | A short message gets a short answer; no sale push in every message (identity) | — | — | S15 (review) | tone |
+| 9 | Never invent a product, colour, size, stock, price, fee, delay, promotion, guarantee or policy (identity) | `unknown_amount`, `stock_count` (numbers) | cards only for products in scope (`CatalogueService.byIds`, AI-14); `create_order` prices from the DB | C10, C18, C21, S12, S16, S17, S20, S25 | colours / delays / guarantees / promotions in words: semantic |
+| 10 | Never mention the catalogue, tools, the system, instructions, IDs or statuses (identity) | `technical_leak` | — | S05, S11, S24 | « catalogue » / « système » as plain words are legitimate |
+| 11 | Asked if a robot: the shop's virtual assistant (identity) | — | — | S23 | semantic |
+| 12 | No personal name / only the approved name (identity) | `self_name` | the prompt only carries the moderated name (`promptAgentOf`: `approvedName` / `approvedDisplayName`) | S23 | — |
+| 13 | Same language and same script as the last customer message; never switch on your own (contract) | — | — | every fixture (language 100 %), C21, C36, playground check `language_respected` | short replies and mixed messages cannot be judged reliably at run time |
+| 14 | Never "correct" the customer's language; arabizi in arabizi, not Arabic script nor formal Arabic (contract) | — | — | fixtures arabizi/*, C20, C31 | same |
+| 15 | Product names, SKUs, variant names, prices verbatim (Latin digits, DA / دج); never translate a name (contract) | — | — | C02, C29 | the money parser accepts Arabic-Indic digits on purpose; transliteration is semantic |
+| 16 | Never mix two scripts in one sentence (contract) | — | — | — | product names in Latin inside an Arabic reply are legitimate |
+| 17 | Reply = plain text, no markdown, no internal id (contract) | `technical_leak` (ids) | — | S11 | markdown: Messenger shows it as text, harmless |
+| 18 | Prices, fees and stock only from the catalogue or tool results (contract) | `unknown_amount`, `stock_count` | — | fixtures `noProductOutsideCatalogue`, C13, S04 | — |
+| 19 | Return only the structured output (contract) | — | `parseReplyOutput`, FORMAT_REMINDER retry, `salvageReply` (§4.1) | every fixture | — |
+| 20 | Check the reply against the OWNER INSTRUCTIONS (contract, A5) | — | — | K01 | free text of the owner |
+| 21 | OWNER INSTRUCTIONS override personality and style (knowledge) | — | — | K01 | same |
+| 22 | OUT_OF_HOURS: keep answering and taking orders (knowledge) | — | the processor sends `out_of_hours` and answers (§3.2) | K01 | — |
+| 23 | Complete catalogue: never mention a product / variant / price / stock not listed; NOT_LISTED (catalogue) | `unknown_amount` (prices) | cards, `get_product`, `create_order` refuse what is not visible (`PRODUCT_NOT_AVAILABLE`, AI-14, D36) | C06, C07, C08, C09, C10, C29, K02 | a product named in words: semantic |
+| 24 | Variant required; never offer it without a variant or at another price; never the base price (catalogue) | `unknown_amount` (base price of a variant product not allowed) | `create_order` → `VARIANT_REQUIRED` | O06, C05 | — |
+| 25 | SERVICE: never as a product in stock or a parcel (catalogue) | — | — | — | semantic |
+| 26 | ORDERABLE BEYOND STOCK: take the order, never OUT_OF_STOCK (catalogue) | — | `create_order` sells beyond stock (`sellOutOfStock`, `beyondStock`) | C12, O18 | — |
+| 27 | STOCK_PRIVATE: never how many units are left, even when asked; only `available` of ORDER_INSUFFICIENT_STOCK (catalogue) | `stock_count` | the prompt and `search_products` / `get_product` carry no count | C30, S21, S26, O07 | — |
+| 28 | OUT_OF_STOCK_SENTENCE word for word, never an own sentence (catalogue) | — | — | K03, C11 | a translation is allowed: word-for-word cannot be checked across languages |
+| 29 | MISSING_VARIANT: say which sizes remain (catalogue) | — | — | C05, C36, O21 | semantic |
+| 30 | No product available: do not invent any (catalogue) | — | cards filtered by scope | fixtures fr/off-catalogue | — |
+| 31 | Delivery fee only from the tool (orders) | `unknown_amount` (fees of this and earlier turns, shop texts) | `quote_delivery` reads the grid | C13, C14, C22, C23, C32, S25 | — |
+| 32 | Above MAX_QTY / MAX_AMOUNT: never created, hand off (orders) | — | `create_order` → `order_limit` hint ⇒ forced handoff | K06, K07, O08, O09, playground `qty_limit` | — |
+| 33 | No limit set: never refuse or hand off because of the size (orders) | — | null limit = no limit in `create_order` (PV 28/10) | O08, O09 | — |
+| 34 | One field at a time; never invent a value; re-ask an invalid value with an example (orders) | — | shared validators → `{ ok:false, error:{ code, field, example } }` | O05, O20, O22 | « one at a time » is style |
+| 35 | Never ask again for a value already given; reuse it in the recap (orders) | — | KNOWN CUSTOMER / `context.customer` | O17, O23 | — |
+| 36 | The chosen product / variant / quantity stay chosen while collecting fields (orders) | — | — | O01, O24 | semantic |
+| 37 | A KNOWN CUSTOMER value is confirmed in the recap; a missing required field is asked (orders) | — | `create_order` → `VALIDATION missing=true` | O17 | — |
+| 38 | A message with only a phone / name / wilaya / address while ordering is that value, never UNCLEAR / a call request / a handoff (orders) | — | handoff-judge (evidence must ask for it) | O01, O05 | UNCLEAR on such a message: semantic |
+| 39 | A place that is wilaya and commune given once is both (orders) | — | — | O20 | semantic |
+| 40 | Recap before `create_order`, wait for an explicit confirmation (orders) | — | `customerConfirmed: const true` in the tool schema | fixtures fr/order-not-created-without-recap, O04 | — |
+| 41 | Never refuse an order because of STOCK; call `create_order`; never more than `availableAllVariants`; a stock shortage is never a handoff (orders) | `stock_count` (only the tool's count) | conditional stock decrement + `ORDER_INSUFFICIENT_STOCK` with `available` / `otherVariants` | O07 | — |
+| 42 | `create_order` once per confirmed recap; `duplicateOf` ⇒ confirm that order (orders) | — | duplicate guard (10 min) + `AiToolCall` replay (§5) | O16 | — |
+| 43 | Cancel only an order the shop has not confirmed; ORDER_CONFIRMED_BY_SELLER ⇒ never promise, hand off (orders) | — | `cancel_order` scope + `hint: handoff` | O13, O14, C34 | — |
+| 44 | Change = new recap, `create_order replacesOrder`; never cancel to replace (orders) | — | `create_order` creates first, then cancels the replaced order | O12 | — |
+| 45 | Cash on delivery unless a payment-link tool exists (orders) | — | `paymentMethod='cash'`; `create_payment_link` only when enabled | C26 | — |
+| 46 | Tracking: `lookup_order`; never invent a status, a date or a delay (orders) | — | `lookup_order` data, Algiers wall-clock dates | O15, C33, fixtures darija/tracking-none | a delay in words: semantic |
+| 47 | An order question is never a handoff reason by itself (orders) | — | handoff-judge (`complaint` needs the customer's words) | C33 | — |
+| 48 | Image: confidence < 0.7 ⇒ confirm; never a price for an unconfirmed match (behaviour) | — | the vision note is computed by the server (`VISION_CONFIDENCE_MIN`); no card without a match | fixtures vision/unknown-photo (`noPriceInReply`) | a price of a product the customer named in words is legitimate — the guard cannot tell |
+| 49 | Cross-sell: ≤ 1 per conversation, only ALSO lines, only after the customer chose (behaviour) | — | ≤ 3 recorded per reply, active rules only (`CrossSellService.impressions`) | C25 | semantic |
+| 50 | Never more than 3 suggestions in one reply (behaviour) | — | `recommendations` max 3 in the schema (REC-01) | — | — |
+| 51 | Never suggest an out-of-stock product or one already chosen (behaviour) | — | — | C25 (review) | semantic |
+| 52 | Card template `{stock}` in words, never a number (behaviour) | `stock_count` | — | K08 | — |
+| 53 | ≤ 5 product cards; only the products the customer is interested in (behaviour) | — | `productCards` max 5 + scope filter | fixtures `cards` | « interested in »: semantic |
+| 54 | Hand off only when the CURRENT message matches a rule; never for a greeting, a photo, an earlier message or an unanswerable question; evidence = the customer's words (behaviour) | — | handoff-judge (§10) | S01, S02, S03, S07, S10, S18, S19, K04, K05, fixtures *-handoff | — |
+| 55 | HANDOFF_MESSAGE is sent automatically: do not announce the handoff yourself (behaviour) | — | reply dropped for `customer_request` / `keyword` when the shop text goes out (recette 09/11) | K04 | other reasons: the reply answers the rest, semantic |
+| 56 | No HANDOFF_MESSAGE: say a team member follows up; never promise a delay (behaviour) | — | — | — | semantic |
+| 57 | UNKNOWN: say you will check with the team, `add_faq_candidate`, keep the conversation (behaviour) | — | UNKNOWN never hands off (PV 08/11); insight `unknown_topic` | S16 | — |
+| 58 | UNCLEAR: say so politely and ask to rephrase; 3 in a row ⇒ handoff (behaviour) | — | `unclearStreak` (§10) | S07, fixtures arabizi/unclear | — |
+| 59 | NEW_VISIT: answer the new message for itself, do not resume the earlier visit (note) | — (`repeat_greeting` lets the greeting through) | — | — | resuming the earlier topic is semantic (the note itself is added by the server after 6 h, `NEW_VISIT_AFTER_MS`) |
+| 60 | RESUMED: never hand off again because of an earlier message (note) | — | handoff-judge: evidence must be in the current message | — | — |
+
+Summary: **60 rules** — **12 held by the reply guard** (1, 9, 10, 12, 17, 18, 23, 24, 27, 31, 41, 52), **34 by an existing server check**, so **39 have at least one run-time check**; **51 have an eval scenario**; **21 are prompt-only at run time** — 14 of them covered by an eval (5, 7, 8, 11, 13, 14, 15, 20, 21, 28, 29, 36, 39, 51), 7 by nothing (2, 3, 4, 16, 25, 56, 59; why in the last column). Every guard rule has unit tests (`reply-guard.spec.ts` 164 cases, `guard-turn.spec.ts` 8 cases for the loop) and live scenarios (S21–S27, C30); the M4 integration test « 04-ai §4.3 reply guard » covers meta / flags / credits.
+
 ---
 
 ## 5. Idempotent run (`AiRunService`, 04 §5)
@@ -212,7 +308,7 @@ finish:           AiRun { status: ok|unclear|unknown|handoff, inputTokens, outpu
 
 | Run kind | Cost | Reserve at | Settle |
 |---|---|---|---|
-| `reply` text only | 1 | job start | debit when the reply message is enqueued to `meta-send` (status `ok|unclear|unknown|handoff` with a reply) |
+| `reply` text only | 1 | job start | debit when the reply message is enqueued to `meta-send` (status `ok|unclear|unknown|handoff` with a reply); the format retry (§4.1), the handoff re-ask (§10) and the reply-guard corrective turn (§4.3) are model calls of the same run: no extra credit (their tokens count in `costUsd`) |
 | `reply` with ≥ 1 image | 5 (replaces 1) | job start | debit when vision pass 2 succeeded (even if the final send fails) |
 | `reply` with audio | 3 (if no image) | job start | debit when transcription succeeded |
 | `create_order` tool | 0 | — | — |
@@ -229,6 +325,7 @@ Ledger rows (`CreditLedger`, append-only, `balanceAfter` stored on every row): r
 
 `POST /agents/:id/test { sessionId, messages:[{ role:'user'|'assistant', text, imageUploadId?, audioUploadId? }], scenario? }` → `{ reply, status, statusDetail, intent, confidence, language, model:{ id, temperature, maxTokens }, tokens:{ input, output }, latencyMs, toolCalls:[{ name, args, result, simulated }], cards:[{ productId, name, price, imageUrl, variantLabel }], creditsWouldCost, promptSections:[{ key, chars }] }`.
 - `AiRun.kind='test'`, `conversationId=null`, no credits, throttler `playground` 60/h/workspace (`PLAYGROUND_RATE_LIMITED`).
+- The same reply guard as the live replies (§4.3; facts from the session's earlier turns): the merchant sees the guarded reply; `AiRun.meta.guard` / flags are kept on the test run, the DTO is unchanged.
 - Dry-run tools: `create_order` validates everything and returns `{ ok:true, number:'TEST-'+seq, simulated:true, … }` without writing; `cancel_order` returns candidates from real orders but never cancels; `quote_delivery`, `search_products`, `lookup_order` are real reads.
 - Scenarios (buttons, `TestScenarioKey`): `darija_price`, `arabizi_delivery`, `photo`, `voice`, `off_catalog`, `anger`, `qty_limit`, `refund` ⇒ seeded first user message from `prompt/scenarios.ts`; each run stored as `AgentTestRun(status ∈ pass|fail|error)` with `AiRun.kind='test_scenario'`.
 - "Ajouter une instruction depuis ce tour" ⇒ `PATCH /agents/:id` append `- …` to `customInstructions`; "Signaler une mauvaise réponse (eval)" ⇒ `POST /agents/:id/test/flag { sessionId, turn, note }` stores `AiEvalCase` (fixtures for nightly evals); "Exporter la conversation (eval)" ⇒ `GET /agents/:id/test/export?sessionId=` JSON download.
@@ -290,7 +387,7 @@ Per run, `AiRunService.finish` also writes `AiRunMetrics` fields used by ANA-02 
 
 ## 15. Evals (07 §9)
 
-Fixtures in `apps/api/test/ai-evals/fixtures/{darija,arabizi,fr,en,mixed,vision,voice}/*.json` (`{ messages, expect:{ status, intent, language, toolCalls?, noProductOutsideCatalogue:true, orderCreated?:boolean } }`); runner `pnpm test:evals` executes against a seeded catalogue with the primary route model, asserts the structured output and tool call sequence, and records cost/latency; runs nightly and on any change under `modules/ai/prompt/**`. Pass threshold 95 % per fixture group; language-respect 100 %.
+Live scenarios (`apps/api/test/ai-evals/scenarios/*.live.ts`, ids C·O·S·K, `pnpm test:scenarios`, real model, run by hand) check the prompt rules with the reply guard's own detectors (S21–S27, C30: stock counts, second greeting, own name, technical text, amounts not explained); the rule ↔ scenario map is §4.3. Fixtures in `apps/api/test/ai-evals/fixtures/{darija,arabizi,fr,en,mixed,vision,voice}/*.json` (`{ messages, expect:{ status, intent, language, toolCalls?, noProductOutsideCatalogue:true, orderCreated?:boolean } }`); runner `pnpm test:evals` executes against a seeded catalogue with the primary route model, asserts the structured output and tool call sequence, and records cost/latency; runs nightly and on any change under `modules/ai/prompt/**`. Pass threshold 95 % per fixture group; language-respect 100 %.
 
 ---
 
@@ -302,9 +399,11 @@ Fixtures in `apps/api/test/ai-evals/fixtures/{darija,arabizi,fr,en,mixed,vision,
 - Filter the catalogue with `isActive && deletedAt IS NULL && moderationStatus IN ('approved','not_required')` in every tool and prompt section.
 - Validate every tool argument with the shared validators and return `{ ok:false, error }` to the model.
 - Send the text reply first, then ≤ 5 cards, each as its own outbox send keyed by message id.
+- Pass the turn's `GuardFacts` (§4.3) to `AiRunService.turn` in every path that answers a customer (reply job, playground): a new prompt rule that can be checked on the text gets a guard rule or a row « prompt only — why » in the §4.3 table.
 
 **Don't**
-- Don't let the model set prices, fees or stock; all numbers come from tool results.
+- Don't let the model set prices, fees or stock; all numbers come from tool results (the reply guard, §4.3, checks every amount and stock count of the text).
+- Don't let the reply guard hand off, change the status / cards of the answer or call a tool: it only rewrites or trims the text.
 - Don't call `create_order` without `customerConfirmed:true`; don't create an order from `cancel_order`.
 - Don't use Meta message tags for AI sends.
 - Don't send the handoff message twice in 24 h for the same conversation.

@@ -29,12 +29,13 @@ import { META_GATEWAY, type MetaGateway } from '../meta/meta.gateway';
 import { AdminNotifier } from '../notifications/admin-notifier.service';
 import { NotificationProducer } from '../notifications/notification.producer';
 import { CrossSellService } from '../recommendations/cross-sell.service';
-import { AI_ERROR_ALERT_FAILURES, AI_ERROR_ALERT_WINDOW_S, LAST_PRODUCTS_MAX, MEDIA_WAIT_MS, MEDIA_WAIT_STEP_MS, NEW_VISIT_AFTER_MS, NEW_VISIT_NOTE, plannedCost, RESUMED_NOTE, RUN_BUDGET_MS, UNCLEAR_STREAK_HANDOFF } from './ai.constants';
-import { AiRunService, intentOf, type RunMeta, type TurnResult } from './ai-run.service';
+import { AI_ERROR_ALERT_FAILURES, AI_ERROR_ALERT_WINDOW_S, GUARD_EARLIER_TOOL_CALLS, LAST_PRODUCTS_MAX, MEDIA_WAIT_MS, MEDIA_WAIT_STEP_MS, NEW_VISIT_AFTER_MS, NEW_VISIT_NOTE, plannedCost, RESUMED_NOTE, RUN_BUDGET_MS, UNCLEAR_STREAK_HANDOFF } from './ai.constants';
+import { AiRunService, guardFlags, intentOf, type RunMeta, type TurnResult } from './ai-run.service';
 import { CatalogueService } from './catalogue.service';
 import { InsightService } from './insight.service';
 import { detectLanguage, type AiLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
+import { guardFactsOf } from './reply-guard';
 import { AiProviderError } from './provider/ai.gateway';
 import { canonicalTool } from './tools/tool-registry';
 import { TurnContextService } from './turn-context.service';
@@ -278,6 +279,10 @@ export class ReplyProcessor implements OnModuleInit {
     const history = await this.history(conv, batch.messages[0]!.createdAt);
     const lead = history.resumed ? RESUMED_NOTE : history.newVisit ? NEW_VISIT_NOTE : null;
     const prompt = PromptBuilder.build(turnCtx.prompt, history.messages, lead ? `${lead}\n${batchText}` : batchText, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });
+    // §4.3 reply guard: the facts of this turn — the prompt's catalogue and shop texts, the fees / totals the tools gave in the
+    // earlier turns of the conversation, whether the AI already answered this visit (the NEW_VISIT / RESUMED notes of the history)
+    const earlier = await prisma.aiToolCall.findMany({ where: { executedAt: { not: null }, aiRun: { conversationId: conv.id, id: { not: run.id } } }, orderBy: { executedAt: 'desc' }, take: GUARD_EARLIER_TOOL_CALLS, select: { result: true } });
+    const guard = guardFactsOf(turnCtx.prompt, { customerText: batch.plain, answeredBefore: history.messages.some((m) => m.author === 'ai' || m.author === 'human'), freshStart: history.newVisit || history.resumed, earlierToolResults: earlier.map((c) => c.result) });
 
     // --- model loop ------------------------------------------------------------------------------------------------------------
     const turn = await this.runs.turn({
@@ -288,6 +293,7 @@ export class ReplyProcessor implements OnModuleInit {
       temperature: turnCtx.temperature,
       maxTokens: turnCtx.maxTokens,
       deadline,
+      guard,
     });
     if (!turn.ok) {
       if (turn.kind === 'provider') return this.providerFailed(conv, agent, run, turn, turn.error, batch, attempts);
@@ -390,7 +396,7 @@ export class ReplyProcessor implements OnModuleInit {
       // the run is closed first: a second execution of the same batch stops here and stores nothing
       const closed = await this.runs.finish(
         run.id,
-        { status, turn, intent: intentOf(out.intent), confidence: out.confidence, startedAt: run.startedAt, flags: [...(blocked ? ['blocked_word'] : []), ...(turn.salvaged ? ['format_salvaged'] : []), ...(turn.handoffRefused ? ['handoff_refused'] : [])], meta: { language: out.language ?? o.lang, cardsSent: cards.length, handoff: status === 'handoff' } },
+        { status, turn, intent: intentOf(out.intent), confidence: out.confidence, startedAt: run.startedAt, flags: [...(blocked ? ['blocked_word'] : []), ...(turn.salvaged ? ['format_salvaged'] : []), ...(turn.handoffRefused ? ['handoff_refused'] : []), ...guardFlags(turn.guard)], meta: { language: out.language ?? o.lang, cardsSent: cards.length, handoff: status === 'handoff', ...(turn.guard ? { guard: turn.guard } : {}) } },
         tx,
       );
       if (!closed) return 'noop';
