@@ -3,7 +3,8 @@
 // CAT-05 / GDS-02 / GDS-03: manual adjustments, the movement journal, reversal, the stock dashboard and the snapshot.
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { prisma, Prisma, TenantContext, type MovementReason, type MovementRefType, type MovementType, type StockMovement, type Tx } from '@djaber/db';
-import { MovementTypeValues, type MovementStatsView, type StockAdjustmentInput, type StockMovementView, type StockPurchasingView } from '@djaber/shared';
+import { MovementTypeValues, renderStoredTextIn, type MovementStatsView, type StockAdjustmentInput, type StockMovementView, type StockPurchasingView } from '@djaber/shared';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { can } from '../../core/rbac/permission-matrix';
 import { AppException, notFound } from '../../core/errors/app.exception';
 import { page, toSkipTake, type Page } from '../../core/http/pagination';
@@ -354,7 +355,7 @@ export class StockService implements OnModuleInit {
       before: m.quantityBefore,
       after: m.quantityAfter,
       reason: m.reason,
-      note: m.note,
+      note: renderStoredTextIn(m.note, viewerLocale()),
       reference: m.refType && m.refId ? { type: m.refType, id: m.refId, label: labels.get(m.refId) ?? m.refId.slice(0, 8) } : null,
       actor: m.actor,
       reversed: !!m.reversedByMovementId,

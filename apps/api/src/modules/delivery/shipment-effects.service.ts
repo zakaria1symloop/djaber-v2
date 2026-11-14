@@ -14,7 +14,7 @@ import { OrderService } from '../orders/order.service';
 import { OrderWorkflowService, type LockedOrder } from '../orders/order-workflow.service';
 import { PROVIDER_NAMES, type CourierProvider } from './adapters/courier-adapter';
 import { SHIPMENT_INCLUDE, shipmentUpdatedPayload, type ShipmentRow } from './shipment.presenter';
-import { attemptsAfter, decideStatus, nextSyncAt, orderDeliveryStatusAfter } from './tracking-rules';
+import { attemptsAfter, decideStatus, isKnownCourierEvent, nextSyncAt, orderDeliveryStatusAfter } from './tracking-rules';
 
 export type CourierUpdate = {
   rawStatus: string;
@@ -104,8 +104,9 @@ export class ShipmentEffects {
     const now = new Date();
     const at = u.at ? new Date(u.at) : now;
     const courierSource = u.source === 'poll' || u.source === 'webhook';
-    const last = await tx.shipmentEvent.findFirst({ where: { shipmentId }, orderBy: [{ at: 'desc' }, { createdAt: 'desc' }] });
-    const isNewEvent = !courierSource || !last || last.rawStatus !== u.rawStatus || Math.abs(last.at.getTime() - at.getTime()) > 1000;
+    // UX-056 remark: a courier report is a new line only when the timeline does not hold it yet (every event, not the newest)
+    const known = courierSource ? await tx.shipmentEvent.findMany({ where: { shipmentId }, select: { rawStatus: true, mappedStatus: true, at: true } }) : [];
+    const isNewEvent = !courierSource || !isKnownCourierEvent(known, { rawStatus: u.rawStatus, mapped: u.mapped, at: u.at ? at : null }, s.rawStatus);
     const decision = u.force ? { change: !!u.mapped && s.status !== u.mapped, reason: 'forward' as const } : decideStatus(s.status, u.mapped);
     // M6 carry-over: raw courier statuses without a mapping are stored as events with `mappedStatus = null` and counted
     if (courierSource && !u.mapped) this.metrics?.courierUnknown(s.provider, u.rawStatus);

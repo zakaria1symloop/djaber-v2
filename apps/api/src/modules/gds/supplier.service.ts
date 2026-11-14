@@ -2,7 +2,7 @@
 // purchases — fix), soft delete blocked by purchases (`SUPPLIER_HAS_PURCHASES` → deactivate), supplier payment allocated
 // to one purchase or to the oldest ones first (each part = PaymentEntry + locked cash row through PurchaseEffects).
 import { Injectable } from '@nestjs/common';
-import { SUPPLIER_SORTS, type CreateSupplierInput, type PurchasesQuery, type SupplierListItemView, type SupplierPaymentInput, type SuppliersQuery, type SupplierView, type UpdateSupplierInput } from '@djaber/shared';
+import { storedText, SUPPLIER_SORTS, type CreateSupplierInput, type PurchasesQuery, type SupplierListItemView, type SupplierPaymentInput, type SuppliersQuery, type SupplierView, type UpdateSupplierInput } from '@djaber/shared';
 import { prisma, Prisma, TenantContext, type Supplier, type Tx } from '@djaber/db';
 import { AppException, notFound, validationError } from '../../core/errors/app.exception';
 import { page, type Page } from '../../core/http/pagination';
@@ -222,7 +222,7 @@ export class SupplierService {
       for (const p of owing) {
         if (left <= 0) break;
         const amount = Math.min(left, p.total - p.amountPaid);
-        await this.purchases.payInTx(tx, p.id, { amount, method: input.method, reference: input.reference, note: input.note, paidAt: input.paidAt, description: `Paiement fournisseur — Achat #${p.number}` });
+        await this.purchases.payInTx(tx, p.id, { amount, method: input.method, reference: input.reference, note: input.note, paidAt: input.paidAt, description: storedText('stored.cash.supplierPayment', { number: p.number }) });
         parts.push({ purchaseId: p.id, number: p.number, amount });
         left -= amount;
       }

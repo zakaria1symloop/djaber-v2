@@ -3,6 +3,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   IMPERSONATION_MINUTES,
+  textIn,
   type AdminImpersonateInput,
   type AdminViewerConversationDto,
   type AdminViewerConversationRowDto,
@@ -18,7 +19,7 @@ import { TokenService } from '../../core/auth/token.service';
 import { AppException, notFound } from '../../core/errors/app.exception';
 import { page, toSkipTake, type Page } from '../../core/http/pagination';
 import { OutboxService } from '../../core/outbox/outbox.service';
-import { DAY, assertUuid, iso, maskName, maskPhone, maskText, requireReason, userRef, userSelect, type AdminActor } from './admin.util';
+import { DAY, adminLocale, assertUuid, iso, maskName, maskPhone, maskText, requireReason, userRef, userSelect, type AdminActor } from './admin.util';
 
 @Injectable()
 export class AdminViewersService {
@@ -57,6 +58,8 @@ export class AdminViewersService {
     const c = await prisma.conversation.findFirst({ where: { id, deletedAt: null }, include: { ...this.convInclude, agent: { select: { id: true, name: true } } } });
     if (!c) throw notFound();
     const msgs = await prisma.message.findMany({ where: { conversationId: id }, orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 200, include: { authorUser: { select: { firstName: true, lastName: true } } } });
+    const lang = adminLocale();
+    const label = (who: 'client' | 'ai' | 'system' | 'team') => textIn(`actor.label.${who}`, lang) ?? who;
     const messages: AdminViewerMessageDto[] = msgs.reverse().map((m) => {
       const author = m.author;
       const atts = Array.isArray(m.attachments) ? (m.attachments as { type?: string; url?: string }[]) : [];
@@ -65,7 +68,8 @@ export class AdminViewersService {
         at: m.sentAt.toISOString(),
         direction: m.direction,
         author,
-        authorLabel: author === 'customer' ? (unmasked ? c.client?.name ?? 'Client' : maskName(c.client?.name)) : author === 'ai' ? c.agent?.name ?? 'IA' : author === 'system' ? 'Système' : m.authorUser ? `${m.authorUser.firstName} ${m.authorUser.lastName[0] ?? ''}.` : 'Équipe',
+        // the fallback names in the admin's language (UX-056 leftovers: were French in the Arabic / English admin)
+        authorLabel: author === 'customer' ? (unmasked ? (c.client?.name ?? label('client')) : maskName(c.client?.name)) : author === 'ai' ? (c.agent?.name ?? label('ai')) : author === 'system' ? label('system') : m.authorUser ? `${m.authorUser.firstName} ${m.authorUser.lastName[0] ?? ''}.` : label('team'),
         type: m.type,
         text: unmasked ? m.text ?? m.transcript : maskText(m.text ?? m.transcript),
         attachments: atts.map((a) => ({ type: a.type ?? 'file', url: unmasked ? a.url ?? null : null })),

@@ -4,7 +4,7 @@
 // and `sched-order-reminders`. Every side effect goes through OrderEffects inside the row-locked transaction.
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import { CancelReasonValues, FailureReasonValues, formatMoney, ORDER_BULK_STATUS_TARGETS, type CallLogInput, type CancelReasonName, type FailureReasonName, type OrderAddressInput, type OrderStatusName, type OrderView, type RecordPaymentInput } from '@djaber/shared';
+import { CancelReasonValues, FailureReasonValues, formatMoney, ORDER_BULK_STATUS_TARGETS, storedText, type CallLogInput, type CancelReasonName, type FailureReasonName, type OrderAddressInput, type OrderStatusName, type OrderView, type RecordPaymentInput } from '@djaber/shared';
 import { prisma, TenantContext, type Order, type Prisma, type Tx } from '@djaber/db';
 import { AppException } from '../../core/errors/app.exception';
 import { runBulk, type BulkCtx } from '../../core/http/bulk';
@@ -13,7 +13,7 @@ import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { QueueOutbox } from '../../core/queue/queue.outbox';
 import type { CancellableOrder, OrderToolContext, ToolResult } from '../ai/tools/order-tools';
 import { withinWindow } from '../messaging/window-rules';
-import { codPlan, callPlan, checkEffectiveAt, checkTransition, isTerminal, transitionPlan } from './order-rules';
+import { aiCancelNote, codPlan, callPlan, checkEffectiveAt, checkTransition, isTerminal, transitionPlan } from './order-rules';
 import type { Actor } from './order-effects.service';
 export type LockedOrder = Locked;
 import { addressSnapshot, hasDeliveryAddress, stateOf } from './order.presenter';
@@ -113,7 +113,8 @@ export class OrderWorkflowService implements OnModuleInit {
     if (plan.cash === 'cod') {
       const cod = codPlan(o, opt.amountCollected, opt.note ?? opt.reason);
       if ('code' in cod) throw refuse(cod);
-      const label = cod.finalPaid === o.total ? `Commande #${o.number} livrée (COD)` : `Commande #${o.number} livrée (COD) — ${formatMoney(cod.finalPaid)} encaissés : ${opt.note ?? opt.reason ?? ''}`.trim();
+      // stored as a key + values, rendered in the reader's language (UX-056 leftovers)
+      const label = cod.finalPaid === o.total ? storedText('stored.cash.orderCod', { number: o.number }) : storedText('stored.cash.orderCodPartial', { number: o.number, amount: formatMoney(cod.finalPaid), note: opt.note ?? opt.reason ?? '' });
       await this.effects.addPayment(tx, o, { amount: cod.entry, method: 'cash', paidAt: at, description: label, note: cod.finalPaid === o.total ? null : (opt.note ?? opt.reason ?? null) }, opt.actor);
       paid = await this.effects.recomputePaid(tx, o);
     } else if (plan.cash === 'clear') {
@@ -374,7 +375,7 @@ export class OrderWorkflowService implements OnModuleInit {
       if (input.amount > o.total - o.amountPaid) throw new AppException('VALIDATION_ERROR', {}, { amount: 'validation.range' });
       const paidAt = input.paidAt ? new Date(input.paidAt) : new Date();
       if (paidAt.getTime() > Date.now() + DAY) throw new AppException('VALIDATION_ERROR', {}, { paidAt: 'validation.date' });
-      await this.effects.addPayment(tx, o, { amount: input.amount, method: input.method, reference: input.reference, note: input.note, paidAt, description: `Commande #${o.number} (paiement)` }, actor);
+      await this.effects.addPayment(tx, o, { amount: input.amount, method: input.method, reference: input.reference, note: input.note, paidAt, description: storedText('stored.cash.orderPayment', { number: o.number }) }, actor);
       const paid = await this.effects.recomputePaid(tx, o);
       const updated = await tx.order.update({ where: { id }, data: { ...paid, version: { increment: 1 } } });
       if (paid.paymentStatus !== o.paymentStatus) await tx.orderStatusHistory.create({ data: { orderId: id, field: 'paymentStatus', from: o.paymentStatus, to: paid.paymentStatus, actorType: actor.type, actorId: actor.id } });
@@ -433,7 +434,7 @@ export class OrderWorkflowService implements OnModuleInit {
         const o = await this.orders.lock(tx, order.id);
         // A8: never an order the shop confirmed (only `new`), never a parcel already sent
         if (o.clientId !== ctx.clientId || o.status !== 'new' || o.deliveryStatus !== 'not_sent') throw new AppException('ORDER_INVALID_TRANSITION', { from: o.status, to: 'cancelled' });
-        await this.transition(tx, o, 'cancelled', { actor: { type: 'ai', id: ctx.agentId }, reason: 'changed_mind', note: reason ? `IA : ${reason}` : 'IA : demande du client', system: true, notifyCustomer: false, shipmentNotice: false });
+        await this.transition(tx, o, 'cancelled', { actor: { type: 'ai', id: ctx.agentId }, reason: 'changed_mind', note: aiCancelNote(reason), system: true, notifyCustomer: false, shipmentNotice: false });
       });
     } catch (e) {
       if (e instanceof AppException && (e.code === 'ORDER_INVALID_TRANSITION' || e.code === 'ORDER_TERMINAL' || e.code === 'DELIVERY_ORDER_ALREADY_SENT' || e.code === 'NOT_FOUND')) return { ok: false, error: { code: 'ORDER_NOT_CANCELLABLE' } };

@@ -368,9 +368,9 @@ One scenario per rule; IDs `AT-<area>-nn`. Columns: scenario (Given / When / The
 | AT-ORD-29 | Address edit after `createParcel` ⇒ `COURIER_ADDRESS_LOCKED`; before ⇒ fee recomputed (Admin override kept), AI informs the customer inside 24 h | 04 §21 | I |
 | AT-ORD-30 | Bulk "mark delivered" endpoint ⇒ 422 (forbidden in bulk); bulk confirm of 3 with one missing address ⇒ 2 ok + `ORDER_ADDRESS_REQUIRED`, dialog "Réessayer les erreurs" | 04 §21, LST-04 | I/E |
 | AT-ORD-31 | Delete dialog: typed "CMD-1035" for CMD-1036 ⇒ button disabled; delivered ⇒ `ORDER_DELETE_DELIVERED`; active parcel ⇒ `DELIVERY_ORDER_ALREADY_SENT` | 04 §21 | E/I |
-| AT-DLV-11 | Failure flow: courier `failed unreachable 2/3` ⇒ notification, Home card, Échecs row; "Relancer" with adapter support ⇒ attempts +1; without support after pickup ⇒ `COURIER_CANCEL_NOT_ALLOWED`; third failure ⇒ UI proposes return | FL-25 | I/E |
+| AT-DLV-11 | Failure flow: courier `failed unreachable 2/3` ⇒ notification, Home card, Échecs row; "Relancer" with adapter support ⇒ attempts +1; without support after pickup ⇒ `COURIER_RETRY_UNSUPPORTED`; third failure ⇒ UI proposes return | FL-25 | I/E |
 | AT-DLV-12 | Refresh tracking twice in 5 min ⇒ `TRACKING_SYNC_RATE_LIMITED`; no event for 6 d in transit ⇒ "Sans mouvement" tab and KPI; 31 d ⇒ `stale` | 04 §22 | I |
-| AT-DLV-13 | Cancel parcel before pickup ⇒ `cancelled`, order back to `confirmed` (option) or cancelled (option); labels dialog on 6 orders with 2 unsent ⇒ 4-page PDF + 2 rows `SHIPMENT_NOT_CREATED`; thermal 100 × 150 variant; `labelPrintedAt` set when ticked | 04 §22 | I/E |
+| AT-DLV-13 | Cancel parcel before pickup ⇒ `cancelled`, order back to `confirmed` (option) or cancelled (option); a courier without API cancel ⇒ `COURIER_CANCEL_UNSUPPORTED`, picked up ⇒ `COURIER_CANCEL_NOT_ALLOWED`; labels dialog on 6 orders with 2 unsent ⇒ 4-page PDF + 2 rows `SHIPMENT_NOT_CREATED`; thermal 100 × 150 variant; `labelPrintedAt` set when ticked | 04 §22 | I/E |
 | AT-DLV-14 | "Livraison propre" courier type: no credentials, mark shipped with optional tracking, Djaber label, manual status only; change courier on a failed order recomputes courier cost not customer fee | 04 §22, D15 | I |
 | AT-CLI-06 | Merge without confirm ⇒ 409 `CUSTOMER_MERGE_IRREVERSIBLE` with data; with confirm ⇒ kept client gains orders/conversations/notes, merged soft-deleted; delete client with orders ⇒ `CUSTOMER_HAS_ORDERS` ⇒ archive; bulk tags add/remove on 5 clients | 03 §37 CLI | I/E |
 | AT-LST-01 | Every list page renders the 6 states (skeleton, empty, filtered-empty, error, offline, loading more) and every form the 5 states (saving, validation, leave-guard, 409, saved toast) — storybook snapshots over 12 §16 | 12 §16 | E |
@@ -406,7 +406,7 @@ One scenario per rule; IDs `AT-<area>-nn`. Columns: scenario (Given / When / The
 | AT-DLG-18 | Supprimer le transporteur | with 27 active parcels ⇒ `COURIER_HAS_ACTIVE_SHIPMENTS` ⇒ Désactiver | E/I |
 | AT-DLG-19 | Grille des frais — actions | reset all needs confirmation and overwrites; fill missing keeps custom; reset row on default ⇒ `FEE_RULE_NOT_FOUND`; free-delivery modes save | E/I |
 | AT-DLG-20 | Bordereau indisponible | retry calls `getLabel`; Djaber A6 renders tracking n°, COD, barcode | E |
-| AT-DLG-21 | Annuler le colis | before pickup ⇒ cancelled with order option; after ⇒ `COURIER_CANCEL_NOT_ALLOWED` | I |
+| AT-DLG-21 | Annuler le colis | before pickup ⇒ cancelled with order option; after ⇒ `COURIER_CANCEL_NOT_ALLOWED`; courier without API cancel ⇒ `COURIER_CANCEL_UNSUPPORTED` | I |
 | AT-DLG-22 | Nouveau client | phone conflict shows "Utiliser ce client"; default address saved; tags | E/I |
 | AT-DLG-23 | Supprimer le client / Tags | soft delete; with orders ⇒ archive proposal; bulk tags apply to 5 | E/I |
 | AT-DLG-24 | Nouvelle catégorie / Nouvelle unité (DLG GDS) | duplicate name ⇒ `CATEGORY_ALREADY_EXISTS`; parent depth > 2 ⇒ `CATEGORY_DEPTH_EXCEEDED`; unit "contains n ×" saved | I/E |

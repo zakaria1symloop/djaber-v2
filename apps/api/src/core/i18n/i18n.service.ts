@@ -32,6 +32,17 @@ export class I18nService {
     }
     return typeof value === 'string' ? value : '';
   }
+
+  /**
+   * The value of a localized JSON column in `locale` only — '' when that translation is blank. For optional platform
+   * texts (a plan's tagline) that are better left out than shown in another language (UX-056 leftovers, 14/11: « Pour
+   * démarrer » on the Arabic billing page). Names keep `pick` (a name is always needed).
+   */
+  pickOwn(value: unknown, locale: string): string {
+    if (!value || typeof value !== 'object') return '';
+    const own = (value as Record<string, unknown>)[isAppLocale(locale) ? locale : 'fr'];
+    return typeof own === 'string' ? own.trim() : '';
+  }
 }
 
 /** `?lang` / `Accept-Language` → fr | ar | en, undefined when neither names a supported language. */

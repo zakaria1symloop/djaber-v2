@@ -6,4 +6,5 @@ export * from './i18n';
 export * from './format';
 export * from './geo';
 export * from './i18n/messages';
+export * from './i18n/stored-text';
 export * from './permissions';

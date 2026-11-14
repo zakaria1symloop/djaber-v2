@@ -4,7 +4,7 @@
 // call a courier: they write the Shipment row + an outbox job in one transaction (CLAUDE.md rule 4).
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import { courierWilayaId, sendClosedCode, TRACKING_SYNC_COOLDOWN_S, type BulkSendInput, type BulkSendResult, type BulkSendRowResult, type CancelShipmentInput, type CreateShipmentInput, type MarkDeliveredInput, type MarkFailedInput, type MarkReturnedInput, type ShipmentView } from '@djaber/shared';
+import { courierWilayaId, sendClosedCode, storedText, TRACKING_SYNC_COOLDOWN_S, type BulkSendInput, type BulkSendResult, type BulkSendRowResult, type CancelShipmentInput, type CreateShipmentInput, type MarkDeliveredInput, type MarkFailedInput, type MarkReturnedInput, type ShipmentView } from '@djaber/shared';
 import { prisma, TenantContext, type Job, type Prisma, type Shipment, type Tx } from '@djaber/db';
 import { ConfigService } from '../../core/config/config.service';
 import { AppException, notFound } from '../../core/errors/app.exception';
@@ -24,7 +24,8 @@ import { COURIER_ERROR_CODE, isCourierError, type CreateShipmentInput as Adapter
 import { CourierAccountService } from './courier-account.service';
 import { CourierLimiter } from './courier-limiter';
 import { ShipmentEffects } from './shipment-effects.service';
-import { courierFieldErrors, encodeShipmentError, errorCodeOf, isSendFailure, parseShipmentError, presentShipment, SHIPMENT_INCLUDE, type ShipmentRow } from './shipment.presenter';
+import { cancelRefusal, changeCourierRefusal, courierFieldErrors, encodeShipmentError, errorCodeOf, isNotOfferedRefusal, isSendFailure, parseShipmentError, presentShipment, retryDeliveryRefusal, SHIPMENT_INCLUDE, type ShipmentRow } from './shipment.presenter';
+import { syncAvailableFromTtl, syncCooldownKey } from './sync-cooldown';
 import { CREATE_MAX_ATTEMPTS, CREATE_RETRY_DELAYS_MS, nextSyncAt } from './tracking-rules';
 
 const SEND_STATUSES = ['confirmed', 'preparing'];
@@ -113,8 +114,7 @@ export class ShipmentService implements OnModuleInit {
 
   // --- reads ----------------------------------------------------------------------------------------------------------------
   async syncAvailableAt(id: string): Promise<string | null> {
-    const ttl = await this.redis.client.ttl(`trk:manual:${id}`);
-    return ttl > 0 ? new Date(Date.now() + ttl * 1000).toISOString() : null;
+    return syncAvailableFromTtl(await this.redis.client.ttl(syncCooldownKey(id)));
   }
 
   async view(id: string, locale: string = viewerLocale()): Promise<ShipmentView> {
@@ -134,7 +134,7 @@ export class ShipmentService implements OnModuleInit {
       }
     }
     const desk = s.order.isStopdesk && s.order.stopdeskId ? stopdeskText((await stopdeskLabels([s.order.stopdeskId])).get(s.order.stopdeskId)) : null;
-    return presentShipment(s as unknown as ShipmentRow, s.order, client, addressOf(s.order, locale, desk), { publicWebUrl: this.config.get('PUBLIC_WEB_URL'), syncAvailableAt: await this.syncAvailableAt(id), portalUrl });
+    return presentShipment(s as unknown as ShipmentRow, s.order, client, addressOf(s.order, locale, desk), { publicWebUrl: this.config.get('PUBLIC_WEB_URL'), syncAvailableAt: await this.syncAvailableAt(id), portalUrl, locale });
   }
 
   // --- send (DLV-05) ----------------------------------------------------------------------------------------------------------
@@ -455,10 +455,12 @@ export class ShipmentService implements OnModuleInit {
       if (closed) throw new AppException(closed);
       const queued = s.status === 'pending';
       const manualSent = s.provider === 'manual' && s.status === 'sent';
-      if (!isSendFailure(s) && !queued && !manualSent) throw new AppException('COURIER_CANCEL_NOT_ALLOWED');
+      // same rule as the menu (UX-056 leftovers): created at a courier => cancel it first; picked up => « Retournée »
+      const refused = changeCourierRefusal(s, await this.capsOf(tx, s));
+      if (refused) throw new AppException(isNotOfferedRefusal(refused) ? 'CONFLICT' : refused);
       if (queued || manualSent) {
         await tx.shipment.update({ where: { id }, data: { status: 'cancelled', cancelledAt: new Date(), nextSyncAt: null } });
-        await tx.shipmentEvent.create({ data: { shipmentId: id, rawStatus: 'cancelled', mappedStatus: 'cancelled', at: new Date(), source: 'manual', actorId: actor.type === 'user' ? actor.id : null, description: 'change_courier' } });
+        await tx.shipmentEvent.create({ data: { shipmentId: id, rawStatus: 'cancelled', mappedStatus: 'cancelled', at: new Date(), source: 'manual', actorId: actor.type === 'user' ? actor.id : null, description: storedText('stored.tracking.changeCourier') } });
         o = await this.orders.lock(tx, o.id);
         if (o.status === 'shipped') await this.workflow.transition(tx, o, 'confirmed', { actor, shipmentHandled: true, shipmentNotice: false, notifyCustomer: false });
         else if (o.deliveryStatus !== 'not_sent') await tx.order.update({ where: { id: o.id }, data: { deliveryStatus: 'not_sent' } });
@@ -469,8 +471,9 @@ export class ShipmentService implements OnModuleInit {
   }
 
   /**
-   * `POST /shipments/:id/cancel { then }` — `pending | sent` only, and the provider must offer cancel (else 409
-   * COURIER_CANCEL_NOT_ALLOWED: use "Retournée" at reception). Not yet created / manual ⇒ immediate; at a courier ⇒ job.
+   * `POST /shipments/:id/cancel { then }` — `pending | sent` only (after pickup 409 COURIER_CANCEL_NOT_ALLOWED: use
+   * "Retournée" at reception), and the provider must offer cancel (else 409 COURIER_CANCEL_UNSUPPORTED: cancel it in the
+   * courier's space). Not yet created / manual ⇒ immediate; at a courier ⇒ job. Rule shared with the menu (`cancelRefusal`).
    */
   async cancel(id: string, input: CancelShipmentInput, locale: string): Promise<{ view: ShipmentView; queued: boolean }> {
     const head = await this.headOf(id);
@@ -479,9 +482,9 @@ export class ShipmentService implements OnModuleInit {
     await this.orders.inTx(async (tx) => {
       const o = await this.orders.lock(tx, head.orderId);
       const s = await this.fx.lockShipment(tx, id);
-      if (!['pending', 'sent'].includes(s.status)) throw new AppException('COURIER_CANCEL_NOT_ALLOWED');
+      const refused = cancelRefusal(s, await this.capsOf(tx, s));
+      if (refused) throw new AppException(isNotOfferedRefusal(refused) ? 'CONFLICT' : refused);
       const atCourier = s.status === 'sent' && s.provider !== 'manual' && !!s.trackingNumber;
-      if (atCourier && !(await this.capsOf(tx, s)).cancel) throw new AppException('COURIER_CANCEL_NOT_ALLOWED');
       if (input.then === 'cancelled' && !input.reason) throw new AppException('VALIDATION_ERROR', {}, { reason: 'validation.required' });
       if (atCourier) {
         await this.queueOutbox.add(tx, 'courier', 'cancel-parcel', { shipmentId: id, workspaceId: s.workspaceId, then: input.then, reason: input.reason ?? null, note: input.note ?? null, userId: actor.id }, `cancel:${id}`, { attempts: 3, backoff: { type: 'fixed', delay: 60_000 } });
@@ -551,15 +554,15 @@ export class ShipmentService implements OnModuleInit {
     });
   }
 
-  /** `POST /shipments/:id/retry-delivery` — re-attempt at the courier (attempt +1); unsupported ⇒ 409 COURIER_CANCEL_NOT_ALLOWED. */
+  /** `POST /shipments/:id/retry-delivery` — re-attempt at the courier (attempt +1); unsupported ⇒ 409 COURIER_RETRY_UNSUPPORTED. */
   async retryDelivery(id: string, note: string | null | undefined, locale: string) {
     const head = await this.headOf(id);
     const actor = this.orders.actor();
     await this.orders.inTx(async (tx) => {
       await this.orders.lock(tx, head.orderId);
       const s = await this.fx.lockShipment(tx, id);
-      if (s.status !== 'failed' || isSendFailure(s)) throw new AppException('CONFLICT');
-      if (!(await this.capsOf(tx, s)).retry || !s.trackingNumber) throw new AppException('COURIER_CANCEL_NOT_ALLOWED');
+      const refused = retryDeliveryRefusal(s, await this.capsOf(tx, s));
+      if (refused) throw new AppException(isNotOfferedRefusal(refused) ? 'CONFLICT' : refused);
       await this.queueOutbox.add(tx, 'courier', 'retry-delivery', { shipmentId: id, workspaceId: s.workspaceId, userId: actor.id, note: note ?? null }, `retry:${id}:${s.deliveryAttempts}`, { attempts: 3, backoff: { type: 'fixed', delay: 60_000 } });
     }, locale);
     return this.view(id, locale);
@@ -577,7 +580,8 @@ export class ShipmentService implements OnModuleInit {
       const r = await adapter.retryDelivery(this.accounts.open(account), s.trackingNumber);
       if (!r.ok) {
         await prisma.$transaction(async (db) => {
-          const u = await (db as Tx).shipment.update({ where: { id: s.id }, data: { lastError: encodeShipmentError('COURIER_CANCEL_NOT_ALLOWED') } });
+          // the courier refused this re-attempt: the merchant asks for it in the courier's space / by phone
+          const u = await (db as Tx).shipment.update({ where: { id: s.id }, data: { lastError: encodeShipmentError('COURIER_RETRY_UNSUPPORTED') } });
           await this.fx.emit(db as Tx, u);
         });
         return;
@@ -647,9 +651,9 @@ export class ShipmentService implements OnModuleInit {
     const s = await prisma.shipment.findFirst({ where: { id } });
     if (!s) throw notFound();
     if (s.provider === 'manual' || !s.trackingNumber || !s.courierAccountId) throw new AppException('TRACKING_NOT_FOUND');
-    const ok = await this.redis.client.set(`trk:manual:${id}`, '1', 'EX', TRACKING_SYNC_COOLDOWN_S, 'NX');
+    const ok = await this.redis.client.set(syncCooldownKey(id), '1', 'EX', TRACKING_SYNC_COOLDOWN_S, 'NX');
     if (!ok) {
-      const ttl = await this.redis.client.ttl(`trk:manual:${id}`);
+      const ttl = await this.redis.client.ttl(syncCooldownKey(id));
       throw new AppException('TRACKING_SYNC_RATE_LIMITED', { retryAfter: ttl > 0 ? ttl : TRACKING_SYNC_COOLDOWN_S });
     }
     await prisma.$transaction((db) => this.queueOutbox.add(db as Tx, 'courier', 'track-batch', { courierAccountId: s.courierAccountId, shipmentIds: [id], workspaceId: s.workspaceId, manual: true }, `track:${s.courierAccountId}:manual:${id}:${Date.now()}`, { attempts: 2, backoff: { type: 'fixed', delay: 60_000 } }));

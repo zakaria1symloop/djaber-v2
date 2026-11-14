@@ -1,7 +1,7 @@
 // api-contract §2, §3.7 — read models of an order (list row, detail, WS summary) and the `Actions ⌄` descriptors
 // (D42: current-state items, first = primary, forbidden ones greyed with their reason; a transition the state machine
 // refuses is left out — UX-060; LST-01 shortcuts).
-import { isNotOffered, ORDER_READ_ONLY_STATUSES, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, type ActionDescriptor, type AddressView, type ClientRefView, type OrderListItemView, type OrderStatusName, type OrderSummary, type OrderUserRef, type OrderView, type SourceBadge } from '@djaber/shared';
+import { isNotOffered, ORDER_READ_ONLY_STATUSES, renderStoredTextIn, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, textIn, type ActionDescriptor, type AddressView, type ClientRefView, type OrderListItemView, type OrderStatusName, type OrderSummary, type OrderUserRef, type OrderView, type SourceBadge } from '@djaber/shared';
 import { TenantContext, type Order, type Prisma } from '@djaber/db';
 import { can, type MerchantPermission } from '../../core/rbac/permission-matrix';
 import { thumbUrlOf } from '../catalog/product-image.util';
@@ -239,7 +239,9 @@ export const addressOf = (
       }
     : null;
 
-const ACTOR_NAMES: Record<string, string> = { ai: 'IA', system: 'Système', courier: 'Transporteur', api: 'API', api_key: 'API' };
+/** Name of a history actor that is not a person, in the viewer's language (UX-056 leftovers: was French whatever the reader). */
+const ACTOR_KEYS: Record<string, string> = { ai: 'actor.label.ai', system: 'actor.label.system', courier: 'actor.label.courier' };
+const actorName = (type: string, locale: string): string => (type === 'api' || type === 'api_key' ? 'API' : ACTOR_KEYS[type] ? (textIn(ACTOR_KEYS[type]!, locale) ?? '') : '');
 
 export type DetailExtras = {
   payments: { id: string; amount: number; method: OrderView['paymentMethod']; reference: string | null; note: string | null; paidAt: Date; createdBy: OrderUserRef | null }[];
@@ -291,7 +293,7 @@ export const presentOrder = (o: OrderDetailRow, extras: DetailExtras, ctx: Prese
     feeExplanation: extras.feeExplanation,
     notes: o.notes,
     cancelReason: o.cancelReason,
-    cancelNote: o.cancelNote,
+    cancelNote: renderStoredTextIn(o.cancelNote, ctx.locale),
     payments: extras.payments.map((p) => ({ id: p.id, amount: p.amount, method: p.method, reference: p.reference, note: p.note, paidAt: p.paidAt.toISOString(), createdBy: p.createdBy })),
     paymentLink: link ? { id: link.id, url: link.checkoutUrl, status: link.status === 'pending' && !link.checkoutUrl ? 'creating' : link.status, expiresAt: link.expiresAt?.toISOString() ?? null, amount: link.amount } : null,
     calls: o.calls.map((c) => ({ id: c.id, user: c.user, result: c.result, callbackAt: c.callbackAt?.toISOString() ?? null, notes: c.notes, calledAt: c.calledAt.toISOString() })),
@@ -299,13 +301,14 @@ export const presentOrder = (o: OrderDetailRow, extras: DetailExtras, ctx: Prese
       id: h.id,
       at: h.at.toISOString(),
       effectiveAt: h.effectiveAt?.toISOString() ?? null,
-      actor: { type: h.actorType, id: h.actorId, name: (h.actorId && extras.actorNames.get(h.actorId)) || ACTOR_NAMES[h.actorType] || '' },
+      actor: { type: h.actorType, id: h.actorId, name: (h.actorId && extras.actorNames.get(h.actorId)) || actorName(h.actorType, ctx.locale) },
       field: h.field,
       from: extras.historyText?.get(h.id)?.from ?? h.from,
       to: extras.historyText?.get(h.id)?.to ?? h.to,
-      reason: h.reason,
+      // stored keys (AI cancel note, « remplacée par … ») read in the viewer's language — UX-056 leftovers
+      reason: renderStoredTextIn(h.reason, ctx.locale),
     })),
-    shipments: o.shipments.map((s) => presentShipment(s as unknown as ShipmentRow, o, base.client, addressOf(o, ctx.locale, extras.stopdeskName ?? null), { publicWebUrl: ctx.publicWebUrl, syncAvailableAt: ctx.syncAvailableAt?.(s.id) ?? null })),
+    shipments: o.shipments.map((s) => presentShipment(s as unknown as ShipmentRow, o, base.client, addressOf(o, ctx.locale, extras.stopdeskName ?? null), { publicWebUrl: ctx.publicWebUrl, syncAvailableAt: ctx.syncAvailableAt?.(s.id) ?? null, locale: ctx.locale })),
     orderNotes: o.orderNotes.map((n) => ({ id: n.id, author: n.author, body: n.body, createdAt: n.createdAt.toISOString() })),
     sheetsSynced: !!o.sheetsRow,
     agent: o.agent,

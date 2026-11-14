@@ -1,6 +1,6 @@
 // Delivery — pure helpers of the overview, tracking panel, couriers page, send dialog, labels and the public page
 // (unit tested in logic.spec.ts). The UI never decides a shipment transition: the server `actions` do.
-import { isOrderSendClosed, type OrderSendClosedStatus } from '@djaber/shared';
+import { isOrderSendClosed, type ActionDescriptor, type OrderSendClosedStatus } from '@djaber/shared';
 import type { Tone } from '@djaber/ui';
 import { algiersTime } from '@/features/orders/logic';
 import type { BulkSendRow, ShipmentStatus } from './contracts';
@@ -61,6 +61,32 @@ export function shipmentTone(status: ShipmentStatus | null | undefined): Tone | 
 export function syncWait(syncAvailableAt: string | null | undefined, now = Date.now()): number {
   if (!syncAvailableAt) return 0;
   return Math.max(0, Math.ceil((Date.parse(syncAvailableAt) - now) / 1000));
+}
+/**
+ * UX-056 leftovers (14/11): the « Actualiser » item of a parcel menu at this instant — greyed with the live wait
+ * (`TRACKING_SYNC_RATE_LIMITED {retryAfter}`) while the 5-minute wait lasts, offered again once it is over. Only the wait is
+ * applied here: any other refusal of the server (permission, parcel not created…) stays as it is.
+ */
+export function withSyncWait(actions: readonly ActionDescriptor[], wait: number): ActionDescriptor[] {
+  return actions.map((a) => {
+    if (a.key !== 'sync') return a;
+    const limited = a.reasonCode === 'TRACKING_SYNC_RATE_LIMITED';
+    if (wait > 0 && (a.enabled || limited)) {
+      const { primary: _p, ...rest } = a;
+      return { ...rest, enabled: false, reasonCode: 'TRACKING_SYNC_RATE_LIMITED', reasonParams: { retryAfter: wait } };
+    }
+    if (wait <= 0 && limited) {
+      const { reasonCode: _c, reasonParams: _r, ...rest } = a;
+      return { ...rest, enabled: true };
+    }
+    return a;
+  });
+}
+/** End of the wait (epoch ms) from what the server said and what this tab learnt since (a refresh, a 429); null = none. */
+export function syncUntil(serverIso: string | null | undefined, local: number | null | undefined): number | null {
+  const server = serverIso ? Date.parse(serverIso) : NaN;
+  const until = Math.max(Number.isNaN(server) ? 0 : server, local ?? 0);
+  return until > 0 ? until : null;
 }
 /** "4 min" / "45 s" (shared with every disabled reason that carries a wait — lib/time). */
 export { waitLabel } from '@/lib/time';

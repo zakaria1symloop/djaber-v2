@@ -2,6 +2,7 @@
 // 01-nest-module-map §4.4): stock (`out` reason `sale`, conditional ⇒ 422 SALE_INSUFFICIENT_STOCK; given back as `return`
 // reason `sale_cancelled`), automatic cash rows (PaymentEntry → locked income `sale`, refund row), client aggregates
 // (recomputed). Always inside the caller's transaction.
+import { storedText } from '@djaber/shared';
 import { Injectable } from '@nestjs/common';
 import type { PaymentMethod, Sale, Tx } from '@djaber/db';
 import { AppException } from '../../core/errors/app.exception';
@@ -59,7 +60,7 @@ export class SaleEffects {
 
   /** Cancel with refund: the money taken goes back out through one locked `refund` expense row. */
   refund(tx: Tx, sale: Pick<Sale, 'id' | 'number' | 'amountPaid' | 'paymentMethod'>, reason: string) {
-    return writeRefund(tx, this.outbox, { sourceId: sale.id, number: sale.number, amount: sale.amountPaid, method: sale.paymentMethod, description: `Vente #${sale.number} annulée (remboursement) — ${reason}` });
+    return writeRefund(tx, this.outbox, { sourceId: sale.id, number: sale.number, amount: sale.amountPaid, method: sale.paymentMethod, description: storedText('stored.cash.saleRefund', { number: sale.number, reason }) });
   }
 
   recomputePaid(tx: Tx, sale: Pick<Sale, 'id' | 'total'>) {

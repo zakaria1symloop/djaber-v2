@@ -2,7 +2,7 @@
 // draft / pending / partial, receipts with over-receipt accepted and the weighted-average cost, payments (locked cash
 // rows), delete while draft / pending and unpaid, duplicate, print. Stock and cash only through PurchaseEffects.
 import { Injectable } from '@nestjs/common';
-import { deriveGdsPaymentStatus, PURCHASE_SORTS, type CancelPurchaseInput, type CreatePurchaseInput, type GdsPaymentInput, type PurchaseListItemView, type PurchasesQuery, type PurchaseStatsView, type PurchaseView, type ReceivePurchaseInput, type UpdatePurchaseInput } from '@djaber/shared';
+import { deriveGdsPaymentStatus, PURCHASE_SORTS, storedText, type CancelPurchaseInput, type CreatePurchaseInput, type GdsPaymentInput, type PurchaseListItemView, type PurchasesQuery, type PurchaseStatsView, type PurchaseView, type ReceivePurchaseInput, type UpdatePurchaseInput } from '@djaber/shared';
 import { prisma, TenantContext, type Prisma, type Purchase, type Tx } from '@djaber/db';
 import { CounterService } from '../../core/counter/counter.service';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
@@ -228,7 +228,7 @@ export class PurchaseService {
         },
       });
       if ((input.amountPaid ?? 0) > 0) {
-        await this.effects.addPayment(tx, p, { amount: input.amountPaid!, method: input.paymentMethod ?? 'cash', description: `Achat #${p.number} (paiement)` });
+        await this.effects.addPayment(tx, p, { amount: input.amountPaid!, method: input.paymentMethod ?? 'cash', description: storedText('stored.cash.purchasePayment', { number: p.number }) });
         await this.writeTotals(tx, p.id);
       }
       return p.id;
@@ -331,7 +331,7 @@ export class PurchaseService {
       const after = await this.writeTotals(tx, id);
       if (input.paymentNow) {
         if (input.paymentNow.amount > after.total - after.amountPaid) throw validationError({ 'paymentNow.amount': 'validation.range' });
-        await this.effects.addPayment(tx, after, { amount: input.paymentNow.amount, method: input.paymentNow.method, paidAt: receivedAt, description: `Achat #${after.number} (paiement à la réception)` });
+        await this.effects.addPayment(tx, after, { amount: input.paymentNow.amount, method: input.paymentNow.method, paidAt: receivedAt, description: storedText('stored.cash.purchaseOnReceipt', { number: after.number }) });
         await this.writeTotals(tx, id);
       }
     });
@@ -365,7 +365,7 @@ export class PurchaseService {
       const p = await this.lock(tx, id);
       if (p.status === 'cancelled') throw new AppException('PURCHASE_CANCELLED_PAYMENT_LOCKED');
       if (input.amount > p.total - p.amountPaid) throw validationError({ amount: 'validation.range' });
-      await this.effects.addPayment(tx, p, { amount: input.amount, method: input.method, reference: input.reference, note: input.note, paidAt, description: `Achat #${p.number} (paiement fournisseur)` });
+      await this.effects.addPayment(tx, p, { amount: input.amount, method: input.method, reference: input.reference, note: input.note, paidAt, description: storedText('stored.cash.purchaseSupplierPayment', { number: p.number }) });
       await this.writeTotals(tx, id);
     });
     return this.get(id);

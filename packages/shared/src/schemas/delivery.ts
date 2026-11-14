@@ -548,6 +548,8 @@ export type DeliveryRowView = {
     courierCost: number | null;
     lastEventAt: string | null;
     lastSyncedAt: string | null;
+    /** UX-056 leftovers: end of the « Actualiser » wait (1 / 5 min), same as `ShipmentView.syncAvailableAt` — the row menu greys the item with the live countdown */
+    syncAvailableAt: string | null;
     noMovement: boolean;
     returnPending: boolean;
     /** UX-064: the order was delivered / cancelled / returned while this parcel had failed (not a failure to handle) */

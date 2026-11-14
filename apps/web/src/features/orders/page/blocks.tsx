@@ -380,7 +380,8 @@ export function HistoryBlock({ order }: { order: Order }) {
   };
   const items: TimelineItem[] = newestFirst(order.history, (h) => h.at).map((h, i) => {
     const kind = actorKind(h);
-    const name = kind === 'ai' ? t('orders.history.ai', { name: h.actor.name }) : kind === 'system' ? t('orders.history.system') : h.actor.name;
+    // an AI line without a named agent reads « IA » once (not « IA (IA) »); the server names it in the viewer's language
+    const name = kind === 'ai' ? (h.actor.name && h.actor.name !== t('actor.label.ai') ? t('orders.history.ai', { name: h.actor.name }) : t('actor.label.ai')) : kind === 'system' ? t('orders.history.system') : h.actor.name;
     const fieldKey = `orders.history.field.${h.field}`;
     const text = h.field === 'created' ? t('orders.history.created') : `${t.has(fieldKey) ? t(fieldKey) : h.field} : ${h.from ? `${value(h.field, h.from)} → ` : ''}${value(h.field, h.to)}`;
     return {

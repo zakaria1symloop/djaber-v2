@@ -2,7 +2,7 @@
 // immutable after validation (cancel + redo), cancel ≤ 7 d with restock and refund, "Encaisser le reste", delete only
 // unpaid, ticket PDF. Blocked by an open blocking inventory count (04 §19). Effects only through SaleEffects.
 import { Injectable } from '@nestjs/common';
-import { SALE_CANCEL_MAX_DAYS, SALE_SORTS, deriveGdsPaymentStatus, type CancelSaleInput, type CreateSaleInput, type SaleClientInput, type SaleListItemView, type SalePaymentInput, type SalesQuery, type SaleStatsView, type SaleView, type UpdateSaleInput } from '@djaber/shared';
+import { deriveGdsPaymentStatus, SALE_CANCEL_MAX_DAYS, SALE_SORTS, storedText, type CancelSaleInput, type CreateSaleInput, type SaleClientInput, type SaleListItemView, type SalePaymentInput, type SalesQuery, type SaleStatsView, type SaleView, type UpdateSaleInput } from '@djaber/shared';
 import { prisma, TenantContext, type Prisma, type Sale, type Tx } from '@djaber/db';
 import { CounterService } from '../../core/counter/counter.service';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
@@ -228,7 +228,7 @@ export class SaleService {
     if (amountPaid < sale.total && !sale.clientId) throw new AppException('SALE_PARTIAL_REQUIRES_CUSTOMER', {}, { clientId: 'validation.required' });
     await this.effects.syncStock(tx, sale, lines.map((l) => ({ productId: l.productId, variantId: l.variantId, quantity: l.quantity, trackStock: l.trackStock })));
     const paid = Math.min(amountPaid, sale.total);
-    if (paid > 0) await this.effects.addPayment(tx, sale, { amount: paid, method: sale.paymentMethod, paidAt: sale.soldAt, description: `Vente #${sale.number}${paid < sale.total ? ' (acompte)' : ''}` });
+    if (paid > 0) await this.effects.addPayment(tx, sale, { amount: paid, method: sale.paymentMethod, paidAt: sale.soldAt, description: storedText(paid < sale.total ? 'stored.cash.saleDeposit' : 'stored.cash.sale', { number: sale.number }) });
     await tx.sale.update({ where: { id: sale.id }, data: { status: 'completed', ...(await this.effects.recomputePaid(tx, sale)) } });
     await this.effects.recomputeClient(tx, sale.clientId);
   }
@@ -335,7 +335,7 @@ export class SaleService {
       if (s.status === 'cancelled') throw new AppException('SALE_IMMUTABLE');
       if (s.status === 'draft') throw conflict({ reason: 'SALE_DRAFT', status: s.status });
       if (input.amount > s.total - s.amountPaid) throw validationError({ amount: 'validation.range' });
-      await this.effects.addPayment(tx, s, { amount: input.amount, method: input.method, reference: input.reference, note: input.note, paidAt, description: `Vente #${s.number} (reste encaissé)` });
+      await this.effects.addPayment(tx, s, { amount: input.amount, method: input.method, reference: input.reference, note: input.note, paidAt, description: storedText('stored.cash.saleBalance', { number: s.number }) });
       await tx.sale.update({ where: { id }, data: await this.effects.recomputePaid(tx, s) });
     });
     return this.get(id);

@@ -394,7 +394,7 @@ Same notation. Decisions D36–D78 (README) are final (DECIDED 2026-10-11); the 
 
 | F | Condition | Handling |
 |---|---|---|
-| F-1 | Retry unsupported by the adapter and parcel already picked up | `COURIER_CANCEL_NOT_ALLOWED` ⇒ only "Marquer retournée" (at reception) remains. |
+| F-1 | Retry unsupported by the adapter and parcel already picked up | « Relancer la livraison » greyed `COURIER_RETRY_UNSUPPORTED` (ask the courier in its space / by phone), « Annuler le colis » greyed `COURIER_CANCEL_NOT_ALLOWED` ⇒ "Marquer retournée" (at reception) remains (UX-056 leftovers 14/11). |
 | F-2 | Address edit on a sent parcel | `COURIER_ADDRESS_LOCKED` ⇒ "Annuler le colis" first (if allowed). |
 | F-3 | Refresh clicked twice within 5 min | `TRACKING_SYNC_RATE_LIMITED` (button shows "Limite 1 / 5 min"). |
 | F-4 | Courier down during retry | `COURIER_UNAVAILABLE`, retry queued (FL-08 F-3). |

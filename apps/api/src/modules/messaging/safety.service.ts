@@ -4,6 +4,7 @@ import { Injectable } from '@nestjs/common';
 import {
   completeSafetyRules,
   normalizePhoneDz,
+  renderStoredTextIn,
   REPORTS_PER_DAY_MAX,
   type CreateBlockInput,
   type CreateReportInput,
@@ -12,6 +13,7 @@ import {
   type SafetyReportView,
   type SafetyRules,
 } from '@djaber/shared';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { prisma, Prisma, TenantContext, type BlockReason, type Conversation, type CustomerBlock, type Tx } from '@djaber/db';
 import { AuditService } from '../../core/audit/audit.service';
 import { AppException, notFound } from '../../core/errors/app.exception';
@@ -96,7 +98,7 @@ export class SafetyService {
       client: b.client ? { id: b.client.id, name: b.client.name, phone: b.client.phone, riskLevel: b.client.riskLevel, isPlaceholder: b.client.isPlaceholder, blocked: true, orderCount: b.client.orderCount, avatarUrl: null } : null,
       phone: b.phone,
       reason: b.reason,
-      note: b.note,
+      note: renderStoredTextIn(b.note, viewerLocale()),
       source: b.source,
       blockedBy: b.blockedBy,
       blockedAt: b.blockedAt.toISOString(),

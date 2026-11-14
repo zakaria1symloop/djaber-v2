@@ -3,7 +3,7 @@
 // and every outbox row (WS, notifications, customer texts, outbound webhooks, Sheets). Always inside the caller's
 // transaction; controllers and the other order services never touch stock or cash.
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { derivePaymentStatus, formatMoney } from '@djaber/shared';
+import { derivePaymentStatus, formatMoney, storedText } from '@djaber/shared';
 import { TenantContext, type CashMethod, type MovementReason, type NotificationType, type Order, type PaymentMethod, type Tx } from '@djaber/db';
 import { AppException } from '../../core/errors/app.exception';
 import { OutboxService } from '../../core/outbox/outbox.service';
@@ -89,7 +89,7 @@ export class OrderEffects implements OnModuleInit {
   /** Return without restock (04 §21): no `return` movement, one `adjustment_out` / `loss` line per tracked item for the audit trail. */
   async lossTrail(tx: Tx, order: Pick<Order, 'id' | 'number'>, lines: StockLine[], actorId?: string | null) {
     for (const l of lines.filter((x) => x.trackStock)) {
-      await this.stock.trail(tx, { productId: l.productId, variantId: l.variantId, type: 'adjustment_out', reason: 'loss', note: `${order.number} · ${l.quantity} non remis en stock`, refType: 'order', refId: order.id, actorId });
+      await this.stock.trail(tx, { productId: l.productId, variantId: l.variantId, type: 'adjustment_out', reason: 'loss', note: storedText('stored.stock.notRestocked', { number: order.number, quantity: l.quantity }), refType: 'order', refId: order.id, actorId });
     }
   }
 
@@ -145,7 +145,7 @@ export class OrderEffects implements OnModuleInit {
   async addReturnExpense(tx: Tx, order: Pick<Order, 'id' | 'number'>, fee: number, at: Date, actor: Actor) {
     if (fee <= 0) return null;
     return tx.cashTransaction.create({
-      data: { workspaceId: TenantContext.workspaceId(), type: 'expense', amount: fee, category: 'shipping', method: 'cash', reference: order.number, description: `Commande #${order.number} retournée (frais de retour)`, date: await this.cashDate(tx, at), isAutomatic: true, sourceType: 'order', sourceId: order.id, createdById: actor.type === 'user' ? actor.id : null },
+      data: { workspaceId: TenantContext.workspaceId(), type: 'expense', amount: fee, category: 'shipping', method: 'cash', reference: order.number, description: storedText('stored.cash.orderReturnFee', { number: order.number }), date: await this.cashDate(tx, at), isAutomatic: true, sourceType: 'order', sourceId: order.id, createdById: actor.type === 'user' ? actor.id : null },
     });
   }
 

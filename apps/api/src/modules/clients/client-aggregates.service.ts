@@ -2,7 +2,7 @@
 // workspace auto-block rule (`autoBlockAfterUncollected`, OFF by default). Called by OrderEffects inside the order's
 // transaction, by the merge, and nightly by `sched-risk-recompute`.
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { autoBlockThreshold, completeSafetyRules, type SafetyRules } from '@djaber/shared';
+import { autoBlockThreshold, completeSafetyRules, storedText, type SafetyRules } from '@djaber/shared';
 import { prisma, TenantContext, type Tx } from '@djaber/db';
 import { OutboxService } from '../../core/outbox/outbox.service';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
@@ -102,7 +102,7 @@ export class ClientAggregatesService implements OnModuleInit {
     const previous = await tx.customerBlock.findMany({ where: { OR: [{ clientId: client.id }, ...(client.phone ? [{ phone: client.phone }] : [])] }, select: { unblockedAt: true, source: true } });
     // already blocked, or an automatic block a person lifted (their decision stands)
     if (previous.some((b) => !b.unblockedAt || b.source === 'auto_rule')) return;
-    const block = await tx.customerBlock.create({ data: { workspaceId: ws, clientId: client.id, phone: client.phone, reason: 'uncollected', source: 'auto_rule', note: `${uncollected} colis non récupérés` } });
+    const block = await tx.customerBlock.create({ data: { workspaceId: ws, clientId: client.id, phone: client.phone, reason: 'uncollected', source: 'auto_rule', note: storedText('stored.block.uncollected', { count: uncollected }) } });
     const conversations = await tx.conversation.findMany({ where: { clientId: client.id, deletedAt: null }, select: { id: true, status: true, aiPaused: true, assigneeId: true, unreadCount: true, clientId: true, lastMessageAt: true, lastMessagePreview: true, version: true } });
     for (const c of conversations) {
       await this.outbox.ws(tx, `ws:${ws}`, 'conversation.updated', { id: c.id, conversation: conversationHead(c, true) });

@@ -295,7 +295,7 @@ describe('parcel actions (04 §22, FL-25)', () => {
     expect((await owner.post(`/shipments/${parcel.id}/mark-failed`, { reason: 'address' }).expect(409)).body.error.code).toBe('CONFLICT');
   });
 
-  it('AT-DLV-13 cancel before pickup ⇒ cancelled, order back to confirmed or cancelled (option); ZR (no cancel) ⇒ COURIER_CANCEL_NOT_ALLOWED; picked up ⇒ 409', async () => {
+  it('AT-DLV-13 cancel before pickup ⇒ cancelled, order back to confirmed or cancelled (option); ZR (no cancel) ⇒ COURIER_CANCEL_UNSUPPORTED; picked up ⇒ 409 COURIER_CANCEL_NOT_ALLOWED', async () => {
     const { owner } = await shop('yalidine');
     const { order } = await confirmedOrder(owner);
     const parcel = await sendAndWork(app, owner, order, { isStopdesk: false });
@@ -317,8 +317,10 @@ describe('parcel actions (04 §22, FL-25)', () => {
     await addCourier(zr, 'zrexpress');
     const { order: zo } = await confirmedOrder(zr);
     const zp = await sendAndWork(app, zr, zo);
-    expect(zp.actions.find((a: any) => a.key === 'cancel')).toMatchObject({ enabled: false, reasonCode: 'COURIER_CANCEL_NOT_ALLOWED' });
-    expect((await zr.post(`/shipments/${zp.id}/cancel`, {}).expect(409)).body.error.code).toBe('COURIER_CANCEL_NOT_ALLOWED');
+    // UX-056 leftovers: a CRÉÉ parcel of a courier without API cancel says so (not « déjà ramassé »)
+    expect(zp.actions.find((a: any) => a.key === 'cancel')).toMatchObject({ enabled: false, reasonCode: 'COURIER_CANCEL_UNSUPPORTED' });
+    expect(zp.actions.find((a: any) => a.key === 'change_courier')).toMatchObject({ enabled: false, reasonCode: 'COURIER_CANCEL_UNSUPPORTED' });
+    expect((await zr.post(`/shipments/${zp.id}/cancel`, {}).expect(409)).body.error.code).toBe('COURIER_CANCEL_UNSUPPORTED');
     // a parcel still queued at Djaber (not created at the courier) is cancelled at once
     const { order: q } = await confirmedOrder(zr);
     fakeCourier(app).unavailable('zrexpress', true);
@@ -343,11 +345,11 @@ describe('parcel actions (04 §22, FL-25)', () => {
     await drain(app, owner.workspaceId);
     const o = await reloadOrder(owner, order.id);
     expect(o).toMatchObject({ status: 'shipped', deliveryFee: fee, courierCost: 350 });
-    // a parcel already at the courier cannot change courier
-    expect((await owner.post(`/shipments/${res.body.data.id}/change-courier`, { courierAccountId: yal.id }).expect(409)).body.error.code).toBe('COURIER_CANCEL_NOT_ALLOWED');
+    // a parcel already created at the courier is cancelled first (UX-056 leftovers: SHIPMENT_CANCEL_FIRST)
+    expect((await owner.post(`/shipments/${res.body.data.id}/change-courier`, { courierAccountId: yal.id }).expect(409)).body.error.code).toBe('SHIPMENT_CANCEL_FIRST');
   });
 
-  it('AT-DLV-11 failure flow: courier `failed unreachable` ⇒ notification + Home card + Échecs row; Relancer with support ⇒ attempt +1; without support ⇒ COURIER_CANCEL_NOT_ALLOWED; 3rd failure ⇒ return proposed', async () => {
+  it('AT-DLV-11 failure flow: courier `failed unreachable` ⇒ notification + Home card + Échecs row; Relancer with support ⇒ attempt +1; without support ⇒ COURIER_RETRY_UNSUPPORTED; 3rd failure ⇒ return proposed', async () => {
     const { owner } = await shop('ecotrack');
     const { order } = await confirmedOrder(owner);
     const parcel = await sendAndWork(app, owner, order);
@@ -389,12 +391,12 @@ describe('parcel actions (04 §22, FL-25)', () => {
     expect(view).toMatchObject({ deliveryAttempts: 3, failureReason: 'refused' });
     expect(view.actions[0]).toMatchObject({ key: 'mark_returned', primary: true });
 
-    // ZR has no retry: COURIER_CANCEL_NOT_ALLOWED
+    // ZR has no retry: COURIER_RETRY_UNSUPPORTED
     const zr = await shop('zrexpress');
     const { order: zo } = await confirmedOrder(zr.owner);
     const zp = await sendAndWork(app, zr.owner, zo);
     await zr.owner.post(`/shipments/${zp.id}/mark-failed`, { reason: 'unreachable' }).expect(200);
-    expect((await zr.owner.post(`/shipments/${zp.id}/retry-delivery`, {}).expect(409)).body.error.code).toBe('COURIER_CANCEL_NOT_ALLOWED');
+    expect((await zr.owner.post(`/shipments/${zp.id}/retry-delivery`, {}).expect(409)).body.error.code).toBe('COURIER_RETRY_UNSUPPORTED');
   });
 });
 

@@ -12,6 +12,7 @@ import { ORDER_ACTION } from '@/features/orders/action-keys';
 import { newestFirst, shortName } from '@/features/orders/logic';
 import { DeliveryPill } from '@/features/orders/ui';
 import { actionState } from '@/lib/actions';
+import { useCountdown } from '@/lib/countdown';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { relativeTime } from '@/lib/time';
 import { SHIPMENT_ACTION } from './action-keys';
@@ -34,9 +35,14 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
   const sending = active?.status === 'pending';
   const queued = sending && active?.lastError === 'COURIER_UNAVAILABLE';
   const parcel = active ? parcelOfShipment(active, order.total) : null;
-  const menu = active ? parcels.menu({ orderId: order.id, parcel, actions: active.actions, phone: order.clientPhone, error: active.error, portalUrl: active.portalUrl }) : [];
-  const label = active ? actionState(active.actions, SHIPMENT_ACTION.label, t) : null;
-  const sync = active ? actionState(active.actions, SHIPMENT_ACTION.sync, t) : null;
+  const subject = active ? { orderId: order.id, parcel, actions: active.actions, phone: order.clientPhone, error: active.error, portalUrl: active.portalUrl, syncAvailableAt: active.syncAvailableAt ?? null } : null;
+  // UX-056 leftovers: « Actualiser » follows the live wait here too (re-render each second while it lasts)
+  const until = subject ? parcels.syncUntil(subject) : null;
+  useCountdown(until && until > Date.now() ? until : null);
+  const live = subject ? parcels.liveActions(subject) : [];
+  const menu = subject ? parcels.menu(subject) : [];
+  const label = active ? actionState(live, SHIPMENT_ACTION.label, t) : null;
+  const sync = active ? actionState(live, SHIPMENT_ACTION.sync, t) : null;
   const events: TrackingStep[] = active
     ? newestFirst(active.events, (e) => e.at).map((e, i) => ({
         key: `${e.at}-${i}`,

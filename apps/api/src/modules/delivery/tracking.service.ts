@@ -4,7 +4,7 @@
 // limiter slot (2 / s by default). Courier webhooks are verified on the raw body, stored as `InboundEvent`, and the
 // status is RE-FETCHED before being applied (06 §3). Applying a status = ShipmentEffects.apply.
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { SHIPMENT_STALE_STATUS_AFTER_DAYS, SHIPMENT_TRACKED_STATUSES } from '@djaber/shared';
+import { SHIPMENT_STALE_STATUS_AFTER_DAYS, SHIPMENT_TRACKED_STATUSES, storedText } from '@djaber/shared';
 import { Prisma, prisma, rawPrisma, TenantContext, type Job, type Shipment, type Tx } from '@djaber/db';
 import { AppException, notFound } from '../../core/errors/app.exception';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
@@ -116,7 +116,7 @@ export class TrackingService implements OnModuleInit {
           const s = await this.fx.lockShipment(tx, r.id);
           if (!TRACKED.includes(s.status) || !s.lastEventAt || s.lastEventAt >= limit) return;
           const u = await tx.shipment.update({ where: { id: s.id }, data: { status: 'stale', nextSyncAt: null } });
-          await tx.shipmentEvent.create({ data: { shipmentId: s.id, rawStatus: 'stale', mappedStatus: 'stale', at: now, source: 'system', description: `no courier event for ${SHIPMENT_STALE_STATUS_AFTER_DAYS} d` } });
+          await tx.shipmentEvent.create({ data: { shipmentId: s.id, rawStatus: 'stale', mappedStatus: 'stale', at: now, source: 'system', description: storedText('stored.tracking.stale', { days: SHIPMENT_STALE_STATUS_AFTER_DAYS }) } });
           await this.fx.emit(tx, u);
         }),
       );

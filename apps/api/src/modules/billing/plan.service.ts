@@ -33,7 +33,8 @@ export class PlanService {
       id: plan.id,
       slug: plan.slug,
       name: this.i18n.pick(plan.name, locale),
-      description: this.i18n.pick(plan.description, locale),
+      // a tagline the admin did not translate into the viewer's language is left out, not shown in French (UX-056 leftovers)
+      description: this.i18n.pickOwn(plan.description, locale),
       priceMonthly: plan.priceMonthly,
       priceYearly: plan.priceYearly,
       yearlyDiscountPct: full > 0 ? Math.round(((full - plan.priceYearly) / full) * 100) : 0,

@@ -1,7 +1,7 @@
 // GDS-10 — the 23 reports (00-build-order M8 Risks: one template + a per-report column map). Column / KPI / chart metadata
 // lives in `@djaber/shared` (`REPORT_DEFINITIONS`); this file holds the query of each report. Figures reuse the analytics
 // rollups (sales by period, P&L revenue) and `money-figures.ts` (P&L), so Revenue is the same number everywhere (AT-ORD-10).
-import { type ReportFilterKey, type ReportKey, type ReportRow } from '@djaber/shared';
+import { renderStoredTextIn, type ReportFilterKey, type ReportKey, type ReportRow } from '@djaber/shared';
 import { Prisma, prisma } from '@djaber/db';
 import { algiersDay } from '../../../core/time/algiers';
 import type { DailyStatsService } from '../../analytics/daily-stats.service';
@@ -417,7 +417,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
           before: m.quantityBefore,
           after: m.quantityAfter,
           valueAtCost: m.quantity * cost,
-          reference: m.refType === 'inventory' && m.refId ? `#${invNo.get(m.refId) ?? ''}` : (m.note ?? null),
+          reference: m.refType === 'inventory' && m.refId ? `#${invNo.get(m.refId) ?? ''}` : renderStoredTextIn(m.note, ctx.locale),
           actor: m.actor ? `${m.actor.firstName} ${m.actor.lastName}`.trim() : null,
           _ref: productRef(m.productId),
         };
@@ -500,7 +500,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     const all: ReportRow[] = txs.map((t) => {
       balance += t.type === 'income' ? t.amount : -t.amount;
       const doc = docOf(t);
-      return { date: iso(t.date), description: t.description, reference: doc?.number ?? t.reference, category: t.category, method: reportMethod(t.method, doc?.type), income: t.type === 'income' ? t.amount : 0, expense: t.type === 'expense' ? t.amount : 0, balance, proof: t.proof?.storageKey ?? null, _ref: doc ? { type: doc.type, id: doc.id } : null };
+      return { date: iso(t.date), description: renderStoredTextIn(t.description, ctx.locale), reference: doc?.number ?? t.reference, category: t.category, method: reportMethod(t.method, doc?.type), income: t.type === 'income' ? t.amount : 0, expense: t.type === 'expense' ? t.amount : 0, balance, proof: t.proof?.storageKey ?? null, _ref: doc ? { type: doc.type, id: doc.id } : null };
     });
     const rows = q ? all.filter((x) => [x.description, x.reference].some((v) => typeof v === 'string' && v.toLowerCase().includes(q))) : all;
     const income = sumOf(all, 'income');
@@ -545,7 +545,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     ]);
     const q = str(ctx, 'q')?.toLowerCase();
     const rows: ReportRow[] = [
-      ...cash.map((t) => ({ date: day(t.date), kind: t.isAutomatic ? 'return' : 'cash', category: t.category, description: t.description, product: null, amount: t.amount, _ref: t.isAutomatic && t.sourceId ? { type: 'order' as const, id: t.sourceId } : null })),
+      ...cash.map((t) => ({ date: day(t.date), kind: t.isAutomatic ? 'return' : 'cash', category: t.category, description: renderStoredTextIn(t.description, ctx.locale), product: null, amount: t.amount, _ref: t.isAutomatic && t.sourceId ? { type: 'order' as const, id: t.sourceId } : null })),
       ...pex.filter((e) => !prod || e.pid === prod).map((e) => ({ date: day(e.date), kind: 'product', category: e.category, description: e.isPerUnit ? `${e.description ?? ''} (${e.units} ×)`.trim() : e.description, product: e.product, amount: e.amount, _ref: productRef(e.pid) })),
     ].filter((x) => !q || [x.description, x.product, x.category].some((v) => typeof v === 'string' && v.toLowerCase().includes(q)));
     const by = (k: string) => rows.filter((x) => x.kind === k).reduce((s, x) => s + n(x.amount), 0);

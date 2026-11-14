@@ -1,9 +1,11 @@
 // api-contract §3.8 `ShipmentDto` + the parcel `Actions ⌄` (04 §22, FL-25): pure functions shared by the order page
 // (orders presenter) and the delivery screens. No database access.
-import { failureHandledAs, sendClosedCode, SHIPMENT_MAX_ATTEMPTS, SHIPMENT_NO_MOVEMENT_STATUSES, SHIPMENT_STALE_AFTER_DAYS, SHIPMENT_TERMINAL_STATUSES, type ActionDescriptor, type AddressView, type ClientRefView, type ShipmentErrorView, type ShipmentEventView, type ShipmentView } from '@djaber/shared';
+import { failureHandledAs, renderStoredTextIn, sendClosedCode, SHIPMENT_MAX_ATTEMPTS, SHIPMENT_NO_MOVEMENT_STATUSES, SHIPMENT_STALE_AFTER_DAYS, SHIPMENT_TERMINAL_STATUSES, type ActionDescriptor, type ErrorCode, type AddressView, type ClientRefView, type ShipmentErrorView, type ShipmentEventView, type ShipmentView } from '@djaber/shared';
 import { TenantContext, type Shipment } from '@djaber/db';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { can, type MerchantPermission } from '../../core/rbac/permission-matrix';
 import { capabilitiesOf } from './adapters/courier-adapter';
+import { dedupeTimeline } from './tracking-rules';
 
 const DAY = 86_400_000;
 export const userRefSelect = { select: { id: true, firstName: true, lastName: true, avatarUrl: true } } as const;
@@ -20,7 +22,7 @@ export type ShipmentRow = Shipment & {
   events: { at: Date; rawStatus: string; mappedStatus: ShipmentView['status'] | null; description: string | null; location: string | null; source: string; actor: { id: string; firstName: string; lastName: string; avatarUrl: string | null } | null }[];
 };
 export type ShipmentOrderLike = { id: string; number: string; status: string; clientPhone?: string | null };
-export type ShipmentPresentCtx = { publicWebUrl?: string; now?: number; syncAvailableAt?: string | null; portalUrl?: string | null };
+export type ShipmentPresentCtx = { publicWebUrl?: string; now?: number; syncAvailableAt?: string | null; portalUrl?: string | null; locale?: string };
 
 /** `Shipment.lastError` = `CODE` or `CODE|field|message` (courier validation errors keep the field for the dialog). */
 export const encodeShipmentError = (code: string, field?: string | null, message?: string | null) => [code, field ?? '', (message ?? '').replace(/\|/g, '/').slice(0, 400)].join('|').replace(/\|+$/, '');
@@ -54,7 +56,9 @@ export const isReturnPending = (s: Pick<Shipment, 'status'>, orderStatus: string
 
 const allowed = (permission: MerchantPermission) => can(TenantContext.maybe()?.role, permission);
 /** The parcel is not in a state where this action exists (12 GLOBAL, UX-060): the item is not offered at all. */
-const NOT_OFFERED = 'NOT_OFFERED';
+const NOT_OFFERED = 'NOT_OFFERED' as const;
+/** A parcel-action refusal: a catalogue code, or « not offered » (the state does not have this action). */
+export type ParcelRefusal = ErrorCode | typeof NOT_OFFERED;
 const act = (key: string, permission: MerchantPermission, o: { reasonCode?: string | null; reasonParams?: Record<string, string | number>; primary?: boolean } = {}): ActionDescriptor | null => {
   if (o.reasonCode === NOT_OFFERED) return null;
   const reasonCode = !allowed(permission) ? 'FORBIDDEN' : (o.reasonCode ?? undefined);
@@ -65,6 +69,45 @@ const act = (key: string, permission: MerchantPermission, o: { reasonCode?: stri
 /** Send failure (the courier never created the parcel): retry / change courier. */
 export const isSendFailure = (s: Pick<Shipment, 'status' | 'trackingNumber'>) => s.status === 'failed' && !s.trackingNumber;
 
+type ParcelState = Pick<Shipment, 'provider' | 'status' | 'trackingNumber'>;
+type Caps = { cancel: boolean; retry: boolean };
+/** The courier holds the parcel and it has not left the merchant yet (CRÉÉ). */
+const createdAtCourier = (s: ParcelState) => s.status === 'sent' && s.provider !== 'manual' && !!s.trackingNumber;
+/** The parcel left the merchant (picked up … failed attempt, or no news for 30 days): only « Retournée » at reception undoes it. */
+const pastPickup = (s: ParcelState) => ['picked_up', 'in_transit', 'out_for_delivery', 'stale'].includes(s.status) || (s.status === 'failed' && !isSendFailure(s));
+
+/**
+ * 04 §22 « Annuler le colis » — one rule for the menu (`shipmentActions`) and the service (POST /shipments/:id/cancel).
+ * null = allowed · `COURIER_CANCEL_UNSUPPORTED` = created at a courier whose API has no cancel (cancel it in the courier's
+ * space / by phone) · `COURIER_CANCEL_NOT_ALLOWED` = already picked up (use « Retournée ») · NOT_OFFERED = nothing to
+ * cancel (failed send, delivered, returned, cancelled). UX-056 remark (12/11): a CRÉÉ parcel of ZR Express said « Colis
+ * déjà ramassé » — the reason now matches the state.
+ */
+export const cancelRefusal = (s: ParcelState, caps: Caps): ParcelRefusal | null => {
+  if (s.status === 'pending' || s.status === 'sent') return createdAtCourier(s) && !caps.cancel ? 'COURIER_CANCEL_UNSUPPORTED' : null;
+  return pastPickup(s) ? 'COURIER_CANCEL_NOT_ALLOWED' : NOT_OFFERED;
+};
+
+/**
+ * « Changer de transporteur » (04 §22): a failed send, a parcel queued at Djaber, or a manual parcel gets a new parcel
+ * with the other courier. A parcel created at a courier is cancelled first (`SHIPMENT_CANCEL_FIRST`, or
+ * `COURIER_CANCEL_UNSUPPORTED` when that courier's API cannot cancel); after pickup `COURIER_CANCEL_NOT_ALLOWED`; a parcel
+ * delivered / returned / cancelled has nothing to change (not offered).
+ */
+export const changeCourierRefusal = (s: ParcelState, caps: Caps): ParcelRefusal | null => {
+  if (isSendFailure(s) || s.status === 'pending' || (s.status === 'sent' && s.provider === 'manual')) return null;
+  if (createdAtCourier(s)) return caps.cancel ? 'SHIPMENT_CANCEL_FIRST' : 'COURIER_CANCEL_UNSUPPORTED';
+  return pastPickup(s) ? 'COURIER_CANCEL_NOT_ALLOWED' : NOT_OFFERED;
+};
+
+/** « Relancer la livraison » (a failed attempt after pickup): the courier's API must offer it (`COURIER_RETRY_UNSUPPORTED`). */
+export const retryDeliveryRefusal = (s: ParcelState, caps: Caps): ParcelRefusal | null => {
+  if (s.status !== 'failed' || isSendFailure(s)) return NOT_OFFERED;
+  return caps.retry && !!s.trackingNumber ? null : 'COURIER_RETRY_UNSUPPORTED';
+};
+/** The not-offered marker of the rules above (the service answers 409 CONFLICT: the parcel moved on meanwhile). */
+export const isNotOfferedRefusal = (code: ParcelRefusal | null): code is typeof NOT_OFFERED => code === NOT_OFFERED;
+
 /**
  * Parcel menu (04 §22): sync · label · retry (failed send) · retry_delivery · change_courier · cancel · mark_failed ·
  * mark_delivered · mark_returned · open_order · call_client. At 3 failed attempts "mark_returned" becomes primary.
@@ -72,7 +115,10 @@ export const isSendFailure = (s: Pick<Shipment, 'status' | 'trackingNumber'>) =>
  * (`DELIVERY_ORDER_<STATUS>` is a not-offered reason, same refusal as the services).
  * UX-060 (retest 12/11): an action the parcel's state does not allow (retry of a parcel that did not fail, mark delivered
  * on a parcel not on its way…) is left out instead of greyed « Changed meanwhile, please reload. »; the wait of « Actualiser »
- * travels as `reasonParams.retryAfter` (seconds).
+ * travels as `reasonParams.retryAfter` (seconds) — on the delivery list rows too (UX-056 leftovers, 14/11).
+ * UX-056 leftovers (14/11): every greyed reason says why in this state — « Actualiser » of a manual parcel or of a finished
+ * one (delivered / returned / cancelled) and « Bordereau » of a cancelled parcel are not offered (nothing to refresh or
+ * print) instead of « Suivi introuvable » / « Commande clôturée » / « Pas de colis créé ».
  */
 export const shipmentActions = (s: Pick<Shipment, 'provider' | 'status' | 'trackingNumber' | 'lastError' | 'deliveryAttempts'> & { courierAccount?: { baseUrl?: string } | null }, order: { status: string }, o: { syncAvailableAt?: string | null; now?: number } = {}): ActionDescriptor[] => {
   const caps = capabilitiesOf(s.provider, s.courierAccount?.baseUrl);
@@ -88,13 +134,15 @@ export const shipmentActions = (s: Pick<Shipment, 'provider' | 'status' | 'track
   const queued = s.status === 'pending' && errorCodeOf(s.lastError) === 'COURIER_UNAVAILABLE';
   const proposeReturn = s.status === 'failed' && !sendFailed && s.deliveryAttempts >= SHIPMENT_MAX_ATTEMPTS;
   const inFlight = ['sent', 'picked_up', 'in_transit', 'out_for_delivery', 'failed'].includes(s.status) && !sendFailed;
+  // a manual parcel prints Djaber's own slip (label.service): « Bordereau » exists once it is sent, with or without a tracking
+  const printable = created || (!courier && !['pending', 'failed'].includes(s.status));
   const list = [
-    act('sync', 'delivery.send', { reasonCode: !courier ? 'TRACKING_NOT_FOUND' : !created ? 'SHIPMENT_NOT_CREATED' : terminal ? 'ORDER_TERMINAL' : coolingDown ? 'TRACKING_SYNC_RATE_LIMITED' : null, reasonParams: coolingDown ? { retryAfter } : undefined }),
-    act('label', 'delivery.send', { reasonCode: !created || s.status === 'cancelled' ? 'SHIPMENT_NOT_CREATED' : null }),
+    act('sync', 'delivery.send', { reasonCode: !courier || terminal ? NOT_OFFERED : !created ? 'SHIPMENT_NOT_CREATED' : coolingDown ? 'TRACKING_SYNC_RATE_LIMITED' : null, reasonParams: coolingDown ? { retryAfter } : undefined }),
+    act('label', 'delivery.send', { reasonCode: s.status === 'cancelled' ? NOT_OFFERED : printable ? null : 'SHIPMENT_NOT_CREATED' }),
     act('retry', 'delivery.send', { reasonCode: orderClosed ? NOT_OFFERED : sendFailed || queued ? null : NOT_OFFERED, primary: sendFailed && !orderClosed }),
-    act('retry_delivery', 'delivery.send', { reasonCode: s.status !== 'failed' || sendFailed ? NOT_OFFERED : caps.retry ? null : 'COURIER_CANCEL_NOT_ALLOWED', primary: s.status === 'failed' && !sendFailed && caps.retry && !proposeReturn }),
-    act('change_courier', 'delivery.send', { reasonCode: orderClosed ? NOT_OFFERED : sendFailed || queued || (s.status === 'sent' && !courier) ? null : 'COURIER_CANCEL_NOT_ALLOWED' }),
-    act('cancel', 'delivery.send', { reasonCode: !['pending', 'sent'].includes(s.status) ? 'COURIER_CANCEL_NOT_ALLOWED' : s.status === 'sent' && courier && !caps.cancel ? 'COURIER_CANCEL_NOT_ALLOWED' : null }),
+    act('retry_delivery', 'delivery.send', { reasonCode: retryDeliveryRefusal(s, caps), primary: s.status === 'failed' && !sendFailed && caps.retry && !proposeReturn }),
+    act('change_courier', 'delivery.send', { reasonCode: orderClosed ? NOT_OFFERED : changeCourierRefusal(s, caps) }),
+    act('cancel', 'delivery.send', { reasonCode: cancelRefusal(s, caps) }),
     act('mark_failed', 'delivery.send', { reasonCode: ['sent', 'picked_up', 'in_transit', 'out_for_delivery'].includes(s.status) ? null : NOT_OFFERED }),
     act('mark_delivered', 'orders.write', { reasonCode: order.status === 'delivered' || terminal || !inFlight ? NOT_OFFERED : null }),
     act('mark_returned', order.status === 'delivered' && s.status !== 'returned' ? 'orders.money' : 'orders.write', { reasonCode: order.status === 'returned' || order.status === 'cancelled' ? 'ORDER_TERMINAL' : inFlight || s.status === 'returned' || (s.status === 'delivered' && order.status === 'delivered') ? null : NOT_OFFERED, primary: proposeReturn || s.status === 'returned' }),
@@ -104,11 +152,12 @@ export const shipmentActions = (s: Pick<Shipment, 'provider' | 'status' | 'track
   return [...list.filter((a) => a.primary), ...list.filter((a) => !a.primary)];
 };
 
-export const presentShipmentEvent = (e: ShipmentRow['events'][number]): ShipmentEventView => ({
+/** One timeline line; a description Djaber stored as a key (« changement de transporteur », stale) is read in `locale`. */
+export const presentShipmentEvent = (e: ShipmentRow['events'][number], locale?: string): ShipmentEventView => ({
   at: e.at.toISOString(),
   rawStatus: e.rawStatus,
   mappedStatus: e.mappedStatus,
-  description: e.description,
+  description: locale ? renderStoredTextIn(e.description, locale) : e.description,
   location: e.location,
   source: e.source,
   actor: e.actor,
@@ -145,7 +194,7 @@ export const presentShipment = (s: ShipmentRow, order: ShipmentOrderLike, client
     returnPending: isReturnPending(s, order.status),
     failureHandled: failureHandledAs(s.status, order.status),
     labelSource: s.labelUrl || (caps.label && s.provider !== 'manual') ? 'courier' : 'djaber',
-    events: s.events.map(presentShipmentEvent),
+    events: dedupeTimeline(s.events).map((e) => presentShipmentEvent(e, ctx.locale ?? viewerLocale())),
     createdAt: s.createdAt.toISOString(),
     actions: shipmentActions(s, order, { syncAvailableAt: ctx.syncAvailableAt, now }),
   };

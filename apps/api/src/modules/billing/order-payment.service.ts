@@ -10,7 +10,7 @@
 //     expense row, `paymentStatus=refunded`.
 //   AI tool `create_payment_link` (worker): same link, created synchronously, returned to the model.
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { formatMoney, PAYMENT_LINK_MINUTES, type OrderPaymentLinkDto } from '@djaber/shared';
+import { formatMoney, PAYMENT_LINK_MINUTES, storedText, type OrderPaymentLinkDto } from '@djaber/shared';
 import { prisma, Prisma, TenantContext, type OrderPayment, type PaymentMethod, type Tx } from '@djaber/db';
 import { AuditService } from '../../core/audit/audit.service';
 import { ConfigService } from '../../core/config/config.service';
@@ -220,7 +220,7 @@ export class OrderPaymentService implements OnModuleInit {
       const refused = refundRefusal(o);
       if (refused) throw new AppException(refused.code);
       if (input.amount > o.amountPaid) throw new AppException('VALIDATION_ERROR', { max: o.amountPaid }, { amount: 'validation.range' });
-      const entry = await this.effects.addPayment(tx, o, { amount: -input.amount, method: input.method ?? o.paymentMethod, reference: 'refund', note: input.reason, description: `Commande #${o.number} (remboursement)` }, actor);
+      const entry = await this.effects.addPayment(tx, o, { amount: -input.amount, method: input.method ?? o.paymentMethod, reference: 'refund', note: input.reason, description: storedText('stored.cash.orderRefund', { number: o.number }) }, actor);
       refundId = entry?.id ?? '';
       const paid = await this.effects.recomputePaid(tx, o);
       const updated = await tx.order.update({ where: { id: orderId }, data: { amountPaid: paid.amountPaid, paymentStatus: 'refunded', version: { increment: 1 } } });

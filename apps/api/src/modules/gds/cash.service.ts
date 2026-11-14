@@ -5,7 +5,8 @@
 // pills ↔ table in sync, `to` = end of day). Day closing: theoretical cash vs counted, correction row, day locked;
 // reopen (Admin+, audited) reverses the correction with a new correction row.
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { CASH_EDIT_WINDOW_HOURS, cashDisplayMethod, type CashDaysQuery, type CashDayView, type CashQuery, type CashStatsQuery, type CashStatsView, type CashTransactionView, type CloseCashInput, type CreateCashEntryInput, type ReopenCashInput, type UpdateCashEntryInput } from '@djaber/shared';
+import { CASH_EDIT_WINDOW_HOURS, cashDisplayMethod, renderStoredTextIn, storedText, type CashDaysQuery, type CashDayView, type CashQuery, type CashStatsQuery, type CashStatsView, type CashTransactionView, type CloseCashInput, type CreateCashEntryInput, type ReopenCashInput, type UpdateCashEntryInput } from '@djaber/shared';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { prisma, Prisma, TenantContext, type CashClosing, type CashTransaction, type Tx } from '@djaber/db';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
 import { page, type Page } from '../../core/http/pagination';
@@ -157,7 +158,8 @@ export class CashService implements OnModuleInit {
     ];
   }
 
-  private async views(rows: CashRow[], balances?: Map<string, number>): Promise<CashTransactionView[]> {
+  /** `locale`: the reader's language (screen = viewer, export = the file's language) — automatic labels are stored as keys. */
+  private async views(rows: CashRow[], balances?: Map<string, number>, locale: string = viewerLocale()): Promise<CashTransactionView[]> {
     const [ref, closed] = await Promise.all([this.references(rows), this.closedDays(rows.map((r) => algiersDay(r.date)))]);
     return rows.map((r) => {
       const isClosed = closed.has(algiersDay(r.date));
@@ -167,7 +169,7 @@ export class CashService implements OnModuleInit {
         amount: r.amount,
         category: r.category,
         method: r.method,
-        description: r.description,
+        description: renderStoredTextIn(r.description, locale),
         reference: ref(r),
         date: r.date.toISOString(),
         isAutomatic: r.isAutomatic,
@@ -465,7 +467,7 @@ export class CashService implements OnModuleInit {
         const reversed = await tx.cashTransaction.count({ where: { correctsTransactionId: c.id } });
         if (reversed) continue;
         await tx.cashTransaction.create({
-          data: { workspaceId: c.workspaceId, type: c.type === 'income' ? 'expense' : 'income', amount: c.amount, category: 'correction', method: c.method, reference: c.reference, description: `Réouverture : ${input.reason}`, date: c.date, isAutomatic: true, sourceType: 'closing', sourceId: closing.id, correctsTransactionId: c.id, createdById: userId },
+          data: { workspaceId: c.workspaceId, type: c.type === 'income' ? 'expense' : 'income', amount: c.amount, category: 'correction', method: c.method, reference: c.reference, description: storedText('stored.cash.reopen', { reason: input.reason }), date: c.date, isAutomatic: true, sourceType: 'closing', sourceId: closing.id, correctsTransactionId: c.id, createdById: userId },
         });
       }
       await emitCash(tx, this.outbox, algiersDayStart(day), `reopen:${closing.id}`);
@@ -477,7 +479,7 @@ export class CashService implements OnModuleInit {
   private async exportTable(q: CashStatsQuery, locale: 'fr' | 'ar' | 'en') {
     const sel = this.selection(q);
     const rows = await prisma.cashTransaction.findMany({ where: { AND: [this.rangeWhere(sel), ...this.filterWhere(q)] }, include: CASH_INCLUDE, orderBy: [{ date: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }], take: 50_000 });
-    const views = await this.views(rows, await this.runningBalances(sel, await this.balanceBefore(sel.gte)));
+    const views = await this.views(rows, await this.runningBalances(sel, await this.balanceBefore(sel.gte)), locale);
     const h = CASH_HEADERS[locale] ?? CASH_HEADERS.fr;
     type R = CashTransactionView;
     return {

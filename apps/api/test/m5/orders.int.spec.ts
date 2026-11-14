@@ -1,5 +1,6 @@
 // M5 — orders: numbering, creation, status machine with OrderEffects (stock / cash / aggregates), calls, callbacks,
 // payments, address, delete, concurrency, bulk, export, print. AT ids from 13-acceptance-tests.md (API side).
+import { renderStoredTextIn, storedText } from '@djaber/shared';
 import { asAdmin, asOperator, asOwner, type Actor } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
 import { createProduct, drain, jobOf } from '../support/m2';
@@ -207,7 +208,9 @@ describe('status machine and effects (04 §1.2, §3)', () => {
     expect(res.body.data).toMatchObject({ status: 'delivered', deliveryStatus: 'delivered', paymentStatus: 'paid', amountPaid: order.total, remaining: 0, deliveredAt: expect.any(String) });
     const cash = await cashOf(order.id);
     expect(cash.map((c) => [c.type, c.category, c.amount, c.isAutomatic, c.sourceType])).toEqual([['income', 'order', order.total, true, 'payment_entry']]);
-    expect(cash[0]!.description).toContain('(COD)');
+    // stored as a key, read in the viewer's language (UX-056 leftovers)
+    expect(cash[0]!.description).toBe(storedText('stored.cash.orderCod', { number: order.number }));
+    expect(renderStoredTextIn(cash[0]!.description, 'fr')).toContain('(COD)');
     expect(await db.client.findUniqueOrThrow({ where: { id: order.client.id } })).toMatchObject({ totalSpent: order.total, orderCount: 1 });
     // never applied twice; a second delivered is refused by the matrix
     expect((await status(op, res.body.data, 'delivered').expect(422)).body.error.code).toBe('ORDER_INVALID_TRANSITION');

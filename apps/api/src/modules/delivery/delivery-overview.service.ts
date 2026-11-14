@@ -6,6 +6,7 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { DELIVERY_TABS, failureHandledAs, isNotOffered, ORDER_SEND_CLOSED_STATUSES, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, type ActionDescriptor, type DeliveryOverviewView, type DeliveryRowView, type DeliveryTab, type ShipmentsQuery } from '@djaber/shared';
 import { Prisma, prisma, TenantContext, type Shipment } from '@djaber/db';
 import { AppException } from '../../core/errors/app.exception';
+import { RedisService } from '../../core/redis/redis.provider';
 import { page, type Page } from '../../core/http/pagination';
 import { algiersDay, algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
 import { can } from '../../core/rbac/permission-matrix';
@@ -16,6 +17,7 @@ import { exportDateTime, exportLabel } from '../jobs/export-cells';
 import { ExportService } from '../jobs/export.service';
 import { PROVIDER_NAMES, type CourierProvider } from './adapters/courier-adapter';
 import { isNoMovement, isReturnPending, parseShipmentError, shipmentActions, errorCodeOf } from './shipment.presenter';
+import { syncAvailability } from './sync-cooldown';
 
 const DAY = 86_400_000;
 const ACTIVE = Prisma.sql`('pending','sent','picked_up','in_transit','out_for_delivery','delivered')`;
@@ -39,6 +41,7 @@ export class DeliveryOverviewService implements OnModuleInit {
   constructor(
     private readonly safety: SafetyService,
     private readonly exports: ExportService,
+    private readonly redis: RedisService,
   ) {}
 
   onModuleInit() {
@@ -132,7 +135,9 @@ export class DeliveryOverviewService implements OnModuleInit {
   /** Rows of the list / overview for (order id, latest shipment id) pairs, in the given order. */
   async rows(pairs: { id: string; sid: string | null }[], locale: string): Promise<DeliveryRowView[]> {
     if (!pairs.length) return [];
-    const [orders, shipments, couriers, index] = await Promise.all([
+    // UX-056 leftovers: the rows carry the « Actualiser » wait like the tracking panel (greyed item + live countdown)
+    const sids = pairs.map((p) => p.sid).filter((x): x is string => !!x);
+    const [orders, shipments, couriers, index, waits] = await Promise.all([
       prisma.order.findMany({
         where: { id: { in: pairs.map((p) => p.id) } },
         include: { client: { select: { id: true, name: true, phone: true, riskLevel: true, isPlaceholder: true, orderCount: true } }, wilaya: { select: { id: true, nameFr: true, nameAr: true } }, commune: { select: { nameFr: true, nameAr: true } }, shipments: { where: { status: { in: ['pending', 'sent', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered'] } }, select: { id: true, provider: true, status: true } } },
@@ -140,6 +145,7 @@ export class DeliveryOverviewService implements OnModuleInit {
       prisma.shipment.findMany({ where: { id: { in: pairs.map((p) => p.sid).filter((x): x is string => !!x) } }, include: { courierAccount: { select: { id: true, displayName: true, baseUrl: true } } } }),
       prisma.courierAccount.count({ where: { isActive: true } }),
       this.safety.index(),
+      syncAvailability(this.redis, sids),
     ]);
     const byOrder = new Map(orders.map((o) => [o.id, o]));
     const byShip = new Map(shipments.map((s) => [s.id, s]));
@@ -161,7 +167,8 @@ export class DeliveryOverviewService implements OnModuleInit {
       };
       push('send_courier', can(role, 'delivery.send'), sendClosedCode(o.status) ?? (active && active.status !== 'delivered' ? 'DELIVERY_ORDER_ALREADY_SENT' : o.status === 'new' ? 'DELIVERY_ORDER_NOT_CONFIRMED' : !sendable ? 'ORDER_INVALID_TRANSITION' : couriers ? null : 'DELIVERY_NO_COURIER'), sendable && couriers > 0);
       push('ship_manual', can(role, 'orders.write'), checkTransition(state, 'shipped', { role })?.code ?? null);
-      const shipActs = s ? shipmentActions(s, o, { now }) : [];
+      const syncAvailableAt = s ? (waits.get(s.id) ?? null) : null;
+      const shipActs = s ? shipmentActions(s, o, { now, syncAvailableAt }) : [];
       if (!s) {
         push('open_order', can(role, 'orders.read'), null);
         push('call_client', can(role, 'orders.write'), null);
@@ -183,14 +190,14 @@ export class DeliveryOverviewService implements OnModuleInit {
         isStopdesk: o.isStopdesk,
         confirmedAt: o.confirmedAt?.toISOString() ?? null,
         labelPrintedAt: o.labelPrintedAt?.toISOString() ?? null,
-        shipment: s ? this.head(s, o.status, now) : null,
+        shipment: s ? this.head(s, o.status, now, syncAvailableAt) : null,
         actions,
       });
     }
     return out;
   }
 
-  private head(s: Shipment & { courierAccount: { id: string; displayName: string } | null }, orderStatus: string, now: number): DeliveryRowView['shipment'] {
+  private head(s: Shipment & { courierAccount: { id: string; displayName: string } | null }, orderStatus: string, now: number, syncAvailableAt: string | null = null): DeliveryRowView['shipment'] {
     return {
       id: s.id,
       provider: s.provider,
@@ -205,6 +212,7 @@ export class DeliveryOverviewService implements OnModuleInit {
       courierCost: s.courierCost,
       lastEventAt: (s.lastEventAt ?? s.createdAt).toISOString(),
       lastSyncedAt: s.lastSyncedAt?.toISOString() ?? null,
+      syncAvailableAt,
       noMovement: isNoMovement(s, now),
       returnPending: isReturnPending(s, orderStatus),
       failureHandled: failureHandledAs(s.status, orderStatus),

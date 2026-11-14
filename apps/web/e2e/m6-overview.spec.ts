@@ -58,9 +58,9 @@ test('DLV-08 / MECH — rows, tabs and filters in the URL, row menu greyed with 
   await expect(page).toHaveURL(/tab=in_transit/);
   await expect(row(page, sent.id)).toBeVisible();
   await expect(row(page, sent.id)).toContainText(/ZR-/);
-  // ZR Express cannot cancel a parcel: the item stays visible, greyed, with its code in the footer
+  // ZR Express cannot cancel a parcel by API: the item stays visible, greyed, with its reason in the footer (UX-056 leftovers)
   await row(page, sent.id).getByRole('button', { name: /Actions/ }).click();
-  await expect(page.getByRole('menu')).toContainText(errText('COURIER_CANCEL_NOT_ALLOWED'));
+  await expect(page.getByRole('menu')).toContainText(errText('COURIER_CANCEL_UNSUPPORTED'));
   await page.keyboard.press('Escape');
 
   // filter panel → URL
@@ -94,7 +94,7 @@ test('AT-DLV-12 — "Actualiser" in the tracking panel: à jour, then limited to
   await expect(page.getByTestId('tracking-timeline')).toBeVisible();
 });
 
-test('AT-DLV-11 — failure flow: Échecs row (reason + attempt n/3), "Relancer" not offered by ZR (COURIER_CANCEL_NOT_ALLOWED), EcoTrack re-attempt +1, third failure ⇒ return proposed', async ({ page, request }) => {
+test('AT-DLV-11 — failure flow: Échecs row (reason + attempt n/3), "Relancer" not offered by ZR (COURIER_RETRY_UNSUPPORTED), EcoTrack re-attempt +1, third failure ⇒ return proposed', async ({ page, request }) => {
   // ZR Express: no re-attempt API
   const a = await confirmedOrder(request, owner, product.id, { name: 'Karim Djebbar' });
   const pa = await sendOrder(request, owner, a.id, zr.id);
@@ -109,7 +109,7 @@ test('AT-DLV-11 — failure flow: Échecs row (reason + attempt n/3), "Relancer"
   await expect(row(page, a.id)).toContainText('tentative 1/3');
   await row(page, a.id).getByRole('button', { name: /Actions/ }).click();
   await expect(page.getByRole('menuitem', { name: 'Relancer la livraison' })).toHaveAttribute('aria-disabled', 'true');
-  await expect(page.getByRole('menu')).toContainText(errText('COURIER_CANCEL_NOT_ALLOWED'));
+  await expect(page.getByRole('menu')).toContainText(errText('COURIER_RETRY_UNSUPPORTED'));
   await page.keyboard.press('Escape');
 
   // EcoTrack parcel: failure recorded from the UI ("Échec de livraison" dialog), then "Relancer la livraison"

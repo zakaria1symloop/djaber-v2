@@ -3,7 +3,7 @@
 // last sync + "Actualiser" (actualisation… / à jour / limite 1 / 5 min `TRACKING_SYNC_RATE_LIMITED` / `TRACKING_NOT_FOUND`
 // / `COURIER_UNAVAILABLE`), timeline (source courier / Djaber member), the parcel actions, and the alternative panels
 // Annulée / Livrée ✓ (COD encaissé) / Retournée (stock réintégré). Opened from a row (`?sheet=<shipmentId>`).
-import { formatDate, formatMoney, formatPhoneDz, type AppLocale } from '@djaber/shared';
+import { formatDate, formatMoney, formatPhoneDz, renderStoredText, type AppLocale } from '@djaber/shared';
 import { ActionsMenu, Banner, Button, Ltr, Pill, SideSheet, Skeleton, StatusPill, toast, TrackingSyncBar, TrackingTimeline, type SheetNav, type SyncState, type TrackingStep } from '@djaber/ui';
 import { useEffect, useState } from 'react';
 import { QueryError } from '@/components/global-states';
@@ -76,14 +76,15 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
         const source = e.source === 'manual' || e.source === 'system' ? [t('tracking.source.djaber'), e.actor ? shortName(e.actor) : null].filter(Boolean).join(' · ') : (s.courierAccount?.displayName ?? t(`couriers.provider.${s.provider}`));
         return {
           key: `${e.at}-${i}`,
-          title: [e.mappedStatus ? t(`tracking.event.${e.mappedStatus}`) : e.rawStatus, e.description && e.description !== e.rawStatus ? e.description : null, e.location].filter(Boolean).join(' · '),
+          title: [e.mappedStatus ? t(`tracking.event.${e.mappedStatus}`) : e.rawStatus, e.description && e.description !== e.rawStatus ? renderStoredText(e.description, (k, p) => (t.has(k) ? t(k, p) : null)) : null, e.location].filter(Boolean).join(' · '),
           meta: `${formatDate(e.at, locale).replace(/ \d{4}$/, '')} ${algiersClock(e.at)} · ${source}`.toUpperCase(),
           tone: i === 0 ? shipmentTone(e.mappedStatus) : undefined,
         };
       })
     : [];
   const phone = s?.client.phone ?? null;
-  const menu = s ? parcels.menu({ orderId: s.orderId, parcel: parcelOfShipment(s), actions: s.actions, phone, error: s.error, portalUrl: s.portalUrl }, { inPanel: true }) : [];
+  // the panel ticks every second during the wait (`wait`), so its header menu shows the live countdown too
+  const menu = s ? parcels.menu({ orderId: s.orderId, parcel: parcelOfShipment(s), actions: s.actions, phone, error: s.error, portalUrl: s.portalUrl, syncAvailableAt: until && until > Date.now() ? new Date(until).toISOString() : (s.syncAvailableAt ?? null) }, { inPanel: true }) : [];
   // the panel buttons of DLV-08: the first enabled items of the menu (primary first), the rest stays in "Actions ⌄"
   const buttons = menu.filter((a) => !a.disabledReason && !a.destructive && a.key !== SHIPMENT_ACTION.sync).slice(0, 5);
 

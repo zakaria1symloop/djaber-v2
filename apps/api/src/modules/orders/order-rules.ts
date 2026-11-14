@@ -1,6 +1,6 @@
 // 04 §1.2 (+ D14, §21) status machine, §1.3 call outcomes, §1.4 payment / COD, §3 side-effect plan — pure functions,
 // no database. `OrderEffects` executes the plans; the unit tests (`order-rules.spec.ts`) cover every pair of the matrix.
-import { canTransition, derivePaymentStatus, ORDER_ADDRESS_REQUIRED_FOR, ORDER_BACKDATE_MAX_DAYS, ORDER_TERMINAL_STATUSES, sendClosedCode, type CallResultName, type CancelReasonName, type OrderStatusName } from '@djaber/shared';
+import { canTransition, derivePaymentStatus, ORDER_ADDRESS_REQUIRED_FOR, ORDER_BACKDATE_MAX_DAYS, ORDER_TERMINAL_STATUSES, parseStoredText, sendClosedCode, storedText, type CallResultName, type CancelReasonName, type OrderStatusName } from '@djaber/shared';
 import type { ErrorCode } from '@djaber/shared';
 
 export type Role = 'owner' | 'admin' | 'operator' | undefined;
@@ -258,4 +258,15 @@ export const stockDeltas = (target: StockLine[], current: Map<string, number>): 
     if (delta !== 0) out.push({ productId: w?.productId ?? productId, variantId: w ? w.variantId : variantId || null, delta });
   }
   return out;
+};
+
+/**
+ * Note of an order the AI cancelled (04 §5 "AI cancel"), stored as a key + values and rendered in the reader's language
+ * (UX-056 leftovers, 14/11: « IA : demande du client » stayed French in the Arabic history). The model's own words (if
+ * any) travel as a value; a note already stored as a key (« remplacée par #CMD-1010 », A9) is kept as it is.
+ */
+export const aiCancelNote = (reason: string | null | undefined): string => {
+  const r = reason?.trim();
+  if (!r) return storedText('stored.order.aiCustomerRequest');
+  return parseStoredText(r) ? r : storedText('stored.order.aiNote', { note: r });
 };

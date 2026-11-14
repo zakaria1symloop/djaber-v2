@@ -4,19 +4,20 @@
 // the MECH menu order, primary first, greyed with their code. Parcel dialogs are hosted here; the order dialogs
 // (send DLV-05, self-delivery, address) come from `useOrderActions` and read the full order.
 import { formatPhoneDz, type ShipmentErrorView } from '@djaber/shared';
-import { toast, type MenuAction } from '@djaber/ui';
+import { ActionsMenu, toast, type MenuAction } from '@djaber/ui';
 import { useCallback, useState, type ReactNode } from 'react';
 import { refusal } from '@/features/orders/dialogs/common';
 import { useOrderActions } from '@/features/orders/use-order-actions';
 import { useRouter } from '@/i18n/navigation';
 import { toMenuActions, type ActionHandler } from '@/lib/actions';
+import { useCountdown } from '@/lib/countdown';
 import { ApiError } from '@/lib/api';
 import { useT } from '@/lib/i18n';
 import { SHIPMENT_ACTION } from './action-keys';
 import { deliveryApi, useDeliveryRefresh } from './api';
 import type { DeliveryRow, Shipment } from './contracts';
 import { LabelViewer } from './labels';
-import { waitLabel } from './logic';
+import { syncUntil, waitLabel, withSyncWait } from './logic';
 import { CancelParcelDialog, ChangeCourierDialog, MarkFailedDialog, ParcelDeliveredDialog, ParcelReturnedDialog, RetryDeliveryDialog, type ParcelRef } from './shipment-dialogs';
 
 type ParcelDialog = 'cancel' | 'change_courier' | 'mark_failed' | 'retry_delivery' | 'deliver' | 'return' | 'label';
@@ -55,8 +56,11 @@ export function parcelOfShipment(s: Shipment, total?: number): ParcelRef {
   };
 }
 
-/** Subject of a menu: an order id, its parcel (if any), the descriptors, the phone to call and the courier error. */
-export type ParcelSubject = { orderId: string; parcel: ParcelRef | null; actions: DeliveryRow['actions']; phone?: string | null; error?: ShipmentErrorView | null; portalUrl?: string | null };
+/**
+ * Subject of a menu: an order id, its parcel (if any), the descriptors, the phone to call, the courier error and the end of
+ * the « Actualiser » wait (`syncAvailableAt` of the row / parcel — UX-056 leftovers: the list greys it like the panel).
+ */
+export type ParcelSubject = { orderId: string; parcel: ParcelRef | null; actions: DeliveryRow['actions']; phone?: string | null; error?: ShipmentErrorView | null; portalUrl?: string | null; syncAvailableAt?: string | null };
 
 export function useParcelActions(o: { onTrack?: (shipmentId: string) => void } = {}) {
   const t = useT();
@@ -65,6 +69,9 @@ export function useParcelActions(o: { onTrack?: (shipmentId: string) => void } =
   const orders = useOrderActions();
   const [dialog, setDialog] = useState<{ kind: ParcelDialog; parcel: ParcelRef } | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
+  // waits learnt in this tab (a refresh just done, a 429) before the list / panel data catches up — parcel id → epoch ms
+  const [waits, setWaits] = useState<Record<string, number>>({});
+  const learnWait = useCallback((id: string, until: number) => setWaits((w) => ({ ...w, [id]: until })), []);
 
   /** "Actualiser le suivi": 1 / 5 min / parcel (`429 TRACKING_SYNC_RATE_LIMITED {retryAfter}`). */
   const sync = useCallback(
@@ -72,11 +79,13 @@ export function useParcelActions(o: { onTrack?: (shipmentId: string) => void } =
       setSyncing(p.id);
       try {
         const s = await deliveryApi.sync(p.id);
+        learnWait(p.id, s.syncAvailableAt ? Date.parse(s.syncAvailableAt) : Date.now() + 300_000);
         await refresh({ shipment: s });
         return { ok: true, shipment: s };
       } catch (e) {
         if (e instanceof ApiError) {
           const retryAfter = Number(e.body.params.retryAfter) || undefined;
+          if (e.code === 'TRACKING_SYNC_RATE_LIMITED') learnWait(p.id, Date.now() + (retryAfter ?? 300) * 1000);
           return { ok: false, code: e.code, retryAfter };
         }
         return { ok: false, code: 'NETWORK' };
@@ -84,7 +93,19 @@ export function useParcelActions(o: { onTrack?: (shipmentId: string) => void } =
         setSyncing(null);
       }
     },
-    [refresh],
+    [refresh, learnWait],
+  );
+  /** End of the « Actualiser » wait of a subject (epoch ms), null = none / unknown. */
+  const syncUntilOf = useCallback((s: ParcelSubject): number | null => (s.parcel ? syncUntil(s.syncAvailableAt, waits[s.parcel.id]) : null), [waits]);
+  /** The subject's descriptors at this instant: « Actualiser » greyed with the live wait, or offered again once it is over. */
+  const liveActions = useCallback(
+    (s: ParcelSubject): DeliveryRow['actions'] => {
+      // a caller that does not know the wait (no `syncAvailableAt`) and nothing learnt here: the server descriptors as they are
+      if (!s.parcel || (s.syncAvailableAt === undefined && !waits[s.parcel.id])) return s.actions;
+      const until = syncUntilOf(s);
+      return withSyncWait(s.actions, until ? Math.max(0, Math.ceil((until - Date.now()) / 1000)) : 0);
+    },
+    [syncUntilOf, waits],
   );
   const syncWithToast = useCallback(
     async (p: ParcelRef) => {
@@ -131,9 +152,9 @@ export function useParcelActions(o: { onTrack?: (shipmentId: string) => void } =
         [SHIPMENT_ACTION.openOrder]: { label: t('parcel.menu.openOrder'), onSelect: () => router.push(`/orders/${s.orderId}`), hint: t('parcel.menu.hint.order'), separated: true },
         [SHIPMENT_ACTION.cancel]: { label: t('parcel.menu.cancel'), onSelect: () => open('cancel'), destructive: true, separated: true, hint: t('parcel.menu.hint.cancel') },
       };
-      return toMenuActions(s.actions, handlers, t);
+      return toMenuActions(liveActions(s), handlers, t);
     },
-    [orders, o, t, router, retrySend, syncWithToast],
+    [orders, o, t, router, retrySend, syncWithToast, liveActions],
   );
 
   const close = () => setDialog(null);
@@ -163,5 +184,15 @@ export function useParcelActions(o: { onTrack?: (shipmentId: string) => void } =
       />
     </>
   );
-  return { menu, element, sync, syncWithToast, syncing, openDialog: (kind: ParcelDialog, parcel: ParcelRef) => setDialog({ kind, parcel }), orders };
+  return { menu, liveActions, syncUntil: syncUntilOf, element, sync, syncWithToast, syncing, openDialog: (kind: ParcelDialog, parcel: ParcelRef) => setDialog({ kind, parcel }), orders };
+}
+
+/**
+ * `Actions ⌄` of a parcel subject that re-renders every second while the « Actualiser » wait lasts, so the greyed item
+ * shows the live countdown (« 54 s ») and comes back by itself (UX-056 leftovers: delivery list rows).
+ */
+export function ParcelActionsMenu({ parcels, subject, heading, label, inPanel }: { parcels: ReturnType<typeof useParcelActions>; subject: ParcelSubject; heading?: string; label: string; inPanel?: boolean }) {
+  const until = parcels.syncUntil(subject);
+  useCountdown(until && until > Date.now() ? until : null);
+  return <ActionsMenu label={label} heading={heading} actions={parcels.menu(subject, { inPanel })} />;
 }

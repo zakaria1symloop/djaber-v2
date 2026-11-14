@@ -58,6 +58,44 @@ export const orderDeliveryStatusAfter = (current: string, shipment: ShipmentStat
   return (DELIVERY_RANK[target] ?? 0) > (DELIVERY_RANK[current] ?? 0) ? target : null;
 };
 
+/** A line of a parcel's timeline as the rules read it (`ShipmentEvent`). */
+export type TimelineEvent = { rawStatus: string; mappedStatus: string | null; at: Date; source?: string };
+const SAME_INSTANT_MS = 1000;
+
+/**
+ * Is this courier report already on the parcel's timeline? (05-integrations §2.6 "events are idempotent" — UX-056 remark
+ * 12/11: « each Refresh adds another "Shipment created" line ».) Identity of a courier event = raw status + courier time
+ * (±1 s), checked against EVERY stored event, not only the newest one (the courier's own creation time is older than
+ * Djaber's « sent » line, so the newest-only check let the same courier line in again on every refresh). Without a courier
+ * time, a raw status equal to the one the parcel already holds (`Shipment.rawStatus`) or to its newest line is the same
+ * report. The creation (`sent`) is one line whatever the courier calls its pre-pickup states.
+ */
+export const isKnownCourierEvent = (events: readonly TimelineEvent[], u: { rawStatus: string; mapped: string | null; at?: Date | null }, currentRaw: string | null = null): boolean => {
+  if (u.mapped === 'sent' && events.some((e) => e.mappedStatus === 'sent')) return true;
+  const at = u.at;
+  if (at) return events.some((e) => e.rawStatus === u.rawStatus && Math.abs(e.at.getTime() - at.getTime()) <= SAME_INSTANT_MS);
+  if (currentRaw !== null && u.rawStatus === currentRaw) return true;
+  const newest = events.reduce<TimelineEvent | null>((n, e) => (!n || e.at > n.at ? e : n), null);
+  return !!newest && newest.rawStatus === u.rawStatus;
+};
+
+/**
+ * The timeline shown on the screens (tracking panel, order page): the courier lines stored twice before the rule above
+ * (refreshes of 12/11) are dropped — Djaber's own lines (manual marks, system) are always kept. Same order as given.
+ */
+export const dedupeTimeline = <E extends TimelineEvent>(events: readonly E[]): E[] => {
+  const isCourier = (e: E) => e.source === 'poll' || e.source === 'webhook';
+  const oldestFirst = [...events].sort((a, b) => a.at.getTime() - b.at.getTime());
+  // Djaber's lines are always kept, so they count from the start (its « sent » line is written after the courier's time)
+  const kept: E[] = oldestFirst.filter((e) => !isCourier(e));
+  const drop = new Set<E>();
+  for (const e of oldestFirst.filter(isCourier)) {
+    if (isKnownCourierEvent(kept, { rawStatus: e.rawStatus, mapped: e.mappedStatus, at: e.at })) drop.add(e);
+    else kept.push(e);
+  }
+  return events.filter((e) => !drop.has(e));
+};
+
 /** 03-events §3 `courier.create-parcel` retry delays after `COURIER_UNAVAILABLE` (FL-08 F-3): 6 retries. */
 export const CREATE_RETRY_DELAYS_MS = [60_000, 300_000, 1_800_000, 7_200_000, 7_200_000, 7_200_000] as const;
 /** 1 attempt + 6 retries. */

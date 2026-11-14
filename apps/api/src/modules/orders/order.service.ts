@@ -4,11 +4,12 @@
 // Side effects (stock, cash, aggregates, outbox) only through OrderEffects (04 §3).
 import { formatSlipAmount } from './print/order-slip.pdf';
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { AI_ORDER_DUPLICATE_WINDOW_MIN, ORDER_READ_ONLY_STATUSES, formatMoney, type CreateOrderInput, type OrderDraft, type OrderListItemView, type OrderView, type OrdersExportQuery, type OrdersQuery, type UpdateOrderInput } from '@djaber/shared';
+import { AI_ORDER_DUPLICATE_WINDOW_MIN, formatMoney, ORDER_READ_ONLY_STATUSES, storedText, type CreateOrderInput, type OrderDraft, type OrderListItemView, type OrdersExportQuery, type OrdersQuery, type OrderView, type UpdateOrderInput } from '@djaber/shared';
 import { prisma, TenantContext, type Order, type Prisma, type Tx } from '@djaber/db';
 import { AuditService } from '../../core/audit/audit.service';
 import { ConfigService } from '../../core/config/config.service';
 import { CounterService } from '../../core/counter/counter.service';
+import { RedisService } from '../../core/redis/redis.provider';
 import { AppException, conflict, forbidden, notFound } from '../../core/errors/app.exception';
 import { page, type Page } from '../../core/http/pagination';
 import { can } from '../../core/rbac/permission-matrix';
@@ -19,6 +20,7 @@ import { ClientService } from '../clients/client.service';
 import { feeExplanation, FeeService, quoteFee } from '../delivery/fee.service';
 import { GeoService } from '../delivery/geo.service';
 import { stopdeskLabels, stopdeskText } from '../delivery/stopdesk-names';
+import { syncAvailability } from '../delivery/sync-cooldown';
 import { exportDateTime, exportLabel } from '../jobs/export-cells';
 import { ExportService } from '../jobs/export.service';
 import { contextOf, type ConversationContext } from '../messaging/messaging.presenter';
@@ -51,6 +53,7 @@ export class OrderService implements OnModuleInit {
     private readonly exports: ExportService,
     private readonly audit: AuditService,
     private readonly config: ConfigService,
+    private readonly redis: RedisService,
   ) {}
 
   onModuleInit() {
@@ -142,7 +145,9 @@ export class OrderService implements OnModuleInit {
       const q = grid.fee === o.deliveryFee || !grid.wilayaServed ? grid : quoteFee(rule, { wilayaId: o.wilayaId, isStopdesk: o.isStopdesk, subtotal: o.subtotal, threshold: ws.freeDeliveryThreshold, override: o.deliveryFee });
       explanation = feeExplanation(q, o.wilaya ?? null, ctx.locale);
     }
-    const [desks, historyText] = await Promise.all([stopdeskLabels([o.isStopdesk ? o.stopdeskId : null]), this.addressHistory(o.history, ctx.locale)]);
+    // the « Actualiser » wait of the order's parcels (UX-056 leftovers: same countdown as the tracking panel and the list)
+    const [desks, historyText, waits] = await Promise.all([stopdeskLabels([o.isStopdesk ? o.stopdeskId : null]), this.addressHistory(o.history, ctx.locale), syncAvailability(this.redis, o.shipments.map((s) => s.id))]);
+    ctx.syncAvailableAt = (shipmentId) => waits.get(shipmentId) ?? null;
     const stopdeskName = o.isStopdesk && o.stopdeskId ? stopdeskText(desks.get(o.stopdeskId)) : null;
     return presentOrder(o, { payments, actorNames, feeExplanation: explanation, stopdeskName, historyText }, ctx);
   }
@@ -296,7 +301,7 @@ export class OrderService implements OnModuleInit {
     await this.effects.holdStock(tx, order, lines, actor.type === 'user' ? actor.id : null, o.releasing ?? []);
     let current = order;
     if (o.amountPaid > 0) {
-      await this.effects.addPayment(tx, order, { amount: o.amountPaid, method: order.paymentMethod, description: `Commande #${order.number} (acompte)` }, actor);
+      await this.effects.addPayment(tx, order, { amount: o.amountPaid, method: order.paymentMethod, description: storedText('stored.cash.orderDeposit', { number: order.number }) }, actor);
       const paid = await this.effects.recomputePaid(tx, order);
       current = await tx.order.update({ where: { id: order.id }, data: paid });
     }
@@ -474,7 +479,7 @@ export class OrderService implements OnModuleInit {
       // 04 §3 "amount paid changed": the order's automatic rows are replaced by one row for the new amount
       if (input.amountPaid !== undefined && input.amountPaid !== o.amountPaid) {
         await this.effects.clearPayments(tx, id);
-        await this.effects.addPayment(tx, o, { amount: input.amountPaid, method: input.paymentMethod ?? o.paymentMethod, description: `Commande #${o.number} (paiement)` }, actor);
+        await this.effects.addPayment(tx, o, { amount: input.amountPaid, method: input.paymentMethod ?? o.paymentMethod, description: storedText('stored.cash.orderPayment', { number: o.number }) }, actor);
         changed.push('amountPaid');
       }
       const paid = await this.effects.recomputePaid(tx, { id, total });

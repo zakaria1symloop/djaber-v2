@@ -7,7 +7,6 @@
 // tracking side panel `?sheet=<shipmentId>`; no-courier card (CTA + Livraison propre); all of it in the URL.
 import { formatDate, formatNumber, formatPhoneDz, type AppLocale } from '@djaber/shared';
 import {
-  ActionsMenu,
   ActiveFilters,
   BulkBar,
   Button,
@@ -61,7 +60,7 @@ import { PrintLabelsDialog } from './labels';
 import { daysSince } from './logic';
 import { currentTab, DELIVERY_LIST, DELIVERY_TAB_LIST, deliveryChips, LAST_ERRORS, LAST_EVENTS, panelFilterCount, SHIPMENT_FILTER_STATUSES, shipmentsQuery } from './overview-spec';
 import { TrackingPanel } from './tracking-panel';
-import { parcelOfRow, useParcelActions } from './use-parcel-actions';
+import { ParcelActionsMenu, parcelOfRow, useParcelActions } from './use-parcel-actions';
 
 const MAX_ATTEMPTS = 3;
 /** Clears the search and the panel filters; the tab stays (it is the screen, not a filter). */
@@ -128,8 +127,9 @@ export function DeliveryOverviewPage() {
     const when = days !== null && days >= 2 ? `${formatDate(at, locale).replace(/ \d{4}$/, '')} · ${t('delivery.row.days', { count: days })}` : `${relativeTime(at, locale)} · ${algiersTime(at)}`;
     return { title: t(`tracking.event.${sh.status}`), meta: [when, sh.courierAccount ? t('delivery.row.byCourier') : t('tracking.source.djaber')].join(' · ') };
   };
-  const subject = (r: DeliveryRow) => ({ orderId: r.orderId, parcel: parcelOfRow(r), actions: r.actions, phone: r.client.phone, error: r.shipment?.error ?? null });
-  const menu = (r: DeliveryRow) => <ActionsMenu label={t('action.actions')} heading={[`#${r.orderNumber}`, r.shipment ? t(`enum.Shipment.status.${r.shipment.status}`) : t('delivery.row.notSentPill'), r.wilaya?.name].filter(Boolean).join(' · ')} actions={parcels.menu(subject(r))} />;
+  const subject = (r: DeliveryRow) => ({ orderId: r.orderId, parcel: parcelOfRow(r), actions: r.actions, phone: r.client.phone, error: r.shipment?.error ?? null, syncAvailableAt: r.shipment?.syncAvailableAt ?? null });
+  // UX-056 leftovers: « Actualiser le suivi » is greyed with the live wait here too (same `syncAvailableAt` as the panel)
+  const menu = (r: DeliveryRow) => <ParcelActionsMenu parcels={parcels} subject={subject(r)} label={t('action.actions')} heading={[`#${r.orderNumber}`, r.shipment ? t(`enum.Shipment.status.${r.shipment.status}`) : t('delivery.row.notSentPill'), r.wilaya?.name].filter(Boolean).join(' · ')} />;
 
   const columns: Column<DeliveryRow>[] = [
     {

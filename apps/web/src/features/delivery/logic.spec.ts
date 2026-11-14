@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseListState } from '@/lib/list-state';
-import { bulkRowState, courierErrorField, credentialErrors, daysLabel, daysSince, deliveryBlockState,isHttpsUrl, parcelSteps, parseWeight, shipmentTone, syncWait, waitLabel } from './logic';
+import { bulkRowState, courierErrorField, credentialErrors, daysLabel, daysSince, deliveryBlockState,isHttpsUrl, parcelSteps, parseWeight, shipmentTone, syncUntil, syncWait, waitLabel, withSyncWait } from './logic';
 import { currentTab, DELIVERY_LIST, deliveryChips, panelFilterCount, shipmentsQuery, TAB_PRESETS } from './overview-spec';
 
 const params = (q: string) => new URLSearchParams(q);
@@ -69,6 +69,32 @@ describe('tracking sync (1 / 5 min)', () => {
   it('days since the last event', () => {
     expect(daysSince('2026-10-05T09:00:00Z', now)).toBe(7);
     expect(daysSince(null, now)).toBeNull();
+  });
+});
+
+// UX-056 leftovers (UX/UI test log 12/11): the list « Actions » offered « Actualiser le suivi » during the 5-minute wait
+describe('« Actualiser » in every parcel menu follows the live wait', () => {
+  const now = Date.parse('2026-10-12T10:00:00Z');
+  const others = [{ key: 'label', enabled: true }, { key: 'cancel', enabled: false, reasonCode: 'COURIER_CANCEL_UNSUPPORTED' }];
+  it('an enabled item is greyed with the seconds left while the wait lasts (a refresh done in this tab, a 429)', () => {
+    expect(withSyncWait([{ key: 'sync', enabled: true, primary: true }, ...others], 54)).toEqual([{ key: 'sync', enabled: false, reasonCode: 'TRACKING_SYNC_RATE_LIMITED', reasonParams: { retryAfter: 54 } }, ...others]);
+  });
+  it('the countdown moves on; at 0 the item is offered again', () => {
+    const limited = { key: 'sync', enabled: false, reasonCode: 'TRACKING_SYNC_RATE_LIMITED', reasonParams: { retryAfter: 240 } };
+    expect(withSyncWait([limited], 12)[0]).toEqual({ ...limited, reasonParams: { retryAfter: 12 } });
+    expect(withSyncWait([limited], 0)[0]).toEqual({ key: 'sync', enabled: true });
+  });
+  it('any other refusal of the server stays (permission, parcel not created)', () => {
+    const forbidden = { key: 'sync', enabled: false, reasonCode: 'FORBIDDEN' };
+    expect(withSyncWait([forbidden], 54)[0]).toBe(forbidden);
+    expect(withSyncWait([forbidden], 0)[0]).toBe(forbidden);
+  });
+  it('end of the wait = the later of what the server said and what this tab learnt', () => {
+    expect(syncUntil('2026-10-12T10:04:00Z', null)).toBe(Date.parse('2026-10-12T10:04:00Z'));
+    expect(syncUntil(null, now + 60_000)).toBe(now + 60_000);
+    expect(syncUntil('2026-10-12T10:04:00Z', now + 600_000)).toBe(now + 600_000);
+    expect(syncUntil(null, null)).toBeNull();
+    expect(syncUntil('nope', undefined)).toBeNull();
   });
 });
 
