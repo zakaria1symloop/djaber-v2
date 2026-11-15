@@ -1,0 +1,53 @@
+{
+  "ai-chat": {
+    "state": "done"
+  },
+  "public": {
+    "state": "done"
+  },
+  "home": {
+    "state": "done"
+  },
+  "products": {
+    "state": "done"
+  },
+  "stock": {
+    "state": "done"
+  },
+  "sales-cash": {
+    "state": "done"
+  },
+  "clients": {
+    "state": "done"
+  },
+  "orders": {
+    "state": "done"
+  },
+  "delivery": {
+    "state": "done"
+  },
+  "agents": {
+    "state": "done"
+  },
+  "channels-inbox": {
+    "state": "done"
+  },
+  "analytics": {
+    "state": "done"
+  },
+  "settings": {
+    "state": "done"
+  },
+  "roles": {
+    "state": "done"
+  },
+  "help": {
+    "state": "done"
+  },
+  "admin": {
+    "state": "done"
+  },
+  "mobile-a11y": {
+    "state": "done"
+  }
+}
