@@ -184,7 +184,7 @@ function ScenarioRow({ run, running, onOpen }: { run: ScenarioRun; running: bool
           {t(`agents.scenario.full.${run.scenarioKey}`)}
         </span>
         <span dir="auto" className="ts-label-meta mt-1 block truncate text-text-muted">
-          {run.summary ?? (running ? t('agents.activate.scenarios.pending') : run.status ? t(`agents.activate.scenarios.status.${run.status}`) : t('agents.activate.scenarios.never'))}
+          {scenarioSummary(run.summary, t) ?? (running ? t('agents.activate.scenarios.pending') : run.status ? t(`agents.activate.scenarios.status.${run.status}`) : t('agents.activate.scenarios.never'))}
         </span>
       </span>
       <button type="button" onClick={onOpen} className="ts-label-meta shrink-0 text-accent-inbound hover:underline" data-testid="scenario-open">
@@ -305,4 +305,14 @@ export function ActivationRail({ agent, activation, onSaveDraft }: { agent: Agen
       </Dialog>
     </div>
   );
+}
+
+/** full-test 15/11 AGENTS-02: the server's codes (« failed:replied,language_respected », « handoff ») in words; a reply as is. */
+export function scenarioSummary(summary: string | null | undefined, t: ReturnType<typeof useT>): string | null {
+  if (!summary) return null;
+  if (summary === 'handoff') return t('agents.activate.scenarios.handedOff');
+  const failed = /^failed:\s*(.+)$/.exec(summary);
+  if (failed) return t('agents.activate.scenarios.failedChecks', { checks: failed[1]!.split(/,\s*/).map((c) => (t.has(`agents.scenario.check.${c}`) ? t(`agents.scenario.check.${c}`) : c)).join(' · ') });
+  if (/^[A-Z][A-Z_]+$/.test(summary)) return t.has(`error.${summary}`) ? t(`error.${summary}`) : t('agents.activate.scenarios.status.error');
+  return summary;
 }

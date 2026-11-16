@@ -139,6 +139,7 @@ export const ERROR_CODES = {
   ORDER_INVALID_TRANSITION: { status: 422, params: ["from","to"] },
   ORDER_NOTHING_TO_REFUND: { status: 422, params: [] },
   ORDER_PAYMENT_LOCKED: { status: 422, params: [] },
+  ORDER_TOTAL_BELOW_PAID: { status: 422, params: ["paid"] },
   ORDER_TERMINAL: { status: 422, params: [] },
   OWNERSHIP_TRANSFER_TARGET_INVALID: { status: 422, params: [] },
   OWNER_IMMUTABLE: { status: 422, params: [] },

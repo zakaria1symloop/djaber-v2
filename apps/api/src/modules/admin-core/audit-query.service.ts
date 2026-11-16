@@ -61,13 +61,14 @@ export class AuditQueryService implements OnModuleInit {
         action: r.action,
         target: { entity: r.entity, id: r.entityId, label, ...(ws ? { workspace: ws } : {}) },
         reason: r.reason,
-        context: { ip: r.ip ? r.ip.replace(/\.\d+\.\d+$/, '.x.x') : null, userAgent: r.userAgent, impersonationSessionId: r.impersonationSessionId, twoFactor: r.actorType === 'admin' },
+        context: { ip: r.ip ? r.ip.replace(/\.\d+\.\d+$/, '.x.x') : null, userAgent: r.userAgent, impersonationSessionId: r.impersonationSessionId, twoFactor: r.actorType === 'admin' && (r.actor as { totpEnabled?: boolean } | null)?.totpEnabled === true },
         before: (r.before as Record<string, unknown> | null) ?? null,
         after: (r.after as Record<string, unknown> | null) ?? null,
       };
     });
   }
-  private readonly include = { actor: { select: { id: true, firstName: true, lastName: true } } } as const;
+  // full-test 15/11 ADMIN-02: « 2FA ✓ » only for an actor whose account has 2FA on (a sign-in of such an account always asks for the code) — it was claimed for every admin row
+  private readonly include = { actor: { select: { id: true, firstName: true, lastName: true, totpEnabled: true } } } as const;
 
   async list(q: AdminAuditQuery): Promise<Page<AuditLogDto>> {
     const where = this.where(q);

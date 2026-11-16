@@ -272,7 +272,9 @@ export class AiAdminService {
       realCostUsdPer1k: Math.round(cost * 100000) / 100000,
       credits: r.creditCost,
       marginPct: revenueDzd > 0 ? Math.round(((revenueDzd - costDzd) / revenueDzd) * 100) : null,
-      state: r.failoverActive ? 'failover' : open || !r.primaryModel.isActive ? 'degraded' : 'ok',
+      // full-test 15/11 ADMIN-01: a model whose PROVIDER is switched off does not answer either — « OK » was shown for a voice
+      // route with both providers off
+      state: r.failoverActive ? 'failover' : open || !(r.primaryModel.isActive && r.primaryModel.provider.isActive) ? 'degraded' : 'ok',
       failoverSince: iso(r.failoverSince),
       timeoutSec: r.timeoutSec,
       errorThresholdPct: r.errorThresholdPct,

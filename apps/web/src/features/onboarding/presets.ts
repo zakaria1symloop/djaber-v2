@@ -22,5 +22,9 @@ export type PresetCard = {
 export const presetCards = (server: { key: string; name: string; tagline: string | null; badge: string | null }[] | null | undefined): PresetCard[] => {
   if (!server?.length) return STATIC_PRESETS.map((s, i) => ({ key: presetKeyOf(s), staticKey: s, name: null, tagline: null, recommended: i === 0, live: false }));
   const anyBadge = server.some((p) => p.badge === 'recommended');
-  return server.slice(0, 4).map((p, i) => ({ key: p.key, staticKey: staticOf(p.key), name: p.name || null, tagline: p.tagline, recommended: anyBadge ? p.badge === 'recommended' : i === 0, live: true }));
+  // full-test 16/11 ONBOARDING-01: the four official presets first (in their order), then the others — the first four of the
+  // list were platform test presets (« test », « testtest », a person's name)
+  const official = STATIC_PRESETS.map((k) => server.find((p) => staticOf(p.key) === k)).filter((p): p is (typeof server)[number] => !!p);
+  const ordered = [...official, ...server.filter((p) => !official.includes(p))];
+  return ordered.slice(0, 4).map((p, i) => ({ key: p.key, staticKey: staticOf(p.key), name: p.name || null, tagline: p.tagline, recommended: anyBadge ? p.badge === 'recommended' : i === 0, live: true }));
 };

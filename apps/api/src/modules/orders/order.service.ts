@@ -128,7 +128,9 @@ export class OrderService implements OnModuleInit {
   async get(id: string, locale = 'fr'): Promise<OrderView> {
     const o = await prisma.order.findFirst({ where: { id }, include: ORDER_DETAIL_INCLUDE });
     if (!o) throw notFound();
-    const userIds = [...new Set(o.history.filter((h) => h.actorType === 'user' && h.actorId).map((h) => h.actorId!))];
+    // full-test 15/11 ORDERS-03: the members named by « Assignation » lines too (the history showed their UUID)
+    const assigned = o.history.filter((h) => h.field === 'assigneeId').flatMap((h) => [h.from, h.to]).filter((x): x is string => !!x && /^[0-9a-f-]{36}$/.test(x));
+    const userIds = [...new Set([...o.history.filter((h) => h.actorType === 'user' && h.actorId).map((h) => h.actorId!), ...assigned])];
     const agentIds = [...new Set(o.history.filter((h) => h.actorType === 'ai' && h.actorId).map((h) => h.actorId!))];
     const [payments, users, agents, ctx, rule, ws] = await Promise.all([
       prisma.paymentEntry.findMany({ where: { sourceType: 'order', sourceId: id }, orderBy: [{ paidAt: 'desc' }, { id: 'desc' }], include: { createdBy: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } } } }),
@@ -148,6 +150,10 @@ export class OrderService implements OnModuleInit {
     // the « Actualiser » wait of the order's parcels (UX-056 leftovers: same countdown as the tracking panel and the list)
     const [desks, historyText, waits] = await Promise.all([stopdeskLabels([o.isStopdesk ? o.stopdeskId : null]), this.addressHistory(o.history, ctx.locale), syncAvailability(this.redis, o.shipments.map((s) => s.id))]);
     ctx.syncAvailableAt = (shipmentId) => waits.get(shipmentId) ?? null;
+    // full-test 15/11 ORDERS-03: a member's name for « Assignation », an Algiers date for « Rappel » (it was a UTC ISO string)
+    const when = new Intl.DateTimeFormat(ctx.locale === 'ar' ? 'ar-DZ-u-nu-latn' : ctx.locale === 'en' ? 'en-GB' : 'fr-FR', { timeZone: 'Africa/Algiers', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const readable = (field: string, v: string | null) => (!v ? v : field === 'assigneeId' ? (actorNames.get(v) ?? v) : field === 'callbackAt' && !Number.isNaN(Date.parse(v)) ? when.format(new Date(v)) : v);
+    for (const h of o.history) if ((h.field === 'assigneeId' || h.field === 'callbackAt') && !historyText.has(h.id)) historyText.set(h.id, { from: readable(h.field, h.from), to: readable(h.field, h.to) });
     const stopdeskName = o.isStopdesk && o.stopdeskId ? stopdeskText(desks.get(o.stopdeskId)) : null;
     return presentOrder(o, { payments, actorNames, feeExplanation: explanation, stopdeskName, historyText }, ctx);
   }
@@ -186,7 +192,11 @@ export class OrderService implements OnModuleInit {
 
   // --- lines & money ----------------------------------------------------------------------------------------------------
   /** Catalogue lines with snapshots (04 §4 "prices snapshotted on lines"); 422 VARIANT_REQUIRED on a variant product without variant. */
-  async resolveLines(tx: Tx, items: CreateOrderInput['items']): Promise<Line[]> {
+  /**
+   * `priceLock` (a member without `orders.money`, full-test 15/11 ROLES-01: an operator sold a 2 500 DA product at 1 DA): a
+   * line price must be the catalogue price, or the price that line already had in this order (an Admin set it) — else 403.
+   */
+  async resolveLines(tx: Tx, items: CreateOrderInput['items'], priceLock?: { kept: Map<string, Set<number>> }): Promise<Line[]> {
     const ids = [...new Set(items.map((i) => i.productId))];
     const products = await tx.product.findMany({ where: { id: { in: ids }, deletedAt: null }, include: { variants: { where: { deletedAt: null } } } });
     const by = new Map(products.map((p) => [p.id, p]));
@@ -196,6 +206,8 @@ export class OrderService implements OnModuleInit {
       if (p.hasVariants && !i.variantId) throw new AppException('VARIANT_REQUIRED', {}, { [`items.${n}.variantId`]: 'validation.required' });
       const v = i.variantId ? p.variants.find((x) => x.id === i.variantId) : null;
       if (i.variantId && !v) throw new AppException('VARIANT_NOT_FOUND', {}, { [`items.${n}.variantId`]: 'validation.invalid' });
+      const catalogue = v?.price ?? p.price;
+      if (priceLock && i.unitPrice !== undefined && i.unitPrice !== catalogue && !priceLock.kept.get(`${p.id}:${v?.id ?? ''}`)?.has(i.unitPrice)) throw forbidden();
       return {
         productId: p.id,
         variantId: v?.id ?? null,
@@ -232,6 +244,7 @@ export class OrderService implements OnModuleInit {
     // 04 §4: fee / discount overrides are Admin+ (`orders.money`)
     if (!money && (input.delivery?.deliveryFee !== undefined || (input.discount ?? 0) > 0 || input.items.some((i) => (i.discount ?? 0) > 0))) throw forbidden();
     if (input.status === 'confirmed' && !input.delivery) throw new AppException('ORDER_ADDRESS_REQUIRED');
+    const priceLock = money ? undefined : { kept: new Map<string, Set<number>>() };
 
     const id = await this.inTx(async (tx) => {
       const conversation = input.conversationId ? await tx.conversation.findFirst({ where: { id: input.conversationId, deletedAt: null } }) : null;
@@ -243,7 +256,7 @@ export class OrderService implements OnModuleInit {
       if (!input.confirm && (index.has({ clientId: client.id, channelId: conversation?.channelId ?? '', externalSenderId: conversation?.externalSenderId ?? '' }, client.phone))) {
         throw new AppException('CUSTOMER_BLOCKED', { clientName: client.name });
       }
-      const lines = await this.resolveLines(tx, input.items);
+      const lines = await this.resolveLines(tx, input.items, priceLock);
       const d = input.delivery ?? null;
       if (d) await this.geo.checkAddress(d, tx, 'delivery.communeId');
       const { subtotal } = orderTotals(lines, { deliveryFee: 0 });
@@ -451,7 +464,9 @@ export class OrderService implements OnModuleInit {
       let lines: Line[] | null = null;
       if (input.items) {
         if (!['new', 'confirmed', 'preparing'].includes(o.status) || o.deliveryStatus !== 'not_sent') throw new AppException('ORDER_INVALID_TRANSITION', { from: o.status, to: o.status });
-        lines = await this.resolveLines(tx, input.items);
+        const kept = new Map<string, Set<number>>();
+        if (!money) for (const it of await tx.orderItem.findMany({ where: { orderId: id }, select: { productId: true, variantId: true, unitPrice: true } })) kept.set(`${it.productId}:${it.variantId ?? ''}`, (kept.get(`${it.productId}:${it.variantId ?? ''}`) ?? new Set()).add(it.unitPrice));
+        lines = await this.resolveLines(tx, input.items, money ? undefined : { kept });
         subtotal = orderTotals(lines, { deliveryFee: 0 }).subtotal;
         changed.push('items');
       }
@@ -469,6 +484,9 @@ export class OrderService implements OnModuleInit {
       if (total < 0) throw new AppException('VALIDATION_ERROR', {}, { discount: 'validation.range' });
       const payment = checkPaymentPatch({ amountPaid: input.amountPaid, paymentStatus: input.paymentStatus }, total);
       if (payment) throw refuse(payment);
+      // full-test 15/11 ROLES-02: money already received is never rewritten by an edit of the lines / discount / fee — the
+      // paid amount was clamped to the new total (1 400 DA cash row, « payé 401 DA », no history line, no refund)
+      if (input.amountPaid === undefined && total < o.amountPaid) throw new AppException('ORDER_TOTAL_BELOW_PAID', { paid: o.amountPaid });
       Object.assign(data, { subtotal, discount, tax, deliveryFee, total });
       if (lines) {
         const totals = orderTotals(lines, { discount, tax, deliveryFee });

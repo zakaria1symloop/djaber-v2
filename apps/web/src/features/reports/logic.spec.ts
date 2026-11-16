@@ -40,14 +40,14 @@ describe('report template cells', () => {
   });
   it('formats each column type and links rows', () => {
     const col = (key: string) => def.columns.find((c) => c.key === key)!;
-    expect(cellText(col('revenue'), 96000, t, 'fr')).toBe('96 000');
+    expect(cellText(col('grossSales'), 96000, t, 'fr')).toBe('96 000');
     expect(cellText(col('marginPct'), 46.7, t, 'fr')).toBe('46,7 %');
     expect(cellText(col('product'), null, t, 'fr')).toBe('—');
     const pay = REPORT_DEFINITIONS.payments.columns.find((c) => c.key === 'method')!;
     // UX-052: « Espèces » for cash at the counter, « COD » for cash collected on an order
     expect(cellText(pay, 'cash', t, 'fr')).toBe('report.paymentMethod.cash');
     expect(cellText(pay, 'cod', t, 'fr')).toBe('report.paymentMethod.cod');
-    expect(columnHeader(col('revenue'), t)).toBe('report.col.revenue (DA)');
+    expect(columnHeader(col('grossSales'), t)).toBe('report.col.grossSales (DA)');
     expect(rowHref({ _ref: { type: 'product', id: 'p1' } })).toBe('/products/p1');
     expect(rowHref({ _ref: { type: 'supplier', id: 's1' } })).toBe('/suppliers?sheet=s1');
     expect(rowHref({})).toBeNull();

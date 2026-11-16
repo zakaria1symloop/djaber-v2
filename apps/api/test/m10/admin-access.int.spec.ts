@@ -133,11 +133,11 @@ describe('platform team & 2FA (PRL-02, AT-PRL-02)', () => {
   it('force-2fa resets the member 2FA (access blocked) and revoking an invitation removes the role; 404 on unknown ids', async () => {
     const sa = await asPlatform(app);
     const fin = await asPlatform(app, 'finance');
-    const team = (await sa.post(`/admin/platform-members/${fin.userId}/force-2fa`, {}).expect(200)).body.data;
+    const team = (await sa.post(`/admin/platform-members/${fin.userId}/force-2fa`, { reason: 'Téléphone perdu' }).expect(200)).body.data;
     expect(team.members.find((m: any) => m.userId === fin.userId)).toMatchObject({ totpEnabled: false, accessBlocked: true });
     expect((await fin.get('/admin/workspaces').expect(403)).body.error.code).toBe('TWO_FA_REQUIRED_FOR_ROLE');
     expect(await audit('platform_member.force_2fa', fin.userId)).toBeTruthy();
-    await sa.post(`/admin/platform-members/${randomUUID()}/force-2fa`, {}).expect(404);
+    await sa.post(`/admin/platform-members/${randomUUID()}/force-2fa`, { reason: 'Téléphone perdu' }).expect(404);
     const email = `rev-${randomUUID().slice(0, 6)}@djaber.ai`;
     const inv = (await sa.post('/admin/platform-members/invitations', { email, platformRole: 'read' }).expect(201)).body.data;
     await sa.delete(`/admin/platform-members/invitations/${inv.id}`).expect(204);

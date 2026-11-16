@@ -17,6 +17,7 @@ import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
 import { fold, WILAYA_ALIASES } from './wilaya-aliases';
 import { handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
+import { confirmation, draftKey, wantsCancel, hasDraft, isPlaceholderName, phoneCheckAsked, phonesIn, type OrderCallHistory } from './order-confirmation';
 
 export type ToolName = 'search_products' | 'get_product' | 'quote_delivery' | 'create_order' | 'cancel_order' | 'lookup_order' | 'handoff_to_human' | 'add_faq_candidate' | 'create_payment_link';
 export type ToolRunContext = {
@@ -32,6 +33,10 @@ export type ToolRunContext = {
   customerText?: string;
   /** unclear turns in a row before this one */
   unclearStreak?: number;
+  /** full-test 15/11 AI-CHAT-01: the `create_order` results of the EARLIER runs of this conversation / playground session (recaps shown) */
+  orderHistory?: OrderCallHistory;
+  /** full-test 15/11 AI-CHAT-01: every customer message of the conversation (the phone of an order must be one of theirs) */
+  customerHistory?: string;
 };
 
 /** Plain status words the model may relay (04-ai-pipeline §4.2) — never the courier's raw status code. */
@@ -84,7 +89,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
   },
   create_order: {
     name: 'create_order',
-    description: 'Create a cash-on-delivery order ONLY after the customer explicitly confirmed the recap.',
+    description: 'Cash-on-delivery order. First call (all required fields known): returns CONFIRMATION_REQUIRED with the recap to show — nothing is ordered. Call again with the same values only after the customer answered yes in a later message. Only values the customer gave.',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -376,7 +381,9 @@ export class ToolRegistry {
       return fail(invalid(path[0] === 'items' && path.length > 1 ? `items.${field}` : field, EXAMPLES[field]));
     }
     const d = a.data;
-    if (d.customerConfirmed !== true) return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', message: 'show the recap and wait for the explicit confirmation of the customer' } });
+    // full-test 15/11 AI-CHAT-01: never an invented value (« Client », 0555000000) — ask the customer
+    const ask = (field: string) => fail({ ok: false, error: { code: 'VALIDATION', field, missing: true, example: EXAMPLES[field] }, say: 'ask the customer for this value (one question); never invent it' });
+    if (isPlaceholderName(d.clientName)) return ask('clientName');
     const phone = normalizePhoneDz(d.clientPhone);
     if (!isPhoneDz(phone)) return fail(invalid('clientPhone', EXAMPLES.clientPhone));
     const phone2 = d.secondPhone ? normalizePhoneDz(d.secondPhone) : null;
@@ -438,11 +445,34 @@ export class ToolRegistry {
     const deliveryFee = Number(quote.fee ?? 0);
     // no order, no error code: the model must hand off with statusDetail=order_limits
     if ((maxQty !== null && quantity > maxQty) || (maxAmount !== null && subtotal + deliveryFee > maxAmount)) return fail({ ok: false, hint: 'order_limit', maxQty, maxAmount });
-    return {
-      ok: true,
-      request: { clientName: d.clientName, clientPhone: phone, secondPhone: phone2, wilayaId: d.wilayaId, communeName: d.communeName || null, address: d.address || null, isStopdesk: d.isStopdesk, stopdeskId: d.stopdeskId || null, notes: d.notes || null, items, subtotal, deliveryFee, total: subtotal + deliveryFee, ...(d.phoneConfirmed ? { phoneConfirmed: true } : {}), replaces },
+    const request: CreateOrderRequest = { clientName: d.clientName, clientPhone: phone, secondPhone: phone2, wilayaId: d.wilayaId, communeName: d.communeName || null, address: d.address || null, isStopdesk: d.isStopdesk, stopdeskId: d.stopdeskId || null, notes: d.notes || null, items, subtotal, deliveryFee, total: subtotal + deliveryFee, replaces };
+    // full-test 15/11 AI-CHAT-01 (Blocker): the order exists only after the customer said yes, in a later message, to the
+    // recap the server sent — the model's `customerConfirmed` is never enough on its own
+    if (ctx.customerHistory !== undefined && !(await this.knownPhones(ctx)).has(phone)) return ask('clientPhone');
+    const draft = draftKey(request);
+    const recap = {
+      items: items.map((i) => ({ name: i.name, variant: i.variant, quantity: i.quantity, unitPrice: i.unitPrice })),
+      subtotal, deliveryFee, total: subtotal + deliveryFee, clientName: d.clientName, clientPhone: phone, ...(phone2 ? { secondPhone: phone2 } : {}),
+      wilaya: String(quote.wilayaName ?? ''), communeName: d.communeName || null, address: d.address || null, isStopdesk: d.isStopdesk,
       ...(beyondStock.length ? { beyondStock } : {}),
     };
+    if (!hasDraft(ctx.orderHistory, draft)) {
+      return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft }, recap, say: 'Nothing is ordered yet. Show this recap to the customer (items, quantities, prices, delivery fee, total, name, phone, address) and ask them to confirm. Do not call create_order again in this turn: call it with the same values when the customer answers yes in their next message.' });
+    }
+    const said = confirmation(ctx.customerText ?? '');
+    if (said === 'no') return fail({ ok: false, error: { code: 'CONFIRMATION_REFUSED', draft }, say: 'The customer did not confirm this recap: nothing is ordered. Ask what they want to change (or whether they still want to order).' });
+    if (said === 'unclear') return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft }, recap, say: 'The customer has not clearly confirmed this recap yet: nothing is ordered. Answer their message, then ask them to reply « oui » to confirm the order (or say what to change).' });
+    // 04 §21: `phoneConfirmed` counts only once the tool asked the customer to re-confirm this number
+    if (d.phoneConfirmed && phoneCheckAsked(ctx.orderHistory, phone)) request.phoneConfirmed = true;
+    return { ok: true, request, ...(beyondStock.length ? { beyondStock } : {}) };
+  }
+
+  /** The phones this customer typed in the conversation or has on their client record (a returning customer) — never one the model reported. */
+  private async knownPhones(ctx: ToolRunContext): Promise<Set<string>> {
+    const known = phonesIn(ctx.customerHistory ?? '');
+    const client = ctx.clientId ? await prisma.client.findUnique({ where: { id: ctx.clientId }, select: { phone: true, phone2: true } }) : null;
+    for (const p of [client?.phone, client?.phone2]) if (p) known.add(normalizePhoneDz(p));
+    return known;
   }
 
   /**
@@ -488,6 +518,10 @@ export class ToolRegistry {
     if (number && !target) return { ok: false, error: { code: 'ORDER_NOT_CANCELLABLE' } };
     // never cancels without the customer's confirmation, and never in the playground
     if (!target || args.customerConfirmed !== true || ctx.dryRun) return { ok: true, candidates: publicList, ...(ctx.dryRun ? { simulated: true } : {}) };
+    // full-test 15/11 AI-CHAT-02: never the order this very turn created, and only on the customer's own words of this turn
+    const createdNow = (await prisma.aiToolCall.findMany({ where: { aiRunId: ctx.runId, name: 'create_order', executedAt: { not: null } }, select: { result: true } })).some((c) => (c.result as { ok?: unknown } | null)?.ok === true);
+    if (createdNow) return { ok: false, error: { code: 'ORDER_JUST_CREATED', number: target.number }, say: "This order was just created at the customer's request: keep it. Cancel only if the customer asks in a later message." };
+    if (ctx.customerText !== undefined && !wantsCancel(ctx.customerText)) return { ok: true, candidates: publicList, say: 'Nothing is cancelled: ask the customer to confirm the cancellation of this order.' };
     return this.orders.cancelOrder({ workspaceId: ctx.workspaceId, agentId: ctx.agent.id, conversationId: ctx.conversationId, clientId: ctx.clientId, channelId: ctx.channelId, runId: ctx.runId, callId: ctx.callId }, target, typeof args.reason === 'string' ? args.reason.slice(0, 200) : null);
   }
 

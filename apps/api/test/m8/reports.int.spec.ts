@@ -73,9 +73,9 @@ describe('report template (ANA-04)', () => {
     await sale(owner, { items: [{ productId: p.id, quantity: 2 }], amountPaid: 6000, discount: 500 });
     for (const key of REPORT_KEYS) await owner.get(`/reports/${key}?period=30d`).expect(200);
     const byProduct = (await get(owner, '/reports/sales_by_product?period=30d')).data;
-    expect(byProduct.rows[0]).toMatchObject({ product: 'Sac cuir', quantity: 2, revenue: 6000, cogs: 2400, margin: 3600, marginPct: 60, sharePct: 100, _ref: { type: 'product', id: p.id } });
-    expect(byProduct.totals).toMatchObject({ quantity: 2, revenue: 6000, cogs: 2400 });
-    expect(byProduct.chart.points[0]).toMatchObject({ x: 'Sac cuir', values: { revenue: 6000 } });
+    expect(byProduct.rows[0]).toMatchObject({ product: 'Sac cuir', quantity: 2, grossSales: 6000, cogs: 2400, margin: 3600, marginPct: 60, sharePct: 100, _ref: { type: 'product', id: p.id } });
+    expect(byProduct.totals).toMatchObject({ quantity: 2, grossSales: 6000, cogs: 2400 });
+    expect(byProduct.chart.points[0]).toMatchObject({ x: 'Sac cuir', values: { grossSales: 6000 } });
     const alerts = (await get(owner, '/reports/stock_alerts')).data;
     expect(alerts.range).toBeNull();
     expect(alerts.rows[0]).toMatchObject({ product: 'Sac cuir', stock: 2, minStock: 5, state: 'low', reorderQty: 8 });

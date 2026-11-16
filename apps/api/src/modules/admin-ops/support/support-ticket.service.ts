@@ -2,6 +2,7 @@
 // platform side (ADM-12, `/admin/support/*`). Tickets are platform rows with an optional `workspaceId` (not a tenant model):
 // every merchant query filters on the request's workspace explicitly. Side effects (WS, `support.reply`) go through the outbox.
 import { Injectable, OnModuleInit } from '@nestjs/common';
+import { keyOfUrl, StorageService } from '../../../core/storage/storage.service';
 import { prisma, Prisma, TenantContext, type SupportTicket, type TicketStatus, type Tx } from '@djaber/db';
 import {
   TICKET_AUTO_CLOSE_DAYS,
@@ -70,7 +71,14 @@ export class SupportTicketService implements OnModuleInit {
     private readonly audit: AuditService,
     private readonly registry: ProcessorRegistry,
     private readonly admins: AdminNotifier,
+    private readonly storage: StorageService,
   ) {}
+
+  /** full-test 15/11 HELP-05: an attachment is shown through a signed link valid 1 hour, never its stored public URL. */
+  private signed(url: string): string {
+    const key = keyOfUrl(url);
+    return key ? this.storage.signedUrl(key, 3600) : url;
+  }
 
   onModuleInit() {
     // HELP-05: resolved tickets are closed 30 d after `resolvedAt`
@@ -111,7 +119,7 @@ export class SupportTicketService implements OnModuleInit {
       authorKind: m.authorKind,
       author: toUserRef(m.author),
       body: m.body,
-      attachments: atts.map((a) => ({ name: a.name, url: a.url, size: a.size })),
+      attachments: atts.map((a) => ({ name: a.name, url: this.signed(a.url), size: a.size })),
       at: m.at.toISOString(),
       ...(withInternal ? { isInternal: m.isInternal, cannedReplyKey: m.cannedReplyKey } : {}),
     };

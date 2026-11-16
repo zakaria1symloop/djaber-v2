@@ -154,6 +154,7 @@ export class SaleService {
     return {
       ...head,
       customerPhone: s.client ? null : s.customerPhone,
+      draftAmountReceived: s.status === 'draft' ? s.draftAmountReceived : null,
       items: s.items.map((i) => ({
         id: i.id,
         product: productRef(i.product),
@@ -229,7 +230,7 @@ export class SaleService {
     await this.effects.syncStock(tx, sale, lines.map((l) => ({ productId: l.productId, variantId: l.variantId, quantity: l.quantity, trackStock: l.trackStock })));
     const paid = Math.min(amountPaid, sale.total);
     if (paid > 0) await this.effects.addPayment(tx, sale, { amount: paid, method: sale.paymentMethod, paidAt: sale.soldAt, description: storedText(paid < sale.total ? 'stored.cash.saleDeposit' : 'stored.cash.sale', { number: sale.number }) });
-    await tx.sale.update({ where: { id: sale.id }, data: { status: 'completed', ...(await this.effects.recomputePaid(tx, sale)) } });
+    await tx.sale.update({ where: { id: sale.id }, data: { status: 'completed', draftAmountReceived: null, ...(await this.effects.recomputePaid(tx, sale)) } });
     await this.effects.recomputeClient(tx, sale.clientId);
   }
 
@@ -257,6 +258,8 @@ export class SaleService {
           total: t.total,
           paymentMethod: input.paymentMethod,
           paymentStatus: deriveGdsPaymentStatus(0, t.total),
+          // full-test 15/11 SALES-CASH-02: a draft keeps the amount typed as received (no cash moves until it is validated)
+          draftAmountReceived: input.status === 'draft' ? Math.min(input.amountPaid, t.total) : null,
           notes: input.notes ?? null,
           createdById: TenantContext.get().userId!,
           soldAt,
@@ -303,12 +306,15 @@ export class SaleService {
           tax,
           total: t.total,
           paymentStatus: deriveGdsPaymentStatus(0, t.total),
+          ...(input.amountPaid !== undefined ? { draftAmountReceived: Math.min(input.amountPaid, t.total) } : {}),
           ...(input.paymentMethod ? { paymentMethod: input.paymentMethod } : {}),
           ...(input.notes !== undefined ? { notes: input.notes } : {}),
           ...(soldAt ? { soldAt } : {}),
         },
       });
-      if (input.status === 'completed') await this.complete(tx, updated, lines, input.amountPaid ?? 0);
+      // full-test 15/11 SALES-CASH-01: « Valider la vente » from the row menu sends no amount — the draft's amount received is
+      // taken (a draft saved before 16/11 has none: the full total, as the sheet proposes it), never 0
+      if (input.status === 'completed') await this.complete(tx, updated, lines, input.amountPaid ?? s.draftAmountReceived ?? t.total);
     });
     return this.get(id);
   }
@@ -353,7 +359,8 @@ export class SaleService {
         if (input.refund) await this.effects.refund(tx, s, input.reason);
         else await this.effects.clearPayments(tx, id);
       }
-      const paid = input.refund ? {} : await this.effects.recomputePaid(tx, s);
+      // full-test 15/11 SALES-CASH-05: refunded ⇒ nothing is kept (it stayed « Partielle · Payé 300 » in the filter and the export)
+      const paid = input.refund && s.amountPaid > 0 ? { amountPaid: 0, paymentStatus: 'unpaid' as const } : input.refund ? {} : await this.effects.recomputePaid(tx, s);
       await tx.sale.update({ where: { id }, data: { status: 'cancelled', cancelledAt: new Date(), cancelledById: TenantContext.get().userId ?? null, cancelReason: input.reason, stockRestored: input.restoreStock, ...paid } });
       await this.effects.recomputeClient(tx, s.clientId);
     });

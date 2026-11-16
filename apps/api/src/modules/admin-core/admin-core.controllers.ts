@@ -364,8 +364,9 @@ export class AdminUsersController {
   @Post('platform-members/:userId/force-2fa')
   @HttpCode(200)
   @RequirePlatformRole('admin.team.write')
-  force2fa(@Param('userId') userId: string, @Admin() a: AdminActor) {
-    return this.users.force2fa(userId, a);
+  // full-test 15/11 ADMIN-03: a one-way action (2FA reset, every session signed out) ⇒ a reason, journalised
+  force2fa(@Param('userId') userId: string, @Body() dto: ReasonDto, @Admin() a: AdminActor) {
+    return this.users.force2fa(userId, a, dto.reason);
   }
 
   @Get('deletion-requests')

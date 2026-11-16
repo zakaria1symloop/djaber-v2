@@ -3,6 +3,7 @@
 // One source for the API (nestjs-zod DTOs) and the web. Field names = contract names. Messages = i18n keys.
 import { z } from 'zod';
 import { AiIntentValues, BlockReasonValues, BlockSourceValues, ConversationStatusValues, NotificationTypeValues, ReportReasonValues } from '../enums';
+import { phoneDz } from '../validators';
 import type { ChannelRefView } from './channels';
 import type { ActionDescriptor } from './common';
 
@@ -132,7 +133,8 @@ export type SafetyBlocksQuery = z.infer<typeof SafetyBlocksQuerySchema>;
 export const CreateBlockSchema = z
   .object({
     clientId: id.optional(),
-    phone: z.string().trim().min(1).max(20).optional(),
+    // full-test 15/11 SETTINGS-03: a real Algerian number, normalised (« abc » / « 0123 » were blocked « successfully »)
+    phone: z.string().trim().max(30).pipe(phoneDz).optional(),
     reason: z.enum(BlockReasonValues).optional(),
     note: z.string().trim().max(500, 'validation.length').optional(),
   })

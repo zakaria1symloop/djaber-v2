@@ -6,7 +6,8 @@ import { Prisma, prisma } from '@djaber/db';
 
 /** Bump when the shape or a formula changes: older rollup rows are then ignored (recomputed live, rewritten at night). */
 // 2: `revenue.salesPaid` (UX-052, 10/11) — cached days of version 1 are computed again
-export const METRICS_VERSION = 2;
+// 3: handoffs = conversations of the day handed to a human (full-test 15/11 ANALYTICS-01)
+export const METRICS_VERSION = 3;
 
 type Num = Record<string, number>;
 export type ChannelDay = { conv: number; handoffs: number; in: number; out: number; orders: number; aiOrders: number; aiRevenue: number; aiReplies: number };
@@ -213,9 +214,12 @@ export async function computeDays(s: ComputeScope): Promise<Map<string, DayMetri
         FROM "Conversation" c WHERE c."workspaceId" = ${ws} AND c."deletedAt" IS NULL AND c."createdAt" >= ${gte} AND c."createdAt" < ${lt} ${chC}
       ) x GROUP BY 1,2`),
     q<{ d: string; ch: string | null; ag: string | null; c: number }>(Prisma.sql`
-      SELECT ${D('r."startedAt"')} d, c."channelId" ch, r."agentId" ag, count(DISTINCT r."conversationId")::int c
-      FROM "AiRun" r JOIN "Conversation" c ON c."id" = r."conversationId"
-      WHERE r."workspaceId" = ${ws} AND r."status" = 'handoff' AND r."kind" = 'reply' AND r."startedAt" >= ${gte} AND r."startedAt" < ${lt} ${chC}
+      -- full-test 15/11 ANALYTICS-01: the conversations OF THE DAY (same population as « conversations ») that were handed to a human —
+      -- it counted distinct conversations with a handoff run per day, summed over the days and including older conversations (−166 %)
+      SELECT ${D('c."createdAt"')} d, c."channelId" ch, c."agentId" ag, count(*)::int c
+      FROM "Conversation" c
+      WHERE c."workspaceId" = ${ws} AND c."deletedAt" IS NULL AND c."createdAt" >= ${gte} AND c."createdAt" < ${lt} ${chC}
+        AND EXISTS (SELECT 1 FROM "AiRun" r WHERE r."conversationId" = c."id" AND r."status" = 'handoff' AND r."kind" = 'reply')
       GROUP BY 1,2,3`),
     q<{ d: string; ch: string; dir: string; au: string; h: number; c: number }>(Prisma.sql`
       SELECT ${D('m."sentAt"')} d, c."channelId" ch, m."direction"::text dir, m."author"::text au, EXTRACT(HOUR FROM m."sentAt" + interval '1 hour')::int h, count(*)::int c

@@ -138,11 +138,11 @@ export default function ProductsPage() {
     },
     ...(advanced
       ? ([
-          { key: 'cost', header: t('products.col.cost'), sortKey: 'cost', hideBelow: 'xl', cell: (r) => <Money value={r.costPrice} muted /> },
+          { key: 'cost', header: t('products.col.cost'), sortKey: 'cost', hideBelow: '2xl', cell: (r) => <Money value={r.costPrice} muted /> },
           {
             key: 'margin',
             header: t('products.col.margin'),
-            hideBelow: 'xl',
+            hideBelow: '2xl',
             // PV 26/10 P4: a product with variants shows the margins of its variants (each on its own price)
             cell: (r) =>
               r.marginRange && r.marginRange.min !== r.marginRange.max ? (
@@ -155,13 +155,15 @@ export default function ProductsPage() {
           },
         ] satisfies Column<ProductListItem>[])
       : []),
+    // full-test 15/11 PRODUCTS-02: below 1536 px the secondary columns (cost, margin, unit, IA, validation) give way, so STOCK is
+    // never under the sticky « Actions » column (they stay on the product page and on wide screens)
     { key: 'stock', header: t('action.stock'), sortKey: 'stock', cell: stockCell },
-    { key: 'unit', header: t('products.col.unit'), hideBelow: 'xl', cell: (r) => <span className="ts-label-meta text-text-muted">{r.unit?.abbreviation ?? '—'}</span> },
-    { key: 'ai', header: t('products.col.ai'), hideBelow: 'xl', cell: (r) => <AiPill state={r.aiState} reason={aiExclusion(r)} /> },
+    { key: 'unit', header: t('products.col.unit'), hideBelow: '2xl', cell: (r) => <span className="ts-label-meta text-text-muted">{r.unit?.abbreviation ?? '—'}</span> },
+    { key: 'ai', header: t('products.col.ai'), hideBelow: '2xl', cell: (r) => <AiPill state={r.aiState} reason={aiExclusion(r)} /> },
     {
       key: 'moderation',
       header: t('products.col.moderation'),
-      hideBelow: 'xl',
+      hideBelow: '2xl',
       cell: (r) => (r.moderation && r.moderation.status !== 'not_required' ? <ModerationPill status={r.moderation.status} /> : <span className="text-text-muted">—</span>),
     },
   ];
@@ -316,7 +318,8 @@ export default function ProductsPage() {
                     </div>
                   </Link>
                   <div className="flex items-center gap-2">
-                    <Money value={r.price} className="ts-numeral-m" />
+                    {/* full-test 15/11 PRODUCTS-03: the variants' price, as in the table and as the AI quotes it */}
+                    <Money value={r.priceRange?.min ?? r.price} className="ts-numeral-m" />
                     <span className="flex-1" />
                     {stockCell(r)}
                   </div>
@@ -357,7 +360,7 @@ export default function ProductsPage() {
                   <div className="truncate text-[14px] font-medium">{r.name}</div>
                   <div className="flex flex-wrap items-center gap-x-2 ts-label-meta text-text-muted">
                     <Ltr>{r.sku}</Ltr>
-                    <Money value={r.price} />
+                    <Money value={r.priceRange?.min ?? r.price} />
                     {r.stock !== null ? <Num value={r.stock} className={stockTone(r.stockState)} /> : null}
                     <StockPill state={r.stockState} />
                   </div>

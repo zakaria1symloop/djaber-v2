@@ -303,13 +303,13 @@ export class AdminUsersService {
   }
 
   /** "Forcer la 2FA": the member's 2FA is reset (secret wiped, sessions revoked) — access blocked until re-enrolled. */
-  async force2fa(userId: string, actor: AdminActor) {
+  async force2fa(userId: string, actor: AdminActor, reason: string) {
     const u = await this.userOr404(userId);
     if (u.platformRole === 'none') throw notFound();
     if (userId === actor.userId) throw new AppException('ADMIN_CANNOT_DEMOTE_SELF');
     await this.twoFactor.disable(userId);
     await TenantContext.runSystem(() => this.sessions.revokeAll(userId));
-    await this.log(actor, 'platform_member.force_2fa', 'User', userId, { totpEnabled: u.totpEnabled }, { totpEnabled: false }, null);
+    await this.log(actor, 'platform_member.force_2fa', 'User', userId, { totpEnabled: u.totpEnabled }, { totpEnabled: false }, reason);
     return this.team(actor);
   }
 

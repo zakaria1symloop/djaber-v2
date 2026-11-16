@@ -199,7 +199,8 @@ export function ChangeStatusDialog({ order, open, onClose, onDone, targets, onRe
   const effectiveAt = localInputToIso(when);
   const dateErr = effectiveDateError(effectiveAt, new Date(), ORDER_BACKDATE_MAX_DAYS);
   const collected = digitsToInt(amount);
-  const needsReason = to === 'delivered' && collected !== null && collected !== order.total;
+  // full-test 15/11 ORDERS-05: the cash taken at delivery, default = what is still due (a deposit is already paid)
+  const needsReason = to === 'delivered' && collected !== null && collected !== order.remaining;
   const s = useDialogSubmit<unknown>((key) =>
     to === 'delivery_failed'
       ? deliveryApi.markFailed(parcel!.id, { reason: failure!, note: reason.trim() || null })
@@ -208,7 +209,7 @@ export function ChangeStatusDialog({ order, open, onClose, onDone, targets, onRe
           {
             to: to as OrderStatus,
             effectiveAt: effectiveAt ?? undefined,
-            amountCollected: to === 'delivered' ? (collected ?? order.total) : undefined,
+            amountCollected: to === 'delivered' ? (collected ?? order.remaining) : undefined,
             note: needsReason || (to === 'returned' && reason.trim()) ? reason.trim() : undefined,
             restoreStock: to === 'returned' ? restock : undefined,
             version: order.version,
@@ -297,16 +298,16 @@ export function DeliverDialog({ order, open, onClose, onDone }: Props) {
   const [day, setDay] = useState('');
   const [touched, setTouched] = useState(false);
   useOnOpen(open, () => {
-    setAmount(moneyDigits(order.remaining > 0 ? order.total : order.total));
+    setAmount(moneyDigits(order.remaining));
     setReason('');
     setDay(isoToLocalInput(new Date()));
     setTouched(false);
   });
   const collected = digitsToInt(amount);
-  const differs = collected !== null && collected !== order.total;
+  const differs = collected !== null && collected !== order.remaining;
   const deliveredAt = localInputToIso(day);
   const dateErr = effectiveDateError(deliveredAt, new Date(), ORDER_BACKDATE_MAX_DAYS);
-  const s = useDialogSubmit(() => ordersApi.deliver(order.id, { amountCollected: collected ?? order.total, reason: differs ? reason.trim() : null, deliveredAt: deliveredAt ?? undefined, version: order.version }));
+  const s = useDialogSubmit(() => ordersApi.deliver(order.id, { amountCollected: collected ?? order.remaining, reason: differs ? reason.trim() : null, deliveredAt: deliveredAt ?? undefined, version: order.version }));
   const submit = async () => {
     setTouched(true);
     if (collected === null || (differs && !reason.trim()) || dateErr) return;
@@ -336,7 +337,7 @@ export function DeliverDialog({ order, open, onClose, onDone }: Props) {
         <Field label={t('orders.deliver.date')} htmlFor="dl-day" error={touched && dateErr ? t('orders.status.effectiveError', { days: ORDER_BACKDATE_MAX_DAYS }) : undefined}>
           <Input id="dl-day" type="datetime-local" value={day} max={isoToLocalInput(new Date())} onChange={(e) => setDay(e.target.value)} className="[color-scheme:dark]" />
         </Field>
-        <p className="rounded-card border border-line-edge px-3 py-2 ts-label-micro !normal-case text-text-muted">{t('orders.deliver.effects', { amount: formatMoney(collected ?? order.total) })}</p>
+        <p className="rounded-card border border-line-edge px-3 py-2 ts-label-micro !normal-case text-text-muted">{t('orders.deliver.effects', { amount: formatMoney(collected ?? order.remaining), paid: formatMoney(order.total - order.remaining + (collected ?? order.remaining)) })}</p>
         {s.error ? <FormAlert>{s.error}</FormAlert> : null}
       </div>
     </Dialog>

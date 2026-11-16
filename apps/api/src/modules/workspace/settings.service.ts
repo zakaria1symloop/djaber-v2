@@ -1,7 +1,7 @@
 // System messages (11 §9.1, D43) and onboarding (ONB-01 / ONB-02).
 import { Injectable } from '@nestjs/common';
 import { DEFAULT_SYSTEM_MESSAGES, prisma, TenantContext, type Localized } from '@djaber/db';
-import { notFound } from '../../core/errors/app.exception';
+import { notFound, validationError } from '../../core/errors/app.exception';
 import { SYSTEM_MESSAGE_KEYS, type SystemMessageKey, type SystemMessagesInput } from './dto';
 
 type SystemMessages = Record<SystemMessageKey, Localized>;
@@ -38,6 +38,20 @@ export class SystemMessagesService {
    * Only `welcome` may be empty (empty ⇒ not sent); an empty text elsewhere falls back to the default.
    */
   async put(input: SystemMessagesInput) {
+    // full-test 15/11 SETTINGS-02: a variable is matched whatever its case ({PRODUCT} ⇒ {product}); an unknown one is refused
+    // inline — it reached customers raw (« Désolé, {PRODUCT} est épuisé … {inconnu} »)
+    const fields: Record<string, string> = {};
+    for (const key of SYSTEM_MESSAGE_KEYS) {
+      const allowed = key === 'out_of_stock' ? ['product', 'shop'] : ['shop'];
+      for (const l of LOCALES) {
+        const v = input[key]?.[l];
+        if (v === undefined) continue;
+        const fixed = v.replace(/\{\s*([a-zA-Z_]+)\s*\}/g, (m, name: string) => (allowed.includes(name.toLowerCase()) ? `{${name.toLowerCase()}}` : m));
+        if (/\{[^}]*\}/.test(allowed.reduce((t, n) => t.split(`{${n}}`).join(''), fixed))) fields[`${key}.${l}`] = 'validation.invalid';
+        (input[key] as Record<string, string>)[l] = fixed;
+      }
+    }
+    if (Object.keys(fields).length) throw validationError(fields);
     const ws = await this.workspace();
     const next = SystemMessagesService.complete(ws.systemMessages);
     for (const key of SYSTEM_MESSAGE_KEYS) {

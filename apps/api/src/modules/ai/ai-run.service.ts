@@ -42,6 +42,8 @@ export type TurnResult =
 export type RunMeta = { language?: string; toolNames?: string[]; cardsSent?: number; handoff?: boolean; costUsd?: number; plannedCost?: number; vision?: Record<string, unknown>; sessionId?: string; turn?: unknown; evalFlag?: unknown; scenario?: string; /** §4.3 reply guard (rules, amounts / leak kinds, action — never message text) */ guard?: GuardOutcome };
 /** §4.3: the run flags of a guard outcome (`guard_rewritten`: the corrective turn passed; `guard_enforced`: sentences dropped or the safe sentence sent). */
 export const guardFlags = (g?: GuardOutcome): string[] => (!g ? [] : g.action === 'rewritten' ? ['guard_rewritten'] : g.action === 'kept' ? ['guard_kept'] : ['guard_enforced']);
+/** §4.1 format retry: the earlier messages kept (the rest of the thread is left out). */
+const FORMAT_RETRY_HISTORY = 8;
 const slim = (v: GuardViolation[]) => v.map(({ rule, value, kind }) => ({ rule, ...(value !== undefined ? { value } : {}), ...(kind ? { kind } : {}) }));
 
 /** Stable JSON (sorted keys) for the tool-call hash. */
@@ -175,7 +177,8 @@ export class AiRunService implements OnModuleInit {
       const left = req.deadline - Date.now();
       if (left <= 0) return guardFallback() ?? { ok: false, kind: 'provider', error: 'timeout', tools: executed, usage, model, usedFallback };
       // the corrective turn of the guard is offered no tool: an order or a cancellation is never done twice
-      const offerTools = toolRounds < MAX_STEPS - 1 && !forcedHandoff && !guardFirst;
+      // full-test 15/11 AI-CHAT-02: nor the format retry — it only re-writes the answer (it cancelled the order it had just created)
+      const offerTools = toolRounds < MAX_STEPS - 1 && !forcedHandoff && !guardFirst && !repaired;
       let res;
       try {
         res = await this.routing.call(
@@ -257,11 +260,12 @@ export class AiRunService implements OnModuleInit {
         return { ok: false, kind: 'format', error: `malformed_output:${parsed.reason}`, tools: executed, usage, model, usedFallback };
       }
       firstAnswer = res.value.text;
-      // §4.1: one retry with the format reminder. It leaves the earlier conversation out (tester report 22/10: in a long
-      // thread the model copies the plain-text style of its past replies and stays malformed after the reminder): with the
-      // batch, this turn's tool results and its own answer only, it just puts that answer in the JSON object.
+      // §4.1: one retry with the format reminder. It leaves the older conversation out (tester report 22/10: in a long
+      // thread the model copies the plain-text style of its past replies and stays malformed after the reminder) but keeps
+      // the last FORMAT_RETRY_HISTORY messages: without any of them (full-test 15/11 AI-CHAT-02) the model saw this turn's
+      // tool calls full of a name / phone / address it had never read, concluded it had invented them and said so.
       repaired = true;
-      messages.splice(0, req.prompt.messages.length - 1);
+      messages.splice(0, Math.max(0, req.prompt.messages.length - 1 - FORMAT_RETRY_HISTORY));
       messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: FORMAT_REMINDER });
     }
     return { ok: false, kind: 'format', error: 'malformed_output:steps', tools: executed, usage, model, usedFallback };

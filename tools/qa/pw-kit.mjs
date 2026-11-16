@@ -29,6 +29,7 @@ export const BLOCKED = [
   ['POST', /\/delivery\/couriers(\/|$)/], // courier credentials are checked against the courier
   ['POST', /\/(checkout|packs\/checkout|payment-link|invoices\/[^/]+\/pay)\b/], // Chargily
   ['POST', /\/channels\/(connect|[^/]+\/reconnect)/], // Meta pages
+  ['GET', /\/channels\/connect\/(facebook|instagram)\b/], // the Meta OAuth start (onboarding run 16/11)
   ['POST', /\/conversations\/[^/]+\/messages/], // a reply to a real Messenger customer
   ['POST', /\/(deletion-request|data-deletion|transfer-ownership)\b/],
   ['POST', /\/workspace\/deletion(?!\/cancel)/],
@@ -74,9 +75,12 @@ const LEAK_RULES = [
 ];
 const ALLOW = new Set(['COD', 'SKU', 'IA', 'AI', 'PDF', 'CSV', 'API', 'URL', 'DA', 'DZD', 'ZR', 'CCP', 'CIB', 'TVA', 'FAQ', 'PRO', 'OK', 'SMS', 'QR', 'ID']);
 
-export async function open({ role = 'owner', locale = 'fr', area = 'misc', headless = true, viewport = { width: 1440, height: 900 } } = {}) {
-  const acc = accounts[role];
-  if (!acc) throw new Error(`no account for role ${role}`);
+// `account` {email,password}: an account the agent created itself (instead of the shared ones); `signedOut`: no sign-in;
+// `allow`: [method, regex] pairs let through — only with an own `account` (e.g. that account's onboarding)
+export async function open({ role = 'owner', locale = 'fr', area = 'misc', headless = true, viewport = { width: 1440, height: 900 }, account = null, signedOut = false, allow = [] } = {}) {
+  const acc = account ?? accounts[role];
+  if (!acc && !signedOut) throw new Error(`no account for role ${role}`);
+  if (allow.length && !account && !signedOut) throw new Error('allow is only for an account the agent created itself');
   const dir = resolve(root, '.local/qa/campaign', area);
   mkdirSync(dir, { recursive: true });
   const browser = await chromium.launch({ headless });
@@ -96,7 +100,8 @@ export async function open({ role = 'owner', locale = 'fr', area = 'misc', headl
   await ctx.route(`${accounts.api}/**`, (route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
-    if (BLOCKED.some(([m, re, body]) => m === req.method() && re.test(path) && (!body || body.test(req.postData() ?? '')))) {
+    const allowed = allow.some(([m, re]) => m === req.method() && re.test(path));
+    if (!allowed && BLOCKED.some(([m, re, body]) => m === req.method() && re.test(path) && (!body || body.test(req.postData() ?? '')))) {
       log.blocked.push({ method: req.method(), path, page: page.url() });
       return route.fulfill({ status: 418, contentType: 'application/json', body: JSON.stringify({ error: { code: 'QA_BLOCKED', message: 'blocked by the QA kit (safety)', ref: 'qa' } }) });
     }
@@ -108,12 +113,14 @@ export async function open({ role = 'owner', locale = 'fr', area = 'misc', headl
     await page.waitForTimeout(500);
   };
   // sign in through the real login page
-  await page.goto(`${accounts.web}/${locale}/login`);
-  await page.locator('input[type="email"]').fill(acc.email);
-  await page.locator('input[type="password"]').fill(acc.password);
-  await page.locator('form button[type="submit"]').first().click();
-  await page.waitForURL((u) => !u.pathname.endsWith('/login'), { timeout: 25_000 });
-  await settle();
+  if (!signedOut) {
+    await page.goto(`${accounts.web}/${locale}/login`);
+    await page.locator('input[type="email"]').fill(acc.email);
+    await page.locator('input[type="password"]').fill(acc.password);
+    await page.locator('form button[type="submit"]').first().click();
+    await page.waitForURL((u) => !u.pathname.endsWith('/login'), { timeout: 25_000 });
+    await settle();
+  }
 
   const qa = {
     page,

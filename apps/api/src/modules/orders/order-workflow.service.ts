@@ -309,7 +309,7 @@ export class OrderWorkflowService implements OnModuleInit {
   async applyAddress(tx: Tx, o: Locked, input: Omit<OrderAddressInput, 'phone2'> & { phone2?: string | null }, actor: Actor) {
     const id = o.id;
     {
-      if (isTerminal(o.status)) throw new AppException('ORDER_TERMINAL');
+      if (isTerminal(o.status) || o.status === 'delivered') throw new AppException('ORDER_TERMINAL');
       const active = this.orders.activeShipment(o);
       if (active && active.provider !== 'manual') throw new AppException('COURIER_ADDRESS_LOCKED');
       const { commune } = await this.orders.geo.checkAddress(input, tx);

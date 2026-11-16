@@ -45,7 +45,7 @@ export const lineFromProduct = (
   };
 };
 
-export function ItemsSection({ lines, onChange, errors, locked }: { lines: FormLine[]; onChange: (next: FormLine[]) => void; errors: FormErrors; locked: boolean }) {
+export function ItemsSection({ lines, onChange, errors, locked, priceLocked = false }: { lines: FormLine[]; onChange: (next: FormLine[]) => void; errors: FormErrors; locked: boolean; /** full-test 15/11 ROLES-01: no `orders.money` ⇒ the catalogue price, read-only */ priceLocked?: boolean }) {
   const t = useT();
   const ws = useWorkspaceId();
   const qc = useQueryClient();
@@ -207,7 +207,8 @@ export function ItemsSection({ lines, onChange, errors, locked }: { lines: FormL
                     aria-label={t('orderForm.items.price', { name: l.productName })}
                     value={l.unitPrice}
                     onValueChange={(v) => patch(i, { unitPrice: v })}
-                    disabled={locked}
+                    disabled={locked || priceLocked}
+                    title={priceLocked && !locked ? t('orderForm.items.priceLocked') : undefined}
                     aria-invalid={!!errors[`lines.${i}.unitPrice`]}
                     className="!h-8 text-[13px]"
                   />

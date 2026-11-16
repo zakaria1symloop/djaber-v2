@@ -7,6 +7,14 @@ import { ConfigService } from '../config/config.service';
 import { fromRepoRoot } from '../config/repo-root';
 
 export type StoredObject = { key: string; url: string };
+/**
+ * Keys only ever served through a signed, short-lived URL: `private/…` and, whatever their prefix (files stored before
+ * 16/11 too), the support-ticket attachments — full-test 15/11 HELP-05: a screenshot of a ticket (customers' data) opened
+ * with no sign-in and was cached for a year.
+ */
+export const isPrivateKey = (key: string) => key.startsWith('private/') || /(^|\/)ticket_attachment\//.test(key);
+/** The storage key inside a stored URL (`…/api/v1/files/<key>` or `<bucket>/<key>`), for the rows that kept only the URL. */
+export const keyOfUrl = (url: string): string | null => /(?:^|\/)((?:private\/)?(?:ws|users)\/[^?#]+)/.exec(url)?.[1] ?? null;
 
 @Injectable()
 export class StorageService {

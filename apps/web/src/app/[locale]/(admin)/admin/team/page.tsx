@@ -52,6 +52,7 @@ export default function AdminTeamPage() {
   const [invite, setInvite] = useState(false);
   const [role, setRole] = useState<PlatformMemberDto | null>(null);
   const [del, setDel] = useState<{ req: DeletionRequestAdminDto; action: DelAction } | null>(null);
+  const [force2fa, setForce2fa] = useState<PlatformMemberDto | null>(null);
   const m = useMutation({ mutationFn: (fn: () => Promise<unknown>) => fn() });
   const act = async (fn: () => Promise<unknown>, done: string) => {
     try {
@@ -78,7 +79,8 @@ export default function AdminTeamPage() {
         mb.actions,
         {
           edit: { label: t('admin.team.action.change_role'), onSelect: () => setRole(mb), hidden: !write },
-          force_2fa: { label: t('admin.team.action.force_2fa'), onSelect: () => void act(() => adminWrite(`/admin/platform-members/${mb.userId}/force-2fa`, 'POST', {}), t('admin.team.forced2fa')), hidden: !write },
+          // full-test 15/11 ADMIN-03: a confirmation with a reason, never one click
+          force_2fa: { label: t('admin.team.action.force_2fa'), onSelect: () => setForce2fa(mb), destructive: true, hidden: !write },
         },
         t,
       )}
@@ -194,8 +196,38 @@ export default function AdminTeamPage() {
       <InviteMemberDialog open={invite} onClose={() => setInvite(false)} />
       <ChangeRoleDialog user={role ? { id: role.userId, name: fullName(role), platformRole: role.platformRole } : null} open={!!role} onClose={() => setRole(null)} />
       <DeletionDialog req={del?.req ?? null} action={del?.action ?? null} onClose={() => setDel(null)} />
+      <Force2faDialog member={force2fa} onClose={() => setForce2fa(null)} />
       {confirm.element}
     </AdminPage>
+  );
+}
+
+function Force2faDialog({ member, onClose }: { member: PlatformMemberDto | null; onClose: () => void }) {
+  const t = useT();
+  const invalidate = useAdminInvalidate();
+  const [reason, setReason] = useState('');
+  const [errors, setErrors] = useState<ServerErrors>(NO_ERRORS);
+  const m = useMutation({ mutationFn: (b: { userId: string; reason: string }) => adminWrite(`/admin/platform-members/${b.userId}/force-2fa`, 'POST', { reason: b.reason }) });
+  useOnOpen(!!member, () => {
+    setReason('');
+    setErrors(NO_ERRORS);
+  });
+  if (!member) return null;
+  const submit = async () => {
+    setErrors(NO_ERRORS);
+    try {
+      await m.mutateAsync({ userId: member.userId, reason: reason.trim() });
+      void invalidate('/admin/platform-members');
+      toast(t('admin.team.forced2fa'));
+      onClose();
+    } catch (e) {
+      setErrors(toServerErrors(e, t, ['reason'], { ADMIN_REASON_REQUIRED: 'reason' }));
+    }
+  };
+  return (
+    <AdminDialog open onClose={onClose} testId="dlg-force-2fa" size="sm" title={t('admin.team.action.force_2fa')} context={`${fullName(member)} · ${member.email}`} note={t('admin.team.force2fa.note')} destructive submitLabel={t('admin.team.action.force_2fa')} disabled={!reasonOk(reason)} pending={m.isPending} error={errors.form} onSubmit={() => void submit()}>
+      <ReasonField value={reason} onChange={setReason} error={errors.fields.reason} />
+    </AdminDialog>
   );
 }
 

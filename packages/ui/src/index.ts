@@ -5,6 +5,7 @@ export * from './data';
 export * from './forms';
 export * from './crop';
 export * from './inputs';
+export * from './number-parse';
 export * from './sheet';
 export * from './filters';
 export * from './data-table';

@@ -28,14 +28,16 @@ export default function ProfilePage() {
   const [saved, setSaved] = useState(false);
   const form = useForm<UpdateProfileInput>({
     resolver: zodResolver(UpdateProfileSchema),
-    defaultValues: { firstName: me?.firstName ?? '', lastName: me?.lastName ?? '', locale: me?.locale ?? locale },
+    // full-test 15/11 SETTINGS-01: the language field shows the interface in use (the URL), not a stale stored value — saving a
+    // name no longer switches the app to another language
+    defaultValues: { firstName: me?.firstName ?? '', lastName: me?.lastName ?? '', locale },
   });
   const { reset } = form;
   // a fresh /me (avatar change, refetch) re-seeds the form only while it is untouched: typed names are never wiped
   useEffect(() => {
-    if (me && !form.formState.isDirty) reset({ firstName: me.firstName, lastName: me.lastName, locale: me.locale });
+    if (me && !form.formState.isDirty) reset({ firstName: me.firstName, lastName: me.lastName, locale });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the profile fields only
-  }, [me?.firstName, me?.lastName, me?.locale, reset]);
+  }, [me?.firstName, me?.lastName, locale, reset]);
 
   const save = useMutation({ mutationFn: authApi.updateMe });
   const avatar = useImageUpload('avatar', async (avatarUploadId) => qc.setQueryData(meKey, await authApi.updateMe({ avatarUploadId })));

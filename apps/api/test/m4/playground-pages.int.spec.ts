@@ -72,8 +72,14 @@ describe('playground (AGT-07)', () => {
     await feeRule(owner.workspaceId, 16, 400, 300);
     const stock = (await db.product.findUniqueOrThrow({ where: { id: robe.id } })).stock;
     const args = { clientName: 'Amine Benali', clientPhone: '0555 12 34 56', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'Cité des 200 logements, Alger', items: [{ productId: robe.id, quantity: 2 }], customerConfirmed: true };
+    // full-test 15/11 AI-CHAT-01: as in live, the recap of an earlier turn of the session, then « oui »
+    const details = 'Amine Benali, 0555 12 34 56, Bab Ezzouar, 2 robes';
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args }] }, { reply: 'Récapitulatif : 2 robes, 9400 DA. Vous confirmez ?', intent: 'SALE' });
+    const first = (await test(owner, agent.id, { sessionId: 'dry-order', ...say(details) }).expect(200)).body.data;
+    expect(first.toolCalls[0]).toMatchObject({ name: 'create_order', result: { ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recap: { total: 9400 } } });
+    fakeAi(app).reset();
     fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args }, { name: 'create_order', args: { ...args, clientPhone: '123' } }, { name: 'add_faq_candidate', args: { question: 'Livrez-vous le vendredi ?' } }] }, { reply: 'Commande test enregistrée.', intent: 'SALE' });
-    const turn = (await test(owner, agent.id, say('oui je confirme')).expect(200)).body.data;
+    const turn = (await test(owner, agent.id, { sessionId: 'dry-order', messages: [{ role: 'user', text: details }, { role: 'assistant', text: 'Récapitulatif : 2 robes, 9400 DA. Vous confirmez ?' }, { role: 'user', text: 'oui je confirme' }] }).expect(200)).body.data;
     expect(turn.toolCalls[0]).toMatchObject({ name: 'create_order', simulated: true, result: { ok: true, simulated: true, orderId: null, subtotal: 9000, deliveryFee: 400, total: 9400, items: [{ name: 'Robe satin bordeaux', quantity: 2, unitPrice: 4500 }], paymentOptions: ['cod'] } });
     expect(turn.toolCalls[0].result.number).toMatch(/^TEST-\d{4}$/);
     expect(turn.toolCalls[1]).toMatchObject({ simulated: false, result: { ok: false, error: { code: 'VALIDATION', field: 'clientPhone' } } });

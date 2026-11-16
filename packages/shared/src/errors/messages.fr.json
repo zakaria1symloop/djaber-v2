@@ -140,6 +140,7 @@
   "ORDER_INVALID_TRANSITION": "Passage {from} → {to} impossible.",
   "ORDER_NOTHING_TO_REFUND": "Aucun paiement à rembourser.",
   "ORDER_PAYMENT_LOCKED": "Paiement verrouillé (commande clôturée).",
+  "ORDER_TOTAL_BELOW_PAID": "Le nouveau total serait inférieur au montant déjà payé ({paid} DA) : corrigez d'abord le paiement ou faites un remboursement.",
   "ORDER_TERMINAL": "Commande clôturée.",
   "OWNERSHIP_TRANSFER_TARGET_INVALID": "Le nouveau propriétaire doit être un admin de l'espace.",
   "OWNER_IMMUTABLE": "Le propriétaire ne peut être retiré ni rétrogradé.",

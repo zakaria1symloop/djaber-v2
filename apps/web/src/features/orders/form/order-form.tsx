@@ -424,7 +424,7 @@ export function NewOrderForm() {
               if (owner) void applyClient(owner);
             }}
           />
-          <ItemsSection lines={values.lines} locked={locked} errors={errors} onChange={(lines) => change({ lines }, ['lines'])} />
+          <ItemsSection lines={values.lines} locked={locked} priceLocked={!canMoney} errors={errors} onChange={(lines) => change({ lines }, ['lines'])} />
           <DeliverySection
             value={values}
             locked={locked}

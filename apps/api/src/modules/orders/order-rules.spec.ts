@@ -113,6 +113,11 @@ describe('AT-ORD-02 / AT-ORD-27 COD rule (04 §1.4, §21, §23)', () => {
   });
   it('partial before ⇒ the entry brings the paid amount up to the total', () => {
     expect(codPlan({ total: 1000, amountPaid: 300 }, undefined, null)).toEqual({ entry: 700, finalPaid: 1000 });
+    // full-test 15/11 ORDERS-05: the cashed amount is added to the deposit (1 200 + 4 200 = 5 400), never taken as the total paid
+    expect(codPlan({ total: 5400, amountPaid: 1200 }, 4200, null)).toEqual({ entry: 4200, finalPaid: 5400 });
+    expect(codPlan({ total: 5400, amountPaid: 1200 }, 4000, 'remise')).toEqual({ entry: 4000, finalPaid: 5200 });
+    expect(codPlan({ total: 5400, amountPaid: 1200 }, 5400, 'x')).toEqual({ code: 'VALIDATION_ERROR', fields: { amountCollected: 'validation.range' } });
+    expect(codPlan({ total: 5400, amountPaid: 1200 }, 4000, null)).toEqual({ code: 'VALIDATION_ERROR', fields: { reason: 'validation.required' } });
   });
   it('a different amount needs a reason; with it the order ends partial', () => {
     expect(codPlan({ total: 8300, amountPaid: 0 }, 8000, null)).toEqual({ code: 'VALIDATION_ERROR', fields: { reason: 'validation.required' } });

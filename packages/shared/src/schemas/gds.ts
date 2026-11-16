@@ -513,6 +513,8 @@ export type SaleListItemView = {
 };
 export type SaleView = Omit<SaleListItemView, 'items'> & {
   customerPhone: string | null;
+  /** full-test 15/11 SALES-CASH-02: a draft's amount typed as received (null: not a draft / not typed) */
+  draftAmountReceived: number | null;
   items: SaleItemView[];
   subtotal: number;
   discount: number;

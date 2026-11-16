@@ -22,6 +22,7 @@ import { AiRunService, guardFlags, intentOf, type RunMeta } from './ai-run.servi
 import { CatalogueService } from './catalogue.service';
 import { detectLanguage, systemLocale, type AiLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
+import { orderHistoryOf } from './tools/order-confirmation';
 import { guardFactsOf } from './reply-guard';
 import { SCENARIOS, type ScenarioCheck } from './prompt/scenarios';
 import { AiProviderError } from './provider/ai.gateway';
@@ -120,7 +121,8 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
   async turn(agent: Agent, d: PlaygroundJob): Promise<PlaygroundTurnDto> {
     const scenario = d.scenario ? SCENARIOS[d.scenario] : null;
     const messages = [...d.messages];
-    if (scenario && !messages.length) messages.push({ role: 'user', text: scenario.message });
+    // full-test 15/11 AGENTS-03: a scenario chip after the first message adds its message to the thread (it sent an empty one)
+    if (scenario && (!messages.length || messages[messages.length - 1]!.role !== 'user')) messages.push({ role: 'user', text: scenario.message });
     const last = messages[messages.length - 1];
     if (!last || last.role !== 'user') throw new AppException('VALIDATION_ERROR', {}, { messages: 'validation.required' });
 
@@ -153,7 +155,9 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         if (r.note.kind === 'match') matched.push(r.note.productId);
         lines.push(`[image]\n${visionNoteText(r.note)}`);
       }
-      const lang: AiLanguage = detectLanguage(said) ?? 'fr';
+      // full-test 15/11 AI-CHAT-04: the previous language of the conversation, as on Messenger (a bare « Tamanrasset ? » gave English)
+      const previous = messages.slice(0, -1).reverse().map((m) => (m.role === 'user' ? detectLanguage(m.text) : undefined)).find((l): l is AiLanguage => !!l);
+      const lang: AiLanguage = detectLanguage(said, previous) ?? previous ?? 'fr';
       const history: HistoryMessage[] = messages.slice(0, -1).map((m) => ({ author: m.role === 'user' ? 'customer' : 'ai', text: m.text }));
       const turnCtx = await this.context.load(agent, { text: said, lastProductIds: matched, lang });
       const prompt = PromptBuilder.build(turnCtx.prompt, history, lines.join('\n') || said, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });
@@ -165,7 +169,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         runId: run.id,
         prompt,
         // retest 12/11: the same handoff check as the live replies (handoff-judge)
-        toolCtx: { workspaceId: agent.workspaceId, agent, conversationId: null, clientId: null, channelId: null, runId: run.id, dryRun: true, customerText: said },
+        toolCtx: { workspaceId: agent.workspaceId, agent, conversationId: null, clientId: null, channelId: null, runId: run.id, dryRun: true, customerText: said, orderHistory: await orderHistoryOf({ agentId: agent.id, batchKey: d.sessionId, id: { not: run.id } }), customerHistory: [...messages.filter((m) => m.role === 'user').map((m) => m.text), said].join('\n') },
         temperature: turnCtx.temperature,
         maxTokens: turnCtx.maxTokens,
         deadline: Date.now() + RUN_BUDGET_MS,
@@ -178,7 +182,8 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       const out = result.output;
       const handoff = !!result.forcedHandoff || out.status === 'HANDOFF';
       const status = handoff ? 'HANDOFF' : out.status;
-      const cards: PlaygroundCard[] = (await this.catalogue.byIds(agent, out.productCards)).map((p) => ({ productId: p.id, name: p.name, price: p.price, imageUrl: p.imageUrl, variantLabel: p.variants.length ? p.variants.map((v) => v.name).join(' · ') : null }));
+      const cards: PlaygroundCard[] = (await this.catalogue.byIds(agent, out.productCards)).map((p) => ({ productId: p.id, name: p.name, // full-test 15/11 AGENTS-04: a product with variants is shown at its variants' lowest price (as the AI quotes it), never the base price
+        price: p.hasVariants && p.variants.length ? Math.min(...p.variants.map((v) => v.price)) : p.price, imageUrl: p.imageUrl, variantLabel: p.variants.length ? p.variants.map((v) => v.name).join(' · ') : null }));
       const texts = turnCtx.prompt.workspace.systemMessages;
       const locale = systemLocale(lang, turnCtx.prompt.locale);
       const text = (key: string) => (texts[key]?.[locale] ?? texts[key]?.fr ?? '').replace('{shop}', turnCtx.prompt.workspace.name);
@@ -190,6 +195,8 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       const dto: PlaygroundTurnDto = {
         turnId: run.id,
         sessionId: d.sessionId,
+        // full-test 15/11 AGENTS-01 / -03: the scenario's own message, so the thread shows (and resends) what was sent
+        ...(scenario && messages.length && messages[messages.length - 1]!.text === scenario.message ? { customerText: scenario.message } : {}),
         reply: out.reply,
         status,
         statusDetail: result.forcedHandoff ?? out.statusDetail ?? null,
@@ -271,10 +278,13 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
   static check(key: TestScenarioKey, turn: PlaygroundTurnDto, inScope: Set<string>): { pass: boolean; failed: ScenarioCheck[] } {
     const s = SCENARIOS[key];
     const replyLang = detectLanguage(turn.reply);
-    const sameScript = s.language === 'ar' ? replyLang === 'ar' : replyLang !== 'ar';
+    // full-test 15/11 AI-CHAT-06: the reply's language must be the customer's (arabizi answered in French used to pass);
+    // a reply too short to tell (undefined) or mixed passes
+    const sameScript = !replyLang || replyLang === 'mixed' || replyLang === s.language || (s.language === 'arabizi' && replyLang === 'ar');
     const created = turn.toolCalls.filter((t) => t.name === 'create_order' && (t.result as { ok?: boolean } | null)?.ok === true);
     const results: Record<ScenarioCheck, boolean> = {
-      replied: turn.reply.trim().length > 0,
+      // full-test 15/11 AGENTS-02: a hand-off answers with the shop's hand-off message (the AI's own text is empty)
+      replied: turn.reply.trim().length > 0 || turn.status === 'HANDOFF',
       language_respected: sameScript,
       no_invented_product: turn.cards.every((c) => inScope.has(c.productId)),
       handoff_on_complaint: !s.expect.handoff || turn.status === 'HANDOFF',
@@ -302,7 +312,8 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
           aiRunId = turn.turnId;
           const c = PlaygroundService.check(key, turn, inScope);
           status = c.pass ? 'pass' : 'fail';
-          summary = c.pass ? turn.reply.slice(0, 200) : `failed: ${c.failed.join(', ')}`;
+          // full-test 15/11 AGENTS-02: codes the wizard translates (« failed:replied » was printed as is)
+          summary = c.pass ? (turn.reply.trim() ? turn.reply.slice(0, 200) : turn.status === 'HANDOFF' ? 'handoff' : null) : `failed:${c.failed.join(',')}`;
         } catch (e) {
           summary = e instanceof AppException ? e.code : 'INTERNAL';
         }

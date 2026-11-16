@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import { prisma, TenantContext, type UploadKind } from '@djaber/db';
 import { AppException, validationError } from '../../core/errors/app.exception';
-import { StorageService } from '../../core/storage/storage.service';
+import { isPrivateKey, StorageService } from '../../core/storage/storage.service';
 
 export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 /** PDF / CSV attachments (appeal proof, support tickets): ≤ 5 MB (04 §12 appeal, 03 §25 HELP-03), stored as sent. */
@@ -40,12 +40,12 @@ export class ImageUploadService {
     if (isCsv && file.buffer.includes(0)) throw new AppException('UPLOAD_TYPE_INVALID', {}, { file: 'validation.invalid' });
     const mime = isPdf ? 'application/pdf' : 'text/csv';
     const ext = isPdf ? 'pdf' : 'csv';
-    const key = `${workspaceId ? `ws/${workspaceId}` : `users/${userId}`}/${kind}/${randomUUID()}.${ext}`;
+    const key = `${kind === 'ticket_attachment' ? 'private/' : ''}${workspaceId ? `ws/${workspaceId}` : `users/${userId}`}/${kind}/${randomUUID()}.${ext}`;
     const stored = await this.storage.put(key, file.buffer, mime);
     const row = await TenantContext.runSystem(() =>
       prisma.upload.create({ data: { workspaceId, storageKey: key, url: stored.url, mime, size: file.buffer.length, kind, createdById: userId } }),
     );
-    return { id: row.id, url: row.url, mime: row.mime, size: row.size, width: null, height: null };
+    return { id: row.id, url: isPrivateKey(key) ? this.storage.signedUrl(key, 3600) : row.url, mime: row.mime, size: row.size, width: null, height: null };
   }
 
   async store(file: UploadedFile | undefined, kind: UploadKind, userId: string, workspaceId: string | null): Promise<UploadResult> {
@@ -68,13 +68,13 @@ export class ImageUploadService {
       throw new AppException('IMAGE_TYPE_INVALID', {}, { file: 'validation.invalid' });
     }
 
-    const key = `${workspaceId ? `ws/${workspaceId}` : `users/${userId}`}/${kind}/${randomUUID()}.webp`;
+    const key = `${kind === 'ticket_attachment' ? 'private/' : ''}${workspaceId ? `ws/${workspaceId}` : `users/${userId}`}/${kind}/${randomUUID()}.webp`;
     const stored = await this.storage.put(key, out.data, 'image/webp');
     const row = await TenantContext.runSystem(() =>
       prisma.upload.create({
         data: { workspaceId, storageKey: key, url: stored.url, mime: 'image/webp', size: out.data.length, kind, createdById: userId },
       }),
     );
-    return { id: row.id, url: row.url, mime: row.mime, size: row.size, width: out.info.width ?? null, height: out.info.height ?? null };
+    return { id: row.id, url: isPrivateKey(key) ? this.storage.signedUrl(key, 3600) : row.url, mime: row.mime, size: row.size, width: out.info.width ?? null, height: out.info.height ?? null };
   }
 }

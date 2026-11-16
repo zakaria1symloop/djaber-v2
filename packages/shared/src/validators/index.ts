@@ -4,7 +4,11 @@ import { WILAYA_COUNT } from '../geo';
 
 /** Normalises +213 / 00213 / spaces / dots / dashes to the national form `0XXXXXXXXX`. */
 export const normalizePhoneDz = (raw: string): string => {
-  let p = raw.replace(/[\s.\-()]/g, '');
+  // full-test 15/11 SETTINGS-03: Arabic-Indic digits (٠٦٩٩…, ۰۶۹۹…) read as Latin digits — a blocked « ٠٦٩٩٩٩٩٩٠١ » blocked nobody
+  let p = raw
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[\s.\-()]/g, '');
   if (p.startsWith('+213')) p = '0' + p.slice(4);
   else if (p.startsWith('00213')) p = '0' + p.slice(5);
   else if (p.startsWith('213') && p.length >= 12) p = '0' + p.slice(3);

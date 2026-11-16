@@ -3347,6 +3347,8 @@ model Sale {
   tax           Int              @default(0)
   total         Int
   amountPaid    Int              @default(0)
+  /// full-test 15/11 SALES-CASH-01/-02: amount typed as received on a draft (no cash until validated)
+  draftAmountReceived Int?
   paymentMethod PaymentMethod    @default(cash)
   paymentStatus GdsPaymentStatus @default(unpaid)
   notes         String?

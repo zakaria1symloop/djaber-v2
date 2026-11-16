@@ -439,6 +439,8 @@ export type TurnView = {
   prompt: string[];
   systemMessages: { key: string; text: string }[];
   turnId: string | null;
+  /** the scenario message the server sent (full-test 15/11 AGENTS-03) */
+  customerText?: string;
 };
 const cardView = (c: TurnCard, i: number) => ({ id: c.productId ?? String(i), name: c.name, price: c.price, imageUrl: c.imageUrl ?? null, variants: c.variantLabel ?? null });
 /** One shape for the screen whatever the spelling of the server (api-contract §3.4 `PlaygroundTurnDto` / 04 §8). */
@@ -460,6 +462,7 @@ export const turnView = (t: PlaygroundTurn): TurnView => {
     prompt: t.promptPreview?.length ? t.promptPreview : (t.promptSections ?? []).map((s) => `${s.key} · ${s.chars}`),
     systemMessages: t.systemMessages ?? [],
     turnId: t.turnId ?? null,
+    ...((t as { customerText?: string }).customerText ? { customerText: (t as { customerText?: string }).customerText } : {}),
   };
 };
 /** "0,97" (fr / ar) · "0.97" (en) */

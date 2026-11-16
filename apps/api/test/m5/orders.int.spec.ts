@@ -306,6 +306,24 @@ describe('status machine and effects (04 §1.2, §3)', () => {
     expect((await cashOf(order.id)).map((c) => c.amount)).toEqual([8000]);
   });
 
+  it('full-test 15/11 ORDERS-05 / ROLES-02: a deposit counts at delivery (default = what is due, added to it); an edit never brings the total below what was paid', async () => {
+    const owner = await shop();
+    const p = await createProduct(owner, { price: 7900, stock: 3 });
+    const { order } = await newOrder(owner, { amountPaid: 1200 }, p);
+    expect(order).toMatchObject({ total: 8300, amountPaid: 1200, remaining: 7100 });
+    // more than what is due ⇒ refused; the due amount ⇒ paid in full, one cash row for the cash taken at delivery
+    expect((await owner.post(`/orders/${order.id}/deliver`, { amountCollected: 8300, reason: 'x' }).expect(422)).body.error.fields).toEqual({ amountCollected: 'validation.range' });
+    const r = await owner.post(`/orders/${order.id}/deliver`, {}).expect(200);
+    expect(r.body.data).toMatchObject({ status: 'delivered', amountPaid: 8300, paymentStatus: 'paid', remaining: 0 });
+    expect((await cashOf(order.id)).map((c) => c.amount).sort((a, b) => a - b)).toEqual([1200, 7100]);
+    // lowering the total of another order below its 1 200 DA paid ⇒ ORDER_TOTAL_BELOW_PAID, nothing changed
+    const { order: b } = await newOrder(owner, { amountPaid: 1200 }, p);
+    const cheap = await createProduct(owner, { price: 100, stock: 3 });
+    const refused = await owner.patch(`/orders/${b.id}`, { items: [{ productId: cheap.id, quantity: 1 }], deliveryFee: 0, version: b.version }).expect(422);
+    expect(refused.body.error).toMatchObject({ code: 'ORDER_TOTAL_BELOW_PAID', params: { paid: 1200 } });
+    expect((await owner.get(`/orders/${b.id}`).expect(200)).body.data).toMatchObject({ total: 8300, amountPaid: 1200 });
+  });
+
   it('AT-ORD-07 delete: delivered ⇒ ORDER_DELETE_DELIVERED; shipped (manual parcel) ⇒ rollback then deleted; live courier parcel ⇒ DELIVERY_ORDER_ALREADY_SENT; audited', async () => {
     const owner = await shop();
     const op = await asOperator(app, owner.workspaceId);

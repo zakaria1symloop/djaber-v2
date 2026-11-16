@@ -806,6 +806,7 @@
  "admin.team.del.sub": "Depuis Paramètres › Zone de danger (web/mobile) ou l'URL publique. Délai de grâce 30 j (annulable par reconnexion), puis anonymisation irréversible ; les factures sont conservées 10 ans (obligation légale) sans données personnelles.",
  "admin.team.del.title": "Demandes de suppression de compte (AccountDeletionRequest)",
  "admin.team.description": "Rôles internes à moindre privilège (2FA obligatoire) et file des suppressions de compte (exigence Google Play « Account deletion » et Apple).",
+ "admin.team.force2fa.note": "La 2FA de ce membre est réinitialisée et toutes ses sessions sont fermées : il devra la réactiver à sa prochaine connexion. Action journalisée.",
  "admin.team.forced2fa": "2FA réinitialisée : accès bloqué jusqu'à sa réactivation.",
  "admin.team.invitation.expires": "expire {date}",
  "admin.team.invitation.revoke": "Révoquer",

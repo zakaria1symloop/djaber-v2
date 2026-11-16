@@ -806,6 +806,7 @@
  "admin.team.del.sub": "From Settings › Danger zone (web/mobile) or the public URL. 30 d grace period (cancelled by logging in again), then irreversible anonymisation; invoices are kept 10 years (legal duty) without personal data.",
  "admin.team.del.title": "Account deletion requests (AccountDeletionRequest)",
  "admin.team.description": "Least-privilege internal roles (2FA required) and the account deletion queue (Google Play “Account deletion” and Apple requirement).",
+ "admin.team.force2fa.note": "This member's 2FA is reset and all their sessions are signed out: they must set it up again at their next sign-in. The action is logged.",
  "admin.team.forced2fa": "2FA reset: access blocked until it is enabled again.",
  "admin.team.invitation.expires": "expires {date}",
  "admin.team.invitation.revoke": "Revoke",

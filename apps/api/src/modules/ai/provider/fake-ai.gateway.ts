@@ -52,6 +52,7 @@ const T: Record<AiLanguage, Record<string, string>> = {
     noOrders: "Je ne trouve aucune commande en cours à votre nom.",
     askOrder: 'Très bien ! Quel est votre nom complet et votre numéro de téléphone ?',
     ordered: 'Votre commande {number} est enregistrée. Total : {total} DA.',
+    recap: 'Récapitulatif : total {total} DA livraison comprise. Vous confirmez la commande ?',
     whichCancel: 'Quelle commande souhaitez-vous annuler ? {list}',
     cancelled: 'Votre commande {number} est annulée.',
     photoMatch: 'Il me semble que vous cherchez « {name} ». Je vous envoie sa fiche.',
@@ -73,6 +74,7 @@ const T: Record<AiLanguage, Record<string, string>> = {
     noOrders: 'I cannot find any open order in your name.',
     askOrder: 'Great! What is your full name and phone number?',
     ordered: 'Your order {number} is registered. Total: {total} DA.',
+    recap: 'Summary: total {total} DA including delivery. Do you confirm the order?',
     whichCancel: 'Which order would you like to cancel? {list}',
     cancelled: 'Your order {number} is cancelled.',
     photoMatch: 'It looks like you are looking for "{name}". Here is its card.',
@@ -94,6 +96,7 @@ const T: Record<AiLanguage, Record<string, string>> = {
     noOrders: 'ما لقيت حتى طلبية مفتوحة باسمك.',
     askOrder: 'مليح! واش هو الاسم الكامل ورقم الهاتف؟',
     ordered: 'الطلبية {number} تسجلت. المجموع: {total} دج.',
+    recap: 'الملخص: المجموع {total} دج مع التوصيل. تأكد الطلبية؟',
     whichCancel: 'أي طلبية تحب تلغي؟ {list}',
     cancelled: 'الطلبية {number} تلغات.',
     photoMatch: 'يبان لي راك تحوس على «{name}». هاهي البطاقة تاعو.',
@@ -115,6 +118,7 @@ const T: Record<AiLanguage, Record<string, string>> = {
     noOrders: 'Ma l9it 7ta commande b ismek.',
     askOrder: 'Mli7! Wach howa ismek w numéro ta3 téléphone?',
     ordered: 'La commande {number} tsejlet. Total: {total} DA.',
+    recap: 'Récap: total {total} DA m3a livraison. Tconfirmi?',
     whichCancel: 'Ama commande t7eb tannuler? {list}',
     cancelled: 'La commande {number} tannulat.',
     photoMatch: 'Yban li rak t7awes 3la "{name}". Hahi la fiche ta3o.',
@@ -409,6 +413,8 @@ export class FakeAiGateway implements AiGateway {
           return out(t.handoff!, { status: 'HANDOFF', statusDetail: 'customer_request', evidence: said, intent: 'COMPLAINT' });
         }
         case 'create_order':
+          // full-test 15/11 AI-CHAT-01: the server's recap is shown and the customer's yes awaited
+          if (r.error?.code === 'CONFIRMATION_REQUIRED' || r.error?.code === 'CONFIRMATION_REFUSED' || r.error?.code === 'PHONE_CONFIRMATION_REQUIRED') return out(fill(t.recap!, { total: r.recap?.total ?? '' }), { intent: 'SALE' });
           return r.ok ? out(fill(t.ordered!, { number: r.number, total: r.total }), { intent: 'SALE' }) : out(t.handoff!, { status: 'HANDOFF', statusDetail: String(r.hint ?? r.error?.code ?? 'other'), intent: 'SALE' });
         case 'handoff_to_human':
           // retest 12/11: a handoff the platform refused (HANDOFF_NOT_NEEDED) ⇒ the model answers instead

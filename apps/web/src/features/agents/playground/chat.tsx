@@ -51,13 +51,15 @@ export function usePlayground(transport: ChatTransport) {
       const failedBefore = entriesRef.current.at(-1)?.role === 'error';
       const settled = entriesRef.current.filter((e) => e.role !== 'error');
       const kept = failedBefore ? settled.slice(0, -1) : settled;
-      const history: PlaygroundMessage[] = kept.flatMap((e): PlaygroundMessage[] => (e.role === 'user' ? [{ role: 'user', text: e.text }] : e.role === 'ai' ? [{ role: 'assistant', text: e.turn.reply }] : []));
+      const history: PlaygroundMessage[] = kept.flatMap((e): PlaygroundMessage[] => (e.role === 'user' ? (e.text ? [{ role: 'user', text: e.text }] : []) : e.role === 'ai' ? [{ role: 'assistant', text: e.turn.reply }] : []));
       const now = Date.now();
       setEntries([...kept, { id: ++seq.current, role: 'user' as const, text: input.text, at: now, attachment: input.attachment, scenario: input.scenario }]);
       setTyping(true);
       try {
         const turn = await transportRef.current(history, input, sessionId);
-        setEntries((old) => [...old, { id: ++seq.current, role: 'ai', at: Date.now(), turn }]);
+        // a scenario chip: the customer bubble takes the message the server sent (shown, and part of the next turns' history)
+        const said = (turn as { customerText?: string }).customerText;
+        setEntries((old) => [...old.map((e) => (said && e.role === 'user' && e.at === now && !e.text ? { ...e, text: said } : e)), { id: ++seq.current, role: 'ai', at: Date.now(), turn }]);
       } catch (e) {
         const code = e instanceof ApiError ? e.code : null;
         if (code === 'PLAYGROUND_RATE_LIMITED' || (e instanceof ApiError && e.status === 429)) setBlockedUntil(Date.now() + retryAfterSeconds(e, 60) * 1000);

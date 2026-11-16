@@ -56,3 +56,12 @@ html:root[dir='rtl'] {
 /* Arabic has no monospace companion: labels use Changa without letter-spacing */
 html:root[dir='rtl'] { --font-mono: var(--f-changa), system-ui, sans-serif; }
 html[dir='rtl'] :is(.ts-label-section, .ts-label-meta, .ts-label-micro) { letter-spacing: 0; font-size: 11px; }
+
+/*
+ * full-test 15/11 MOBILE-A11Y-02 (WCAG 2.4.7): the keyboard focus ring is the design system's blue everywhere. The
+ * `focus-visible:outline-accent-inbound` class of the buttons lost to their text colour (black ring on a white button on
+ * the black page, white on secondary ones); unlayered, this rule wins over every utility layer.
+ */
+:focus-visible {
+  outline-color: var(--accent-inbound);
+}

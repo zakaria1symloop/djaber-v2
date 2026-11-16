@@ -688,6 +688,7 @@
  "validation.price": "سعر البيع مطلوب (> 0)",
  "validation.quantity": "كمية غير صالحة",
  "validation.range": "القيمة خارج الحدود ({min}–{max})",
+ "validation.url": "رابط غير صالح (https://…)",
  "validation.required": "حقل مطلوب",
  "validation.sku_taken": "SKU مستخدم من قبل",
  "validation.url_https": "HTTPS إلزامي",

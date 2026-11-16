@@ -4,6 +4,7 @@
 import * as Popover from '@radix-ui/react-popover';
 import { Check, ChevronDown, Minus, Plus, Search, X } from 'lucide-react';
 import * as React from 'react';
+import { parseIntegerInput } from './number-parse';
 import { cn, Input } from './primitives';
 
 /* ---------- <Ltr>: numbers, phones, SKUs, amounts keep their reading order in Arabic ---------- */
@@ -125,22 +126,31 @@ export const UrlInput = React.forwardRef<HTMLInputElement, Omit<React.InputHTMLA
 
 const group = (digits: string) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 
-/* ---------- Integer field: digits only, grouped by thousands while typing, optional suffix (DA, %, unités) ---------- */
+/*
+ * ---------- Integer field: grouped by thousands while typing, optional suffix (DA, %, unités) ----------
+ * Full-test 15/11 (ORDERS-01, PRODUCTS-01, DELIVERY-01, STOCK-02, SETTINGS-09, SALES-CASH-07): what is typed is read by
+ * `parseIntegerInput` — « 2 500,00 » is 2500 (the decimal part shows while typing and goes when the field loses focus, never
+ * glued to the integer); a minus sign, a letter or one digit too many is refused (the field keeps its value) instead of being
+ * stripped. `allowNegative`: a leading « - » is accepted (value « -12 »).
+ */
 export type NumberInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> & {
-  /** digits only ('' = empty) */
+  /** the integer as text: digits, with a leading « - » only when `allowNegative` ('' = empty) */
   value: string;
   onValueChange: (digits: string) => void;
   suffix?: string;
   maxDigits?: number;
+  allowNegative?: boolean;
 };
 export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(function NumberInput(
-  { value, onValueChange, suffix, maxDigits = 9, className, ...rest },
+  { value, onValueChange, suffix, maxDigits = 9, allowNegative = false, className, onBlur, ...rest },
   ref,
 ) {
   const inner = React.useRef<HTMLInputElement | null>(null);
   // number of digits before the caret after the last keystroke: the caret is put back there once the value is regrouped
   const caret = React.useRef<number | null>(null);
-  const shown = group(value);
+  // the decimal part being typed (« ,5 »): shown, never part of the value, dropped on blur
+  const [fraction, setFraction] = React.useState('');
+  const shown = group(value) + fraction;
   React.useLayoutEffect(() => {
     const el = inner.current;
     if (!el || caret.current === null || document.activeElement !== el) return;
@@ -157,16 +167,27 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
           if (typeof ref === 'function') ref(el);
           else if (ref) ref.current = el;
         }}
-        inputMode="numeric"
+        inputMode={allowNegative ? 'text' : 'numeric'}
         autoComplete="off"
         value={shown}
         onChange={(e) => {
           const raw = e.target.value;
-          const before = raw.slice(0, e.target.selectionStart ?? raw.length).replace(/\D/g, '').length;
-          const digits = raw.replace(/\D/g, '');
-          const trimmed = digits.replace(/^0+(?=\d)/, '');
-          caret.current = Math.max(0, before - (digits.length - trimmed.length));
-          onValueChange(trimmed.slice(0, maxDigits));
+          const at = e.target.selectionStart ?? raw.length;
+          const r = parseIntegerInput(raw, { allowNegative, maxDigits, caret: at });
+          if (!r.ok) {
+            // refused keystroke: the value stays and the caret goes back where it was
+            const back = Math.max(0, at - (raw.length - shown.length));
+            requestAnimationFrame(() => inner.current?.setSelectionRange(back, back));
+            return;
+          }
+          caret.current = r.caretDigits;
+          setFraction(r.fraction);
+          if (r.value !== value) onValueChange(r.value);
+        }}
+        onBlur={(e) => {
+          setFraction('');
+          if (value === '-') onValueChange('');
+          onBlur?.(e);
         }}
         className={cn('tabular-nums', suffix && 'pe-12', className)}
         {...rest}
@@ -211,6 +232,10 @@ export function QtyStepper({
   className?: string;
 }) {
   const off = disabled || !!disabledReason;
+  // full-test 15/11 STOCK-01 / SALES-CASH-07 / STOCK-02: while the field has focus it shows what is typed (an erased field
+  // stays empty, « 2.5 » shows « 2.5 » but counts 2, never 25; « -3 » is refused); the value is clamped to min / max at
+  // once for the totals, and the field shows it when it loses focus — « erase then type 5 » is 5, not 15
+  const [draft, setDraft] = React.useState<string | null>(null);
   const btn = 'flex size-7 items-center justify-center text-text-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40';
   return (
     <div dir="ltr" title={disabledReason} className={cn('inline-flex h-8 items-center rounded-card border border-line-edge bg-ink-surface', className)}>
@@ -221,11 +246,16 @@ export function QtyStepper({
         aria-label={labels.value}
         inputMode="numeric"
         disabled={off}
-        value={String(value)}
+        value={draft ?? String(value)}
         onChange={(e) => {
-          const n = Number(e.target.value.replace(/\D/g, '') || '0');
-          onChange(Math.min(max, Math.max(min, n)));
+          const r = parseIntegerInput(e.target.value, { allowNegative: min < 0, maxDigits: String(Math.abs(max)).length });
+          if (!r.ok) return;
+          setDraft(r.value + r.fraction);
+          const n = r.value === '' || r.value === '-' ? min : Number(r.value);
+          const next = Math.min(max, Math.max(min, n));
+          if (next !== value) onChange(next);
         }}
+        onBlur={() => setDraft(null)}
         className={cn(
           'h-full w-10 bg-transparent text-center text-[13px] font-semibold tabular-nums focus:outline-none disabled:opacity-60',
           tone === 'warning' && 'text-accent-starred',

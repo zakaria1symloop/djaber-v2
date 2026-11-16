@@ -49,5 +49,8 @@
   },
   "mobile-a11y": {
     "state": "done"
+  },
+  "onboarding": {
+    "state": "done"
   }
 }

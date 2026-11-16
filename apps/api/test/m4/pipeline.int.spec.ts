@@ -226,10 +226,10 @@ describe('FL-01 — reply turn', () => {
     expect(back.out.at(-1)).toMatchObject({ author: 'ai', text: 'La robe est à 4500 DA.' });
   });
 
-  it('tester report 22/10: in a long thread the format-reminder retry leaves the history out, so the answer still goes out', async () => {
+  it('tester report 22/10 / full-test 15/11 AI-CHAT-02: in a long thread the format-reminder retry keeps only the last 8 messages (and offers no tool), so the answer still goes out', async () => {
     const s = await shop();
     const sender = newSender();
-    for (const text of ['bonjour', 'vous avez des robes ?', 'et des sacs ?']) {
+    for (const text of ['bonjour', 'vous avez des robes ?', 'et des sacs ?', 'en noir ?', 'et en rouge ?', 'merci']) {
       fakeAi(app).script('reply', { reply: `Réponse à « ${text} »`, intent: 'INFO' });
       expect((await turn(s, sender, { text })).outcome).toBe('sent');
       await resetAi();
@@ -240,10 +240,13 @@ describe('FL-01 — reply turn', () => {
     expect(t.outcome).toBe('sent');
     const [first, retry] = fakeAi(app).callsOf('reply');
     expect(first!.messages.length).toBeGreaterThan(3); // the thread so far
-    expect(retry!.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
-    expect(String((retry!.messages[0] as { content: unknown }).content)).toContain('prix robe ?');
-    expect(retry!.messages[1]).toMatchObject({ role: 'assistant', content: 'La robe est à 4500 DA.' });
-    expect(retry!.messages[2]).toMatchObject({ role: 'user', content: FORMAT_REMINDER });
+    expect(first!.messages).toHaveLength(13); // 6 turns + the batch
+    expect(retry!.messages).toHaveLength(11); // the last 8 + the batch + its answer + the reminder
+    expect(retry!.messages.slice(0, 8)).toEqual(first!.messages.slice(4, 12));
+    expect(String((retry!.messages[8] as { content: unknown }).content)).toContain('prix robe ?');
+    expect(retry!.messages[9]).toMatchObject({ role: 'assistant', content: 'La robe est à 4500 DA.' });
+    expect(retry!.messages[10]).toMatchObject({ role: 'user', content: FORMAT_REMINDER });
+    expect(retry!.tools).toBeUndefined();
     expect(t.out.at(-1)).toMatchObject({ author: 'ai', text: 'La robe est à 4500 DA.' });
     expect(t.conversation).toMatchObject({ status: 'active', aiPaused: false });
   });
@@ -348,22 +351,30 @@ describe('tools', () => {
       { toolCalls: [{ name: 'create_order', args: { ...base, clientPhone: '0555 12 34 56' } }] },
       { reply: 'Je transmets votre commande à un conseiller.', status: 'OK', intent: 'SALE' },
     );
-    const t = await turn(s, newSender(), { text: 'نعم' });
-    const r = t.runs[0]!.toolCalls.sort((a, b) => a.executedAt!.getTime() - b.executedAt!.getTime()).map((c) => c.result as any);
-    expect(r[0]).toEqual({ ok: false, error: { code: 'VALIDATION', field: 'clientPhone', example: '0555123456' } });
-    expect(r.filter((x) => x.error?.code === 'CONFIRMATION_REQUIRED')).toHaveLength(1);
-    expect(r.filter((x) => x.hint === 'order_limit')).toEqual([{ ok: false, hint: 'order_limit', maxQty: 3, maxAmount: null }]);
-    expect(r.filter((x) => x.error?.field === 'address')).toHaveLength(1);
+    const sender = newSender();
+    const details = await turn(s, sender, { text: 'Amine Benali, 0555 12 34 56, Bab Ezzouar' });
+    const r0 = details.runs[0]!.toolCalls.sort((a, b) => a.executedAt!.getTime() - b.executedAt!.getTime()).map((c) => c.result as any);
+    expect(r0[0]).toEqual({ ok: false, error: { code: 'VALIDATION', field: 'clientPhone', example: '0555123456' } });
+    expect(r0.filter((x) => x.hint === 'order_limit')).toEqual([{ ok: false, hint: 'order_limit', maxQty: 3, maxAmount: null }]);
+    expect(r0.filter((x) => x.error?.field === 'address')).toHaveLength(1);
+    // full-test 15/11 AI-CHAT-01: a valid cart is never ordered in the turn that prepares it — the server's recap comes back
+    expect(r0.filter((x) => x.error?.code === 'CONFIRMATION_REQUIRED')).toHaveLength(2);
+    expect(r0.at(-1)).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft: expect.any(String) }, recap: { subtotal: 4500, deliveryFee: 400, total: 4900, clientPhone: '0555123456', wilaya: expect.any(String), items: [{ name: 'Robe satin bordeaux', quantity: 1, unitPrice: 4500 }] } });
+    expect(create).not.toHaveBeenCalled();
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args: { ...base, clientPhone: '0555 12 34 56' } }] }, { reply: 'Commande enregistrée.', status: 'OK', intent: 'SALE' });
+    const t = await turn(s, sender, { text: 'نعم' });
+    const r = t.runs.at(-1)!.toolCalls.map((c) => c.result as any);
     // the validated request handed to the orders port (bound to the orders module since M5)
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0]![1]).toMatchObject({ clientPhone: '0555123456', wilayaId: 16, subtotal: 4500, deliveryFee: 400, total: 4900, items: [{ productId: s.robe.id, quantity: 1, unitPrice: 4500, name: 'Robe satin bordeaux' }] });
-    expect(create.mock.calls[0]![0]).toMatchObject({ runId: t.runs[0]!.id, conversationId: t.conversationId, agentId: s.agent.id });
+    expect(create.mock.calls[0]![0]).toMatchObject({ runId: t.runs.at(-1)!.id, conversationId: t.conversationId, agentId: s.agent.id });
     // M5: the orders module creates the order; the thread stays with the AI
     expect(r.at(-1)).toMatchObject({ ok: true, number: 'CMD-1001', total: 4900, duplicateOf: null });
     expect(t.conversation.status).toBe('active');
-    expect(t.runs[0]).toMatchObject({ status: 'ok', creditsCharged: 1 });
+    expect(t.runs.at(-1)).toMatchObject({ status: 'ok', creditsCharged: 1 });
     expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(1);
-    expect((await debits(s.owner.workspaceId)).map((d) => [d.action, d.credits])).toEqual([['text_reply', -1]]);
+    expect((await debits(s.owner.workspaceId)).map((d) => [d.action, d.credits])).toEqual([['text_reply', -1], ['text_reply', -1]]);
     create.mockRestore();
   });
 
@@ -374,14 +385,19 @@ describe('tools', () => {
     const create = jest.spyOn(port, 'createOrder').mockResolvedValue({ ok: true, orderId: 'o-1', number: 'CMD-1042', subtotal: 4500, deliveryFee: 400, total: 4900, items: [], duplicateOf: null, paymentOptions: ['cod'] });
     const call = { name: 'create_order', args: { clientName: 'Amine Benali', clientPhone: '0555123456', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'Cité des 200 logements, Alger', items: [{ productId: s.robe.id, quantity: 1 }], customerConfirmed: true } };
     const sender = newSender();
+    // full-test 15/11 AI-CHAT-01: the recap is shown in an earlier turn
+    fakeAi(app).script('reply', { toolCalls: [call] }, { reply: 'Récapitulatif … Vous confirmez ?', intent: 'SALE' });
+    await turn(s, sender, { text: 'Amine Benali, 0555123456, Bab Ezzouar' });
+    await resetAi();
+    const debitsBefore = (await debits(s.owner.workspaceId)).length;
     const { conversation } = await receive(app, s.page, sender, { text: 'oui je confirme' });
     // attempt 1: the tool runs, then both models fail ⇒ the job throws (BullMQ will retry it)
     fakeAi(app).script('reply', { toolCalls: [{ ...call, id: 'call_a' }] }, { error: 'provider_error' }, { error: 'provider_error' });
     const data = (await replyJob(app, conversation.id))!.data as never;
     await expect(runReply(app, conversation.id, { attempt: 1, attempts: 3 })).rejects.toThrow(/ai provider unavailable/);
     expect(create).toHaveBeenCalledTimes(1);
-    expect(await outMessages(conversation.id)).toHaveLength(0);
-    expect(await runsOf(conversation.id)).toMatchObject([{ status: 'running', attempt: 1 }]);
+    const outBefore = (await outMessages(conversation.id)).length;
+    expect((await runsOf(conversation.id)).at(-1)).toMatchObject({ status: 'running', attempt: 1 });
     expect((await balanceOf(app, s.owner.workspaceId)).reserved).toBe(1); // the reservation waits for the retry
 
     // attempt 2: re-prompted, the model asks for the same call under another provider id ⇒ stored result, no execution
@@ -393,12 +409,13 @@ describe('tools', () => {
     expect(create).toHaveBeenCalledTimes(1);
     const replayed = fakeAi(app).callsOf('reply')[1]!.messages.at(-1) as any;
     expect(replayed).toMatchObject({ role: 'tool', name: 'create_order', result: { ok: true, number: 'CMD-1042' } });
-    const [run] = await runsOf(conversation.id);
+    const run = (await runsOf(conversation.id)).at(-1);
     expect(run).toMatchObject({ status: 'ok', attempt: 2, creditsCharged: 1, toolCallCount: 1 });
     expect(run!.toolCalls).toHaveLength(1);
-    expect((await aiMessages(conversation.id)).map((m) => m.text)).toEqual(['Votre commande CMD-1042 est enregistrée. Total : 4900 DA.']);
+    expect((await aiMessages(conversation.id)).map((m) => m.text).at(-1)).toBe('Votre commande CMD-1042 est enregistrée. Total : 4900 DA.');
+    expect((await outMessages(conversation.id)).length).toBeGreaterThan(outBefore);
     expect(sends(sender).filter((c) => String(c.args.message.text).includes('CMD-1042'))).toHaveLength(1);
-    expect(await debits(s.owner.workspaceId)).toHaveLength(1);
+    expect(await debits(s.owner.workspaceId)).toHaveLength(debitsBefore + 1);
 
     // AT-AI-06 (order rule itself: M5) — an existing order returned by the port reaches the model untouched
     create.mockResolvedValue({ ok: true, orderId: 'o-1', number: 'CMD-1042', total: 4900, duplicateOf: 'CMD-1042' });

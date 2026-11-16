@@ -92,7 +92,7 @@ describe('report filters of ANA-04 (M8 row)', () => {
     const now = new Date();
     await order(owner.workspaceId, { total: 2000, status: 'delivered', orderedAt: now, deliveredAt: now, channelId: pageA.id, productId: sac.id, productName: 'Sac', quantity: 1 });
     await order(owner.workspaceId, { total: 6000, status: 'delivered', orderedAt: now, deliveredAt: now, channelId: pageB.id, productId: robe.id, productName: 'Robe', quantity: 2 });
-    const rows = async (q: string) => ((await owner.get(`/reports/sales_by_product?period=30d${q}`).expect(200)).body.data.rows as any[]).map((r) => [r.product, r.quantity, r.revenue]).sort();
+    const rows = async (q: string) => ((await owner.get(`/reports/sales_by_product?period=30d${q}`).expect(200)).body.data.rows as any[]).map((r) => [r.product, r.quantity, r.grossSales]).sort();
     expect(await rows('')).toEqual([['Robe', 4, 12000], ['Sac', 1, 2000]]);
     expect(await rows('&source=sales')).toEqual([['Robe', 2, 6000]]);
     expect(await rows('&source=orders')).toEqual([['Robe', 2, 6000], ['Sac', 1, 2000]]);
@@ -103,7 +103,7 @@ describe('report filters of ANA-04 (M8 row)', () => {
     const def = (await owner.get('/reports/sales_by_product?period=30d').expect(200)).body.data.definition;
     expect(def.filters).toEqual(['categoryId', 'productId', 'source', 'channelId', 'groupBy', 'q']);
     expect((await owner.get('/reports/top_products?period=30d&source=orders').expect(200)).body.data.rows.map((r: any) => [r.product, r.quantity])).toEqual([['Robe', 2], ['Sac', 1]]);
-    expect((await owner.get('/reports/sales_by_category?period=30d&source=sales').expect(200)).body.data.kpis.find((k: any) => k.key === 'revenue').value).toBe(6000);
+    expect((await owner.get('/reports/sales_by_category?period=30d&source=sales').expect(200)).body.data.kpis.find((k: any) => k.key === 'grossSales').value).toBe(6000);
     expect((await owner.get('/reports/sales_by_period?period=30d&source=sales').expect(422)).body.error.fields).toEqual({ source: 'validation.invalid' });
     await owner.get('/reports/sales_by_product?period=30d&source=pos').expect(422);
     await owner.get('/reports/sales_by_product?period=30d&groupBy=week').expect(422);

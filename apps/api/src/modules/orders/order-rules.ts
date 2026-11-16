@@ -161,15 +161,17 @@ export const checkEffectiveAt = (effectiveAt: Date | null | undefined, now: Date
 };
 
 /**
- * 04 §1.4 / §21 / §23 COD rule. `amountCollected` = what the courier / the merchant cashed in total (default = total);
- * the new payment entry brings `amountPaid` up to it; a different amount needs a reason.
+ * 04 §1.4 / §21 / §23 COD rule. `amountCollected` = the cash the courier / the merchant took AT DELIVERY (default = what
+ * was still due, total − amountPaid); it is ADDED to what was already paid (a deposit) — full-test 15/11 ORDERS-05: it was
+ * read as the new total paid, so a deposit of 1 200 + 4 200 cashed gave « payé 4 200 / reste 1 200 » and a 3 000 DA cash row.
+ * More than what is due is refused; a different amount needs a reason.
  */
 export const codPlan = (o: { total: number; amountPaid: number }, amountCollected: number | undefined, reason: string | null | undefined): { entry: number; finalPaid: number } | Refusal => {
-  const collected = amountCollected ?? o.total;
-  if (collected > o.total) return { code: 'VALIDATION_ERROR', fields: { amountCollected: 'validation.range' } };
-  if (collected !== o.total && !(reason ?? '').trim()) return { code: 'VALIDATION_ERROR', fields: { reason: 'validation.required' } };
-  const finalPaid = Math.max(collected, o.amountPaid);
-  return { entry: finalPaid - o.amountPaid, finalPaid };
+  const due = Math.max(0, o.total - o.amountPaid);
+  const collected = amountCollected ?? due;
+  if (collected < 0 || collected > due) return { code: 'VALIDATION_ERROR', fields: { amountCollected: 'validation.range' } };
+  if (collected !== due && !(reason ?? '').trim()) return { code: 'VALIDATION_ERROR', fields: { reason: 'validation.required' } };
+  return { entry: collected, finalPaid: o.amountPaid + collected };
 };
 
 export type CallPlan = {

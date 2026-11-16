@@ -292,7 +292,8 @@ function NewSaleSheet({ draftId, onClose }: { draftId: string | null; onClose: (
     setLines(lineFromSale(d));
     setDiscount(d.discount ? moneyDigits(d.discount) : '');
     setMethod(d.paymentMethod);
-    setReceived(d.amountPaid ? moneyDigits(d.amountPaid) : null);
+    // full-test 15/11 SALES-CASH-02: the amount typed before « Brouillon » comes back (it used to follow the total again)
+    setReceived(d.draftAmountReceived !== null && d.draftAmountReceived !== undefined ? moneyDigits(d.draftAmountReceived) : d.amountPaid ? moneyDigits(d.amountPaid) : null);
     if (d.client) setClient({ ...d.client } as ClientListItem);
     setReady(true);
   }, [draft.data]);
@@ -395,13 +396,15 @@ function NewSaleSheet({ draftId, onClose }: { draftId: string | null; onClose: (
               const err = lineErr(i);
               return (
                 <li key={l.key} className="flex flex-col gap-1 px-3 py-2.5" data-line={l.productId}>
-                  <div className="flex items-center gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[14px]">{l.name}</div>
+                  {/* full-test 15/11 SALES-CASH-03: the name has its own line (the 460 px sheet / a phone squeezed it to 0 px) */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="min-w-0 basis-full">
+                      <div className="truncate text-[14px]" title={l.name}>{l.name}</div>
                       <div className="ts-label-micro text-text-muted">
                         {[v?.name, l.trackStock && stock !== null ? t('sales.form.stock', { count: stock }) : null, priceEdited(l) ? t('sales.form.priceEdited', { from: formatNumber(l.catalogPrice), to: formatNumber(int(l.unitPrice)) }) : null].filter(Boolean).join(' · ')}
                       </div>
                     </div>
+                    <span className="flex-1" />
                     <QtyStepper value={l.quantity} onChange={(q) => patch(i, { quantity: q })} min={1} max={100000} labels={{ decrease: t('gds.qty.decrease'), increase: t('gds.qty.increase'), value: t('common.quantity') }} tone={l.trackStock && stock !== null && l.quantity > stock ? 'danger' : undefined} />
                     <MoneyInput aria-label={t('sales.form.priceFor', { name: l.name })} value={l.unitPrice} onValueChange={(x) => patch(i, { unitPrice: x })} className="!h-8 w-28 text-end" currency="" />
                     <button type="button" aria-label={t('orderForm.items.remove', { name: l.name })} onClick={() => setLines((x) => x.filter((_, j) => j !== i))} className="p-1 text-text-muted hover:text-text-primary">

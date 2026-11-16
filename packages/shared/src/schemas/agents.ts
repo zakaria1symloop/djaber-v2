@@ -402,6 +402,8 @@ export type PlaygroundToolCall = { name: string; args: unknown; result: unknown;
 export type PlaygroundTurnDto = {
   turnId: string;
   sessionId: string;
+  /** the customer message the server sent for a scenario (full-test 15/11 AGENTS-03) */
+  customerText?: string;
   reply: string;
   status: (typeof AI_REPLY_STATUSES)[number];
   statusDetail: string | null;

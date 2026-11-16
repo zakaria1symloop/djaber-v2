@@ -23,10 +23,17 @@ describe('onboarding preset cards', () => {
       { key: 'mode', name: 'Mode', tagline: 'Boutiques de mode', badge: 'popular' },
     ]);
     expect(cards.map((c) => [c.key, c.staticKey, c.recommended])).toEqual([
-      ['service-client', 'serviceClient', false],
+      // official presets first, in the frame's order (ONBOARDING-01)
       ['vendeur-pro', 'vendeurPro', true],
+      ['service-client', 'serviceClient', false],
       ['mode', null, false],
     ]);
     expect(presetCards([{ key: 'a', name: 'A', tagline: null, badge: null }])[0]!.recommended).toBe(true);
+  });
+  it('full-test 16/11 ONBOARDING-01: the four official presets come first, whatever the server order', () => {
+    const p = (key: string) => ({ key, name: key, tagline: null, badge: null });
+    const cards = presetCards([p('test'), p('testtest'), p('vendeur-pro'), p('mohamed-b'), p('service-client'), p('conseiller-produit'), p('reponse-express')]);
+    expect(cards.map((c) => c.key)).toEqual(['vendeur-pro', 'service-client', 'conseiller-produit', 'reponse-express']);
+    expect(presetCards([p('test'), p('vendeur-pro')]).map((c) => c.key)).toEqual(['vendeur-pro', 'test']);
   });
 });

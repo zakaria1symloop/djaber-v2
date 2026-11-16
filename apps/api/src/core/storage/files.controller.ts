@@ -2,7 +2,7 @@ import { Controller, Get, Param, Query, Res } from '@nestjs/common';
 import { Public } from '../auth/decorators';
 import { AppException } from '../errors/app.exception';
 import { ConfigService } from '../config/config.service';
-import { StorageService } from './storage.service';
+import { isPrivateKey, StorageService } from './storage.service';
 
 /** `filename*` of a Content-Disposition header (RFC 6266 / 5987) with an ASCII fallback. */
 export const contentDisposition = (kind: 'attachment' | 'inline', fileName: string) => {
@@ -28,11 +28,11 @@ export class FilesController {
     const k = Array.isArray(key) ? key.join('/') : key;
     const e = Number(exp);
     const signed = !!sig && !!e && e >= Date.now() / 1000 && sig === this.storage.sign(k, e);
-    if (k.startsWith('private/') ? !signed : !signed && this.config.get('STORAGE_DRIVER') !== 'local') throw new AppException('NOT_FOUND');
+    if (isPrivateKey(k) ? !signed : !signed && this.config.get('STORAGE_DRIVER') !== 'local') throw new AppException('NOT_FOUND');
     try {
       const { body, mime } = await this.storage.get(k);
       res.setHeader('Content-Type', mime);
-      res.setHeader('Cache-Control', k.startsWith('private/') ? 'private, no-store' : 'public, max-age=31536000, immutable');
+      res.setHeader('Cache-Control', isPrivateKey(k) ? 'private, no-store' : 'public, max-age=31536000, immutable');
       res.setHeader('X-Content-Type-Options', 'nosniff');
       if (dl !== undefined) res.setHeader('Content-Disposition', contentDisposition('attachment', dl.trim() || k.split('/').pop()!));
       res.end(body);

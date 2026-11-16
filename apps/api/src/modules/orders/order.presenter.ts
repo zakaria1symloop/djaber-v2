@@ -149,7 +149,8 @@ export const orderActions = (o: Pick<Order, 'status' | 'deliveryStatus' | 'payme
     act('callback', 'orders.write', { reason: terminal ? 'ORDER_TERMINAL' : !['new', 'confirmed', 'preparing'].includes(o.status) ? notAllowed(o.status) : null, shortcut: 'R' }),
     act('open_conversation', 'inbox.read', { reason: o.conversationId ? null : 'NOT_FOUND', shortcut: 'M' }),
     act('edit', 'orders.write', { reason: readOnly ? 'ORDER_TERMINAL' : null, shortcut: 'E' }),
-    act('edit_address', 'orders.write', { reason: terminal ? 'ORDER_TERMINAL' : state.courierParcel ? 'COURIER_ADDRESS_LOCKED' : null }),
+    // full-test 15/11 ORDERS-04: a delivered order is read-only too (its address / phone 2 could still be changed)
+    act('edit_address', 'orders.write', { reason: readOnly ? 'ORDER_TERMINAL' : state.courierParcel ? 'COURIER_ADDRESS_LOCKED' : null }),
     act('assign', 'orders.write', { shortcut: 'A' }),
     act('record_payment', 'orders.write', { reason: recordPaymentRefusal(o) }),
     act('print', 'orders.read', { shortcut: 'P' }),

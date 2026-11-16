@@ -5,7 +5,10 @@ import type { AppLocale } from '@djaber/shared';
 import type { Metadata } from 'next';
 
 export const SITE_LOCALES: readonly AppLocale[] = ['fr', 'ar', 'en'];
-export const SITE_URL = (process.env.PUBLIC_WEB_URL || 'http://localhost:3010').replace(/\/+$/, '');
+// full-test 15/11 PUBLIC-01: the live site had no PUBLIC_WEB_URL, so canonical / hreflang / og:url / sitemap / robots said
+// http://localhost:3010 — on Vercel the production domain (system variable) is used when PUBLIC_WEB_URL is not set
+const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+export const SITE_URL = (process.env.PUBLIC_WEB_URL || (vercelHost ? `https://${vercelHost}` : 'http://localhost:3010')).replace(/\/+$/, '');
 export const SITE_NAME = 'Djaber.ai';
 
 /** Indexable public paths (without locale prefix) listed in the sitemap. */

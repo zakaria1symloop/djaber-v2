@@ -484,7 +484,14 @@ export function NotesBlock({ order, onAdd, canWrite }: { order: Order; onAdd: (b
           </div>
         </div>
       ) : null}
-      {notes.length === 0 && !open ? <p className="px-4 py-4 ts-label-meta text-text-muted">{t('orders.page.noNotes')}</p> : null}
+      {/* full-test 15/11 ORDERS-02: the note typed in the order form (« Notes internes ») is shown first */}
+      {order.notes?.trim() ? (
+        <div className="px-4 py-3" data-testid="order-form-note">
+          <p dir="auto" className="whitespace-pre-wrap text-[13px]">{order.notes}</p>
+          <div className="mt-1 ts-label-micro text-text-muted">{t('orders.page.formNote')}</div>
+        </div>
+      ) : null}
+      {notes.length === 0 && !open && !order.notes?.trim() ? <p className="px-4 py-4 ts-label-meta text-text-muted">{t('orders.page.noNotes')}</p> : null}
       {notes.map((n) => (
         <div key={n.id} className="px-4 py-3">
           <p className="text-[13px]">{n.body}</p>

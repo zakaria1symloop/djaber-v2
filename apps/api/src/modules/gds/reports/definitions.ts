@@ -181,8 +181,8 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     const lines = str(ctx, 'groupBy') === 'product' ? byProduct(sold) : sold;
     const total = lines.reduce((s, l) => s + l.revenue, 0);
     const cogs = lines.reduce((s, l) => s + l.cogs, 0);
-    const rows: ReportRow[] = lines.map((l) => ({ product: l.product, variant: l.variant, sku: l.sku, category: l.category, quantity: l.qty, revenue: l.revenue, cogs: l.cogs, margin: l.revenue - l.cogs, marginPct: pct(l.revenue - l.cogs, l.revenue), sharePct: pct(l.revenue, total), _ref: productRef(l.pid) }));
-    return { rows, kpis: { revenue: total, quantity: lines.reduce((s, l) => s + l.qty, 0), products: new Set(lines.map((l) => l.pid)).size, marginPct: pct(total - cogs, total) } };
+    const rows: ReportRow[] = lines.map((l) => ({ product: l.product, variant: l.variant, sku: l.sku, category: l.category, quantity: l.qty, grossSales: l.revenue, cogs: l.cogs, margin: l.revenue - l.cogs, marginPct: pct(l.revenue - l.cogs, l.revenue), sharePct: pct(l.revenue, total), _ref: productRef(l.pid) }));
+    return { rows, kpis: { grossSales: total, quantity: lines.reduce((s, l) => s + l.qty, 0), products: new Set(lines.map((l) => l.pid)).size, marginPct: pct(total - cogs, total) } };
   },
 
   async sales_by_category(ctx) {
@@ -197,8 +197,8 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
       by.set(k, e);
     }
     const total = lines.reduce((s, l) => s + l.revenue, 0);
-    const rows: ReportRow[] = [...by.values()].map((e) => ({ category: e.name, quantity: e.qty, revenue: e.revenue, cogs: e.cogs, margin: e.revenue - e.cogs, sharePct: pct(e.revenue, total), _ref: e.cid ? { type: 'category', id: e.cid } : null }));
-    return { rows, kpis: { revenue: total, quantity: lines.reduce((s, l) => s + l.qty, 0), categories: by.size } };
+    const rows: ReportRow[] = [...by.values()].map((e) => ({ category: e.name, quantity: e.qty, grossSales: e.revenue, cogs: e.cogs, margin: e.revenue - e.cogs, sharePct: pct(e.revenue, total), _ref: e.cid ? { type: 'category', id: e.cid } : null }));
+    return { rows, kpis: { grossSales: total, quantity: lines.reduce((s, l) => s + l.qty, 0), categories: by.size } };
   },
 
   async top_products(ctx) {
@@ -212,8 +212,8 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
       by.set(l.pid, e);
     }
     const sorted = [...by.values()].sort((a, b) => b.qty - a.qty || b.revenue - a.revenue);
-    const rows: ReportRow[] = sorted.map((e, i) => ({ rank: i + 1, product: e.product, sku: e.sku, category: e.category, quantity: e.qty, orders: e.docs, revenue: e.revenue, _ref: productRef(e.pid) }));
-    return { rows, kpis: { quantity: sumOf(rows, 'quantity'), revenue: sumOf(rows, 'revenue'), products: rows.length } };
+    const rows: ReportRow[] = sorted.map((e, i) => ({ rank: i + 1, product: e.product, sku: e.sku, category: e.category, quantity: e.qty, orders: e.docs, grossSales: e.revenue, _ref: productRef(e.pid) }));
+    return { rows, kpis: { quantity: sumOf(rows, 'quantity'), grossSales: sumOf(rows, 'grossSales'), products: rows.length } };
   },
 
   async profit_loss(ctx) {
@@ -303,16 +303,20 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     const ids = (t: string) => entries.filter((e) => e.sourceType === t).map((e) => e.sourceId);
     const [orders, sales, purchases] = await Promise.all([
       prisma.order.findMany({ where: { id: { in: ids('order') } }, select: { id: true, number: true, clientName: true } }),
-      prisma.sale.findMany({ where: { id: { in: ids('sale') } }, select: { id: true, number: true, customerName: true, client: { select: { name: true } } } }),
-      prisma.purchase.findMany({ where: { id: { in: ids('purchase') } }, select: { id: true, number: true, supplier: { select: { name: true } } } }),
+      prisma.sale.findMany({ where: { id: { in: ids('sale') } }, select: { id: true, number: true, status: true, customerName: true, client: { select: { name: true } } } }),
+      prisma.purchase.findMany({ where: { id: { in: ids('purchase') } }, select: { id: true, number: true, status: true, supplier: { select: { name: true } } } }),
     ]);
     const doc = new Map<string, { number: string; party: string | null }>([
       ...orders.map((o) => [o.id, { number: o.number, party: o.clientName }] as const),
       ...sales.map((s) => [s.id, { number: s.number, party: s.client?.name ?? s.customerName ?? ctx.walkIn }] as const),
       ...purchases.map((p) => [p.id, { number: p.number, party: p.supplier?.name ?? null }] as const),
     ]);
+    // full-test 15/11 ANALYTICS-02 (04 §4 « Cash collected » = completed sales): the money of a cancelled sale / purchase is not
+    // collected / paid (a refunded 300 000 DA sale made « ENCAISSÉ 326 522 » against 19 722 in Statistiques)
+    const cancelled = new Set([...sales, ...purchases].filter((d) => d.status === 'cancelled').map((d) => d.id));
     const q = str(ctx, 'q')?.toLowerCase();
     const rows: ReportRow[] = entries
+      .filter((e) => !cancelled.has(e.sourceId))
       .map((e) => {
         const d = doc.get(e.sourceId);
         return { date: iso(e.paidAt), documentType: e.sourceType, number: d?.number ?? null, party: d?.party ?? null, method: reportMethod(e.method, e.sourceType), direction: e.sourceType === 'purchase' ? 'out' : 'in', amount: e.amount, reference: e.reference, _ref: { type: e.sourceType as 'order' | 'sale' | 'purchase', id: e.sourceId } };

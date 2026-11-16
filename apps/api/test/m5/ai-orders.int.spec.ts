@@ -41,6 +41,18 @@ const createCall = (s: Shop, over: Record<string, unknown> = {}) => ({
   args: { clientName: 'Amine Benali', clientPhone: '0555 12 34 56', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'Cité des 200 logements, Bt 4, Bab Ezzouar', items: [{ productId: s.robe.id, quantity: 1 }], customerConfirmed: true, ...over },
 });
 const lastResult = (runs: Awaited<ReturnType<typeof runsOf>>) => runs.at(-1)!.toolCalls.sort((a, b) => a.executedAt!.getTime() - b.executedAt!.getTime()).at(-1)!.result as any;
+/**
+ * Full-test 15/11 AI-CHAT-01: an order needs the server's recap in an EARLIER turn — the customer gives the details
+ * (with the phone), create_order answers CONFIRMATION_REQUIRED + recap, the AI shows it; the « oui » comes next.
+ */
+const recap = async (s: Shop, sender: string, over: Record<string, unknown> = {}) => {
+  const call = createCall(s, over);
+  fakeAi(app).script('reply', { toolCalls: [call] }, { reply: 'Récapitulatif : Robe satin bordeaux, livraison, total. Vous confirmez ?', intent: 'SALE' });
+  const t = await turn(s, sender, `Amine Benali, ${(call.args as { clientPhone: string }).clientPhone}, Bab Ezzouar, Cité des 200 logements`);
+  expect(lastResult(t.runs)).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft: expect.any(String) }, recap: { clientName: 'Amine Benali' } });
+  await resetAi();
+  return t;
+};
 
 beforeAll(async () => {
   app = await createTestApp();
@@ -59,8 +71,10 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const s = await shop();
     expect(s.agent).toMatchObject({ maxQtyPerOrder: null, maxAmountPerOrder: null });
     const hijab = await createProduct(s.owner, { name: 'Hijab soie', price: 5000, stock: 40 });
+    const buyer = newSender();
+    await recap(s, buyer, { items: [{ productId: hijab.id, quantity: 12 }] });
     fakeAi(app).script('reply', { toolCalls: [createCall(s, { items: [{ productId: hijab.id, quantity: 12 }] })] }, { reply: 'Commande enregistrée.', status: 'OK', intent: 'SALE' });
-    const t = await turn(s, newSender(), 'oui je confirme');
+    const t = await turn(s, buyer, 'oui je confirme');
     expect(lastResult(t.runs)).toMatchObject({ ok: true, subtotal: 60_000 });
     expect(t.conversation.status).toBe('active');
     expect(await db.order.findFirstOrThrow({ where: { workspaceId: s.owner.workspaceId }, include: { items: true } })).toMatchObject({ subtotal: 60_000, items: [expect.objectContaining({ quantity: 12 })] });
@@ -69,7 +83,7 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const capped = await shop({ maxQtyPerOrder: 10 });
     const h2 = await createProduct(capped.owner, { name: 'Hijab soie', price: 1500, stock: 40 });
     fakeAi(app).script('reply', { toolCalls: [createCall(capped, { items: [{ productId: h2.id, quantity: 12 }] })] }, { reply: 'Je transmets.', status: 'HANDOFF', statusDetail: 'order_limits', intent: 'SALE' });
-    const refused = await turn(capped, newSender(), 'oui');
+    const refused = await turn(capped, newSender(), 'Amine Benali, 0555 12 34 56, 12 pièces');
     expect(lastResult(refused.runs)).toEqual({ ok: false, hint: 'order_limit', maxQty: 10, maxAmount: null });
     expect(await db.order.count({ where: { workspaceId: capped.owner.workspaceId } })).toBe(0);
   });
@@ -78,8 +92,9 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const s = await shop();
     // the phone already belongs to a client of the shop (an earlier manual order)
     const existing = await db.client.create({ data: { workspaceId: s.owner.workspaceId, name: 'Amine B.', phone: '0555123456', source: 'manual' } });
-    fakeAi(app).script('reply', { toolCalls: [createCall(s)] }, { reply: 'Votre commande est enregistrée ✓', intent: 'SALE' });
     const sender = newSender();
+    await recap(s, sender);
+    fakeAi(app).script('reply', { toolCalls: [createCall(s)] }, { reply: 'Votre commande est enregistrée ✓', intent: 'SALE' });
     const t = await turn(s, sender, 'نعم');
     const r = lastResult(t.runs);
     expect(r).toMatchObject({ ok: true, number: 'CMD-1001', subtotal: 4500, deliveryFee: 400, total: 4900, duplicateOf: null, paymentOptions: ['cod'], items: [{ name: 'Robe satin bordeaux', quantity: 1, unitPrice: 4500 }] });
@@ -102,15 +117,16 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     await work(app, [s.owner.workspaceId]);
     const n = await db.notification.findFirstOrThrow({ where: { workspaceId: s.owner.workspaceId, type: 'order_ai_created' } });
     expect(n.data).toMatchObject({ orderId: order.id, number: 'CMD-1001', total: expect.stringContaining('900'), agent: 'Vendeur', client: 'Amine Benali' });
-    // credits: one text reply, nothing for the order
-    expect((await ledger(s.owner.workspaceId)).filter((l) => l.kind === 'debit').map((l) => [l.action, l.credits])).toEqual([['text_reply', -1]]);
-    expect(t.runs[0]).toMatchObject({ status: 'ok', creditsCharged: 1 });
+    // credits: one text reply per turn (the recap, the confirmation), nothing for the order
+    expect((await ledger(s.owner.workspaceId)).filter((l) => l.kind === 'debit').map((l) => [l.action, l.credits])).toEqual([['text_reply', -1], ['text_reply', -1]]);
+    expect(t.runs.at(-1)).toMatchObject({ status: 'ok', creditsCharged: 1 });
     expect(t.conversation.status).toBe('active');
   });
 
   it('AT-AI-05 the job crashes after `create_order`, before the send ⇒ the retry replays the stored result: one order, one send', async () => {
     const s = await shop();
     const sender = newSender();
+    await recap(s, sender);
     const { conversation } = await receive(app, s.page, sender, { text: 'oui je confirme' });
     fakeAi(app).script('reply', { toolCalls: [{ ...createCall(s), id: 'call_a' }] }, { error: 'provider_error' }, { error: 'provider_error' });
     const data = (await replyJob(app, conversation.id))!.data as never;
@@ -125,7 +141,7 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     expect(fakeMeta(app).callsOf('send').filter((c) => (c.args as any).recipientId === sender && String((c.args as any).message.text).includes('CMD-1001'))).toHaveLength(1);
     // the port itself is idempotent on runId:callId too (api-contract §1.7)
     const port = app.app.get<OrderTools>(ORDER_TOOLS);
-    const [run] = await runsOf(conversation.id);
+    const run = (await runsOf(conversation.id)).at(-1);
     const stored = run!.toolCalls[0]!;
     const again = await (await import('@djaber/db')).TenantContext.runAs(s.owner.workspaceId, () => port.createOrder({ workspaceId: s.owner.workspaceId, agentId: s.agent.id, conversationId: conversation.id, clientId: null, channelId: s.page.id, runId: run!.id, callId: stored.callId }, {} as never));
     expect(again).toMatchObject({ ok: true, number: 'CMD-1001' });
@@ -134,6 +150,7 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
   it('AT-AI-06 the same customer confirms the identical cart twice within 10 min ⇒ the existing order comes back (duplicateOf)', async () => {
     const s = await shop();
     const sender = newSender();
+    await recap(s, sender);
     fakeAi(app).script('reply', { toolCalls: [createCall(s)] }, { reply: 'OK', intent: 'SALE' });
     await turn(s, sender, 'oui');
     await resetAi();
@@ -147,6 +164,7 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
   it('AT-AI-07 "annuler ma commande": a new order ⇒ cancelled through OrderEffects (its hold released); a shipped order ⇒ handoff', async () => {
     const s = await shop();
     const sender = newSender();
+    await recap(s, sender);
     fakeAi(app).script('reply', { toolCalls: [createCall(s)] }, { reply: 'OK', intent: 'SALE' });
     const first = await turn(s, sender, 'oui');
     const orderId = lastResult(first.runs).orderId;
@@ -164,6 +182,7 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     // shipped ⇒ not cancellable ⇒ the thread goes to the team
     const other = newSender();
     await resetAi();
+    await recap(s, other, { clientPhone: '0666 11 22 33' });
     fakeAi(app).script('reply', { toolCalls: [createCall(s, { clientPhone: '0666 11 22 33' })] }, { reply: 'OK', intent: 'SALE' });
     const second = await turn(s, other, 'oui');
     await db.order.update({ where: { id: lastResult(second.runs).orderId }, data: { status: 'shipped', deliveryStatus: 'sent' } });
@@ -177,12 +196,14 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const s = await shop();
     await db.product.update({ where: { id: s.robe.id }, data: { stock: 2 } });
     const sender = newSender();
+    await recap(s, sender);
     fakeAi(app).script('reply', { toolCalls: [createCall(s)] }, { reply: 'OK', intent: 'SALE' });
     const first = await turn(s, sender, 'oui');
     const oldId = lastResult(first.runs).orderId;
     expect(await held(s)).toBe(1);
     // 2 units wanted: possible only because the replaced order's unit is given back
     await resetAi();
+    await recap(s, sender, { items: [{ productId: s.robe.id, quantity: 2 }], replacesOrder: 'CMD-1001' });
     fakeAi(app).script('reply', { toolCalls: [{ ...createCall(s, { items: [{ productId: s.robe.id, quantity: 2 }], replacesOrder: 'CMD-1001' }), id: 'call_replace' }] }, { reply: 'Commande modifiée.', intent: 'SALE' });
     const change = await turn(s, sender, 'oui finalement 2');
     const replaced = lastResult(change.runs);
@@ -207,16 +228,20 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
   it('a blocked customer ⇒ CUSTOMER_BLOCKED, no order, silent handoff (04 §13); risky client with RISKY_CLIENT_POLICY=handoff ⇒ handoff', async () => {
     const s = await shop();
     await s.owner.post('/safety/blocks', { phone: '0555123456', reason: 'fraud' }).expect(201);
+    const blocked = newSender();
+    await recap(s, blocked);
     fakeAi(app).script('reply', { toolCalls: [createCall(s)] }, { reply: 'Je transmets à un conseiller.', intent: 'SALE' });
-    const t = await turn(s, newSender(), 'oui');
+    const t = await turn(s, blocked, 'oui');
     expect(lastResult(t.runs)).toMatchObject({ ok: false, error: { code: 'CUSTOMER_BLOCKED' } });
     expect(t.conversation.status).toBe('needs_human');
     expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(0);
 
     const r = await shop({ riskyClientBehavior: 'handoff' });
     await db.client.create({ data: { workspaceId: r.owner.workspaceId, name: 'Client risqué', phone: '0777000111', riskLevel: 'high', riskSetManually: true } });
+    const riskySender = newSender();
+    await recap(r, riskySender, { clientPhone: '0777000111' });
     fakeAi(app).script('reply', { toolCalls: [createCall(r, { clientPhone: '0777000111' })] }, { reply: 'Je transmets.', intent: 'SALE' });
-    const risky = await turn(r, newSender(), 'oui');
+    const risky = await turn(r, riskySender, 'oui');
     expect(lastResult(risky.runs)).toEqual({ ok: false, hint: 'risky_client' });
     expect(risky.conversation.status).toBe('needs_human');
     expect(await db.order.count({ where: { workspaceId: r.owner.workspaceId } })).toBe(0);
@@ -227,11 +252,19 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const number = phone();
     const c = await db.client.create({ data: { workspaceId: s.owner.workspaceId, name: 'Ancien client', phone: number } });
     await db.order.create({ data: { workspaceId: s.owner.workspaceId, number: 'CMD-500', clientId: c.id, source: 'manual', clientName: c.name, clientPhone: number, subtotal: 1, total: 1, status: 'cancelled', cancelReason: 'fake' } });
-    fakeAi(app).script('reply', { toolCalls: [createCall(s, { clientPhone: number })] }, { toolCalls: [createCall(s, { clientPhone: number, phoneConfirmed: true })] }, { reply: 'Commande enregistrée', intent: 'SALE' });
-    const t = await turn(s, newSender(), 'oui');
-    const results = t.runs[0]!.toolCalls.sort((a, b) => a.executedAt!.getTime() - b.executedAt!.getTime()).map((x) => x.result as any);
+    const sender = newSender();
+    await recap(s, sender, { clientPhone: number });
+    // full-test 15/11 AI-CHAT-03: a phoneConfirmed the tool did not ask for in an earlier turn is not honoured
+    fakeAi(app).script('reply', { toolCalls: [createCall(s, { clientPhone: number })] }, { toolCalls: [createCall(s, { clientPhone: number, phoneConfirmed: true })] }, { reply: 'Vous confirmez bien ce numéro ?', intent: 'SALE' });
+    const t = await turn(s, sender, 'oui');
+    const results = t.runs.at(-1)!.toolCalls.sort((a, b) => a.executedAt!.getTime() - b.executedAt!.getTime()).map((x) => x.result as any);
     expect(results[0]).toMatchObject({ ok: false, error: { code: 'PHONE_CONFIRMATION_REQUIRED', phone: number } });
-    expect(results[1]).toMatchObject({ ok: true, number: 'CMD-1001' });
+    expect(results[1]).toMatchObject({ ok: false, error: { code: 'PHONE_CONFIRMATION_REQUIRED', phone: number } });
+    // the customer re-confirms the number in the next message ⇒ the order is created
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [createCall(s, { clientPhone: number, phoneConfirmed: true })] }, { reply: 'Commande enregistrée', intent: 'SALE' });
+    const ok = await turn(s, sender, 'oui c’est bien mon numéro');
+    expect(lastResult(ok.runs)).toMatchObject({ ok: true, number: 'CMD-1001' });
   });
 
   it('AT-ORD-21 Messenger and Instagram AI orders are identical except the channel', async () => {

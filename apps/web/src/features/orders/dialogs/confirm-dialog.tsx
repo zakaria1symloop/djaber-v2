@@ -9,6 +9,7 @@ import { Phone } from 'lucide-react';
 import { useState } from 'react';
 import { actionState } from '@/lib/actions';
 import { useT } from '@/lib/i18n';
+import { useSession } from '@/lib/session';
 import { ORDER_ACTION } from '../action-keys';
 import { ordersApi } from '../api';
 import { ORDER_NO_ANSWER_PROPOSAL_AT, type Order } from '../contracts';
@@ -53,11 +54,13 @@ export function ConfirmOrderDialog({ order, open, onClose, onDone, onAddress, on
   const [outcome, setOutcome] = useState<OutcomeValue>(emptyOutcome());
   const [touched, setTouched] = useState(false);
   const [fresh, setFresh] = useState<Order | null>(null);
+  const [statusAtOpen, setStatusAtOpen] = useState(order.status);
   useOnOpen(open, () => {
     setStep(mode === 'log' ? 'call' : 'review');
     setOutcome(mode === 'confirm' ? { ...emptyOutcome(), result: 'picked_up' } : emptyOutcome());
     setTouched(false);
     setFresh(null);
+    setStatusAtOpen(order.status);
   });
   const missing = addressMissing(order);
   const checks = confirmChecks(order);
@@ -91,6 +94,10 @@ export function ConfirmOrderDialog({ order, open, onClose, onDone, onAddress, on
   const result = fresh ?? order;
   const prepare = actionState(result.actions, ORDER_ACTION.prepare, t);
   const send = actionState(result.actions, ORDER_ACTION.sendToCourier, t);
+  // full-test 15/11 ORDERS-06: with « envoi automatique au transporteur » on, confirming queues the parcel — said here, and no
+  // second manual send is offered
+  const { workspace } = useSession();
+  const autoSent = !!workspace?.autoSendToCourier && fresh?.status === 'confirmed' && statusAtOpen === 'new';
   const resultText = (() => {
     if (!fresh) return '';
     if (fresh.status === 'cancelled') return t('orders.confirm.result.cancelled', { number: fresh.number });
@@ -133,7 +140,7 @@ export function ConfirmOrderDialog({ order, open, onClose, onDone, onAddress, on
             {t('action.prepare')}
           </Button>
         ) : null}
-        {send.present ? (
+        {send.present && !autoSent ? (
           <Tooltip content={send.reason ?? t('action.sendToCourier')}>
             <span>
               <Button onClick={() => onSendToCourier(result)} disabled={!send.enabled} data-testid="confirm-send">
@@ -217,8 +224,8 @@ export function ConfirmOrderDialog({ order, open, onClose, onDone, onAddress, on
         {step === 'result' ? (
           <div className="flex flex-col gap-2" data-testid="confirm-result">
             <p className="text-[14px] font-medium">{resultText}</p>
-            {fresh?.status === 'confirmed' ? <p className="ts-label-meta text-text-muted">{t('orders.confirm.result.next')}</p> : null}
-            {send.present && !send.enabled && send.reason ? <p className="ts-label-micro !normal-case text-text-muted">{t('action.sendToCourier')} : {send.reason}</p> : null}
+            {fresh?.status === 'confirmed' ? <p className="ts-label-meta text-text-muted" data-testid="confirm-next-step">{t(autoSent ? 'orders.confirm.result.autoSend' : 'orders.confirm.result.next')}</p> : null}
+            {send.present && !autoSent && !send.enabled && send.reason ? <p className="ts-label-micro !normal-case text-text-muted">{t('action.sendToCourier')} : {send.reason}</p> : null}
             {fresh?.confirmationStatus === 'no_answer' && fresh.callAttempts >= ORDER_NO_ANSWER_PROPOSAL_AT ? <p className="ts-label-meta text-accent-starred">{t('orders.call.thirdNoAnswer')}</p> : null}
           </div>
         ) : null}

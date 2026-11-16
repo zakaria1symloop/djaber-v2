@@ -112,35 +112,41 @@ export const REPORT_DEFINITIONS: Record<ReportKey, ReportDefinition> = {
     filters: [],
     defaultSort: 'day',
   },
+  // full-test 15/11 ANALYTICS-03: line amounts before document discounts / without delivery fees — not the named figure
+  // « Revenus » of 04 §4 (it showed 23 692 next to 19 722 for the same days)
   sales_by_product: {
     key: 'sales_by_product',
     group: 'sales',
     simple: true,
     period: 'range',
-    columns: [product, variant, sku, category, c('quantity', 'int', { sum: true }), c('revenue', 'money', { sum: true }), c('cogs', 'money', { sum: true, advanced: true }), c('margin', 'money', { sum: true, advanced: true }), c('marginPct', 'pct', { advanced: true }), c('sharePct', 'pct')],
-    kpis: [k('revenue', 'money', { figure: 'revenue' }), k('quantity', 'count'), k('products', 'count'), k('marginPct', 'pct', { advanced: true })],
-    chart: { type: 'bar', x: 'product', y: ['revenue'] },
+    columns: [product, variant, sku, category, c('quantity', 'int', { sum: true }), c('grossSales', 'money', { sum: true }), c('cogs', 'money', { sum: true, advanced: true }), c('margin', 'money', { sum: true, advanced: true }), c('marginPct', 'pct', { advanced: true }), c('sharePct', 'pct')],
+    kpis: [k('grossSales', 'money'), k('quantity', 'count'), k('products', 'count'), k('marginPct', 'pct', { advanced: true })],
+    chart: { type: 'bar', x: 'product', y: ['grossSales'] },
     filters: ['categoryId', 'productId', 'source', 'channelId', 'groupBy', 'q'],
-    defaultSort: '-revenue',
+    defaultSort: '-grossSales',
   },
+  // full-test 15/11 ANALYTICS-03: line amounts before document discounts / without delivery fees — not the named figure
+  // « Revenus » of 04 §4 (it showed 23 692 next to 19 722 for the same days)
   sales_by_category: {
     key: 'sales_by_category',
     group: 'sales',
     simple: true,
     period: 'range',
-    columns: [category, c('quantity', 'int', { sum: true }), c('revenue', 'money', { sum: true }), c('cogs', 'money', { sum: true, advanced: true }), c('margin', 'money', { sum: true, advanced: true }), c('sharePct', 'pct')],
-    kpis: [k('revenue', 'money', { figure: 'revenue' }), k('quantity', 'count'), k('categories', 'count')],
-    chart: { type: 'donut', x: 'category', y: ['revenue'] },
+    columns: [category, c('quantity', 'int', { sum: true }), c('grossSales', 'money', { sum: true }), c('cogs', 'money', { sum: true, advanced: true }), c('margin', 'money', { sum: true, advanced: true }), c('sharePct', 'pct')],
+    kpis: [k('grossSales', 'money'), k('quantity', 'count'), k('categories', 'count')],
+    chart: { type: 'donut', x: 'category', y: ['grossSales'] },
     filters: ['source', 'channelId'],
-    defaultSort: '-revenue',
+    defaultSort: '-grossSales',
   },
+  // full-test 15/11 ANALYTICS-03: line amounts before document discounts / without delivery fees — not the named figure
+  // « Revenus » of 04 §4 (it showed 23 692 next to 19 722 for the same days)
   top_products: {
     key: 'top_products',
     group: 'sales',
     simple: true,
     period: 'range',
-    columns: [c('rank', 'int'), product, sku, category, c('quantity', 'int', { sum: true }), c('orders', 'int', { sum: true }), c('revenue', 'money', { sum: true })],
-    kpis: [k('quantity', 'count'), k('revenue', 'money', { figure: 'revenue' }), k('products', 'count')],
+    columns: [c('rank', 'int'), product, sku, category, c('quantity', 'int', { sum: true }), c('orders', 'int', { sum: true }), c('grossSales', 'money', { sum: true })],
+    kpis: [k('quantity', 'count'), k('grossSales', 'money'), k('products', 'count')],
     chart: { type: 'bar', x: 'product', y: ['quantity'] },
     filters: ['categoryId', 'source', 'channelId', 'q'],
     defaultSort: '-quantity',

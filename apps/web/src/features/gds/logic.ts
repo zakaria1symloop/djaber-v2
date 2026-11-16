@@ -2,6 +2,7 @@
 // the receive dialog summary, the inventory variance rule (04 §19), the expense margin preview (EXP-01/02), the cash
 // period selection (09 §4: pills, table and KPIs read the same parameters) and small labels.
 import { inventoryNeedsNote, inventoryVariancePct, roundHalfUp } from '@djaber/shared';
+import { integerOf } from '@djaber/ui';
 import { addDays, algiersDay } from '@/features/catalog/stock/logic';
 import { algiersInstant } from '@/features/orders/logic';
 import type { GdsPeriodKey } from './contracts';
@@ -9,7 +10,8 @@ import type { GdsPeriodKey } from './contracts';
 /* ---------- money ---------- */
 export const int = (s: string | number | null | undefined): number => {
   if (typeof s === 'number') return Number.isFinite(s) ? Math.trunc(s) : 0;
-  const n = Number(String(s ?? '').replace(/\D/g, ''));
+  // full-test 15/11: the text of a NumberInput (digits, maybe a leading « - ») — never digits glued from « 2,5 » or a lost sign
+  const n = integerOf(String(s ?? '').replace(/[\s  ]/g, '')) ?? 0;
   return Number.isFinite(n) ? n : 0;
 };
 

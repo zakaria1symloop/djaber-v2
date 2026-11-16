@@ -688,6 +688,7 @@
  "validation.price": "Selling price required (> 0)",
  "validation.quantity": "Invalid quantity",
  "validation.range": "Value out of range ({min}–{max})",
+ "validation.url": "Invalid URL (https://…)",
  "validation.required": "Required field",
  "validation.sku_taken": "SKU already in use",
  "validation.url_https": "HTTPS required",

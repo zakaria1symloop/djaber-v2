@@ -22,13 +22,13 @@ export type Column<Row> = {
   /** numbers, phones, SKUs: wrapped in <Ltr> */
   ltr?: boolean;
   /** hidden under this breakpoint (secondary columns at 1024) */
-  hideBelow?: 'lg' | 'xl';
+  hideBelow?: 'lg' | 'xl' | '2xl';
   /** false ⇒ not listed in the column picker (name, actions) */
   hideable?: boolean;
   className?: string;
 };
 
-const HIDE: Record<NonNullable<Column<unknown>['hideBelow']>, string> = { lg: 'max-lg:hidden', xl: 'max-xl:hidden' };
+const HIDE: Record<NonNullable<Column<unknown>['hideBelow']>, string> = { lg: 'max-lg:hidden', xl: 'max-xl:hidden', '2xl': 'max-2xl:hidden' };
 
 export function DataTable<Row>({
   columns,

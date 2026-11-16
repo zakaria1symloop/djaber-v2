@@ -58,9 +58,18 @@ export class SaleEffects {
     return clearPayments(tx, this.outbox, 'sale', saleId);
   }
 
-  /** Cancel with refund: the money taken goes back out through one locked `refund` expense row. */
-  refund(tx: Tx, sale: Pick<Sale, 'id' | 'number' | 'amountPaid' | 'paymentMethod'>, reason: string) {
-    return writeRefund(tx, this.outbox, { sourceId: sale.id, number: sale.number, amount: sale.amountPaid, method: sale.paymentMethod, description: storedText('stored.cash.saleRefund', { number: sale.number, reason }) });
+  /**
+   * Cancel with refund: the money taken goes back out through locked `refund` expense rows — one per payment method, as it
+   * was taken (full-test 15/11 SALES-CASH-04: 200 Espèces + 100 Virement came back as −300 Espèces, so the drawer's
+   * theoretical cash was 100 DA too low).
+   */
+  async refund(tx: Tx, sale: Pick<Sale, 'id' | 'number' | 'amountPaid' | 'paymentMethod'>, reason: string) {
+    const entries = await tx.paymentEntry.findMany({ where: { sourceType: 'sale', sourceId: sale.id }, select: { amount: true, method: true }, orderBy: { createdAt: 'asc' } });
+    const byMethod = new Map<PaymentMethod, number>();
+    for (const e of entries) byMethod.set(e.method, (byMethod.get(e.method) ?? 0) + e.amount);
+    if (!entries.length) byMethod.set(sale.paymentMethod, sale.amountPaid);
+    const description = storedText('stored.cash.saleRefund', { number: sale.number, reason });
+    for (const [method, amount] of byMethod) await writeRefund(tx, this.outbox, { sourceId: sale.id, number: sale.number, amount, method, description });
   }
 
   recomputePaid(tx: Tx, sale: Pick<Sale, 'id' | 'total'>) {
