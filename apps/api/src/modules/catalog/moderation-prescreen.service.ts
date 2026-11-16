@@ -61,13 +61,25 @@ const latinCore = (w: string) => {
  * Whole-word hit (a letter or digit next to it ends the match): « drug » in « drug test » and « drugs », not in
  * « drugstore »; an Arabic word with its attached article / particles / endings too (« الخمر », « بالخمر », « مخدراتهم »).
  */
-export const containsWord = (hay: string, needles: readonly string[]) =>
-  needles.find((n) => {
-    const w = foldText(n).trim();
-    if (w.length <= 1) return false;
-    const core = ARABIC.test(w) ? `${AR_PREFIX}${escapeRe(w.replace(/^ال/, ''))}${AR_SUFFIX}` : latinCore(w);
-    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${core}(?:$|[^\\p{L}\\p{N}])`, 'u').test(hay);
-  }) ?? null;
+const wordRe = (n: string): RegExp | null => {
+  const w = foldText(n).trim();
+  if (w.length <= 1) return null;
+  const core = ARABIC.test(w) ? `${AR_PREFIX}${escapeRe(w.replace(/^ال/, ''))}${AR_SUFFIX}` : latinCore(w);
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}])(${core})(?:$|[^\\p{L}\\p{N}])`, 'u');
+};
+export const containsWord = (hay: string, needles: readonly string[]) => needles.find((n) => wordRe(n)?.test(hay) ?? false) ?? null;
+/**
+ * The listed word and the form the text actually holds (journey J02-9: « drogues » is listed, the title says « drogue » —
+ * the merchant is shown « drogue », the word to find and remove). The text is the folded one (no accents, lower case). An
+ * Arabic word keeps its listed spelling: the match carries the attached article / particles and the folded hamza.
+ */
+export const findWord = (hay: string, needles: readonly string[]): { listed: string; matched: string } | null => {
+  for (const n of needles) {
+    const m = wordRe(n)?.exec(hay);
+    if (m) return { listed: n, matched: ARABIC.test(n) ? n : (m[1] ?? n) };
+  }
+  return null;
+};
 
 /**
  * recette 09/11 (Badro, « VERY URGENT »): the name customers read — an agent's name / display name — never carries an
@@ -256,12 +268,12 @@ export class ModerationPrescreenService {
     if (containsAny(cat, ELECTRONICS) && !containsAny(desc, WARRANTY_WORDS)) add('missing_warranty', 'warranty', 'description');
     const penalty = flags.reduce((s, f) => s + (WEIGHTS[f.code] ?? 0), 0);
     // UX-034: a whole-word hit of the platform lists rejects at once (a hit inside another word only flags, for a human)
-    const bannedWord = containsWord(text, rules.words);
-    const bannedCategory = bannedWord ? null : containsWord(`${text} ${cat}`, rules.prohibited);
+    const bannedWord = findWord(text, rules.words);
+    const bannedCategory = bannedWord ? null : findWord(`${text} ${cat}`, rules.prohibited);
     const banned: BannedHit | undefined = bannedWord
-      ? { code: 'blocked_word', word: bannedWord, field: where(rules.words, containsWord) }
+      ? { code: 'blocked_word', word: bannedWord.matched, field: where(rules.words, containsWord) }
       : bannedCategory
-        ? { code: 'prohibited_category', word: bannedCategory, field: containsWord(cat, rules.prohibited) ? 'categoryId' : where(rules.prohibited, containsWord) }
+        ? { code: 'prohibited_category', word: bannedCategory.matched, field: containsWord(cat, rules.prohibited) ? 'categoryId' : where(rules.prohibited, containsWord) }
         : undefined;
     return {
       aiScore: Math.max(0, Math.round((1 - penalty) * 100) / 100),

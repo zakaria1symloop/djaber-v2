@@ -117,6 +117,23 @@ describe('preview', () => {
     expect(old.rows[1]!.errors).toEqual([]);
   });
 
+  it('journey J02-2: a price, cost, old price or stock above the form maximum is refused with the bound', () => {
+    const r = preview(['Nom', 'Prix', 'Ancien prix', 'Prix d achat', 'Stock', 'Poids'], [
+      ['Lustre', '1000000000', '', '', '1', ''],
+      ['Lustre 2', '100000000', '200000000', '100000001', '10000001', '1000001'],
+      ['Lustre 3', '100 000 000', '', '', '10000000', '1000000'],
+    ]);
+    expect(r.rows[0]!.errors).toEqual([{ field: 'price', code: 'validation.price_max' }]);
+    expect(r.rows[1]!.errors).toEqual([
+      { field: 'oldPrice', code: 'validation.price_max' },
+      { field: 'costPrice', code: 'validation.price_max' },
+      { field: 'stock', code: 'validation.quantity_max' },
+      { field: 'weightGrams', code: 'validation.range', params: { min: 0, max: expect.stringMatching(/^1\s000\s000$/) } },
+    ]);
+    expect(r.rows[2]!.errors).toEqual([]);
+    expect(r.totals).toMatchObject({ valid: 1, invalid: 2 });
+  });
+
   it('retest 11/11 UX-054: a value that is not a number is kept as typed for the error screen and file', () => {
     const r = preview(headers, [['A', 'Tapis', 'abc', '12x', '-3', '', '', '']]);
     expect(r.rows[0]!.values).toMatchObject({ price: 'abc', costPrice: '12x', stock: -3 });

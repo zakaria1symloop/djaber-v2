@@ -1,6 +1,6 @@
 // 04 §1.2 (+ D14, §21) status machine, §1.3 call outcomes, §1.4 payment / COD, §3 side-effect plan — pure functions,
 // no database. `OrderEffects` executes the plans; the unit tests (`order-rules.spec.ts`) cover every pair of the matrix.
-import { canTransition, derivePaymentStatus, ORDER_ADDRESS_REQUIRED_FOR, ORDER_BACKDATE_MAX_DAYS, ORDER_TERMINAL_STATUSES, parseStoredText, sendClosedCode, storedText, type CallResultName, type CancelReasonName, type OrderStatusName } from '@djaber/shared';
+import { canTransition, derivePaymentStatus, formatMoney, ORDER_ADDRESS_REQUIRED_FOR, ORDER_BACKDATE_MAX_DAYS, ORDER_TERMINAL_STATUSES, parseStoredText, sendClosedCode, storedText, type CallResultName, type CancelReasonName, type OrderStatusName } from '@djaber/shared';
 import type { ErrorCode } from '@djaber/shared';
 
 export type Role = 'owner' | 'admin' | 'operator' | undefined;
@@ -213,6 +213,41 @@ export const callPlan = (o: { status: OrderStatusName; deliveryStatus: string },
       return base;
   }
 };
+
+/**
+ * journey 16/11 J05-5: the « Articles » history line says what changed — the lines whose quantity, price or discount moved,
+ * before → after (« Robe kabyle ×2 → Robe kabyle ×3 »; a new line reads « ×0 → ×1 », a removed one « ×1 → ×0 »; the unit
+ * price is shown when it changed). Null when the lines are the same.
+ */
+export type ItemSnapshot = { productId: string; variantId: string | null; productName: string; variantName: string | null; unitPrice: number; quantity: number; discount?: number };
+export const itemsChange = (before: ItemSnapshot[], after: ItemSnapshot[]): { from: string; to: string } | null => {
+  const group = (lines: ItemSnapshot[]) => {
+    const m = new Map<string, ItemSnapshot>();
+    for (const l of lines) {
+      const k = `${l.productId}:${l.variantId ?? ''}`;
+      const x = m.get(k);
+      m.set(k, x ? { ...x, quantity: x.quantity + l.quantity, discount: (x.discount ?? 0) + (l.discount ?? 0) } : { ...l, discount: l.discount ?? 0 });
+    }
+    return m;
+  };
+  const b = group(before);
+  const a = group(after);
+  const from: string[] = [];
+  const to: string[] = [];
+  for (const k of new Set([...b.keys(), ...a.keys()])) {
+    const x = b.get(k);
+    const y = a.get(k);
+    if (x && y && x.quantity === y.quantity && x.unitPrice === y.unitPrice && x.discount === y.discount) continue;
+    const priced = !!x && !!y && x.unitPrice !== y.unitPrice;
+    const show = (l: ItemSnapshot, qty: number) => `${l.variantName ? `${l.productName} (${l.variantName})` : l.productName} ×${qty}${priced ? ` · ${formatMoney(l.unitPrice)}` : ''}`;
+    from.push(x ? show(x, x.quantity) : show(y!, 0));
+    to.push(y ? show(y, y.quantity) : show(x!, 0));
+  }
+  return from.length ? { from: from.join(', '), to: to.join(', ') } : null;
+};
+
+/** 04 §21: what is left to collect — nothing on a cancelled / returned order (full-test ORDERS-11, journey 16/11 J05-10). */
+export const remainingOf = (o: { status: string; total: number; amountPaid: number }): number => (o.status === 'cancelled' || o.status === 'returned' ? 0 : Math.max(0, o.total - o.amountPaid));
 
 /** 04 §4: `lineTotal = unitPrice × qty − lineDiscount`, `subtotal = Σ`, `total = subtotal − discount + tax + deliveryFee`. */
 export const orderTotals = (lines: { unitPrice: number; quantity: number; discount?: number }[], o: { discount?: number; tax?: number; deliveryFee: number }) => {

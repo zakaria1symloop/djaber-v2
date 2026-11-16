@@ -4,7 +4,9 @@
 // (R-H): `Agent.modelId` follows the platform routing at every save.
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import {
+  AGENT_DEFAULT_STYLE,
   AGENT_INSTRUCTIONS_MAX,
+  AGENT_TONE_OF_PERSONALITY,
   type ActionDescriptor,
   type AgentDto,
   type AgentMetrics,
@@ -428,8 +430,19 @@ export class AgentService implements OnModuleInit {
     const id = await prisma.$transaction(async (db) => {
       const tx = db as Tx;
       await this.assertRefs(tx, input.wizard);
-      const wizard = this.wizardData(input.wizard ?? {});
-      const style = { languages: input.wizard?.languages ?? [], defaultLanguage: input.wizard?.defaultLanguage ?? null, tone: input.wizard?.tone ?? null, formality: input.wizard?.formality ?? null, emojiLevel: input.wizard?.emojiLevel ?? null };
+      // journey 16/11 J01-3: a style field the body leaves out starts at the wizard's default (the preset's tone), so a draft
+      // made in one click from a preset is the ready-to-use template and not an empty agent
+      const w0 = input.wizard ?? {};
+      const languages = w0.languages ?? (w0.defaultLanguage && !AGENT_DEFAULT_STYLE.languages.includes(w0.defaultLanguage) ? [...AGENT_DEFAULT_STYLE.languages, w0.defaultLanguage] : [...AGENT_DEFAULT_STYLE.languages]);
+      const defaultLanguage = w0.defaultLanguage !== undefined ? w0.defaultLanguage : languages.includes(AGENT_DEFAULT_STYLE.defaultLanguage) ? AGENT_DEFAULT_STYLE.defaultLanguage : (languages[0] ?? null);
+      const style = {
+        languages,
+        defaultLanguage,
+        tone: w0.tone !== undefined ? w0.tone : AGENT_TONE_OF_PERSONALITY[preset?.personality ?? 'friendly'],
+        formality: w0.formality !== undefined ? w0.formality : AGENT_DEFAULT_STYLE.formality,
+        emojiLevel: w0.emojiLevel !== undefined ? w0.emojiLevel : AGENT_DEFAULT_STYLE.emojiLevel,
+      };
+      const wizard = this.wizardData({ ...w0, ...style });
       const imageRecognition = input.wizard?.capabilities?.imageRecognition ?? preset?.imageRecognition ?? true;
       const voiceTranscription = input.wizard?.capabilities?.voiceTranscription ?? preset?.voiceTranscription ?? true;
       const agent = await tx.agent.create({

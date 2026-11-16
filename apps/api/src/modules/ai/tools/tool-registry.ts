@@ -97,7 +97,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
   },
   create_order: {
     name: 'create_order',
-    description: 'Cash-on-delivery order. First call (all required fields known): returns CONFIRMATION_REQUIRED with the recap to show — nothing is ordered. Call again with the same values only after the customer answered yes in a later message. Only values the customer gave.',
+    description: 'Cash-on-delivery order. Call it only once the customer wrote their name, phone number and (home delivery) address in the conversation — never a placeholder or a guessed value (0000000000, 0500000000, « Client »): ask for what is missing instead. First call: returns CONFIRMATION_REQUIRED with the recap to show — nothing is ordered. Call again with the same values only after the customer answered yes in a later message.',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -421,7 +421,11 @@ export class ToolRegistry {
     const ask = (field: string) => fail({ ok: false, error: { code: 'VALIDATION', field, missing: true, example: EXAMPLES[field] }, say: 'ask the customer for this value (one question); never invent it' });
     if (isPlaceholderName(d.clientName)) return ask('clientName');
     const phone = normalizePhoneDz(d.clientPhone);
-    if (!isPhoneDz(phone)) return fail(invalid('clientPhone', EXAMPLES.clientPhone));
+    // journey 16/11 J05-9: a number the customer never wrote (« 0500000000 », « 0000000000 » before any phone was given) is
+    // asked for first, before the address and the other checks — the model used to get a format error and guess again
+    const known = ctx.customerHistory !== undefined ? await this.knownPhones(ctx) : null;
+    if (!isPhoneDz(phone)) return fail(known && known.size === 0 ? { ok: false, error: { code: 'VALIDATION', field: 'clientPhone', missing: true, example: EXAMPLES.clientPhone }, say: 'ask the customer for this value (one question); never invent it' } : invalid('clientPhone', EXAMPLES.clientPhone));
+    if (known && !known.has(phone)) return ask('clientPhone');
     const phone2 = d.secondPhone ? normalizePhoneDz(d.secondPhone) : null;
     if (phone2 && !isPhoneDz(phone2)) return fail(invalid('secondPhone', EXAMPLES.secondPhone));
     if (!d.isStopdesk && (d.address ?? '').length < 10) return fail(invalid('address', EXAMPLES.address));
@@ -487,7 +491,6 @@ export class ToolRegistry {
     const request: CreateOrderRequest = { clientName: d.clientName, clientPhone: phone, secondPhone: phone2, wilayaId: d.wilayaId, communeName: d.communeName || null, address: d.address || null, isStopdesk: d.isStopdesk, stopdeskId: d.stopdeskId || null, notes: d.notes || null, items, subtotal, deliveryFee, total: subtotal + deliveryFee, replaces };
     // full-test 15/11 AI-CHAT-01 (Blocker): the order exists only after the customer said yes, in a later message, to the
     // recap the server sent — the model's `customerConfirmed` is never enough on its own
-    if (ctx.customerHistory !== undefined && !(await this.knownPhones(ctx)).has(phone)) return ask('clientPhone');
     const draft = draftKey(request);
     // full-test 15/11 proposal 4: one order per confirmed recap — never a second one in the same turn, never the same
     // content again in a later turn (C06: TEST-2998 then TEST-2283 on « oui c'est bon »)

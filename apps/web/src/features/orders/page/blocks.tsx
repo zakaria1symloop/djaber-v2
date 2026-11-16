@@ -2,7 +2,7 @@
 // Blocks of the order page (Figma "ORD-06 — Order page — new"): CLIENTE (inline contact edit), ARTICLES (+ totals,
 // quantity edit while editable), PAIEMENT, HISTORIQUE, APPELS, NOTES INTERNES (LIVRAISON: features/delivery/order-block).
 import { formatDate, formatMoney, formatPhoneDz, type AppLocale } from '@djaber/shared';
-import { Button, DetailRows, Field, FormAlert, IconButton, Input, Ltr, MonoChip, OrderBlock, OrderTimeline, PhoneInput, QtyStepper, StatusPill, Textarea, TotalsRows, Tooltip, type TimelineItem } from '@djaber/ui';
+import { Button, DetailRows, Field, FormAlert, IconButton, Input, Ltr, MoneyInput, MonoChip, OrderBlock, OrderTimeline, PhoneInput, QtyStepper, StatusPill, Textarea, TotalsRows, Tooltip, type TimelineItem } from '@djaber/ui';
 import { ExternalLink, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { ProductThumb } from '@/features/catalog/ui';
@@ -13,7 +13,7 @@ import { formatPhoneOnBlur, phonePreview, phonePreviewLine } from '@/lib/phone';
 import { relativeTime } from '@/lib/time';
 import { ORDER_ACTION } from '../action-keys';
 import type { Order, OrderItem } from '../contracts';
-import { actorKind, algiersTime, historyReason, historyValue, newestFirst, shortName } from '../logic';
+import { actorKind, algiersTime, historyParams, historyReason, historyValue, newestFirst, shortName } from '../logic';
 import { CallResultPill, PaymentPill, RiskPill } from '../ui';
 
 const linkClass = 'text-[13px] text-text-secondary hover:text-text-primary disabled:opacity-45';
@@ -163,12 +163,21 @@ export function ClientBlock({
 }
 
 /* ---------- ARTICLES ---------- */
-export type ItemsDraft = { id: string; productId: string; variantId: string | null; quantity: number; unitPrice: number }[];
-export const itemsOf = (o: Order): ItemsDraft => o.items.map((i) => ({ id: i.id, productId: i.product.id, variantId: i.variantId, quantity: i.quantity, unitPrice: i.unitPrice }));
+// journey 16/11 J05-4: an Admin+ (`orders.money`) also edits the unit prices, the order discount and the delivery fee
+export type ItemsDraft = { lines: { id: string; productId: string; variantId: string | null; quantity: number; unitPrice: number }[]; discount: number; deliveryFee: number };
+export const itemsOf = (o: Order): ItemsDraft => ({ lines: o.items.map((i) => ({ id: i.id, productId: i.product.id, variantId: i.variantId, quantity: i.quantity, unitPrice: i.unitPrice })), discount: o.discount, deliveryFee: o.deliveryFee });
+/** `PATCH /orders/:id` body of the items edit: the discount / fee only when an Admin changed them (a fee sent is an override). */
+export const itemsPatch = (d: ItemsDraft, o: Pick<Order, 'discount' | 'deliveryFee'>) => ({
+  items: d.lines.map((i) => ({ productId: i.productId, variantId: i.variantId, quantity: i.quantity, unitPrice: i.unitPrice })),
+  ...(d.discount !== o.discount ? { discount: d.discount } : {}),
+  ...(d.deliveryFee !== o.deliveryFee ? { deliveryFee: d.deliveryFee } : {}),
+});
+const amountOf = (digits: string) => (/^\d+$/.test(digits) ? Number(digits) : 0);
 
 export function ItemsBlock({
   order,
   canEdit,
+  canMoney,
   editReason,
   editing,
   draft,
@@ -181,6 +190,8 @@ export function ItemsBlock({
 }: {
   order: Order;
   canEdit: boolean;
+  /** `orders.money`: unit price, discount and delivery fee editable (J05-4) */
+  canMoney: boolean;
   editReason?: string;
   editing: boolean;
   draft: ItemsDraft;
@@ -193,10 +204,13 @@ export function ItemsBlock({
 }) {
   const t = useT();
   const byId = new Map(order.items.map((i) => [i.id, i]));
-  const lines: (OrderItem & { qty: number })[] = editing ? draft.map((d) => ({ ...byId.get(d.id)!, qty: d.quantity })).filter((l) => l.id) : order.items.map((i) => ({ ...i, qty: i.quantity }));
+  const lines: (OrderItem & { qty: number })[] = editing ? draft.lines.map((d) => ({ ...byId.get(d.id)!, qty: d.quantity, unitPrice: d.unitPrice })).filter((l) => l.id) : order.items.map((i) => ({ ...i, qty: i.quantity }));
   const subtotal = editing ? lines.reduce((s, l) => s + l.unitPrice * l.qty - l.discount, 0) : order.subtotal;
-  const fee = order.deliveryFee;
-  const total = editing ? subtotal - order.discount + order.tax + fee : order.total;
+  const fee = editing ? draft.deliveryFee : order.deliveryFee;
+  const discount = editing ? draft.discount : order.discount;
+  const total = editing ? subtotal - discount + order.tax + fee : order.total;
+  const moneyEdit = editing && canMoney;
+  const setLine = (id: string, patch: Partial<ItemsDraft['lines'][number]>) => onDraft({ ...draft, lines: draft.lines.map((d) => (d.id === id ? { ...d, ...patch } : d)) });
   const a = order.address;
   const feeLabel = [t('common.deliveryFee').toUpperCase(), a ? a.wilayaName.toUpperCase() : null, a ? (a.isStopdesk ? t('common.stopdesk').toUpperCase() : t('common.home').toUpperCase()) : null].filter(Boolean).join(' · ');
   return (
@@ -240,16 +254,21 @@ export function ItemsBlock({
                       <div className="ts-label-micro truncate text-text-muted">
                         {[l.variantName, l.sku ? t('orders.page.sku', { sku: l.sku }) : null].filter(Boolean).join(' · ')}
                       </div>
-                      {l.stockWarning ? <div className="ts-label-micro text-accent-starred">⚠ {t(`orders.page.stock.${l.stockWarning}`)}</div> : null}
+                      {/* journey J02-6: « variante » only for a variant line; a product sold beyond its stock is « to restock » */}
+                      {l.stockWarning ? <div className="ts-label-micro text-accent-starred">⚠ {t(`orders.page.stock.${l.stockWarning === 'last_unit' && !l.variantId ? 'last_unit_product' : l.stockWarning}`)}</div> : null}
                     </div>
                   </div>
                 </td>
                 <td className="whitespace-nowrap px-3 py-3 text-end max-md:px-2">
-                  <Ltr className="tabular-nums">{formatMoney(l.unitPrice)}</Ltr>
+                  {moneyEdit ? (
+                    <MoneyInput className="ms-auto w-32 text-end" value={String(l.unitPrice)} onValueChange={(v) => setLine(l.id, { unitPrice: amountOf(v) })} aria-label={t('orders.page.unitPriceOf', { name: l.productName })} disabled={saving} data-testid="edit-unit-price" />
+                  ) : (
+                    <Ltr className="tabular-nums">{formatMoney(l.unitPrice)}</Ltr>
+                  )}
                 </td>
                 <td className="px-3 py-3 text-center">
                   {editing ? (
-                    <QtyStepper value={l.qty} min={1} onChange={(q) => onDraft(draft.map((d) => (d.id === l.id ? { ...d, quantity: q } : d)))} labels={{ decrease: t('orders.page.qtyMinus'), increase: t('orders.page.qtyPlus'), value: t('orders.page.qty') }} disabled={saving} />
+                    <QtyStepper value={l.qty} min={1} onChange={(q) => setLine(l.id, { quantity: q })} labels={{ decrease: t('orders.page.qtyMinus'), increase: t('orders.page.qtyPlus'), value: t('orders.page.qty') }} disabled={saving} />
                   ) : (
                     <Ltr className="tabular-nums">{l.qty}</Ltr>
                   )}
@@ -259,7 +278,7 @@ export function ItemsBlock({
                 </td>
                 {editing ? (
                   <td className="pe-3">
-                    <IconButton size="sm" variant="ghost" label={t('orders.page.removeLine', { name: l.productName })} disabled={saving || draft.length <= 1} onClick={() => onDraft(draft.filter((d) => d.id !== l.id))}>
+                    <IconButton size="sm" variant="ghost" label={t('orders.page.removeLine', { name: l.productName })} disabled={saving || draft.lines.length <= 1} onClick={() => onDraft({ ...draft, lines: draft.lines.filter((d) => d.id !== l.id) })}>
                       <Trash2 className="size-4" aria-hidden />
                     </IconButton>
                   </td>
@@ -273,18 +292,28 @@ export function ItemsBlock({
         <TotalsRows
           rows={[
             { key: 'subtotal', label: t('common.subtotal').toUpperCase(), value: <Ltr>{formatMoney(subtotal)}</Ltr> },
-            { key: 'delivery', label: feeLabel, value: <Ltr>{formatMoney(fee)}</Ltr> },
-            ...(order.feeExplanation ? [{ key: 'feeNote', label: '', value: <span className="ts-label-micro !normal-case text-text-muted">{order.feeExplanation}</span> }] : []),
-            { key: 'discount', label: t('common.discount').toUpperCase(), value: <Ltr>{`− ${formatMoney(order.discount)}`}</Ltr> },
+            {
+              key: 'delivery',
+              label: feeLabel,
+              value: moneyEdit ? <MoneyInput className="ms-auto w-32 text-end" value={String(draft.deliveryFee)} onValueChange={(v) => onDraft({ ...draft, deliveryFee: amountOf(v) })} aria-label={t('common.deliveryFee')} disabled={saving} data-testid="edit-delivery-fee" /> : <Ltr>{formatMoney(fee)}</Ltr>,
+            },
+            ...(order.feeExplanation && !moneyEdit ? [{ key: 'feeNote', label: '', value: <span className="ts-label-micro !normal-case text-text-muted">{order.feeExplanation}</span> }] : []),
+            {
+              key: 'discount',
+              label: t('common.discount').toUpperCase(),
+              value: moneyEdit ? <MoneyInput className="ms-auto w-32 text-end" value={String(draft.discount)} onValueChange={(v) => onDraft({ ...draft, discount: amountOf(v) })} aria-label={t('common.discount')} disabled={saving} data-testid="edit-discount" /> : <Ltr>{`− ${formatMoney(discount)}`}</Ltr>,
+            },
             ...(order.tax ? [{ key: 'tax', label: t('orders.page.tax'), value: <Ltr>{formatMoney(order.tax)}</Ltr> }] : []),
             { key: 'total', label: t('common.total'), value: <Ltr>{formatMoney(total)}</Ltr>, strong: true },
-            { key: 'paid', label: t('orders.page.paidRemaining'), value: <Ltr>{`${formatMoney(order.amountPaid)} · ${formatMoney(Math.max(0, total - order.amountPaid))}`}</Ltr> },
+            // journey 16/11 J05-10: the remainder of the server (0 for a cancelled / returned order, 04 §21), as the PAIEMENT block
+            { key: 'paid', label: t('orders.page.paidRemaining'), value: <Ltr>{`${formatMoney(order.amountPaid)} · ${formatMoney(editing ? Math.max(0, total - order.amountPaid) : order.remaining)}`}</Ltr> },
           ]}
         />
         {editing ? (
           <>
             {error ? <FormAlert>{error}</FormAlert> : null}
             <p className="ts-label-micro !normal-case text-text-muted">{t('orders.page.itemsNote')}</p>
+            <p className="ts-label-micro !normal-case text-text-muted">{t(canMoney ? 'orders.page.itemsMoneyNote' : 'orders.page.itemsMoneyLocked')}</p>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={onCancel} disabled={saving}>
                 {t('action.cancel')}
@@ -376,9 +405,10 @@ const MONEY_FIELDS = new Set(['amountPaid', 'deliveryFee', 'total', 'discount', 
 export function HistoryBlock({ order }: { order: Order }) {
   const t = useT();
   const locale = useLocaleCode() as AppLocale;
-  const value = (field: string, v: string | null) => {
-    const r = historyValue(field, v, t.has);
-    return r.key ? t(r.key, { attempts: order.callAttempts, time: order.callbackAt ? algiersTime(order.callbackAt) : '' }) : (r.raw ?? '—');
+  // journey 16/11 J05-2: the count / callback time of the line's own moment (historyParams), not today's order
+  const value = (h: Order['history'][number], side: 'from' | 'to') => {
+    const r = historyValue(h.field, h[side], t.has);
+    return r.key ? t(r.key, historyParams(order, h, side)).trim() : (r.raw ?? '—');
   };
   const items: TimelineItem[] = newestFirst(order.history, (h) => h.at).map((h, i) => {
     const kind = actorKind(h);
@@ -388,8 +418,11 @@ export function HistoryBlock({ order }: { order: Order }) {
     // full-test 15/11 MOBILE-A11Y-08: the arrow follows the reading direction (« جديد ← مُسلَّم » read right to left), amounts
     // are money (« 1 400 DA », never « 0 → 1400 »)
     const arrow = locale === 'ar' ? ' ← ' : ' → ';
-    const shown = (v: string | null) => (MONEY_FIELDS.has(h.field) && v !== null && /^-?\d+$/.test(v) ? formatMoney(Number(v)) : value(h.field, v));
-    const text = h.field === 'created' ? t('orders.history.created') : `${t.has(fieldKey) ? t(fieldKey) : h.field} : ${h.from ? `${shown(h.from)}${arrow}` : ''}${shown(h.to)}`;
+    const shown = (side: 'from' | 'to') => {
+      const v = h[side];
+      return MONEY_FIELDS.has(h.field) && v !== null && /^-?\d+$/.test(v) ? formatMoney(Number(v)) : value(h, side);
+    };
+    const text = h.field === 'created' ? t('orders.history.created') : `${t.has(fieldKey) ? t(fieldKey) : h.field} : ${h.from ? `${shown('from')}${arrow}` : ''}${shown('to')}`;
     return {
       key: `${h.at}-${i}`,
       time: algiersTime(h.at),

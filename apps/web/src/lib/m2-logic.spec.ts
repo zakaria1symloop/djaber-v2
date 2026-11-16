@@ -209,6 +209,10 @@ describe('money', () => {
     expect(compactAmount(2_310_000, 'en')).toBe('2.31 M');
     expect(compactAmount(2_500_000, 'ar')).toBe('2,5 M');
     expect(compactAmount(999_999, 'fr').replace(/\s/g, ' ')).toBe('999 999');
+    // journey J02-2: the whole part is grouped
+    expect(compactAmount(1_000_952_900, 'fr').replace(/\s/g, ' ')).toBe('1 000,95 M');
+    expect(compactAmount(1_000_952_900, 'en').replace(/\s/g, ' ')).toBe('1 000.95 M');
+    expect(compactAmount(-3_000_000, 'fr')).toBe('-3,0 M');
   });
 });
 

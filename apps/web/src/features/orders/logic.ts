@@ -122,6 +122,25 @@ export function confirmChecks(o: Pick<Order, 'address' | 'clientPhone'>): Addres
 /** Calls without answer before this one (confirm dialog "2 appels précédents sans réponse"). */
 export const unansweredCalls = (o: Pick<Order, 'calls'>): number => o.calls.filter((c) => c.result === 'no_answer' || c.result === 'busy' || c.result === 'voicemail').length;
 
+/**
+ * journey 16/11 J05-2: the « SANS RÉPONSE n/3 » count and the « RAPPEL hh:mm » time of a confirmation history line as they
+ * were when the line was written — never today's `callAttempts` / `callbackAt` (a line read 3/3, then 5/3 on reload). The
+ * count is the unanswered calls logged up to the line (1 s of slack: the call and its line are one transaction), minus the
+ * call of the line itself on the « from » side of a « no answer → no answer » line; the time is the last callback set up
+ * to the line (a call « rappeler » or « Programmer un rappel »).
+ */
+export function historyParams(o: Pick<Order, 'calls' | 'history'>, h: Pick<OrderHistoryRow, 'at' | 'from' | 'to'>, side: 'from' | 'to'): { attempts: number; time: string } {
+  const until = Date.parse(h.at) + 1000;
+  const unanswered = o.calls.filter((c) => (c.result === 'no_answer' || c.result === 'busy' || c.result === 'voicemail') && Date.parse(c.calledAt) <= until).length;
+  const attempts = Math.max(1, side === 'from' && h.from === 'no_answer' && h.to === 'no_answer' ? unanswered - 1 : unanswered);
+  const set: { at: number; callbackAt: string }[] = [
+    ...o.calls.filter((c) => c.callbackAt && Date.parse(c.calledAt) <= until).map((c) => ({ at: Date.parse(c.calledAt), callbackAt: c.callbackAt! })),
+    ...o.history.filter((x) => x.field === 'callbackAt' && x.to && Date.parse(x.at) <= until).map((x) => ({ at: Date.parse(x.at), callbackAt: x.to })),
+  ].sort((a, b) => a.at - b.at);
+  const last = set[set.length - 1];
+  return { attempts, time: last ? algiersTime(last.callbackAt) : '' };
+}
+
 /** Value labels of a history row: status-like fields read through the enum catalogue. */
 const ENUM_FIELDS: Record<string, string> = {
   status: 'enum.Order.status',

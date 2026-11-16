@@ -175,7 +175,7 @@ test('default state: tiles, meter, ledger rows of real AI turns (text · photo �
   await expect(row('voice_transcription').locator('td').nth(3)).toHaveText('−3');
   // the trial opens the period with a `grant` row of 300
   const trial = row('grant');
-  await expect(trial).toContainText('GESTE');
+  await expect(trial).toContainText('ESSAI'); // journey 16/11 J01-5: a trial grant names its source
   await expect(trial.locator('td').nth(2)).toHaveText("Crédits de l'essai Pro");
   await expect(trial.locator('td').nth(3)).toHaveText('+300');
   await expect(trial.locator('td').nth(4)).toHaveText('300');

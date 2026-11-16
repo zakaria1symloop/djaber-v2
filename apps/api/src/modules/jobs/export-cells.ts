@@ -3,7 +3,7 @@
 //   values are UTC, 04 §8); a date-only value « 11/11/2026 ». In XLSX it is a real date cell (number format
 //   `dd/mm/yyyy hh:mm` / `dd/mm/yyyy`), in CSV / PDF the same text. Same digits whatever the export language.
 // - an enumerated value (type, mode, status, source…) is the label the screen shows, in the export language
-//   (« COD livré », « COD », « Espèces »), never the stored code (« order », « cod »); an unknown value stays as stored.
+//   (« Paiement commande », « COD », « Espèces »), never the stored code (« order », « cod »); an unknown value stays as stored.
 import { formatMessage, getMessages, isAppLocale, type AppLocale } from '@djaber/shared';
 import { ALGIERS_OFFSET_MS, isDay } from '../../core/time/algiers';
 import type { DateCell } from './xlsx';

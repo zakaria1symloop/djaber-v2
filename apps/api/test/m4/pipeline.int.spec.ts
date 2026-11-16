@@ -272,7 +272,8 @@ describe('FL-01 — reply turn', () => {
       { toolCalls: [{ name: 'search_products', args: { query: 'veste' } }, { name: 'get_product', args: { productId: archived.id } }, { name: 'create_order', args: { clientName: 'Amine Benali', clientPhone: '0555123456', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'Cité des 200 logements, Alger', items: [{ productId: archived.id, quantity: 1 }], customerConfirmed: true } }] },
       { reply: "Cette veste n'est plus disponible.", intent: 'INFO', productCards: [archived.id, inactive.id, s.robe.id] },
     );
-    const t = await turn(s, newSender(), { text: 'je veux la veste' });
+    // journey 16/11 J05-9: the phone is in the customer's message (an unknown phone is asked for before the product check)
+    const t = await turn(s, newSender(), { text: 'je veux la veste, Amine Benali 0555123456' });
     const system = fakeAi(app).callsOf('reply')[0]!.system;
     expect(system).not.toContain('Veste archivée');
     expect(system).not.toContain('Veste inactive');

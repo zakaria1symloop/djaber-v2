@@ -3,6 +3,7 @@
 // covered — and fails here — without touching this file.
 import { getMessages, NotificationTypeValues, type AppLocale } from '@djaber/shared';
 import type { NotificationType } from '@djaber/db';
+import { mergeGroupIds } from './notification.producer';
 import { jobPath, jobRefs, missingNotificationParams, NOTIFICATION_PARAMS, NOTIFICATION_VARIANTS, notificationDeepLink, notificationGroup, notificationSlug, parcelPath, renderNotification } from './notification.catalog';
 
 const LOCALES: AppLocale[] = ['fr', 'ar', 'en'];
@@ -123,5 +124,13 @@ describe('notification catalogue', () => {
     expect(parcelPath({ orderId: 'o1', shipmentId: 's1' })).toBe('/delivery?tab=all&ids=o1&sheet=s1');
     expect(parcelPath({ orderId: 'o1' })).toBe('/delivery?tab=all&ids=o1');
     expect(notificationDeepLink('shipment_failed', { orderId: 'o1', shipmentId: 's1' }).web).toBe('/delivery?tab=all&ids=o1&sheet=s1');
+  });
+});
+
+describe("journey 16/11 J05-15 — grouped « Produits validés aujourd'hui »", () => {
+  it('the product ids of the day add up, without duplicates (running an event twice adds nothing)', () => {
+    expect(mergeGroupIds(['a'], ['b'])).toEqual(['a', 'b']);
+    expect(mergeGroupIds(['a', 'b'], ['b'])).toEqual(['a', 'b']);
+    expect(mergeGroupIds(undefined, ['c', 3])).toEqual(['c']);
   });
 });

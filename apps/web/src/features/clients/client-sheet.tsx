@@ -33,7 +33,7 @@ export function ClientDetailBody({ client: c }: { client: Client }) {
   const address = c.addresses.find((a) => a.isDefault) ?? c.addresses[0] ?? null;
   const merged = c.mergedFrom[0];
   const addressText = address
-    ? [`${address.wilayaName} (${address.wilayaId})`, address.communeText, address.address, address.isStopdesk ? (address.stopdeskName ?? t('common.stopdesk')) : t('clients.sheet.atHome')].filter(Boolean).join(' · ')
+    ? [`${address.wilayaName} (${String(address.wilayaId).padStart(2, '0')})`, address.communeText, address.address, address.isStopdesk ? (address.stopdeskName ?? t('common.stopdesk')) : t('clients.sheet.atHome')].filter(Boolean).join(' · ')
     : null;
   return (
     <div className="flex flex-col gap-5" data-testid="client-detail">
@@ -49,6 +49,12 @@ export function ClientDetailBody({ client: c }: { client: Client }) {
         <MetricTile label={t('clients.sheet.spentTile')} value={formatMoney(c.metrics.spent)} data-metric="spent" />
         <MetricTile label={t('clients.sheet.returns')} value={`${decimalLabel(c.metrics.returnPct, locale)} %`} tone={c.metrics.returns > 0 ? 'warning' : undefined} data-metric="returns" />
       </div>
+      {/* journey 16/11 J05-14: the tile counts the orders not cancelled; the list below also shows the cancelled ones */}
+      {c.metrics.cancels > 0 ? (
+        <p className="-mt-3 ts-label-meta text-text-muted" data-testid="client-cancels-note">
+          {t('clients.sheet.cancelsNotCounted', { count: c.metrics.cancels })}
+        </p>
+      ) : null}
       {c.metrics.sales > 0 ? (
         <p className="-mt-3 ts-label-meta text-text-muted" data-testid="client-spent-split">
           {t('clients.sheet.spentSplit', { orders: formatMoney(c.metrics.ordersSpent), sales: formatMoney(c.metrics.salesSpent) })}

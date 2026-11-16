@@ -7,7 +7,7 @@ import { can, type MerchantPermission } from '../../core/rbac/permission-matrix'
 import { thumbUrlOf } from '../catalog/product-image.util';
 import { presentShipment, type ShipmentRow } from '../delivery/shipment.presenter';
 import { channelRef } from '../channels/channel.service';
-import { allowedTargets, checkTransition, isTerminal, paymentLinkRefusal, recordPaymentRefusal, refundRefusal, type OrderState, type Refusal } from './order-rules';
+import { allowedTargets, checkTransition, isTerminal, paymentLinkRefusal, recordPaymentRefusal, refundRefusal, remainingOf, type OrderState, type Refusal } from './order-rules';
 
 const userRef = { select: { id: true, firstName: true, lastName: true, avatarUrl: true } } as const;
 export const ACTIVE_SHIPMENT = ['pending', 'sent', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered'] as const;
@@ -38,7 +38,7 @@ export const ORDER_DETAIL_INCLUDE = {
   items: {
     orderBy: { id: 'asc' },
     include: {
-      product: { select: { id: true, name: true, sku: true, price: true, hasVariants: true, trackStock: true, stock: true, images: { where: { isPrimary: true }, take: 1, select: { url: true } } } },
+      product: { select: { id: true, name: true, sku: true, price: true, hasVariants: true, trackStock: true, sellOutOfStock: true, stock: true, images: { where: { isPrimary: true }, take: 1, select: { url: true } } } },
       variant: { select: { id: true, stock: true } },
     },
   },
@@ -145,16 +145,17 @@ export const orderActions = (o: Pick<Order, 'status' | 'deliveryStatus' | 'payme
     act('ship_manual', 'orders.write', { reason: t('shipped'), primary: primaryKey === 'ship_manual', shortcut: primaryKey === 'ship_manual' ? 'Enter' : undefined }),
     act('deliver', 'orders.write', { reason: t('delivered'), primary: primaryKey === 'deliver', shortcut: primaryKey === 'deliver' ? 'Enter' : undefined }),
     act('return', o.status === 'delivered' ? 'orders.money' : 'orders.write', { reason: t('returned') }),
-    act('call', 'orders.write', { reason: terminal ? 'ORDER_TERMINAL' : null, shortcut: 'C' }),
+    // journey 16/11 J05-11: a delivered order is read-only too (12 §5 [RO]: only « Marquer retournée » and the notes)
+    act('call', 'orders.write', { reason: readOnly ? 'ORDER_TERMINAL' : null, shortcut: 'C' }),
     act('callback', 'orders.write', { reason: terminal ? 'ORDER_TERMINAL' : !['new', 'confirmed', 'preparing'].includes(o.status) ? notAllowed(o.status) : null, shortcut: 'R' }),
     act('open_conversation', 'inbox.read', { reason: o.conversationId ? null : 'NOT_FOUND', shortcut: 'M' }),
     act('edit', 'orders.write', { reason: readOnly ? 'ORDER_TERMINAL' : null, shortcut: 'E' }),
     // full-test 15/11 ORDERS-04: a delivered order is read-only too (its address / phone 2 could still be changed)
     act('edit_address', 'orders.write', { reason: readOnly ? 'ORDER_TERMINAL' : state.courierParcel ? 'COURIER_ADDRESS_LOCKED' : null }),
-    act('assign', 'orders.write', { shortcut: 'A' }),
+    act('assign', 'orders.write', { reason: readOnly ? 'ORDER_TERMINAL' : null, shortcut: 'A' }),
     act('record_payment', 'orders.write', { reason: recordPaymentRefusal(o) }),
     act('print', 'orders.read', { shortcut: 'P' }),
-    act('change_status', 'orders.write', { reason: allowedTargets(state, role).length ? null : 'ORDER_TERMINAL' }),
+    act('change_status', 'orders.write', { reason: readOnly || !allowedTargets(state, role).length ? 'ORDER_TERMINAL' : null }),
     // no « Delete » hint on « Annuler » next to « Supprimer » (full-test ORDERS-24)
     act('cancel', 'orders.write', { reason: t('cancelled') }),
     act('delete', 'orders.money', { reason: o.status === 'delivered' ? 'ORDER_DELETE_DELIVERED' : state.courierParcel ? 'DELIVERY_ORDER_ALREADY_SENT' : null }),
@@ -187,7 +188,7 @@ export const presentOrderListItem = (o: OrderListRow, ctx: PresentCtx): OrderLis
     total: o.total,
     amountPaid: o.amountPaid,
     // nothing is left to collect on a cancelled / returned order (full-test ORDERS-11, like purchases)
-    remaining: o.status === 'cancelled' || o.status === 'returned' ? 0 : Math.max(0, o.total - o.amountPaid),
+    remaining: remainingOf(o),
     status: o.status,
     confirmationStatus: o.confirmationStatus,
     callAttempts: o.callAttempts,
@@ -256,6 +257,18 @@ export type DetailExtras = {
   historyText?: Map<string, { from: string | null; to: string | null }>;
 };
 
+/**
+ * The stock note of an order line, on what is left once this order has its units: a `new` order only reserves (no movement —
+ * owner decision 2026-10-21), a confirmed / preparing one already took them. Journey J02-6: a product sold at zero stock
+ * (« Accepter les commandes en rupture ») is a `backorder` to restock, never « last unit ».
+ */
+export const lineStockWarning = (status: string, stock: number | null, quantity: number, sellOutOfStock: boolean): 'last_unit' | 'insufficient' | 'backorder' | null => {
+  if (stock === null || !['new', 'confirmed', 'preparing'].includes(status)) return null;
+  const left = status === 'new' ? stock - quantity : stock;
+  if (left < 0) return sellOutOfStock ? 'backorder' : 'insufficient';
+  return left === 0 ? 'last_unit' : null;
+};
+
 export const presentOrder = (o: OrderDetailRow, extras: DetailExtras, ctx: PresentCtx): OrderView => {
   const active = o.shipments.find((s) => (ACTIVE_SHIPMENT as readonly string[]).includes(s.status));
   const listRow = { ...o, items: o.items.map((i) => ({ productName: i.productName, variantName: i.variantName, quantity: i.quantity })), shipments: active ? [{ ...active, events: active.events.slice(0, 1).map((e) => ({ at: e.at })) }] : [] } as unknown as OrderListRow;
@@ -270,7 +283,6 @@ export const presentOrder = (o: OrderDetailRow, extras: DetailExtras, ctx: Prese
     address: addressOf(o, ctx.locale, extras.stopdeskName ?? null),
     items: o.items.map((i) => {
       const stock = i.variant ? i.variant.stock : i.product.trackStock ? (i.product.stock ?? 0) : null;
-      const open = ['new', 'confirmed', 'preparing'].includes(o.status);
       return {
         id: i.id,
         product: { id: i.product.id, name: i.product.name, sku: i.product.sku, price: i.product.price, primaryImageUrl: i.product.images[0] ? thumbUrlOf(i.product.images[0].url) : null, hasVariants: i.product.hasVariants, trackStock: i.product.trackStock },
@@ -283,8 +295,7 @@ export const presentOrder = (o: OrderDetailRow, extras: DetailExtras, ctx: Prese
         quantity: i.quantity,
         discount: i.discount,
         total: i.total,
-        // stock is already taken at creation: the warning reads what is left for the other orders
-        stockWarning: !open || stock === null ? null : stock < 0 ? 'insufficient' : stock === 0 ? 'last_unit' : null,
+        stockWarning: lineStockWarning(o.status, stock, i.quantity, i.product.sellOutOfStock),
       };
     }),
     subtotal: o.subtotal,

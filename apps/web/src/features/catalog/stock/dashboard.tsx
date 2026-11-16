@@ -35,6 +35,7 @@ export function StockDashboard() {
   const o = overview.data;
   const empty = !!o && (o.totalProducts ?? o.activeProducts + o.services) === 0;
   const lowRows = low.data ?? [];
+  const lowProducts = new Set(lowRows.map((r) => r.productId)).size;
   const canPurchase = advanced && can('gds.write');
   const restock = (r: LowStockItem) =>
     canPurchase
@@ -90,7 +91,9 @@ export function StockDashboard() {
               testId="tile-low"
               href="/products?lowStock=1"
               label={t('stock.dashboard.tile.low')}
-              value={<Num value={o.lowStockCount ?? 0} />}
+              // journey J02-5: « STOCK FAIBLE » is one figure on every screen — the products at or under their threshold,
+              // out of stock included (the list behind `?lowStock=1`, Home, the products header); the hint says how many are out
+              value={<Num value={(o.lowStockCount ?? 0) + (o.outOfStockCount ?? 0)} />}
               tone={o.outOfStockCount ? 'alert' : o.lowStockCount ? 'starred' : undefined}
               hint={o.outOfStockCount ? t('stock.dashboard.tile.out', { count: o.outOfStockCount }) : undefined}
             />
@@ -123,7 +126,9 @@ export function StockDashboard() {
                 {low.data ? (
                   <>
                     {' · '}
-                    <Ltr>{formatNumber(lowRows.length)}</Ltr>
+                    {/* journey J02-5: the same product count as the tile; the variant lines are named apart */}
+                    <Ltr>{formatNumber(lowProducts)}</Ltr>
+                    {lowRows.length !== lowProducts ? <span className="normal-case text-text-muted">{` · ${t('stock.dashboard.low.lines', { count: lowRows.length })}`}</span> : null}
                   </>
                 ) : null}
               </SectionLabel>

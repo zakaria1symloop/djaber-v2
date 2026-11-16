@@ -18,6 +18,8 @@ const PAYMENT_LABEL: Record<SlipLang, Record<string, string>> = {
   ar: { cash: 'الدفع عند الاستلام', card: 'بطاقة', transfer: 'تحويل', ccp: 'CCP', other: 'أخرى' },
   en: { cash: 'Cash on delivery', card: 'Card', transfer: 'Transfer', ccp: 'CCP', other: 'Other' },
 };
+/** journey 16/11 J05-13: a fully paid order prints « Payée », never « Paiement à la livraison » under a 0 DA total. */
+const PAID_LABEL: Record<SlipLang, string> = { fr: 'Payée — rien à encaisser', ar: 'مدفوعة — لا شيء للتحصيل', en: 'Paid — nothing to collect' };
 
 @Injectable()
 export class OrderPrintService implements OnModuleInit {
@@ -75,7 +77,7 @@ export class OrderPrintService implements OnModuleInit {
         deliveryFee: o.deliveryFee,
         total: o.total,
         amountPaid: o.amountPaid,
-        paymentMethod: PAYMENT_LABEL[lang][o.paymentMethod] ?? o.paymentMethod,
+        paymentMethod: o.amountPaid > 0 && o.amountPaid >= o.total ? PAID_LABEL[lang] : (PAYMENT_LABEL[lang][o.paymentMethod] ?? o.paymentMethod),
         notes: o.notes,
         trackingUrl: o.shipments[0] ? `${web}/s/${o.shipments[0].publicTrackingToken}` : null,
       }));

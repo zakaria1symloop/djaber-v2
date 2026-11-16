@@ -211,7 +211,9 @@ describe('PATCH /products/:id', () => {
     const detail = await owner.get(`/products/${p.id}/moderation`).expect(200);
     expect(detail.body.data).toMatchObject({ status: 'approved', contentVersion: 2, item: { decision: null }, appeal: { status: 'available' } });
     expect(detail.body.data.history).toHaveLength(4);
-    expect((await owner.get('/moderation/summary').expect(200)).body.data).toEqual({ pending: 0, rejected: 0, appealed: 0, trustLevel: 'standard' });
+    const summary = (await owner.get('/moderation/summary').expect(200)).body.data;
+    expect(summary).toMatchObject({ pending: 0, rejected: 0, appealed: 0, trustLevel: 'standard' });
+    expect(summary.sellable).toBe(0); // journey J02-8: the only product is approved but switched off — nothing sells
   });
 
   it('moderation, merchant side: resubmit only when rejected; appeal once, within 7 days', async () => {

@@ -20,7 +20,7 @@ import { usePlans, useSubscription } from './api';
 import { CancelDialog, ChangePlanDialog, UndoCancelButton } from './billing-dialogs';
 import type { Cycle, Plan, Subscription } from './contracts';
 import { InvoicesCard, usePayInvoice } from './invoices';
-import { cyclePrice, daysLeft, defaultCycle, isFreePlan, isPaidSubscription, monthlyEquivalent, parseCycle, planBanner, planCta, type PlanCta } from './logic';
+import { bestYearlyDiscount, cyclePrice, daysLeft, defaultCycle, isFreePlan, isPaidSubscription, monthlyEquivalent, parseCycle, planBanner, planCta, type PlanCta } from './logic';
 import { RecentLedger } from './recent-ledger';
 
 export function BillingPage() {
@@ -68,6 +68,7 @@ function BillingBody({ sub }: { sub: Subscription }) {
   const locale = useLocaleCode() as AppLocale;
   const { can } = useSession();
   const plans = usePlans();
+  const yearlyPct = bestYearlyDiscount(plans.data ?? []);
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -158,7 +159,7 @@ function BillingBody({ sub }: { sub: Subscription }) {
             onChange={(v) => setParams({ cycle: v === defaultCycle(sub) ? null : v })}
             options={[
               { value: 'monthly', label: t('billing.cycle.monthly') },
-              { value: 'yearly', label: t('billing.cycle.yearly') },
+              { value: 'yearly', label: yearlyPct > 0 ? t('billing.cycle.yearlyDiscount', { pct: yearlyPct }) : t('billing.cycle.yearly') },
             ]}
           />
         </div>

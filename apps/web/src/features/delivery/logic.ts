@@ -7,6 +7,39 @@ import type { BulkSendRow, ShipmentStatus } from './contracts';
 
 export const algiersClock = algiersTime;
 
+/**
+ * journey 16/11 J05-3: the geo pickers search without accents, case, hyphens or Arabic vowel marks — « Sétif » finds the
+ * commune spelled « Setif », « bejaia » finds « Béjaïa », « bordj bou » finds « Bordj-Bou-Arreridj ».
+ */
+export const foldGeo = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f\u064b-\u065f\u0670]/g, '')
+    .toLowerCase()
+    .replace(/[-'’ʼ`]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+export const geoFilter = <T extends { label: string; hint?: string }>(options: T[], q: string): T[] => {
+  const needle = foldGeo(q);
+  return needle ? options.filter((o) => foldGeo(`${o.label} ${o.hint ?? ''}`).includes(needle)) : options;
+};
+
+/* ---------- parcel timeline order (journey 16/11 J05-17) ---------- */
+const STAGE: Record<string, number> = { pending: 0, sent: 1, picked_up: 2, in_transit: 3, out_for_delivery: 4, stale: 4, failed: 5, delivered: 6, returned: 7, cancelled: 8 };
+/**
+ * Newest first. Events of the same minute follow the parcel's life (a « Livré » dated with the minute picked in the dialog
+ * came after « Expédition créée » of the same minute, never before it): later stage first, then the exact time.
+ */
+export const timelineOrder = <T extends { at: string; mappedStatus?: string | null }>(events: readonly T[]): T[] =>
+  [...events].sort((a, b) => {
+    const ma = Math.floor(Date.parse(a.at) / 60_000);
+    const mb = Math.floor(Date.parse(b.at) / 60_000);
+    if (ma !== mb) return mb - ma;
+    const sa = STAGE[a.mappedStatus ?? ''] ?? -1;
+    const sb = STAGE[b.mappedStatus ?? ''] ?? -1;
+    return sa !== sb ? sb - sa : Date.parse(b.at) - Date.parse(a.at);
+  });
+
 /* ---------- LIVRAISON block of the order page (UX-064) ---------- */
 /**
  * What the order's LIVRAISON block shows for its current parcel. `handled` (server `failureHandled`): the order was

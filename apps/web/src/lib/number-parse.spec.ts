@@ -20,6 +20,10 @@ describe('parseIntegerInput', () => {
     expect(value('2,5')).toBe('2');
     expect(parse('1999.')).toMatchObject({ value: '1999', fraction: '.' });
     expect(parse('0,5')).toMatchObject({ value: '0', fraction: ',5' });
+    // journey J05: a 3rd / 4th decimal digit never turns the comma into a thousands separator
+    expect(parse('2500,005')).toMatchObject({ value: '2500', fraction: ',005' });
+    expect(value('2500,0000')).toBe('2500');
+    expect(value('12 500,999')).toBe('12500');
   });
   it('typing « 2.500 » key by key ends as 2500, not 2 or 25', () => {
     expect(value('2.')).toBe('2');

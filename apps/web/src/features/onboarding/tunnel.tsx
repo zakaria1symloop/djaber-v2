@@ -7,7 +7,7 @@
 // flow (M3). A reopened step shows what already exists (product, agent, pages) and continues without creating twice;
 // leaving a reopened step never moves the saved progress back.
 import { CreateProductSchema, formatNumber } from '@djaber/shared';
-import { Button, buttonClass, Card, ChecklistRow, cn, Field, FormAlert, Input, MoneyInput, NumberInput, onRadioGroupKeyDown, OptionCard, Skeleton, Steps, toast, Tooltip, type StepItem } from '@djaber/ui';
+import { Button, buttonClass, Card, ChecklistRow, cn, Field, FormAlert, Input, MoneyInput, NumberInput, onRadioGroupKeyDown, OptionCard, radioTabIndex, Skeleton, Steps, toast, Tooltip, type StepItem } from '@djaber/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Bot, Box, Check, Plus, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -157,11 +157,12 @@ function StockMode() {
   return (
     <Shell slug="stock-mode" title={t('onboarding.stock.title')} description={t('onboarding.stock.description')}>
       <div role="radiogroup" aria-label={t('nav.settings.stockMode')} className="flex flex-col gap-5">
-        {(['simple', 'advanced'] as const).map((m) => (
+        {(['simple', 'advanced'] as const).map((m, i, all) => (
           <OptionCard
             key={m}
             name={m}
             selected={mode === m}
+            tabIndex={radioTabIndex(i, all.indexOf(mode))}
             onSelect={() => setMode(m)}
             disabled={busy}
             icon={<Box className="size-5" aria-hidden />}
@@ -471,7 +472,7 @@ function AgentPreset() {
         <DoneNotice testId="onboarding-agent-existing">{t('onboarding.agent.existing', { name: existing.name })}</DoneNotice>
       ) : null}
       <div role="radiogroup" aria-label={t('onboarding.agent.title')} className={cn('grid gap-3 sm:grid-cols-2', existing && 'mt-4')} data-testid="onboarding-presets" data-source={cards[0]?.live ? 'server' : 'static'}>
-        {cards.map((c) => {
+        {cards.map((c, i) => {
           const on = selected?.key === c.key;
           return (
             <button
@@ -479,6 +480,8 @@ function AgentPreset() {
               type="button"
               role="radio"
               aria-checked={on}
+              // journey 16/11 ONBOARDING-13 retest: one Tab stop for the group (the selected card), the arrows move inside it
+              tabIndex={radioTabIndex(i, selected ? cards.findIndex((x) => x.key === selected.key) : -1)}
               data-preset={c.key}
               disabled={busy}
               onClick={() => setPicked(c.key)}
@@ -587,11 +590,12 @@ function Connect() {
         </DoneNotice>
       ) : null}
       <div role="radiogroup" aria-label={t('onboarding.connect.title')} className={cn('flex flex-col gap-5', pages.length && 'mt-4')}>
-        {(['facebook', 'instagram'] as const).map((p) => (
+        {(['facebook', 'instagram'] as const).map((p, i, all) => (
           <OptionCard
             key={p}
             name={p}
             selected={platform === p}
+            tabIndex={radioTabIndex(i, all.indexOf(platform))}
             onSelect={() => setPlatform(p)}
             disabled={connect.busy || saving}
             icon={<Box className="size-5" aria-hidden />}

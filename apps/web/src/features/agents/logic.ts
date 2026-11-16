@@ -1,7 +1,7 @@
 // Pure logic of the agents module: the wizard draft (03 §30 AGV-02), per-step validation and checklist, the diff
 // between two drafts (dirty sections of AGT-04, merge by section after a 409), the business-hours model, the credit
 // estimate of the summary rail, and the view models of a playground turn and of a tool call (AGT-07).
-import { AGENT_CARD_TEMPLATE_MAX, AGENT_CLOSING_MAX, AGENT_DEFAULT_MAX_AMOUNT, AGENT_HANDOFF_KEYWORDS_MAX, AGENT_NAME_MAX, AGENT_POLICY_MAX, AGENT_RESPONSE_DELAY_MAX_S, CREDIT_COST, formatNumber } from '@djaber/shared';
+import { AGENT_CARD_TEMPLATE_MAX, AGENT_CLOSING_MAX, AGENT_DEFAULT_MAX_AMOUNT, AGENT_DEFAULT_STYLE, AGENT_TONE_OF_PERSONALITY, AGENT_HANDOFF_KEYWORDS_MAX, AGENT_NAME_MAX, AGENT_POLICY_MAX, AGENT_RESPONSE_DELAY_MAX_S, CREDIT_COST, formatNumber } from '@djaber/shared';
 import type {
   Agent,
   AgentLanguage,
@@ -79,11 +79,11 @@ export const defaultDraft = (): AgentDraft => ({
   avatarUploadId: null,
   avatarUrl: null,
   avatarMode: 'page',
-  languages: ['darija', 'arabizi', 'fr', 'ar'],
-  defaultLanguage: 'darija',
-  tone: 'warm',
-  formality: 'follow_customer',
-  emojiLevel: 'moderate',
+  languages: [...AGENT_DEFAULT_STYLE.languages],
+  defaultLanguage: AGENT_DEFAULT_STYLE.defaultLanguage,
+  tone: AGENT_TONE_OF_PERSONALITY.friendly,
+  formality: AGENT_DEFAULT_STYLE.formality,
+  emojiLevel: AGENT_DEFAULT_STYLE.emojiLevel,
   catalogScope: 'all',
   scopeCategoryIds: [],
   outOfStockBehavior: 'suggest_alternative',
@@ -136,23 +136,29 @@ const applyWizard = (d: AgentDraft, w: Partial<AgentWizardFields> | null | undef
   };
 };
 
-export const draftFromAgent = (a: Agent): AgentDraft =>
-  applyWizard(
+export const draftFromAgent = (a: Agent): AgentDraft => {
+  const w = a.wizard;
+  // journey 16/11 J01-3: a draft made in one click before the server filled the style (tunnel step 4, page analysis) has no
+  // language, tone or emoji level and was never saved through step 1: it opens with the wizard's starting style
+  const unstyled = a.status === 'draft' && (a.wizardStep ?? 1) <= 1 && !!w && !w.languages?.length && !w.defaultLanguage && !w.tone && !w.emojiLevel;
+  const base = defaultDraft();
+  return applyWizard(
     {
-      ...defaultDraft(),
+      ...base,
       presetKey: a.preset?.key ?? null,
       name: a.name,
       description: a.description ?? '',
       responseDelaySec: a.responseDelaySec,
       productCardTemplate: a.productCardTemplate ?? '',
       closingInstructions: a.closingInstructions ?? '',
-      capabilities: { ...defaultDraft().capabilities, imageRecognition: a.imageRecognition, voiceTranscription: a.voiceTranscription },
+      capabilities: { ...base.capabilities, imageRecognition: a.imageRecognition, voiceTranscription: a.voiceTranscription },
     },
-    a.wizard,
+    unstyled ? { ...w, languages: undefined, defaultLanguage: undefined, tone: TONE_OF[a.personality] ?? base.tone, formality: w.formality ?? undefined, emojiLevel: undefined } : w,
   );
+};
 
 /** Starting point of step 1: the preset fills its defaults; the name keeps what the merchant already typed. */
-const TONE_OF: Record<Personality, AgentDraft['tone']> = { friendly: 'warm', professional: 'professional', casual: 'casual', technical: 'professional' };
+const TONE_OF: Record<Personality, AgentDraft['tone']> = AGENT_TONE_OF_PERSONALITY;
 export const draftFromPreset = (preset: AgentPreset | null, keep?: Pick<AgentDraft, 'name' | 'description' | 'displayName'>): AgentDraft => {
   const base = defaultDraft();
   const d: AgentDraft = preset

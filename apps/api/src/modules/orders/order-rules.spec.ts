@@ -1,6 +1,8 @@
 // AT-ORD-01 (table-driven over every (from, to) pair of 04 §1.2 + D14 + §21), AT-ORD-02 COD plan, AT-ORD-03 / 18 / 25
 // call outcomes, AT-ORD-22 payment rules, the 04 §3 effects plan of every allowed transition, totals and stock deltas.
 import { derivePaymentStatus, ORDER_STATUS_TRANSITIONS, type OrderStatusName } from '@djaber/shared';
+import { itemsChange, remainingOf } from './order-rules';
+import { formatMessage } from '@djaber/shared';
 import { callPlan, checkEffectiveAt, checkOrderedAt, checkPaymentPatch, checkTransition, codPlan, orderTotals, paymentLinkRefusal, recordPaymentRefusal, refundRefusal, stockDeltas, transitionPlan, type OrderState } from './order-rules';
 
 const ALL: OrderStatusName[] = ['new', 'confirmed', 'preparing', 'shipped', 'delivered', 'cancelled', 'returned'];
@@ -224,5 +226,28 @@ describe('money actions: the reason fits the order (UX-060)', () => {
     expect(paymentLinkRefusal(o('new', 'paid', 5000))).toEqual({ code: 'ORDER_ALREADY_PAID' });
     expect(paymentLinkRefusal(o('confirmed', 'refunded', 0))).toEqual({ code: 'ORDER_ALREADY_REFUNDED' });
     expect(paymentLinkRefusal(o('new', 'unpaid', 0))).toBeNull();
+  });
+});
+
+describe('journey 16/11 J05-5 / J05-10 / J05-17 — history of the lines, remainder, amounts in errors', () => {
+  const robe = { productId: 'p1', variantId: null, productName: 'Robe kabyle', variantName: null, unitPrice: 4500, quantity: 2 };
+  const foulard = { productId: 'p2', variantId: 'v1', productName: 'Foulard', variantName: 'Bleu', unitPrice: 1200, quantity: 1 };
+  it('the « Articles » line says what changed, before → after', () => {
+    expect(itemsChange([robe, foulard], [{ ...robe, quantity: 3 }, foulard])).toEqual({ from: 'Robe kabyle ×2', to: 'Robe kabyle ×3' });
+    expect(itemsChange([robe], [robe, { ...foulard, quantity: 2 }])).toEqual({ from: 'Foulard (Bleu) ×0', to: 'Foulard (Bleu) ×2' });
+    expect(itemsChange([robe, foulard], [robe])).toEqual({ from: 'Foulard (Bleu) ×1', to: 'Foulard (Bleu) ×0' });
+    expect(itemsChange([robe], [{ ...robe, unitPrice: 4000 }])).toEqual({ from: 'Robe kabyle ×2 · 4 500 DA', to: 'Robe kabyle ×2 · 4 000 DA' });
+    expect(itemsChange([robe, foulard], [foulard, robe])).toBeNull();
+  });
+  it('nothing is left to collect on a cancelled / returned order', () => {
+    expect(remainingOf({ status: 'returned', total: 12900, amountPaid: 0 })).toBe(0);
+    expect(remainingOf({ status: 'cancelled', total: 2850, amountPaid: 0 })).toBe(0);
+    expect(remainingOf({ status: 'shipped', total: 15000, amountPaid: 2000 })).toBe(13000);
+    expect(remainingOf({ status: 'delivered', total: 15000, amountPaid: 16000 })).toBe(0);
+  });
+  it('an amount in an error message is grouped by thousands; other numbers are not', () => {
+    expect(formatMessage('déjà payé ({paid} DA) :', { paid: 3000 })).toBe('déjà payé (3 000 DA) :');
+    expect(formatMessage('({paid} دج)', { paid: 12500 })).toBe('(12 500 دج)');
+    expect(formatMessage('{count} lignes en {year}', { count: 1500, year: 2026 })).toBe('1500 lignes en 2026');
   });
 });

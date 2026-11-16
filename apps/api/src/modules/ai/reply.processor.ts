@@ -33,7 +33,7 @@ import { AI_ERROR_ALERT_FAILURES, AI_ERROR_ALERT_WINDOW_S, GUARD_EARLIER_TOOL_CA
 import { AiRunService, guardFlags, intentOf, type RunMeta, type TurnResult } from './ai-run.service';
 import { CatalogueService } from './catalogue.service';
 import { InsightService } from './insight.service';
-import { detectLanguage, type AiLanguage } from './language';
+import { turnLanguage, type AiLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
 import { guardFactsOf } from './reply-guard';
 import { AiProviderError } from './provider/ai.gateway';
@@ -239,7 +239,8 @@ export class ReplyProcessor implements OnModuleInit {
   ): Promise<ReplyOutcome> {
     const deadline = Date.now() + RUN_BUDGET_MS;
     const ctx = contextOf(conv);
-    const lang: AiLanguage = detectLanguage(batch.plain, ctx.lastLanguage as AiLanguage | undefined) ?? 'fr';
+    // journey 16/11 J05-8: a turn with no clue (phone number, name) keeps the conversation's language, Arabic script included
+    const lang: AiLanguage = turnLanguage(batch.plain, ctx.lastLanguage as AiLanguage | undefined);
     await this.typing(conv.channel, conv.externalSenderId);
 
     // --- vision (AI-06): notes are kept on the run so a retry does not pay the provider twice ---------------------------------

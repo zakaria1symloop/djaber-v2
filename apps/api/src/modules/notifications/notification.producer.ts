@@ -33,7 +33,15 @@ export type NotificationInput = {
   data: Record<string, unknown>;
   /** deduplication key: the throttle window of 03 §5.1 is part of it (e.g. `stock_low:<productId>:<day>`) */
   key: string;
+  /**
+   * journey 16/11 J05-15: a grouped notification (« Produits validés aujourd'hui : {count} »). Each event keeps its own `key`;
+   * the first one of the `group` makes the rows, the next ones add their `data.productIds` to them and recount `count` (the
+   * title said « 1 » after three products were validated the same day — the later events were dropped as duplicates).
+   */
+  group?: string;
 };
+/** The product ids of two events of one group, without duplicates (pure — notification.catalog.spec). */
+export const mergeGroupIds = (a: unknown, b: unknown): string[] => [...new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])].filter((x): x is string => typeof x === 'string'))];
 export type FanoutRecipient = { id: string; email: string; locale: AppLocale };
 /** A delivery channel beyond the in-app row (e-mail, push): called once per notification row, after it is stored. */
 export type NotificationChannel = {
@@ -93,21 +101,41 @@ export class NotificationProducer implements OnModuleInit {
   /** Outbox handler (worker). Safe to run twice: rows are keyed by the outbox key stored in `data.key`. */
   async deliver(n: NotificationInput) {
     return TenantContext.runSystem(async () => {
-      const already = await prisma.notification.count({ where: { workspaceId: n.workspaceId, type: n.type, data: { path: ['key'], equals: n.key } } });
-      if (already) return 0;
       const recipients = await this.recipients(n);
       if (!recipients.length) return 0;
       const slug = notificationSlug(n.type);
-      const rows = await prisma.notification.createManyAndReturn({
-        data: recipients.map((userId) => ({
-          workspaceId: n.workspaceId,
-          userId,
-          type: n.type,
-          title: { key: `notification.${slug}.title` },
-          body: { key: `notification.${slug}.body`, params: n.data } as object,
-          data: { ...n.data, key: n.key } as object,
-        })),
+      // a grouped event takes a lock on its group: two events of the same day never make two notifications
+      const rows = await prisma.$transaction(async (db) => {
+        const tx = db as Tx;
+        if (n.group) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${n.group}, 0))`;
+        const already = await tx.notification.count({ where: { workspaceId: n.workspaceId, type: n.type, data: { path: ['key'], equals: n.key } } });
+        if (already) return null;
+        if (n.group) {
+          const grouped = await tx.notification.findMany({ where: { workspaceId: n.workspaceId, type: n.type, data: { path: ['group'], equals: n.group } } });
+          if (grouped.length) {
+            // the group's rows are recounted in place (no second push / e-mail); running twice adds nothing
+            for (const r of grouped) {
+              const prev = (r.data ?? {}) as Record<string, unknown>;
+              const productIds = mergeGroupIds(prev.productIds, n.data.productIds);
+              const data = { ...prev, ...n.data, productIds: productIds.slice(0, 200), count: productIds.length, key: prev.key, group: n.group };
+              const body = { ...((r.body ?? {}) as Record<string, unknown>), params: data };
+              await tx.notification.update({ where: { id: r.id }, data: { data: data as object, body: body as object } });
+            }
+            return null;
+          }
+        }
+        return tx.notification.createManyAndReturn({
+          data: recipients.map((userId) => ({
+            workspaceId: n.workspaceId,
+            userId,
+            type: n.type,
+            title: { key: `notification.${slug}.title` },
+            body: { key: `notification.${slug}.body`, params: n.data } as object,
+            data: { ...n.data, key: n.key, ...(n.group ? { group: n.group } : {}) } as object,
+          })),
+        });
       });
+      if (!rows) return 0;
       const users = await prisma.user.findMany({ where: { id: { in: recipients } }, select: { id: true, email: true, locale: true } });
       const byId = new Map(users.map((u) => [u.id, u]));
       const unread = await prisma.notification.groupBy({ by: ['userId'], where: { userId: { in: recipients }, workspaceId: n.workspaceId, readAt: null }, _count: { _all: true } });

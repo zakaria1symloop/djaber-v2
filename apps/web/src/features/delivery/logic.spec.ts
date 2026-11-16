@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseListState } from '@/lib/list-state';
+import { foldGeo, geoFilter, timelineOrder } from './logic';
 import { bulkRowState, courierErrorField, credentialErrors, daysLabel, daysSince, deliveryBlockState,isHttpsUrl, parcelSteps, parseWeight, shipmentStatusKey, shipmentTone, syncUntil, syncWait, waitLabel, withCourierSetup, withSyncWait } from './logic';
 import { currentTab, DELIVERY_LIST, deliveryChips, panelFilterCount, shipmentsQuery, TAB_PRESETS } from './overview-spec';
 
@@ -199,5 +200,22 @@ describe('full-test 15/11 — parcel pill of a self-delivery, send without couri
     expect(withCourierSetup(acts, true)[0]).toEqual({ key: 'send_courier', enabled: true });
     expect(withCourierSetup(acts, false)[0]).toMatchObject({ enabled: false, reasonCode: 'DELIVERY_NO_COURIER' });
     expect(withCourierSetup([{ key: 'send_courier', enabled: false, reasonCode: 'DELIVERY_ORDER_NOT_CONFIRMED' }], true)[0]).toMatchObject({ enabled: false });
+  });
+});
+
+describe('journey 16/11 J05-3 / J05-17 — geo search and parcel timeline', () => {
+  it('the geo pickers search without accents, case, hyphens or Arabic vowel marks', () => {
+    const communes = [{ label: 'Setif' }, { label: 'El Eulma' }, { label: 'Bordj-Bou-Arreridj' }, { label: 'سَطِيف' }];
+    expect(geoFilter(communes, 'Sétif').map((c) => c.label)).toEqual(['Setif']);
+    expect(geoFilter(communes, 'sé').map((c) => c.label)).toEqual(['Setif']);
+    expect(geoFilter(communes, 'bordj bou').map((c) => c.label)).toEqual(['Bordj-Bou-Arreridj']);
+    expect(geoFilter(communes, 'سطيف').map((c) => c.label)).toEqual(['سَطِيف']);
+    expect(geoFilter(communes, '  ')).toHaveLength(4);
+    expect(foldGeo('Béjaïa')).toBe('bejaia');
+  });
+  it('newest first; events of the same minute follow the parcel life', () => {
+    const e = (mappedStatus: string, at: string) => ({ mappedStatus, at });
+    const rows = [e('returned', '2026-11-16T16:30:40.000Z'), e('sent', '2026-11-16T16:30:20.000Z'), e('delivered', '2026-11-16T16:30:00.000Z'), e('in_transit', '2026-11-16T16:10:00.000Z')];
+    expect(timelineOrder(rows).map((x) => x.mappedStatus)).toEqual(['returned', 'delivered', 'sent', 'in_transit']);
   });
 });

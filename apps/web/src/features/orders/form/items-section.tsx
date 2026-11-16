@@ -10,6 +10,7 @@ import { catalogKeys } from '@/features/catalog/api';
 import type { Product, ProductListItem } from '@/features/catalog/contracts';
 import { fieldError } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
+import { priceText } from '@/lib/money';
 import { useWorkspaceId } from '@/lib/session';
 import { uuid } from '@/lib/uuid';
 import { orderFormApi, useProductSearch } from './api';
@@ -40,7 +41,8 @@ export const lineFromProduct = (
       isActive: v.isActive,
     })),
     variantId: only?.id ?? null,
-    unitPrice: String(only?.price ?? p.price),
+    // journey J02-3: a product with several variants has no price of its own — the line takes the chosen variant's price
+    unitPrice: p.hasVariants && !only ? '' : String(only?.price ?? p.price),
     quantity: 1,
   };
 };
@@ -135,7 +137,7 @@ export function ItemsSection({ lines, onChange, errors, locked, priceLocked = fa
                           : ''}
                     </span>
                   </span>
-                  <Ltr className="shrink-0 text-[13px] tabular-nums">{formatMoney(p.price)}</Ltr>
+                  <Ltr className="shrink-0 text-[13px] tabular-nums">{priceText(p)}</Ltr>
                 </button>
               </li>
             ))}

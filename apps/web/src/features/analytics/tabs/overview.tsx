@@ -48,7 +48,7 @@ function Overview({ d }: { d: AnalyticsOverviewView }) {
           title={t('analytics.revenueDefinition')}
         />
         <Kpi k={k.orders} name="orders" label={t('analytics.unit.orders')} meta={t('analytics.overview.confirmedPct', { pct: fig(hintNum(k.orders, 'confirmedPct'), 'pct') })} sub={t('analytics.overview.aiOrders', { count: formatNumber(hintNum(k.orders, 'aiOrders') ?? 0) })} />
-        <Kpi k={k.deliveryRate} name="deliveryRate" label={t('analytics.unit.deliveryRate')} meta={t('analytics.overview.returns', { count: formatNumber(hintNum(k.deliveryRate, 'returned') ?? 0) })} sub={t('analytics.overview.ofShipped', { count: formatNumber(hintNum(k.deliveryRate, 'shipped') ?? 0) })} />
+        <Kpi k={k.deliveryRate} name="deliveryRate" label={t('analytics.unit.deliveryRate')} meta={t('analytics.overview.returns', { count: hintNum(k.deliveryRate, 'returned') ?? 0 })} sub={t('analytics.overview.ofShipped', { count: formatNumber(hintNum(k.deliveryRate, 'shipped') ?? 0) })} />
         <Kpi k={k.conversations} name="conversations" label={t('analytics.unit.conversations')} meta={t('analytics.overview.aiHandled', { pct: fig(hintNum(k.conversations, 'aiHandledPct'), 'pct') })} sub={t('analytics.overview.handoffs', { count: formatNumber(hintNum(k.conversations, 'handoffs') ?? 0) })} />
         <Kpi
           k={credits}

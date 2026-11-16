@@ -207,6 +207,9 @@ describe('misc', () => {
   });
   it('greets by the hour in Africa/Algiers', () => {
     expect(greetingKey(new Date('2026-10-11T08:00:00Z'))).toBe('home.greeting.morning'); // 09:00 in Algiers
+    expect(greetingKey(new Date('2026-10-11T10:59:00Z'))).toBe('home.greeting.morning'); // 11:59
+    expect(greetingKey(new Date('2026-11-16T16:20:00Z'))).toBe('home.greeting.afternoon'); // 17:20 (J01-8)
+    expect(greetingKey(new Date('2026-10-11T16:59:00Z'))).toBe('home.greeting.afternoon'); // 17:59
     expect(greetingKey(new Date('2026-10-11T19:30:00Z'))).toBe('home.greeting.evening'); // 20:30
     expect(greetingKey(new Date('2026-10-11T03:00:00Z'))).toBe('home.greeting.evening'); // 04:00
   });

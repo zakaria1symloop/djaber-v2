@@ -2,7 +2,7 @@
 // Product search of the GDS forms ("Scanner / chercher un produit, SKU, code-barres…"): new purchase, receive dialog
 // (added line), new sale, recommendation rule. Same search as the order form (`GET /products?q`); a product with
 // variants is read in full so that the caller gets its variants (variant required on purchases and sales).
-import { formatMoney, formatNumber } from '@djaber/shared';
+import { formatNumber } from '@djaber/shared';
 import { Ltr, PickerSearch } from '@djaber/ui';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -10,6 +10,7 @@ import { catalogKeys } from '@/features/catalog/api';
 import type { Product, ProductListItem } from '@/features/catalog/contracts';
 import { orderFormApi, useProductSearch } from '@/features/orders/form/api';
 import { useT } from '@/lib/i18n';
+import { priceText } from '@/lib/money';
 import { useWorkspaceId } from '@/lib/session';
 
 export type PickedVariant = { id: string; name: string; sku: string | null; price: number; costPrice: number | null; stock: number };
@@ -121,7 +122,8 @@ export function ProductPicker({
                       {reason ? ` · ${reason}` : ''}
                     </span>
                   </span>
-                  <Ltr className="shrink-0 text-[13px] tabular-nums">{formatMoney(p.price)}</Ltr>
+                  {/* journey J02-3: the variants' range, never the unsold base price */}
+                  <Ltr className="shrink-0 text-[13px] tabular-nums">{priceText(p)}</Ltr>
                 </button>
               </li>
             );

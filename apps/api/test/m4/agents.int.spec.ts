@@ -56,6 +56,8 @@ describe('presets and wizard', () => {
       expect(a.preset).toMatchObject({ key: p.key, version: p.version, updateAvailable: null });
       expect(a.model).toEqual({ id: route.primaryModelId, label: route.primaryModel.displayName, provider: 'OpenAI' });
       expect(a.wizard.capabilities).toMatchObject({ imageRecognition: p.imageRecognition, voiceTranscription: p.voiceTranscription, takeOrders: true });
+      // journey 16/11 J01-3: a one-click preset draft carries the wizard's starting style (tone from the preset's personality)
+      expect(a.wizard).toMatchObject({ languages: ['darija', 'arabizi', 'fr', 'ar'], defaultLanguage: 'darija', tone: { friendly: 'warm', professional: 'professional', technical: 'professional', casual: 'casual' }[p.personality as string], formality: 'follow_customer', emojiLevel: 'moderate' });
     }
     // Arabic for an Arabic-speaking member; from scratch; an unknown preset
     expect((await owner.get('/agents/presets').set('Accept-Language', 'ar').expect(200)).body.data[0].name).toBe('البائع المحترف');

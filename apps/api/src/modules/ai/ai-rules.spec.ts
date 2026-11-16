@@ -1,10 +1,10 @@
 // Pure rules of the AI pipeline (04-ai-pipeline): language detection, structured output, tool-call ids, credit periods,
 // the adapter factory guard and the scriptable fake adapter.
 import { parseFaqText } from '../agents/knowledge.service';
-import { creditPeriod } from '../credits/credit.service';
+import { creditPeriod, exhaustionEta } from '../credits/credit.service';
 import { canonicalJson, costUsd, toolCallId } from './ai-run.service';
 import { plannedCost } from './ai.constants';
-import { detectLanguage, systemLocale } from './language';
+import { conversationLanguage, detectLanguage, languageSwitched, systemLocale, turnLanguage } from './language';
 import { createAiGateway } from './provider/ai-gateway.factory';
 import { AiProviderError, readInput, withInput, type AiGenerateRequest } from './provider/ai.gateway';
 import { FakeAiGateway } from './provider/fake-ai.gateway';
@@ -38,6 +38,28 @@ describe('detectLanguage (§3.6)', () => {
     expect(detectLanguage('👍')).toBeUndefined();
     expect(detectLanguage(null, 'fr')).toBe('fr');
     expect([systemLocale('ar'), systemLocale('arabizi'), systemLocale('mixed'), systemLocale('fr'), systemLocale('en'), systemLocale(undefined, 'ar')]).toEqual(['ar', 'fr', 'fr', 'fr', 'en', 'ar']);
+  });
+});
+
+describe('turn language (journey 16/11 J05-8)', () => {
+  it('a phone number or a name keeps the conversation language, Arabic script included', () => {
+    const fr = ['Bonsoir, je veux 2 robes kabyles', 'Livraison à Sétif à domicile', 'Nadia Ferhat'];
+    expect(conversationLanguage(fr)).toBe('fr');
+    expect(turnLanguage('0770123456', conversationLanguage(fr))).toBe('fr');
+    expect(turnLanguage('0770 12 34 56', 'fr')).toBe('fr');
+    expect(conversationLanguage(['واش عندكم روب ساتان', 'Nadia Ferhat'])).toBe('ar');
+    expect(turnLanguage('Nadia Ferhat', 'ar')).toBe('ar');
+    expect(turnLanguage('0661234567', conversationLanguage(['salam, chhal robe satin ?', 'Karima Haddad']))).toBe('arabizi');
+  });
+  it('a clear switch still switches; the first message keeps the §3.6 fallbacks', () => {
+    expect(conversationLanguage(['Bonjour, quel est le prix ?', 'Hello, how much is the dress?'])).toBe('en');
+    expect(turnLanguage('Nadia Ferhat', undefined)).toBe('en');
+    expect(turnLanguage('0770123456', undefined)).toBe('fr');
+    expect(conversationLanguage([])).toBeUndefined();
+  });
+  it('the English answer of the J05-8 report breaks the language rule of a French customer', () => {
+    expect(languageSwitched('fr', 'Thanks Karima, got it! What is your full address in Blida?')).toBe(true);
+    expect(languageSwitched('fr', 'Merci Karima ! Quelle est votre adresse complète à Blida ?')).toBe(false);
   });
 });
 
@@ -125,6 +147,18 @@ describe('credit period (02 §6)', () => {
     expect(p('2026-01-31T00:00:00.000Z', '2026-02-28T12:00:00Z')).toEqual(['2026-02-28T00:00:00.000Z', '2026-03-31T00:00:00.000Z']);
     expect(p('2025-10-11T08:00:00.000Z', '2026-10-11T07:00:00Z')).toEqual(['2025-09-11T08:00:00.000Z', '2025-10-11T08:00:00.000Z'].map((_, i) => ['2026-09-11T08:00:00.000Z', '2026-10-11T08:00:00.000Z'][i]));
     expect(p('2026-06-01T00:00:00.000Z', '2026-05-01T00:00:00Z')).toEqual(['2026-06-01T00:00:00.000Z', '2026-07-01T00:00:00.000Z']); // an anchor in the future
+  });
+
+  it('projects the exhaustion only inside the running period (journey 16/11 J01-6)', () => {
+    const now = new Date('2026-11-16T16:00:00.000Z');
+    const periodEnd = new Date('2026-12-16T16:00:00.000Z');
+    // 295 left at 0.7 / day = 421 days: after the renewal, not shown
+    expect(exhaustionEta({ total: 295, burnPerDay: 0.7, periodEnd }, now)).toBeNull();
+    // 300 left at 100 / day = 3 days
+    expect(exhaustionEta({ total: 300, burnPerDay: 100, periodEnd }, now)).toBe('2026-11-19T16:00:00.000Z');
+    expect(exhaustionEta({ total: 300, burnPerDay: 0, periodEnd }, now)).toBeNull();
+    expect(exhaustionEta({ total: 0, burnPerDay: 10, periodEnd }, now)).toBeNull();
+    expect(exhaustionEta({ total: 300, burnPerDay: 100, periodEnd, unlimited: true }, now)).toBeNull();
   });
 });
 

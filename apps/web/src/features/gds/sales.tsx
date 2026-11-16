@@ -248,7 +248,9 @@ function SalesList({ creating }: { creating?: boolean }) {
 type Line = { key: string; productId: string; name: string; hasVariants: boolean; variants: PickedProduct['variants']; variantId: string | null; trackStock: boolean; stock: number | null; quantity: number; unitPrice: string; catalogPrice: number };
 const lineOf = (p: PickedProduct): Line => {
   const v = p.variants.length === 1 ? p.variants[0]! : null;
-  return { key: uuid(), productId: p.id, name: p.name, hasVariants: p.hasVariants, variants: p.variants, variantId: v?.id ?? null, trackStock: p.trackStock, stock: v ? v.stock : p.stock, quantity: 1, unitPrice: moneyDigits(v?.price ?? p.price), catalogPrice: v?.price ?? p.price };
+  // journey J02-3: a product with several variants has no price of its own — the line is priced when a variant is chosen
+  const unpriced = p.hasVariants && !v;
+  return { key: uuid(), productId: p.id, name: p.name, hasVariants: p.hasVariants, variants: p.variants, variantId: v?.id ?? null, trackStock: p.trackStock, stock: v ? v.stock : p.stock, quantity: 1, unitPrice: unpriced ? '' : moneyDigits(v?.price ?? p.price), catalogPrice: unpriced ? 0 : (v?.price ?? p.price) };
 };
 const lineFromSale = (s: Sale): Line[] =>
   s.items.map((i) => ({

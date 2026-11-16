@@ -31,8 +31,8 @@ describe('exportDateTime / exportDate (Africa/Algiers wall clock)', () => {
 
 describe('exportLabel (screen labels in the export language)', () => {
   it('UX-055 remark: Caisse type and mode as on screen, not « order » / « cod »', () => {
-    expect(exportLabel('fr', 'enum.Cash.category', 'order')).toBe('COD livré');
-    expect(exportLabel('en', 'enum.Cash.category', 'order')).toBe('COD delivered');
+    expect(exportLabel('fr', 'enum.Cash.category', 'order')).toBe('Paiement commande');
+    expect(exportLabel('en', 'enum.Cash.category', 'order')).toBe('Order payment');
     expect(exportLabel('fr', 'orders.payment.method', 'cod')).toBe('COD');
     expect(exportLabel('fr', 'orders.payment.method', 'cash')).toBe('Espèces');
     expect(exportLabel('en', 'orders.payment.method', 'cash')).toBe('Cash');

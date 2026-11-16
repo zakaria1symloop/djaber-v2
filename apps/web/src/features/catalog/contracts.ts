@@ -53,7 +53,7 @@ export const MODERATION_STATUSES = ['not_required', 'pending', 'approved', 'reje
 export type ModerationStatus = (typeof MODERATION_STATUSES)[number];
 
 /** `GET /moderation/summary` (06 §8.2) — banner "38 produits en attente". */
-export type ModerationSummary = { pending: number; rejected: number; appealed: number; trustLevel: 'new' | 'standard' | 'trusted' | 'watch' };
+export type ModerationSummary = { pending: number; rejected: number; appealed: number; /** active products the AI may offer (J02-8) */ sellable?: number; trustLevel: 'new' | 'standard' | 'trusted' | 'watch' };
 
 /** `GET /stock/overview` (GDS-01). `valueAtCost` / `potentialMargin` are null in simple mode (no cost price). */
 export type StockOverview = {

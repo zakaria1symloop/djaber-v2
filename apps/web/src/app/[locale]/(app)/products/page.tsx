@@ -25,7 +25,7 @@ import { AiPill, aiExclusion, CategoryPill, ListPagination, ModerationPill, Mone
 import { Link, useRouter } from '@/i18n/navigation';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
-import { compactAmount } from '@/lib/money';
+import { compactAmount, priceRangeOf } from '@/lib/money';
 import { useSession } from '@/lib/session';
 import { useListState } from '@/lib/use-list-state';
 
@@ -112,6 +112,18 @@ export default function ProductsPage() {
       </div>
     </div>
   );
+  // a product with variants is sold at its variants' prices: their range, not the base price (tester report 2026-10-20) — the
+  // same text in the table, the grid and the phone card (journey J02-4)
+  const priceCell = (r: ProductListItem, className?: string) => {
+    const range = priceRangeOf(r);
+    return range.min !== range.max ? (
+      <span className="whitespace-nowrap" data-price-range>
+        <Money value={range.min} className={className} /> – <Money value={range.max} className={className} />
+      </span>
+    ) : (
+      <Money value={range.min} className={className} />
+    );
+  };
   const stockCell = (r: ProductListItem) => (
     <span className="inline-flex items-center gap-2">
       {r.stock === null ? <span className="text-text-muted">—</span> : <Num value={r.stock} className={cn('ts-numeral-m', stockTone(r.stockState))} />}
@@ -122,20 +134,7 @@ export default function ProductsPage() {
     { key: 'name', header: t('products.col.product'), sortKey: 'name', hideable: false, cell: nameCell, className: 'max-w-[320px]' },
     { key: 'sku', header: t('products.col.sku'), sortKey: 'sku', hideBelow: 'lg', cell: (r) => <Ltr className="whitespace-nowrap ts-label-meta text-text-secondary">{r.sku}</Ltr> },
     { key: 'category', header: t('products.col.category'), hideBelow: 'lg', cell: (r) => <CategoryPill category={r.category} /> },
-    // a product with variants is sold at its variants' prices: their range, not the base price (tester report 2026-10-20)
-    {
-      key: 'price',
-      header: t('common.price'),
-      sortKey: 'price',
-      cell: (r) =>
-        r.priceRange && r.priceRange.min !== r.priceRange.max ? (
-          <span className="whitespace-nowrap">
-            <Money value={r.priceRange.min} className="ts-numeral-m" /> – <Money value={r.priceRange.max} className="ts-numeral-m" />
-          </span>
-        ) : (
-          <Money value={r.priceRange?.min ?? r.price} className="ts-numeral-m" />
-        ),
-    },
+    { key: 'price', header: t('common.price'), sortKey: 'price', cell: (r) => priceCell(r, 'ts-numeral-m') },
     ...(advanced
       ? ([
           { key: 'cost', header: t('products.col.cost'), sortKey: 'cost', hideBelow: '2xl', cell: (r) => <Money value={r.costPrice} muted /> },
@@ -237,7 +236,8 @@ export default function ProductsPage() {
       ) : null}
       {moderation.data && moderation.data.pending > 0 && s.tab !== 'pending' ? (
         <Banner tone="info" action={{ label: t('action.view'), onClick: () => list.set({ tab: 'pending' }) }}>
-          {t('products.banner.pending', { count: moderation.data.pending })}
+          {/* journey J02-8: « the rest keeps selling » only when something is validated; else the AI offers nothing meanwhile */}
+          {t(moderation.data.sellable === 0 ? 'products.banner.pendingNone' : 'products.banner.pending', { count: moderation.data.pending })}
         </Banner>
       ) : null}
 
@@ -318,8 +318,8 @@ export default function ProductsPage() {
                     </div>
                   </Link>
                   <div className="flex items-center gap-2">
-                    {/* full-test 15/11 PRODUCTS-03: the variants' price, as in the table and as the AI quotes it */}
-                    <Money value={r.priceRange?.min ?? r.price} className="ts-numeral-m" />
+                    {/* full-test 15/11 PRODUCTS-03 / J02-4: the variants' price range, as in the table and as the AI quotes it */}
+                    {priceCell(r, 'ts-numeral-m')}
                     <span className="flex-1" />
                     {stockCell(r)}
                   </div>
@@ -357,10 +357,16 @@ export default function ProductsPage() {
               <Link href={`/products/${r.id}`} className="flex min-w-0 flex-1 items-center gap-3">
                 <ProductThumb src={r.primaryImageUrl} name={r.name} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[14px] font-medium">{r.name}</div>
+                  {/* journey J02-7: the phone card carries the state pills of the table (MASQUÉ / ARCHIVÉ, and the validation
+                      state while the moderation columns are shown) */}
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-[14px] font-medium">{r.name}</span>
+                    {r.archived || !r.isActive ? <ProductStatePill product={r} /> : null}
+                    {reviewing && r.moderation && r.moderation.status !== 'approved' ? <ModerationPill status={r.moderation.status} /> : null}
+                  </div>
                   <div className="flex flex-wrap items-center gap-x-2 ts-label-meta text-text-muted">
                     <Ltr>{r.sku}</Ltr>
-                    <Money value={r.priceRange?.min ?? r.price} />
+                    {priceCell(r)}
                     {r.stock !== null ? <Num value={r.stock} className={stockTone(r.stockState)} /> : null}
                     <StockPill state={r.stockState} />
                   </div>

@@ -15,7 +15,7 @@ import { actionState } from '@/lib/actions';
 import { SHIPMENT_ACTION } from './action-keys';
 import { useShipment } from './api';
 import type { Shipment } from './contracts';
-import { algiersClock, shipmentStatusKey, shipmentTone, waitLabel } from './logic';
+import { algiersClock, shipmentStatusKey, shipmentTone, timelineOrder, waitLabel } from './logic';
 import { parcelOfShipment, type useParcelActions } from './use-parcel-actions';
 
 const MAX_ATTEMPTS = 3;
@@ -84,7 +84,7 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
         : (stored?.message ?? sync?.message);
 
   const events: TrackingStep[] = s
-    ? newestFirst(s.events, (e) => e.at).map((e, i) => {
+    ? timelineOrder(s.events).map((e, i) => {
         const source = e.source === 'manual' || e.source === 'system' ? [t('tracking.source.djaber'), e.actor ? shortName(e.actor) : null].filter(Boolean).join(' · ') : (s.courierAccount?.displayName ?? t(`couriers.provider.${s.provider}`));
         return {
           key: `${e.at}-${i}`,

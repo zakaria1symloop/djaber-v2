@@ -148,7 +148,7 @@ export function CancelOrderDialog({ order, open, onClose, onDone }: Props) {
       description={orderContext(t, order)}
       closeLabel={t('action.close')}
       size="md"
-      footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('action.cancelOrder').replace(/^✕\s*/, '')} danger closeLabel={t('action.keep')} note={t('orders.cancel.note')} />}
+      footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('action.cancelOrder').replace(/^✕\s*/, '')} danger closeLabel={t('action.keep')} note={t(order.status === 'new' ? 'orders.cancel.note' : 'orders.cancel.noteRestock')} />}
     >
       <div className="flex flex-col gap-4" data-testid="cancel-dialog">
         <Pill tone="danger" className="w-fit !rounded-[4px]">
@@ -160,6 +160,8 @@ export function CancelOrderDialog({ order, open, onClose, onDone }: Props) {
         <Field label={t('common.noteOptional')} htmlFor="cancel-note" error={s.fieldError('note')}>
           <Input id="cancel-note" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} />
         </Field>
+        {/* journey 16/11 J05-12: as the return dialog, the merchant is told the deposit leaves the cash register (04 §3) */}
+        {order.amountPaid > 0 ? <FormAlert tone="info">{t('orders.cancel.paymentsCleared', { amount: formatMoney(order.amountPaid) })}</FormAlert> : null}
         <label className="flex items-center gap-2 text-[13px]">
           <Checkbox checked={notify} onChange={(e) => setNotify(e.target.checked)} disabled={!order.conversationId} />
           <span>

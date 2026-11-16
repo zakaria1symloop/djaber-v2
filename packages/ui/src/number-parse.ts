@@ -35,13 +35,20 @@ export function parseIntegerInput(raw: string, opts: { allowNegative?: boolean; 
     negative = true;
     text = text.slice(1);
   }
-  // the last separator followed by 0–2 digits at the end is the decimal mark; every other one groups thousands
+  // The last separator is the decimal mark when it is followed by 0–2 digits, or by 3+ digits after a badly grouped integer
+  // (« 2500,005 » — journey J05: a 3rd decimal digit turned the comma into a thousands separator, 2 500 005); it groups
+  // thousands only after a well-formed group run (« 2.500 », « 12.500.000 »)
   let fraction = '';
-  const dec = /[.,](\d{0,2})$/.exec(text);
+  const last = Math.max(text.lastIndexOf(','), text.lastIndexOf('.'));
   let intPart = text;
-  if (dec && !/^[.,]\d{3}/.test(text.slice(dec.index))) {
-    fraction = dec[0];
-    intPart = text.slice(0, dec.index);
+  if (last >= 0) {
+    const after = text.slice(last + 1);
+    const head = text.slice(0, last);
+    const grouped = /^\d{1,3}(?:[.,]\d{3})*$/.test(head) && after.length === 3;
+    if (/^\d*$/.test(after) && !grouped) {
+      fraction = text.slice(last);
+      intPart = head;
+    }
   }
   // thousands groups: every separator left must be followed by exactly 3 digits
   if (/[.,](?!\d{3}(?:[.,]|$))/.test(intPart)) return { ok: false };

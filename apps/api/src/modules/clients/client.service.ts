@@ -273,9 +273,9 @@ export class ClientService implements OnModuleInit {
     ]);
     // no saved address yet: the address of the client's last order is the default one (full-test ORDERS-13 — « adresse par
     // défaut préremplie »; the quality filter already counts order addresses). Saving the card writes it as a real address.
-    const lastOrderAddress = addresses.length
-      ? null
-      : await prisma.order.findFirst({ where: { clientId: id, wilayaId: { not: null } }, include: { wilaya: true, commune: true }, orderBy: [{ orderedAt: 'desc' }, { id: 'desc' }] });
+    // journey 16/11 J05-14: the last order that was not cancelled (a cancelled order's address is not the client's), else any
+    const orderAddress = (cancelled: boolean) => prisma.order.findFirst({ where: { clientId: id, wilayaId: { not: null }, ...(cancelled ? {} : { status: { not: 'cancelled' as const } }) }, include: { wilaya: true, commune: true }, orderBy: [{ orderedAt: 'desc' }, { id: 'desc' }] });
+    const lastOrderAddress = addresses.length ? null : ((await orderAddress(false)) ?? (await orderAddress(true)));
     const n = (s: string) => counts.find((x) => x.status === s)?._count._all ?? 0;
     const delivered = n('delivered');
     const returns = n('returned');

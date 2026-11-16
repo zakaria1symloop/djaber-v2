@@ -6,7 +6,7 @@
 // Before the draft exists the form is kept in sessionStorage (session-expired recovery, 02-next-route-map §6).
 // Inside the onboarding tunnel (step 4 "Partir de zéro", `?start=scratch`) only steps 1–3 run: channels and activation
 // need the page of step 5, so finishing step 3 moves the tunnel on to the page step; cancel / save & quit go back to it.
-import { Button, FormAlert, OptionCard, Skeleton, SummaryRail, toast, ValidationSummary, WizardFrame, type WizardStep } from '@djaber/ui';
+import { Button, FormAlert, OptionCard, radioTabIndex, Skeleton, SummaryRail, toast, ValidationSummary, WizardFrame, type WizardStep } from '@djaber/ui';
 import { formatNumber, PLAYGROUND_TURNS_PER_HOUR } from '@djaber/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
@@ -369,6 +369,8 @@ function WizardBody({ step, agent, crumb, inTunnel, exitTo, initialStart }: { st
   const perConv = creditsPerConversation(draft);
   const status = saving ? t('common.saving') : !agent ? t('agents.wizard.status.unsaved') : changed ? t('agents.wizard.status.pending') : savedAt ? t('agents.wizard.status.saved', { ago: relativeTime(new Date(savedAt), locale) }) : t('agents.wizard.status.draft');
 
+  // journey 16/11 J01-3: a draft made from a preset already carries its knowledge, capabilities and handoff settings
+  const shown = (n: number, k: WizardStepKey) => savedStep >= n || step === k || !!draft.presetKey;
   const rail = (
     <SummaryRail
       title={t('agents.rail.title')}
@@ -376,9 +378,9 @@ function WizardBody({ step, agent, crumb, inTunnel, exitTo, initialStart }: { st
         { label: t('agents.rail.preset'), value: presetName },
         { label: t('agents.rail.name'), value: draft.name.trim() },
         { label: t('agents.rail.languages'), value: draft.languages.map((l) => t(`agents.language.short.${l}`)).join(' · ') },
-        { label: t('agents.rail.knowledge'), value: savedStep >= 2 || step === 'knowledge' ? [draft.catalogScope === 'all' ? t('agents.rail.catalogAll') : t('agents.summary.catalogCategories', { count: draft.scopeCategoryIds.length }), t('agents.summary.rules', { count: policyCount(draft) }), t('agents.summary.faq', { count: agent?.wizard?.faqCount ?? 0 })].join(' · ') : '' },
-        { label: t('agents.rail.capabilities'), value: savedStep >= 3 || step === 'behaviour' ? enabledCapabilities(draft).map((c) => t(`agents.capability.short.${c}`)).join(' · ') : '' },
-        { label: t('agents.rail.handoff'), value: savedStep >= 3 || step === 'behaviour' ? t('agents.rail.handoffValue', { rules: enabledRuleCount(draft), keywords: draft.handoffKeywords.length }) : '' },
+        { label: t('agents.rail.knowledge'), value: shown(2, 'knowledge') ? [draft.catalogScope === 'all' ? t('agents.rail.catalogAll') : t('agents.summary.catalogCategories', { count: draft.scopeCategoryIds.length }), t('agents.summary.rules', { count: policyCount(draft) }), t('agents.summary.faq', { count: agent?.wizard?.faqCount ?? 0 })].join(' · ') : '' },
+        { label: t('agents.rail.capabilities'), value: shown(3, 'behaviour') ? enabledCapabilities(draft).map((c) => t(`agents.capability.short.${c}`)).join(' · ') : '' },
+        { label: t('agents.rail.handoff'), value: shown(3, 'behaviour') ? t('agents.rail.handoffValue', { rules: enabledRuleCount(draft), keywords: draft.handoffKeywords.length }) : '' },
         { label: t('agents.rail.channels'), value: (agent?.channels ?? []).map(channelLabel).join(' · ') },
       ]}
     >
@@ -463,10 +465,10 @@ function WizardBody({ step, agent, crumb, inTunnel, exitTo, initialStart }: { st
               ) : (
                 <div role="radiogroup" aria-label={t('agents.start.title')} aria-invalid={!!errors.start || undefined} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                   {presets.isPending ? [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24" />) : null}
-                  {(presets.data ?? []).map((p) => (
-                    <OptionCard key={p.key} name={p.key} selected={start === p.key} onSelect={() => choose(p.key)} title={p.name} description={p.tagline ?? p.description ?? ''} badge={t('agents.start.selected')} />
+                  {(presets.data ?? []).map((p, i, all) => (
+                    <OptionCard key={p.key} name={p.key} selected={start === p.key} onSelect={() => choose(p.key)} tabIndex={radioTabIndex(i, start === SCRATCH ? all.length : all.findIndex((x) => x.key === start))} title={p.name} description={p.tagline ?? p.description ?? ''} badge={t('agents.start.selected')} />
                   ))}
-                  <OptionCard name="scratch" selected={start === SCRATCH} onSelect={() => choose(SCRATCH)} title={t('agents.start.scratch')} description={t('agents.start.scratch.description')} badge={t('agents.start.selected')} />
+                  <OptionCard name="scratch" selected={start === SCRATCH} onSelect={() => choose(SCRATCH)} tabIndex={radioTabIndex(presets.data?.length ?? 0, start === SCRATCH ? (presets.data?.length ?? 0) : (presets.data ?? []).findIndex((x) => x.key === start))} title={t('agents.start.scratch')} description={t('agents.start.scratch.description')} badge={t('agents.start.selected')} />
                 </div>
               )}
             </section>

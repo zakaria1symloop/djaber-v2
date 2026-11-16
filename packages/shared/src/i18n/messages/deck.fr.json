@@ -716,5 +716,8 @@
  "notification.support.reply.pending.title": "Le support attend votre réponse · #{ticket}",
  "notification.support.reply.pending.body": "Répondez dans la demande pour que le support continue.",
  "notification.bellUnread": "{count, plural, one {# non lue} other {# non lues}}",
- "shortcuts.esc": "Échap"
+ "shortcuts.esc": "Échap",
+ "validation.price_max": "Montant trop élevé (100 000 000 DA maximum)",
+ "validation.quantity_max": "Quantité trop élevée (10 000 000 maximum)",
+ "dialog.archiveProduct.title": "Archiver « {name} » ?"
 }

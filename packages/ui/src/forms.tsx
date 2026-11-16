@@ -253,6 +253,7 @@ export function OptionCard({
   name,
   className,
   arrowSelects = true,
+  tabIndex,
 }: {
   selected: boolean;
   onSelect: () => void;
@@ -266,12 +267,15 @@ export function OptionCard({
   disabled?: boolean;
   name?: string;
   className?: string;
+  /** roving Tab stop of the group: `radioTabIndex(index, selectedIndex)` — one Tab stop per group (ONBOARDING-13) */
+  tabIndex?: 0 | -1;
 }) {
   return (
     <button
       type="button"
       role="radio"
       aria-checked={selected}
+      tabIndex={tabIndex}
       data-name={name}
       disabled={disabled}
       onClick={onSelect}

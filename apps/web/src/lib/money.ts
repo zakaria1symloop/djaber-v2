@@ -39,6 +39,20 @@ export const signedNumber = (n: number): string => `${n < 0 ? '−' : ''}${forma
 /** `−8 000 DA` / `12 500 DA` */
 export const signedMoney = (n: number): string => `${n < 0 ? '−' : ''}${formatMoney(Math.abs(n))}`;
 
+/**
+ * The selling price a product shows everywhere (table, grid, phone card, pickers): its variants' range « 1 500 DA – 1 900 DA »
+ * when it has variants (the base price is never sold on its own — PRODUCTS-03, journey J02-3 / J02-4), else its price.
+ */
+export const priceRangeOf = (p: { price: number; hasVariants?: boolean; priceRange?: { min: number; max: number } | null; variants?: { price: number; isActive?: boolean }[] }): { min: number; max: number } => {
+  if (p.priceRange) return p.priceRange;
+  const prices = p.hasVariants ? (p.variants ?? []).filter((v) => v.isActive !== false).map((v) => v.price) : [];
+  return prices.length ? { min: Math.min(...prices), max: Math.max(...prices) } : { min: p.price, max: p.price };
+};
+export const priceText = (p: Parameters<typeof priceRangeOf>[0]): string => {
+  const r = priceRangeOf(p);
+  return r.min === r.max ? formatMoney(r.min) : `${formatMoney(r.min)} – ${formatMoney(r.max)}`;
+};
+
 /** `55,6 %` / `−6,1 %` (true minus, decimal comma). */
 export const pctText = (value: number): string => `${value < 0 ? '−' : ''}${String(Math.abs(Math.round(value * 10) / 10)).replace('.', ',')} %`;
 
@@ -46,6 +60,7 @@ export const pctText = (value: number): string => `${value < 0 ? '−' : ''}${St
 export function compactAmount(n: number, locale: string): string {
   if (Math.abs(n) < 1_000_000) return formatNumber(n);
   const v = Math.round(n / 10_000) / 100;
-  const s = v.toFixed(2).replace(/0$/, '');
-  return `${locale === 'en' ? s : s.replace('.', ',')} M`;
+  const [whole, dec] = Math.abs(v).toFixed(2).replace(/0$/, '').split('.');
+  // journey J02-2: « 1 000,97 M », the whole part grouped like every other figure (it read « 1000,97 M »)
+  return `${v < 0 ? '-' : ''}${formatNumber(Number(whole))}${dec ? `${locale === 'en' ? '.' : ','}${dec}` : ''} M`;
 }

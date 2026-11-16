@@ -72,10 +72,11 @@ describe('moderation pre-screen', () => {
 
   it('recette 09/11 UX-043: French / English plural and feminine endings are rejected like the word (« armes », « drugs »)', () => {
     const fr = { ...rules, words: ['arme', 'drug', 'interdit'] };
-    expect(svc.score({ ...base, name: 'Recette H-19 armes' }, fr, null).banned).toMatchObject({ code: 'blocked_word', word: 'arme', field: 'name' });
-    expect(svc.score({ ...base, name: 'Recette H-19 drugs' }, fr, null).banned).toMatchObject({ word: 'drug' });
-    expect(svc.score({ ...base, name: 'Vente interdite' }, fr, null).banned).toMatchObject({ word: 'interdit' });
-    expect(svc.score({ ...base, categoryName: 'Armes blanches' }, rules, null).banned).toEqual({ code: 'prohibited_category', word: 'arme', field: 'categoryId' });
+    // journey J02-9: the hit names the form the text holds (the word to find and remove), not the listed one
+    expect(svc.score({ ...base, name: 'Recette H-19 armes' }, fr, null).banned).toMatchObject({ code: 'blocked_word', word: 'armes', field: 'name' });
+    expect(svc.score({ ...base, name: 'Recette H-19 drugs' }, fr, null).banned).toMatchObject({ word: 'drugs' });
+    expect(svc.score({ ...base, name: 'Vente interdite' }, fr, null).banned).toMatchObject({ word: 'interdite' });
+    expect(svc.score({ ...base, categoryName: 'Armes blanches' }, rules, null).banned).toEqual({ code: 'prohibited_category', word: 'armes', field: 'categoryId' });
     // « armée » is not « arme » + « e » (a word ending in e only takes s); compounds only flag
     expect(svc.score({ ...base, name: 'Surplus armée' }, fr, null).banned).toBeUndefined();
     expect(svc.score({ ...base, name: 'Drugstore kit' }, fr, null).banned).toBeUndefined();
@@ -84,10 +85,10 @@ describe('moderation pre-screen', () => {
 
   it('retest 11/11 UX-053: a word listed in the plural rejects its singular too (« drogues » → « drogue », « drugs » → « drug »)', () => {
     const pl = { ...rules, words: ['drogues', 'drugs', 'couteaux', 'gas', 'kiss'] };
-    expect(svc.score({ ...base, name: 'Recette UX-043 drogue' }, pl, null).banned).toMatchObject({ code: 'blocked_word', word: 'drogues', field: 'name' });
+    expect(svc.score({ ...base, name: 'Recette UX-043 drogue' }, pl, null).banned).toMatchObject({ code: 'blocked_word', word: 'drogue', field: 'name' });
     expect(svc.score({ ...base, name: 'Recette UX-043 drogues' }, pl, null).banned).toMatchObject({ word: 'drogues' });
-    expect(svc.score({ ...base, name: 'drug' }, pl, null).banned).toMatchObject({ word: 'drugs' });
-    expect(svc.score({ ...base, name: 'Couteau de chasse' }, pl, null).banned).toMatchObject({ word: 'couteaux' });
+    expect(svc.score({ ...base, name: 'drug' }, pl, null).banned).toMatchObject({ word: 'drug' });
+    expect(svc.score({ ...base, name: 'Couteau de chasse' }, pl, null).banned).toMatchObject({ word: 'couteau' });
     // a short word or a double s keeps its whole form; longer words still only flag
     expect(svc.score({ ...base, name: 'Ga 16' }, pl, null).banned).toBeUndefined();
     expect(svc.score({ ...base, name: 'Kis 16' }, pl, null).banned).toBeUndefined();
@@ -138,7 +139,7 @@ describe('moderation pre-screen', () => {
     // a longer word that merely contains it is not a hit
     expect(svc.score({ ...base, name: 'خمرية اللون' }, ar, null).banned).toBeUndefined();
     // French / English: the word with its plural ending too (recette 09/11 UX-043), not a longer word
-    expect(svc.score({ ...base, name: 'Arnaques' }, ar, null).banned).toMatchObject({ word: 'arnaque' });
+    expect(svc.score({ ...base, name: 'Arnaques' }, ar, null).banned).toMatchObject({ word: 'arnaques' }) // J02-9: the form the text holds;
     expect(svc.score({ ...base, name: 'Arnaqueurs' }, ar, null).banned).toBeUndefined();
   });
 });

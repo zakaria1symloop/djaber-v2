@@ -101,7 +101,8 @@ export function ArchiveProductDialog({ product, onClose, onDone }: { product: Ar
     <Dialog
       open={!!product}
       onOpenChange={(o) => !o && !busy && onClose()}
-      title={t('dialog.deleteProduct.title', { name: product?.name ?? '' })}
+      // journey J02-10: the title follows the chosen option — archiving is reversible, only the hard delete is « destructive »
+      title={t(mode === 'hard' ? 'dialog.deleteProduct.title' : 'dialog.archiveProduct.title', { name: product?.name ?? '' })}
       closeLabel={t('action.close')}
       size="md"
       footer={
@@ -116,9 +117,11 @@ export function ArchiveProductDialog({ product, onClose, onDone }: { product: Ar
       }
     >
       <div className="flex flex-col gap-4">
-        <Pill tone="danger" className="w-fit rounded-[4px]">
-          {t('common.destructive')}
-        </Pill>
+        {mode === 'hard' ? (
+          <Pill tone="danger" className="w-fit rounded-[4px]">
+            {t('common.destructive')}
+          </Pill>
+        ) : null}
         <RadioCards<'archive' | 'hard'>
           label={t('products.delete.mode')}
           columns={1}

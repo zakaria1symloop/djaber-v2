@@ -13,7 +13,7 @@ import { Link } from '@/i18n/navigation';
 import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
-import { digitsToInt, marginPct, moneyDigits, pctText } from '@/lib/money';
+import { digitsToInt, marginPct, moneyDigits, pctText, priceText } from '@/lib/money';
 import { useSession, useWorkspaceId } from '@/lib/session';
 import { catalogApi, catalogKeys, useCatalogRefresh, useProduct, useProductRelations } from '../api';
 import { GenerateVariantsDialog } from '../generate-variants-dialog';
@@ -39,7 +39,10 @@ export function QuickEditSheet({ productId, onClose, onPrev, onNext, position }:
       title={p?.name ?? t('common.loading')}
       subtitle={
         p
-          ? [`SKU ${p.sku}`, p.category?.name, p.hasVariants ? t('products.variantsCount', { count: p.variants.length }) : null, t(`enum.Product.state.${p.archived ? 'archived' : p.isActive ? 'active' : 'hidden'}`)].filter(Boolean).join(' · ')
+          ? [`SKU ${p.sku}`, p.category?.name, p.hasVariants ? t('products.variantsCount', { count: p.variants.length }) : null, t(`enum.Product.state.${p.archived ? 'archived' : p.isActive ? 'active' : 'hidden'}`)].filter(Boolean)
+              // journey J02-11: each part isolated (FSI … PDI) so an Arabic count never joins a Latin run
+              .map((part) => `\u2068${part}\u2069`)
+              .join(' · ')
           : undefined
       }
       media={p ? <ProductThumb src={p.primaryImageUrl} name={p.name} size={44} /> : <Skeleton className="size-11" />}
@@ -115,7 +118,8 @@ function Body({ product, setStatus }: { product: Product; setStatus: (s: Status)
     if (value === current) return;
     const schema = field === 'costPrice' ? productCost.nullable() : field === 'oldPrice' ? productPrice.nullable() : productPrice;
     const parsed = schema.safeParse(value);
-    if (!parsed.success) return setErrors((prev) => ({ ...prev, [field]: t('validation.price') }));
+    // journey J02-2: the schema's own message (« Montant trop élevé … » above the maximum), not always « required »
+    if (!parsed.success) return setErrors((prev) => ({ ...prev, [field]: t(parsed.error.issues[0]?.message ?? 'validation.price', { min: '', max: '' }) }));
     setErrors((prev) => ({ ...prev, [field]: undefined }));
     setStatus({ tone: 'busy', text: t('common.saving') });
     try {
@@ -161,7 +165,16 @@ function Body({ product, setStatus }: { product: Product; setStatus: (s: Status)
     <div className="flex flex-col gap-6">
       <SheetSection label={t('products.quick.section')} note={t('products.quick.sectionNote')}>
         <div className={cn('grid gap-3', advanced ? 'grid-cols-3' : 'grid-cols-2')}>
-          {priceField('price', t('products.quick.price'))}
+          {/* journey J02-3: a product with variants is sold at its variants' prices — the base price is not offered here */}
+          {product.hasVariants && product.variants.some((v) => v.isActive) ? (
+            <Field label={t('products.quick.price')} hint={t('products.quick.priceByVariant')}>
+              <div className="flex h-9 items-center rounded-[6px] border border-line-hairline px-3 text-[13px] text-text-secondary" data-testid="quick-price-range">
+                <Ltr className="tabular-nums">{priceText(product)}</Ltr>
+              </div>
+            </Field>
+          ) : (
+            priceField('price', t('products.quick.price'))
+          )}
           {priceField('oldPrice', t('products.quick.oldPrice'))}
           {advanced ? priceField('costPrice', t('products.quick.cost')) : null}
         </div>

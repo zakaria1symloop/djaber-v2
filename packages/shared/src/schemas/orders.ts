@@ -446,8 +446,9 @@ export type OrderItemView = {
   quantity: number;
   discount: number;
   total: number;
-  /** `last_unit` when this line takes the last unit, `insufficient` when the current stock no longer covers it */
-  stockWarning: 'last_unit' | 'insufficient' | null;
+  /** `last_unit` when this line takes the last unit, `insufficient` when the current stock no longer covers it, `backorder`
+   *  when the product is sold beyond its stock (« Accepter les commandes en rupture » — journey J02-6) */
+  stockWarning: 'last_unit' | 'insufficient' | 'backorder' | null;
 };
 export type PaymentEntryView = { id: string; amount: number; method: PaymentMethodName; reference: string | null; note: string | null; paidAt: string; createdBy: OrderUserRef | null };
 export type OrderCallView = { id: string; user: OrderUserRef; result: CallResultName; callbackAt: string | null; notes: string | null; calledAt: string };

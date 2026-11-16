@@ -429,7 +429,7 @@ function OrdersTab() {
               <Kpi k={k.confirmationRate} name="confirmationRate" label={t('analytics.unit.confirmationRate')} meta={t('analytics.orders.calls', { value: fig(hintNum(k.confirmationRate, 'callsPerOrder'), 'ratio') })} />
               <Kpi k={k.delivered} name="delivered" label={t('analytics.unit.delivered')} meta={t('analytics.orders.deliveredMeta', { rate: fig(hintNum(k.delivered, 'deliveryRate'), 'pct'), cod: fig(hintNum(k.delivered, 'codPct'), 'pct') })} onClick={() => router.push(`/orders?tab=delivered&${range}`)} />
               <Kpi k={k.cancelledPct} name="cancelledPct" label={t('analytics.unit.cancelled')} meta={t('analytics.orders.wrongNumber', { pct: fig(hintNum(k.cancelledPct, 'wrongNumberPct'), 'pct') })} onClick={() => router.push(`/orders?tab=cancelled&${range}`)} />
-              <Kpi k={k.returnedPct} name="returnedPct" label={t('analytics.unit.returned')} meta={t('analytics.orders.returns', { count: n(hintNum(k.returnedPct, 'returned')) })} onClick={() => router.push(`/orders?tab=returned&${range}`)} />
+              <Kpi k={k.returnedPct} name="returnedPct" label={t('analytics.unit.returned')} meta={t('analytics.orders.returns', { count: hintNum(k.returnedPct, 'returned') ?? 0 })} onClick={() => router.push(`/orders?tab=returned&${range}`)} />
               <Kpi k={k.abandoned} name="abandoned" label={t('analytics.unit.abandoned')} meta={hintNum(k.abandoned, 'pct') !== null ? fig(hintNum(k.abandoned, 'pct'), 'pct') : undefined} />
             </section>
             <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5" aria-label={t('analytics.figures.title')} data-testid="money-figures">

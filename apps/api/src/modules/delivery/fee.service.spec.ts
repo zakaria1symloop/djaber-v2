@@ -31,9 +31,9 @@ describe('AT-ORD-09 delivery fee quote', () => {
   it('UX-046: the fee note follows the app language, wilaya name included', () => {
     const relay = quoteFee(alger, { wilayaId: 19, isStopdesk: true, threshold: null });
     const setif = { nameFr: 'Sétif', nameAr: 'سطيف' };
-    expect(feeExplanation(relay, setif, 'fr')).toBe(`GRILLE SÉTIF · POINT RELAIS ${relay.base}`);
-    expect(feeExplanation(relay, setif, 'en')).toBe(`SÉTIF FEE GRID · PICKUP POINT ${relay.base}`);
-    expect(feeExplanation(relay, setif, 'ar')).toBe(`شبكة رسوم سطيف · نقطة استلام ${relay.base}`);
+    expect(feeExplanation(relay, setif, 'fr')).toBe(`GRILLE SÉTIF · STOP-DESK ${relay.base}`);
+    expect(feeExplanation(relay, setif, 'en')).toBe(`SÉTIF FEE GRID · STOPDESK ${relay.base}`);
+    expect(feeExplanation(relay, setif, 'ar')).toBe(`شبكة رسوم سطيف · مكتب الاستلام ${relay.base}`);
     expect(feeExplanation(quoteFee(alger, { wilayaId: 19, isStopdesk: false, subtotal: 6000, threshold: 5000 }), setif, 'ar')).toBe('شبكة رسوم سطيف · توصيل للمنزل 400 ← مجاني');
   });
 });

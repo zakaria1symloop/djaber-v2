@@ -1,6 +1,6 @@
 'use client';
 // /settings/stock-mode — Figma "SET — Settings — … Stock mode" (D12): two Option Cards · saving.
-import { ConfirmDialog, FormAlert, OptionCard, Skeleton, Spinner, toast } from '@djaber/ui';
+import { ConfirmDialog, FormAlert, OptionCard, radioTabIndex, Skeleton, Spinner, toast } from '@djaber/ui';
 import { Box } from 'lucide-react';
 import { useState } from 'react';
 import { Section, SettingsPage } from '@/features/settings/common';
@@ -44,11 +44,12 @@ export default function StockModePage() {
           <Skeleton className="h-28" />
         ) : (
           <div role="radiogroup" aria-label={t('nav.settings.stockMode')} className="grid gap-3 sm:grid-cols-2">
-            {(['simple', 'advanced'] as const).map((m) => (
+            {(['simple', 'advanced'] as const).map((m, i, all) => (
               <OptionCard
                 key={m}
                 name={m}
                 selected={workspace.stockMode === m}
+                tabIndex={radioTabIndex(i, all.indexOf(workspace.stockMode))}
                 onSelect={() => (m === 'simple' && workspace.stockMode === 'advanced' ? setConfirmSimple(true) : void choose(m))}
                 disabled={patch.isPending || !editable}
                 icon={<Box className="size-5" aria-hidden />}

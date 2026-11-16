@@ -1,6 +1,6 @@
 // CAT-06 / FL-12 — pure part of the catalogue import: header aliases (FR / EN / AR, as V1), cell parsing, row validation,
 // preview. No database here: the service passes what the rows must be checked against.
-import { IMPORT_FIELDS, IMPORT_REQUIRED_FIELDS, type ImportField, type ImportPreviewResult, type ImportPreviewRow } from '@djaber/shared';
+import { CATALOG_MAX_MONEY, CATALOG_MAX_QTY, formatNumber, IMPORT_FIELDS, IMPORT_REQUIRED_FIELDS, type ImportField, type ImportPreviewResult, type ImportPreviewRow } from '@djaber/shared';
 
 /** Lowercase, accents dropped, letters and digits only: "Prix d’achat" → "prixdachat". Arabic letters are kept. */
 export const normalizeHeader = (value: unknown): string =>
@@ -77,11 +77,13 @@ type Values = ImportPreviewRow['values'];
 type RowError = ImportPreviewRow['errors'][number];
 
 const MAX = { sku: 255, name: 255, description: 5000, category: 80 };
+/** The bounds of the product form (`CreateProductSchema`): a row the form would refuse is refused here (journey J02-2). */
+const BOUND = { money: CATALOG_MAX_MONEY, qty: CATALOG_MAX_QTY, weightGrams: 1_000_000 };
 
 const parseRow = (cell: (f: ImportField) => string, mapped: (f: ImportField) => boolean): { values: Values; errors: RowError[] } => {
   const values: Values = {};
   const errors: RowError[] = [];
-  const err = (field: ImportField, code: string) => errors.push({ field, code });
+  const err = (field: ImportField, code: string, params?: Record<string, string | number>) => errors.push({ field, code, ...(params ? { params } : {}) });
 
   const name = cell('name');
   if (!name) err('name', 'validation.required');
@@ -94,6 +96,7 @@ const parseRow = (cell: (f: ImportField) => string, mapped: (f: ImportField) => 
   // full-test 15/11 PRODUCTS-11: « 1999.5 » is a price, just not a whole number of DA — say so
   if (price === null && rawPrice) err('price', 'validation.price_integer');
   else if (price === null || price <= 0) err('price', 'validation.price');
+  else if (price > BOUND.money) err('price', 'validation.price_max');
   values.price = price ?? (rawPrice || null);
 
   if (mapped('sku')) {
@@ -122,6 +125,7 @@ const parseRow = (cell: (f: ImportField) => string, mapped: (f: ImportField) => 
     const n = parseInteger(raw);
     if (n === null) err(f, 'validation.price_integer');
     else if (n < (f === 'oldPrice' ? 1 : 0)) err(f, 'validation.price');
+    else if (n > BOUND.money) err(f, 'validation.price_max');
     // 04 §12 (PRODUCTS-09): the struck-through price is above the selling price
     else if (f === 'oldPrice' && typeof price === 'number' && price > 0 && n <= price) err(f, 'validation.old_price');
     values[f] = n ?? raw;
@@ -134,7 +138,10 @@ const parseRow = (cell: (f: ImportField) => string, mapped: (f: ImportField) => 
       continue;
     }
     const n = parseInteger(raw);
-    if (n === null || n < 0) err(f, f === 'weightGrams' ? 'validation.range' : 'validation.quantity');
+    // the weight message names its bounds (« Valeur hors limites (0–1 000 000) »)
+    const weightRange = { min: 0, max: formatNumber(BOUND.weightGrams) };
+    if (n === null || n < 0) err(f, f === 'weightGrams' ? 'validation.range' : 'validation.quantity', f === 'weightGrams' ? weightRange : undefined);
+    else if (n > (f === 'weightGrams' ? BOUND.weightGrams : BOUND.qty)) err(f, f === 'weightGrams' ? 'validation.range' : 'validation.quantity_max', f === 'weightGrams' ? weightRange : undefined);
     values[f] = n ?? raw;
   }
   if (mapped('keywords')) {

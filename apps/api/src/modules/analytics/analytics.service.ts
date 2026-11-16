@@ -467,7 +467,8 @@ export class AnalyticsService {
     return {
       ...this.base(ctx),
       kpis: {
-        activeProducts: snap('count', active, { hint: { lowStock: overview.lowStockCount } }),
+        // journey J02-5: « stock faible » = products at or under their threshold, out of stock included (as every other screen)
+        activeProducts: snap('count', active, { hint: { lowStock: overview.lowStockCount + overview.outOfStockCount } }),
         unitsSold: kpi(ctx, 'count', sold(cur), prev ? sold(prev) : null, { hint: { distinct: Object.values(cur.products).filter((p) => p.sold > 0).length } }),
         topProduct: kpi(ctx, 'money', best && best[1].revenue > 0 ? best[1].revenue : null, best ? (prev?.products[best[0]]?.revenue ?? 0) : null, { hint: { productId: best && best[1].revenue > 0 ? best[0] : null, name: bestName } }),
         avgMarginPct: kpi(ctx, 'pct', margin(cur), margin(prev)),

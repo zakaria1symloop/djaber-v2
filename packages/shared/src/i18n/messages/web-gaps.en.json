@@ -35,7 +35,7 @@
  "clients.sheet.allSales": "See all {count}",
  "clients.sheet.salesTitle": "COUNTER SALES",
  "clients.sheet.countSplit": "{orders} order(s) + {sales} counter sale(s)",
-  "clients.sheet.spentSplit": "Delivered orders {orders} + counter sales {sales}",
+ "clients.sheet.spentSplit": "Delivered orders {orders} + counter sales {sales}",
  "credits.pill.labelPacks": "Credits: {used} / {limit}, packs {packUsed} / {packTotal}",
  "credits.pill.packs": "This month: {used} / {limit} plan credits · Packs: {packUsed} / {packTotal} used ({pack} left), used once the month's credits run out",
  "gaps.agents.activate.blocked": "Fix before activating: {items}.",
@@ -141,5 +141,6 @@
  "tracking.panel.openLink": "Open",
  "tracking.panel.publicLink": "TRACKING LINK",
  "validation.banned_word": "Contains a word banned on Djaber: choose another name.",
- "validation.supplier_taken": "Already used by another supplier"
+ "validation.supplier_taken": "Already used by another supplier",
+ "clients.sheet.cancelsNotCounted": "{count, plural, one {# cancelled order is not counted} other {# cancelled orders are not counted}}"
 }

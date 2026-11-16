@@ -2,9 +2,11 @@
 // Wilaya / commune / stop-desk pickers fed by `/geo/*` and `/delivery/stopdesks` (02-next-route-map §5 "Combobox
 // variants: WilayaCombobox, CommuneCombobox wilayaId"). Used by the order form, the address dialog and the client form.
 import { Combobox } from '@djaber/ui';
+import { useState } from 'react';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useCommunes, useGeoWilayas, useStopdesks } from './api';
 import type { Commune, Wilaya } from './contracts';
+import { geoFilter } from './logic';
 
 /** "19 · Sétif" (Arabic name in the Arabic UI) */
 export const wilayaLabel = (w: Pick<Wilaya, 'code' | 'nameFr' | 'nameAr'>, locale: string) => `${w.code} · ${locale === 'ar' ? w.nameAr : w.nameFr}`;
@@ -15,15 +17,17 @@ export function WilayaCombobox({ id, value, onChange, invalid, disabled, clearab
   const locale = useLocaleCode();
   const q = useGeoWilayas();
   const list = q.data ?? [];
+  const [search, setSearch] = useState('');
   return (
     <Combobox
+      onSearch={setSearch}
       id={id}
       value={value === null ? null : String(value)}
       onChange={(v) => {
         const w = v ? (list.find((x) => String(x.id) === v) ?? null) : null;
         onChange(w ? w.id : null, w);
       }}
-      options={list.map((w) => ({ value: String(w.id), label: wilayaLabel(w, locale), hint: locale === 'ar' ? w.nameFr : w.nameAr }))}
+      options={geoFilter(list.map((w) => ({ value: String(w.id), label: wilayaLabel(w, locale), hint: locale === 'ar' ? w.nameFr : w.nameAr })), search)}
       placeholder={t('geo.wilaya.placeholder')}
       searchPlaceholder={t('geo.wilaya.search')}
       emptyLabel={q.isPending ? t('common.loading') : t('geo.empty')}
@@ -40,15 +44,17 @@ export function CommuneCombobox({ id, wilayaId, value, onChange, invalid, disabl
   const locale = useLocaleCode();
   const q = useCommunes(wilayaId);
   const list = q.data ?? [];
+  const [search, setSearch] = useState('');
   return (
     <Combobox
+      onSearch={setSearch}
       id={id}
       value={value === null ? null : String(value)}
       onChange={(v) => {
         const c = v ? (list.find((x) => String(x.id) === v) ?? null) : null;
         onChange(c ? c.id : null, c);
       }}
-      options={list.map((c) => ({ value: String(c.id), label: communeLabel(c, locale), hint: c.postalCode ?? undefined }))}
+      options={geoFilter(list.map((c) => ({ value: String(c.id), label: communeLabel(c, locale), hint: c.postalCode ?? undefined })), search)}
       placeholder={wilayaId ? t('geo.commune.placeholder') : t('geo.commune.pickWilaya')}
       searchPlaceholder={t('geo.commune.search')}
       emptyLabel={q.isPending && wilayaId ? t('common.loading') : t('geo.empty')}
@@ -64,12 +70,14 @@ export function StopdeskCombobox({ id, communeId, provider, value, onChange, inv
   const t = useT();
   const q = useStopdesks(communeId, provider === 'manual' ? undefined : provider);
   const list = q.data ?? [];
+  const [search, setSearch] = useState('');
   return (
     <Combobox
+      onSearch={setSearch}
       id={id}
       value={value}
       onChange={(v, o) => onChange(v, o?.label ?? null)}
-      options={list.map((s) => ({ value: s.id, label: s.name, hint: s.provider }))}
+      options={geoFilter(list.map((s) => ({ value: s.id, label: s.name, hint: s.provider })), search)}
       placeholder={t('geo.stopdesk.placeholder')}
       searchPlaceholder={t('geo.stopdesk.search')}
       emptyLabel={q.isPending && communeId ? t('common.loading') : t('geo.stopdesk.empty')}

@@ -25,7 +25,7 @@ import { OrderStatusPill } from '../ui';
 import { useOrderActions } from '../use-order-actions';
 import { OrderDeliveryBlock } from '@/features/delivery/order-block';
 import { useParcelActions } from '@/features/delivery/use-parcel-actions';
-import { CallsBlock, ClientBlock, contactOf, HistoryBlock, ItemsBlock, itemsOf, NotesBlock, PaymentBlock, type ContactDraft, type ItemsDraft } from './blocks';
+import { CallsBlock, ClientBlock, contactOf, HistoryBlock, ItemsBlock, itemsOf, itemsPatch, NotesBlock, PaymentBlock, type ContactDraft, type ItemsDraft } from './blocks';
 
 function PageSkeleton() {
   const t = useT();
@@ -103,7 +103,7 @@ export function OrderPage({ id }: { id: string }) {
       const body =
         part === 'contact'
           ? { version, clientName: contact!.clientName.trim(), clientPhone: contact!.clientPhone.trim(), clientPhone2: contact!.clientPhone2.trim() || null }
-          : { version, items: items!.map((i) => ({ productId: i.productId, variantId: i.variantId, quantity: i.quantity, unitPrice: i.unitPrice })) };
+          : { version, ...itemsPatch(items!, order) };
       const next = await ordersApi.update(order.id, body);
       await refresh({ order: next });
       if (part === 'contact') setContact(null);
@@ -190,6 +190,7 @@ export function OrderPage({ id }: { id: string }) {
           <ItemsBlock
             order={order}
             canEdit={editItems}
+            canMoney={can('orders.money')}
             editReason={!ro && edit.present && !edit.enabled ? edit.reason : !ro && !itemsOpen ? t('orders.page.itemsLocked') : undefined}
             editing={!!items}
             draft={items ?? itemsOf(order)}

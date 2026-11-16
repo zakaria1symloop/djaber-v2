@@ -154,13 +154,21 @@ export function ProductPage({ id }: { id: string }) {
         </span>
       }
       description={
+        // journey J02-11 (STOCK-07 family): each part is isolated, so in Arabic a Latin category name never takes the number of
+        // « 6 متغيرات » into its run
         <span data-testid="product-sub">
-          {t('products.page.variants.sku')} <Ltr>{product.sku}</Ltr>
-          {product.category ? ` · ${product.category.name}` : ''}
-          {variantCount ? ` · ${t('products.page.variantsCount', { count: variantCount })}` : ''}
-          {!product.trackStock ? ` · ${t('enum.Product.state.service')}` : ''}
-          {` · ${t('products.page.sub.created', { date: formatDate(product.createdAt, locale) })}`}
-          {` · ${t('products.page.sub.updated', { date: formatDate(product.updatedAt, locale) })}`}
+          {[
+            <bdi key="sku">
+              {t('products.page.variants.sku')} <Ltr>{product.sku}</Ltr>
+            </bdi>,
+            product.category ? <bdi key="cat">{product.category.name}</bdi> : null,
+            variantCount ? <bdi key="variants">{t('products.page.variantsCount', { count: variantCount })}</bdi> : null,
+            !product.trackStock ? <bdi key="service">{t('enum.Product.state.service')}</bdi> : null,
+            <bdi key="created">{t('products.page.sub.created', { date: formatDate(product.createdAt, locale) })}</bdi>,
+            <bdi key="updated">{t('products.page.sub.updated', { date: formatDate(product.updatedAt, locale) })}</bdi>,
+          ]
+            .filter(Boolean)
+            .flatMap((part, i) => (i ? [' · ', part] : [part]))}
         </span>
       }
       actions={

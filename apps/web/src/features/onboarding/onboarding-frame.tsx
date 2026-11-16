@@ -1,8 +1,9 @@
 'use client';
-// OnboardingLayout (02-next-route-map §1): logo, "Passer la configuration", guard (owner session, resume rule).
+// OnboardingLayout (02-next-route-map §1): logo, FR · AR · EN, "Passer la configuration", "Déconnexion", guard (owner session, resume rule).
 import { Banner, Button, ConfirmDialog, Spinner, toast } from '@djaber/ui';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
+import { LocaleSwitch } from '@/components/auth/auth-card';
 import { PageSessionExpired, QueryError } from '@/components/global-states';
 import { Logo } from '@/components/shell/sidebar';
 import { useOnboardingStep } from '@/features/workspace/api';
@@ -24,6 +25,7 @@ export function OnboardingFrame({ children }: { children: ReactNode }) {
   const { step = '' } = useParams<{ step?: string }>();
   const skip = useOnboardingStep();
   const [confirmSkip, setConfirmSkip] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   // full-test 15/11 ONBOARDING-11: « reprise (banner at next login) » — the first tunnel page of a browser session that
   // resumes a saved step says so once
   const [resumed, setResumed] = useState<number | null>(null);
@@ -81,6 +83,15 @@ export function OnboardingFrame({ children }: { children: ReactNode }) {
     );
   }
 
+  const signOut = async () => {
+    setSigningOut(true);
+    try {
+      await s.logout();
+      router.replace('/login');
+    } finally {
+      setSigningOut(false);
+    }
+  };
   const onSkip = async () => {
     setConfirmSkip(false);
     try {
@@ -92,12 +103,20 @@ export function OnboardingFrame({ children }: { children: ReactNode }) {
   };
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="flex h-20 shrink-0 items-center justify-between px-4 sm:px-8">
+      <header className="flex min-h-20 shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-8">
         <Logo />
-        {/* full-test 15/11 ONBOARDING-10: one click no longer ends the setup — it is confirmed, and says where to resume */}
-        <Button variant="ghost" onClick={() => setConfirmSkip(true)} loading={skip.isPending && skip.variables === ONBOARDING_SKIPPED} data-testid="onboarding-skip">
-          {t('onboarding.skip')}
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+          {/* journey 16/11 J01-4: the language can change and the merchant can sign out without leaving the setup first
+              (a shared computer); the URL keeps the step */}
+          <LocaleSwitch />
+          {/* full-test 15/11 ONBOARDING-10: one click no longer ends the setup — it is confirmed, and says where to resume */}
+          <Button variant="ghost" onClick={() => setConfirmSkip(true)} loading={skip.isPending && skip.variables === ONBOARDING_SKIPPED} data-testid="onboarding-skip">
+            {t('onboarding.skip')}
+          </Button>
+          <Button variant="ghost" onClick={() => void signOut()} loading={signingOut} data-testid="onboarding-logout">
+            {t('userMenu.logout')}
+          </Button>
+        </div>
         <ConfirmDialog
           open={confirmSkip}
           onOpenChange={setConfirmSkip}

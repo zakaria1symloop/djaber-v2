@@ -155,7 +155,10 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
     const el = inner.current;
     if (!el || caret.current === null || document.activeElement !== el) return;
     let pos = 0;
-    for (let digits = 0; pos < shown.length && digits < caret.current; pos++) if (/\d/.test(shown[pos]!)) digits++;
+    // journey J01-1: a caret in the decimal part (« 12,| ») goes to the end — it was put back before the comma, so the next
+    // digit landed in the integer part (« 12,5 » typed key by key became 125)
+    if (caret.current === Number.POSITIVE_INFINITY) pos = shown.length;
+    else for (let digits = 0; pos < shown.length && digits < caret.current; pos++) if (/\d/.test(shown[pos]!)) digits++;
     el.setSelectionRange(pos, pos);
     caret.current = null;
   }, [shown]);
@@ -180,7 +183,9 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
             requestAnimationFrame(() => inner.current?.setSelectionRange(back, back));
             return;
           }
-          caret.current = r.caretDigits;
+          // the caret is in (or right after) the decimal part when it is past the separator of the typed text
+          const sep = Math.max(raw.lastIndexOf(','), raw.lastIndexOf('.'));
+          caret.current = r.fraction && sep >= 0 && at > sep ? Number.POSITIVE_INFINITY : r.caretDigits;
           setFraction(r.fraction);
           if (r.value !== value) onValueChange(r.value);
         }}

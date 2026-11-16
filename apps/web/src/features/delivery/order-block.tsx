@@ -17,7 +17,7 @@ import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
 import { SHIPMENT_ACTION } from './action-keys';
-import { algiersClock, deliveryBlockState, shipmentStatusKey, shipmentTone, waitLabel, withCourierSetup } from './logic';
+import { algiersClock, deliveryBlockState, shipmentStatusKey, shipmentTone, timelineOrder, waitLabel, withCourierSetup } from './logic';
 import { parcelOfShipment, type useParcelActions } from './use-parcel-actions';
 
 const MAX_ATTEMPTS = 3;
@@ -46,7 +46,7 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
   const label = active ? actionState(live, SHIPMENT_ACTION.label, t) : null;
   const sync = active ? actionState(live, SHIPMENT_ACTION.sync, t) : null;
   const events: TrackingStep[] = active
-    ? newestFirst(active.events, (e) => e.at).map((e, i) => ({
+    ? timelineOrder(active.events).map((e, i) => ({
         key: `${e.at}-${i}`,
         title: [e.mappedStatus ? t(`tracking.event.${e.mappedStatus}`) : e.rawStatus, e.location].filter(Boolean).join(' · '),
         meta: `${formatDate(e.at, locale).replace(/ \d{4}$/, '')} ${algiersClock(e.at)} · ${e.source === 'manual' || e.source === 'system' ? [t('tracking.source.djaber'), e.actor ? shortName(e.actor) : null].filter(Boolean).join(' · ') : (active.courierAccount?.displayName ?? t(`couriers.provider.${active.provider}`))}`.toUpperCase(),

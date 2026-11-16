@@ -77,6 +77,22 @@ export const isBookkeeping = (r: Pick<LedgerRow, 'kind' | 'action'>): boolean =>
 const KNOWN: ReadonlySet<string> = new Set<LedgerAction>(['text_reply', 'image_recognition', 'voice_transcription', 'reserve', 'release', 'renewal', 'pack_purchase', 'grant', 'store_refund', 'adjustment']);
 /** i18n key of the action pill; a value this build does not know is shown as sent. */
 export const actionLabelKey = (action: string): string | null => (KNOWN.has(action) ? `enum.CreditLedger.action.${action}` : null);
+/**
+ * journey 16/11 J01-5: a `grant` row is not always the admin's goodwill gesture — the reason written by the server says
+ * where it comes from (`trial`, `promo:CODE`, `referral:CODE`, `upgrade:slug`; `admin:…` stays « geste »).
+ */
+export const GRANT_SOURCES = ['trial', 'promo', 'referral', 'upgrade'] as const;
+export type GrantSource = (typeof GRANT_SOURCES)[number];
+export const grantSource = (r: Pick<LedgerRow, 'action' | 'detail'>): GrantSource | null => {
+  if (r.action !== 'grant' || !r.detail) return null;
+  const head = r.detail.split(':')[0] as GrantSource;
+  return (GRANT_SOURCES as readonly string[]).includes(head) ? head : null;
+};
+/** i18n key of the action pill of a row: a grant says its source (ESSAI, PROMO …), the other actions their action. */
+export const rowLabelKey = (r: Pick<LedgerRow, 'action' | 'detail'>): string | null => {
+  const source = grantSource(r);
+  return source ? `enum.CreditLedger.grant.${source}` : actionLabelKey(r.action);
+};
 
 /** "0,98" (fr / ar) · "0.98" (en) — price of one credit in DA. */
 export const pricePerCredit = (n: number | null | undefined, locale: string): string => {

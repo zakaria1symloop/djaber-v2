@@ -140,7 +140,9 @@ export class ModerationHookService implements OnModuleInit {
         type: 'product_approved',
         workspaceId: item.workspaceId,
         target: { roles: ['owner', 'admin'] },
-        key: `product_approved:${item.workspaceId}:${algiersDay()}`,
+        // journey 16/11 J05-15: one event per product, grouped per day (the count of the day's notification grows)
+        key: `product_approved:${item.workspaceId}:${algiersDay()}:${item.productId}`,
+        group: `product_approved:${item.workspaceId}:${algiersDay()}`,
         data: { productIds: [item.productId], count: 1 },
       });
     }
@@ -379,7 +381,7 @@ export class ModerationHookService implements OnModuleInit {
         await tx.$executeRaw`
           UPDATE "Product" p SET "moderationStatus" = 'approved'::"ModerationStatusProduct", "approvedSnapshot" = m."snapshot"
           FROM "ModerationItem" m WHERE m."id" = p."moderationItemId" AND p."workspaceId" = ${ws}::uuid AND p."id" = ANY(${approvedIds}::uuid[])`;
-        await this.notifications.emit(tx, { type: 'product_approved', workspaceId: ws, target: { roles: ['owner', 'admin'] }, key: `product_approved:${ws}:${algiersDay()}`, data: { productIds: approvedIds.slice(0, 200), count: approvedIds.length } });
+        await this.notifications.emit(tx, { type: 'product_approved', workspaceId: ws, target: { roles: ['owner', 'admin'] }, key: `product_approved:${ws}:${algiersDay()}:${approved[0]!.item.id}`, group: `product_approved:${ws}:${algiersDay()}`, data: { productIds: approvedIds.slice(0, 200), count: approvedIds.length } });
       }
       if (approved.length < scored.length) await this.emitQueue(tx);
     }
@@ -516,12 +518,15 @@ export class ModerationHookService implements OnModuleInit {
   /** `GET /moderation/summary` — banner "n produits en attente". */
   async summary() {
     const ws = TenantContext.workspaceId();
-    const [groups, workspace] = await Promise.all([
+    const [groups, workspace, sellable] = await Promise.all([
       prisma.product.groupBy({ by: ['moderationStatus'], where: { deletedAt: null }, _count: { _all: true } }),
       prisma.workspace.findUnique({ where: { id: ws }, select: { trustLevel: true } }),
+      // journey J02-8: the active products the AI may offer (validated, or not subject to review) — the banner says « the rest
+      // keeps selling » only when there is a rest
+      prisma.product.count({ where: { deletedAt: null, isActive: true, moderationStatus: { in: ['approved', 'not_required'] } } }),
     ]);
     const n = (s: string) => groups.find((g) => g.moderationStatus === s)?._count._all ?? 0;
-    return { pending: n('pending'), rejected: n('rejected'), appealed: n('appealed'), trustLevel: workspace?.trustLevel ?? 'new' };
+    return { pending: n('pending'), rejected: n('rejected'), appealed: n('appealed'), sellable, trustLevel: workspace?.trustLevel ?? 'new' };
   }
 
   /** `POST /products/:id/resubmit` — only a rejected product (409 MODERATION_NOT_REJECTED otherwise): a new item, pre-screened. */

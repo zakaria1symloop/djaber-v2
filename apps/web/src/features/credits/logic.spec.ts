@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Credits } from './contracts';
-import { actionLabelKey, applyCreditsEvent, burnRate, creditsBanner, creditsLevel, creditsTone, isBookkeeping, levelOf, orderedRange, packLeft, packsShown, packUsage, pricePerCredit, runningOnPacks, signedCredits, usedPct, warningDate } from './logic';
+import { actionLabelKey, applyCreditsEvent, grantSource, rowLabelKey, burnRate, creditsBanner, creditsLevel, creditsTone, isBookkeeping, levelOf, orderedRange, packLeft, packsShown, packUsage, pricePerCredit, runningOnPacks, signedCredits, usedPct, warningDate } from './logic';
 
 const credits = (o: Partial<Credits> & { used?: number; limit?: number } = {}): Credits => {
   const { used = 3_760, limit = 5_000, ...rest } = o;
@@ -86,6 +86,15 @@ describe('ledger rows', () => {
     expect(isBookkeeping({ kind: 'debit', action: 'text_reply' })).toBe(false);
     expect(actionLabelKey('pack_purchase')).toBe('enum.CreditLedger.action.pack_purchase');
     expect(actionLabelKey('something_new')).toBeNull();
+  });
+  it('names a grant by its source (journey 16/11 J01-5)', () => {
+    expect(grantSource({ action: 'grant', detail: 'trial' })).toBe('trial');
+    expect(grantSource({ action: 'grant', detail: 'promo:BIENVENUE' })).toBe('promo');
+    expect(grantSource({ action: 'grant', detail: 'admin:commercial:geste' })).toBeNull();
+    expect(grantSource({ action: 'renewal', detail: 'trial' })).toBeNull();
+    expect(rowLabelKey({ action: 'grant', detail: 'trial' })).toBe('enum.CreditLedger.grant.trial');
+    expect(rowLabelKey({ action: 'grant', detail: 'admin:x' })).toBe('enum.CreditLedger.action.grant');
+    expect(rowLabelKey({ action: 'text_reply', detail: 'text_reply' })).toBe('enum.CreditLedger.action.text_reply');
   });
   it('formats the price and the burn rate', () => {
     expect(pricePerCredit(0.98, 'fr')).toBe('0,98');

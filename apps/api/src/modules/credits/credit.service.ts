@@ -37,6 +37,17 @@ export const creditPeriod = (anchor: Date, now = new Date()): { start: Date; end
   return { start: addMonths(anchor, n), end: addMonths(anchor, n + 1) };
 };
 
+/**
+ * `GET /credits` `exhaustedEta`: the day the credits left run out at the 7-day burn rate — only when that day falls inside
+ * the running period. The plan credits renew at `periodEnd`, so a later date cannot happen and is not shown (journey 16/11
+ * J01-6: « épuisés le 12 janv. 2028 ⚠ » after one AI fill on a 300-credit trial).
+ */
+export const exhaustionEta = (o: { total: number; burnPerDay: number; periodEnd: Date; unlimited?: boolean }, now = new Date()): string | null => {
+  if (o.unlimited || o.burnPerDay <= 0 || o.total <= 0) return null;
+  const at = new Date(now.getTime() + (o.total / o.burnPerDay) * DAY);
+  return at < o.periodEnd ? at.toISOString() : null;
+};
+
 @Injectable()
 export class CreditService implements OnModuleInit {
   constructor(
@@ -304,7 +315,7 @@ export class CreditService implements OnModuleInit {
       negative: !b.unlimited && b.total < 0,
       exhausted: b.exhausted,
       burnRatePerDay: burn,
-      exhaustedEta: !b.unlimited && burn > 0 && b.total > 0 ? new Date(Date.now() + (b.total / burn) * DAY).toISOString() : null,
+      exhaustedEta: exhaustionEta({ total: b.total, burnPerDay: burn, periodEnd: b.periodEnd, unlimited: b.unlimited }),
       pricePerCreditDzd: pricing ? Number(pricing.creditPriceDzd) : 0,
       packPricePerCreditDzd: pack && pack.credits > 0 ? Math.round((pack.priceWebDzd / pack.credits) * 100) / 100 : null,
     };

@@ -45,14 +45,17 @@ export function usePlayground(transport: ChatTransport) {
   const wait = useCountdown(blockedUntil);
 
   const send = useCallback(
-    async (input: ChatInput) => {
+    async (input: ChatInput, opts: { retry?: boolean } = {}) => {
       // the ref closes the window before `typing` re-renders (double click, the effect of `?scenario=` run twice in dev)
       if (typing || sending.current) return;
       sending.current = true;
-      // a retry replaces the failed attempt: its customer bubble is neither stacked nor sent twice in the history
-      const failedBefore = entriesRef.current.at(-1)?.role === 'error';
-      const settled = entriesRef.current.filter((e) => e.role !== 'error');
-      const kept = failedBefore ? settled.slice(0, -1) : settled;
+      // « Réessayer » replaces the failed attempt: its customer bubble is neither stacked nor sent twice in the history.
+      // journey 16/11 J05-16: a new message after a failed turn keeps the failed one (bubble + error line) — the customer did
+      // write it, and the next turns are sent with it (the phone number typed in the failed turn was lost and the agent
+      // asked for it again)
+      const all = entriesRef.current;
+      const lastUser = all.map((e) => e.role).lastIndexOf('user');
+      const kept = opts.retry && all.at(-1)?.role === 'error' && lastUser >= 0 ? all.slice(0, lastUser) : all;
       const history: PlaygroundMessage[] = kept.flatMap((e): PlaygroundMessage[] => (e.role === 'user' ? (e.text ? [{ role: 'user', text: e.text }] : []) : e.role === 'ai' ? [{ role: 'assistant', text: e.turn.reply }] : []));
       const now = Date.now();
       setEntries([...kept, { id: ++seq.current, role: 'user' as const, text: input.text, at: now, attachment: input.attachment, scenario: input.scenario }]);
@@ -99,7 +102,7 @@ export function usePlayground(transport: ChatTransport) {
     hourly: hourly ?? entries.filter((e) => e.role === 'ai').length,
     /** seconds until the rate limit lifts (0 = free) */
     wait,
-    retry: failed ? () => void send(failed.input) : null,
+    retry: failed ? () => void send(failed.input, { retry: true }) : null,
   };
 }
 export type Playground = ReturnType<typeof usePlayground>;

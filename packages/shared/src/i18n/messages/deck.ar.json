@@ -716,5 +716,8 @@
  "notification.support.reply.pending.title": "الدعم ينتظر ردك · #{ticket}",
  "notification.support.reply.pending.body": "أجب في الطلب ليتابع الدعم.",
  "notification.bellUnread": "{count, plural, zero {لا غير مقروءة} one {واحدة غير مقروءة} two {اثنتان غير مقروءتين} few {# غير مقروءة} other {# غير مقروءة}}",
- "shortcuts.esc": "Esc"
+ "shortcuts.esc": "Esc",
+ "validation.price_max": "المبلغ مرتفع جدًا (100 000 000 DA كحد أقصى)",
+ "validation.quantity_max": "الكمية مرتفعة جدًا (10 000 000 كحد أقصى)",
+ "dialog.archiveProduct.title": "أرشفة « {name} »؟"
 }

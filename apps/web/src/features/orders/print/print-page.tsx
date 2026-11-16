@@ -57,7 +57,8 @@ export function slipProps(o: Order, shop: string | Shop, lang: Lang, withPrices:
         ]
       : [],
     total: withPrices ? { label: tr('orders.print.total'), amount: formatMoney(o.remaining) } : undefined,
-    footer: [tr(o.paymentMethod === 'cash' ? 'orders.print.cod' : 'orders.print.paidBy', { method: tr(`orders.payment.methodLong.${o.paymentMethod}`) }), tracking ? tr('orders.print.thanksTracking', { url: tracking.replace(/^https?:\/\//, '') }) : tr('orders.print.thanks'), ...(o.notes ? [o.notes] : [])],
+    // journey 16/11 J05-13: a paid order says so — never « Paiement à la livraison » under « TOTAL À PAYER 0 DA »
+    footer: [tr(o.amountPaid > 0 && o.remaining === 0 ? 'orders.print.paidInFull' : o.paymentMethod === 'cash' ? 'orders.print.cod' : 'orders.print.paidBy', { method: tr(`orders.payment.methodLong.${o.paymentMethod}`) }), tracking ? tr('orders.print.thanksTracking', { url: tracking.replace(/^https?:\/\//, '') }) : tr('orders.print.thanks'), ...(o.notes ? [o.notes] : [])],
     dir: isRtl(lang) ? 'rtl' : 'ltr',
     lang,
   };

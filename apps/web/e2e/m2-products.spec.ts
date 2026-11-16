@@ -222,7 +222,7 @@ test('AT-CAT-07 archive from the list hides the product; the Archivés filter sh
   await page.goto('/fr/products');
   await rowOf(page, temp).getByRole('button', { name: 'Actions' }).click();
   await page.getByRole('menuitem', { name: /Archiver/ }).click();
-  const dialog = page.getByRole('dialog', { name: /Supprimer « Produit à archiver »/ });
+  const dialog = page.getByRole('dialog', { name: /Archiver « Produit à archiver »/ }); // J02-10: the title follows the option
   await expect(dialog.getByRole('radio', { name: /Archiver/ })).toBeChecked();
   await dialog.getByLabel(/Sortir le stock restant \(4 u\)/).check();
   await dialog.getByTestId('archive-submit').click();

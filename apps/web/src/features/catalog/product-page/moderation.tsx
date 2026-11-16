@@ -47,7 +47,8 @@ export function RejectedBanner({ product, view, canWrite, onAppeal }: { product:
         ) : null}
         <p className="mt-1 ts-label-meta text-text-muted">
           {moderationRuleLabels(view.rules, t).length ? `${t('products.moderation.banner.rules', { rules: moderationRuleLabels(view.rules, t).join(' · ') })} ` : ''}
-          {t('products.moderation.banner.hidden')} {t('products.moderation.sla')}
+          {/* journey J02-9: a refusal is a decision already made — no validation delay here (it applies once resubmitted) */}
+          {t('products.moderation.banner.hidden')}
         </p>
       </div>
       {canWrite ? (

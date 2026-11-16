@@ -191,6 +191,14 @@ describe('draft diff and patch', () => {
     expect(d.capabilities.voiceTranscription).toBe(false);
     expect(d.orderFields).toHaveLength(9);
   });
+  it('gives a one-click preset draft with no style the wizard starting style (journey 16/11 J01-3)', () => {
+    const empty = { languages: [], defaultLanguage: null, tone: null, formality: null, emojiLevel: null } as unknown as Agent['wizard'];
+    const d = draftFromAgent(agent({ status: 'draft', wizardStep: 1, personality: 'professional', wizard: empty }));
+    expect(d).toMatchObject({ languages: ['darija', 'arabizi', 'fr', 'ar'], defaultLanguage: 'darija', tone: 'professional', formality: 'follow_customer', emojiLevel: 'moderate' });
+    // a draft saved past step 1, or an active agent, keeps what it has
+    expect(draftFromAgent(agent({ status: 'draft', wizardStep: 2, wizard: empty })).languages).toEqual([]);
+    expect(draftFromAgent(agent({ status: 'active', wizardStep: 5, wizard: empty })).tone).toBeNull();
+  });
   it('starts from a preset with its capabilities and tone', () => {
     const preset = { key: 'reponse-express', name: 'Réponse Express', tagline: 'Court', personality: 'casual', imageRecognition: false, voiceTranscription: true, responseDelaySec: 1 } as AgentPreset;
     const d = draftFromPreset(preset, { name: 'Mon agent', description: '', displayName: '' });

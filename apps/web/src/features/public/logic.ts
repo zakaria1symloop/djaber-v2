@@ -2,7 +2,7 @@
 // (feature blocks, FAQ), the vN-1 → vN diff of a legal page, the pricing cards (cycle prices, feature lines), the help
 // centre query, the account-deletion page view. No React here.
 import { HELP_CATEGORIES, type HelpCategory } from '@djaber/shared';
-import { monthlyEquivalent, yearlyDiscountPct, type Cycle } from '@/features/billing/logic';
+import { bestYearlyDiscount as yearlyDiscountOf, monthlyEquivalent, type Cycle } from '@/features/billing/logic';
 import type { Params } from '@/lib/format-message';
 
 /* ---------- CMS Markdown ---------- */
@@ -89,7 +89,7 @@ export type PublicPlan = {
 export type PublicPack = { id: string; priceWebDzd: number; credits: number };
 
 /** "−17 %" of the yearly toggle: the best yearly saving among the paid plans (0 ⇒ no label). */
-export const bestYearlyDiscount = (plans: readonly PublicPlan[]): number => plans.reduce((best, p) => Math.max(best, p.priceMonthly > 0 ? yearlyDiscountPct(p) : 0), 0);
+export const bestYearlyDiscount = (plans: readonly PublicPlan[]): number => yearlyDiscountOf(plans);
 
 export const isFree = (p: Pick<PublicPlan, 'priceMonthly' | 'priceYearly'>) => p.priceMonthly <= 0 && p.priceYearly <= 0;
 /** Big numeral of a card: monthly price, or the monthly equivalent of the yearly price. */

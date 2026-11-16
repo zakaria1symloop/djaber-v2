@@ -47,6 +47,19 @@ export const detectLanguage = (text: string | null | undefined, previous?: AiLan
 };
 
 /**
+ * journey 16/11 J05-8: the language of a customer turn. A text with no clue (a phone number, a name, « ok ») keeps the
+ * conversation's language whatever it is — also Arabic script (the old fallback gave English to an Arabic-script customer
+ * typing their name, then every phone-only turn after it stayed English). Only the first message of a conversation falls
+ * back to §3.6 (`en` for Latin text with no clue, `fallback` for a text with no letter).
+ */
+export const turnLanguage = (text: string | null | undefined, previous: AiLanguage | undefined, fallback: AiLanguage = 'fr'): AiLanguage =>
+  detectLanguage(text, previous, previous ? { neutral: 'previous' } : {}) ?? previous ?? fallback;
+
+/** The conversation's language after these customer texts (oldest first), each turn read with the one before (J05-8). */
+export const conversationLanguage = (texts: ReadonlyArray<string | null | undefined>): AiLanguage | undefined =>
+  texts.reduce<AiLanguage | undefined>((prev, t) => (t && t.trim() ? detectLanguage(t, prev, prev ? { neutral: 'previous' } : {}) : prev), undefined);
+
+/**
  * full-test 15/11 AI-CHAT-04 (proposal 5): the language of an AI reply, only when it is clear — a reply too short to
  * tell, or with no clue (« 12 500 DA ? »), gives undefined. Used by the reply guard (`language_switch`) and the step-5
  * scenarios (`language_respected`).

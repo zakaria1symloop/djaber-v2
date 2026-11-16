@@ -14,17 +14,20 @@ export const BULK_MAX_IDS = 500;
 export const AI_FILL_MAX_PHOTOS = 5;
 const MAX_MONEY = 100_000_000;
 const MAX_QTY = 10_000_000;
+/** The bounds of a catalogue amount / quantity (the import checks the same ones — journey J02-2). */
+export const CATALOG_MAX_MONEY = MAX_MONEY;
+export const CATALOG_MAX_QTY = MAX_QTY;
 
 // --- primitives ---------------------------------------------------------------------------------------------------------
 const id = z.string({ required_error: 'validation.required', invalid_type_error: 'validation.id' }).uuid('validation.id');
 /** Required text: a missing key and an empty input give the same `validation.required`. */
 const text = (max: number) => z.string({ required_error: 'validation.required', invalid_type_error: 'validation.invalid' }).trim().min(1, 'validation.required').max(max, 'validation.length');
 const int = (key: string) => z.number({ invalid_type_error: key, required_error: 'validation.required' }).int(key);
-/** 04 §2: selling price = integer DA > 0. */
-export const productPrice = int('validation.price').gt(0, 'validation.price').max(MAX_MONEY, 'validation.price');
+/** 04 §2: selling price = integer DA > 0. Above the maximum says so, not « required » (journey J02-2). */
+export const productPrice = int('validation.price').gt(0, 'validation.price').max(MAX_MONEY, 'validation.price_max');
 /** 04 §2: cost price = integer DA ≥ 0, optional. */
-export const productCost = int('validation.price').min(0, 'validation.price').max(MAX_MONEY, 'validation.price');
-export const stockQty = int('validation.quantity').min(0, 'validation.quantity').max(MAX_QTY, 'validation.quantity');
+export const productCost = int('validation.price').min(0, 'validation.price').max(MAX_MONEY, 'validation.price_max');
+export const stockQty = int('validation.quantity').min(0, 'validation.quantity').max(MAX_QTY, 'validation.quantity_max');
 export const productName = text(255);
 export const productSku = text(255);
 /** Forms send '' for "no value": '' and null both clear the field. */
@@ -197,7 +200,7 @@ export const BulkPriceSchema = z
   .object({
     ids,
     op: z.enum(['increase', 'decrease', 'set'], { errorMap: () => ({ message: 'validation.invalid' }) }),
-    value: int('validation.price').min(0, 'validation.price').max(MAX_MONEY, 'validation.price'),
+    value: int('validation.price').min(0, 'validation.price').max(MAX_MONEY, 'validation.price_max'),
     unit: z.enum(['percent', 'dzd'], { errorMap: () => ({ message: 'validation.invalid' }) }),
     roundUpTens: z.boolean().optional(),
     applyToVariants: z.boolean().optional(),

@@ -3,6 +3,7 @@ import { parseListState, serializeListState } from '@/lib/list-state';
 import type { BulkResponse, OrderListItem } from './contracts';
 import { activeChips, ORDERS_LIST, ordersQuery, periodOf, tabCountsQuery } from './list/spec';
 import {
+  historyParams,
   draftChanged,
   orderAnchor,
   actorKind,
@@ -220,5 +221,25 @@ describe('order page: inline edits and anchors', () => {
     expect(orderAnchor('calls')).toBe('calls');
     expect(orderAnchor('#items')).toBeNull();
     expect(orderAnchor('')).toBeNull();
+  });
+});
+
+describe('journey 16/11 J05-2 — history counts of their own moment', () => {
+  const call = (result: string, calledAt: string, callbackAt: string | null = null) => ({ id: calledAt, user: null, result, callbackAt, notes: null, calledAt }) as never;
+  const o = {
+    calls: [call('no_answer', '2026-11-16T16:00:00.000Z'), call('no_answer', '2026-11-16T16:05:00.000Z'), call('no_answer', '2026-11-16T16:10:00.000Z'), call('callback', '2026-11-16T16:15:00.000Z', '2026-11-16T17:15:00.000Z'), call('picked_up', '2026-11-16T16:20:00.000Z')],
+    history: [{ id: 'h', field: 'callbackAt', from: null, to: '2026-11-16T17:30:00.000Z', at: '2026-11-16T16:25:00.000Z' }] as never,
+  };
+  const h = (at: string, from: string | null, to: string) => ({ at, from, to });
+  it('« no answer n/3 » counts the unanswered calls up to the line, not today', () => {
+    expect(historyParams(o, h('2026-11-16T16:00:00.000Z', 'pending', 'no_answer'), 'to').attempts).toBe(1);
+    expect(historyParams(o, h('2026-11-16T16:05:00.000Z', 'no_answer', 'no_answer'), 'from').attempts).toBe(1);
+    expect(historyParams(o, h('2026-11-16T16:05:00.000Z', 'no_answer', 'no_answer'), 'to').attempts).toBe(2);
+    expect(historyParams(o, h('2026-11-16T16:15:00.000Z', 'no_answer', 'callback'), 'from').attempts).toBe(3);
+  });
+  it('« callback hh:mm » is the callback set up to the line (a later one or a cleared one does not rewrite it)', () => {
+    expect(historyParams(o, h('2026-11-16T16:15:00.000Z', 'no_answer', 'callback'), 'to').time).toBe('18:15');
+    expect(historyParams(o, h('2026-11-16T16:20:00.000Z', 'callback', 'confirmed'), 'from').time).toBe('18:15');
+    expect(historyParams(o, h('2026-11-16T16:00:00.000Z', 'pending', 'no_answer'), 'to').time).toBe('');
   });
 });

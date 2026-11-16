@@ -35,7 +35,7 @@
  "clients.sheet.allSales": "عرض {count}",
  "clients.sheet.salesTitle": "مبيعات المحل",
  "clients.sheet.countSplit": "{orders} طلب + {sales} بيع في المحل",
-  "clients.sheet.spentSplit": "طلبات مسلَّمة {orders} + مبيعات المحل {sales}",
+ "clients.sheet.spentSplit": "طلبات مسلَّمة {orders} + مبيعات المحل {sales}",
  "credits.pill.labelPacks": "الأرصدة: {used} / {limit}، الباقات {packUsed} / {packTotal}",
  "credits.pill.packs": "رصيد الشهر: {used} / {limit} · الباقات: {packUsed} / {packTotal} مستهلكة ({pack} متبقية)، تُستهلك بعد نفاد رصيد الشهر",
  "gaps.agents.activate.blocked": "يجب تصحيحه قبل التفعيل: {items}.",
@@ -141,5 +141,6 @@
  "tracking.panel.openLink": "فتح",
  "tracking.panel.publicLink": "رابط التتبع",
  "validation.banned_word": "يحتوي على كلمة ممنوعة في Djaber: اختر اسمًا آخر.",
- "validation.supplier_taken": "مستخدم لدى مورّد آخر"
+ "validation.supplier_taken": "مستخدم لدى مورّد آخر",
+ "clients.sheet.cancelsNotCounted": "{count, plural, zero {لا طلبات ملغاة} one {طلب ملغى واحد غير محسوب} two {طلبان ملغيان غير محسوبين} few {# طلبات ملغاة غير محسوبة} many {# طلبًا ملغى غير محسوب} other {# طلب ملغى غير محسوب}}"
 }

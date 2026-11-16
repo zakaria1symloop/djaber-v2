@@ -26,7 +26,7 @@ import { ExportService } from '../jobs/export.service';
 import { contextOf, type ConversationContext } from '../messaging/messaging.presenter';
 import { SafetyService } from '../messaging/safety.service';
 import { OrderEffects, type Actor } from './order-effects.service';
-import { checkOrderedAt, checkPaymentPatch, isTerminal, orderTotals, type Refusal, type StockLine } from './order-rules';
+import { checkOrderedAt, checkPaymentPatch, isTerminal, itemsChange, orderTotals, remainingOf, type Refusal, type StockLine } from './order-rules';
 import { ACTIVE_SHIPMENT, hasDeliveryAddress, ORDER_DETAIL_INCLUDE, ORDER_LIST_INCLUDE, parseAddressSnapshot, presentOrder, presentOrderListItem, type PresentCtx } from './order.presenter';
 import { orderOrderBy, orderStats, orderWhere, type OrderFilters } from './order.query';
 
@@ -176,7 +176,8 @@ export class OrderService implements OnModuleInit {
     const name = (x: { nameFr: string; nameAr: string } | undefined) => (x ? (locale === 'ar' ? x.nameAr || x.nameFr : x.nameFr) : null);
     const w = new Map(wilayas.map((x) => [x.id, x]));
     const c = new Map(communes.map((x) => [x.id, x]));
-    const relay = locale === 'ar' ? 'نقطة استلام' : locale === 'en' ? 'pickup point' : 'point relais';
+    // journey 16/11 J05-17: the stop-desk word of the screens (common.stopdesk)
+    const relay = locale === 'ar' ? 'مكتب الاستلام' : locale === 'en' ? 'stopdesk' : 'stop-desk';
     const text = (a: (typeof all)[number] | null) => {
       if (!a) return null;
       const where = a.isStopdesk ? [relay, a.stopdeskId ? (desks.get(a.stopdeskId)?.name ?? null) : null].filter(Boolean).join(' ') : a.address;
@@ -482,14 +483,18 @@ export class OrderService implements OnModuleInit {
       if (input.discount !== undefined) changed.push('discount');
       const total = subtotal - discount + tax + deliveryFee;
       if (total < 0) throw new AppException('VALIDATION_ERROR', {}, { discount: 'validation.range' });
+      // journey 16/11 J05-5: the new total gets its own history line (« Total : 10 500 DA → 15 000 DA »)
+      if (total !== o.total) changed.push('total');
       const payment = checkPaymentPatch({ amountPaid: input.amountPaid, paymentStatus: input.paymentStatus }, total);
       if (payment) throw refuse(payment);
       // full-test 15/11 ROLES-02: money already received is never rewritten by an edit of the lines / discount / fee — the
       // paid amount was clamped to the new total (1 400 DA cash row, « payé 401 DA », no history line, no refund)
       if (input.amountPaid === undefined && total < o.amountPaid) throw new AppException('ORDER_TOTAL_BELOW_PAID', { paid: o.amountPaid });
       Object.assign(data, { subtotal, discount, tax, deliveryFee, total });
+      let itemsLine: { from: string; to: string } | null = null;
       if (lines) {
         const totals = orderTotals(lines, { discount, tax, deliveryFee });
+        itemsLine = itemsChange(await tx.orderItem.findMany({ where: { orderId: id }, orderBy: { id: 'asc' } }), lines);
         await tx.orderItem.deleteMany({ where: { orderId: id } });
         await tx.orderItem.createMany({ data: lines.map((l, i) => ({ orderId: id, productId: l.productId, variantId: l.variantId, productName: l.productName, variantName: l.variantName, sku: l.sku, unitPrice: l.unitPrice, costPrice: l.costPrice, quantity: l.quantity, discount: l.discount, total: totals.lineTotals[i]! })) });
         await this.effects.holdStock(tx, o, this.stockLines(lines), actor.id);
@@ -503,7 +508,10 @@ export class OrderService implements OnModuleInit {
       const paid = await this.effects.recomputePaid(tx, { id, total });
       if (paid.amountPaid > total) throw new AppException('VALIDATION_ERROR', {}, { amountPaid: 'validation.range' });
       const updated = await tx.order.update({ where: { id }, data: { ...data, ...paid, version: { increment: 1 } } });
-      for (const field of changed) await tx.orderStatusHistory.create({ data: { orderId: id, field, from: field === 'items' ? null : String((o as Record<string, unknown>)[field] ?? ''), to: field === 'items' ? `${lines!.length}` : String((updated as Record<string, unknown>)[field] ?? ''), actorType: actor.type, actorId: actor.id } });
+      for (const field of changed) {
+        if (field === 'items' && !itemsLine) continue;
+        await tx.orderStatusHistory.create({ data: { orderId: id, field, from: field === 'items' ? itemsLine!.from : String((o as Record<string, unknown>)[field] ?? ''), to: field === 'items' ? itemsLine!.to : String((updated as Record<string, unknown>)[field] ?? ''), actorType: actor.type, actorId: actor.id } });
+      }
       if (paid.paymentStatus !== o.paymentStatus) {
         await tx.orderStatusHistory.create({ data: { orderId: id, field: 'paymentStatus', from: o.paymentStatus, to: paid.paymentStatus, actorType: actor.type, actorId: actor.id } });
         if (paid.paymentStatus === 'paid') await this.effects.webhook(tx, 'order.paid', id, { amountPaid: paid.amountPaid, method: updated.paymentMethod }, ':paid');
@@ -603,7 +611,7 @@ export class OrderService implements OnModuleInit {
       { header: h.deliveryFee, value: (r: R) => r.deliveryFee },
       { header: h.total, value: (r: R) => r.total },
       { header: h.paid, value: (r: R) => r.amountPaid },
-      { header: h.remaining, value: (r: R) => Math.max(0, r.total - r.amountPaid) },
+      { header: h.remaining, value: (r: R) => remainingOf(r) },
       { header: h.paymentMethod, value: (r: R) => exportLabel(locale, 'enum.Order.paymentMethod', r.paymentMethod) },
       { header: h.status, value: (r: R) => exportLabel(locale, 'enum.Order.status', r.status) },
       { header: h.confirmation, value: (r: R) => exportLabel(locale, 'enum.Order.confirmationStatus', r.confirmationStatus, { attempts: r.callAttempts, time: '' }) },
@@ -622,7 +630,7 @@ export class OrderService implements OnModuleInit {
         fileName: `commandes-${algiersDay()}`,
         rows: flat,
         columns: cols,
-        pdf: { title: h.sheet, subtitle: `· ${rows.length}`, landscape: true, totals: [{ label: h.total, value: formatSlipAmount(totalOf((o) => o.total)), bold: true }, { label: h.remaining, value: formatSlipAmount(totalOf((o) => Math.max(0, o.total - o.amountPaid))) }] },
+        pdf: { title: h.sheet, subtitle: `· ${rows.length}`, landscape: true, totals: [{ label: h.total, value: formatSlipAmount(totalOf((o) => o.total)), bold: true }, { label: h.remaining, value: formatSlipAmount(totalOf((o) => remainingOf(o))) }] },
       };
     }
     const extra =

@@ -233,7 +233,8 @@ export class OrderWorkflowService implements OnModuleInit {
       const data: Prisma.OrderUncheckedUpdateInput = { callAttempts: attempts, callbackAt: plan.callback === 'set' ? callbackAt : null, version: { increment: 1 } };
       if (plan.confirmationStatus && !plan.warning) data.confirmationStatus = plan.confirmationStatus;
       const updated = await tx.order.update({ where: { id: o.id }, data });
-      if (plan.confirmationStatus && !plan.warning && plan.confirmationStatus !== o.confirmationStatus) {
+      // journey 16/11 J05-2: every unanswered call gets its line (« Sans réponse 1/3 → Sans réponse 2/3 »), not only the first
+      if (plan.confirmationStatus && !plan.warning && (plan.confirmationStatus !== o.confirmationStatus || plan.confirmationStatus === 'no_answer')) {
         await tx.orderStatusHistory.create({ data: { orderId: o.id, field: 'confirmationStatus', from: o.confirmationStatus, to: plan.confirmationStatus, actorType: actor.type, actorId: actor.id, reason: input.notes ?? null } });
       }
       if (plan.statusTo) {

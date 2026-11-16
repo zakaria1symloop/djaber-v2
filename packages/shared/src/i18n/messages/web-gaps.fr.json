@@ -35,7 +35,7 @@
  "clients.sheet.allSales": "Voir les {count}",
  "clients.sheet.salesTitle": "VENTES COMPTOIR",
  "clients.sheet.countSplit": "{orders} commande(s) + {sales} vente(s) au comptoir",
-  "clients.sheet.spentSplit": "Commandes livrées {orders} + ventes comptoir {sales}",
+ "clients.sheet.spentSplit": "Commandes livrées {orders} + ventes comptoir {sales}",
  "credits.pill.labelPacks": "Crédits : {used} / {limit}, packs {packUsed} / {packTotal}",
  "credits.pill.packs": "Crédits du mois : {used} / {limit} · Packs : {packUsed} / {packTotal} utilisés ({pack} restants), utilisés quand ceux du mois sont épuisés",
  "gaps.agents.activate.blocked": "À corriger avant d'activer : {items}.",
@@ -141,5 +141,6 @@
  "tracking.panel.openLink": "Ouvrir",
  "tracking.panel.publicLink": "LIEN DE SUIVI",
  "validation.banned_word": "Contient un mot interdit sur Djaber : choisissez un autre nom.",
- "validation.supplier_taken": "Déjà utilisé par un autre fournisseur"
+ "validation.supplier_taken": "Déjà utilisé par un autre fournisseur",
+ "clients.sheet.cancelsNotCounted": "{count, plural, one {# commande annulée n'est pas comptée} other {# commandes annulées ne sont pas comptées}}"
 }

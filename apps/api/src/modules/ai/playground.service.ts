@@ -20,7 +20,7 @@ import { JobService } from '../jobs/job.service';
 import { GUARD_EARLIER_TOOL_CALLS, plannedCost, RUN_BUDGET_MS } from './ai.constants';
 import { AiRunService, guardFlags, intentOf, type RunMeta } from './ai-run.service';
 import { CatalogueService } from './catalogue.service';
-import { detectLanguage, languageSwitched, systemLocale, type AiLanguage } from './language';
+import { conversationLanguage, languageSwitched, systemLocale, turnLanguage, type AiLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
 import { nextChosen, orderHistoryOf, placedThisTurn, type ChosenItem } from './tools/order-confirmation';
 import { canonicalTool } from './tools/tool-registry';
@@ -166,8 +166,10 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         lines.push(`[image]\n${visionNoteText(r.note)}`);
       }
       // full-test 15/11 AI-CHAT-04: the previous language of the conversation, as on Messenger (a bare « Tamanrasset ? » gave English)
-      const previous = messages.slice(0, -1).reverse().map((m) => (m.role === 'user' ? detectLanguage(m.text) : undefined)).find((l): l is AiLanguage => !!l);
-      const lang: AiLanguage = detectLanguage(said, previous) ?? previous ?? 'fr';
+      // journey 16/11 J05-8: each earlier turn read with the one before it — a bare « Nadia Ferhat » read alone gave English, so
+      // the phone number sent after it was answered in English in the middle of a French conversation
+      const previous = conversationLanguage(messages.slice(0, -1).filter((m) => m.role === 'user').map((m) => m.text));
+      const lang: AiLanguage = turnLanguage(said, previous);
       const history: HistoryMessage[] = messages.slice(0, -1).map((m) => ({ author: m.role === 'user' ? 'customer' : 'ai', text: m.text }));
       // full-test 15/11 AI-CHAT-05: what the customer chose in the earlier turns of the session (CURRENT ORDER), as on Messenger
       const previousRun = await prisma.aiRun.findFirst({ where: { agentId: agent.id, batchKey: d.sessionId, id: { not: run.id }, status: { not: 'running' } }, orderBy: { startedAt: 'desc' }, select: { meta: true } });

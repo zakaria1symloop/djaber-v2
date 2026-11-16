@@ -31,6 +31,12 @@ export const yearlyDiscountPct = (p: PlanLike): number => {
   return full > 0 && p.priceYearly < full ? Math.round(((full - p.priceYearly) * 100) / full) : 0;
 };
 
+/**
+ * The yearly toggle's « −17 % »: the best yearly saving among the paid plans (0 ⇒ no figure). One label on Tarifs and on
+ * Plan & facturation (journey 16/11 J01-11: « Annuel −17 % » vs « Annuel · −2 mois »).
+ */
+export const bestYearlyDiscount = (plans: readonly PlanLike[]): number => plans.reduce((best, p) => Math.max(best, p.priceMonthly > 0 ? yearlyDiscountPct(p) : 0), 0);
+
 /** The subscription is a paid plan that renews (not the free plan, not a trial). */
 export const isPaidSubscription = (s: SubscriptionLike): boolean => s.status !== 'trial' && !isFreePlan(s.plan) && s.billingCycle !== 'none';
 

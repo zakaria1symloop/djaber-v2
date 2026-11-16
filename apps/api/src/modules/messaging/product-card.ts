@@ -29,9 +29,35 @@ const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` 
 export const cardPrice = (c: Pick<MessageCardView, 'price' | 'priceMax' | 'oldPrice'>) =>
   `${formatMoney(c.price)}${c.priceMax && c.priceMax !== c.price ? ` – ${formatMoney(c.priceMax)}` : ''}${c.oldPrice && c.oldPrice > c.price ? ` (${formatMoney(c.oldPrice)})` : ''}`;
 
+const SEP = ' · ';
+/**
+ * The subtitle « [Photo n/total ·] variants · price ». The price is the key line of the card: when the whole line is longer
+ * than Meta's 80 characters, the variant list is the part that is shortened (or dropped), never the price (journey J02-1:
+ * six short variant names cut « 4 500 DA » into « 4 50… »).
+ */
+export const cardSubtitle = (c: MessageCardView, l: CardLabels): string => {
+  const photo = c.photo ? l.photo.replace('{n}', String(c.photo.n)).replace('{total}', String(c.photo.total)) : null;
+  const price = cardPrice(c);
+  const fixed = [photo, price].filter(Boolean).join(SEP);
+  const room = SUBTITLE_MAX - fixed.length - SEP.length;
+  let variants = c.variants ?? null;
+  if (variants && variants.length > room) {
+    // shorten on a separator so no variant name is cut in the middle; keep « … » to say there are more
+    const names = variants.split(SEP);
+    let kept = '';
+    for (const n of names) {
+      const next = kept ? `${kept}${SEP}${n}` : n;
+      if (next.length + 2 > room) break; // room for « · … » / « … »
+      kept = next;
+    }
+    variants = kept ? `${kept} …` : null;
+  }
+  return cut([photo, variants, price].filter(Boolean).join(SEP), SUBTITLE_MAX);
+};
+
 export const cardElement = (c: MessageCardView, l: CardLabels): CardElement => ({
   title: cut(c.name, TITLE_MAX),
-  subtitle: cut([c.photo ? l.photo.replace('{n}', String(c.photo.n)).replace('{total}', String(c.photo.total)) : null, c.variants ?? null, cardPrice(c)].filter(Boolean).join(' · '), SUBTITLE_MAX),
+  subtitle: cardSubtitle(c, l),
   ...(c.imageUrl ? { imageUrl: c.imageUrl } : {}),
   buttons: [
     { title: cut(l.order, BUTTON_MAX), payload: `ORDER:${c.productId}` },

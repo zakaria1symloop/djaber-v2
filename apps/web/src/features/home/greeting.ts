@@ -4,10 +4,14 @@ import { TIMEZONE } from '@djaber/shared';
 /** Hour (0–23) in Africa/Algiers. */
 export const algiersHour = (d: Date): number => Number(new Intl.DateTimeFormat('en-GB', { timeZone: TIMEZONE, hour: '2-digit', hour12: false }).format(d)) % 24;
 
-/** "Bonjour" from 05:00 to 17:59, "Bonsoir" otherwise. */
-export const greetingKey = (d: Date): 'home.greeting.morning' | 'home.greeting.evening' => {
+/**
+ * Morning 05:00–11:59, afternoon 12:00–17:59, evening otherwise — the same parts of the day as `GET /dashboard/home`
+ * `partOfDay`. FR says « Bonjour » for both morning and afternoon; EN / AR have their own afternoon words (journey 16/11
+ * J01-8: « Good morning » at 17:20).
+ */
+export const greetingKey = (d: Date): 'home.greeting.morning' | 'home.greeting.afternoon' | 'home.greeting.evening' => {
   const h = algiersHour(d);
-  return h >= 5 && h < 18 ? 'home.greeting.morning' : 'home.greeting.evening';
+  return h >= 5 && h < 12 ? 'home.greeting.morning' : h >= 12 && h < 18 ? 'home.greeting.afternoon' : 'home.greeting.evening';
 };
 
 /** "mardi 7 octobre" — weekday + day + month, Latin digits in every locale. */

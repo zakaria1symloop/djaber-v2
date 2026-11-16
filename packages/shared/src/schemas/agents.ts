@@ -42,6 +42,19 @@ export const ANALYSIS_RUNS_PER_DAY = 3;
 /** 02 §6 / 04-ai-pipeline §7: credits per AI turn (highest applies). */
 export const CREDIT_COST = { text: 1, voice: 3, image: 5, order: 0 } as const;
 export const AGENT_LANGUAGES = ['darija', 'arabizi', 'fr', 'ar', 'kabyle', 'en'] as const;
+/**
+ * Starting style of a new agent (05 §15 AGV-02 step 1 defaults). The wizard pre-fills it, and `POST /agents` stores it for
+ * every style field the body leaves out, so a draft made from a preset in one click (tunnel step 4, page analysis) opens
+ * with the same languages, tone and emojis as the wizard (journey 16/11 J01-3).
+ */
+export const AGENT_DEFAULT_STYLE = {
+  languages: ['darija', 'arabizi', 'fr', 'ar'] as (typeof AGENT_LANGUAGES)[number][],
+  defaultLanguage: 'darija' as (typeof AGENT_LANGUAGES)[number],
+  formality: 'follow_customer' as const,
+  emojiLevel: 'moderate' as const,
+};
+/** The wizard tone a preset's personality starts with (same table in the wizard and in `POST /agents`). */
+export const AGENT_TONE_OF_PERSONALITY = { friendly: 'warm', professional: 'professional', casual: 'casual', technical: 'professional' } as const;
 export const ORDER_FIELD_KEYS = ['product', 'quantity', 'name', 'phone', 'wilaya', 'commune', 'address', 'phone2', 'note'] as const;
 /** Fields the merchant cannot switch off (AGV-02 step 3 "verrouillé"). */
 export const ORDER_FIELDS_LOCKED: readonly (typeof ORDER_FIELD_KEYS)[number][] = ['product', 'quantity', 'name', 'phone', 'wilaya'];

@@ -26,7 +26,7 @@ import { useCredits, useLedger } from './api';
 import { BuyPackDialog } from './buy-pack-dialog';
 import { CalculatorDialog } from './calculator-dialog';
 import { BUCKETS, FILTER_ACTIONS, type Credits, type LedgerRow } from './contracts';
-import { actionLabelKey, burnRate, creditsTone, isBookkeeping, levelOf, orderedRange, packsShown, pricePerCredit, signedCredits } from './logic';
+import { burnRate, creditsTone, isBookkeeping, levelOf, orderedRange, packsShown, pricePerCredit, rowLabelKey, signedCredits } from './logic';
 
 /** `GET /credits/ledger` parameters (api-contract §4 `LedgerQuery`). */
 export const LEDGER_SPEC: ListSpec = { filters: { from: 'date', to: 'date', action: 'list', agentId: 'text', bucket: 'text' }, sorts: ['at'], defaultSort: '-at' };
@@ -318,7 +318,7 @@ function codedReason(raw: string, credits: number, t: TFunction): string {
 function LedgerLine({ row: r, locale }: { row: LedgerRow; locale: AppLocale }) {
   const t = useT();
   const { can } = useSession();
-  const key = actionLabelKey(r.action);
+  const key = rowLabelKey(r);
   const muted = isBookkeeping(r);
   // the API falls back to the action code when a row has no reason (`detail = reason ?? action`): the pill already says it
   const raw = r.detail && r.detail !== r.action ? r.detail : '';
