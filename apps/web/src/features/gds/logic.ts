@@ -97,6 +97,15 @@ export function receiveSummary(lines: readonly ReceiveLineDraft[]) {
 /** Default of "REÇU AUJOURD'HUI": what is still due on the line. */
 export const defaultReceiveQty = (ordered: number, received: number) => Math.max(0, ordered - received);
 
+/**
+ * Cancel dialog of a partly received purchase (04 §20, journeys 16/11 J07-5): what the received units cost (lines + tax +
+ * shipping, never below what was paid) and what is still owed for them — the server's figures after the cancellation.
+ */
+export function partialCancelOwed(p: { items: readonly { receivedQty: number; unitCost: number }[]; tax: number; shippingCost: number; amountPaid: number }) {
+  const value = Math.max(p.items.reduce((s, i) => s + i.receivedQty * i.unitCost, 0) + p.tax + p.shippingCost, p.amountPaid);
+  return { value, remaining: Math.max(0, value - p.amountPaid) };
+}
+
 /* ---------- inventory (INV-02, 04 §19) ---------- */
 export function variance(expected: number, counted: number | null) {
   if (counted === null) return { difference: 0, pct: 0, noteRequired: false, counted: false };
@@ -193,3 +202,10 @@ export const closingGap = (theoretical: number, counted: string) => (counted.tri
  * time — tester report 2026-10-20: an edited row kept a time nobody could see or change). An empty time means noon.
  */
 export const cashDateIso = (day: string, time: string) => algiersInstant(day, /^\d{2}:\d{2}$/.test(time) ? time : '12:00').toISOString();
+
+/** Supplier sheet « CONDITIONS »: the payment days and the typed terms, the terms dropped when they only repeat the days (J07-11). */
+export const supplierTermsLine = (days: string | null, terms: string | null): string => {
+  const norm = (x: string) => x.replace(/\s+/g, ' ').trim().toLowerCase();
+  const typed = terms?.trim() ? terms.trim() : null;
+  return [days, typed && (!days || norm(typed) !== norm(days)) ? typed : null].filter(Boolean).join(' · ');
+};

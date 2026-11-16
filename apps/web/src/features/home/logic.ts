@@ -109,13 +109,14 @@ export type HomeTile = { key: 'pages' | 'products' | 'revenue' | 'stock'; value:
  * PRODUITS = catalogue size (+ low stock), CHIFFRE D'AFFAIRES (30 J) = Revenue 30 d, VALEUR DU STOCK = stock value
  * (at cost when the server gives it — advanced mode —, otherwise at retail).
  */
-export function homeTiles(k: HomeView['kpis']): HomeTile[] {
+/** `advanced` = the stock mode: the simple mode has no cost price, its stock value is the sale value like /stock (J07-9). */
+export function homeTiles(k: HomeView['kpis'], advanced = true): HomeTile[] {
   const low = k.products.lowStock + k.products.outOfStock;
   return [
     { key: 'pages', value: k.channels.active, money: false, sub: k.channels.needsReconnect > 0 ? [{ key: 'home.kpi.pages.reconnect', count: k.channels.needsReconnect }] : [] },
     { key: 'products', value: k.products.total, money: false, sub: low > 0 ? [{ key: 'home.kpi.products.low', count: low }] : [] },
     { key: 'revenue', value: k.revenue30d.value, money: true, sub: revenueSources(k.revenueSources30d) },
-    { key: 'stock', value: k.stockValue.cost ?? k.stockValue.retail, money: true, sub: [] },
+    { key: 'stock', value: advanced ? (k.stockValue.cost ?? k.stockValue.retail) : k.stockValue.retail, money: true, sub: [] },
   ];
 }
 

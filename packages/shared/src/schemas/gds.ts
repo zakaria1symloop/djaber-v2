@@ -72,7 +72,9 @@ export const deriveGdsPaymentStatus = (amountPaid: number, total: number): GdsPa
 /** 04 §20 / AT-GDS-16: weighted-average cost at a receipt, integer DA half-up; a null cost counts as 0. */
 export const weightedAverageCost = (stockBefore: number, costBefore: number | null, receivedQty: number, unitCost: number): number => {
   const stock = Math.max(stockBefore, 0);
-  if (stock + receivedQty <= 0) return unitCost;
+  // journey J07-2 (owner « fix everything » 16/11): an unknown cost (null, a product created in simple mode) takes the
+  // receipt's cost — counted as 0 it gave 4 000 DA bought ⇒ 667 DA « weighted cost » and a 92 % margin
+  if (costBefore === null || stock + receivedQty <= 0) return unitCost;
   return Math.floor((stock * (costBefore ?? 0) + receivedQty * unitCost) / (stock + receivedQty) + 0.5);
 };
 /** 04 §19: |difference| / max(expected, 1), in whole percent (truncated: AT-INV-02 "3 → 1 (66 %)"). */
@@ -348,6 +350,9 @@ export type PurchaseView = PurchaseListItemView & {
   shippingCost: number;
   paymentMethod: (typeof PaymentMethodValues)[number] | null;
   payments: PaymentEntryView[];
+  /** journeys 16/11 J07-11: the stock movements of the purchase (what its « Mouvements » link opens) and its receipts (one per receive call, oldest first) */
+  movementCount: number;
+  receipts: { at: string; units: number }[];
   notes: string | null;
   cancelReason: string | null;
   cancelledAt: string | null;
@@ -541,6 +546,8 @@ export type SaleStatsView = {
   averageBasket: number;
   averageBasketPrevious: number;
   averageBasketDeltaPct: number | null;
+  /** journeys 16/11 J07-7: the open count that blocks counter sales (04 §19 `blockCounterSales`), else null — the sales page and the sale sheet announce it */
+  blockedByInventory: { id: string; number: string } | null;
 };
 
 // =====================================================================================================================

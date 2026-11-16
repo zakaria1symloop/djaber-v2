@@ -5,6 +5,7 @@
  "agent.api.defaultName": "Nouvel agent",
  "agent.api.generatedName": "Agent de {page}",
  "agent.api.readiness.catalog": "Produits actifs dans le périmètre de l’agent",
+ "agent.api.readiness.catalogPending": "Aucun produit validé pour l’instant : vos {count} produits attendent la validation de Djaber — d’ici là, l’agent répond aux clients que les produits seront bientôt en ligne",
  "agent.api.readiness.channels": "Pages rattachées",
  "agent.api.readiness.credits": "Crédits disponibles",
  "agent.api.readiness.emailVerified": "Adresse e-mail vérifiée",

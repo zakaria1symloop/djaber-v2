@@ -77,7 +77,7 @@ export function StopdeskCombobox({ id, communeId, provider, value, onChange, inv
       id={id}
       value={value}
       onChange={(v, o) => onChange(v, o?.label ?? null)}
-      options={geoFilter(list.map((s) => ({ value: s.id, label: s.name, hint: s.provider })), search)}
+      options={geoFilter(list.map((s) => ({ value: s.id, label: s.name, hint: t(`couriers.provider.${s.provider}`) })), search)}
       placeholder={t('geo.stopdesk.placeholder')}
       searchPlaceholder={t('geo.stopdesk.search')}
       emptyLabel={q.isPending && communeId ? t('common.loading') : t('geo.stopdesk.empty')}

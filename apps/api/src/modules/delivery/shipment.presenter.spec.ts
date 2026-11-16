@@ -3,7 +3,7 @@
 // UX-060 rule; ShipmentService refuses them with the readable DELIVERY_ORDER_<STATUS>), and `failureHandled` tells the screens.
 import { failureHandledAs, isNotOffered, isOrderSendClosed, sendClosedCode } from '@djaber/shared';
 import { TenantContext } from '@djaber/db';
-import { shipmentActions } from './shipment.presenter';
+import { isSendFailure, shipmentActions } from './shipment.presenter';
 
 const asOwner = <T>(fn: () => T) => TenantContext.run({ workspaceId: 'w1', userId: 'u1', role: 'owner', readOnly: false } as never, fn);
 const sendFailure = { provider: 'zrexpress' as const, status: 'failed' as const, trackingNumber: null, lastError: 'COURIER_VALIDATION|cod|Montant supérieur à 150000 DA', deliveryAttempts: 0, courierAccount: null };
@@ -47,5 +47,23 @@ describe('UX-064 — shared rule (one source for API and web)', () => {
     expect(failureHandledAs('failed', 'confirmed')).toBeNull();
     expect(failureHandledAs('failed', 'shipped')).toBeNull();
     expect(failureHandledAs('delivered', 'delivered')).toBeNull();
+  });
+});
+
+describe('journey J08-4 / J08-9 — a self-delivered parcel without tracking that failed', () => {
+  const manualFailed = { provider: 'manual' as const, status: 'failed' as const, trackingNumber: null, lastError: null, deliveryAttempts: 1, courierAccount: null };
+  it('is a failed delivery attempt, not a failed send: no « Corriger et renvoyer », « Marquer livrée / retournée » offered', () => {
+    expect(isSendFailure(manualFailed)).toBe(false);
+    expect(isSendFailure({ ...manualFailed, provider: 'zrexpress' })).toBe(true);
+    const a = new Map(asOwner(() => shipmentActions(manualFailed, { status: 'shipped' })).map((x) => [x.key, x]));
+    expect(a.has('retry')).toBe(false);
+    expect(a.get('mark_delivered')).toMatchObject({ enabled: true });
+    expect(a.get('mark_returned')).toMatchObject({ enabled: true });
+  });
+  it('« Changer de transporteur » is greyed DELIVERY_NO_COURIER when the shop has no active courier', () => {
+    const none = new Map(asOwner(() => shipmentActions(manualFailed, { status: 'shipped' }, { hasCourier: false })).map((x) => [x.key, x]));
+    expect(none.get('change_courier')).toEqual({ key: 'change_courier', enabled: false, reasonCode: 'DELIVERY_NO_COURIER' });
+    const some = new Map(asOwner(() => shipmentActions(manualFailed, { status: 'shipped' }, { hasCourier: true })).map((x) => [x.key, x]));
+    expect(some.get('change_courier')).toEqual({ key: 'change_courier', enabled: true });
   });
 });

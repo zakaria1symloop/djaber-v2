@@ -71,6 +71,7 @@ export class PublicTrackingService {
       trackingNumber: s.trackingNumber,
       wilayaName: s.order.wilaya ? (locale === 'ar' ? s.order.wilaya.nameAr : s.order.wilaya.nameFr) : null,
       isStopdesk: s.order.isStopdesk,
+      selfDelivery: s.provider === 'manual',
       updatedAt: (s.lastEventAt ?? s.updatedAt).toISOString(),
       reportUrl: `${web}/s/${token}#report`,
     };

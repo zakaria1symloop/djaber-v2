@@ -57,5 +57,9 @@ export const catalogueSection = (c: PromptContext): string => {
   rules.push(c.agent.outOfStockBehavior === 'suggest_alternative' ? `OUT_OF_STOCK: ${say}, then suggest an alternative from the same category` : `OUT_OF_STOCK: ${say}, nothing else about it`);
   // full-test 15/11 AI-CHAT-08 (X02: « Sac à main cuir est en rupture » when only the red one was)
   if (c.agent.showMissingVariants) rules.push('MISSING_VARIANT: when only some variants are out of stock the product is available: say which variants remain, never that the whole product is out of stock');
-  return [head, ...(catalogue.count === 0 ? ['(no product available: do not invent any)'] : blocks), ...rules].join('\n');
+  // journey 16/11 J04-1: a new shop whose products still wait for Djaber's review is not a shop « with no product »
+  const empty = catalogue.awaitingReview
+    ? ["(no product available yet: the shop's products are being checked before they go online. Never say the shop sells nothing or has no products: say its products will be online very soon, answer the other questions (delivery, payment, opening hours) and invite the customer to come back; do not invent any product, price or stock, and take no order)"]
+    : ['(no product available: do not invent any)'];
+  return [head, ...(catalogue.count === 0 ? empty : blocks), ...rules].join('\n');
 };

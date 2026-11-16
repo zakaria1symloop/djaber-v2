@@ -38,7 +38,7 @@ import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
 import { guardFactsOf } from './reply-guard';
 import { AiProviderError } from './provider/ai.gateway';
 import { canonicalTool } from './tools/tool-registry';
-import { nextChosen, orderHistoryOf, placedThisTurn } from './tools/order-confirmation';
+import { lastAiText, nextChosen, orderHistoryOf, placedThisTurn } from './tools/order-confirmation';
 import { TurnContextService } from './turn-context.service';
 import { VisionService, visionNoteText, type VisionNote } from './vision.service';
 
@@ -240,7 +240,8 @@ export class ReplyProcessor implements OnModuleInit {
     const deadline = Date.now() + RUN_BUDGET_MS;
     const ctx = contextOf(conv);
     // journey 16/11 J05-8: a turn with no clue (phone number, name) keeps the conversation's language, Arabic script included
-    const lang: AiLanguage = turnLanguage(batch.plain, ctx.lastLanguage as AiLanguage | undefined);
+    // journey 16/11 J04-2: the first message with no clue takes the shop's language (agent default, else workspace), not English
+    const lang: AiLanguage = turnLanguage(batch.plain, ctx.lastLanguage as AiLanguage | undefined, { agentDefault: agent.defaultLanguage, workspaceLocale: TenantContext.get().locale });
     await this.typing(conv.channel, conv.externalSenderId);
 
     // --- vision (AI-06): notes are kept on the run so a retry does not pay the provider twice ---------------------------------
@@ -298,7 +299,7 @@ export class ReplyProcessor implements OnModuleInit {
       runId: run.id,
       prompt,
       // retest 12/11: a handoff is checked against the customer's words of this batch (handoff-judge)
-      toolCtx: { workspaceId: conv.workspaceId, agent, conversationId: conv.id, clientId: conv.clientId, channelId: conv.channelId, runId: run.id, dryRun: false, customerText: batch.plain, unclearStreak: ctx.unclearStreak ?? 0, orderHistory, customerHistory, ordering: !!ctx.chosen?.length },
+      toolCtx: { workspaceId: conv.workspaceId, agent, conversationId: conv.id, clientId: conv.clientId, channelId: conv.channelId, runId: run.id, dryRun: false, customerText: batch.plain, unclearStreak: ctx.unclearStreak ?? 0, orderHistory, customerHistory, ordering: !!ctx.chosen?.length, lastAiText: lastAiText(history.messages) },
       temperature: turnCtx.temperature,
       maxTokens: turnCtx.maxTokens,
       deadline,
@@ -412,9 +413,10 @@ export class ReplyProcessor implements OnModuleInit {
 
       // §5 welcome: before the first AI reply of a conversation nobody answered yet (empty workspace text ⇒ skipped)
       const answeredBefore = await tx.message.count({ where: { conversationId: conv.id, author: { in: ['ai', 'human'] } } });
-      if (!answeredBefore && !blocked) await this.outbound.sendSystemText(conv.id, 'welcome', {}, { tx, oncePer24h: true });
+      // journey 16/11 J04-2: in the language of the turn (a first « Bonsoir » got the workspace text, the reply another language)
+      if (!answeredBefore && !blocked) await this.outbound.sendSystemText(conv.id, 'welcome', {}, { tx, oncePer24h: true, lang: o.lang });
       // §3.2 out of hours: standalone workspace text before the reply, once per conversation per 24 h
-      if (o.outOfHours && !blocked) await this.outbound.sendSystemText(conv.id, 'out_of_hours', {}, { tx, oncePer24h: true });
+      if (o.outOfHours && !blocked) await this.outbound.sendSystemText(conv.id, 'out_of_hours', {}, { tx, oncePer24h: true, lang: o.lang });
 
       let replyId: string | null = null;
       if (replyText) replyId = (await this.outbound.store(tx, conv.id, { author: 'ai', kind: 'ai', text: replyText, aiRunId: run.id })).message.id;

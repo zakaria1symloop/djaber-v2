@@ -26,7 +26,7 @@ import { CourierLimiter } from './courier-limiter';
 import { ShipmentEffects } from './shipment-effects.service';
 import { cancelRefusal, changeCourierRefusal, courierFieldErrors, encodeShipmentError, errorCodeOf, isNotOfferedRefusal, isSendFailure, manualOpen, parseShipmentError, presentShipment, retryDeliveryRefusal, SHIPMENT_INCLUDE, type ShipmentRow } from './shipment.presenter';
 import { syncAvailableFromTtl, syncCooldownKey } from './sync-cooldown';
-import { CREATE_MAX_ATTEMPTS, CREATE_RETRY_DELAYS_MS, nextSyncAt } from './tracking-rules';
+import { attemptsAfter, CREATE_MAX_ATTEMPTS, CREATE_RETRY_DELAYS_MS, nextSyncAt } from './tracking-rules';
 
 const SEND_STATUSES = ['confirmed', 'preparing'];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -134,7 +134,8 @@ export class ShipmentService implements OnModuleInit {
       }
     }
     const desk = s.order.isStopdesk && s.order.stopdeskId ? stopdeskText((await stopdeskLabels([s.order.stopdeskId])).get(s.order.stopdeskId)) : null;
-    return presentShipment(s as unknown as ShipmentRow, s.order, client, addressOf(s.order, locale, desk), { publicWebUrl: this.config.get('PUBLIC_WEB_URL'), syncAvailableAt: await this.syncAvailableAt(id), portalUrl, locale });
+    const hasCourier = (await prisma.courierAccount.count({ where: { isActive: true } })) > 0;
+    return presentShipment(s as unknown as ShipmentRow, s.order, client, addressOf(s.order, locale, desk), { publicWebUrl: this.config.get('PUBLIC_WEB_URL'), syncAvailableAt: await this.syncAvailableAt(id), portalUrl, locale, hasCourier });
   }
 
   // --- send (DLV-05) ----------------------------------------------------------------------------------------------------------
@@ -611,7 +612,8 @@ export class ShipmentService implements OnModuleInit {
       const s = await this.fx.lockShipment(tx, id);
       if (o.status === 'delivered' || !['sent', 'picked_up', 'in_transit', 'out_for_delivery', 'failed'].includes(s.status) || isSendFailure(s)) throw new AppException('CONFLICT');
       const at = input.deliveredAt ? new Date(input.deliveredAt) : new Date();
-      const u = await tx.shipment.update({ where: { id }, data: { status: 'delivered', lastEventAt: at, nextSyncAt: null } });
+      // journey J08-6: this delivery is an attempt (a parcel delivered after a failure = 2nd attempt)
+      const u = await tx.shipment.update({ where: { id }, data: { status: 'delivered', lastEventAt: at, nextSyncAt: null, deliveryAttempts: attemptsAfter(s.status, 'delivered', s.deliveryAttempts) } });
       const e = await tx.shipmentEvent.create({ data: { shipmentId: id, rawStatus: 'delivered', mappedStatus: 'delivered', at, source: 'manual', actorId: actor.type === 'user' ? actor.id : null, description: input.reason ?? null }, include: { actor: SHIPMENT_INCLUDE.events.include.actor } });
       o = await this.orders.lock(tx, o.id);
       await this.workflow.transition(tx, o, 'delivered', { actor, amountCollected: input.amountCollected, note: input.reason, effectiveAt: input.deliveredAt ? at : null, notifyCustomer: input.notifyCustomer, shipmentHandled: true });

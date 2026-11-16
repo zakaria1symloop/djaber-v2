@@ -22,7 +22,7 @@ import { AiRunService, guardFlags, intentOf, type RunMeta } from './ai-run.servi
 import { CatalogueService } from './catalogue.service';
 import { conversationLanguage, languageSwitched, systemLocale, turnLanguage, type AiLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
-import { nextChosen, orderHistoryOf, placedThisTurn, type ChosenItem } from './tools/order-confirmation';
+import { lastAiText, nextChosen, orderHistoryOf, placedThisTurn, type ChosenItem } from './tools/order-confirmation';
 import { canonicalTool } from './tools/tool-registry';
 import { guardFactsOf } from './reply-guard';
 import { SCENARIOS, type ScenarioCheck } from './prompt/scenarios';
@@ -168,8 +168,10 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       // full-test 15/11 AI-CHAT-04: the previous language of the conversation, as on Messenger (a bare « Tamanrasset ? » gave English)
       // journey 16/11 J05-8: each earlier turn read with the one before it — a bare « Nadia Ferhat » read alone gave English, so
       // the phone number sent after it was answered in English in the middle of a French conversation
-      const previous = conversationLanguage(messages.slice(0, -1).filter((m) => m.role === 'user').map((m) => m.text));
-      const lang: AiLanguage = turnLanguage(said, previous);
+      // journey 16/11 J04-2: a first message with no clue (« Bonsoir » had none) takes the shop's language, not English
+      const shop = { agentDefault: agent.defaultLanguage, workspaceLocale: TenantContext.get().locale };
+      const previous = conversationLanguage(messages.slice(0, -1).filter((m) => m.role === 'user').map((m) => m.text), shop);
+      const lang: AiLanguage = turnLanguage(said, previous, shop);
       const history: HistoryMessage[] = messages.slice(0, -1).map((m) => ({ author: m.role === 'user' ? 'customer' : 'ai', text: m.text }));
       // full-test 15/11 AI-CHAT-05: what the customer chose in the earlier turns of the session (CURRENT ORDER), as on Messenger
       const previousRun = await prisma.aiRun.findFirst({ where: { agentId: agent.id, batchKey: d.sessionId, id: { not: run.id }, status: { not: 'running' } }, orderBy: { startedAt: 'desc' }, select: { meta: true } });
@@ -184,7 +186,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         runId: run.id,
         prompt,
         // retest 12/11: the same handoff check as the live replies (handoff-judge)
-        toolCtx: { workspaceId: agent.workspaceId, agent, conversationId: null, clientId: null, channelId: null, runId: run.id, dryRun: true, customerText: said, orderHistory: await orderHistoryOf({ agentId: agent.id, batchKey: d.sessionId, id: { not: run.id } }), customerHistory: [...messages.filter((m) => m.role === 'user').map((m) => m.text), said].join('\n'), ordering: !!chosen?.length },
+        toolCtx: { workspaceId: agent.workspaceId, agent, conversationId: null, clientId: null, channelId: null, runId: run.id, dryRun: true, customerText: said, orderHistory: await orderHistoryOf({ agentId: agent.id, batchKey: d.sessionId, id: { not: run.id } }), customerHistory: [...messages.filter((m) => m.role === 'user').map((m) => m.text), said].join('\n'), ordering: !!chosen?.length, lastAiText: lastAiText(history) },
         temperature: turnCtx.temperature,
         maxTokens: turnCtx.maxTokens,
         deadline: Date.now() + RUN_BUDGET_MS,

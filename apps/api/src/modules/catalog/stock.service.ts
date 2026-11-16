@@ -3,7 +3,7 @@
 // CAT-05 / GDS-02 / GDS-03: manual adjustments, the movement journal, reversal, the stock dashboard and the snapshot.
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { prisma, Prisma, TenantContext, type MovementReason, type MovementRefType, type MovementType, type StockMovement, type Tx } from '@djaber/db';
-import { MovementTypeValues, renderStoredTextIn, type MovementStatsView, type StockAdjustmentInput, type StockMovementView, type StockPurchasingView } from '@djaber/shared';
+import { MovementTypeValues, renderStoredTextIn, textIn, type MovementStatsView, type StockAdjustmentInput, type StockMovementView, type StockPurchasingView } from '@djaber/shared';
 import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { can } from '../../core/rbac/permission-matrix';
 import { AppException, notFound } from '../../core/errors/app.exception';
@@ -15,6 +15,7 @@ import { exportDateTime, exportLabel } from '../jobs/export-cells';
 import { ExportService } from '../jobs/export.service';
 import { action, likePattern, shortageSince, stockStateOf } from './catalog.util';
 import type { MovementsQuery, SnapshotQuery } from './dto';
+import { COUNTED_PURCHASE } from '../gds/purchase-scope';
 import { LowStockEvaluator } from './low-stock.evaluator';
 import { thumbUrlOf } from './product-image.util';
 
@@ -484,7 +485,8 @@ export class StockService implements OnModuleInit {
         { header: h.after, value: (r: R) => r.after },
         { header: h.reason, value: (r: R) => exportLabel(locale, 'enum.StockMovement.reason', r.reason) },
         { header: h.note, value: (r: R) => r.note ?? '' },
-        { header: h.reference, value: (r: R) => r.reference?.label ?? '' },
+        // J07-11: a reversal names what it cancels, as on the screen (« Contre-passation du mouvement du 16/11/2026 »)
+        { header: h.reference, value: (r: R) => (r.reversalOf ? (textIn('movements.reversalOf', locale, { date: dmy(algiersDay(new Date(r.reversalOf.createdAt))) }) ?? '') : (r.reference?.label ?? '')) },
         { header: h.actor, value: (r: R) => (r.actor ? `${r.actor.firstName} ${r.actor.lastName}`.trim() : '') },
       ],
     };
@@ -546,9 +548,9 @@ export class StockService implements OnModuleInit {
     const [open, late, due, suppliers, bought, restock] = await Promise.all([
       prisma.purchase.aggregate({ where: { status: { in: ['pending', 'partial'] } }, _count: { _all: true }, _sum: { total: true } }),
       prisma.purchase.count({ where: { status: { in: ['pending', 'partial'] }, expectedAt: { lt: now } } }),
-      prisma.purchase.findMany({ where: { status: { in: ['pending', 'partial', 'received'] } }, select: { total: true, amountPaid: true } }),
+      prisma.purchase.findMany({ where: COUNTED_PURCHASE, select: { total: true, amountPaid: true } }),
       prisma.supplier.count({ where: { deletedAt: null, isActive: true } }),
-      prisma.purchase.aggregate({ where: { status: { notIn: ['cancelled', 'draft'] }, purchasedAt: { gte: new Date(now.getTime() - 30 * 86_400_000) } }, _sum: { total: true } }),
+      prisma.purchase.aggregate({ where: { ...COUNTED_PURCHASE, purchasedAt: { gte: new Date(now.getTime() - 30 * 86_400_000) } }, _sum: { total: true } }),
       prisma.stockRecommendation.count({ where: { status: 'active', type: { in: ['restock', 'stockout_imminent'] } } }),
     ]);
     return {
@@ -663,6 +665,9 @@ export class StockService implements OnModuleInit {
     return { ...page(data, agg?.total ?? 0, q), meta: { totalValue: Math.round(agg?.value ?? 0), date: q.date } };
   }
 }
+
+/** `YYYY-MM-DD` ⇒ « dd/mm/yyyy » (export cells). */
+const dmy = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
 
 const MOVEMENT_HEADERS = {
   fr: { sheet: 'Mouvements', date: 'Date', product: 'Produit', variant: 'Variante', type: 'Type', quantity: 'Quantité', before: 'Avant', after: 'Après', reason: 'Motif', note: 'Note', reference: 'Référence', actor: 'Par' },

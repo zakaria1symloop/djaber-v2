@@ -33,6 +33,8 @@ export type PromptContext = {
   faqs: PromptFaq[];
   catalogue: CatalogueSlice;
   lang: AiLanguage;
+  /** journey 16/11 J04-3: the customer's message is formal Arabic (MSA), not darija */
+  formalArabic?: boolean;
   locale: AppLocale;
   now: Date;
   outOfHours: boolean;

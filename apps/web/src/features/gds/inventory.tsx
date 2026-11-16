@@ -429,7 +429,7 @@ function InventoryCount({ id }: { id: string }) {
       {inv.status === 'cancelled' ? <Banner tone="neutral">{t('inventory.page.cancelledBanner')}</Banner> : null}
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" data-testid="inventory-kpis">
         <KpiTile value={`${formatNumber(totals.counted)} / ${formatNumber(lines.length)}`} label={t('inventory.kpi.counted')} meta={`${totals.progressPct} %`} />
-        <KpiTile value={formatNumber(totals.discrepancies)} label={t('inventory.kpi.gaps')} meta={t('inventory.kpi.flagged', { count: totals.flagged })} tone={totals.flagged ? 'warning' : undefined} />
+        <KpiTile value={formatNumber(totals.discrepancies)} label={t('inventory.kpi.gaps')} meta={t(inv.status === 'validated' ? 'inventory.kpi.flaggedDone' : 'inventory.kpi.flagged', { count: totals.flagged })} tone={totals.flagged && inv.status !== 'validated' ? 'warning' : undefined} />
         <KpiTile value={signedNumber(totals.value)} label={t('inventory.kpi.value')} meta={t('inventory.kpi.valueMeta')} tone={totals.value < 0 ? 'danger' : undefined} />
         <KpiTile value={day(inv.startedAt.slice(0, 10))} label={t('inventory.kpi.started')} meta={shortName(inv.startedBy) ?? '—'} />
       </section>
@@ -592,7 +592,7 @@ export function ValidateInventoryDialog({ inventoryId, onClose }: { inventoryId:
                     <Input
                       aria-label={t('inventory.page.noteFor', { name: l.name })}
                       value={lineNotes[k] ?? l.note ?? ''}
-                      onChange={(e) => setLineNotes((x) => ({ ...x, [k]: e.target.value }))}
+                      onChange={(e) => { const v = e.target.value; setLineNotes((x) => ({ ...x, [k]: v })); if (v.trim()) setMissing((m) => m.filter((x) => x !== k)); }}
                       placeholder={t('inventory.page.noteRequired')}
                       aria-invalid={missing.includes(k) || undefined}
                       className={cn('!h-8', missing.includes(k) && '!border-accent-alert')}

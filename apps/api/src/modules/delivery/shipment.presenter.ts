@@ -22,7 +22,7 @@ export type ShipmentRow = Shipment & {
   events: { at: Date; rawStatus: string; mappedStatus: ShipmentView['status'] | null; description: string | null; location: string | null; source: string; actor: { id: string; firstName: string; lastName: string; avatarUrl: string | null } | null }[];
 };
 export type ShipmentOrderLike = { id: string; number: string; status: string; clientPhone?: string | null };
-export type ShipmentPresentCtx = { publicWebUrl?: string; now?: number; syncAvailableAt?: string | null; portalUrl?: string | null; locale?: string };
+export type ShipmentPresentCtx = { publicWebUrl?: string; now?: number; syncAvailableAt?: string | null; portalUrl?: string | null; locale?: string; hasCourier?: boolean };
 
 /** `Shipment.lastError` = `CODE` or `CODE|field|message` (courier validation errors keep the field for the dialog). */
 export const encodeShipmentError = (code: string, field?: string | null, message?: string | null) => [code, field ?? '', (message ?? '').replace(/\|/g, '/').slice(0, 400)].join('|').replace(/\|+$/, '');
@@ -66,8 +66,12 @@ const act = (key: string, permission: MerchantPermission, o: { reasonCode?: stri
   return { key, enabled: !reasonCode, ...(reasonCode ? { reasonCode } : {}), ...(params ? { reasonParams: params } : {}), ...(o.primary ? { primary: true } : {}) };
 };
 
-/** Send failure (the courier never created the parcel): retry / change courier. */
-export const isSendFailure = (s: Pick<Shipment, 'status' | 'trackingNumber'>) => s.status === 'failed' && !s.trackingNumber;
+/**
+ * Send failure (the courier never created the parcel): retry / change courier. Journey J08-4: a self-delivered parcel
+ * (`provider=manual`, tracking number optional) that fails is a failed delivery attempt, never a failed send — it read as one
+ * when no tracking number was typed (« Corriger et renvoyer », no « Marquer livrée / retournée », not in « échecs du jour »).
+ */
+export const isSendFailure = (s: Pick<Shipment, 'status' | 'trackingNumber' | 'provider'>) => s.status === 'failed' && !s.trackingNumber && s.provider !== 'manual';
 
 type ParcelState = Pick<Shipment, 'provider' | 'status' | 'trackingNumber'>;
 type Caps = { cancel: boolean; retry: boolean };
@@ -127,7 +131,7 @@ export const isNotOfferedRefusal = (code: ParcelRefusal | null): code is typeof 
  * one (delivered / returned / cancelled) and « Bordereau » of a cancelled parcel are not offered (nothing to refresh or
  * print) instead of « Suivi introuvable » / « Commande clôturée » / « Pas de colis créé ».
  */
-export const shipmentActions = (s: Pick<Shipment, 'provider' | 'status' | 'trackingNumber' | 'lastError' | 'deliveryAttempts'> & { courierAccount?: { baseUrl?: string } | null }, order: { status: string }, o: { syncAvailableAt?: string | null; now?: number } = {}): ActionDescriptor[] => {
+export const shipmentActions = (s: Pick<Shipment, 'provider' | 'status' | 'trackingNumber' | 'lastError' | 'deliveryAttempts'> & { courierAccount?: { baseUrl?: string } | null }, order: { status: string }, o: { syncAvailableAt?: string | null; now?: number; hasCourier?: boolean } = {}): ActionDescriptor[] => {
   const caps = capabilitiesOf(s.provider, s.courierAccount?.baseUrl);
   const courier = s.provider !== 'manual';
   const terminal = (SHIPMENT_TERMINAL_STATUSES as readonly string[]).includes(s.status);
@@ -148,7 +152,9 @@ export const shipmentActions = (s: Pick<Shipment, 'provider' | 'status' | 'track
     act('label', 'delivery.send', { reasonCode: s.status === 'cancelled' ? NOT_OFFERED : printable ? null : 'SHIPMENT_NOT_CREATED' }),
     act('retry', 'delivery.send', { reasonCode: orderClosed ? NOT_OFFERED : sendFailed || queued ? null : NOT_OFFERED, primary: sendFailed && !orderClosed }),
     act('retry_delivery', 'delivery.send', { reasonCode: retryDeliveryRefusal(s, caps), primary: s.status === 'failed' && !sendFailed && caps.retry && !proposeReturn }),
-    act('change_courier', 'delivery.send', { reasonCode: orderClosed ? NOT_OFFERED : changeCourierRefusal(s, caps) }),
+    // journey J08-9: with no active courier at all there is nothing to change to — greyed with its reason (12 §20), it opened a
+    // dialog « Aucun autre transporteur actif » with an enabled « Changer et renvoyer »
+    act('change_courier', 'delivery.send', { reasonCode: orderClosed ? NOT_OFFERED : (changeCourierRefusal(s, caps) ?? (o.hasCourier === false ? 'DELIVERY_NO_COURIER' : null)) }),
     act('cancel', 'delivery.send', { reasonCode: cancelRefusal(s, caps) }),
     act('mark_failed', 'delivery.send', { reasonCode: ['sent', 'picked_up', 'in_transit', 'out_for_delivery'].includes(s.status) ? null : NOT_OFFERED }),
     act('mark_delivered', 'orders.write', { reasonCode: order.status === 'delivered' || terminal || !inFlight ? NOT_OFFERED : null }),
@@ -203,7 +209,7 @@ export const presentShipment = (s: ShipmentRow, order: ShipmentOrderLike, client
     labelSource: s.labelUrl || (caps.label && s.provider !== 'manual') ? 'courier' : 'djaber',
     events: dedupeTimeline(s.events).map((e) => presentShipmentEvent(e, ctx.locale ?? viewerLocale())),
     createdAt: s.createdAt.toISOString(),
-    actions: shipmentActions(s, order, { syncAvailableAt: ctx.syncAvailableAt, now }),
+    actions: shipmentActions(s, order, { syncAvailableAt: ctx.syncAvailableAt, now, hasCourier: ctx.hasCourier }),
   };
 };
 

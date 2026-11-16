@@ -253,7 +253,8 @@ export class InventoryService {
             });
             movementId = r.movement?.id ?? null;
             discrepancies++;
-            value += Math.abs(p.difference) * (p.l.variant?.costPrice ?? p.l.product.costPrice ?? 0);
+            // net value of the variances, signed like the count page and its validate dialog (J07-11: « −4 574 », never « 4 574 »)
+            value += p.difference * (p.l.variant?.costPrice ?? p.l.product.costPrice ?? 0);
           }
           await tx.inventoryCountLine.update({ where: { id: p.l.id }, data: { expectedQty: p.expected, difference: p.difference, differencePct: p.pct, movementId } });
         }

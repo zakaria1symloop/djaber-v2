@@ -16,7 +16,7 @@ import { algiersDay, algiersDayEnd, algiersDayStart } from '../../core/time/algi
 import { action } from '../catalog/catalog.util';
 import { exportDateTime, exportLabel } from '../jobs/export-cells';
 import { ExportService } from '../jobs/export.service';
-import { emitCash } from './cash-rows';
+import { closingReference, emitCash } from './cash-rows';
 import { checkBusinessDate, lockRow, rangeOf, USER_SELECT, userRef } from './gds.util';
 
 const HOUR_MS = 3_600_000;
@@ -466,11 +466,15 @@ export class CashService implements OnModuleInit {
       await tx.cashClosing.update({ where: { id: closing.id }, data: { reopenedById: userId, reopenedAt: new Date() } });
       // the correction of this closing still standing (not reversed yet) is reversed, never deleted
       const corrections = await tx.cashTransaction.findMany({ where: { sourceType: 'closing', sourceId: closing.id, correctsTransactionId: null } });
+      // the reversal is dated when the day is reopened (journeys 16/11 J06-10h: dated at the closing time, it was listed
+      // before the rows written in between); a past day keeps it inside that day, after its last row
+      const reopenedAt = new Date();
+      const reversalAt = (closedAt: Date) => (day === algiersDay(reopenedAt) ? reopenedAt : new Date(Math.max(closedAt.getTime(), algiersDayEnd(day).getTime() - 1000)));
       for (const c of corrections) {
         const reversed = await tx.cashTransaction.count({ where: { correctsTransactionId: c.id } });
         if (reversed) continue;
         await tx.cashTransaction.create({
-          data: { workspaceId: c.workspaceId, type: c.type === 'income' ? 'expense' : 'income', amount: c.amount, category: 'correction', method: c.method, reference: c.reference, description: storedText('stored.cash.reopen', { reason: input.reason }), date: c.date, isAutomatic: true, sourceType: 'closing', sourceId: closing.id, correctsTransactionId: c.id, createdById: userId },
+          data: { workspaceId: c.workspaceId, type: c.type === 'income' ? 'expense' : 'income', amount: c.amount, category: 'correction', method: c.method, reference: c.reference, description: storedText('stored.cash.reopen', { reason: input.reason }), date: reversalAt(c.date), isAutomatic: true, sourceType: 'closing', sourceId: closing.id, correctsTransactionId: c.id, createdById: userId },
         });
       }
       await emitCash(tx, this.outbox, algiersDayStart(day), `reopen:${closing.id}`);
@@ -492,7 +496,7 @@ export class CashService implements OnModuleInit {
       columns: [
         { header: h.date, value: (r: R) => exportDateTime(r.date) },
         { header: h.description, value: (r: R) => r.description ?? '' },
-        { header: h.reference, value: (r: R) => r.reference?.label ?? '' },
+        { header: h.reference, value: (r: R) => (r.reference?.type === 'closing' ? closingReference(r.reference.label, locale) : (r.reference?.label ?? '')) },
         { header: h.category, value: (r: R) => exportLabel(locale, 'enum.Cash.category', r.category) },
         { header: h.method, value: (r: R) => exportLabel(locale, 'orders.payment.method', cashDisplayMethod(r.category, r.method)) },
         { header: h.amount, value: (r: R) => (r.type === 'income' ? r.amount : -r.amount) },

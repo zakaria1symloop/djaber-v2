@@ -1,6 +1,7 @@
 // M7 — cash register (GDS-08, CSH-01…04, 04 §20 D56): manual rows, locks of automatic rows, 24 h window, day closing with
 // correction row, reopen (Admin+, audited), period selection ↔ table ↔ KPIs in sync (09 §4 regression), export; proof
-// photos readable from the ledger and Reports › Caisse (tester report 2026-10-19 UX-001).
+// photos readable from the ledger and Reports › Caisse (tester report 2026-10-19 UX-001); no money row lands in a closed
+// day (journeys 16/11 J06-1).
 import request from 'supertest';
 import sharp from 'sharp';
 import { algiersDay, algiersDayEnd, algiersDayStart } from '../../src/core/time/algiers';
@@ -11,7 +12,7 @@ import { createTestApp, type TestApp } from '../support/app';
 import { eventually } from '../support/m1';
 import { drain, jobOf } from '../support/m2';
 import { cashOf, newOrder, status } from '../support/m5';
-import { advancedShop, DAY, db, idem, product, sale } from '../support/m7';
+import { advancedShop, DAY, db, idem, product, sale, stockOf } from '../support/m7';
 
 let app: TestApp;
 beforeAll(async () => {
@@ -130,6 +131,42 @@ describe('day closing (CSH-01/02, 04 §20)', () => {
     await owner.post('/cash/close', { day: d1, countedBalance: 900, note: 'manque 100' }).set(idem()).expect(200);
     await db.cashTransaction.create({ data: { workspaceId: owner.workspaceId, type: 'expense', amount: 300, category: 'rent', method: 'cash', date: new Date(at(d2, 9)), createdById: owner.userId } });
     expect((await owner.get(`/cash/stats?day=${d2}`).expect(200)).body.data.day.theoreticalCash).toBe(600);
+  });
+
+  it('journeys 16/11 J06-1: today closed ⇒ a sale with money, « Encaisser le reste », a refund, a cancel without refund and a member marking an order delivered are refused with 409 CASH_DAY_CLOSED (nothing written); a draft is accepted; the closed day keeps its figures; after reopening the reversal is dated at the reopening and the sale goes through', async () => {
+    const owner = await advancedShop(app, { fees: true });
+    const today = algiersDay();
+    const p = await product(owner, { price: 1000, stock: 20 });
+    const partial = await sale(owner, { client: { name: 'Sara B.', phone: '0555 66 06 01' }, items: [{ productId: p.id, quantity: 2 }], amountPaid: 500 });
+    const paid = await sale(owner, { items: [{ productId: p.id, quantity: 1 }], amountPaid: 1000 });
+    const closed = await owner.post('/cash/close', { day: today, countedBalance: 1400, note: 'manque 100' }).set(idem()).expect(200);
+    expect(closed.body.data.closing).toMatchObject({ theoreticalBalance: 1500, countedBalance: 1400, difference: -100 });
+    const rowsBefore = await db.cashTransaction.count({ where: { workspaceId: owner.workspaceId } });
+    const refused = { code: 'CASH_DAY_CLOSED', params: { date: today } };
+
+    expect((await owner.post('/sales', { items: [{ productId: p.id, quantity: 1 }], amountPaid: 1000 }).set(idem()).expect(409)).body.error).toMatchObject(refused);
+    expect(await stockOf(p.id)).toBe(17);
+    expect((await owner.post(`/sales/${partial.id}/payments`, { amount: 300, method: 'cash' }).set(idem()).expect(409)).body.error).toMatchObject(refused);
+    expect((await owner.post(`/sales/${paid.id}/cancel`, { reason: 'erreur', restoreStock: true, refund: true }).expect(409)).body.error).toMatchObject(refused);
+    expect((await owner.post(`/sales/${paid.id}/cancel`, { reason: 'erreur', restoreStock: true, refund: false }).expect(409)).body.error).toMatchObject(refused);
+    const { order } = await newOrder(owner);
+    expect((await status(owner, order, 'delivered').expect(409)).body.error).toMatchObject(refused);
+    // no money moves: a draft is still accepted
+    await owner.post('/sales', { items: [{ productId: p.id, quantity: 1 }], status: 'draft' }).set(idem()).expect(201);
+    expect(await db.cashTransaction.count({ where: { workspaceId: owner.workspaceId } })).toBe(rowsBefore);
+    expect(await stockOf(p.id)).toBe(17);
+    const dayView = (await owner.get('/cash/days').expect(200)).body.data.find((d: any) => d.day === today);
+    expect(dayView).toMatchObject({ closed: true, theoreticalCash: 1400, closing: { theoreticalBalance: 1500, countedBalance: 1400 } });
+
+    const correction = await db.cashTransaction.findFirstOrThrow({ where: { workspaceId: owner.workspaceId, sourceType: 'closing', correctsTransactionId: null } });
+    const beforeReopen = Date.now();
+    await owner.post(`/cash/days/${today}/reopen`, { reason: 'vente après clôture' }).expect(200);
+    const reversal = await db.cashTransaction.findFirstOrThrow({ where: { correctsTransactionId: correction.id } });
+    expect(reversal.date.getTime()).toBeGreaterThanOrEqual(beforeReopen - 1000);
+    expect(algiersDay(reversal.date)).toBe(today);
+    const late = await sale(owner, { items: [{ productId: p.id, quantity: 1 }], amountPaid: 1000 });
+    expect(late).toMatchObject({ paymentStatus: 'paid' });
+    await owner.post(`/sales/${partial.id}/payments`, { amount: 300, method: 'cash' }).set(idem()).expect(200);
   });
 });
 

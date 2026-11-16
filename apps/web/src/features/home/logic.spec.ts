@@ -128,6 +128,9 @@ describe('home KPI tiles (AT-ANA-01 named figures)', () => {
   it('uses the stock value at cost when the server gives it (advanced mode)', () => {
     expect(homeTiles(kpis({ stockValue: { retail: 10, cost: 7 } }))[3]!.value).toBe(7);
   });
+  it('journeys 16/11 J07-9: the simple mode shows the sale value, the same figure as the stock dashboard', () => {
+    expect(homeTiles(kpis({ stockValue: { retail: 196_100, cost: 36_462 } }), false)[3]!.value).toBe(196_100);
+  });
   it('flags pages to reconnect and hides an empty low-stock line', () => {
     const tiles = homeTiles(kpis({ channels: { active: 1, total: 2, needsReconnect: 1 }, products: { total: 4, lowStock: 0, outOfStock: 0 } }));
     expect(tiles[0]!.sub).toEqual([{ key: 'home.kpi.pages.reconnect', count: 1 }]);

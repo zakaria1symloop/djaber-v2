@@ -35,7 +35,7 @@ const SOURCE = {
 } as const;
 
 /** Options, current values and chips shared by the bar and the panel. */
-export function useMovementFilters(list: ListController, fallbackProductName?: string) {
+export function useMovementFilters(list: ListController, fallbackProductName?: string, refLabel?: string | null) {
   const t = useT();
   const locale = useLocaleCode() as 'fr' | 'ar' | 'en';
   const { can } = useSession();
@@ -80,7 +80,7 @@ export function useMovementFilters(list: ListController, fallbackProductName?: s
   if (variantId) chip('variantId', t('movements.filter.variant'), variantName, { variantId: null });
   if (reasons.length) chip('reason', t('movements.filter.reason'), labels(reasons, reasonOptions), { reason: null });
   if (refTypes.length) chip('refType', t('movements.filter.reference'), labels(refTypes, refTypeOptions), { refType: null, refId: null });
-  if (filterText(s, 'refId')) chip('refId', t('movements.filter.reference'), t('movements.filter.oneDocument'), { refId: null });
+  if (filterText(s, 'refId')) chip('refId', t('movements.filter.reference'), refLabel ? `#${refLabel}` : t('movements.filter.oneDocument'), { refId: null }); // J07-11: « #ACH-1001 »
   if (periodLabel) chip('period', t('movements.filter.period'), periodLabel, { from: null, to: null });
   if (createdById) chip('createdById', t('movements.filter.by'), labels([createdById], memberOptions), { createdById: null });
   if (minQty || maxQty) chip('qty', t('movements.filter.quantity'), `${minQty ? formatNumber(Number(minQty)) : '…'} – ${maxQty ? formatNumber(Number(maxQty)) : '…'}`, { minQty: null, maxQty: null });

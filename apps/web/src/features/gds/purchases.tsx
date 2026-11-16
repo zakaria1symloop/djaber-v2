@@ -86,7 +86,7 @@ function PurchasesList() {
       cell: (r) => (
         <div className="flex flex-col items-start gap-1">
           <PurchaseStatusPill status={r.status} units={r.units} />
-          {r.status !== 'cancelled' && r.status !== 'draft' && r.paymentStatus !== 'paid' ? <PaymentPill status={r.paymentStatus} /> : null}
+          {(r.status !== 'cancelled' || r.remaining > 0) && r.status !== 'draft' && r.paymentStatus !== 'paid' ? <PaymentPill status={r.paymentStatus} /> : null}
         </div>
       ),
     },

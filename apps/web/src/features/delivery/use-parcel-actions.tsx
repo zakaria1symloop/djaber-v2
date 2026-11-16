@@ -66,7 +66,8 @@ export function useParcelActions(o: { onTrack?: (shipmentId: string) => void } =
   const t = useT();
   const router = useRouter();
   const refresh = useDeliveryRefresh();
-  const orders = useOrderActions();
+  // journey J08-5: « Marquer expédiée (livraison propre) » / send / address opened from a row refresh the list, the tiles and the tabs
+  const orders = useOrderActions({ onChanged: (orderId) => refresh({ orderId }) });
   const [dialog, setDialog] = useState<{ kind: ParcelDialog; parcel: ParcelRef } | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
   // waits learnt in this tab (a refresh just done, a 429) before the list / panel data catches up — parcel id → epoch ms
@@ -150,7 +151,7 @@ export function useParcelActions(o: { onTrack?: (shipmentId: string) => void } =
         [SHIPMENT_ACTION.callClient]: { label: s.phone ? t('parcel.menu.call', { phone: formatPhoneDz(s.phone) }) : t('parcel.menu.callClient'), onSelect: () => s.phone && window.open(`tel:${s.phone}`, '_self'), hidden: !s.phone },
         portal: { label: t('parcel.menu.portal'), onSelect: () => s.portalUrl && window.open(s.portalUrl, '_blank', 'noopener'), local: true, hidden: !s.portalUrl, hint: '↗' },
         [SHIPMENT_ACTION.openOrder]: { label: t('parcel.menu.openOrder'), onSelect: () => router.push(`/orders/${s.orderId}`), hint: t('parcel.menu.hint.order'), separated: true },
-        [SHIPMENT_ACTION.cancel]: { label: t('parcel.menu.cancel'), onSelect: () => open('cancel'), destructive: true, separated: true, hint: t('parcel.menu.hint.cancel') },
+        [SHIPMENT_ACTION.cancel]: { label: t('parcel.menu.cancel'), onSelect: () => open('cancel'), destructive: true, separated: true, hint: p?.provider === 'manual' ? t('parcel.menu.hint.cancelManual') : t('parcel.menu.hint.cancel') },
       };
       return toMenuActions(liveActions(s), handlers, t);
     },

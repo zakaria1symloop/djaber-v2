@@ -409,3 +409,30 @@ describe('full-test 15/11 — false confession about a placed order (AI-CHAT-02,
     expect(enforceReply(reply, checkReply(reply, f), f, { hasCards: false }).reply).toBe('Votre commande CMD-1042 est enregistrée.');
   });
 });
+
+describe('journey 16/11 J04-2 / J04-3 — language and darija of the J04 transcripts', () => {
+  it('an English customer typing an address still gets English; a French recap breaks the rule (O04 T3)', () => {
+    const f = facts({ lang: 'en', customerText: 'John Benali, 0555987654, Oran, Bir El Djir, cité 1000 logements' }, []);
+    expect(f.messageLang).toBeUndefined();
+    expect(rules('Merci John, voici le récapitulatif de votre commande. Répondez oui pour valider.', f)).toContain('language_switch');
+  });
+  it('a reply in the language of the message itself is not a switch (« Price? » in an Arabic-script conversation)', () => {
+    const f = facts({ lang: 'ar', customerText: 'Bonsoir, et la livraison ?' }, []);
+    expect(rules('Bonsoir, la livraison à Oran coûte 600 DA, le délai est de 2 à 5 jours.', f)).not.toContain('language_switch');
+  });
+  it.each([
+    ['P14 T4', 'arabizi', 'Ma nqderch nconfirmi daba, ma 3andnach l3ibaya f catalogue.'],
+    ['P14 T5', 'arabizi', 'Sa7a bik khouya 😊 Ila bghiti chi 7aja, ana hna.'],
+    ['P14 T3', 'arabizi', 'Ki tewsel l colis, tkhallsou cash m3a livreur, ma kaynch paiement 9bal.'],
+    ['O02 T2', 'arabizi', "Mzyan, rah nsajjel lek wahda 👍 Ch7al smitek (ism) l'commande ?"],
+    ['O02 T3, a French-looking arabizi reply', 'arabizi', 'Merci Walid 😊 Ch7al numéro dyal téléphone (exemple : 0555123456) ?'],
+    ['P08 T1', 'ar', 'مرحبًا بيك! الدفع عندنا يكون عند الاستلام فقط، بالفلوس ملي يوصلك الطرد.'],
+    ['P08 T2', 'ar', 'الإرجاع ما يكونش بفلوس (ما فماش استرجاع نقدي)، التبديل فقط.'],
+  ] as const)('non-Algerian darija flagged: %s', (_what, lang, reply) => {
+    expect(rules(reply, facts({ lang, customerText: 'x' }, []))).toContain('moroccan_darija');
+  });
+  it('Algerian replies and French replies are not flagged', () => {
+    expect(rules('Ih kayen M, t7ebb nsajjel lek la commande ? Makach walou problème.', facts({ lang: 'arabizi', customerText: 'x' }, []))).not.toContain('moroccan_darija');
+    expect(rules('Le chiffre est correct, merci pour votre message.', facts({ lang: 'fr', customerText: 'x' }, []))).not.toContain('moroccan_darija');
+  });
+});

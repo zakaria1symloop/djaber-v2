@@ -235,7 +235,8 @@ export function AdjustStockDialog({
         {target && current !== null && after !== null && !zero ? (
           <p className="ts-label-meta text-text-muted" data-testid="adjust-preview">
             {t(insufficient && !force ? 'stock.adjust.previewBlocked' : 'stock.adjust.preview', {
-              name: selected?.name ?? target.name,
+              // J07-11: a variant is named with its product (« Pull laine · S passe de 9 à 8 »)
+              name: selected ? `${target.name} · ${selected.name}` : target.name,
               from: formatNumber(current),
               to: `${after < 0 ? '−' : ''}${formatNumber(Math.abs(after))}`,
               // the type the journal shows for the row written (`adjustment_in` / `adjustment_out`, 04 §20) — STOCK-12

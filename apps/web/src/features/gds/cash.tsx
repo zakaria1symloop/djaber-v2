@@ -203,7 +203,7 @@ function CashLedger() {
     // retest 11/11 UX-055: cash collected on a delivered order reads « COD », as in the reports
     { key: 'method', header: t('cash.col.method'), hideBelow: 'lg', cell: (r) => t(`orders.payment.method.${cashDisplayMethod(r.category, r.method)}`) },
     { key: 'amount', header: t('cash.col.amount'), align: 'end', cell: (r) => <SignedAmount value={r.type === 'income' ? r.amount : -r.amount} formatted={formatNumber(r.amount)} /> },
-    { key: 'balance', header: t('cash.col.balance'), align: 'end', hideBelow: 'lg', cell: (r) => <Ltr className="tabular-nums text-text-secondary">{formatNumber(r.balanceAfter)}</Ltr> },
+    { key: 'balance', header: t('cash.col.balance'), align: 'end', hideBelow: 'lg', cell: (r) => <Ltr className="tabular-nums text-text-secondary">{signedNumber(r.balanceAfter)}</Ltr> },
     { key: 'by', header: t('cash.col.by'), hideBelow: 'xl', cell: (r) => shortName(r.createdBy) ?? <span className="text-text-secondary">{t('cash.system')}</span> },
     {
       key: 'source',
@@ -245,8 +245,8 @@ function CashLedger() {
           <>
             {/* full-test 15/11 SALES-CASH-12: a selection that ends before today shows the balance at its end, named so */}
             <KpiTile value={signedNumber(k.currentBalance)} label={k.to < today ? t('cash.kpi.balanceAt', { day: day(k.to) }) : t('cash.kpi.current')} meta={t('cash.kpi.opening', { day: day(k.from), amount: iso(signedMoney(k.openingBalance)) })} data-kpi="current" />
-            <KpiTile value={`+${formatNumber(k.income)}`} label={sel.kind === 'day' && sel.day === today ? t('cash.kpi.incomeToday') : t('cash.kpi.income')} meta={t('cash.kpi.incomeMeta', { sales: k.counts.sales, cod: k.counts.cod, other: k.counts.otherIncome ?? 0 })} data-kpi="income" />
-            <KpiTile value={`−${formatNumber(k.expense)}`} label={t('cash.kpi.expense')} meta={t('cash.kpi.expenseMeta', { purchases: k.counts.purchases, fees: k.counts.fees, other: k.counts.otherExpense ?? 0 })} data-kpi="expense" />
+            <KpiTile value={k.income ? `+${formatNumber(k.income)}` : '0'} label={sel.kind === 'day' && sel.day === today ? t('cash.kpi.incomeToday') : t('cash.kpi.income')} meta={t('cash.kpi.incomeMeta', { sales: k.counts.sales, cod: k.counts.cod, other: k.counts.otherIncome ?? 0 })} data-kpi="income" />
+            <KpiTile value={k.expense ? `−${formatNumber(k.expense)}` : '0'} label={t('cash.kpi.expense')} meta={t('cash.kpi.expenseMeta', { purchases: k.counts.purchases, fees: k.counts.fees, other: k.counts.otherExpense ?? 0 })} data-kpi="expense" />
             <button type="button" className="text-start" disabled={!k.unclosedDays.length} onClick={() => k.unclosedDays[0] && list.set({ filters: { day: k.unclosedDays[0], period: null, from: null, to: null } })}>
               <KpiTile
                 value={formatNumber(k.unclosedDays.length)}

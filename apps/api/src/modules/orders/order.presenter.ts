@@ -322,7 +322,7 @@ export const presentOrder = (o: OrderDetailRow, extras: DetailExtras, ctx: Prese
       // stored keys (AI cancel note, « remplacée par … ») read in the viewer's language — UX-056 leftovers
       reason: renderStoredTextIn(h.reason, ctx.locale),
     })),
-    shipments: o.shipments.map((s) => presentShipment(s as unknown as ShipmentRow, o, base.client, addressOf(o, ctx.locale, extras.stopdeskName ?? null), { publicWebUrl: ctx.publicWebUrl, syncAvailableAt: ctx.syncAvailableAt?.(s.id) ?? null, locale: ctx.locale })),
+    shipments: o.shipments.map((s) => presentShipment(s as unknown as ShipmentRow, o, base.client, addressOf(o, ctx.locale, extras.stopdeskName ?? null), { publicWebUrl: ctx.publicWebUrl, syncAvailableAt: ctx.syncAvailableAt?.(s.id) ?? null, locale: ctx.locale, hasCourier: ctx.hasCourier })),
     orderNotes: o.orderNotes.map((n) => ({ id: n.id, author: n.author, body: n.body, createdAt: n.createdAt.toISOString() })),
     sheetsSynced: !!o.sheetsRow,
     agent: o.agent,

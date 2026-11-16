@@ -12,6 +12,7 @@ import { SaleStatusPill } from '@/features/gds/ui';
 import { decimalLabel } from '@/features/orders/logic';
 import { Link } from '@/i18n/navigation';
 import { useHere, withBack } from '@/lib/back';
+import { iso } from '@/lib/format-message';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
@@ -60,6 +61,18 @@ export function ClientDetailBody({ client: c }: { client: Client }) {
           {t('clients.sheet.spentSplit', { orders: formatMoney(c.metrics.ordersSpent), sales: formatMoney(c.metrics.salesSpent) })}
           {' · '}
           {t('clients.sheet.countSplit', { orders: formatNumber(Math.max(0, c.orderCount - c.metrics.sales)), sales: formatNumber(c.metrics.sales) })}
+        </p>
+      ) : null}
+      {/* journeys 16/11 J06-5: a partial counter sale needs the client so that the rest is collected — the card says what is due */}
+      {c.metrics.salesDue > 0 ? (
+        <p className="-mt-3 ts-label-meta text-accent-starred" data-testid="client-sales-due">
+          {can('gds.read') ? (
+            <Link href={withBack(`/sales?clientId=${c.id}&hasRemaining=1`, here)} className="underline-offset-2 hover:underline">
+              {t('clients.sheet.salesDue', { amount: iso(formatMoney(c.metrics.salesDue)) })}
+            </Link>
+          ) : (
+            t('clients.sheet.salesDue', { amount: iso(formatMoney(c.metrics.salesDue)) })
+          )}
         </p>
       ) : null}
 

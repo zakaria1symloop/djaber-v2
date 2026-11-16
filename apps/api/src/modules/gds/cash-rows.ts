@@ -3,19 +3,39 @@
 // and the `amountPaid` recomputed from the entries (never incremented). Only the effects services call these functions
 // (CLAUDE.md rule 5); they always run inside the caller's transaction.
 import { TenantContext, type CashCategory, type CashMethod, type PaymentMethod, type Tx } from '@djaber/db';
-import { deriveGdsPaymentStatus } from '@djaber/shared';
+import { deriveGdsPaymentStatus, textIn } from '@djaber/shared';
 import type { OutboxService } from '../../core/outbox/outbox.service';
-import { algiersDay } from '../../core/time/algiers';
+import { AppException } from '../../core/errors/app.exception';
+import { algiersDay, algiersDayStart } from '../../core/time/algiers';
 
 const CASH_METHOD: Record<PaymentMethod, CashMethod> = { cash: 'cash', card: 'card', transfer: 'transfer', ccp: 'ccp', other: 'other' };
 export const cashMethodOf = (m: PaymentMethod): CashMethod => CASH_METHOD[m];
 
-/** 04 §20: an automatic row is dated on its effective date only while that day is open, else today (the cash moved today). */
-export async function cashDate(tx: Tx, at: Date): Promise<Date> {
+const closedDay = async (tx: Tx, day: string) => !!(await tx.cashClosing.findFirst({ where: { day: new Date(`${day}T00:00:00Z`), reopenedAt: null }, select: { id: true } }));
+const nextDay = (day: string) => new Date(Date.parse(`${day}T00:00:00Z`) + 24 * 3600_000).toISOString().slice(0, 10);
+
+/**
+ * 04 §20 locked day: an automatic row is dated on its effective date only while that day is open, else today (the cash
+ * moved today). When today is closed too (journeys 16/11 J06-1: a sale or « Encaisser le reste » after « Clôturer la
+ * journée » landed in the closed day), a user action is refused with `409 CASH_DAY_CLOSED {date}` (reopen the day first)
+ * and a system event (courier, payment webhook, AI) is booked at the start of the next open day — never in a closed day.
+ */
+export async function cashDate(tx: Tx, at: Date, onClosed: 'refuse' | 'next' = 'refuse'): Promise<Date> {
+  const today = algiersDay();
   const day = algiersDay(at);
-  if (day === algiersDay()) return at;
-  const closed = await tx.cashClosing.findFirst({ where: { day: new Date(`${day}T00:00:00Z`), reopenedAt: null }, select: { id: true } });
-  return closed ? new Date() : at;
+  if (day !== today && !(await closedDay(tx, day))) return at;
+  if (!(await closedDay(tx, today))) return day === today ? at : new Date();
+  if (onClosed === 'refuse') throw new AppException('CASH_DAY_CLOSED', { date: today });
+  let next = nextDay(today);
+  while (await closedDay(tx, next)) next = nextDay(next);
+  return algiersDayStart(next);
+}
+
+/** 04 §20: an automatic row of a closed day is never deleted (a cancel without refund of a sale paid on a closed day). */
+async function assertRowsOpen(tx: Tx, cashIds: string[]) {
+  if (!cashIds.length) return;
+  const rows = await tx.cashTransaction.findMany({ where: { id: { in: cashIds } }, select: { date: true } });
+  for (const day of new Set(rows.map((r) => algiersDay(r.date)))) if (await closedDay(tx, day)) throw new AppException('CASH_DAY_CLOSED', { date: day });
 }
 
 /** The member recorded on a payment entry (`createdById` is required): the acting user, else the workspace owner. */
@@ -64,6 +84,7 @@ export async function clearPayments(tx: Tx, outbox: OutboxService, sourceType: '
   const entries = await tx.paymentEntry.findMany({ where: { sourceType, sourceId }, select: { id: true, cashTransactionId: true } });
   if (!entries.length) return 0;
   const cashIds = entries.map((e) => e.cashTransactionId).filter((x): x is string => !!x);
+  await assertRowsOpen(tx, cashIds);
   await tx.paymentEntry.deleteMany({ where: { id: { in: entries.map((e) => e.id) } } });
   if (cashIds.length) await tx.cashTransaction.deleteMany({ where: { id: { in: cashIds }, isAutomatic: true } });
   await outbox.ws(tx, `ws:${TenantContext.workspaceId()}`, 'cash.updated', { day: algiersDay() }, `cash.updated:clear:${sourceType}:${sourceId}:${Date.now()}`);
@@ -74,7 +95,7 @@ export async function clearPayments(tx: Tx, outbox: OutboxService, sourceType: '
 export async function writeRefund(tx: Tx, outbox: OutboxService, p: { sourceId: string; number: string; amount: number; method: PaymentMethod; description: string }) {
   if (p.amount <= 0) return null;
   const cash = await tx.cashTransaction.create({
-    data: { workspaceId: TenantContext.workspaceId(), type: 'expense', amount: p.amount, category: 'refund', method: CASH_METHOD[p.method], reference: p.number, description: p.description, date: new Date(), isAutomatic: true, sourceType: 'sale', sourceId: p.sourceId, createdById: TenantContext.get().userId ?? null },
+    data: { workspaceId: TenantContext.workspaceId(), type: 'expense', amount: p.amount, category: 'refund', method: CASH_METHOD[p.method], reference: p.number, description: p.description, date: await cashDate(tx, new Date()), isAutomatic: true, sourceType: 'sale', sourceId: p.sourceId, createdById: TenantContext.get().userId ?? null },
   });
   await emitCash(tx, outbox, cash.date, cash.id);
   return cash;
@@ -90,3 +111,6 @@ export async function recomputePaid(tx: Tx, sourceType: 'sale' | 'purchase', sou
 export function emitCash(tx: Tx, outbox: OutboxService, date: Date, key: string) {
   return outbox.ws(tx, `ws:${TenantContext.workspaceId()}`, 'cash.updated', { day: algiersDay(date) }, `cash.updated:${key}:${Date.now()}`);
 }
+
+/** The reference of a closing / reopening row read by people (« Clôture du 16/11/2026 »), not the raw key (J06-10a). */
+export const closingReference = (day: string, locale: string) => textIn('cash.ref.closing', locale, { day: `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}` }) ?? day;

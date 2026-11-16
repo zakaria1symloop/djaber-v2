@@ -773,19 +773,23 @@ export class AgentService implements OnModuleInit {
     const a = await this.rowOrNotFound(id);
     const t = TenantContext.get();
     const scope = this.catalogue.scopeWhere(a);
+    // full-test 15/11 AI-CHAT-17: the products the agent would sell (its own scope: list, categories or all) — not the whole shop's
+    const own = { deletedAt: null, isActive: true, ...(!a.sellAllProducts ? { agentProducts: { some: { agentId: id } } } : a.catalogScope === 'categories' ? { categoryId: { in: a.scopeCategoryIds } } : {}) };
     const [products, withoutPhoto, fees, pendingModeration, balance, user] = await Promise.all([
       prisma.product.count({ where: scope }),
-      prisma.product.count({ where: { AND: [scope, { images: { none: {} } }] } }),
+      // journey 16/11 J04-1: the products waiting for Djaber count too (9 products without a photo showed « Produits sans photo · 0 »)
+      prisma.product.count({ where: { ...own, images: { none: {} } } }),
       prisma.deliveryFeeRule.count({ where: { isActive: true } }),
-      // full-test 15/11 AI-CHAT-17: the pending products the agent would sell (its own scope: list, categories or all) — not the whole shop's
-      prisma.product.count({ where: { deletedAt: null, isActive: true, moderationStatus: 'pending', ...(!a.sellAllProducts ? { agentProducts: { some: { agentId: id } } } : a.catalogScope === 'categories' ? { categoryId: { in: a.scopeCategoryIds } } : {}) } }),
+      prisma.product.count({ where: { ...own, moderationStatus: 'pending' } }),
       this.credits.balance(t.workspaceId),
       t.userId ? prisma.user.findUnique({ where: { id: t.userId }, select: { emailVerifiedAt: true } }) : null,
     ]);
     const policies = (a.policies ?? {}) as Record<string, string>;
     const label = (key: string) => this.i18n.t(locale, agentTextKey(`readiness.${key}`));
     const checks: AgentReadinessDto['checks'] = [
-      { key: 'catalog', ok: products > 0, label: label('catalog'), count: products, link: '/products', blocking: false },
+      // journey 16/11 J04-1 (04 §12: a new product waits for a moderator): with nothing validated yet the row says what the
+      // agent answers meanwhile — « Produits actifs · 0 » read as an empty catalogue
+      { key: 'catalog', ok: products > 0, label: products === 0 && pendingModeration > 0 ? this.i18n.t(locale, agentTextKey('readiness.catalogPending'), { count: pendingModeration }) : label('catalog'), count: products, link: products === 0 && pendingModeration > 0 ? '/products?moderationStatus=pending' : '/products', blocking: false },
       { key: 'productsWithoutPhoto', ok: withoutPhoto === 0, label: label('productsWithoutPhoto'), count: withoutPhoto, link: '/products', blocking: false },
       { key: 'feeGrid', ok: fees > 0, label: label('feeGrid'), count: fees, link: '/delivery/fees', blocking: false },
       { key: 'policies', ok: ['delivery', 'payment', 'returns'].every((k) => (policies[k] ?? '').trim().length > 0), label: label('policies'), count: ['delivery', 'payment', 'returns', 'hours'].filter((k) => (policies[k] ?? '').trim()).length, total: 4, blocking: false },

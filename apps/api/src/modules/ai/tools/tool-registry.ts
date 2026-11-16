@@ -17,7 +17,7 @@ import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
 import { fold, WILAYA_ALIASES } from './wilaya-aliases';
 import { handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
-import { asksCancel, confirmation, draftKey, wantsCancel, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, simulatedOrders, type OrderCallHistory } from './order-confirmation';
+import { asksCancel, confirmation, draftKey, wantsCancel, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, recapShown, simulatedOrders, type OrderCallHistory } from './order-confirmation';
 
 export type ToolName = 'search_products' | 'get_product' | 'check_availability' | 'quote_delivery' | 'create_order' | 'cancel_order' | 'lookup_order' | 'handoff_to_human' | 'add_faq_candidate' | 'create_payment_link';
 export type ToolRunContext = {
@@ -39,7 +39,16 @@ export type ToolRunContext = {
   customerHistory?: string;
   /** full-test 15/11 proposal 9: an order is being taken (the customer chose a product, `context.chosen`) */
   ordering?: boolean;
+  /** journey 16/11 J04-4: the AI's message(s) right before the customer's current one (a recap it wrote itself) */
+  lastAiText?: string;
 };
+
+/** journey 16/11 J04-7: an FAQ suggestion that carries a customer's phone, address or « Cliente X » (a note about one customer). */
+export const personalNote = (question: string): boolean =>
+  phonesIn(question).size > 0 ||
+  /(?<!\p{L})(cit[eé]|logements?|bloc|lotissement|r[eé]sidence|villa|b[aâ]timent)(?!\p{L})|حي |عمارة/iu.test(question) ||
+  // « Cliente Samira Benali … » (a name right after the word, not « le client demande si… »)
+  /(?<!\p{L})(?:[Cc]liente?|[Cc]ustomer)\s+\p{Lu}\p{Ll}+/u.test(question);
 
 /** Plain status words the model may relay (04-ai-pipeline §4.2) — never the courier's raw status code. */
 const SHIPMENT_STATUS_FOR_AI: Record<string, string> = {
@@ -97,7 +106,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
   },
   create_order: {
     name: 'create_order',
-    description: 'Cash-on-delivery order. Call it only once the customer wrote their name, phone number and (home delivery) address in the conversation — never a placeholder or a guessed value (0000000000, 0500000000, « Client »): ask for what is missing instead. First call: returns CONFIRMATION_REQUIRED with the recap to show — nothing is ordered. Call again with the same values only after the customer answered yes in a later message.',
+    description: 'Cash-on-delivery order. Call it only once the customer wrote their name, phone number and (home delivery) address in the conversation — never a placeholder or a guessed value (0000000000, 0500000000, « Client », a wilaya they did not name): ask for what is missing instead; never call it to test a phone number. First call: returns CONFIRMATION_REQUIRED with the recap to show — nothing is ordered; every recap (a change of a placed order too, with replacesOrder) comes from this first call. Call again with the same values only after the customer answered yes in a later message.',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -137,7 +146,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
   },
   add_faq_candidate: {
     name: 'add_faq_candidate',
-    description: 'Record a customer question the shop has no answer for, so the merchant can add it.',
+    description: "Record a general customer question the shop has no answer for, so the merchant can add it to the FAQ (« Quelle est l'adresse de la boutique ? »). Never the customer's name, phone or address, never an order or a call-back note: it records nothing for this customer.",
     parameters: { type: 'object', required: ['question'], additionalProperties: false, properties: { question: { type: 'string', maxLength: 300 }, topic: { type: 'string', maxLength: 80 } } },
   },
   /** enabledWhen: workspace.onlinePaymentEnabled && flag `online_payment` (P2 — offered since M9). */
@@ -348,7 +357,10 @@ export class ToolRegistry {
     if (a.data.isStopdesk && !stopdeskAvailable) return { ok: false, error: { code: 'WILAYA_NOT_SERVED', wilayaId: wilaya.id, wilayaName: wilaya.nameFr, stopdeskAvailable: false, homeAvailable: true } };
     const freeFrom = rule.freeAbove ?? ws.freeDeliveryThreshold ?? null;
     const free = !a.data.isStopdesk && freeFrom !== null && a.data.subtotal !== undefined && a.data.subtotal >= freeFrom;
-    return { ok: true, wilayaId: wilaya.id, wilayaName: wilaya.nameFr, isStopdesk: a.data.isStopdesk, fee: free ? 0 : a.data.isStopdesk ? rule.stopdeskPrice : rule.homePrice, free, freeFrom, stopdeskAvailable, stopdeskFee: stopdeskAvailable ? rule.stopdeskPrice : null, etaDays: '2–5' };
+    // journey J08-3: the threshold is for home delivery only — said in the result, so the model can explain a stop-desk fee
+    // above the threshold (it answered « le seuil est 10 000 DA, mais … 350 DA » without knowing why)
+    const note = freeFrom !== null ? (a.data.isStopdesk ? 'freeFrom applies to home delivery only: a stop-desk order always pays the stop-desk fee.' : 'freeFrom applies to home delivery only, never to stop-desk.') : undefined;
+    return { ok: true, wilayaId: wilaya.id, wilayaName: wilaya.nameFr, isStopdesk: a.data.isStopdesk, fee: free ? 0 : a.data.isStopdesk ? rule.stopdeskPrice : rule.homePrice, free, freeFrom, freeFor: freeFrom !== null ? 'home' : null, stopdeskAvailable, stopdeskFee: stopdeskAvailable ? rule.stopdeskPrice : null, etaDays: '2–5', ...(note ? { note } : {}) };
   }
 
   /**
@@ -504,7 +516,10 @@ export class ToolRegistry {
       wilaya: String(quote.wilayaName ?? ''), communeName: d.communeName || null, address: d.address || null, isStopdesk: d.isStopdesk,
       ...(beyondStock.length ? { beyondStock } : {}),
     };
-    if (!hasDraft(ctx.orderHistory, draft)) {
+    // journey 16/11 J04-4: a recap the AI wrote itself in its previous message (a change after an order) counts as shown
+    // when it carries this phone, total, products (and replaced order) — and the customer's message of the turn says yes
+    const confirmsOwnRecap = () => confirmation(ctx.customerText ?? '') === 'yes' && recapShown(ctx.lastAiText, { clientPhone: phone, total: request.total, items, replaces });
+    if (!hasDraft(ctx.orderHistory, draft) && !confirmsOwnRecap()) {
       return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft }, recap, say: 'Nothing is ordered yet. Show this recap to the customer (items, quantities, prices, delivery fee, total, name, phone, address) and ask them to confirm. Do not call create_order again in this turn: call it with the same values when the customer answers yes in their next message.' });
     }
     const said = confirmation(ctx.customerText ?? '');
@@ -601,6 +616,9 @@ export class ToolRegistry {
   private async faqCandidate(args: Record<string, unknown>, ctx: ToolRunContext): Promise<ToolResult> {
     const question = typeof args.question === 'string' ? args.question.trim().slice(0, 300) : '';
     if (!question) return invalid('question');
+    // journey 16/11 J04-7: a customer's name / phone / address written as an FAQ « question » (a call-back note) is refused,
+    // in the playground too — it would store personal data as an FAQ suggestion and nothing calls the customer back
+    if (personalNote(question)) return { ok: false, error: { code: 'VALIDATION', field: 'question' }, say: "Write only the general question (no name, phone or address of the customer). This records nothing for the customer: never say you noted their details or that someone will get back to them." };
     if (ctx.dryRun) return { ok: true, simulated: true };
     const key = normQuestion(question);
     const existing = (await prisma.agentFaq.findMany({ where: { agentId: ctx.agent.id, source: 'ai_suggested' }, select: { id: true, question: true, askedCount: true } })).find((f) => normQuestion(f.question) === key);

@@ -12,6 +12,7 @@ import { QueryError } from '@/components/global-states';
 import { conflictOf, usePatchWorkspace, useWorkspaceCache } from '@/features/workspace/api';
 import { actionState, reasonText } from '@/lib/actions';
 import type { WorkspaceDto } from '@/lib/contracts';
+import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession, useWorkspaceId } from '@/lib/session';
@@ -20,6 +21,10 @@ import { deliveryApi, deliveryKeys, useCouriers, useFees, type FeeGrid } from '.
 import { CopyRatesDialog } from './copy-rates-dialog';
 import type { FeeRule } from './contracts';
 import { canReset, filterRows, freeRule, isChange, rowBody, seedCount, thresholdOnToggle, type FeeField } from './fee-logic';
+
+/** Upper bounds of the server schemas (`UpdateFeeRuleSchema` money, `PATCH /workspace` freeDeliveryThreshold). */
+const FEE_MAX = 1_000_000;
+const THRESHOLD_MAX = 100_000_000;
 
 export function FeeGridView() {
   const t = useT();
@@ -58,6 +63,8 @@ export function FeeGridView() {
       return next;
     });
   };
+  // journey J08-1: a refused amount says what is accepted (it was only « Vérifiez les champs. »)
+  const amountError = (e: unknown, key: string, max: number) => (e instanceof ApiError && e.code === 'VALIDATION_ERROR' && Object.keys(e.body.fields ?? {}).length ? t(key, { max: formatMoney(max) }) : errorMessage(e, t));
   const refreshCounters = () => qc.invalidateQueries({ queryKey: deliveryKeys.fees(ws) });
 
   const save = async (row: FeeRule, change: Partial<Pick<FeeRule, FeeField | 'isActive'>>) => {
@@ -71,7 +78,7 @@ export function FeeGridView() {
       void refreshCounters();
     } catch (e) {
       setRow(row);
-      mark(row.wilayaId, 'error', errorMessage(e, t));
+      mark(row.wilayaId, 'error', amountError(e, 'fees.amountRange', FEE_MAX));
     }
   };
   const reset = async (row: FeeRule) => {
@@ -116,7 +123,7 @@ export function FeeGridView() {
         writeWorkspace(c.current);
         return setThreshold(threshold, c.current.version);
       }
-      setRuleError(errorMessage(e, t));
+      setRuleError(amountError(e, 'fees.free.amountRange', THRESHOLD_MAX));
     }
   };
 
@@ -125,8 +132,9 @@ export function FeeGridView() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-2">
-        <SearchInput value={q} onChange={setQ} label={t('action.search')} placeholder={t('fees.search')} clearLabel={t('list.clearSearch')} className="w-full sm:w-80" />
-        {/* full-test DELIVERY-17: on a phone the search takes the whole line, the buttons go to the next one */}
+        <SearchInput value={q} onChange={setQ} label={t('action.search')} placeholder={t('fees.search')} clearLabel={t('list.clearSearch')} className="basis-full sm:w-80 sm:flex-none sm:basis-auto" />
+        {/* full-test DELIVERY-17: on a phone the search takes the whole line, the buttons go to the next one (SearchInput is
+            `flex-1` = basis 0: `w-full` alone left it ~150 px next to « Compléter les manquants », retest J08) */}
         <span className="hidden flex-1 sm:block" />
         <Button onClick={() => void seed(false)} loading={seeding === 'fill'} disabledReason={readOnlyReason} disabled={!!seeding} data-testid="fees-fill">
           {t('fees.fillMissing')}

@@ -3,6 +3,28 @@
 import { deriveGdsPaymentStatus, inventoryNeedsNote, inventoryVariancePct, PURCHASE_STATUS_TRANSITIONS, weightedAverageCost } from '@djaber/shared';
 import { printable } from './gds-document.pdf';
 import { cogsOf, profitAndLoss } from './money-figures';
+import { mergeDuplicateLines, remainingOf } from './purchase.service';
+
+describe('journeys 16/11 J07-1 / J07-5 purchase money', () => {
+  it('a purchase cancelled after a partial receipt still owes its received units; before any receipt or as a draft it owes nothing', () => {
+    expect(remainingOf({ status: 'cancelled', total: 3300, amountPaid: 2000, items: [{ receivedQty: 3 }, { receivedQty: 0 }] })).toBe(1300);
+    expect(remainingOf({ status: 'cancelled', total: 13500, amountPaid: 0, items: [{ receivedQty: 0 }] })).toBe(0);
+    expect(remainingOf({ status: 'draft', total: 500, amountPaid: 0 })).toBe(0);
+    expect(remainingOf({ status: 'partial', total: 500, amountPaid: 600 })).toBe(0);
+  });
+  it('a duplicate merges the lines split by a receipt at another cost (latest cost)', () => {
+    expect(mergeDuplicateLines([
+      { productId: 'a', variantId: null, quantity: 3, unitCost: 4000 },
+      { productId: 'b', variantId: 'v', quantity: 1, unitCost: 10 },
+      { productId: 'a', variantId: null, quantity: 2, unitCost: 4200 },
+      { productId: 'b', variantId: 'w', quantity: 1, unitCost: 20 },
+    ])).toEqual([
+      { productId: 'a', variantId: null, quantity: 5, unitCost: 4200 },
+      { productId: 'b', variantId: 'v', quantity: 1, unitCost: 10 },
+      { productId: 'b', variantId: 'w', quantity: 1, unitCost: 20 },
+    ]);
+  });
+});
 
 describe('AT-GDS-16 weighted-average cost (04 §20, R-M)', () => {
   it('stock 10 at 100, receive 5 at 160 ⇒ 120', () => {
@@ -13,8 +35,8 @@ describe('AT-GDS-16 weighted-average cost (04 §20, R-M)', () => {
     expect(weightedAverageCost(3, 100, 1, 101)).toBe(100);
     expect(weightedAverageCost(1, 100, 1, 101)).toBe(101);
   });
-  it('a null cost counts as 0; empty stock takes the unit cost; negative stock counts as 0', () => {
-    expect(weightedAverageCost(4, null, 4, 200)).toBe(100);
+  it('a null (unknown) cost takes the receipt cost (J07-2); empty stock takes the unit cost; negative stock counts as 0', () => {
+    expect(weightedAverageCost(4, null, 4, 200)).toBe(200);
     expect(weightedAverageCost(0, 999, 6, 150)).toBe(150);
     expect(weightedAverageCost(-3, 500, 2, 80)).toBe(80);
   });

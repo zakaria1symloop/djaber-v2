@@ -63,7 +63,7 @@ export function orderMenuActions(o: OrderLike, run: (kind: OrderDialogKind | 'co
  * Dialog host + quick actions of the order screens. `open(kind, order)` loads the full order (cache first) and shows
  * the dialog; `confirmDirect` / `prepare` post the status at once (Idempotency-Key, version of the row).
  */
-export function useOrderActions(o: { onDeleted?: () => void } = {}) {
+export function useOrderActions(o: { onDeleted?: () => void; onChanged?: (orderId?: string) => unknown } = {}) {
   const t = useT();
   const router = useRouter();
   const { can } = useSession();
@@ -108,6 +108,8 @@ export function useOrderActions(o: { onDeleted?: () => void } = {}) {
       return;
     }
     await refresh(next ? { order: next } : { orderId: state?.id });
+    // journey J08-5: a dialog opened from another screen (delivery list) refreshes that screen too
+    await o.onChanged?.(next?.id ?? state?.id);
   };
   const is = (k: OrderDialogKind) => state?.kind === k && !!order;
   const base = order ? { order, onClose: close, onDone: done } : null;

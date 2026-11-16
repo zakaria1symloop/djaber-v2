@@ -32,7 +32,8 @@ export function AddressDialog({ order, open, onClose, onDone }: DialogBaseProps 
     setD({ wilayaId: a?.wilayaId ?? null, communeId: a?.communeId ?? null, isStopdesk: a?.isStopdesk ?? false, stopdeskId: a?.stopdeskId ?? null, address: a?.address ?? '', phone2: order.clientPhone2 ?? '' });
     setTouched(false);
   });
-  const quote = useFeeQuote({ wilayaId: open ? d.wilayaId : null, stopdesk: d.isStopdesk, subtotal: order.subtotal });
+  // journey J08-2 / J08-12 #12: the threshold is read after the discount, as the server recomputes it
+  const quote = useFeeQuote({ wilayaId: open ? d.wilayaId : null, stopdesk: d.isStopdesk, subtotal: order.subtotal - order.discount });
   const errors = touched ? addressDraftErrors(d) : {};
   const s = useDialogSubmit(() =>
     ordersApi.address(order.id, {
@@ -87,7 +88,7 @@ export function AddressDialog({ order, open, onClose, onDone }: DialogBaseProps 
           value={d.isStopdesk ? 'stopdesk' : 'home'}
           onChange={(v) => setD((x) => ({ ...x, isStopdesk: v === 'stopdesk' }))}
           options={[
-            { value: 'home', label: q && !q.isStopdesk ? `${t('common.home')} · ${formatMoney(q.base)}` : t('common.home'), description: t('orders.address.homeHint') },
+            { value: 'home', label: q && !q.isStopdesk ? `${t('common.home')} · ${formatMoney(q.fee)}` : t('common.home'), description: t('orders.address.homeHint') },
             { value: 'stopdesk', label: t('common.stopdesk'), description: t('orders.address.stopdeskHint') },
           ]}
         />

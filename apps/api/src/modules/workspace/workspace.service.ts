@@ -186,6 +186,8 @@ export class WorkspaceService {
     const { version, logoUploadId, ...fields } = input;
     const data: Record<string, unknown> = { ...fields };
 
+    // journey J08-11: « Envoi automatique » needs a courier to send to (04 §22 D9: the default courier)
+    if (fields.autoSendToCourier === true && !before.autoSendToCourier && !(await prisma.courierAccount.count({ where: { isActive: true } }))) throw new AppException('DELIVERY_NO_COURIER');
     if (fields.senderWilayaId) {
       const wilaya = await prisma.wilaya.findUnique({ where: { id: fields.senderWilayaId } });
       if (!wilaya) throw validationError({ senderWilayaId: 'validation.wilaya' });

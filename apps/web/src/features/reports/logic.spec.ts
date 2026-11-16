@@ -1,4 +1,4 @@
-import { REPORT_DEFINITIONS, SIMPLE_MODE_REPORTS } from '@djaber/shared';
+import { formatNumber, REPORT_DEFINITIONS, SIMPLE_MODE_REPORTS } from '@djaber/shared';
 import { describe, expect, it } from 'vitest';
 import type { JobDto } from '@/lib/jobs';
 import { cellText, chartForm, columnHeader, daysLeft, jobView, rowHref, visibleColumns } from './logic';
@@ -41,6 +41,7 @@ describe('report template cells', () => {
   it('formats each column type and links rows', () => {
     const col = (key: string) => def.columns.find((c) => c.key === key)!;
     expect(cellText(col('grossSales'), 96000, t, 'fr')).toBe('96 000');
+    expect(cellText(col('grossSales'), -1638, t, 'fr')).toBe(`−${formatNumber(1638)}`); // J07-11: the true minus sign
     expect(cellText(col('marginPct'), 46.7, t, 'fr')).toBe('46,7 %');
     expect(cellText(col('product'), null, t, 'fr')).toBe('—');
     const pay = REPORT_DEFINITIONS.payments.columns.find((c) => c.key === 'method')!;

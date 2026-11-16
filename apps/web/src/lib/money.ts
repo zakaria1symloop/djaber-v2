@@ -21,7 +21,8 @@ export function parseMoney(input: string | null | undefined): number | null {
 export const moneyDigits = (n: number | null | undefined): string => (n === null || n === undefined ? '' : String(Math.trunc(n)));
 
 /** Number sent to the API from the digits of an input (`''` → null). */
-export const digitsToInt = (digits: string): number | null => (digits === '' ? null : Number(digits));
+// a NumberInput value: digits, maybe a leading « - » (kept so a negative amount is refused by validation, never turned positive)
+export const digitsToInt = (digits: string): number | null => (digits === '' || digits === '-' || !/^-?\d+$/.test(digits) ? null : Number(digits));
 
 /**
  * Margin in percent of the selling price, one decimal half-up (the server's `marginPct`, so the quick-edit sheet, the

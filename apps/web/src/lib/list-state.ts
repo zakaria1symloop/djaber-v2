@@ -67,6 +67,24 @@ const parseFilter = (kind: FilterKind, raw: string): FilterValue | undefined => 
 
 type Params = { get(name: string): string | null };
 
+/**
+ * A `from` / `to` (or `xFrom` / `xTo`) pair typed or shared inverted in the URL is read in the right order (journeys 16/11
+ * J06-7: `?from=2026-11-16&to=2026-11-01` broke Caisse and Ventes with « Impossible de charger »). The date picker never
+ * applies an inverted range; only the URL can carry one.
+ */
+export function swapInvertedRanges(filters: Record<string, FilterValue>) {
+  for (const name of Object.keys(filters)) {
+    const to = name === 'from' ? 'to' : name.endsWith('From') ? `${name.slice(0, -4)}To` : null;
+    if (!to) continue;
+    const a = filters[name];
+    const b = filters[to];
+    if (typeof a === 'string' && typeof b === 'string' && DATE.test(a) && DATE.test(b) && a > b) {
+      filters[name] = b;
+      filters[to] = a;
+    }
+  }
+}
+
 /** Reads the state from the query string; unknown or malformed values fall back to the defaults (never throws). */
 export function parseListState(spec: ListSpec, params: Params): ListState {
   const filters: Record<string, FilterValue> = {};
@@ -76,6 +94,7 @@ export function parseListState(spec: ListSpec, params: Params): ListState {
     const value = parseFilter(kind, raw);
     if (value !== undefined) filters[name] = value;
   }
+  swapInvertedRanges(filters);
   const sortRaw = params.get('sort') ?? '';
   const sort = spec.sorts.includes(parseSort(sortRaw).key) ? sortRaw : spec.defaultSort;
   const page = Number(params.get('page'));

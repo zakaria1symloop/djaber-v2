@@ -59,6 +59,7 @@ import { relativeTime } from '@/lib/time';
 import { useListState } from '@/lib/use-list-state';
 import { gdsApi, useGdsRefresh, useSupplier, useSuppliers } from './api';
 import { PAYMENT_METHODS, type CashMethod, type Supplier, type SupplierRow } from './contracts';
+import { supplierTermsLine } from './logic';
 import { AdvancedOnly, PaymentPill, PurchaseStatusPill, useDayLabel } from './ui';
 import { emailError, emailOrNull } from '@/lib/email';
 import { fieldError } from '@/lib/forms';
@@ -346,7 +347,8 @@ function SupplierSheet({
           <div className="grid grid-cols-3 gap-2">
             <KpiTile value={formatNumber(s.totalSpent)} label={t('suppliers.sheet.kpi.spent')} data-kpi="spent" />
             <KpiTile value={formatNumber(s.balance)} label={t('suppliers.sheet.kpi.due')} tone={s.balance > 0 ? 'warning' : undefined} data-kpi="balance" />
-            <KpiTile value={s.avgLeadDays ?? s.leadDaysMeasured ?? '—'} label={t('suppliers.sheet.kpi.lead')} data-kpi="lead" />
+            {/* J07-11: the delay measured on the received purchases (the figure of the report « Meilleurs fournisseurs »), else the typed one */}
+            <KpiTile value={s.leadDaysMeasured ?? s.avgLeadDays ?? '—'} label={t('suppliers.sheet.kpi.lead')} data-kpi="lead" />
           </div>
           <DetailRows
             rows={[
@@ -356,7 +358,8 @@ function SupplierSheet({
               {
                 key: 'terms',
                 label: t('suppliers.sheet.terms'),
-                value: [s.paymentTermsDays !== null ? t('suppliers.sheet.paymentDays', { count: s.paymentTermsDays }) : null, s.terms].filter(Boolean).join(' · ') || '—',
+                // J07-11: terms typed as the same words as the payment days (« Paiement à 30 j ») are said once
+                value: supplierTermsLine(s.paymentTermsDays !== null ? t('suppliers.sheet.paymentDays', { count: s.paymentTermsDays }) : null, s.terms) || '—',
               },
               { key: 'notes', label: t('suppliers.dialog.notes'), value: s.notes ? <span className="whitespace-pre-wrap">{s.notes}</span> : '—' },
             ]}
@@ -374,7 +377,7 @@ function SupplierSheet({
                         <span className="ts-label-micro text-text-muted">{`${day(p.purchasedAt.slice(0, 10))} · ${t('gds.units', { count: p.units.ordered })}`}</span>
                       </span>
                       {p.status === 'received' || p.status === 'cancelled' ? (
-                        p.status === 'received' && p.remaining > 0 ? (
+                        p.remaining > 0 ? (
                           <PaymentPill status={p.paymentStatus} remaining={p.remaining} />
                         ) : (
                           <PurchaseStatusPill status={p.status} />
@@ -580,7 +583,7 @@ export function SupplierPaymentDialog({ supplier, onClose, purchaseId }: { suppl
   const open = !!supplier;
   const due = useQuery({
     queryKey: [ws, 'suppliers', 'due', supplier?.id ?? ''],
-    queryFn: () => gdsApi.supplierPurchases(supplier!.id, { paymentStatus: ['unpaid', 'partial'], status: ['pending', 'partial', 'received'], sort: 'purchasedAt', pageSize: 100 }),
+    queryFn: () => gdsApi.supplierPurchases(supplier!.id, { paymentStatus: ['unpaid', 'partial'], status: ['pending', 'partial', 'received', 'cancelled'], sort: 'purchasedAt', pageSize: 100 }),
     enabled: open,
   });
   const dueRows = (due.data?.rows ?? []).filter((p) => p.remaining > 0);
@@ -629,7 +632,7 @@ export function SupplierPaymentDialog({ supplier, onClose, purchaseId }: { suppl
             <Select id="sp-method" value={method} onChange={(e) => setMethod(e.target.value as CashMethod)}>
               {PAYMENT_METHODS.map((m) => (
                 <option key={m} value={m}>
-                  {t(`orders.payment.method.${m}`)}
+                  {t(`sales.method.${m}`)}
                 </option>
               ))}
             </Select>

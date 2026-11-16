@@ -519,3 +519,13 @@ export const insertToken = (value: string, start: number, end: number, token: st
   const inserted = `${lead}${token}${tail}`;
   return { next: `${before}${inserted}${after}`, caret: start + lead.length + token.length };
 };
+
+/**
+ * journey 16/11 J04-1 (04 §12: a new product waits for Djaber's review): the number of the agent's products still waiting
+ * when none is validated yet — the playground then says why the agent answers that nothing is online. Null otherwise.
+ */
+export const pendingCatalogue = (checks: readonly { key: string; count?: number }[] | null | undefined): number | null => {
+  const sold = checks?.find((c) => c.key === 'catalog')?.count;
+  const waiting = checks?.find((c) => c.key === 'pendingModeration')?.count ?? 0;
+  return sold === 0 && waiting > 0 ? waiting : null;
+};

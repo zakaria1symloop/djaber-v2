@@ -140,7 +140,7 @@ export function ManualEntryDialog({ mode, onClose, defaultDay }: { mode: ManualM
             <Select id="cm-method" value={method} onChange={(e) => setMethod(e.target.value as CashMethod)}>
               {PAYMENT_METHODS.map((m) => (
                 <option key={m} value={m}>
-                  {t(`orders.payment.method.${m}`)}
+                  {t(`sales.method.${m}`)}
                 </option>
               ))}
             </Select>

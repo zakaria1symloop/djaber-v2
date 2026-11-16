@@ -69,6 +69,30 @@ export const confirmation = (text: string): 'yes' | 'no' | 'unclear' => {
   return has(w, YES) || EMOJI_YES.test(text) ? 'yes' : 'unclear';
 };
 
+/**
+ * journey 16/11 J04-4: the AI's previous message showed this order itself (it wrote a change's recap after
+ * check_availability + quote_delivery, without the first `create_order`): the customer's « oui » then confirms it at once —
+ * it used to get « pas encore validée » and the same recap again. The message must carry the phone, the server's total,
+ * every product name and, for a change, the number of the replaced order.
+ */
+export const recapShown = (aiText: string | null | undefined, r: { clientPhone: string; total: number; items: { name: string }[]; replaces?: { number: string } | null }): boolean => {
+  if (!aiText?.trim()) return false;
+  const text = latinDigits(aiText);
+  if (!phonesIn(text).has(r.clientPhone)) return false;
+  // « 3 400 DA », « 3.400 », « 10450 DA »: the thousands separators are dropped before the numbers are read
+  const amounts = new Set([...text.replace(/(?<=\d)[ .,  ](?=\d{3}(?!\d))/g, '').matchAll(/\d+/g)].map((m) => Number(m[0])));
+  if (!amounts.has(r.total)) return false;
+  const shown = ` ${norm(aiText)} `;
+  return r.items.every((i) => shown.includes(` ${norm(i.name)} `)) && (!r.replaces || shown.includes(` ${norm(r.replaces.number)} `));
+};
+
+/** The AI's last message(s) before the customer's current one (playground or conversation history, oldest first). */
+export const lastAiText = (history: readonly { author: string; text: string }[]): string => {
+  const tail: string[] = [];
+  for (let i = history.length - 1; i >= 0 && history[i]!.author !== 'customer'; i--) if (history[i]!.author === 'ai') tail.unshift(history[i]!.text);
+  return tail.join('\n');
+};
+
 /** The `create_order` / `cancel_order` results of the earlier runs (`aiRun` filter: this conversation, or this playground session) of the last 2 hours. */
 export const orderHistoryOf = async (aiRun: Prisma.AiRunWhereInput): Promise<OrderCallHistory> =>
   (await prisma.aiToolCall.findMany({ where: { name: { in: ['create_order', 'cancel_order'] }, executedAt: { gte: new Date(Date.now() - DRAFT_TTL_MS) }, aiRun }, orderBy: { executedAt: 'desc' }, take: 30, select: { name: true, result: true, executedAt: true } })).map((c) => ({ name: c.name, result: c.result, at: c.executedAt! }));

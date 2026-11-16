@@ -175,7 +175,7 @@ export class OutboundSendService implements OnModuleInit {
     conversationId: string,
     key: string,
     params: Record<string, string | number> = {},
-    o: { kind?: SendKind; oncePer24h?: boolean; tx?: Tx; author?: 'system' | 'human'; authorUserId?: string | null; patch?: Prisma.ConversationUncheckedUpdateInput } = {},
+    o: { kind?: SendKind; oncePer24h?: boolean; tx?: Tx; author?: 'system' | 'human'; authorUserId?: string | null; patch?: Prisma.ConversationUncheckedUpdateInput; /** the language of the AI turn being answered (journey 16/11 J04-2) */ lang?: string } = {},
   ): Promise<MessageRow | null> {
     const run = async (tx: Tx) => {
       const conv = await tx.conversation.findFirst({ where: { id: conversationId } });
@@ -185,7 +185,7 @@ export class OutboundSendService implements OnModuleInit {
       const now = new Date();
       if (o.oncePer24h && last && now.getTime() - Date.parse(last) < DAY_MS) return null;
       const ws = await tx.workspace.findUniqueOrThrow({ where: { id: conv.workspaceId }, select: { name: true, locale: true, systemMessages: true } });
-      const template = this.templateOf(key, this.localeOf(conv, ws.locale), ws.systemMessages);
+      const template = this.templateOf(key, this.localeOf(o.lang ? { context: { ...ctx, lastLanguage: o.lang } as Prisma.JsonValue } : conv, ws.locale), ws.systemMessages);
       if (!template) return null;
       const text = formatMessage(template, { shop: ws.name, ...params });
       const patch: Prisma.ConversationUncheckedUpdateInput = { ...(o.patch ?? {}), context: { ...((o.patch?.context as object | undefined) ?? {}), lastSystemTextAt: { ...(ctx.lastSystemTextAt ?? {}), [key]: now.toISOString() } } as Prisma.InputJsonValue };

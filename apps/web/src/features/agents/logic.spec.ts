@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Agent, AgentPreset, PlaygroundTurn } from './contracts';
 import {
   issueSummary,
+  pendingCatalogue,
   insertToken,
   sectionOfField,
   serverIssues,
@@ -365,5 +366,14 @@ describe('full-test 15/11 AGENTS-19 — card template placeholders insert with a
     // in the middle of a word: a space after too, and the caret right after the token
     const r = insertToken('ab', 1, 1, '{x}');
     expect(r).toEqual({ next: 'a {x} b', caret: 5 });
+  });
+});
+
+describe('pendingCatalogue (journey 16/11 J04-1)', () => {
+  it('counts the waiting products only when the agent sells none yet', () => {
+    expect(pendingCatalogue([{ key: 'catalog', count: 0 }, { key: 'pendingModeration', count: 9 }])).toBe(9);
+    expect(pendingCatalogue([{ key: 'catalog', count: 3 }, { key: 'pendingModeration', count: 9 }])).toBeNull();
+    expect(pendingCatalogue([{ key: 'catalog', count: 0 }, { key: 'pendingModeration', count: 0 }])).toBeNull();
+    expect(pendingCatalogue(undefined)).toBeNull();
   });
 });

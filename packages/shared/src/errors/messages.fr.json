@@ -78,7 +78,7 @@
   "CUSTOMER_BLOCKED_BY_PLATFORM": "Bloqué par la plateforme : contestez via le support.",
   "CUSTOMER_HAS_ORDERS": "Ce client a des commandes ({count}) : archivez-le plutôt.",
   "CUSTOMER_MERGE_IRREVERSIBLE": "Fusion irréversible : confirmez.",
-  "DELIVERY_NO_COURIER": "Aucun transporteur actif : activez-en un (Livraison › Transporteurs) ou utilisez la livraison propre.",
+  "DELIVERY_NO_COURIER": "Aucun transporteur actif : ajoutez-en un ou activez-en un (Livraison › Transporteurs), ou utilisez la livraison propre.",
   "DELIVERY_ORDER_ALREADY_SENT": "Déjà envoyée (colis actif).",
   "DELIVERY_ORDER_CANCELLED": "Cette commande est annulée : elle ne peut plus être envoyée à un transporteur.",
   "DELIVERY_ORDER_DELIVERED": "Cette commande est déjà livrée : elle ne peut plus être envoyée à un transporteur.",

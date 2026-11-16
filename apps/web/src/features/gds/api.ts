@@ -239,7 +239,9 @@ export const useInventories = (q: ApiQuery, enabled = true) => {
 };
 export const useInventory = (id: string | null | undefined) => {
   const ws = useWorkspaceId();
-  return useQuery({ queryKey: gdsKeys.inventory(ws, id ?? ''), queryFn: () => gdsApi.inventory(id!), enabled: !!ws && !!id, retry: notFoundNoRetry });
+  // journeys 16/11 J07-6: the « théorique » follows the movements made during the count — the page reloads it every time it
+  // is opened (a stock adjustment elsewhere does not invalidate this query), like its validate dialog does
+  return useQuery({ queryKey: gdsKeys.inventory(ws, id ?? ''), queryFn: () => gdsApi.inventory(id!), enabled: !!ws && !!id, retry: notFoundNoRetry, refetchOnMount: 'always' });
 };
 export const useInventoryScope = (scope: InventoryScope, categoryId: string | null, enabled = true) => {
   const ws = useWorkspaceId();

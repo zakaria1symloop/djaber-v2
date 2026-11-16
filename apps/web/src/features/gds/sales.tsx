@@ -9,6 +9,7 @@ import { formatDateTime, formatMoney, formatNumber, isPhoneDz, normalizePhoneDz,
 import {
   ActionsMenu,
   ActiveFilters,
+  Banner,
   Button,
   buttonClass,
   Card,
@@ -96,6 +97,7 @@ function SalesList({ creating }: { creating?: boolean }) {
   const rows = useMemo(() => q.data?.rows ?? [], [q.data]);
   const total = q.data?.total ?? null;
   const k = stats.data;
+  const blockedBy = k?.blockedByInventory ?? null;
   const canWrite = can('gds.write');
   const [clientFilter, setClientFilter] = useState<ClientListItem | null>(null);
 
@@ -119,7 +121,8 @@ function SalesList({ creating }: { creating?: boolean }) {
       header: t('common.items'),
       hideBelow: 'lg',
       className: 'max-w-[240px]',
-      cell: (r) => <span className="block truncate">{r.items.map((i) => `${i.name}${i.variant ? ` ${i.variant}` : ''} ×${i.qty}`).join(' · ')}</span>,
+      // journeys 16/11 J06-9: each name is isolated, so « ×1 » stays after a mixed Latin / Arabic name
+      cell: (r) => <span className="block truncate">{r.items.map((i) => `${iso(`${i.name}${i.variant ? ` ${i.variant}` : ''}`)} ×${i.qty}`).join(' · ')}</span>,
     },
     { key: 'total', header: t('common.total'), sortKey: 'total', align: 'end', cell: (r) => <Ltr className="whitespace-nowrap tabular-nums">{formatMoney(r.total)}</Ltr> },
     { key: 'paid', header: t('sales.col.paid'), align: 'end', hideBelow: 'lg', cell: (r) => (r.status === 'cancelled' ? <span className="text-text-muted">—</span> : <Ltr className="whitespace-nowrap tabular-nums">{formatMoney(r.amountPaid)}</Ltr>) },
@@ -139,8 +142,8 @@ function SalesList({ creating }: { creating?: boolean }) {
         <>
           <ListExportMenu path="/sales/export" filters={list.filterQuery()} entity={t('sales.export.entity')} file={t('sales.export.file')} disabledReason={offline ? t('banner.offline') : undefined} />
           {canWrite ? (
-            offline ? (
-              <Button variant="primary" disabled disabledReason={t('banner.offline')} data-testid="sale-new">
+            offline || blockedBy ? (
+              <Button variant="primary" disabled disabledReason={offline ? t('banner.offline') : t('sales.blockedByInventory', { number: blockedBy!.number })} data-testid="sale-new">
                 {t('sales.new')}
               </Button>
             ) : (
@@ -153,6 +156,15 @@ function SalesList({ creating }: { creating?: boolean }) {
       }
     >
       {offline ? <OfflineBanner since={since} onRetry={() => void q.refetch()} /> : null}
+      {/* journeys 16/11 J07-7: the block of a count is announced where the seller works, before a basket is scanned */}
+      {blockedBy ? (
+        <Banner tone="warning">
+          {t('sales.blockedByInventory', { number: blockedBy.number })}{' '}
+          <Link href={`/inventory/${blockedBy.id}`} className="underline">
+            {t('sales.blockedByInventoryOpen')}
+          </Link>
+        </Banner>
+      ) : null}
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label={t('sales.kpi.label')} data-testid="sale-kpis">
         {k ? (
           <>
@@ -238,7 +250,7 @@ function SalesList({ creating }: { creating?: boolean }) {
           footer={<ListPagination page={s.page} pageSize={s.pageSize} total={total ?? rows.length} onChange={(p) => list.set(p)} note={t('sales.menuNote')} />}
         />
       )}
-      {creating ? <NewSaleSheet draftId={params.get('draft')} onClose={closeSheet} /> : null}
+      {creating ? <NewSaleSheet draftId={params.get('draft')} onClose={closeSheet} blockedBy={blockedBy} /> : null}
       {actions.element}
     </AppPage>
   );
@@ -267,7 +279,7 @@ const lineFromSale = (s: Sale): Line[] =>
     catalogPrice: i.catalogPrice ?? i.unitPrice,
   }));
 
-function NewSaleSheet({ draftId, onClose }: { draftId: string | null; onClose: () => void }) {
+function NewSaleSheet({ draftId, onClose, blockedBy }: { draftId: string | null; onClose: () => void; blockedBy: { id: string; number: string } | null }) {
   const t = useT();
   const router = useRouter();
   const refresh = useGdsRefresh();
@@ -373,7 +385,7 @@ function NewSaleSheet({ draftId, onClose }: { draftId: string | null; onClose: (
       setBusy(null);
     }
   };
-  const blocked = !can('gds.write') ? t('toast.forbidden') : offline ? t('banner.offline') : live.discountOver ? t('sales.form.discountOver') : undefined;
+  const blocked = !can('gds.write') ? t('toast.forbidden') : offline ? t('banner.offline') : blockedBy ? t('sales.blockedByInventory', { number: blockedBy.number }) : live.discountOver ? t('sales.form.discountOver') : undefined;
   if (draftId && draft.isError)
     return (
       <SideSheet open onClose={onClose} title={t('sales.form.title')} closeLabel={t('action.close')} width={460}>

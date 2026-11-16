@@ -39,6 +39,12 @@ describe('attempts (04 §22 "attempt n/3")', () => {
     expect(attemptsAfter('in_transit', 'failed', 0)).toBe(1);
     expect(attemptsAfter('out_for_delivery', 'delivered', 2)).toBe(2);
   });
+  it('journey J08-6: a delivery without « out for delivery » is an attempt (delivered after a failure = 2nd attempt)', () => {
+    expect(attemptsAfter('sent', 'delivered', 0)).toBe(1);
+    expect(attemptsAfter('failed', 'delivered', 1)).toBe(2);
+    expect(attemptsAfter('in_transit', 'delivered', 0)).toBe(1);
+    expect(attemptsAfter('delivered', 'delivered', 1)).toBe(1);
+  });
 });
 
 describe('cadence & stale (DLV-04)', () => {

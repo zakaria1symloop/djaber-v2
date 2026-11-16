@@ -200,8 +200,17 @@ export function PlaygroundThread({ pg, agentName, empty, showTools = true, class
 }
 
 /** Text field + Envoyer, with the 📷 / 🎤 inputs of the merchant playground (uploads go through `POST /uploads`). */
-export function PlaygroundComposer({ pg, placeholder, media, disabledReason }: { pg: Playground; placeholder: string; media?: boolean; disabledReason?: string }) {
+export function PlaygroundComposer({ pg, placeholder, shortPlaceholder, media, disabledReason }: { pg: Playground; placeholder: string; /** journey 16/11 J04-8: below 640 px (the long hint wrapped and only « français) » showed) */ shortPlaceholder?: string; media?: boolean; disabledReason?: string }) {
   const t = useT();
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639.98px)');
+    const sync = () => setNarrow(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+  const hint = narrow && shortPlaceholder ? shortPlaceholder : placeholder;
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -272,7 +281,7 @@ export function PlaygroundComposer({ pg, placeholder, media, disabledReason }: {
           dir="auto"
           rows={1}
           aria-label={placeholder}
-          placeholder={disabledReason ?? placeholder}
+          placeholder={disabledReason ?? hint}
           value={text}
           maxLength={2000}
           disabled={blocked || !!disabledReason}

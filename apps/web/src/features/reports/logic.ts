@@ -72,7 +72,8 @@ export function cellText(col: ReportColumnDef, v: ReportRow[string] | undefined,
   switch (col.type) {
     case 'money':
     case 'int':
-      return typeof v === 'number' ? formatNumber(v) : String(v);
+      // full-test STOCK-14 / J07-11: the true minus sign « −1 638 » (Journal de caisse, Écarts d'inventaire…)
+      return typeof v === 'number' ? (v < 0 ? `−${formatNumber(-v)}` : formatNumber(v)) : String(v);
     case 'pct':
       return typeof v === 'number' ? `${decimal(v, locale)}${NBSP}%` : String(v);
     case 'days':
@@ -84,7 +85,7 @@ export function cellText(col: ReportColumnDef, v: ReportRow[string] | undefined,
       const d = new Date(v);
       if (Number.isNaN(d.getTime())) return v;
       const tag = locale === 'ar' ? 'ar-DZ-u-nu-latn' : locale === 'en' ? 'en-GB' : 'fr-FR';
-      return new Intl.DateTimeFormat(tag, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Algiers' }).format(d);
+      return new Intl.DateTimeFormat(tag, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Africa/Algiers' }).format(d);
     }
     case 'enum': {
       const key = `${col.enumKey}.${v}`;

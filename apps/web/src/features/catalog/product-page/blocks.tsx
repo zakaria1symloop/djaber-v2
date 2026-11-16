@@ -200,12 +200,20 @@ export function MovementsBlock({ productId }: { productId: string }) {
 }
 
 /* ---------- Prix & marge ---------- */
+/** Min / max of the known variant costs (null when no variant or no known cost). */
+export function variantCostRange(variants: readonly { weightedCost: number | null }[] | null | undefined): { min: number; max: number } | null {
+  const known = (variants ?? []).map((v) => v.weightedCost).filter((c): c is number => c !== null);
+  return known.length ? { min: Math.min(...known), max: Math.max(...known) } : null;
+}
 export function PricingBlock({ product, advanced, canEdit = false }: { product: Pick<Product, 'id' | 'price' | 'oldPrice' | 'pricing'> & Partial<Pick<Product, 'priceRange' | 'unit'>>; advanced: boolean; /** expenses editor (catalog.write, live product) */ canEdit?: boolean }) {
   const t = useT();
   const p = product.pricing;
   // PV 26/10 P4: a product with variants is sold at its variants' prices — those, and the margin of each variant
   const range = product.priceRange ?? null;
   const perVariant = p?.variants?.length ? p.variants : null;
+  // journeys 16/11 J07-3: a product with variants is bought at its variants' costs (each receipt updates the variant's
+  // weighted cost) — the range of those, like PRIX DE VENTE, never the base cost typed at creation
+  const costRange = variantCostRange(perVariant);
   const units = (n: number) => <Ltr className="tabular-nums">{qtyText(formatNumber(n), product.unit, (count) => t('products.page.units', { count }))}</Ltr>;
   return (
     <Block title={t(advanced ? 'products.page.pricing.title' : 'products.page.pricing.titleSimple')} testId="block-pricing">
@@ -234,7 +242,19 @@ export function PricingBlock({ product, advanced, canEdit = false }: { product: 
         {advanced ? (
           <>
             <Row label={t('products.page.pricing.weightedCost')} testId="pricing-cost">
-              <Money value={p?.weightedCost} />
+              {costRange ? (
+                <>
+                  <Money value={costRange.min} />
+                  {costRange.max !== costRange.min ? (
+                    <>
+                      {' – '}
+                      <Money value={costRange.max} />
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <Money value={p?.weightedCost} />
+              )}
             </Row>
             <Row label={t('products.page.pricing.expenses')}>
               <Money value={p?.expensesPerUnit ?? 0} />

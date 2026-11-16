@@ -5,6 +5,7 @@
  "agent.api.defaultName": "New agent",
  "agent.api.generatedName": "{page} agent",
  "agent.api.readiness.catalog": "Active products in the agent’s scope",
+ "agent.api.readiness.catalogPending": "No product approved yet: your {count} products are waiting for Djaber’s approval — until then, the agent tells customers the products will be online soon",
  "agent.api.readiness.channels": "Linked pages",
  "agent.api.readiness.credits": "Credits available",
  "agent.api.readiness.emailVerified": "Verified e-mail address",

@@ -14,6 +14,7 @@ import { actionState } from '@/lib/actions';
 import { useBack } from '@/lib/back';
 import { iso } from '@/lib/format-message';
 import { useLocaleCode, useT } from '@/lib/i18n';
+import { algiersDay } from '@/features/catalog/stock/logic';
 import { usePurchase } from './api';
 import { ActionButton, usePurchaseActions } from './purchase-dialogs';
 import { AdvancedOnly, PaymentPill, PurchaseStatusPill, shortName, useDayLabel } from './ui';
@@ -58,6 +59,8 @@ function PurchaseDetail({ id }: { id: string }) {
     t('purchases.page.created', { date: day(p.createdAt.slice(0, 10)) }),
     // a cancelled purchase that had been ordered (paid or partly received) keeps its « commandé » step (STOCK-15)
     p.status !== 'draft' && (p.status !== 'cancelled' || p.payments.length > 0 || p.units.received > 0) ? t('purchases.page.orderedOn', { date: day(p.purchasedAt.slice(0, 10)) }) : null,
+    // J07-11: every partial receipt is listed; the last one of a fully received purchase is its « reçu » step
+    ...p.receipts.map((r, i) => (p.receivedAt && i === p.receipts.length - 1 ? null : t('purchases.page.partReceivedOn', { date: day(algiersDay(r.at)), units: iso(formatNumber(r.units)) }))),
     p.receivedAt ? t('purchases.page.receivedOn', { date: day(p.receivedAt.slice(0, 10)) }) : null,
     ...p.payments.map((x) => t('purchases.page.paidOn', { date: day(x.paidAt.slice(0, 10)), amount: iso(formatMoney(x.amount)) })),
     p.cancelledAt ? t('purchases.page.cancelledOn', { date: day(p.cancelledAt.slice(0, 10)) }) : null,
@@ -76,7 +79,7 @@ function PurchaseDetail({ id }: { id: string }) {
       badges={
         <span className="flex flex-wrap items-center gap-1.5" data-testid="purchase-pills">
           <PurchaseStatusPill status={p.status} units={p.units} />
-          {p.status !== 'draft' && p.status !== 'cancelled' ? <PaymentPill status={p.paymentStatus} remaining={p.remaining} /> : null}
+          {p.status !== 'draft' && (p.status !== 'cancelled' || p.remaining > 0) ? <PaymentPill status={p.paymentStatus} remaining={p.remaining} /> : null}
         </span>
       }
       actions={
@@ -88,7 +91,7 @@ function PurchaseDetail({ id }: { id: string }) {
         </>
       }
     >
-      {p.status === 'cancelled' ? <Banner tone="neutral">{t('purchases.page.cancelledBanner', { reason: p.cancelReason ?? '—' })}</Banner> : null}
+      {p.status === 'cancelled' ? <Banner tone="neutral">{p.cancelReason ? t('purchases.page.cancelledBanner', { reason: p.cancelReason }) : t('purchases.page.cancelledBannerPlain')}</Banner> : null}
       {p.late ? <Banner tone="warning">{t('purchases.page.lateBanner', { date: p.expectedAt ? day(p.expectedAt.slice(0, 10)) : '—' })}</Banner> : null}
       <Card className="p-5" data-testid="purchase-detail">
         <DetailRows
@@ -113,7 +116,7 @@ function PurchaseDetail({ id }: { id: string }) {
                 '—'
               ),
             },
-            { key: 'items', label: t('purchases.col.items'), value: t('purchases.page.itemsLine', { lines: p.itemCount, units: iso(formatNumber(p.units.ordered)), pct: iso(`${pct} %`), date: p.receivedAt ? day(p.receivedAt.slice(0, 10)) : '—' }) },
+            { key: 'items', label: t('purchases.col.items'), value: t('purchases.page.itemsLine', { lines: p.itemCount, units: iso(formatNumber(p.units.ordered)), pct: iso(`${pct} %`), date: p.receivedAt ? day(p.receivedAt.slice(0, 10)) : '—' }) },
             {
               key: 'amounts',
               label: t('purchases.page.amounts'),
@@ -125,7 +128,7 @@ function PurchaseDetail({ id }: { id: string }) {
               value:
                 p.units.received > 0 ? (
                   <Link href={`/movements?refType=purchase&refId=${p.id}`} className="inline-flex items-center gap-1 hover:underline" data-testid="purchase-movements">
-                    {t('purchases.page.movementsLine', { count: p.items.filter((i) => i.receivedQty > 0).length })}
+                    {t('purchases.page.movementsLine', { count: p.movementCount })}
                     <ArrowUpRight className="size-3 rtl:-scale-x-100" aria-hidden />
                   </Link>
                 ) : (

@@ -123,7 +123,7 @@
  "report.col.proof": "الوصل",
  "report.col.salesRevenue": "إيرادات المبيعات",
  "report.file.view": "عرض",
- "report.paymentMethod.card": "CIB",
+ "report.paymentMethod.card": "بطاقة",
  "report.paymentMethod.cash": "نقدًا",
  "report.paymentMethod.ccp": "CCP",
  "report.paymentMethod.cod": "الدفع عند الاستلام",
@@ -142,5 +142,6 @@
  "tracking.panel.publicLink": "رابط التتبع",
  "validation.banned_word": "يحتوي على كلمة ممنوعة في Djaber: اختر اسمًا آخر.",
  "validation.supplier_taken": "مستخدم لدى مورّد آخر",
- "clients.sheet.cancelsNotCounted": "{count, plural, zero {لا طلبات ملغاة} one {طلب ملغى واحد غير محسوب} two {طلبان ملغيان غير محسوبين} few {# طلبات ملغاة غير محسوبة} many {# طلبًا ملغى غير محسوب} other {# طلب ملغى غير محسوب}}"
+ "clients.sheet.cancelsNotCounted": "{count, plural, zero {لا طلبات ملغاة} one {طلب ملغى واحد غير محسوب} two {طلبان ملغيان غير محسوبين} few {# طلبات ملغاة غير محسوبة} many {# طلبًا ملغى غير محسوب} other {# طلب ملغى غير محسوب}}",
+ "clients.sheet.salesDue": "المتبقي على مبيعات المحل: {amount}"
 }

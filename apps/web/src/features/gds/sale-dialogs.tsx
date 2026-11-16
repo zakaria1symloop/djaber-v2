@@ -7,6 +7,7 @@
 import { formatMoney, formatPhoneDz, storedText } from '@djaber/shared';
 import { Checkbox, ConfirmDialog, Dialog, Field, FormAlert, Input, Ltr, MoneyInput, Pill, PickerSearch, Select, Textarea, toast, type MenuAction } from '@djaber/ui';
 import { useState } from 'react';
+import { ApiError } from '@/lib/api';
 import type { ClientListItem } from '@/features/clients/contracts';
 import { DialogFooter, refusal, useDialogSubmit, useOnOpen } from '@/features/orders/dialogs/common';
 import { useClientSearch } from '@/features/orders/form/api';
@@ -39,36 +40,62 @@ export function useSaleActions(o: { onDeleted?: () => void; onEditDraft?: (id: s
     }
   };
   const [validating, setValidating] = useState(false);
+  // CLAUDE rule 8 (journeys 16/11 J06-2): a refused validate / delete stays inside its confirm dialog, with the way out
+  const [dlgError, setDlgError] = useState<{ message: string; code: string | null } | null>(null);
+  const refused = (e: unknown) => setDlgError({ message: refusal(e, t), code: e instanceof ApiError ? e.code : null });
   // validating a draft takes the stock out and the money in: confirmed first (cancel / delete confirm too)
   const validate = async (s: { id: string }) => {
     setValidating(true);
+    setDlgError(null);
     try {
       const r = await gdsApi.updateSale(s.id, { status: 'completed' });
       await refresh();
       toast(t('sales.validated', { number: r.number }));
       setDlg(null);
     } catch (e) {
-      toast({ tone: 'danger', message: refusal(e, t) });
+      refused(e);
     } finally {
       setValidating(false);
     }
+  };
+  const open = (d: Dlg) => {
+    setDlgError(null);
+    setDlg(d);
+  };
+  const close = () => {
+    setDlgError(null);
+    setDlg(null);
   };
   const menu = (s: SaleRef): MenuAction[] =>
     offlineMenu(toMenuActions(
       s.actions,
       {
-        validate: { label: t('sales.action.validate'), hint: t('gds.hint.dialog'), onSelect: () => setDlg({ kind: 'validate', id: s.id, number: s.number }) },
-        collect: { label: t('sales.action.collect'), hint: t('gds.hint.dialog'), onSelect: () => setDlg({ kind: 'collect', id: s.id, number: s.number }) },
+        validate: { label: t('sales.action.validate'), hint: t('gds.hint.dialog'), onSelect: () => open({ kind: 'validate', id: s.id, number: s.number }) },
+        collect: { label: t('sales.action.collect'), hint: t('gds.hint.dialog'), onSelect: () => open({ kind: 'collect', id: s.id, number: s.number }) },
         open: { label: t('action.open'), hint: t('gds.hint.page'), onSelect: () => router.push(`/sales/${s.id}`) },
         receipt: { label: t('sales.action.receipt'), onSelect: () => void receipt(s.id) },
-        link_client: { label: t('sales.action.linkClient'), hint: t('gds.hint.dialog'), onSelect: () => setDlg({ kind: 'link', id: s.id, number: s.number }) },
-        edit: { label: s.status === 'draft' ? t('action.edit') : t('sales.action.editPayment'), onSelect: () => (s.status === 'draft' && o.onEditDraft ? o.onEditDraft(s.id) : setDlg({ kind: 'edit', id: s.id, number: s.number })) },
-        cancel: { label: t('sales.action.cancel'), separated: true, destructive: true, onSelect: () => setDlg({ kind: 'cancel', id: s.id, number: s.number }) },
-        delete: { label: t('action.delete'), destructive: true, onSelect: () => setDlg({ kind: 'delete', id: s.id, number: s.number }) },
+        link_client: { label: t('sales.action.linkClient'), hint: t('gds.hint.dialog'), onSelect: () => open({ kind: 'link', id: s.id, number: s.number }) },
+        edit: { label: s.status === 'draft' ? t('action.edit') : t('sales.action.editPayment'), onSelect: () => (s.status === 'draft' && o.onEditDraft ? o.onEditDraft(s.id) : open({ kind: 'edit', id: s.id, number: s.number })) },
+        cancel: { label: t('sales.action.cancel'), separated: true, destructive: true, onSelect: () => open({ kind: 'cancel', id: s.id, number: s.number }) },
+        delete: { label: t('action.delete'), destructive: true, onSelect: () => open({ kind: 'delete', id: s.id, number: s.number }) },
       },
       t,
     ), offline ? t('banner.offline') : undefined, ['open', 'receipt']);
-  const close = () => setDlg(null);
+  // the partial walk-in draft is finished from the sheet, where the client is added (04 §20 « Draft sale client »)
+  const editDraft = dlgError?.code === 'SALE_PARTIAL_REQUIRES_CUSTOMER' && dlg && o.onEditDraft ? dlg.id : null;
+  const errorBox = dlgError ? (
+    <FormAlert>
+      {dlgError.message}
+      {editDraft ? (
+        <>
+          {' '}
+          <button type="button" className="font-semibold underline" onClick={() => { close(); o.onEditDraft!(editDraft); }}>
+            {t('action.edit')}
+          </button>
+        </>
+      ) : null}
+    </FormAlert>
+  ) : null;
   const element = (
     <>
       <CollectDialog saleId={dlg?.kind === 'collect' ? dlg.id : null} onClose={close} />
@@ -85,7 +112,9 @@ export function useSaleActions(o: { onDeleted?: () => void; onEditDraft?: (id: s
         closeLabel={t('action.close')}
         loading={validating}
         onConfirm={() => dlg?.kind === 'validate' && void validate(dlg)}
-      />
+      >
+        {dlg?.kind === 'validate' ? errorBox : null}
+      </ConfirmDialog>
       <ConfirmDialog
         open={dlg?.kind === 'delete'}
         onOpenChange={(v) => !v && close()}
@@ -105,15 +134,16 @@ export function useSaleActions(o: { onDeleted?: () => void; onEditDraft?: (id: s
               close();
               o.onDeleted?.();
             } catch (e) {
-              close();
-              toast({ tone: 'danger', message: refusal(e, t) });
+              refused(e);
             }
           })()
         }
-      />
+      >
+        {dlg?.kind === 'delete' ? errorBox : null}
+      </ConfirmDialog>
     </>
   );
-  return { menu, element, open: setDlg, receipt };
+  return { menu, element, open, receipt };
 }
 
 function useSaleFor(id: string | null) {
@@ -145,16 +175,20 @@ export function CollectDialog({ saleId, onClose }: { saleId: string | null; onCl
   const [note, setNote] = useState('');
   const [touched, setTouched] = useState(false);
   const [filled, setFilled] = useState<string | null>(null);
+  // journeys 16/11 J06-3: the prefill (remaining, the sale's method) arrives with the sale; a field the seller already
+  // typed in or picked before that moment keeps what they chose (« 3400 » became « 3 400 400 »)
+  const [edited, setEdited] = useState({ amount: false, method: false });
   useOnOpen(!!saleId, () => {
     setAmount('');
     setNote('');
     setTouched(false);
     setFilled(null);
+    setEdited({ amount: false, method: false });
   });
   if (s && filled !== s.id) {
     setFilled(s.id);
-    setAmount(moneyDigits(s.remaining));
-    setMethod(s.paymentMethod);
+    if (!edited.amount) setAmount(moneyDigits(s.remaining));
+    if (!edited.method) setMethod(s.paymentMethod);
   }
   const value = digitsToInt(amount);
   // full-test 15/11 SALES-CASH-22: « 0 » is not « empty »: it says the amount must be above 0
@@ -177,19 +211,33 @@ export function CollectDialog({ saleId, onClose }: { saleId: string | null; onCl
       description={s ? t('sales.collect.context', { number: s.number, amount: formatMoney(s.remaining) }) : undefined}
       closeLabel={t('action.close')}
       size="md"
-      footer={<DialogFooter onClose={onClose} busy={sub.busy} onSubmit={() => void submit()} label={t('sales.collect.submit')} disabled={!s} note={t('sales.collect.note')} />}
+      footer={<DialogFooter onClose={onClose} busy={sub.busy} onSubmit={() => void submit()} label={t('sales.collect.submit')} disabled={!s} note={s && value !== null && value > 0 && value < s.remaining ? t('sales.collect.notePartial', { amount: formatMoney(s.remaining - value) }) : t('sales.collect.note')} />}
     >
       <div className="flex flex-col gap-4" data-testid="collect-dialog">
         {loadError ? <FormAlert>{loadError}</FormAlert> : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t('gds.amount')} htmlFor="col-amount" error={(touched || err === 'suppliers.payment.overDue') && err ? t(err, { amount: formatMoney(s?.remaining ?? 0) }) : sub.fieldError('amount')}>
-            <MoneyInput id="col-amount" value={amount} onValueChange={setAmount} />
+            <MoneyInput
+              id="col-amount"
+              value={amount}
+              onValueChange={(v) => {
+                setAmount(v);
+                setEdited((x) => (x.amount ? x : { ...x, amount: true }));
+              }}
+            />
           </Field>
           <Field label={t('gds.method')} htmlFor="col-method">
-            <Select id="col-method" value={method} onChange={(e) => setMethod(e.target.value as CashMethod)}>
+            <Select
+              id="col-method"
+              value={method}
+              onChange={(e) => {
+                setMethod(e.target.value as CashMethod);
+                setEdited((x) => (x.method ? x : { ...x, method: true }));
+              }}
+            >
               {PAYMENT_METHODS.map((m) => (
                 <option key={m} value={m}>
-                  {t(`orders.payment.method.${m}`)}
+                  {t(`sales.method.${m}`)}
                 </option>
               ))}
             </Select>
@@ -389,16 +437,16 @@ export function EditSaleDialog({ saleId, onClose }: { saleId: string | null; onC
       <div className="flex flex-col gap-4" data-testid="edit-sale-dialog">
         {loadError ? <FormAlert>{loadError}</FormAlert> : null}
         <Field label={t('gds.method')} htmlFor="es-method">
-          <Select id="es-method" value={method} onChange={(e) => setMethod(e.target.value as CashMethod)}>
+          <Select id="es-method" value={method} disabled={!s} onChange={(e) => setMethod(e.target.value as CashMethod)}>
             {PAYMENT_METHODS.map((m) => (
               <option key={m} value={m}>
-                {t(`orders.payment.method.${m}`)}
+                {t(`sales.method.${m}`)}
               </option>
             ))}
           </Select>
         </Field>
         <Field label={t('common.noteOptional')} htmlFor="es-notes">
-          <Textarea id="es-notes" value={notes} maxLength={2000} onChange={(e) => setNotes(e.target.value)} className="min-h-14" />
+          <Textarea id="es-notes" value={notes} maxLength={2000} disabled={!s} onChange={(e) => setNotes(e.target.value)} className="min-h-14" />
         </Field>
         <p className="ts-label-micro !normal-case text-text-muted">{t('sales.edit.immutable')}</p>
         {sub.error ? <FormAlert>{sub.error}</FormAlert> : null}

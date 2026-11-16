@@ -2,7 +2,7 @@
 // immutable after validation (cancel + redo), cancel ≤ 7 d with restock and refund, "Encaisser le reste", delete only
 // unpaid, ticket PDF. Blocked by an open blocking inventory count (04 §19). Effects only through SaleEffects.
 import { Injectable } from '@nestjs/common';
-import { deriveGdsPaymentStatus, renderStoredTextIn, SALE_CANCEL_MAX_DAYS, SALE_SORTS, storedText, type CancelSaleInput, type CreateSaleInput, type SaleClientInput, type SaleListItemView, type SalePaymentInput, type SalesQuery, type SaleStatsView, type SaleView, type UpdateSaleInput } from '@djaber/shared';
+import { deriveGdsPaymentStatus, renderStoredTextIn, SALE_CANCEL_MAX_DAYS, SALE_SORTS, storedText, textIn, type CancelSaleInput, type CreateSaleInput, type SaleClientInput, type SaleListItemView, type SalePaymentInput, type SalesQuery, type SaleStatsView, type SaleView, type UpdateSaleInput } from '@djaber/shared';
 import { prisma, TenantContext, type Prisma, type Sale, type Tx } from '@djaber/db';
 import { CounterService } from '../../core/counter/counter.service';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
@@ -29,6 +29,8 @@ export const SALE_INCLUDE = {
 type SaleRow = Prisma.SaleGetPayload<{ include: typeof SALE_INCLUDE }>;
 
 export const cancellableUntil = (s: Pick<Sale, 'soldAt'>) => new Date(s.soldAt.getTime() + SALE_CANCEL_MAX_DAYS * DAY_MS);
+/** 04 §19: an open count started with « Bloquer les ventes comptoir » blocks the counter sales. */
+const BLOCKING_COUNT: Prisma.InventoryCountWhereInput = { status: { in: ['draft', 'counting'] }, blockCounterSales: true };
 const remainingOf = (s: Pick<Sale, 'status' | 'total' | 'amountPaid'>) => (s.status === 'completed' ? Math.max(0, s.total - s.amountPaid) : 0);
 
 /** Row menu of a sale (contract-ready.md "Sales"). */
@@ -121,10 +123,11 @@ export class SaleService {
     const now = new Date();
     const span = (range.lt ?? now).getTime() - (range.gte ?? new Date(0)).getTime();
     const window = (gte: Date | null, lt: Date | null): Prisma.SaleWhereInput => ({ AND: [base, { status: 'completed' }, { soldAt: { ...(gte ? { gte } : {}), ...(lt ? { lt } : {}) } }] });
-    const [cur, prev, partial] = await Promise.all([
+    const [cur, prev, partial, blocking] = await Promise.all([
       prisma.sale.aggregate({ where: window(range.gte, range.lt), _sum: { total: true }, _count: { _all: true } }),
       range.gte ? prisma.sale.aggregate({ where: window(new Date(range.gte.getTime() - span), range.gte), _sum: { total: true }, _count: { _all: true } }) : null,
       prisma.sale.findMany({ where: { AND: [window(range.gte, range.lt), { paymentStatus: { in: ['unpaid', 'partial'] } }] }, select: { total: true, amountPaid: true } }),
+      prisma.inventoryCount.findFirst({ where: BLOCKING_COUNT, select: { id: true, number: true } }),
     ]);
     const count = cur._count._all;
     const revenue = cur._sum.total ?? 0;
@@ -139,6 +142,7 @@ export class SaleService {
       averageBasket: avg,
       averageBasketPrevious: prevAvg,
       averageBasketDeltaPct: deltaPct(avg, prevAvg),
+      blockedByInventory: blocking,
     };
   }
 
@@ -192,7 +196,7 @@ export class SaleService {
 
   /** 04 §19: `blockCounterSales` on an open count ⇒ 409 SALE_BLOCKED_BY_INVENTORY (orders and the AI are never blocked). */
   private async assertNotBlocked(tx: Tx) {
-    const count = await tx.inventoryCount.findFirst({ where: { status: { in: ['draft', 'counting'] }, blockCounterSales: true }, select: { id: true } });
+    const count = await tx.inventoryCount.findFirst({ where: BLOCKING_COUNT, select: { id: true } });
     if (count) throw new AppException('SALE_BLOCKED_BY_INVENTORY');
   }
 
@@ -411,6 +415,8 @@ export class SaleService {
           ...(s.tax ? [{ label: t.tax!, value: money(s.tax) }] : []),
           { label: t.total!, value: money(s.total), bold: true },
           { label: t.paid!, value: money(s.amountPaid) },
+          // journeys 16/11 J06-10g: the ticket says how it was paid (« Espèces », « 1 000 DA Espèces + 3 400 DA CCP / BaridiMob »)
+          ...(s.amountPaid > 0 ? [{ label: t.payment!, value: receiptMethods(s, l) }] : []),
           ...(s.remaining ? [{ label: t.remaining!, value: money(s.remaining) }] : []),
         ],
         note: s.notes,
@@ -418,4 +424,13 @@ export class SaleService {
       s.number,
     );
   }
+}
+
+const methodLabel = (m: string, l: string) => textIn(`sales.method.${m}`, l) ?? m;
+/** One method ⇒ its name; several (a sale completed in two payments) ⇒ « amount method + amount method ». */
+function receiptMethods(s: Pick<SaleView, 'payments' | 'paymentMethod'>, l: string): string {
+  const by = new Map<string, number>();
+  for (const p of s.payments) by.set(p.method, (by.get(p.method) ?? 0) + p.amount);
+  if (by.size <= 1) return methodLabel([...by.keys()][0] ?? s.paymentMethod, l);
+  return [...by].map(([m, a]) => `${money(a)} ${methodLabel(m, l)}`).join(' + ');
 }

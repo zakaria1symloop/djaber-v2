@@ -27,7 +27,8 @@ export type CatalogueProduct = {
   category: string | null;
   also: { id: string; name: string; price: number; reason: string | null }[];
 };
-export type CatalogueSlice = { count: number; full: boolean; products: CatalogueProduct[] };
+/** `awaitingReview` (journey 16/11 J04-1): the agent sells nothing yet, but this many of its products wait for Djaber's first review */
+export type CatalogueSlice = { count: number; full: boolean; products: CatalogueProduct[]; awaitingReview?: number };
 
 /** 04 §12 "Visibility while pending": a changed product keeps selling its last approved snapshot until the decision. */
 const VISIBLE: Prisma.ProductWhereInput = {
@@ -54,6 +55,12 @@ export class CatalogueService {
 
   count(agent: AgentScope) {
     return prisma.product.count({ where: this.scopeWhere(agent) });
+  }
+
+  /** journey 16/11 J04-1: the agent's active products that wait for their first moderation decision (never shown yet). */
+  awaitingReview(agent: AgentScope) {
+    const scope: Prisma.ProductWhereInput = !agent.sellAllProducts ? { agentProducts: { some: { agentId: agent.id } } } : agent.catalogScope === 'categories' ? { categoryId: { in: agent.scopeCategoryIds } } : {};
+    return prisma.product.count({ where: { ...scope, isActive: true, deletedAt: null, moderationStatus: 'pending', approvedSnapshot: { equals: Prisma.AnyNull } } });
   }
 
   private async present(rows: Row[], withAlso: boolean, agent?: AgentScope): Promise<CatalogueProduct[]> {
@@ -149,6 +156,11 @@ export class CatalogueService {
   /** §3.5: ≤ 60 products ⇒ the whole scope; above ⇒ the last-mentioned products + the best matches of the batch text. */
   async slice(agent: AgentScope, o: { text: string; lastProductIds: string[] }): Promise<CatalogueSlice> {
     const count = await this.count(agent);
+    // journey 16/11 J04-1: a new shop's products wait for Djaber (04 §12, manual review by default): the prompt says so
+    if (count === 0) {
+      const awaitingReview = await this.awaitingReview(agent);
+      return { count, full: true, products: [], ...(awaitingReview ? { awaitingReview } : {}) };
+    }
     if (count <= FULL_CATALOGUE_MAX) {
       const rows = await prisma.product.findMany({ where: this.scopeWhere(agent), include, orderBy: [{ name: 'asc' }, { id: 'asc' }] });
       return { count, full: true, products: await this.present(rows, true, agent) };

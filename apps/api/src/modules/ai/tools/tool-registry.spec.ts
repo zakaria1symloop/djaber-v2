@@ -1,5 +1,5 @@
 // Tool schemas must be accepted by every provider: Anthropic refuses a top-level oneOf / allOf / anyOf in input_schema.
-import { TOOL_DEFS, ToolRegistry } from './tool-registry';
+import { personalNote, TOOL_DEFS, ToolRegistry } from './tool-registry';
 
 describe('TOOL_DEFS', () => {
   it.each(Object.values(TOOL_DEFS).map((d) => [d.name, d] as const))('%s: an object schema without top-level oneOf / allOf / anyOf', (_name, def) => {
@@ -75,4 +75,18 @@ describe('full-test 15/11 proposal 2 — check_availability (create_order is nev
     expect(await r.execute('lookup_order', {}, { ...ctx, orderHistory })).toMatchObject({ orders: [{ number: 'TEST-8354', status: 'new', simulated: true }] });
     expect(await r.execute('cancel_order', {}, { ...ctx, orderHistory })).toMatchObject({ ok: true, candidates: [{ number: 'TEST-8354' }], simulated: true });
   });
+});
+
+describe('journey 16/11 J04-7 — add_faq_candidate is never a note about one customer', () => {
+  it.each([
+    'Cliente Samira Benali (Sétif, El Eulma, cité 500 logements bloc 12) souhaite commander, mais aucun article n’est disponible actuellement.',
+    'Rappeler le 0661234567 quand la robe revient',
+    'Samira souhaite être livrée à la cité 20 août villa 3',
+  ])('refused: « %s »', async (question) => {
+    expect(personalNote(question)).toBe(true);
+    const reg = Object.create(ToolRegistry.prototype) as ToolRegistry;
+    const r = await reg.execute('add_faq_candidate', { question }, { workspaceId: 'w', agent: { id: 'a' } as never, conversationId: null, clientId: null, channelId: null, runId: 'r', callId: 'c', dryRun: true });
+    expect(r).toMatchObject({ ok: false, error: { code: 'VALIDATION', field: 'question' } });
+  });
+  it.each(['Quelle est l’adresse de la boutique ?', 'Le client demande si vous livrez à Illizi', 'Quand les produits seront-ils de nouveau disponibles ?', 'واش عندكم محل؟'])('a general question: « %s »', (q) => expect(personalNote(q)).toBe(false));
 });

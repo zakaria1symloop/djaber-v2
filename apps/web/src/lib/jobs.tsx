@@ -53,6 +53,9 @@ export function useJob<R = unknown>(jobId: string | null | undefined) {
     queryFn: () => api<JobDto<R>>(`/jobs/${jobId}`),
     enabled: !!ws && !!jobId,
     staleTime: 0,
+    // journey J08-12 #10: an unknown / expired job id (404) is not retried — the page shows the « gone » banner at once
+    // instead of nothing for the retries (7 × 404 in the console)
+    retry: (n, e) => !(e instanceof ApiError && (e.status === 404 || e.status === 403)) && n < 3,
     refetchInterval: (q) => (isJobRunning(q.state.data) && !(q.state.error instanceof ApiError) ? (live ? 5_000 : 1_500) : false),
   });
 }

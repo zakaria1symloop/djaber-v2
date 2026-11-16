@@ -233,7 +233,8 @@ export function ParcelDeliveredDialog({ parcel, open, onClose, onDone }: Props) 
         <Field label={t('orders.deliver.date')} htmlFor="pd-day" error={touched && dateErr ? t('orders.status.effectiveError', { days: ORDER_BACKDATE_MAX_DAYS }) : undefined}>
           <Input id="pd-day" type="datetime-local" value={day} max={isoToLocalInput(new Date())} onChange={(e) => setDay(e.target.value)} className="[color-scheme:dark]" />
         </Field>
-        <p className="rounded-card border border-line-edge px-3 py-2 ts-label-micro !normal-case text-text-muted">{t('orders.deliver.effects', { amount: formatMoney(collected ?? parcel.codAmount) })}</p>
+        {/* journey J08-12 #1: « (payé : …) » had no value — what was already paid (total − COD) + what is cashed now */}
+        <p className="rounded-card border border-line-edge px-3 py-2 ts-label-micro !normal-case text-text-muted">{t('orders.deliver.effects', { amount: formatMoney(collected ?? parcel.codAmount), paid: formatMoney(Math.max(0, parcel.total - parcel.codAmount) + (collected ?? parcel.codAmount)) })}</p>
         {s.error ? <FormAlert>{s.error}</FormAlert> : null}
       </div>
     </Dialog>

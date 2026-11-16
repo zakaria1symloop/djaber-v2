@@ -123,7 +123,7 @@
  "report.col.proof": "Receipt",
  "report.col.salesRevenue": "Sales revenue",
  "report.file.view": "View",
- "report.paymentMethod.card": "CIB",
+ "report.paymentMethod.card": "Card",
  "report.paymentMethod.cash": "Cash",
  "report.paymentMethod.ccp": "CCP",
  "report.paymentMethod.cod": "COD",
@@ -142,5 +142,6 @@
  "tracking.panel.publicLink": "TRACKING LINK",
  "validation.banned_word": "Contains a word banned on Djaber: choose another name.",
  "validation.supplier_taken": "Already used by another supplier",
- "clients.sheet.cancelsNotCounted": "{count, plural, one {# cancelled order is not counted} other {# cancelled orders are not counted}}"
+ "clients.sheet.cancelsNotCounted": "{count, plural, one {# cancelled order is not counted} other {# cancelled orders are not counted}}",
+ "clients.sheet.salesDue": "Still due on counter sales: {amount}"
 }

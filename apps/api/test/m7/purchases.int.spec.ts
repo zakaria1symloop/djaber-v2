@@ -154,12 +154,25 @@ describe('purchases (GDS-06, 04 §20)', () => {
     expect(ach).toMatchObject({ amountPaid: 300, paymentStatus: 'partial', remaining: 700 });
     await receive(owner, ach.id, { items: [{ id: ach.items[0].id, receivedQty: 4 }] }).expect(200);
     const cancelled = await owner.post(`/purchases/${ach.id}/cancel`, { reason: 'rupture fournisseur' }).expect(200);
-    expect(cancelled.body.data).toMatchObject({ status: 'cancelled', cancelReason: 'rupture fournisseur', amountPaid: 300, remaining: 0 });
+    // journeys 16/11 J07-5: the 4 received units stay bought and owed (4 × 100 − 300 paid = 100), the 6 others are no longer due
+    expect(cancelled.body.data).toMatchObject({ status: 'cancelled', cancelReason: 'rupture fournisseur', subtotal: 400, total: 400, amountPaid: 300, remaining: 100, paymentStatus: 'partial' });
+    expect(cancelled.body.data.items[0]).toMatchObject({ quantity: 10, receivedQty: 4, total: 400 });
+    expect(cancelled.body.data.actions[0]).toMatchObject({ key: 'record_payment', enabled: true });
     expect(await stockOf(p.id)).toBe(4);
     expect(await cashOfDoc('purchase', ach.id)).toHaveLength(1);
-    expect((await owner.get(`/suppliers/${s.id}`).expect(200)).body.data).toMatchObject({ balance: 0, totalSpent: 0 });
-    const locked = await owner.post(`/purchases/${ach.id}/payments`, { amount: 100, method: 'cash' }).set(idem()).expect(422);
-    expect(locked.body.error.code).toBe('PURCHASE_CANCELLED_PAYMENT_LOCKED');
+    expect((await owner.get(`/suppliers/${s.id}`).expect(200)).body.data).toMatchObject({ balance: 100, totalSpent: 400, purchaseCount: 1, purchases12m: { count: 1, total: 400 } });
+    expect((await owner.get('/purchases/stats').expect(200)).body.data).toMatchObject({ dueToSuppliers: 100, purchased: 400 });
+    // more than the 100 still owed ⇒ 422; the 100 ⇒ paid
+    expect((await owner.post(`/purchases/${ach.id}/payments`, { amount: 200, method: 'cash' }).set(idem()).expect(422)).body.error.fields).toEqual({ amount: 'validation.range' });
+    expect((await owner.post(`/purchases/${ach.id}/payments`, { amount: 100, method: 'cash' }).set(idem()).expect(200)).body.data).toMatchObject({ amountPaid: 400, remaining: 0, paymentStatus: 'paid' });
+    expect((await owner.get(`/suppliers/${s.id}`).expect(200)).body.data).toMatchObject({ balance: 0, totalSpent: 400 });
+    const locked = await owner.post(`/purchases/${ach.id}/payments`, { amount: 1, method: 'cash' }).set(idem()).expect(422);
+    expect(locked.body.error.fields).toEqual({ amount: 'validation.range' });
+
+    // paid more than the received units cost: the total never drops below the money paid (only unpaid amounts are reversed)
+    const prepaid = await purchase(owner, { supplierId: s.id, items: [{ productId: p.id, quantity: 10, unitCost: 100 }], status: 'pending', amountPaid: 800, paymentMethod: 'cash' });
+    await receive(owner, prepaid.id, { items: [{ id: prepaid.items[0].id, receivedQty: 3 }] }).expect(200);
+    expect((await owner.post(`/purchases/${prepaid.id}/cancel`, {}).expect(200)).body.data).toMatchObject({ subtotal: 300, total: 800, amountPaid: 800, remaining: 0 });
 
     const paidPending = await purchase(owner, { items: [{ productId: p.id, quantity: 2, unitCost: 100 }], status: 'pending', amountPaid: 200, paymentMethod: 'cash' });
     expect((await owner.delete(`/purchases/${paidPending.id}`).expect(422)).body.error.code).toBe('PURCHASE_DELETE_NOT_PENDING');
@@ -169,6 +182,67 @@ describe('purchases (GDS-06, 04 §20)', () => {
     const draft = await purchase(owner, { items: [{ productId: p.id, quantity: 2, unitCost: 100 }] });
     await owner.delete(`/purchases/${draft.id}`).expect(204);
     await owner.get(`/purchases/${draft.id}`).expect(404);
+  });
+
+  it('journeys 16/11 J07-1: a second receipt at a new unit cost keeps the cost of the units already received (line split), weighted cost per receipt, duplicate merges the lines', async () => {
+    const owner = await advancedShop(app);
+    const s = await supplier(owner);
+    const tapis = await product(owner, { costPrice: 4000, stock: 0 });
+    const pull = await product(owner, { costPrice: 1000, stock: 0 });
+    const ach = await purchase(owner, { supplierId: s.id, items: [{ productId: tapis.id, quantity: 5, unitCost: 4000 }, { productId: pull.id, quantity: 3, unitCost: 1250 }], shippingCost: 500, status: 'pending' });
+    const lt = ach.items.find((i: any) => i.product.id === tapis.id);
+    const lp = ach.items.find((i: any) => i.product.id === pull.id);
+    expect(ach.total).toBe(20000 + 3750 + 500);
+    await receive(owner, ach.id, { items: [{ id: lt.id, receivedQty: 3, unitCost: 4000 }, { id: lp.id, receivedQty: 0, unitCost: 9999 }] }).expect(200);
+    // a line with nothing received keeps its cost even when the dialog sends another one
+    expect((await owner.get(`/purchases/${ach.id}`).expect(200)).body.data.items.find((i: any) => i.id === lp.id)).toMatchObject({ unitCost: 1250, total: 3750 });
+    const second = await receive(owner, ach.id, { items: [{ id: lt.id, receivedQty: 2, unitCost: 4200 }, { id: lp.id, receivedQty: 3 }] }).expect(200);
+    const tapisLines = second.body.data.items.filter((i: any) => i.product.id === tapis.id).map((i: any) => [i.quantity, i.receivedQty, i.unitCost, i.total]);
+    expect(tapisLines).toEqual([
+      [3, 3, 4000, 12000],
+      [2, 2, 4200, 8400],
+    ]);
+    expect(second.body.data).toMatchObject({ status: 'received', subtotal: 20400 + 3750, total: 20400 + 3750 + 500, units: { ordered: 8, received: 8 } });
+    // weighted cost per receipt: (3 × 4000 + 2 × 4200) / 5 = 4080
+    expect(await costOf(tapis.id)).toBe(4080);
+    expect((await owner.get(`/suppliers/${s.id}`).expect(200)).body.data).toMatchObject({ balance: 24650, totalSpent: 24650 });
+    // a new cost on a line not received yet re-prices it (no split)
+    const ach2 = await purchase(owner, { items: [{ productId: tapis.id, quantity: 4, unitCost: 4000 }], status: 'pending' });
+    const r2 = await receive(owner, ach2.id, { items: [{ id: ach2.items[0].id, receivedQty: 1, unitCost: 4100 }] }).expect(200);
+    expect(r2.body.data.items.map((i: any) => [i.quantity, i.receivedQty, i.unitCost, i.total])).toEqual([[4, 1, 4100, 16400]]);
+    // the duplicate is the ordered purchase again: one Tapis line of 5 at the latest cost
+    const copy = (await owner.post(`/purchases/${ach.id}/duplicate`).expect(201)).body.data;
+    expect(copy.items.filter((i: any) => i.product.id === tapis.id).map((i: any) => [i.quantity, i.unitCost])).toEqual([[5, 4200]]);
+    // two receipts of the Tapis line + one of the Pull line = 3 movements, 2 receipts
+    const view = (await owner.get(`/purchases/${ach.id}`).expect(200)).body.data;
+    expect(view.movementCount).toBe(3);
+    expect(view.receipts.map((r: any) => r.units)).toEqual([3, 5]);
+    const report = (await owner.get(`/reports/product_purchases?period=today`).expect(200)).body.data;
+    expect(report.rows.find((r: any) => r._ref?.id === tapis.id)).toMatchObject({ qtyOrdered: 9, total: 20400 + 16400, avgUnitCost: Math.round(36800 / 9) });
+  });
+
+  it('journeys 16/11 J07-5: a partly received, partly paid purchase cancelled stays in the supplier figures and the purchase reports', async () => {
+    const owner = await advancedShop(app);
+    const s = await supplier(owner);
+    const coussin = await product(owner, { costPrice: 900, stock: 6 });
+    const tapis = await product(owner, { costPrice: 4000, stock: 0 });
+    const ach = await purchase(owner, { supplierId: s.id, items: [{ productId: coussin.id, quantity: 5, unitCost: 1100 }, { productId: tapis.id, quantity: 2, unitCost: 4000 }], status: 'pending' });
+    await owner.post(`/purchases/${ach.id}/payments`, { amount: 2000, method: 'cash' }).set(idem()).expect(200);
+    await receive(owner, ach.id, { items: [{ id: ach.items.find((i: any) => i.product.id === coussin.id).id, receivedQty: 3 }] }).expect(200);
+    const c = (await owner.post(`/purchases/${ach.id}/cancel`, {}).expect(200)).body.data;
+    expect(c).toMatchObject({ status: 'cancelled', total: 3300, amountPaid: 2000, remaining: 1300 });
+    expect((await owner.get(`/suppliers/${s.id}`).expect(200)).body.data).toMatchObject({ balance: 1300, totalSpent: 3300, purchases12m: { count: 1, total: 3300 } });
+    const bySupplier = (await owner.get('/reports/purchases_by_supplier?period=today').expect(200)).body.data;
+    expect(bySupplier.rows).toEqual([expect.objectContaining({ purchases: 1, total: 3300, paid: 2000, remaining: 1300 })]);
+    const byPeriod = (await owner.get('/reports/purchases_by_period?period=today').expect(200)).body.data;
+    expect(byPeriod.rows).toEqual([expect.objectContaining({ number: ach.number, status: 'cancelled', total: 3300, paid: 2000, remaining: 1300 })]);
+    const byProduct = (await owner.get('/reports/product_purchases?period=today').expect(200)).body.data;
+    expect(byProduct.rows.find((r: any) => r._ref?.id === coussin.id)).toMatchObject({ qtyOrdered: 3, qtyReceived: 3, total: 3300, avgUnitCost: 1100 });
+    expect(byProduct.rows.find((r: any) => r._ref?.id === tapis.id)).toMatchObject({ qtyOrdered: 0, total: 0 });
+    const payments = (await owner.get('/reports/payments?period=today').expect(200)).body.data;
+    expect(payments.kpis.find((k: any) => k.key === 'paid')).toMatchObject({ value: 2000 });
+    // the weighted cost took the 3 units in: (6 × 900 + 3 × 1100) / 9 = 967
+    expect(await costOf(coussin.id)).toBe(967);
   });
 
   it('payments (≤ remaining, Idempotency-Key), PATCH locks, duplicate, print, list filters + stats, roles and tenancy', async () => {

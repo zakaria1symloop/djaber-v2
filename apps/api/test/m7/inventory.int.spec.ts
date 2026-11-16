@@ -34,9 +34,12 @@ describe('inventory counts (INV-01…03)', () => {
     const p = await product(owner, { name: 'Vendable', stock: 10 });
     expect((await postSale(owner, { items: [{ productId: p.id, quantity: 1 }], amountPaid: 2500 }).expect(409)).body.error.code).toBe('SALE_BLOCKED_BY_INVENTORY');
     await newOrder(owner, {}, p); // orders are never blocked
+    // journeys 16/11 J07-7: the sales page knows about the block before a basket is scanned
+    expect((await owner.get('/sales/stats').expect(200)).body.data.blockedByInventory).toEqual({ id: started.body.data.id, number: 'INV-1' });
     expect((await owner.post('/inventories', { scope: 'category' }).expect(422)).body.error.fields).toEqual({ categoryId: 'validation.required' });
     await owner.post(`/inventories/${started.body.data.id}/cancel`).expect(200);
     await postSale(owner, { items: [{ productId: p.id, quantity: 1 }], amountPaid: 2500 }).expect(201);
+    expect((await owner.get('/sales/stats').expect(200)).body.data.blockedByInventory).toBeNull();
     expect((await owner.get('/inventories?status=cancelled').expect(200)).body.data.map((c: any) => c.id)).toEqual([started.body.data.id]);
     expect(await db.stockMovement.count({ where: { workspaceId: owner.workspaceId, type: 'inventory' } })).toBe(0);
   });
@@ -68,7 +71,7 @@ describe('inventory counts (INV-01…03)', () => {
     await op.put(`/inventories/${c.id}/lines`, { lines: [{ productId: a.id, countedQty: 18, note: 'casse' }, { productId: b.id, countedQty: 1, note: 'vol suspecté' }] }).expect(200);
     const admin = await asAdmin(app, owner.workspaceId);
     const done = await admin.post(`/inventories/${c.id}/validate`, { note: 'inventaire mensuel' }).set(idem()).expect(200);
-    expect(done.body.data).toMatchObject({ status: 'validated', validatedBy: { id: admin.userId }, summary: { discrepancies: 2, value: 3 * 100 + 2 * 50 } });
+    expect(done.body.data).toMatchObject({ status: 'validated', validatedBy: { id: admin.userId }, summary: { discrepancies: 2, value: -(3 * 100 + 2 * 50) } });
     expect(await stockOf(a.id)).toBe(18);
     expect(await stockOf(b.id)).toBe(1);
     const moves = await movementsOf('inventory', c.id);

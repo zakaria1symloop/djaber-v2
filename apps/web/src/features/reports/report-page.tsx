@@ -64,13 +64,23 @@ import { reportsApi, useReport, useReportsHub, type ReportApiQuery } from './api
 import { useToggleFavorite } from './hub';
 import { cellText, chartForm, columnHeader, rowHref, visibleColumns } from './logic';
 import { ScheduleDialog } from './schedule-dialog';
+import { AdvancedOnly } from '@/features/gds/ui';
 
 const TONES: ChartTone[] = ['money', 'orders', 'inbound', 'clients', 'starred'];
 const DAYS = [30, 60, 90, 180, 365];
 
 export function ReportPage({ reportKey }: { reportKey: string }) {
   const locale = useLocaleCode();
+  const t = useT();
   if (!isReportKey(reportKey)) return <Page404 homeHref={`/${locale}/home`} />;
+  // journeys 16/11 J07-8: a report outside the 9 of the simple mode (costs, purchases, cash…) opened by its URL shows the
+  // « Disponible en mode avancé » page, like /movements or /purchases (03 ONB-03)
+  if (!REPORT_DEFINITIONS[reportKey].simple)
+    return (
+      <AdvancedOnly title={t(`report.${reportKey}.title`)}>
+        <ReportView reportKey={reportKey} />
+      </AdvancedOnly>
+    );
   return <ReportView reportKey={reportKey} />;
 }
 
@@ -562,7 +572,8 @@ function ReportTable({
     return filtered ? (
       <FilteredEmptyState title={t('state.list.filteredEmpty.title')} description={t('reports.filteredEmptyRows')} action={{ label: t('action.clearFilters'), onClick: onClear }} />
     ) : (
-      <EmptyState icon={<FileBarChart className="size-5" />} title={t('analytics.empty.title')} description={t('reports.emptyDescription')} />
+      // J07-11: a snapshot report (stock today) has no period — its empty state says so
+      <EmptyState icon={<FileBarChart className="size-5" />} title={t(view.definition.period === 'snapshot' ? 'reports.emptySnapshot.title' : 'analytics.empty.title')} description={t(view.definition.period === 'snapshot' ? 'reports.emptySnapshot.description' : 'reports.emptyDescription')} />
     );
   }
   const numeric = (c: ReportColumnDef) => c.type === 'money' || c.type === 'int' || c.type === 'pct' || c.type === 'days';

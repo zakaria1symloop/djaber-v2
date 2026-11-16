@@ -143,8 +143,11 @@ export class OrderService implements OnModuleInit {
     const actorNames = new Map<string, string>([...users.map((u) => [u.id, `${u.firstName} ${u.lastName}`.trim()] as [string, string]), ...agents.map((a) => [a.id, a.name] as [string, string])]);
     let explanation = '';
     if (o.wilayaId) {
-      const grid = quoteFee(rule, { wilayaId: o.wilayaId, isStopdesk: o.isStopdesk, subtotal: o.subtotal, threshold: ws.freeDeliveryThreshold });
-      const q = grid.fee === o.deliveryFee || !grid.wilayaServed ? grid : quoteFee(rule, { wilayaId: o.wilayaId, isStopdesk: o.isStopdesk, subtotal: o.subtotal, threshold: ws.freeDeliveryThreshold, override: o.deliveryFee });
+      // journey J08-2: the threshold is read on the subtotal after the discount, as the create / items paths and the order
+      // form do — the gross subtotal labelled an untouched fee « MODIFIÉ » (an Admin override) on a discounted order
+      const base = o.subtotal - o.discount;
+      const grid = quoteFee(rule, { wilayaId: o.wilayaId, isStopdesk: o.isStopdesk, subtotal: base, threshold: ws.freeDeliveryThreshold });
+      const q = grid.fee === o.deliveryFee || !grid.wilayaServed ? grid : quoteFee(rule, { wilayaId: o.wilayaId, isStopdesk: o.isStopdesk, subtotal: base, threshold: ws.freeDeliveryThreshold, override: o.deliveryFee });
       explanation = feeExplanation(q, o.wilaya ?? null, ctx.locale);
     }
     // the « Actualiser » wait of the order's parcels (UX-056 leftovers: same countdown as the tracking panel and the list)

@@ -82,6 +82,7 @@ export const handoffSection = (c: PromptContext): string => {
       ? `Instruction: status=HANDOFF with statusDetail=<rule id> and evidence=<the customer's words> (or call handoff_to_human). The shop's HANDOFF_MESSAGE is sent automatically right after your reply: do not announce the handoff yourself (no « je vous passe un conseiller », « a team member will contact you »); "reply" only answers what else the customer asked, or stays empty — when they only asked for a human, "reply" is empty.
 HANDOFF_MESSAGE: "${handoffText}"`
       : 'Instruction: status=HANDOFF with statusDetail=<rule id> and evidence=<the customer\'s words> (or call handoff_to_human). Tell the customer briefly that a team member will follow up; do not promise a delay.',
-    'status=UNKNOWN when you have no answer but no rule applies: say briefly that you will check with the team (call add_faq_candidate with the question) and keep helping with the rest — the conversation stays with you. status=UNCLEAR when you did not understand: say so politely in the customer language and ask them to rephrase.',
+    // journey 16/11 J04-7: the customer's name and address were stored as an FAQ « question » with « j'ai noté vos informations »
+    "status=UNKNOWN when you have no answer but no rule applies: say briefly that you will check with the team (call add_faq_candidate with the general question only — never the customer's name, phone or address) and keep helping with the rest — the conversation stays with you. add_faq_candidate records nothing for this customer: never say you noted their details or that someone will get back to them. status=UNCLEAR when you did not understand: say so politely in the customer language and ask them to rephrase.",
   ].join('\n');
 };

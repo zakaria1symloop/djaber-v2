@@ -87,7 +87,7 @@ test('CAT-09 advanced mode: every block of a variant product, inline variant edi
   await dialog.getByRole('button', { name: 'Annuler' }).click();
 });
 
-test('CAT-09 simple mode: only gallery, price, stock, agents and validation', async ({ page, request }) => {
+test('CAT-09 simple mode: gallery, variants (no cost column — J07-8), price, stock, agents and validation', async ({ page, request }) => {
   await setStockMode(request, account, 'simple');
   try {
     await loginHome(page, account);
@@ -97,7 +97,11 @@ test('CAT-09 simple mode: only gallery, price, stock, agents and validation', as
     await expect(page.getByTestId('block-stock')).toBeVisible();
     await expect(page.getByTestId('block-gallery')).toBeVisible();
     await expect(page.getByTestId('block-moderation')).toBeVisible();
-    for (const hidden of ['block-variants', 'block-movements', 'pricing-cost', 'pricing-margin']) await expect(page.getByTestId(hidden)).toHaveCount(0);
+    // journeys 16/11 J07-8: a product with variants keeps its variants table in simple mode (the edit form and the stock
+    // dashboard show them too), without the cost column
+    await expect(page.getByTestId('block-variants')).toBeVisible();
+    await expect(page.getByTestId('block-variants').getByRole('columnheader', { name: 'COÛT' })).toHaveCount(0);
+    for (const hidden of ['block-movements', 'pricing-cost', 'pricing-margin']) await expect(page.getByTestId(hidden)).toHaveCount(0);
   } finally {
     await setStockMode(request, account, 'advanced');
   }

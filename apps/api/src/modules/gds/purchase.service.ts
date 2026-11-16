@@ -15,6 +15,7 @@ import { resolveGdsLines } from './gds-lines';
 import { GdsPrintService } from './gds-print.service';
 import { checkBusinessDate, dateWhere, deltaPct, iso, lockRow, paymentsOf, PRODUCT_REF_SELECT, productRef, rangeOf, sortOf, USER_SELECT, userRef } from './gds.util';
 import { PurchaseEffects } from './purchase-effects.service';
+import { COUNTED_PURCHASE, receivedAny } from './purchase-scope';
 
 export const PURCHASE_INCLUDE = {
   supplier: { select: { id: true, name: true } },
@@ -25,10 +26,15 @@ type PurchaseRow = Prisma.PurchaseGetPayload<{ include: typeof PURCHASE_INCLUDE 
 const OPEN_RECEIPT = ['pending', 'partial'] as const;
 
 export const isLate = (p: Pick<Purchase, 'status' | 'expectedAt'>, now = Date.now()) => !!p.expectedAt && p.expectedAt.getTime() < now && (OPEN_RECEIPT as readonly string[]).includes(p.status);
-export const remainingOf = (p: Pick<Purchase, 'status' | 'total' | 'amountPaid'>) => (p.status === 'cancelled' || p.status === 'draft' ? 0 : Math.max(0, p.total - p.amountPaid));
+/**
+ * What is still owed: nothing on a draft or on a purchase cancelled before any receipt; a purchase cancelled after a
+ * partial receipt still owes its received units (04 §20, journeys 16/11 J07-5).
+ */
+export const remainingOf = (p: Pick<Purchase, 'status' | 'total' | 'amountPaid'> & { items?: { receivedQty: number }[] }) =>
+  p.status === 'draft' || (p.status === 'cancelled' && !receivedAny(p.items)) ? 0 : Math.max(0, p.total - p.amountPaid);
 
 /** Row menu of a purchase (contract-ready.md "Purchases"). */
-export const purchaseActions = (p: Pick<Purchase, 'status' | 'total' | 'amountPaid'>) => {
+export const purchaseActions = (p: Pick<Purchase, 'status' | 'total' | 'amountPaid'> & { items?: { receivedQty: number }[] }) => {
   const paid = p.amountPaid > 0;
   const remaining = Math.max(0, p.total - p.amountPaid);
   const del = (enabled: boolean) => action('delete', 'gds.write', { reasonCode: enabled ? undefined : 'PURCHASE_DELETE_NOT_PENDING' });
@@ -42,6 +48,8 @@ export const purchaseActions = (p: Pick<Purchase, 'status' | 'total' | 'amountPa
     case 'received':
       return [...(remaining > 0 ? [action('record_payment', 'gds.write', { primary: true })] : []), action('duplicate', 'gds.write'), action('print', 'gds.read'), action('cancel', 'gds.write', { reasonCode: 'PURCHASE_ALREADY_RECEIVED' }), del(false)];
     default:
+      // cancelled after a partial receipt: the received units are still owed and can be paid (J07-5)
+      if (receivedAny(p.items) && remaining > 0) return [action('record_payment', 'gds.write', { primary: true }), action('duplicate', 'gds.write'), action('print', 'gds.read')];
       return [action('duplicate', 'gds.write'), action('print', 'gds.read'), action('record_payment', 'gds.write', { reasonCode: 'PURCHASE_CANCELLED_PAYMENT_LOCKED' })];
   }
 };
@@ -68,6 +76,28 @@ export const presentPurchaseListItem = (p: PurchaseRow): PurchaseListItemView =>
 const totalsOf = (lines: { quantity: number; unitCost: number }[], tax: number, shipping: number) => {
   const subtotal = lines.reduce((s, l) => s + l.quantity * l.unitCost, 0);
   return { subtotal, total: subtotal + tax + shipping };
+};
+
+/** Stored lines: the line `total` is what the line costs (its units × its cost; only the received units once cancelled). */
+const storedTotalsOf = (lines: { total: number }[], tax: number, shipping: number) => {
+  const subtotal = lines.reduce((s, l) => s + l.total, 0);
+  return { subtotal, total: subtotal + tax + shipping };
+};
+
+/**
+ * Lines of a duplicate: a line split by a receipt at another cost (J07-1) is one ordered line again — the quantities add
+ * up, the cost is the latest one.
+ */
+export const mergeDuplicateLines = (items: { productId: string; variantId: string | null; quantity: number; unitCost: number }[]) => {
+  const out: typeof items = [];
+  for (const i of items) {
+    const same = out.find((o) => o.productId === i.productId && o.variantId === i.variantId);
+    if (same) {
+      same.quantity += i.quantity;
+      same.unitCost = i.unitCost;
+    } else out.push({ ...i });
+  }
+  return out;
 };
 
 @Injectable()
@@ -112,11 +142,11 @@ export class PurchaseService {
     const range = q.period || q.from || q.to ? rangeOf(q) : lastDays(30).current;
     const span = (range.lt ?? now).getTime() - (range.gte ?? new Date(0)).getTime();
     const prevRange = range.gte ? { gte: new Date(range.gte.getTime() - span), lt: range.gte } : null;
-    const counted: Prisma.PurchaseWhereInput = { status: { notIn: ['cancelled', 'draft'] } };
+    const counted: Prisma.PurchaseWhereInput = COUNTED_PURCHASE;
     const [pendingReceipt, late, due, drafts, cur, prev, count] = await Promise.all([
       prisma.purchase.count({ where: { status: { in: [...OPEN_RECEIPT] } } }),
       prisma.purchase.count({ where: { status: { in: [...OPEN_RECEIPT] }, expectedAt: { lt: now } } }),
-      prisma.purchase.findMany({ where: { status: { in: ['pending', 'partial', 'received'] } }, select: { supplierId: true, total: true, amountPaid: true } }),
+      prisma.purchase.findMany({ where: COUNTED_PURCHASE, select: { supplierId: true, total: true, amountPaid: true } }),
       prisma.purchase.count({ where: { status: 'draft' } }),
       prisma.purchase.aggregate({ where: { AND: [this.where(base), counted, { purchasedAt: { ...(range.gte ? { gte: range.gte } : {}), ...(range.lt ? { lt: range.lt } : {}) } }] }, _sum: { total: true } }),
       prevRange ? prisma.purchase.aggregate({ where: { AND: [this.where(base), counted, { purchasedAt: prevRange }] }, _sum: { total: true } }) : null,
@@ -146,7 +176,14 @@ export class PurchaseService {
 
   async get(id: string): Promise<PurchaseView> {
     const p = await this.row(id);
-    const payments = (await paymentsOf('purchase', [p.id])).get(p.id) ?? [];
+    const [paymentMap, movements] = await Promise.all([
+      paymentsOf('purchase', [p.id]),
+      prisma.stockMovement.findMany({ where: { refType: 'purchase', refId: p.id }, select: { createdAt: true, quantity: true, type: true }, orderBy: { createdAt: 'asc' } }),
+    ]);
+    const payments = paymentMap.get(p.id) ?? [];
+    // one receipt = the `in` movements written by one receive call (same transaction ⇒ same createdAt)
+    const receipts = new Map<string, number>();
+    for (const m of movements) if (m.type === 'in') receipts.set(m.createdAt.toISOString(), (receipts.get(m.createdAt.toISOString()) ?? 0) + m.quantity);
     return {
       ...presentPurchaseListItem(p),
       supplierInvoiceRef: p.supplierInvoiceRef,
@@ -167,6 +204,8 @@ export class PurchaseService {
       shippingCost: p.shippingCost,
       paymentMethod: p.paymentMethod,
       payments,
+      movementCount: movements.length,
+      receipts: [...receipts].map(([at, units]) => ({ at, units })),
       notes: p.notes,
       cancelReason: p.cancelReason,
       cancelledAt: iso(p.cancelledAt),
@@ -190,7 +229,12 @@ export class PurchaseService {
 
   private async writeTotals(tx: Tx, id: string) {
     const p = await tx.purchase.findUniqueOrThrow({ where: { id }, include: { items: true } });
-    const t = totalsOf(p.items, p.tax, p.shippingCost);
+    const t = storedTotalsOf(p.items, p.tax, p.shippingCost);
+    // a cancelled purchase reverses only what is unpaid (04 §20): its total never drops below the money paid for it
+    if (p.status === 'cancelled') {
+      const paidSum = await tx.paymentEntry.aggregate({ where: { sourceType: 'purchase', sourceId: id }, _sum: { amount: true } });
+      t.total = Math.max(t.total, paidSum._sum.amount ?? 0);
+    }
     const paid = await this.effects.recomputePaid(tx, { id, total: t.total });
     return tx.purchase.update({ where: { id }, data: { subtotal: t.subtotal, total: t.total, ...paid } });
   }
@@ -299,18 +343,29 @@ export class PurchaseService {
       if (p.status === 'received') throw new AppException('PURCHASE_ALREADY_RECEIVED');
       if (p.status === 'cancelled') throw conflict({ reason: 'PURCHASE_CANCELLED', status: p.status });
       const total = input.items.reduce((s, i) => s + i.receivedQty, 0) + (input.newItems ?? []).reduce((s, i) => s + i.receivedQty, 0);
+      const earlier = await tx.stockMovement.findMany({ where: { refType: 'purchase', refId: id }, select: { id: true } });
       if (total <= 0) throw validationError({ items: 'validation.required' });
       // the same line twice in one receipt is one mistake: refuse it
       if (new Set(input.items.map((i) => i.id)).size !== input.items.length) throw validationError({ items: 'validation.invalid' });
       for (const [n, it] of input.items.entries()) {
         const line = p.items.find((l) => l.id === it.id);
         if (!line) throw validationError({ [`items.${n}.id`]: 'validation.invalid' });
+        // a line with nothing received this time is left as it is (its cost stays the cost of its own receipts)
+        if (it.receivedQty <= 0) continue;
         const unitCost = it.unitCost ?? line.unitCost;
         await this.effects.receive(tx, p, { productId: line.productId, variantId: line.variantId, unitCost }, it.receivedQty);
         const received = line.receivedQty + it.receivedQty;
-        const quantity = Math.max(line.quantity, received);
         if (received > line.quantity) warnings.push({ code: 'PURCHASE_OVER_RECEIVE', params: { ordered: line.quantity, received }, field: `items.${n}.receivedQty` });
-        await tx.purchaseItem.update({ where: { id: line.id }, data: { receivedQty: received, quantity, unitCost, total: quantity * unitCost } });
+        if (line.receivedQty > 0 && unitCost !== line.unitCost) {
+          // journeys 16/11 J07-1: the units already received keep the cost of their receipt (04 §4 Σ unitCost × qty);
+          // the rest of the line moves to a new line at the new cost, received now
+          const rest = Math.max(line.quantity - line.receivedQty, it.receivedQty);
+          await tx.purchaseItem.update({ where: { id: line.id }, data: { quantity: line.receivedQty, total: line.receivedQty * line.unitCost } });
+          await tx.purchaseItem.create({ data: { purchaseId: id, productId: line.productId, variantId: line.variantId, productName: line.productName, variantName: line.variantName, quantity: rest, receivedQty: it.receivedQty, unitCost, total: rest * unitCost } });
+        } else {
+          const quantity = Math.max(line.quantity, received);
+          await tx.purchaseItem.update({ where: { id: line.id }, data: { receivedQty: received, quantity, unitCost, total: quantity * unitCost } });
+        }
       }
       if (input.newItems?.length) {
         const lines = await resolveGdsLines(tx, input.newItems.map((i) => ({ productId: i.productId, variantId: i.variantId, quantity: i.receivedQty })), { purchase: true, field: 'newItems' });
@@ -322,6 +377,10 @@ export class PurchaseService {
           await tx.purchaseItem.create({ data: { purchaseId: id, productId: l.productId, variantId: l.variantId, productName: l.productName, variantName: l.variantName, quantity: it.receivedQty, receivedQty: it.receivedQty, unitCost: it.unitCost, total: it.receivedQty * it.unitCost } });
         }
       }
+      // one receipt = one instant: the movements written by this call share the time of the first one (the purchase page
+      // lists each receipt in its HISTORIQUE — J07-11)
+      const fresh = await tx.stockMovement.findMany({ where: { refType: 'purchase', refId: id, id: { notIn: earlier.map((m) => m.id) } }, select: { id: true, createdAt: true }, orderBy: { createdAt: 'asc' } });
+      if (fresh.length > 1) await tx.stockMovement.updateMany({ where: { id: { in: fresh.map((m) => m.id) } }, data: { createdAt: fresh[0]!.createdAt } });
       const items = await tx.purchaseItem.findMany({ where: { purchaseId: id } });
       const complete = items.every((i) => i.receivedQty >= i.quantity);
       await tx.purchase.update({
@@ -349,8 +408,10 @@ export class PurchaseService {
       const p = await this.lock(tx, id);
       if (p.status === 'received') throw new AppException('PURCHASE_ALREADY_RECEIVED');
       if (p.status === 'cancelled') throw conflict({ reason: 'PURCHASE_CANCELLED', status: p.status });
-      const receivedAny = p.items.some((i) => i.receivedQty > 0);
-      if (!receivedAny) await this.effects.clearPayments(tx, id);
+      if (!receivedAny(p.items)) await this.effects.clearPayments(tx, id);
+      // J07-5: a partial cancellation keeps the received units bought and owed — each line now costs its received units
+      // only, the unreceived rest is no longer due (the ordered quantities stay for the history and the duplicate)
+      else for (const i of p.items) await tx.purchaseItem.update({ where: { id: i.id }, data: { total: i.receivedQty * i.unitCost } });
       await tx.purchase.update({ where: { id }, data: { status: 'cancelled', cancelledAt: new Date(), cancelReason: input.reason ?? null } });
       await this.writeTotals(tx, id);
     });
@@ -363,7 +424,7 @@ export class PurchaseService {
     await prisma.$transaction(async (db) => {
       const tx = db as Tx;
       const p = await this.lock(tx, id);
-      if (p.status === 'cancelled') throw new AppException('PURCHASE_CANCELLED_PAYMENT_LOCKED');
+      if (p.status === 'cancelled' && !receivedAny(p.items)) throw new AppException('PURCHASE_CANCELLED_PAYMENT_LOCKED');
       if (input.amount > p.total - p.amountPaid) throw validationError({ amount: 'validation.range' });
       await this.effects.addPayment(tx, p, { amount: input.amount, method: input.method, reference: input.reference, note: input.note, paidAt, description: storedText('stored.cash.purchaseSupplierPayment', { number: p.number }) });
       await this.writeTotals(tx, id);
@@ -374,7 +435,7 @@ export class PurchaseService {
   /** Used by the supplier payment dialog (allocation already decided by SupplierService). */
   async payInTx(tx: Tx, id: string, input: GdsPaymentInput & { description: string }) {
     const p = await this.lock(tx, id);
-    if (p.status === 'cancelled') throw new AppException('PURCHASE_CANCELLED_PAYMENT_LOCKED');
+    if (p.status === 'cancelled' && !receivedAny(p.items)) throw new AppException('PURCHASE_CANCELLED_PAYMENT_LOCKED');
     if (input.amount > p.total - p.amountPaid) throw validationError({ amount: 'validation.range' });
     await this.effects.addPayment(tx, p, { amount: input.amount, method: input.method, reference: input.reference, note: input.note, paidAt: input.paidAt ? new Date(input.paidAt) : undefined, description: input.description });
     return this.writeTotals(tx, id);
@@ -383,7 +444,7 @@ export class PurchaseService {
   /** `POST /purchases/:id/duplicate` — a new draft with the same supplier, lines (ordered quantities and costs), tax, shipping. */
   async duplicate(id: string): Promise<PurchaseView> {
     const src = await this.row(id);
-    const items = src.items.filter((i) => i.product.trackStock).map((i) => ({ productId: i.productId, variantId: i.variantId, quantity: i.quantity, unitCost: i.unitCost }));
+    const items = mergeDuplicateLines(src.items.filter((i) => i.product.trackStock).map((i) => ({ productId: i.productId, variantId: i.variantId, quantity: i.quantity, unitCost: i.unitCost })));
     if (!items.length) throw validationError({ items: 'validation.required' });
     return this.create({ supplierId: src.supplierId, items, tax: src.tax, shippingCost: src.shippingCost, paymentMethod: src.paymentMethod, notes: src.notes, status: 'draft' });
   }

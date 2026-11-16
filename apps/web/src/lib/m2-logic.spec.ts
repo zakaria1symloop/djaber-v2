@@ -46,6 +46,12 @@ describe('list state ↔ URL', () => {
     expect(s).toMatchObject({ sort: '-price', page: 3, pageSize: 50, density: 'compact', tab: 'pending', sheet: 'p1', layout: 'grid', hide: ['cost', 'margin'] });
   });
 
+  it('journeys 16/11 J06-7: an inverted date pair in the URL is read in order (from / to and xFrom / xTo)', () => {
+    expect(parse('createdFrom=2026-11-16&createdTo=2026-11-01').filters).toEqual({ createdFrom: '2026-11-01', createdTo: '2026-11-16' });
+    expect(parse('createdFrom=2026-11-01&createdTo=2026-11-16').filters).toEqual({ createdFrom: '2026-11-01', createdTo: '2026-11-16' });
+    expect(parseListState({ ...SPEC, filters: { from: 'date', to: 'date' } }, new URLSearchParams('from=2026-11-16&to=2026-11-01')).filters).toEqual({ from: '2026-11-01', to: '2026-11-16' });
+  });
+
   it('falls back on a sort outside the whitelist, a bad page size, an unknown tab', () => {
     const s = parse('sort=-secret&pageSize=20&page=0&tab=nope&density=huge&layout=cards&lowStock=0');
     expect(s).toMatchObject({ sort: 'name', pageSize: 25, page: 1, tab: null, density: null, layout: null });

@@ -156,7 +156,7 @@ export function DeliveryOverviewPage() {
       cell: (r) => (
         <div className="whitespace-nowrap">
           {r.client.phone ? <Ltr className="text-[14px]">{formatPhoneDz(r.client.phone)}</Ltr> : <span className="text-text-muted">—</span>}
-          <div className="ts-label-micro text-text-muted">{r.shipment && r.shipment.deliveryAttempts > 0 ? t('delivery.row.attempt', { n: r.shipment.deliveryAttempts, max: MAX_ATTEMPTS }) : r.isStopdesk ? t('common.stopdesk') : t('common.home')}</div>
+          <div className="ts-label-micro text-text-muted">{r.shipment && r.shipment.deliveryAttempts > 0 && !['delivered', 'returned', 'cancelled'].includes(r.shipment.status) ? t('delivery.row.attempt', { n: r.shipment.deliveryAttempts, max: MAX_ATTEMPTS }) : r.isStopdesk ? t('common.stopdesk') : t('common.home')}</div>
         </div>
       ),
     },
@@ -329,7 +329,7 @@ export function DeliveryOverviewPage() {
             <KpiTile value={formatNumber(k.pendingPickup)} label={t('delivery.kpi.created')} meta={t('delivery.kpi.pendingPickup')} data-kpi="pendingPickup" />
             <KpiTile value={formatNumber(k.inTransit)} label={t('delivery.kpi.inTransit')} meta={t('delivery.kpi.stale', { count: k.staleOver5d })} tone={k.staleOver5d ? 'warning' : undefined} data-kpi="inTransit" />
             <KpiTile value={formatNumber(k.failedToday)} label={t('delivery.kpi.failed')} meta={t('delivery.kpi.failedMeta')} tone={k.failedToday ? 'danger' : undefined} data-kpi="failed" />
-            <KpiTile value={formatNumber(k.delivered30d)} label={t('delivery.kpi.delivered')} meta={`${decimalLabel(k.deliveredPct30d, locale)} %`} data-kpi="delivered" />
+            <KpiTile value={formatNumber(k.delivered30d)} label={t('delivery.kpi.delivered')} meta={t('delivery.kpi.deliveredPct', { pct: decimalLabel(k.deliveredPct30d, locale) })} data-kpi="delivered" />
             <KpiTile value={formatNumber(k.returned30d)} label={t('delivery.kpi.returned')} meta={`${k.returnedPct30d} %`} data-kpi="returned" />
           </>
         ) : overview.isError ? null : (

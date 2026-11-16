@@ -3,7 +3,7 @@
 // saving / saved / error state) and the free-delivery rule bar. All copy comes in through props; logical CSS only.
 import { Check, Loader2, TriangleAlert } from 'lucide-react';
 import * as React from 'react';
-import { NumberInput } from './inputs';
+import { MoneyInput, NumberInput } from './inputs';
 import { cn, Switch } from './primitives';
 
 export type CellState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
@@ -104,13 +104,14 @@ export function FreeDeliveryBar({
         <Switch checked={enabled} onCheckedChange={onEnabledChange} label={switchLabel} disabled={disabled || saving} />
         <span className="text-[14px] font-medium">{label}</span>
         <div className="w-32">
-          <NumberInput
+          {/* journey J08-1: the threshold is an integer DZD amount — the money field (a minus sign or a letter is refused) */}
+          <MoneyInput
             aria-label={amountLabel}
             value={draft}
             onValueChange={setDraft}
             onBlur={commit}
             onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-            suffix={currency}
+            currency={currency}
             disabled={disabled || saving || !enabled}
             className="!h-9 text-[13px]"
           />

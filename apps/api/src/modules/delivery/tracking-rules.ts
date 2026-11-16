@@ -26,10 +26,13 @@ export const decideStatus = (current: ShipmentStatusName, mapped: ShipmentStatus
 
 /**
  * Delivery attempts started (`attempt n/3`): entering `out_for_delivery` starts one; a failure reported without a
- * prior "out for delivery" counts as one; "Relancer" (retry-delivery) counts one and moves the parcel out again.
+ * prior "out for delivery" counts as one, and so does a delivery; "Relancer" (retry-delivery) counts one and moves the parcel out again.
  */
 export const attemptsAfter = (current: ShipmentStatusName, next: ShipmentStatusName, attempts: number): number => {
   if (next === 'out_for_delivery' && current !== 'out_for_delivery') return attempts + 1;
+  // journey J08-6: a delivery reported without a prior « out for delivery » is an attempt too — a parcel delivered after a
+  // failure is delivered at the 2nd attempt (it counted as the 1st: « 1re tentative 100 % »)
+  if (next === 'delivered' && current !== 'out_for_delivery' && current !== 'delivered') return attempts + 1;
   if (next === 'failed' && current !== 'out_for_delivery' && current !== 'failed') return attempts + 1;
   return attempts;
 };

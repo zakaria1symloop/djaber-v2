@@ -111,6 +111,21 @@ describe('report template (ANA-04)', () => {
     expect(pl.rows.map((r: any) => r.line)).toEqual(['salesRevenue', 'ordersRevenue', 'revenue', 'cogs', 'grossMargin', 'manualExpenses', 'productExpenses', 'returnCosts', 'expenses', 'net', 'purchasesPaid']);
   });
 
+  it('journeys 16/11 J06-4: a product sold without a cost price has no margin (« — »), stays out of the average margin, and the P&L names that revenue', async () => {
+    const owner = await advancedShop(app);
+    const known = await product(owner, { name: 'Tapis', price: 2000, costPrice: 1000, stock: 10 });
+    const unknown = await product(owner, { name: 'Savon olive', price: 450, stock: 10 });
+    await db.product.update({ where: { id: unknown.id }, data: { costPrice: null } });
+    await sale(owner, { items: [{ productId: known.id, quantity: 1 }, { productId: unknown.id, quantity: 2 }], amountPaid: 2900 });
+    const byProduct = (await get(owner, '/reports/sales_by_product?period=30d')).data;
+    expect(byProduct.rows.find((r: any) => r.product === 'Savon olive')).toMatchObject({ quantity: 2, grossSales: 900, cogs: null, margin: null, marginPct: null });
+    expect(byProduct.rows.find((r: any) => r.product === 'Tapis')).toMatchObject({ cogs: 1000, margin: 1000, marginPct: 50 });
+    expect(byProduct.kpis.find((k: any) => k.key === 'marginPct').value).toBe(50);
+    const pl = (await get(owner, '/reports/profit_loss?period=30d')).data;
+    expect(pl.rows.find((r: any) => r.line === 'unknownCostSales').amount).toBe(900);
+    expect(pl.rows.find((r: any) => r.line === 'cogs').amount).toBe(1000);
+  });
+
   it('AT-INV-02 (report side): "Écarts d’inventaire" lists the inventory movement with its #INV reference', async () => {
     const owner = await advancedShop(app);
     const p = await product(owner, { name: 'Tunique', stock: 21 });

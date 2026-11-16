@@ -22,6 +22,8 @@ export type WorkspacePatch = Partial<{
   /** D9 / DLV-05: confirmed orders sent to the default courier (M6) */
   autoSendToCourier: boolean;
   logoUploadId: string | null;
+  /** J07-4: Settings › Stock mode, advanced only — target margin of the PRIX recommendation (0–100, default 35) */
+  targetMarginPct: number;
 }>;
 
 export const workspaceApi = {

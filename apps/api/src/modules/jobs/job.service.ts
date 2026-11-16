@@ -190,7 +190,7 @@ export class JobService {
         userIds: [job.createdById],
         key: `job_finished:${job.id}:${job.updatedAt.getTime()}`,
         // `channelId` / `agentId` of the payload: the deep link opens the screen of the job (notification.catalog `jobPath`)
-        data: { ...jobRefs(job.payload), jobId: job.id, kind: job.kind, name: this.nameOf(job), label: this.labelOf(job), ...this.importCounts(job.kind, out.result) },
+        data: { ...jobRefs(job.payload), jobId: job.id, kind: job.kind, name: this.nameOf(job), label: this.labelOf(job), ...this.exportOf(job), ...this.importCounts(job.kind, out.result) },
       });
     });
   }
@@ -198,6 +198,13 @@ export class JobService {
   /** `{label}` of `notification.job.finished|failed.title`: the job name of 03 §3, else its kind. */
   private labelOf(job: Pick<Job, 'payload' | 'kind'>): string {
     return this.nameOf(job) ?? job.kind;
+  }
+
+  /** What an export holds (`cash`, `sales` …) and its format: three exports are not three identical « Export » (J06-10c). */
+  private exportOf(job: Pick<Job, 'payload' | 'kind'>): { exportKind?: string; format?: string } {
+    if (job.kind !== 'export') return {};
+    const p = job.payload as { kind?: unknown; format?: unknown } | null;
+    return { ...(typeof p?.kind === 'string' ? { exportKind: p.kind } : {}), ...(typeof p?.format === 'string' ? { format: p.format } : {}) };
   }
 
   /** An import that committed reports its counts: the notification uses the `job.finished.import` texts. */
@@ -215,7 +222,7 @@ export class JobService {
         workspaceId: job.workspaceId,
         userIds: [job.createdById],
         key: `job_failed:${job.id}:${job.updatedAt.getTime()}`,
-        data: { ...jobRefs(job.payload), jobId: job.id, kind: job.kind, name: this.nameOf(job), label: this.labelOf(job), error: error.code },
+        data: { ...jobRefs(job.payload), jobId: job.id, kind: job.kind, name: this.nameOf(job), label: this.labelOf(job), ...this.exportOf(job), error: error.code },
       });
     });
   }

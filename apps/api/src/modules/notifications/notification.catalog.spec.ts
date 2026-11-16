@@ -63,6 +63,8 @@ describe('notification catalogue', () => {
     // rows stored before the parameters were named like the placeholders still read correctly
     expect(renderNotification('stock_low', { name: 'Théière', stock: 1, minStock: 4 }, 'fr').title).toBe('Stock faible : Théière (stock 1)');
     expect(renderNotification('job_finished', { name: 'export', kind: 'export' }, 'fr').title).toBe('Tâche terminée : Export');
+    // journeys 16/11 J06-10c: an export names what it holds (needs `notification.value.exportKind.*`, i18n j06 patch)
+    expect(renderNotification('job_finished', { label: 'export', name: 'export', kind: 'export', exportKind: 'cash', format: 'xlsx' }, 'fr').title).toBe('Tâche terminée : Export de la caisse (XLSX)');
     expect(renderNotification('job_finished', { label: 'product-import-commit', kind: 'import', imported: 12, skipped: 3 }, 'fr')).toEqual({
       title: 'Import terminé · produits importés : 12 · lignes ignorées : 3',
       body: 'Téléchargez le rapport d\'erreurs pour corriger les lignes ignorées (3).',

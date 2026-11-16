@@ -35,6 +35,9 @@ export function feeExplanation(t: TFunction, q: FeeQuote, wilayaName: string | n
         base: formatMoney(q.base),
       }),
     );
+  // journey J08-3: free delivery is a home-delivery rule (DeliveryFeeRule.freeAbove « free home delivery »): a stop-desk
+  // order is charged the grid price whatever its subtotal, and the line says so
+  if (override === null && q.isStopdesk && q.reason === 'grid' && q.freeFrom !== null) parts.push(t('orderForm.delivery.fee.stopdeskNotFree', { threshold: formatMoney(q.freeFrom) }));
   if (q.courierCost !== null) parts.push(t('orderForm.delivery.fee.courierCost', { cost: formatMoney(q.courierCost) }));
   return parts.join(' · ').toUpperCase();
 }

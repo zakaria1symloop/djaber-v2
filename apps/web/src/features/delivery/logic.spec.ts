@@ -28,6 +28,10 @@ describe('UX-064 — LIVRAISON block of the order page', () => {
     expect(deliveryBlockState('shipped', { status: 'failed', trackingNumber: 'ZR-1', failureHandled: null })).toEqual({ handled: null, openFailure: true, fixable: false, showSend: false });
     expect(deliveryBlockState('shipped', { status: 'sent', trackingNumber: 'ZR-1', failureHandled: null }).showSend).toBe(false);
   });
+  it('journey J08-4: a self-delivered parcel without tracking that failed is a failed attempt, not a failed send', () => {
+    expect(deliveryBlockState('shipped', { status: 'failed', trackingNumber: null, provider: 'manual', failureHandled: null })).toEqual({ handled: null, openFailure: true, fixable: false, showSend: false });
+    expect(deliveryBlockState('confirmed', { status: 'failed', trackingNumber: null, provider: 'zrexpress', failureHandled: null }).fixable).toBe(true);
+  });
 });
 
 describe('public parcel steps', () => {
@@ -46,6 +50,12 @@ describe('public parcel steps', () => {
       expect(steps.at(-1)).toEqual({ key: st, state: 'failed' });
       expect(steps).toHaveLength(5);
     }
+  });
+  it('journey J08-12 #9: a self-delivery has no « Ramassée » step', () => {
+    expect(parcelSteps('sent', { selfDelivery: true }).map((s) => s.key)).toEqual(['sent', 'in_transit', 'out_for_delivery', 'delivered']);
+    expect(parcelSteps('sent', { selfDelivery: true })[0]!.state).toBe('current');
+    expect(parcelSteps('failed', { selfDelivery: true }).map((s) => s.key)).toEqual(['sent', 'in_transit', 'out_for_delivery', 'failed']);
+    expect(parcelSteps('delivered', { selfDelivery: true }).every((s) => s.state === 'done')).toBe(true);
   });
   it('tones follow the status', () => {
     expect(shipmentTone('delivered')).toBe('success');

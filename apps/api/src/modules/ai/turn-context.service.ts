@@ -4,7 +4,7 @@ import { Injectable } from '@nestjs/common';
 import type { AppLocale } from '@djaber/shared';
 import { DEFAULT_SYSTEM_MESSAGES, prisma, TenantContext, type Agent } from '@djaber/db';
 import { CatalogueService } from './catalogue.service';
-import { systemLocale, type AiLanguage } from './language';
+import { formalArabic, systemLocale, type AiLanguage } from './language';
 import { isOutOfHours, promptAgentOf } from './prompt/prompt-builder';
 import type { PromptContext } from './prompt/prompt.types';
 import { RoutingService, type RoutedModel } from './routing.service';
@@ -71,6 +71,7 @@ export class TurnContextService {
         faqs: faqs.filter((f) => f.answer.trim()),
         catalogue,
         lang: o.lang,
+        ...(o.lang === 'ar' && formalArabic(o.text) ? { formalArabic: true } : {}),
         locale: systemLocale(o.lang, ws.locale as AppLocale),
         now,
         outOfHours: isOutOfHours(a.businessHours, now),

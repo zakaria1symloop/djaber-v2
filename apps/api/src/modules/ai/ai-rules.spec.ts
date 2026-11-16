@@ -4,7 +4,7 @@ import { parseFaqText } from '../agents/knowledge.service';
 import { creditPeriod, exhaustionEta } from '../credits/credit.service';
 import { canonicalJson, costUsd, toolCallId } from './ai-run.service';
 import { plannedCost } from './ai.constants';
-import { conversationLanguage, detectLanguage, languageSwitched, systemLocale, turnLanguage } from './language';
+import { conversationLanguage, detectLanguage, formalArabic, languageSwitched, MOROCCAN_WORDS, systemLocale, turnLanguage, WRONG_DARIJA } from './language';
 import { createAiGateway } from './provider/ai-gateway.factory';
 import { AiProviderError, readInput, withInput, type AiGenerateRequest } from './provider/ai.gateway';
 import { FakeAiGateway } from './provider/fake-ai.gateway';
@@ -51,12 +51,56 @@ describe('turn language (journey 16/11 J05-8)', () => {
     expect(turnLanguage('Nadia Ferhat', 'ar')).toBe('ar');
     expect(turnLanguage('0661234567', conversationLanguage(['salam, chhal robe satin ?', 'Karima Haddad']))).toBe('arabizi');
   });
-  it('a clear switch still switches; the first message keeps the §3.6 fallbacks', () => {
+  it('a clear switch still switches; a first message with no clue takes the shop language (journey 16/11 J04-2)', () => {
     expect(conversationLanguage(['Bonjour, quel est le prix ?', 'Hello, how much is the dress?'])).toBe('en');
-    expect(turnLanguage('Nadia Ferhat', undefined)).toBe('en');
+    expect(turnLanguage('Nadia Ferhat', undefined)).toBe('fr');
     expect(turnLanguage('0770123456', undefined)).toBe('fr');
+    expect(turnLanguage('Nadia Ferhat', undefined, { agentDefault: 'en' })).toBe('en');
+    expect(turnLanguage('Nadia Ferhat', undefined, { agentDefault: 'darija' })).toBe('arabizi');
+    expect(turnLanguage('0770123456', undefined, { agentDefault: 'darija' })).toBe('ar');
+    expect(turnLanguage('👍', undefined, { agentDefault: 'kabyle', workspaceLocale: 'en' })).toBe('en');
+    expect(turnLanguage('ok', undefined, { agentDefault: null, workspaceLocale: 'ar' })).toBe('arabizi');
     expect(conversationLanguage([])).toBeUndefined();
   });
+});
+
+describe('journey 16/11 J04-2 — the language of a conversation', () => {
+  it('« Bonsoir » and the short French greetings are French, not English', () => {
+    for (const t of ['Bonsoir', 'bonsoir !', 'bsr', 'Bjr', 'Slt, vous livrez ?']) expect(turnLanguage(t, undefined, { agentDefault: 'en' })).toBe('fr');
+  });
+  it('a name, a phone or an address keeps the conversation language (O01, O02, O04)', () => {
+    expect(conversationLanguage(['Bonsoir', 'je veux la robe kabyle M', 'Samira Benali', '0661234567'])).toBe('fr');
+    expect(conversationLanguage(['slm, ch7al djellaba ?', 'nheb wahda', 'smiti Walid Bouzid', '0770112233', 'wilaya Blida, Boufarik, cite 20 aout villa 3'])).toBe('arabizi');
+    expect(conversationLanguage(['Hello, do you have the running shoes in size 42?', 'yes I want them', 'John Benali, 0555987654, Oran, Bir El Djir, cité 1000 logements'])).toBe('en');
+    expect(turnLanguage('Sétif, El Eulma, cité 500 logements bloc 12', 'en')).toBe('en');
+  });
+  it('one word of another language keeps the conversation; two clues switch it (P13)', () => {
+    expect(turnLanguage('oui', 'arabizi')).toBe('arabizi');
+    expect(turnLanguage('merci', 'en')).toBe('en');
+    expect(turnLanguage('thanks', 'fr')).toBe('fr');
+    expect(turnLanguage('Bonjour, et pour Blida ?', 'arabizi')).toBe('fr');
+    expect(turnLanguage('And to Annaba?', 'ar')).toBe('en');
+    expect(turnLanguage('wach kayen M ?', 'fr')).toBe('arabizi');
+    expect(turnLanguage('شكرا، و لقسنطينة؟', 'fr')).toBe('ar');
+  });
+  it('the French recap to an English customer breaks the language rule (O04 T3)', () => {
+    expect(languageSwitched('en', 'Merci John, voici le récapitulatif de votre commande, répondez oui')).toBe(true);
+  });
+});
+
+describe('journey 16/11 J04-3 — formal Arabic and non-Algerian darija', () => {
+  it('formal Arabic (MSA) is told apart from darija', () => {
+    expect(formalArabic('مرحباً، ما هي طرق الدفع المتاحة؟')).toBe(true);
+    expect(formalArabic('هل يمكنني إرجاع المنتج؟')).toBe(true);
+    expect(formalArabic('كم مدة التوصيل إلى قسنطينة وكم السعر؟')).toBe(true);
+    expect(formalArabic('كاش ما عندكم جلابة؟')).toBe(false);
+    expect(formalArabic('شحال التوصيل لوهران؟')).toBe(false);
+    expect(formalArabic('السلام عليكم')).toBe(false);
+    expect(formalArabic('hello')).toBe(false);
+  });
+  it.each(['Ma nqderch nconfirmi daba', 'Ila bghiti chi 7aja, ana hna', 'ma kaynch paiement 9bal', 'numéro dyal téléphone', 'بالفلوس ملي يوصلك الطرد', 'ما فماش استرجاع نقدي', 'واخا نسجلها'])('Moroccan / Tunisian: « %s »', (t) => expect(MOROCCAN_WORDS.test(t)).toBe(true));
+  it.each(['Ih kayen M, t7ebb nsajjel lek ?', 'Makach walou f stock', 'واش تحب حاجة أخرى؟', 'Chhal livraison l Oran : 600 DA', 'machine à laver'])('Algerian: « %s »', (t) => expect(MOROCCAN_WORDS.test(t) || WRONG_DARIJA.test(t)).toBe(false));
+  it.each(['Ch7al smitek (ism) l\'commande ?', 'Ch7al numéro dyal téléphone ?', 'Ch7al wilaya t7ebb ?', 'شحال اسمك؟'])('« how much » used for « what »: « %s »', (t) => expect(WRONG_DARIJA.test(t)).toBe(true));
   it('the English answer of the J05-8 report breaks the language rule of a French customer', () => {
     expect(languageSwitched('fr', 'Thanks Karima, got it! What is your full address in Blida?')).toBe(true);
     expect(languageSwitched('fr', 'Merci Karima ! Quelle est votre adresse complète à Blida ?')).toBe(false);

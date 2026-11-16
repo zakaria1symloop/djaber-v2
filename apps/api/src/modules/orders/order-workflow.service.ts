@@ -4,7 +4,7 @@
 // and `sched-order-reminders`. Every side effect goes through OrderEffects inside the row-locked transaction.
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import { CancelReasonValues, FailureReasonValues, formatMoney, ORDER_BULK_STATUS_TARGETS, storedText, type CallLogInput, type CancelReasonName, type FailureReasonName, type OrderAddressInput, type OrderStatusName, type OrderView, type RecordPaymentInput } from '@djaber/shared';
+import { CancelReasonValues, FailureReasonValues, formatMoney, ORDER_BULK_STATUS_TARGETS, storedText, type CallLogInput, type CancelReasonName, type FailureReasonName, type OrderAddressInput, type OrderStatusName, type OrderView, type ShipmentStatusName, type RecordPaymentInput } from '@djaber/shared';
 import { prisma, TenantContext, type Order, type Prisma, type Tx } from '@djaber/db';
 import { AppException } from '../../core/errors/app.exception';
 import { runBulk, type BulkCtx } from '../../core/http/bulk';
@@ -17,6 +17,7 @@ import { aiCancelNote, codPlan, callPlan, checkEffectiveAt, checkTransition, isT
 import type { Actor } from './order-effects.service';
 export type LockedOrder = Locked;
 import { addressSnapshot, hasDeliveryAddress, stateOf } from './order.presenter';
+import { attemptsAfter } from '../delivery/tracking-rules';
 import { OrderService, refuse, StaleVersion } from './order.service';
 
 export type TransitionOptions = {
@@ -94,14 +95,16 @@ export class OrderWorkflowService implements OnModuleInit {
       const sent = await tx.shipment.create({ data: { workspaceId: o.workspaceId, orderId: o.id, provider: 'manual', status: 'sent', trackingNumber: opt.trackingNumber ?? null, publicTrackingToken: randomBytes(12).toString('base64url'), codAmount: Math.max(0, o.total - o.amountPaid) } });
       await tx.shipmentEvent.create({ data: { shipmentId: sent.id, rawStatus: 'sent', mappedStatus: 'sent', at, source: 'manual', actorId: actorUserId } });
     } else if (active && plan.shipment === 'mark_delivered') {
-      await tx.shipment.update({ where: { id: active.id }, data: { status: 'delivered' } });
+      // journey J08-6: the delivery is an attempt of its own unless the parcel was already out for delivery (« 2e tentative »
+      // after a failure); J08-12 #6: the row's « Dernier événement » is this delivery, not the failure before it
+      await tx.shipment.update({ where: { id: active.id }, data: { status: 'delivered', lastEventAt: at, deliveryAttempts: attemptsAfter(active.status as ShipmentStatusName, 'delivered', o.shipments.find((x) => x.id === active.id)?.deliveryAttempts ?? 0) } });
       await tx.shipmentEvent.create({ data: { shipmentId: active.id, rawStatus: 'delivered', mappedStatus: 'delivered', at, source: 'manual', actorId: actorUserId } });
     } else if (plan.shipment === 'mark_returned') {
       const reason = (FailureReasonValues as readonly string[]).includes(opt.reason ?? '') ? (opt.reason as FailureReasonName) : null;
       // the parcel keeps the reason (unclaimed parcels drive the auto-block rule); a self-delivered order gets a manual parcel record
       const target = active ?? o.shipments[0] ?? null;
       const returned = target
-        ? await tx.shipment.update({ where: { id: target.id }, data: { status: 'returned', failureReason: reason } })
+        ? await tx.shipment.update({ where: { id: target.id }, data: { status: 'returned', failureReason: reason, ...(target.status !== 'returned' ? { lastEventAt: at } : {}) } })
         : await tx.shipment.create({ data: { workspaceId: o.workspaceId, orderId: o.id, provider: 'manual', status: 'returned', failureReason: reason, publicTrackingToken: randomBytes(12).toString('base64url'), codAmount: o.total } });
       // PUBLIC-06: the event that made the parcel « Retournée » (courier parcels get theirs from the tracking sync)
       if (!target || target.status !== 'returned') await tx.shipmentEvent.create({ data: { shipmentId: returned.id, rawStatus: 'returned', mappedStatus: 'returned', at, source: 'manual', actorId: actorUserId } });
@@ -120,6 +123,9 @@ export class OrderWorkflowService implements OnModuleInit {
     if (plan.cash === 'cod') {
       const cod = codPlan(o, opt.amountCollected, opt.note ?? opt.reason);
       if ('code' in cod) throw refuse(cod);
+      // journey J08-6: the delivered parcel's COD is what was cashed at the door (« COD encaissé » of the overview, the
+      // analytics and the tracking panel = the cash register), not the amount it was sent with
+      if (to === 'delivered') await tx.shipment.updateMany({ where: { orderId: o.id, status: 'delivered' }, data: { codAmount: cod.entry } });
       // stored as a key + values, rendered in the reader's language (UX-056 leftovers)
       const label = cod.finalPaid === o.total ? storedText('stored.cash.orderCod', { number: o.number }) : storedText('stored.cash.orderCodPartial', { number: o.number, amount: formatMoney(cod.finalPaid), note: opt.note ?? opt.reason ?? '' });
       await this.effects.addPayment(tx, o, { amount: cod.entry, method: 'cash', paidAt: at, description: label, note: cod.finalPaid === o.total ? null : (opt.note ?? opt.reason ?? null) }, opt.actor);
@@ -341,6 +347,9 @@ export class OrderWorkflowService implements OnModuleInit {
       // UX-046 (10/11): the whole address before / after (wilaya, commune, home address or relay point), shown with names
       const to = { wilayaId: input.wilayaId, communeId: commune?.id ?? null, communeText: commune ? null : (input.communeText ?? null), address: input.address ?? null, isStopdesk: input.isStopdesk, stopdeskId: input.stopdeskId ?? null };
       await tx.orderStatusHistory.create({ data: { orderId: id, field: 'address', from: o.wilayaId ? addressSnapshot(o) : null, to: addressSnapshot(to), actorType: actor.type, actorId: actor.id } });
+      // journey J08-12 #12: the fee and the total the new address changed get their history lines (stop-desk 350 → home 0)
+      if (deliveryFee !== o.deliveryFee) await tx.orderStatusHistory.create({ data: { orderId: id, field: 'deliveryFee', from: String(o.deliveryFee), to: String(deliveryFee), actorType: actor.type, actorId: actor.id } });
+      if (total !== o.total) await tx.orderStatusHistory.create({ data: { orderId: id, field: 'total', from: String(o.total), to: String(total), actorType: actor.type, actorId: actor.id } });
       await this.effects.emitUpdated(tx, updated, ['address', 'deliveryFee', 'total']);
       await this.effects.sheets(tx, updated);
       // 04 §21: the customer is told through the conversation when it is open and inside 24 h (thread event for the AI and the team)

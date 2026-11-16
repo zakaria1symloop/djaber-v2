@@ -78,7 +78,7 @@
   "CUSTOMER_BLOCKED_BY_PLATFORM": "Blocked by the platform: contest through support.",
   "CUSTOMER_HAS_ORDERS": "This client has orders ({count}): archive it instead.",
   "CUSTOMER_MERGE_IRREVERSIBLE": "Merge is irreversible: confirm.",
-  "DELIVERY_NO_COURIER": "No active courier: activate one (Delivery › Couriers) or use self-delivery.",
+  "DELIVERY_NO_COURIER": "No active courier: add or activate one (Delivery › Couriers), or use self-delivery.",
   "DELIVERY_ORDER_ALREADY_SENT": "Already sent (active parcel).",
   "DELIVERY_ORDER_CANCELLED": "This order is cancelled: it can't be sent to a courier.",
   "DELIVERY_ORDER_DELIVERED": "This order is already delivered: it can't be sent to a courier.",

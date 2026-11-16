@@ -16,6 +16,7 @@ import { CrossSellService } from '../recommendations/cross-sell.service';
 import { NotificationProducer } from '../notifications/notification.producer';
 import { orderPublic, orderSummary } from './order.presenter';
 import { stockDeltas, stockKey, type StockLine } from './order-rules';
+import { cashDate } from '../gds/cash-rows';
 
 export type Actor = { type: 'user' | 'ai' | 'system' | 'api' | 'courier'; id: string | null; name?: string };
 const CASH_METHOD: Record<PaymentMethod, CashMethod> = { cash: 'cash', card: 'card', transfer: 'transfer', ccp: 'ccp', other: 'other' };
@@ -94,12 +95,12 @@ export class OrderEffects implements OnModuleInit {
   }
 
   // --- money (04 §1.4, §3, §21; PaymentEntry rows → locked automatic cash rows) --------------------------------------------
-  /** The day of a cash row: the effective date only if that day is still open, else today (04 §20 / §21). */
-  async cashDate(tx: Tx, at: Date): Promise<Date> {
-    const day = algiersDay(at);
-    if (day === algiersDay()) return at;
-    const closed = await tx.cashClosing.findFirst({ where: { day: new Date(`${day}T00:00:00Z`), reopenedAt: null }, select: { id: true } });
-    return closed ? new Date() : at;
+  /**
+   * The day of a cash row: the effective date only if that day is still open, else today (04 §20 / §21); today closed too ⇒
+   * a member's action is refused (`409 CASH_DAY_CLOSED`), a courier / webhook / AI event goes to the next open day (J06-1).
+   */
+  cashDate(tx: Tx, at: Date, actor: Actor): Promise<Date> {
+    return cashDate(tx, at, actor.type === 'user' || actor.type === 'api' ? 'refuse' : 'next');
   }
 
   /** The member recorded on a payment entry (`createdById` is required): the actor, else the workspace owner. */
@@ -116,7 +117,7 @@ export class OrderEffects implements OnModuleInit {
     const paidAt = p.paidAt ?? new Date();
     const createdById = await this.payer(tx, actor);
     const cash = await tx.cashTransaction.create({
-      data: { workspaceId, type: p.amount > 0 ? 'income' : 'expense', amount: Math.abs(p.amount), category: p.amount > 0 ? 'order' : 'refund', method: CASH_METHOD[p.method], reference: order.number, description: p.description, date: await this.cashDate(tx, paidAt), isAutomatic: true, sourceType: 'payment_entry', createdById },
+      data: { workspaceId, type: p.amount > 0 ? 'income' : 'expense', amount: Math.abs(p.amount), category: p.amount > 0 ? 'order' : 'refund', method: CASH_METHOD[p.method], reference: order.number, description: p.description, date: await this.cashDate(tx, paidAt, actor), isAutomatic: true, sourceType: 'payment_entry', createdById },
     });
     const entry = await tx.paymentEntry.create({ data: { workspaceId, sourceType: 'order', sourceId: order.id, amount: p.amount, method: p.method, reference: p.reference ?? null, note: p.note ?? null, paidAt, createdById, cashTransactionId: cash.id } });
     await tx.cashTransaction.update({ where: { id: cash.id }, data: { sourceId: entry.id } });
@@ -145,7 +146,7 @@ export class OrderEffects implements OnModuleInit {
   async addReturnExpense(tx: Tx, order: Pick<Order, 'id' | 'number'>, fee: number, at: Date, actor: Actor) {
     if (fee <= 0) return null;
     return tx.cashTransaction.create({
-      data: { workspaceId: TenantContext.workspaceId(), type: 'expense', amount: fee, category: 'shipping', method: 'cash', reference: order.number, description: storedText('stored.cash.orderReturnFee', { number: order.number }), date: await this.cashDate(tx, at), isAutomatic: true, sourceType: 'order', sourceId: order.id, createdById: actor.type === 'user' ? actor.id : null },
+      data: { workspaceId: TenantContext.workspaceId(), type: 'expense', amount: fee, category: 'shipping', method: 'cash', reference: order.number, description: storedText('stored.cash.orderReturnFee', { number: order.number }), date: await this.cashDate(tx, at, actor), isAutomatic: true, sourceType: 'order', sourceId: order.id, createdById: actor.type === 'user' ? actor.id : null },
     });
   }
 

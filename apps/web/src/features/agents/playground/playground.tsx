@@ -11,11 +11,11 @@ import { Link } from '@/i18n/navigation';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
-import { agentsApi, useAgentsRefresh } from '../api';
+import { agentsApi, useAgentsRefresh, useReadiness } from '../api';
 import type { Agent } from '../contracts';
 import { SCENARIO_KEYS } from '../contracts';
 import { INSTRUCTION_MAX } from '../insights/resolve-dialog';
-import { confidenceLabel, secondsLabel, statusTone, turnView, type TurnView } from '../logic';
+import { confidenceLabel, pendingCatalogue, secondsLabel, statusTone, turnView, type TurnView } from '../logic';
 import { ModelBadge } from '../ui';
 import { downloadJson } from '../use-agent-actions';
 import { PlaygroundComposer, PlaygroundThread, usePlayground, type ChatTransport, type Playground as Pg } from './chat';
@@ -45,8 +45,10 @@ export function inspectorRows(t: ReturnType<typeof useT>, locale: string, turn: 
 }
 
 /** Thread + scenario chips + composer: also embedded in step 5 of the wizard ("Tester moi-même", scenario "Ouvrir ›"). */
-export function PlaygroundPane({ pg, agent, scenarios = true, className }: { pg: Pg; agent: Pick<Agent, 'name'>; scenarios?: boolean; className?: string }) {
+export function PlaygroundPane({ pg, agent, scenarios = true, className }: { pg: Pg; agent: Pick<Agent, 'id' | 'name'>; scenarios?: boolean; className?: string }) {
   const t = useT();
+  // journey 16/11 J04-1: none of the agent's products is validated by Djaber yet — say why it answers that nothing is online
+  const waiting = pendingCatalogue(useReadiness(agent.id).data?.checks);
   return (
     <div className={className ?? 'flex min-h-[28rem] min-w-0 flex-col'}>
       <div role="status" data-testid="playground-banner" className="mx-4 mb-2 flex flex-wrap items-center gap-2 rounded-card border border-line-hairline bg-ink-surface px-3 py-2 ts-label-meta text-text-muted">
@@ -59,6 +61,16 @@ export function PlaygroundPane({ pg, agent, scenarios = true, className }: { pg:
           <Ltr>{t('agents.playground.turns', { used: pg.hourly, limit: PLAYGROUND_TURNS_PER_HOUR })}</Ltr>
         </span>
       </div>
+      {waiting ? (
+        <FormAlert tone="warning" className="mx-4 mb-2">
+          <span data-testid="playground-pending-products">
+            {t('agents.playground.pendingProducts', { count: formatNumber(waiting) })}{' '}
+            <Link href="/products?moderationStatus=pending" className="underline">
+              {t('action.view')}
+            </Link>
+          </span>
+        </FormAlert>
+      ) : null}
       <PlaygroundThread pg={pg} agentName={agent.name} empty={t('agents.playground.empty')} />
       <div className="flex flex-col gap-2 border-t border-line-hairline px-4 pt-3">
         {scenarios ? (
@@ -71,7 +83,7 @@ export function PlaygroundPane({ pg, agent, scenarios = true, className }: { pg:
             ))}
           </div>
         ) : null}
-        <PlaygroundComposer pg={pg} media placeholder={t('agents.playground.placeholder')} />
+        <PlaygroundComposer pg={pg} media placeholder={t('agents.playground.placeholder')} shortPlaceholder={t('agents.playground.placeholderShort')} />
       </div>
     </div>
   );

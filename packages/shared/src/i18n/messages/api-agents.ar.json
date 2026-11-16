@@ -5,6 +5,7 @@
  "agent.api.defaultName": "وكيل جديد",
  "agent.api.generatedName": "وكيل {page}",
  "agent.api.readiness.catalog": "منتجات نشطة ضمن نطاق الوكيل",
+ "agent.api.readiness.catalogPending": "لا يوجد أي منتج مصادق عليه حاليًا: منتجاتك ({count}) في انتظار مصادقة Djaber — وإلى ذلك الحين، يجيب الوكيل العملاء بأن المنتجات ستكون متاحة قريبًا",
  "agent.api.readiness.channels": "الصفحات المرتبطة",
  "agent.api.readiness.credits": "الرصيد المتاح",
  "agent.api.readiness.emailVerified": "البريد الإلكتروني مؤكَّد",

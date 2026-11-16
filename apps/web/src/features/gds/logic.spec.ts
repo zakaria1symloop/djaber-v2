@@ -2,7 +2,21 @@
 // rule (> 10 % ⇒ note), expense margin preview, cash selection (pills ↔ table ↔ KPIs use the same parameters).
 import { describe, expect, it } from 'vitest';
 import { orderImportPhase } from '@/features/orders/import/order-import';
-import { cashDateIso, cashSelection, cashSelectionQuery, closingGap, daysList, defaultReceiveQty, int, inventoryTotals, lineVariants, marginPreview, periodDays, priceEdited, purchaseTotals, receiveSummary, saleClientBody, saleSheetSnapshot, saleTotals, selectionDay, unitsLabel, variance } from './logic';
+import { cashDateIso, cashSelection, cashSelectionQuery, closingGap, daysList, defaultReceiveQty, int, inventoryTotals, lineVariants, marginPreview, partialCancelOwed, periodDays, priceEdited, purchaseTotals, receiveSummary, saleClientBody, saleSheetSnapshot, saleTotals, selectionDay, supplierTermsLine, unitsLabel, variance } from './logic';
+
+describe('journeys 16/11 J07-5 / J07-11 purchase and supplier texts', () => {
+  it('cancel dialog of a partly received purchase: the received units stay owed, never below what was paid', () => {
+    const items = [{ receivedQty: 3, unitCost: 1100 }, { receivedQty: 0, unitCost: 4000 }];
+    expect(partialCancelOwed({ items, tax: 0, shippingCost: 0, amountPaid: 2000 })).toEqual({ value: 3300, remaining: 1300 });
+    expect(partialCancelOwed({ items, tax: 0, shippingCost: 500, amountPaid: 5000 })).toEqual({ value: 5000, remaining: 0 });
+  });
+  it('supplier terms repeating the payment days are said once', () => {
+    expect(supplierTermsLine('Paiement à 30 j', 'paiement à  30 j')).toBe('Paiement à 30 j');
+    expect(supplierTermsLine('Paiement à 30 j', 'Chèque à la livraison')).toBe('Paiement à 30 j · Chèque à la livraison');
+    expect(supplierTermsLine(null, 'Chèque')).toBe('Chèque');
+    expect(supplierTermsLine(null, null)).toBe('');
+  });
+});
 
 describe('money input', () => {
   it('reads digits only, never NaN', () => {

@@ -140,7 +140,7 @@ export function CouriersPage() {
             <span data-testid="couriers-simulated">{t('couriers.simulated')}</span>
           </FormAlert>
         ) : null}
-        <AutoSendCard />
+        <AutoSendCard hasCourier={list.some((c) => c.isActive)} loading={couriers.isPending} />
         <div className="flex flex-wrap items-center gap-3">
           <p className="min-w-0 flex-1 ts-label-meta text-text-muted">{t('couriers.intro')}</p>
           <Button variant="primary" onClick={() => setEdit({ account: null, provider: (missing[0]?.provider as ProviderKey) ?? 'zrexpress' })} data-testid="add-courier">
@@ -592,13 +592,15 @@ function DeleteCourierDialog({ account, onClose, onDeactivate, onDeleted }: { ac
 }
 
 /* ---------- Envoi automatique (D9, DLV-05): a confirmed order is sent to the default courier ---------- */
-function AutoSendCard() {
+function AutoSendCard({ hasCourier, loading }: { hasCourier: boolean; loading: boolean }) {
   const t = useT();
   const { workspace, can } = useSession();
   const patch = usePatchWorkspace();
   const write = useWorkspaceCache();
   const [error, setError] = useState<string | null>(null);
   if (!workspace) return null;
+  // journey J08-11: no active courier ⇒ nothing to send to — the switch is greyed with its reason (it can still be turned off)
+  const noCourier = !loading && !hasCourier;
   const set = async (v: boolean, version = workspace.version) => {
     setError(null);
     try {
@@ -616,10 +618,15 @@ function AutoSendCard() {
   return (
     <Card className="flex flex-col gap-2 p-4" data-testid="auto-send">
       <div className="flex flex-wrap items-center gap-3">
-        <Switch checked={workspace.autoSendToCourier} onCheckedChange={(v) => void set(v)} label={t('couriers.autoSend.label')} disabled={patch.isPending || !can('workspace.settings')} />
+        <Switch checked={workspace.autoSendToCourier} onCheckedChange={(v) => void set(v)} label={t('couriers.autoSend.label')} disabled={patch.isPending || !can('workspace.settings') || (noCourier && !workspace.autoSendToCourier)} />
         <span className="text-[14px] font-medium">{t('couriers.autoSend.label')}</span>
         <span className="ts-label-meta text-text-muted">{t('couriers.autoSend.hint')}</span>
       </div>
+      {noCourier ? (
+        <p className="ts-label-meta text-accent-starred" data-testid="auto-send-no-courier">
+          {t('couriers.autoSend.noCourier')}
+        </p>
+      ) : null}
       {error ? <FormAlert>{error}</FormAlert> : null}
     </Card>
   );

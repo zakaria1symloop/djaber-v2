@@ -20,7 +20,8 @@ export function formatValue(value: number | null | undefined, unit: Unit, locale
     case 'money':
     case 'count':
     case 'credits':
-      return formatNumber(value);
+      // full-test STOCK-14 / J07-11: a negative amount reads with the true minus sign « −37 400 », never « -37 400 »
+      return value < 0 ? `−${formatNumber(-value)}` : formatNumber(value);
     case 'pct':
       return `${decimal(value, locale)}${NBSP}%`;
     case 'seconds':

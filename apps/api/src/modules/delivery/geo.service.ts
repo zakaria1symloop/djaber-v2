@@ -22,9 +22,18 @@ export class GeoService {
     return { wilaya, commune };
   }
 
+  /**
+   * Stop-desk agencies (platform reference data, `CourierStopdesk`) — journey J08-10: only of the couriers the shop has an
+   * active account with (a shop without any courier listed the agencies another shop's courier had loaded, test ones
+   * included); none ⇒ an empty list.
+   */
   async stopdesks(q: { provider?: 'zrexpress' | 'ecotrack' | 'yalidine'; communeId?: number; wilayaId?: number }): Promise<StopdeskView[]> {
+    const accounts = await prisma.courierAccount.findMany({ where: { isActive: true }, select: { provider: true } });
+    const mine = [...new Set(accounts.map((a) => a.provider))];
+    const providers = q.provider ? mine.filter((p) => p === q.provider) : mine;
+    if (!providers.length) return [];
     const rows = await prisma.courierStopdesk.findMany({
-      where: { ...(q.provider ? { provider: q.provider } : {}), ...(q.communeId ? { communeId: q.communeId } : {}), ...(q.wilayaId ? { commune: { wilayaId: q.wilayaId } } : {}) },
+      where: { provider: { in: providers }, ...(q.communeId ? { communeId: q.communeId } : {}), ...(q.wilayaId ? { commune: { wilayaId: q.wilayaId } } : {}) },
       orderBy: { name: 'asc' },
       take: 200,
     });

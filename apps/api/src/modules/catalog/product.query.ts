@@ -85,7 +85,7 @@ export const productWhere = (q: Partial<ProductsQuery>): Prisma.Sql => {
   if (q.agentId?.length) and.push(Prisma.sql`EXISTS (SELECT 1 FROM "AgentProduct" ap WHERE ap."productId" = p."id" AND ap."agentId" = ANY(${q.agentId}::uuid[]))`);
   if (q.noAgent) and.push(Prisma.sql`NOT EXISTS (SELECT 1 FROM "AgentProduct" ap WHERE ap."productId" = p."id")`);
   // same set as the supplier sheet's `productCount` (purchases of any status but cancelled)
-  if (q.supplierId) and.push(Prisma.sql`EXISTS (SELECT 1 FROM "PurchaseItem" pi JOIN "Purchase" pu ON pu."id" = pi."purchaseId" WHERE pi."productId" = p."id" AND pu."workspaceId" = ${ws}::uuid AND pu."supplierId" = ${q.supplierId}::uuid AND pu."status" <> 'cancelled')`);
+  if (q.supplierId) and.push(Prisma.sql`EXISTS (SELECT 1 FROM "PurchaseItem" pi JOIN "Purchase" pu ON pu."id" = pi."purchaseId" WHERE pi."productId" = p."id" AND pu."workspaceId" = ${ws}::uuid AND pu."supplierId" = ${q.supplierId}::uuid AND (pu."status" <> 'cancelled' OR pi."receivedQty" > 0))`);
   if (q.moderationStatus?.length) and.push(Prisma.sql`p."moderationStatus"::text = ANY(${q.moderationStatus}::text[])`);
 
   if (q.createdFrom) and.push(Prisma.sql`p."createdAt" >= ${algiersDayStart(q.createdFrom)}`);

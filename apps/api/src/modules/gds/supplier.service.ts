@@ -8,6 +8,7 @@ import { AppException, notFound, validationError } from '../../core/errors/app.e
 import { page, type Page } from '../../core/http/pagination';
 import { action } from '../catalog/catalog.util';
 import { iso, lockRow, rangeOf, sortOf } from './gds.util';
+import { COUNTED_PURCHASE, countedPurchaseSql } from './purchase-scope';
 import { PURCHASE_INCLUDE, presentPurchaseListItem, PurchaseService } from './purchase.service';
 
 type Agg = { supplierId: string; purchaseCount: number; totalSpent: number; balance: number; lastPurchaseAt: Date | null; count12m: number; total12m: number };
@@ -17,7 +18,7 @@ const YEAR_MS = 365 * 86_400_000;
 export class SupplierService {
   constructor(private readonly purchases: PurchaseService) {}
 
-  /** Per supplier: purchases (draft and cancelled excluded), balance due, last purchase, last 12 months. */
+  /** Per supplier: purchases (draft and cancelled before any receipt excluded — J07-5), balance due, last purchase, last 12 months. */
   private async aggregates(ids?: string[]): Promise<Map<string, Agg>> {
     const ws = TenantContext.workspaceId();
     const since = new Date(Date.now() - YEAR_MS);
@@ -31,7 +32,7 @@ export class SupplierService {
              (count(*) FILTER (WHERE "purchasedAt" >= ${since}))::int AS "count12m",
              COALESCE(sum("total") FILTER (WHERE "purchasedAt" >= ${since}), 0)::int AS "total12m"
       FROM "Purchase"
-      WHERE "workspaceId" = ${ws}::uuid AND "supplierId" IS NOT NULL AND "status" NOT IN ('cancelled', 'draft') ${filter}
+      WHERE "workspaceId" = ${ws}::uuid AND "supplierId" IS NOT NULL AND ${countedPurchaseSql()} ${filter}
       GROUP BY "supplierId"`;
     return new Map(rows.map((r) => [r.supplierId, r]));
   }
@@ -113,7 +114,7 @@ export class SupplierService {
       this.purchaseCounts([id]),
       prisma.purchase.findMany({ where: { supplierId: id }, include: PURCHASE_INCLUDE, orderBy: [{ purchasedAt: 'desc' }, { id: 'desc' }], take: 5 }),
       prisma.purchase.findMany({ where: { supplierId: id, status: 'received', receivedAt: { not: null } }, select: { purchasedAt: true, receivedAt: true } }),
-      prisma.purchaseItem.findMany({ where: { purchase: { supplierId: id, status: { not: 'cancelled' } } }, distinct: ['productId'], select: { productId: true } }),
+      prisma.purchaseItem.findMany({ where: { purchase: { supplierId: id }, OR: [{ purchase: { status: { not: 'cancelled' } } }, { receivedQty: { gt: 0 } }] }, distinct: ['productId'], select: { productId: true } }),
     ]);
     const lead = received.length ? Math.round(received.reduce((n, p) => n + (p.receivedAt!.getTime() - p.purchasedAt.getTime()) / 86_400_000, 0) / received.length) : null;
     return {
@@ -205,7 +206,7 @@ export class SupplierService {
       const tx = db as Tx;
       if (!(await lockRow(tx, 'Supplier', id))) throw notFound();
       const due = await tx.purchase.findMany({
-        where: { supplierId: id, status: { in: ['pending', 'partial', 'received'] }, ...(input.purchaseId ? { id: input.purchaseId } : {}) },
+        where: { supplierId: id, ...COUNTED_PURCHASE, ...(input.purchaseId ? { id: input.purchaseId } : {}) },
         orderBy: [{ purchasedAt: 'asc' }, { id: 'asc' }],
         select: { id: true, number: true, total: true, amountPaid: true, status: true },
       });
@@ -222,7 +223,7 @@ export class SupplierService {
       for (const p of owing) {
         if (left <= 0) break;
         const amount = Math.min(left, p.total - p.amountPaid);
-        await this.purchases.payInTx(tx, p.id, { amount, method: input.method, reference: input.reference, note: input.note, paidAt: input.paidAt, description: storedText('stored.cash.supplierPayment', { number: p.number }) });
+        await this.purchases.payInTx(tx, p.id, { amount, method: input.method, reference: input.reference, note: input.note, paidAt: input.paidAt, description: storedText('stored.cash.purchaseSupplierPayment', { number: p.number }) }); // J07-11: one label for a supplier payment, from the purchase page or the supplier dialog
         parts.push({ purchaseId: p.id, number: p.number, amount });
         left -= amount;
       }

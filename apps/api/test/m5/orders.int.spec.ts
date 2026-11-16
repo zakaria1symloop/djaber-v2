@@ -137,6 +137,25 @@ describe('creation (ORD-01 / ORD-02, 04 §3 "Order created")', () => {
     expect((await postOrder(op, orderBody(p.id, { delivery: address({ deliveryFee: 150 }) })).expect(403)).body.error.code).toBe('FORBIDDEN');
   });
 
+  it('journey J08-1 / J08-2 / J08-3: negative fee or threshold refused; the threshold is read after the discount on every path; never for stop-desk', async () => {
+    const owner = await shop();
+    const p = await createProduct(owner, { price: 5000, stock: 50 });
+    const version = async () => (await db.workspace.findUniqueOrThrow({ where: { id: owner.workspaceId } })).version;
+    // J08-1: « -5 » / « -100 » never become 5 / 100 on the server either
+    expect((await owner.patch('/workspace', { freeDeliveryThreshold: -5, version: await version() }).expect(422)).body.error.fields).toMatchObject({ freeDeliveryThreshold: 'validation.price' });
+    expect((await owner.put('/delivery/fees/16', { homePrice: -100, stopdeskPrice: 250 }).expect(422)).body.error.fields).toMatchObject({ homePrice: 'validation.price' });
+    await owner.put('/delivery/fees/16', { homePrice: 400, stopdeskPrice: 250 }).expect(200);
+    await owner.patch('/workspace', { freeDeliveryThreshold: 10000, version: await version() }).expect(200);
+    // J08-2: 10 000 − 500 discount = 9 500 < threshold ⇒ grid fee, and the order page says so (no « MODIFIÉ »)
+    const discounted = await postOrder(owner, orderBody(p.id, { items: [{ productId: p.id, quantity: 2 }], discount: 500 })).expect(201);
+    expect(discounted.body.data).toMatchObject({ subtotal: 10000, discount: 500, deliveryFee: 400 });
+    expect((await owner.get(`/orders/${discounted.body.data.id}`).expect(200)).body.data.feeExplanation).toBe('GRILLE ALGER · DOMICILE 400');
+    // J08-3: stop-desk pays its fee above the threshold (DeliveryFeeRule.freeAbove = free HOME delivery)
+    const desk = await postOrder(owner, orderBody(p.id, { items: [{ productId: p.id, quantity: 3 }], delivery: address({ isStopdesk: true, address: null, stopdeskId: 'SD-1' }) })).expect(201);
+    expect(desk.body.data).toMatchObject({ subtotal: 15000, deliveryFee: 250 });
+    expect((await owner.get('/delivery/fees/quote?wilayaId=16&stopdesk=true&subtotal=15000').expect(200)).body.data).toMatchObject({ fee: 250, free: false, freeFrom: 10000, reason: 'grid' });
+  });
+
   it('AT-DLV-10 a commune of another wilaya is refused (validation.commune)', async () => {
     const owner = await shop();
     const p = await createProduct(owner, { price: 1000, stock: 5 });

@@ -611,6 +611,8 @@ export type TrackingPublicView = {
   trackingNumber: string | null;
   wilayaName: string | null;
   isStopdesk: boolean;
+  /** journey J08-12 #9: the merchant delivers it himself (`provider=manual`) — no courier pick-up step on the page */
+  selfDelivery: boolean;
   updatedAt: string;
   reportUrl: string;
 };

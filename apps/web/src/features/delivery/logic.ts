@@ -49,11 +49,13 @@ export const timelineOrder = <T extends { at: string; mappedStatus?: string | nu
  */
 export function deliveryBlockState(
   orderStatus: string,
-  parcel: { status: ShipmentStatus; trackingNumber: string | null; failureHandled?: OrderSendClosedStatus | null } | null,
+  parcel: { status: ShipmentStatus; trackingNumber: string | null; provider?: string | null; failureHandled?: OrderSendClosedStatus | null } | null,
 ): { handled: OrderSendClosedStatus | null; openFailure: boolean; fixable: boolean; showSend: boolean } {
   const handled = parcel?.status === 'failed' ? (parcel.failureHandled ?? null) : null;
   const openFailure = parcel?.status === 'failed' && !handled;
-  const fixable = openFailure && !parcel?.trackingNumber;
+  // journey J08-4: a self-delivered parcel without a tracking number that failed is a failed delivery attempt (the parcel
+  // exists, the order is shipped) — only a courier parcel without tracking is a failed send (« rien n'a été créé »)
+  const fixable = openFailure && !parcel?.trackingNumber && parcel?.provider !== 'manual';
   return { handled, openFailure, fixable, showSend: !isOrderSendClosed(orderStatus) && (!parcel || fixable) };
 }
 
@@ -80,13 +82,15 @@ export function withCourierSetup(actions: readonly ActionDescriptor[], canManage
 /* ---------- public page steps: Créée → Ramassée → En transit → En livraison → Livrée ---------- */
 const FLOW = ['sent', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered'] as const;
 export type FlowKey = (typeof FLOW)[number] | 'failed' | 'returned' | 'cancelled';
-export function parcelSteps(status: ShipmentStatus): { key: FlowKey; state: 'done' | 'current' | 'upcoming' | 'failed' }[] {
+export function parcelSteps(status: ShipmentStatus, o: { selfDelivery?: boolean } = {}): { key: FlowKey; state: 'done' | 'current' | 'upcoming' | 'failed' }[] {
+  // journey J08-12 #9: a parcel the merchant delivers himself is never « Ramassée » by a courier
+  const flow: readonly (typeof FLOW)[number][] = o.selfDelivery ? FLOW.filter((k) => k !== 'picked_up') : FLOW;
   if (status === 'failed' || status === 'returned' || status === 'cancelled') {
     // the last step of the bar becomes the end of the parcel; the steps before stay done
-    return [...FLOW.slice(0, 4).map((key) => ({ key, state: 'done' as const })), { key: status, state: 'failed' as const }];
+    return [...flow.slice(0, flow.length - 1).map((key) => ({ key, state: 'done' as const })), { key: status, state: 'failed' as const }];
   }
-  const at = status === 'pending' ? -1 : status === 'stale' ? FLOW.indexOf('in_transit') : FLOW.indexOf(status as (typeof FLOW)[number]);
-  return FLOW.map((key, i) => ({ key, state: i < at || (status === 'delivered' && i === at) ? 'done' : i === at ? 'current' : 'upcoming' }));
+  const at = status === 'pending' ? -1 : status === 'stale' ? flow.indexOf('in_transit') : status === 'picked_up' && o.selfDelivery ? flow.indexOf('in_transit') : flow.indexOf(status as (typeof FLOW)[number]);
+  return flow.map((key, i) => ({ key, state: i < at || (status === 'delivered' && i === at) ? 'done' : i === at ? 'current' : 'upcoming' }));
 }
 /** Dot / tone of a mapped status (timeline). */
 export function shipmentTone(status: ShipmentStatus | null | undefined): Tone | undefined {

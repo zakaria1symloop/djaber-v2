@@ -329,7 +329,7 @@ function PurchaseForm({ purchase }: { purchase?: Purchase }) {
             <Select id="pf-method" value={f.method} onChange={(e) => set({ method: e.target.value as CashMethod })}>
               {PAYMENT_METHODS.map((m) => (
                 <option key={m} value={m}>
-                  {t(`orders.payment.method.${m}`)}
+                  {t(`sales.method.${m}`)}
                 </option>
               ))}
             </Select>

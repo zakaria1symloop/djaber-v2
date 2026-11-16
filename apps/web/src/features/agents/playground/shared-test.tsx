@@ -88,7 +88,7 @@ export function SharedTest({ token }: { token: string }) {
           </div>
           <PlaygroundThread pg={pg} agentName={q.data.agentName || t('agents.shared.assistant')} showTools={false} empty={t('agents.shared.intro')} className="pt-2" />
           <div className="border-t border-line-hairline p-3">
-            <PlaygroundComposer pg={pg} placeholder={t('agents.playground.placeholder')} />
+            <PlaygroundComposer pg={pg} placeholder={t('agents.playground.placeholder')} shortPlaceholder={t('agents.playground.placeholderShort')} />
           </div>
         </Card>
       )}

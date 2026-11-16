@@ -38,7 +38,7 @@ export function PublicTrackingPage({ code }: { code: string }) {
   const d = q.data;
   const [reporting, setReporting] = useState(false);
   const [reported, setReported] = useState(false);
-  const steps: ParcelStep[] = d ? parcelSteps(d.status).map((s) => ({ key: s.key, state: s.state, label: t(`tracking.public.step.${s.key}`) })) : [];
+  const steps: ParcelStep[] = d ? parcelSteps(d.status, { selfDelivery: d.selfDelivery }).map((s) => ({ key: s.key, state: s.state, label: t(`tracking.public.step.${s.key}`) })) : [];
 
   return (
     <div className="flex min-h-dvh flex-col">

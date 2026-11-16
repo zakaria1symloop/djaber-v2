@@ -222,7 +222,7 @@ function Queue({ view }: { view: HomeView }) {
 function Overview({ view, advanced }: { view: HomeView; advanced: boolean }) {
   const t = useT();
   const locale = useLocaleCode();
-  const tiles = homeTiles(view.kpis);
+  const tiles = homeTiles(view.kpis, advanced);
   const label: Record<string, string> = {
     pages: t('home.kpi.pages'),
     products: t('home.kpi.products'),
@@ -230,7 +230,9 @@ function Overview({ view, advanced }: { view: HomeView; advanced: boolean }) {
     stock:
       advanced && view.kpis.stockValue.cost !== null
         ? t('home.kpi.stockCost')
-        : t('home.kpi.stock'),
+        : advanced
+          ? t('home.kpi.stock')
+          : t('home.kpi.stockRetail'),
   };
   return (
     <HomeSection label={t('home.overview.title')}>

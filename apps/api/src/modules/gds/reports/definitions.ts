@@ -7,7 +7,9 @@ import { algiersDay } from '../../../core/time/algiers';
 import type { DailyStatsService } from '../../analytics/daily-stats.service';
 import { sumDays } from '../../analytics/day-metrics';
 import { eachDay, pct, round1, type DayRange } from '../../analytics/range';
+import { closingReference } from '../cash-rows';
 import { profitAndLoss } from '../money-figures';
+import { COUNTED_PURCHASE, countedPurchaseSql } from '../purchase-scope';
 import { deadStock, stockLines } from './stock-queries';
 
 /**
@@ -44,7 +46,8 @@ const like = (ctx: ReportCtx) => {
 };
 const sumOf = (rows: ReportRow[], key: string) => rows.reduce((s, row) => s + n(row[key]), 0);
 
-type SoldLine = { pid: string; vid: string | null; product: string; variant: string | null; sku: string | null; cid: string | null; category: string | null; qty: number; revenue: number; cogs: number; docs: number };
+/** `unknownCost`: revenue of the lines sold without a cost price (journeys 16/11 J06-4: they counted as « 100 % margin »). */
+type SoldLine = { pid: string; vid: string | null; product: string; variant: string | null; sku: string | null; cid: string | null; category: string | null; qty: number; revenue: number; cogs: number; unknownCost: number; docs: number };
 /** Lines sold in the period: delivered orders (deliveredAt) + completed counter sales (soldAt) — the 04 §4 Revenue lines. */
 async function soldLines(ctx: ReportCtx, f: { categoryId?: string; productId?: string; q?: string | null; source?: string; channelId?: string } = {}): Promise<SoldLine[]> {
   const { gte, lt } = r(ctx);
@@ -55,21 +58,21 @@ async function soldLines(ctx: ReportCtx, f: { categoryId?: string; productId?: s
   const cat = f.categoryId ? Prisma.sql`AND p."categoryId" = ${f.categoryId}::uuid` : Prisma.empty;
   const prod = f.productId ? Prisma.sql`AND p."id" = ${f.productId}::uuid` : Prisma.empty;
   const q = f.q ? Prisma.sql`AND (p."name" ILIKE ${f.q} OR p."sku" ILIKE ${f.q} OR v."sku" ILIKE ${f.q})` : Prisma.empty;
-  const rows = await prisma.$queryRaw<{ pid: string; vid: string | null; product: string; variant: string | null; sku: string | null; cid: string | null; category: string | null; qty: bigint; rev: bigint; cogs: bigint; docs: number }[]>`
+  const rows = await prisma.$queryRaw<{ pid: string; vid: string | null; product: string; variant: string | null; sku: string | null; cid: string | null; category: string | null; qty: bigint; rev: bigint; cogs: bigint; unk: bigint; docs: number }[]>`
     SELECT x.pid, x.vid, p."name" product, v."name" variant, coalesce(v."sku", p."sku") sku, p."categoryId" cid, c."name" category,
-           sum(x.qty)::bigint qty, sum(x.rev)::bigint rev, sum(x.cogs)::bigint cogs, count(DISTINCT x.doc)::int docs
+           sum(x.qty)::bigint qty, sum(x.rev)::bigint rev, sum(x.cogs)::bigint cogs, sum(x.unk)::bigint unk, count(DISTINCT x.doc)::int docs
     FROM (
-      SELECT i."productId" pid, i."variantId" vid, i."quantity" qty, i."total" rev, i."quantity" * coalesce(i."costPrice", 0) cogs, o."id" doc
+      SELECT i."productId" pid, i."variantId" vid, i."quantity" qty, i."total" rev, i."quantity" * coalesce(i."costPrice", 0) cogs, CASE WHEN i."costPrice" IS NULL THEN i."total" ELSE 0 END unk, o."id" doc
       FROM "OrderItem" i JOIN "Order" o ON o."id" = i."orderId"
       WHERE ${withOrders ? Prisma.sql`true` : Prisma.sql`false`} AND o."workspaceId" = ${ws(ctx)} AND o."status" = 'delivered' AND o."deliveredAt" >= ${gte} AND o."deliveredAt" < ${lt} ${channel}
       UNION ALL
-      SELECT i."productId", i."variantId", i."quantity", i."total", i."quantity" * coalesce(i."costPrice", 0), s."id"
+      SELECT i."productId", i."variantId", i."quantity", i."total", i."quantity" * coalesce(i."costPrice", 0), CASE WHEN i."costPrice" IS NULL THEN i."total" ELSE 0 END, s."id"
       FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
       WHERE ${withSales ? Prisma.sql`true` : Prisma.sql`false`} AND s."workspaceId" = ${ws(ctx)} AND s."status" = 'completed' AND s."soldAt" >= ${gte} AND s."soldAt" < ${lt}
     ) x JOIN "Product" p ON p."id" = x.pid LEFT JOIN "ProductVariant" v ON v."id" = x.vid LEFT JOIN "Category" c ON c."id" = p."categoryId"
     WHERE true ${cat} ${prod} ${q}
     GROUP BY 1,2,3,4,5,6,7`;
-  return rows.map((x) => ({ pid: x.pid, vid: x.vid, product: x.product, variant: x.variant, sku: x.sku, cid: x.cid, category: x.category, qty: n(x.qty), revenue: n(x.rev), cogs: n(x.cogs), docs: x.docs }));
+  return rows.map((x) => ({ pid: x.pid, vid: x.vid, product: x.product, variant: x.variant, sku: x.sku, cid: x.cid, category: x.category, qty: n(x.qty), revenue: n(x.rev), cogs: n(x.cogs), unknownCost: n(x.unk), docs: x.docs }));
 }
 
 type CashSource = { id: string; sourceType: string | null; sourceId: string | null; correctsTransactionId: string | null };
@@ -122,6 +125,7 @@ function byProduct(lines: SoldLine[]): SoldLine[] {
       e.qty += l.qty;
       e.revenue += l.revenue;
       e.cogs += l.cogs;
+      e.unknownCost += l.unknownCost;
       e.docs += l.docs;
       if (!l.vid) e.sku = l.sku;
     }
@@ -180,24 +184,32 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     const sold = await soldLines(ctx, { categoryId: str(ctx, 'categoryId'), productId: str(ctx, 'productId'), q: like(ctx), ...sourceFilters(ctx) });
     const lines = str(ctx, 'groupBy') === 'product' ? byProduct(sold) : sold;
     const total = lines.reduce((s, l) => s + l.revenue, 0);
+    // a line sold without a cost price has no margin (« — » like the product page) and stays out of the average margin
+    const known = lines.reduce((s, l) => s + l.revenue - l.unknownCost, 0);
     const cogs = lines.reduce((s, l) => s + l.cogs, 0);
-    const rows: ReportRow[] = lines.map((l) => ({ product: l.product, variant: l.variant, sku: l.sku, category: l.category, quantity: l.qty, grossSales: l.revenue, cogs: l.cogs, margin: l.revenue - l.cogs, marginPct: pct(l.revenue - l.cogs, l.revenue), sharePct: pct(l.revenue, total), _ref: productRef(l.pid) }));
-    return { rows, kpis: { grossSales: total, quantity: lines.reduce((s, l) => s + l.qty, 0), products: new Set(lines.map((l) => l.pid)).size, marginPct: pct(total - cogs, total) } };
+    const rows: ReportRow[] = lines.map((l) => {
+      const knownRev = l.revenue - l.unknownCost;
+      const margin = knownRev > 0 ? knownRev - l.cogs : null;
+      return { product: l.product, variant: l.variant, sku: l.sku, category: l.category, quantity: l.qty, grossSales: l.revenue, cogs: knownRev > 0 ? l.cogs : null, margin, marginPct: margin === null ? null : pct(margin, knownRev), sharePct: pct(l.revenue, total), _ref: productRef(l.pid) };
+    });
+    return { rows, kpis: { grossSales: total, quantity: lines.reduce((s, l) => s + l.qty, 0), products: new Set(lines.map((l) => l.pid)).size, marginPct: known > 0 ? pct(known - cogs, known) : null } };
   },
 
   async sales_by_category(ctx) {
     const lines = await soldLines(ctx, sourceFilters(ctx));
-    const by = new Map<string, { cid: string | null; name: string | null; qty: number; revenue: number; cogs: number }>();
+    const by = new Map<string, { cid: string | null; name: string | null; qty: number; revenue: number; cogs: number; unknownCost: number }>();
     for (const l of lines) {
       const k = l.cid ?? 'none';
-      const e = by.get(k) ?? { cid: l.cid, name: l.category, qty: 0, revenue: 0, cogs: 0 };
+      const e = by.get(k) ?? { cid: l.cid, name: l.category, qty: 0, revenue: 0, cogs: 0, unknownCost: 0 };
       e.qty += l.qty;
       e.revenue += l.revenue;
       e.cogs += l.cogs;
+      e.unknownCost += l.unknownCost;
       by.set(k, e);
     }
     const total = lines.reduce((s, l) => s + l.revenue, 0);
-    const rows: ReportRow[] = [...by.values()].map((e) => ({ category: e.name, quantity: e.qty, grossSales: e.revenue, cogs: e.cogs, margin: e.revenue - e.cogs, sharePct: pct(e.revenue, total), _ref: e.cid ? { type: 'category', id: e.cid } : null }));
+    // J06-4: the margin covers the lines with a known cost only (none ⇒ « — »)
+    const rows: ReportRow[] = [...by.values()].map((e) => ({ category: e.name, quantity: e.qty, grossSales: e.revenue, cogs: e.revenue > e.unknownCost ? e.cogs : null, margin: e.revenue > e.unknownCost ? e.revenue - e.unknownCost - e.cogs : null, sharePct: pct(e.revenue, total), _ref: e.cid ? { type: 'category', id: e.cid } : null }));
     return { rows, kpis: { grossSales: total, quantity: lines.reduce((s, l) => s + l.qty, 0), categories: by.size } };
   },
 
@@ -229,7 +241,9 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
       returnCosts: cash.returns,
       purchasesPaid: cash.purchases,
     });
-    const values: Record<string, number> = { salesRevenue: m.revenue.sales, ordersRevenue: m.revenue.orders, revenue: p.revenue, cogs: p.cogs, grossMargin: p.grossMargin, manualExpenses: cash.manual, productExpenses: pex.reduce((s, e) => s + e.amount, 0), returnCosts: cash.returns, expenses: p.expenses, net: p.net, purchasesPaid: p.purchasesPaid };
+    // J06-4: the revenue sold without a cost price is named (its cost is not in « Coût des ventes », so the margin is overstated by it)
+    const unknownCost = lines.reduce((s, l) => s + l.unknownCost, 0);
+    const values: Record<string, number> = { salesRevenue: m.revenue.sales, ordersRevenue: m.revenue.orders, revenue: p.revenue, cogs: p.cogs, ...(unknownCost > 0 ? { unknownCostSales: unknownCost } : {}), grossMargin: p.grossMargin, manualExpenses: cash.manual, productExpenses: pex.reduce((s, e) => s + e.amount, 0), returnCosts: cash.returns, expenses: p.expenses, net: p.net, purchasesPaid: p.purchasesPaid };
     const rows: ReportRow[] = Object.entries(values).map(([line, amount]) => ({ line, amount, _ref: null }));
     return { rows, kpis: { revenue: p.revenue, cogs: p.cogs, grossMargin: p.grossMargin, expenses: p.expenses, net: p.net, purchasesPaid: p.purchasesPaid } };
   },
@@ -256,7 +270,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
       revenueDays(ctx),
       prisma.$queryRaw<{ d: string; tax: bigint }[]>`
         SELECT to_char("purchasedAt" + interval '1 hour', 'YYYY-MM-DD') d, coalesce(sum("tax"), 0)::bigint tax FROM "Purchase"
-        WHERE "workspaceId" = ${ws(ctx)} AND "status" NOT IN ('draft', 'cancelled') AND "purchasedAt" >= ${range.gte} AND "purchasedAt" < ${range.lt} GROUP BY 1`,
+        WHERE "workspaceId" = ${ws(ctx)} AND ${countedPurchaseSql()} AND "purchasedAt" >= ${range.gte} AND "purchasedAt" < ${range.lt} GROUP BY 1`,
     ]);
     const pTax = new Map(purchases.map((p) => [p.d, n(p.tax)]));
     const zero = sumDays([]);
@@ -304,7 +318,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     const [orders, sales, purchases] = await Promise.all([
       prisma.order.findMany({ where: { id: { in: ids('order') } }, select: { id: true, number: true, clientName: true } }),
       prisma.sale.findMany({ where: { id: { in: ids('sale') } }, select: { id: true, number: true, status: true, customerName: true, client: { select: { name: true } } } }),
-      prisma.purchase.findMany({ where: { id: { in: ids('purchase') } }, select: { id: true, number: true, status: true, supplier: { select: { name: true } } } }),
+      prisma.purchase.findMany({ where: { id: { in: ids('purchase') } }, select: { id: true, number: true, status: true, supplier: { select: { name: true } }, items: { where: { receivedQty: { gt: 0 } }, select: { id: true }, take: 1 } } }),
     ]);
     const doc = new Map<string, { number: string; party: string | null }>([
       ...orders.map((o) => [o.id, { number: o.number, party: o.clientName }] as const),
@@ -313,7 +327,8 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     ]);
     // full-test 15/11 ANALYTICS-02 (04 §4 « Cash collected » = completed sales): the money of a cancelled sale / purchase is not
     // collected / paid (a refunded 300 000 DA sale made « ENCAISSÉ 326 522 » against 19 722 in Statistiques)
-    const cancelled = new Set([...sales, ...purchases].filter((d) => d.status === 'cancelled').map((d) => d.id));
+    // a purchase cancelled after a partial receipt keeps its payments: they paid the received units (J07-5)
+    const cancelled = new Set([...sales.filter((d) => d.status === 'cancelled'), ...purchases.filter((d) => d.status === 'cancelled' && !d.items.length)].map((d) => d.id));
     const q = str(ctx, 'q')?.toLowerCase();
     const rows: ReportRow[] = entries
       .filter((e) => !cancelled.has(e.sourceId))
@@ -437,7 +452,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     const rows0 = await prisma.$queryRaw<{ sid: string | null; name: string | null; c: number; total: bigint; paid: bigint; last: Date }[]>`
       SELECT p."supplierId" sid, s."name" name, count(*)::int c, sum(p."total")::bigint total, sum(p."amountPaid")::bigint paid, max(p."purchasedAt") last
       FROM "Purchase" p LEFT JOIN "Supplier" s ON s."id" = p."supplierId"
-      WHERE p."workspaceId" = ${ws(ctx)} AND p."status" NOT IN ('draft', 'cancelled') AND p."purchasedAt" >= ${gte} AND p."purchasedAt" < ${lt}
+      WHERE p."workspaceId" = ${ws(ctx)} AND ${countedPurchaseSql('p')} AND p."purchasedAt" >= ${gte} AND p."purchasedAt" < ${lt}
         ${sup ? Prisma.sql`AND p."supplierId" = ${sup}::uuid` : Prisma.empty} ${q ? Prisma.sql`AND s."name" ILIKE ${q}` : Prisma.empty}
       GROUP BY 1,2`;
     const rows: ReportRow[] = rows0.map((x) => ({ supplier: x.name, purchases: x.c, total: n(x.total), paid: n(x.paid), remaining: n(x.total) - n(x.paid), lastPurchaseAt: day(x.last), _ref: x.sid ? { type: 'supplier', id: x.sid } : null }));
@@ -449,7 +464,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     const sup = str(ctx, 'supplierId');
     const q = str(ctx, 'q');
     const list = await prisma.purchase.findMany({
-      where: { status: { notIn: ['draft', 'cancelled'] }, purchasedAt: { gte, lt }, ...(sup ? { supplierId: sup } : {}), ...(q ? { OR: [{ number: { contains: q, mode: 'insensitive' } }, { supplier: { name: { contains: q, mode: 'insensitive' } } }] } : {}) },
+      where: { AND: [COUNTED_PURCHASE], purchasedAt: { gte, lt }, ...(sup ? { supplierId: sup } : {}), ...(q ? { OR: [{ number: { contains: q, mode: 'insensitive' } }, { supplier: { name: { contains: q, mode: 'insensitive' } } }] } : {}) },
       include: { supplier: { select: { name: true } } },
       orderBy: [{ purchasedAt: 'asc' }, { id: 'asc' }],
     });
@@ -465,9 +480,9 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     const q = like(ctx);
     const rows0 = await prisma.$queryRaw<{ pid: string; vid: string | null; product: string; variant: string | null; sku: string | null; qty: bigint; rec: bigint; total: bigint; c: number }[]>`
       SELECT i."productId" pid, i."variantId" vid, pr."name" product, v."name" variant, coalesce(v."sku", pr."sku") sku,
-             sum(i."quantity")::bigint qty, sum(i."receivedQty")::bigint rec, sum(i."total")::bigint total, count(DISTINCT p."id")::int c
+             sum(CASE WHEN p."status" = 'cancelled' THEN i."receivedQty" ELSE i."quantity" END)::bigint qty, sum(i."receivedQty")::bigint rec, sum(i."total")::bigint total, count(DISTINCT p."id")::int c
       FROM "PurchaseItem" i JOIN "Purchase" p ON p."id" = i."purchaseId" JOIN "Product" pr ON pr."id" = i."productId" LEFT JOIN "ProductVariant" v ON v."id" = i."variantId"
-      WHERE p."workspaceId" = ${ws(ctx)} AND p."status" NOT IN ('draft', 'cancelled') AND p."purchasedAt" >= ${gte} AND p."purchasedAt" < ${lt}
+      WHERE p."workspaceId" = ${ws(ctx)} AND ${countedPurchaseSql('p')} AND p."purchasedAt" >= ${gte} AND p."purchasedAt" < ${lt}
         ${sup ? Prisma.sql`AND p."supplierId" = ${sup}::uuid` : Prisma.empty} ${cat ? Prisma.sql`AND pr."categoryId" = ${cat}::uuid` : Prisma.empty}
         ${prod ? Prisma.sql`AND pr."id" = ${prod}::uuid` : Prisma.empty} ${q ? Prisma.sql`AND (pr."name" ILIKE ${q} OR pr."sku" ILIKE ${q})` : Prisma.empty}
       GROUP BY 1,2,3,4,5`;
@@ -481,7 +496,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
       SELECT p."supplierId" sid, s."name" name, count(*)::int c, sum(p."total")::bigint total,
              avg(EXTRACT(EPOCH FROM (p."receivedAt" - p."purchasedAt")) / 86400.0) FILTER (WHERE p."receivedAt" IS NOT NULL)::float8 lead
       FROM "Purchase" p JOIN "Supplier" s ON s."id" = p."supplierId"
-      WHERE p."workspaceId" = ${ws(ctx)} AND p."status" NOT IN ('draft', 'cancelled') AND p."purchasedAt" >= ${gte} AND p."purchasedAt" < ${lt}
+      WHERE p."workspaceId" = ${ws(ctx)} AND ${countedPurchaseSql('p')} AND p."purchasedAt" >= ${gte} AND p."purchasedAt" < ${lt}
       GROUP BY 1,2`;
     const total = rows0.reduce((s, x) => s + n(x.total), 0);
     const rows: ReportRow[] = rows0
@@ -504,7 +519,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     const all: ReportRow[] = txs.map((t) => {
       balance += t.type === 'income' ? t.amount : -t.amount;
       const doc = docOf(t);
-      return { date: iso(t.date), description: renderStoredTextIn(t.description, ctx.locale), reference: doc?.number ?? t.reference, category: t.category, method: reportMethod(t.method, doc?.type), income: t.type === 'income' ? t.amount : 0, expense: t.type === 'expense' ? t.amount : 0, balance, proof: t.proof?.storageKey ?? null, _ref: doc ? { type: doc.type, id: doc.id } : null };
+      return { date: iso(t.date), description: renderStoredTextIn(t.description, ctx.locale), reference: doc?.number ?? (t.sourceType === 'closing' ? closingReference(algiersDay(t.date), ctx.locale) : t.reference), category: t.category, method: reportMethod(t.method, doc?.type), income: t.type === 'income' ? t.amount : 0, expense: t.type === 'expense' ? t.amount : 0, balance, proof: t.proof?.storageKey ?? null, _ref: doc ? { type: doc.type, id: doc.id } : null };
     });
     const rows = q ? all.filter((x) => [x.description, x.reference].some((v) => typeof v === 'string' && v.toLowerCase().includes(q))) : all;
     const income = sumOf(all, 'income');

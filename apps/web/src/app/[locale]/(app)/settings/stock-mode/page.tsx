@@ -1,6 +1,6 @@
 'use client';
 // /settings/stock-mode — Figma "SET — Settings — … Stock mode" (D12): two Option Cards · saving.
-import { ConfirmDialog, FormAlert, OptionCard, radioTabIndex, Skeleton, Spinner, toast } from '@djaber/ui';
+import { Button, ConfirmDialog, Field, FormAlert, NumberInput, OptionCard, radioTabIndex, Skeleton, Spinner, toast } from '@djaber/ui';
 import { Box } from 'lucide-react';
 import { useState } from 'react';
 import { Section, SettingsPage } from '@/features/settings/common';
@@ -65,6 +65,7 @@ export default function StockModePage() {
         {!editable ? <p className="ts-label-meta mt-3 text-text-muted">{t('error.READ_ONLY_MEMBER')}</p> : null}
         {error ? <FormAlert className="mt-3">{error}</FormAlert> : null}
       </Section>
+      {workspace?.stockMode === 'advanced' ? <TargetMargin key={workspace.version} workspace={workspace} editable={editable} /> : null}
       <ConfirmDialog
         open={confirmSimple}
         onOpenChange={setConfirmSimple}
@@ -80,5 +81,42 @@ export default function StockModePage() {
         }}
       />
     </SettingsPage>
+  );
+}
+
+/**
+ * journeys 16/11 J07-4 — 03 §Settings « target margin » (`Workspace.targetMarginPct`, default 35, advanced mode only): the
+ * margin the PRIX stock recommendation aims at (04 §20, AT-GDS-16). 0–100 % (API range).
+ */
+function TargetMargin({ workspace, editable }: { workspace: WorkspaceDto; editable: boolean }) {
+  const t = useT();
+  const patch = usePatchWorkspace();
+  const [value, setValue] = useState(String(workspace.targetMarginPct));
+  const [error, setError] = useState<string | null>(null);
+  const n = value.trim() === '' ? null : Number(value);
+  const invalid = n === null || n > 100;
+  const dirty = n !== workspace.targetMarginPct;
+  const save = async () => {
+    if (invalid || !dirty) return;
+    setError(null);
+    try {
+      await patch.mutateAsync({ targetMarginPct: n!, version: workspace.version });
+      toast(t('toast.saved'));
+    } catch (e) {
+      setError(errorMessage(e, t));
+    }
+  };
+  return (
+    <Section title={t('settings.stockMode.targetMargin.title')} description={t('settings.stockMode.targetMargin.description')}>
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label={t('settings.stockMode.targetMargin.label')} htmlFor="target-margin" error={value.trim() !== '' && invalid ? t('validation.range', { min: 0, max: 100 }) : undefined}>
+          <NumberInput id="target-margin" value={value} onValueChange={setValue} maxDigits={3} suffix="%" disabled={!editable || patch.isPending} className="w-28" />
+        </Field>
+        <Button variant="primary" onClick={() => void save()} loading={patch.isPending} disabled={!editable || invalid || !dirty} disabledReason={!editable ? t('error.READ_ONLY_MEMBER') : undefined}>
+          {t('action.save')}
+        </Button>
+      </div>
+      {error ? <FormAlert className="mt-3">{error}</FormAlert> : null}
+    </Section>
   );
 }

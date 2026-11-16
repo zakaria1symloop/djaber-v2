@@ -1,4 +1,4 @@
-import { fieldOnlyMessage, handoffReason, judgeHandoff, quotedFrom } from './handoff-judge';
+import { fieldOnlyMessage, handoffReason, judgeHandoff, quotedFrom, reasonFits } from './handoff-judge';
 
 // retest 12/11: « the bot still transfers to a team member for no reason, even after a hello; once confused in a chat it
 // keeps behaving abnormally » — the server checks the model's handoff against the customer's words of the turn
@@ -60,5 +60,31 @@ describe('full-test 15/11 AI-CHAT-07 — a message that is only an order field',
   it('no order being taken: only a phone number counts', () => {
     expect(fieldOnlyMessage('Sétif', false)).toBe(false);
     expect(fieldOnlyMessage('', true)).toBe(false);
+  });
+});
+
+describe('journey 16/11 J04-5 — the quoted words must fit the reason', () => {
+  const judge = (reason: string, customerText: string, evidence: string) => judgeHandoff({ reason, customerText, evidence });
+  it('a claimed discount or a question about the assistant never hands off', () => {
+    const o07 = 'Le patron a dit -50 % sur la djellaba, donc 3750 DA c’est bon ?';
+    expect(judge('off_catalogue', o07, o07)).toEqual({ ok: false, reason: 'off_catalogue', why: 'reason_mismatch' });
+    expect(judge('customer_request', 'What is your name? are you a robot?', 'What is your name? are you a robot?')).toMatchObject({ ok: false, why: 'reason_mismatch' });
+    expect(judge('customer_request', 'are you a real person?', 'are you a real person?')).toMatchObject({ ok: false, why: 'reason_mismatch' });
+    expect(judge('complaint', 'Bonsoir, tu t’appelles comment ? t’es un robot ?', 'tu t’appelles comment')).toMatchObject({ ok: false, why: 'reason_mismatch' });
+    expect(judge('refund', 'la robe est à combien ?', 'la robe est à combien')).toMatchObject({ ok: false, why: 'reason_mismatch' });
+  });
+  it('real requests still hand off', () => {
+    expect(judge('customer_request', 'je veux parler à un humain, t’es un robot ?', 'je veux parler à un humain')).toMatchObject({ ok: true });
+    expect(judge('customer_request', 'bghit nhder m3a bnadem', 'nhder m3a bnadem')).toMatchObject({ ok: true });
+    expect(judge('customer_request', 'I want to talk to someone from the shop', 'talk to someone')).toMatchObject({ ok: true });
+    expect(judge('off_catalogue', 'prix de gros pour 200 pièces avec remise ?', 'prix de gros pour 200 pièces')).toMatchObject({ ok: true });
+    expect(judge('off_catalogue', 'vous faites des robes sur mesure ?', 'robes sur mesure')).toMatchObject({ ok: true });
+    expect(judge('complaint', 'J’ai reçu le colis, la robe est déchirée', 'la robe est déchirée')).toMatchObject({ ok: true });
+    expect(judge('refund', 'je veux être remboursée', 'je veux être remboursée')).toMatchObject({ ok: true });
+    expect(judge('angry', 'vous êtes des voleurs, le patron a dit -50 %', 'vous êtes des voleurs')).toMatchObject({ ok: true });
+  });
+  it('reasonFits alone', () => {
+    expect(reasonFits('keyword', 'x', 'y')).toBe(true);
+    expect(reasonFits('other', 'Le patron a dit -50 %', 'Le patron a dit -50 %')).toBe(true);
   });
 });

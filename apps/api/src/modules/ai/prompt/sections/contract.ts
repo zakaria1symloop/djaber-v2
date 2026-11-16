@@ -4,6 +4,9 @@ import type { PromptContext } from '../prompt.types';
 
 const NAMES: Record<string, string> = { ar: 'Arabic script (Algerian darija)', arabizi: 'Latin-script darija (arabizi)', fr: 'French', en: 'English', mixed: 'mixed (follow the dominant language of the message)' };
 
+// journey 16/11 J04-3 (P08): a customer writing formal Arabic was answered in darija with Moroccan / Tunisian words
+const FORMAL_ARABIC = 'Arabic script, formal Arabic (MSA) — answer in simple formal Arabic, not in darija';
+
 export const languageSection = (c: PromptContext): string =>
   [
     'LANGUAGE (STRICT — Algerian customers mix languages and scripts):',
@@ -11,15 +14,17 @@ export const languageSection = (c: PromptContext): string =>
     '- Arabic script (ex: "بشحال", "واش عندكم", "نحب نشري") -> reply in Arabic script, in Algerian dialect (darija), not in formal/literary Arabic unless the customer writes formal Arabic.',
     '- Latin-script darija / arabizi (ex: "3andkom", "bch", "bchhal", "wach", "chhal", "kayn", "nchri", "sahbi") -> reply in that SAME Latin-script darija, using the same kind of spelling (3 = ع, 7 = ح, 9/q = ق). Do NOT answer such a message in Arabic script and do NOT answer it in formal Arabic, in French or in English.',
     // full-test 15/11 AI-CHAT-04 (proposal 5): Moroccan words in the replies (« chno », « dyal », « walakin »)
-    '- The shop is Algerian: write ALGERIAN darija (wach, kifach, rani, rahi, ta3, nqder, bezzaf, kima, chhal, kayen, t7ebb, dork, bessah / تاع، واش، راني، بزاف، درك، بصح), never Moroccan words (chno, dyal, nqdar, walakin, daba, شنو، ديال، دابا). Examples: « kayen taille M ? » -> « Ih kayen M, t7ebb nsajjel lek la commande ? »; « win rahi commande ta3i ? » -> « Rani nchouf, a3tini numéro li commandit bih. »',
+    // journey 16/11 J04-3: Moroccan / Tunisian words of the J04 transcripts (« bghiti chi 7aja », « ma kaynch », « ملي », « فماش »)
+    '- The shop is Algerian: write ALGERIAN darija (wach, kifach, rani, rahi, ta3, nqder, bezzaf, kima, chhal, kayen, makach, t7ebb, hadja, ki, dork, bessah / تاع، واش، راني، بزاف، ماكانش، حاجة، كي، درك، بصح), never Moroccan or Tunisian words (chno, dyal, nqdar, walakin, daba, bghit / bghiti, chi, ma kaynch, wakha, barcha, famma / شنو، ديال، دابا، بغيت، شي حاجة، ملي، واخا، فماش، برشا). Examples: « kayen taille M ? » -> « Ih kayen M, t7ebb nsajjel lek la commande ? »; « win rahi commande ta3i ? » -> « Rani nchouf, a3tini numéro li commandit bih. »; « Ila t7ebb hadja okhra, ana hna. »',
+    '- « chhal / ch7al / شحال » means « how much / how many » only, never « what » or « which »: « wach smitek ? », « a3tini numéro ta3ek », « f ayya wilaya ? », « wach men produit t7ebb ? » (never « ch7al smitek », « ch7al wilaya »).',
     '- French (ex: "bonjour", "c\'est combien", "je veux commander") -> reply in French.',
     '- English -> reply in English.',
     '- Mixed in one sentence (very common: "bonjour, chhal hada ?") -> reply in the dominant language of that sentence and keep the same mix; do not translate the customer\'s words into another language.',
     '- Never switch language or script mid-conversation on your own. Only switch when the customer switches, and then follow them from that message on.',
     '- Keep product names, SKUs, variant names and numeric prices EXACTLY as written in the catalogue (same characters, Latin digits, "DA"; an Arabic-script reply writes "دج") whatever the reply language is. Never translate or transliterate a product name, a variant name or a SKU.',
-    '- Never mix two scripts inside one sentence of your own reply.',
+    '- Never mix two scripts inside one sentence of your own reply: an Arabic-script reply writes no French word and no French word in brackets (« بالفلوس (espèces) », « (stop-desk) »): write it in Arabic (نقدا، نقطة الاستلام / ستوب ديسك); only product names, SKUs and the courier name stay as written.',
     // PV 08/11: an automatic guess, stated as a fact, made the model answer a short « ok » or « 0555… » in the wrong language
-    `DETECTED_LANGUAGE of the last customer message (automatic guess — if the message itself says otherwise, or it is too short to tell, follow the message and the language of the conversation): ${NAMES[c.lang] ?? c.lang}`,
+    `DETECTED_LANGUAGE of the last customer message (automatic guess — if the message itself says otherwise, or it is too short to tell, follow the message and the language of the conversation): ${c.lang === 'ar' && c.formalArabic ? FORMAL_ARABIC : (NAMES[c.lang] ?? c.lang)}`,
   ].join('\n');
 
 export const outputContractSection = (c: PromptContext): string =>

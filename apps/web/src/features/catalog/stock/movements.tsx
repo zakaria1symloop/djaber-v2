@@ -17,6 +17,7 @@ import { JobParamBanner } from '@/components/job-param-banner';
 import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
 import { useSession } from '@/lib/session';
 import { useListState } from '@/lib/use-list-state';
+import { filterText } from '@/lib/list-state';
 import { useMovementStats } from '@/features/gds/api';
 import { signedNumber } from '@/lib/money';
 import { AdjustStockDialog } from '../adjust-stock-dialog';
@@ -81,7 +82,8 @@ function Journal() {
   const [exporting, setExporting] = useState(false);
 
   const selectedProduct = typeof list.state.filters.productId === 'string' ? list.state.filters.productId : '';
-  const f = useMovementFilters(list, rows.find((m) => m.product.id === selectedProduct)?.product.name);
+  const refId = filterText(list.state, 'refId');
+  const f = useMovementFilters(list, rows.find((m) => m.product.id === selectedProduct)?.product.name, refId ? rows.find((m) => m.reference?.id === refId)?.reference?.label : null);
 
   const exportCsv = async () => {
     setExporting(true);

@@ -15,11 +15,12 @@ import { useRouter } from '@/i18n/navigation';
 import { offlineMenu, toMenuActions } from '@/lib/actions';
 import { useOffline } from '@/features/orders/offline';
 import { useLocaleCode, useT } from '@/lib/i18n';
+import { iso } from '@/lib/format-message';
 import { downloadUrl } from '@/lib/jobs';
 import { digitsToInt, moneyDigits } from '@/lib/money';
 import { gdsApi, useGdsRefresh } from './api';
 import { PAYMENT_METHODS, type CashMethod, type Purchase, type PurchaseRow } from './contracts';
-import { defaultReceiveQty, int, receiveSummary } from './logic';
+import { defaultReceiveQty, int, partialCancelOwed, receiveSummary } from './logic';
 import { ProductPicker, type PickedProduct } from './product-picker';
 
 type Dlg = { kind: 'receive' | 'cancel' | 'pay' | 'delete'; id: string; number: string } | null;
@@ -342,7 +343,7 @@ export function ReceiveDialog({ purchaseId, onClose }: { purchaseId: string | nu
                     <Select aria-label={t('gds.method')} value={method} onChange={(e) => setMethod(e.target.value as CashMethod)} className="w-28">
                       {PAYMENT_METHODS.map((m) => (
                         <option key={m} value={m}>
-                          {t(`orders.payment.method.${m}`)}
+                          {t(`sales.method.${m}`)}
                         </option>
                       ))}
                     </Select>
@@ -392,7 +393,11 @@ export function CancelPurchaseDialog({ purchaseId, onClose }: { purchaseId: stri
           {t('common.destructive')}
         </Pill>
         {loadError ? <FormAlert>{loadError}</FormAlert> : null}
-        {p ? <p className="text-[13px] text-text-secondary">{received > 0 ? t('purchases.cancel.partial', { count: received }) : t('purchases.cancel.none')}</p> : null}
+        {p ? (
+          <p className="text-[13px] text-text-secondary">
+            {received > 0 ? t('purchases.cancel.partialOwed', { count: received, value: iso(formatNumber(partialCancelOwed(p).value)), remaining: iso(formatNumber(partialCancelOwed(p).remaining)) }) : t('purchases.cancel.none')}
+          </p>
+        ) : null}
         <Field label={t('common.noteOptional')} htmlFor="pc-reason" error={s.fieldError('reason')}>
           <Input id="pc-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder={t('purchases.cancel.reasonPlaceholder')} />
         </Field>
@@ -413,6 +418,8 @@ export function PurchasePaymentDialog({ purchaseId, onClose }: { purchaseId: str
   const [date, setDate] = useState(algiersDay());
   const [touched, setTouched] = useState(false);
   const [filled, setFilled] = useState<string | null>(null);
+  // the prefill never lands on what was typed / picked before the purchase arrived (journeys 16/11 J06-3, same class)
+  const [edited, setEdited] = useState({ amount: false, method: false });
   useOnOpen(!!purchaseId, () => {
     setAmount('');
     setMethod('cash');
@@ -420,11 +427,12 @@ export function PurchasePaymentDialog({ purchaseId, onClose }: { purchaseId: str
     setDate(algiersDay());
     setTouched(false);
     setFilled(null);
+    setEdited({ amount: false, method: false });
   });
   if (p && filled !== p.id) {
     setFilled(p.id);
-    setAmount(moneyDigits(p.remaining));
-    setMethod(p.paymentMethod ?? 'cash');
+    if (!edited.amount) setAmount(moneyDigits(p.remaining));
+    if (!edited.method) setMethod(p.paymentMethod ?? 'cash');
   }
   const value = digitsToInt(amount);
   const err = value === null ? 'validation.required' : value === 0 ? 'validation.amount_positive' : p && value > p.remaining ? 'suppliers.payment.overDue' : null;
@@ -452,13 +460,27 @@ export function PurchasePaymentDialog({ purchaseId, onClose }: { purchaseId: str
         {loadError ? <FormAlert>{loadError}</FormAlert> : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t('gds.amount')} htmlFor="pp-amount" required error={(touched || err === 'suppliers.payment.overDue') && err ? t(err, { amount: formatMoney(p?.remaining ?? 0) }) : s.fieldError('amount')}>
-            <MoneyInput id="pp-amount" value={amount} onValueChange={setAmount} aria-invalid={(touched && !!err) || undefined} />
+            <MoneyInput
+              id="pp-amount"
+              value={amount}
+              onValueChange={(v) => {
+                setAmount(v);
+                setEdited((x) => (x.amount ? x : { ...x, amount: true }));
+              }}
+              aria-invalid={(touched && !!err) || undefined} />
           </Field>
           <Field label={t('gds.method')} htmlFor="pp-method">
-            <Select id="pp-method" value={method} onChange={(e) => setMethod(e.target.value as CashMethod)}>
+            <Select
+              id="pp-method"
+              value={method}
+              onChange={(e) => {
+                setMethod(e.target.value as CashMethod);
+                setEdited((x) => (x.method ? x : { ...x, method: true }));
+              }}
+            >
               {PAYMENT_METHODS.map((m) => (
                 <option key={m} value={m}>
-                  {t(`orders.payment.method.${m}`)}
+                  {t(`sales.method.${m}`)}
                 </option>
               ))}
             </Select>

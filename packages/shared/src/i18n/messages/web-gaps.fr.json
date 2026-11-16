@@ -123,7 +123,7 @@
  "report.col.proof": "Justificatif",
  "report.col.salesRevenue": "Revenus ventes",
  "report.file.view": "Voir",
- "report.paymentMethod.card": "CIB",
+ "report.paymentMethod.card": "Carte",
  "report.paymentMethod.cash": "Espèces",
  "report.paymentMethod.ccp": "CCP",
  "report.paymentMethod.cod": "COD",
@@ -142,5 +142,6 @@
  "tracking.panel.publicLink": "LIEN DE SUIVI",
  "validation.banned_word": "Contient un mot interdit sur Djaber : choisissez un autre nom.",
  "validation.supplier_taken": "Déjà utilisé par un autre fournisseur",
- "clients.sheet.cancelsNotCounted": "{count, plural, one {# commande annulée n'est pas comptée} other {# commandes annulées ne sont pas comptées}}"
+ "clients.sheet.cancelsNotCounted": "{count, plural, one {# commande annulée n'est pas comptée} other {# commandes annulées ne sont pas comptées}}",
+ "clients.sheet.salesDue": "Reste dû sur les ventes comptoir : {amount}"
 }

@@ -205,7 +205,9 @@ export function ProductPage({ id }: { id: string }) {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]" data-mode={advanced ? 'advanced' : 'simple'} data-testid="product-blocks">
         <div className="flex min-w-0 flex-col gap-4">
           <GalleryBlock product={product} canEdit={live && canWrite} />
-          {advanced && product.hasVariants ? (
+          {/* journeys 16/11 J07-8: a product that has variants shows them in both modes (its stock is per variant; the page,
+              the form and the stock dashboard agree) — the simple mode only hides the cost column */}
+          {product.hasVariants ? (
             <VariantsBlock product={product} advanced={advanced} canWrite={live && canWrite} onAdjust={canAdjust ? (variantId) => actions.adjust(product, variantId) : undefined} />
           ) : null}
           {advanced && product.trackStock && can('stock.read') ? <MovementsBlock productId={product.id} /> : null}

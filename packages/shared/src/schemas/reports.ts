@@ -365,7 +365,7 @@ export const REPORT_DEFINITIONS: Record<ReportKey, ReportDefinition> = {
 };
 
 /** P&L lines of `profit_loss`, in display order (04 §4: purchases are listed for information, never subtracted). */
-export const PNL_LINES = ['salesRevenue', 'ordersRevenue', 'revenue', 'cogs', 'grossMargin', 'manualExpenses', 'productExpenses', 'returnCosts', 'expenses', 'net', 'purchasesPaid'] as const;
+export const PNL_LINES = ['salesRevenue', 'ordersRevenue', 'revenue', 'cogs', 'unknownCostSales', 'grossMargin', 'manualExpenses', 'productExpenses', 'returnCosts', 'expenses', 'net', 'purchasesPaid'] as const;
 
 /** Reports listed in simple stock mode (D62). */
 export const SIMPLE_MODE_REPORTS = REPORT_KEYS.filter((key) => REPORT_DEFINITIONS[key].simple);

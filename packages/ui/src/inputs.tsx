@@ -151,6 +151,23 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
   // the decimal part being typed (« ,5 »): shown, never part of the value, dropped on blur
   const [fraction, setFraction] = React.useState('');
   const shown = group(value) + fraction;
+  // journey J07 / J05: a refused key (minus, letter, one digit too many) or a dropped decimal part is shown by a short red
+  // ring (it was silent); the caret of a refused key is put back in the same render (a requestAnimationFrame could land
+  // after the next key when typing fast)
+  const [refused, setRefused] = React.useState(0);
+  const [flash, setFlash] = React.useState(false);
+  const back = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    if (!refused) return;
+    setFlash(true);
+    const id = setTimeout(() => setFlash(false), 900);
+    return () => clearTimeout(id);
+  }, [refused]);
+  React.useLayoutEffect(() => {
+    const el = inner.current;
+    if (el && back.current !== null && document.activeElement === el) el.setSelectionRange(back.current, back.current);
+    back.current = null;
+  }, [refused]);
   React.useLayoutEffect(() => {
     const el = inner.current;
     if (!el || caret.current === null || document.activeElement !== el) return;
@@ -176,11 +193,14 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
         onChange={(e) => {
           const raw = e.target.value;
           const at = e.target.selectionStart ?? raw.length;
-          const r = parseIntegerInput(raw, { allowNegative, maxDigits, caret: at });
+          // journeys J05 / J07 / J08: a minus is kept even where negatives are not allowed — refusing only the « - » key let
+          // « -100 » become +100 (a −5 DA free-delivery threshold saved as 5). The field shows it as invalid and the form /
+          // the server refuse the negative amount with their own message
+          const r = parseIntegerInput(raw, { allowNegative: true, maxDigits, caret: at });
           if (!r.ok) {
-            // refused keystroke: the value stays and the caret goes back where it was
-            const back = Math.max(0, at - (raw.length - shown.length));
-            requestAnimationFrame(() => inner.current?.setSelectionRange(back, back));
+            // refused keystroke: the value stays, the caret goes back where it was, the field flashes
+            back.current = Math.max(0, at - (raw.length - shown.length));
+            setRefused((n) => n + 1);
             return;
           }
           // the caret is in (or right after) the decimal part when it is past the separator of the typed text
@@ -190,12 +210,16 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
           if (r.value !== value) onValueChange(r.value);
         }}
         onBlur={(e) => {
+          // a decimal part with a non-zero digit is dropped: the merchant sees it happen
+          if (/[1-9]/.test(fraction)) setRefused((n) => n + 1);
           setFraction('');
           if (value === '-') onValueChange('');
           onBlur?.(e);
         }}
-        className={cn('tabular-nums', suffix && 'pe-12', className)}
+        data-refused={flash || undefined}
         {...rest}
+        aria-invalid={(!allowNegative && value.startsWith('-')) || rest['aria-invalid'] || undefined}
+        className={cn('tabular-nums transition-shadow', suffix && 'pe-12', (flash || (!allowNegative && value.startsWith('-'))) && 'ring-2 ring-accent-alert', className)}
       />
       {suffix ? (
         <span aria-hidden className="pointer-events-none absolute inset-y-0 end-3 flex items-center ts-label-micro text-text-muted">

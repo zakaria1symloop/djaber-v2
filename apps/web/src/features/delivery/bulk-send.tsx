@@ -104,7 +104,8 @@ export function BulkSendDialog({ open, orders, onClose, onFinished }: { open: bo
                 {invalid.map((o) => (
                   <li key={o.id} className="px-3 py-2 text-[13px]">
                     <span className="block truncate">{o.label}</span>
-                    <span className="block ts-label-micro !normal-case text-accent-starred">{o.blocked}</span>
+                    {/* journey J08-12 #2: the « no courier » reason is said once above the list, not under every order */}
+                    {!active.length && o.blocked === t('error.DELIVERY_NO_COURIER') ? null : <span className="block ts-label-micro !normal-case text-accent-starred">{o.blocked}</span>}
                   </li>
                 ))}
               </ul>

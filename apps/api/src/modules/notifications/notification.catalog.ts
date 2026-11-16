@@ -269,6 +269,9 @@ const display = (type: string, key: string, value: string | number, messages: Re
   if (type === 'order_status_changed' && (key === 'from' || key === 'to')) return inSentence(messages[`enum.Order.status.${v}`] ?? v);
   if (type === 'agent_insight' && key === 'type') return inSentence(messages[`enum.AgentInsight.type.${v}`] ?? v);
   // a job is named by the code (`product-import-commit`, `export`): the reader sees what the task was
+  // an export names what it holds and its format (« Export de la caisse (XLSX) », journeys 16/11 J06-10c)
+  if ((type === 'job_finished' || type === 'job_failed') && key === 'label' && data.kind === 'export' && typeof data.exportKind === 'string' && messages[`notification.value.exportKind.${data.exportKind}`])
+    return `${messages[`notification.value.exportKind.${data.exportKind}`]}${typeof data.format === 'string' ? ` (${data.format.toUpperCase()})` : ''}`;
   if ((type === 'job_finished' || type === 'job_failed') && key === 'label' && /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(v)) return messages[`notification.value.jobKind.${String(data.kind ?? '')}`] ?? messages['notification.value.jobKind.other'] ?? v;
   return v;
 };

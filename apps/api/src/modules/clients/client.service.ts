@@ -269,7 +269,7 @@ export class ClientService implements OnModuleInit {
       // counter sales: "DA dépensés" counts them, so the sheet lists them next to the orders (tester report 2026-10-19 UX-003)
       prisma.sale.findMany({ where: { clientId: id, status: { not: 'draft' } }, select: { id: true, number: true, soldAt: true, total: true, status: true, paymentStatus: true }, orderBy: [{ soldAt: 'desc' }, { id: 'desc' }], take: 10 }),
       prisma.order.aggregate({ where: { clientId: id, status: 'delivered' }, _sum: { total: true } }),
-      prisma.sale.aggregate({ where: { clientId: id, status: 'completed' }, _sum: { total: true }, _count: { _all: true } }),
+      prisma.sale.aggregate({ where: { clientId: id, status: 'completed' }, _sum: { total: true, amountPaid: true }, _count: { _all: true } }),
     ]);
     // no saved address yet: the address of the client's last order is the default one (full-test ORDERS-13 — « adresse par
     // défaut préremplie »; the quality filter already counts order addresses). Saving the card writes it as a real address.
@@ -314,7 +314,7 @@ export class ClientService implements OnModuleInit {
             ]
           : [],
       ),
-      metrics: { orders: totalOrders, delivered, spent: c.totalSpent, ordersSpent: ordersSum._sum.total ?? 0, sales: salesSum._count._all, salesSpent: salesSum._sum.total ?? 0, returns, returnPct: delivered + returns ? Math.round((returns * 1000) / (delivered + returns)) / 10 : 0, cancels: n('cancelled'), conversations: c._count.conversations, lastOrderAt: c.lastOrderAt?.toISOString() ?? null },
+      metrics: { orders: totalOrders, delivered, spent: c.totalSpent, ordersSpent: ordersSum._sum.total ?? 0, sales: salesSum._count._all, salesSpent: salesSum._sum.total ?? 0, salesDue: Math.max(0, (salesSum._sum.total ?? 0) - (salesSum._sum.amountPaid ?? 0)), returns, returnPct: delivered + returns ? Math.round((returns * 1000) / (delivered + returns)) / 10 : 0, cancels: n('cancelled'), conversations: c._count.conversations, lastOrderAt: c.lastOrderAt?.toISOString() ?? null },
       mergedFrom: mergedFrom.map((m) => ({ id: m.id, name: m.name, at: (m.deletedAt ?? m.updatedAt).toISOString() })),
       recentOrders: recent.map((o) => presentOrderListItem(o, ctx)),
       recentSales: sales.map((s) => ({ id: s.id, number: s.number, soldAt: s.soldAt.toISOString(), total: s.total, status: s.status as 'completed' | 'cancelled', paymentStatus: s.paymentStatus })),

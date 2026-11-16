@@ -71,7 +71,8 @@ export class DeliveryOverviewService implements OnModuleInit {
         { header: h.stopdesk, value: (r: R) => (r.isStopdesk ? h.yes : h.no) },
         { header: h.courier, value: (r: R) => r.shipment?.courierAccount?.displayName ?? (r.shipment ? PROVIDER_NAMES[r.shipment.provider as CourierProvider] ?? r.shipment.provider : '') },
         { header: h.tracking, value: (r: R) => r.shipment?.trackingNumber ?? '' },
-        { header: h.status, value: (r: R) => exportLabel(locale, ['enum.Shipment.status', 'enum.Order.deliveryStatus'], r.shipment?.status ?? 'not_sent') },
+        // journey J08-12 #8: a sent self-delivery reads « ENVOYÉE » like on every screen (parcel.manual.sent), not « CRÉÉE »
+        { header: h.status, value: (r: R) => (r.shipment?.provider === 'manual' && r.shipment.status === 'sent' ? exportLabel(locale, 'parcel.manual', 'sent') : exportLabel(locale, ['enum.Shipment.status', 'enum.Order.deliveryStatus'], r.shipment?.status ?? 'not_sent')) },
         { header: h.attempts, value: (r: R) => r.shipment?.deliveryAttempts ?? 0 },
         { header: h.failure, value: (r: R) => exportLabel(locale, 'enum.Shipment.failureReason', r.shipment?.failureReason) },
         { header: h.cod, value: (r: R) => r.shipment?.codAmount ?? r.remaining },
@@ -171,7 +172,7 @@ export class DeliveryOverviewService implements OnModuleInit {
       push('send_courier', can(role, 'delivery.send'), sendClosedCode(o.status) ?? (active && active.status !== 'delivered' ? 'DELIVERY_ORDER_ALREADY_SENT' : o.status === 'new' ? 'DELIVERY_ORDER_NOT_CONFIRMED' : !sendable ? 'ORDER_INVALID_TRANSITION' : couriers ? null : 'DELIVERY_NO_COURIER'), sendable && couriers > 0);
       push('ship_manual', can(role, 'orders.write'), checkTransition(state, 'shipped', { role })?.code ?? null);
       const syncAvailableAt = s ? (waits.get(s.id) ?? null) : null;
-      const shipActs = s ? shipmentActions(s, o, { now, syncAvailableAt }) : [];
+      const shipActs = s ? shipmentActions(s, o, { now, syncAvailableAt, hasCourier: couriers > 0 }) : [];
       if (!s) {
         push('open_order', can(role, 'orders.read'), null);
         push('call_client', can(role, 'orders.write'), null);
@@ -234,6 +235,9 @@ export class DeliveryOverviewService implements OnModuleInit {
     const today = algiersDayStart(algiersDay(now));
     const stale5 = new Date(now.getTime() - SHIPMENT_STALE_AFTER_DAYS * DAY);
     const base = this.where({}, now);
+    // journey J08-8: a self-delivered parcel (`provider=manual`) never waits for a courier pickup — once sent it is on its
+    // way (« En transit », like its tab), not « En attente de ramassage · Créées ». J08-4: a failed self-delivery without a
+    // tracking number is a failed attempt of the day (only a courier parcel without tracking is a failed send)
     const [tabs] = await prisma.$queryRaw<Record<string, bigint>[]>`
       SELECT
         count(*) FILTER (WHERE ${FAILED_OPEN}) AS failed,
@@ -242,9 +246,9 @@ export class DeliveryOverviewService implements OnModuleInit {
         count(*) FILTER (WHERE s."status" IN ('pending','sent','picked_up','in_transit','out_for_delivery')) AS in_transit,
         count(*) FILTER (WHERE s."status" = 'returned') AS returns,
         count(*) AS "all",
-        count(*) FILTER (WHERE s."status" IN ('pending','sent')) AS pending_pickup,
-        count(*) FILTER (WHERE s."status" IN ('picked_up','in_transit','out_for_delivery')) AS moving,
-        count(*) FILTER (WHERE ${FAILED_OPEN} AND s."trackingNumber" IS NOT NULL AND s."updatedAt" >= ${today}) AS failed_today
+        count(*) FILTER (WHERE s."status" IN ('pending','sent') AND s."provider" <> 'manual') AS pending_pickup,
+        count(*) FILTER (WHERE s."status" IN ('picked_up','in_transit','out_for_delivery') OR (s."status" = 'sent' AND s."provider" = 'manual')) AS moving,
+        count(*) FILTER (WHERE ${FAILED_OPEN} AND (s."trackingNumber" IS NOT NULL OR s."provider" = 'manual') AND s."updatedAt" >= ${today}) AS failed_today
       FROM "Order" o ${LATEST} WHERE ${base}`;
     const [closed] = await prisma.$queryRaw<{ delivered: bigint; returned: bigint; avg_days: number | null }[]>`
       SELECT count(*) FILTER (WHERE "status" = 'delivered') AS delivered,
@@ -297,7 +301,7 @@ export class DeliveryOverviewService implements OnModuleInit {
 }
 
 const EXPORT_HEADERS = {
-  fr: { sheet: 'Livraisons', order: 'Commande', client: 'Client', phone: 'Téléphone', wilaya: 'Wilaya', commune: 'Commune', stopdesk: 'Point relais', courier: 'Transporteur', tracking: 'Suivi', status: 'Statut colis', attempts: 'Tentatives', failure: 'Motif d’échec', cod: 'Montant à encaisser', total: 'Total', sentAt: 'Envoyé le', lastEventAt: 'Dernier événement', yes: 'Oui', no: 'Non' },
+  fr: { sheet: 'Livraisons', order: 'Commande', client: 'Client', phone: 'Téléphone', wilaya: 'Wilaya', commune: 'Commune', stopdesk: 'Stop-desk', courier: 'Transporteur', tracking: 'Suivi', status: 'Statut colis', attempts: 'Tentatives', failure: 'Motif d’échec', cod: 'Montant à encaisser', total: 'Total', sentAt: 'Envoyé le', lastEventAt: 'Dernier événement', yes: 'Oui', no: 'Non' },
   en: { sheet: 'Deliveries', order: 'Order', client: 'Client', phone: 'Phone', wilaya: 'Wilaya', commune: 'Commune', stopdesk: 'Stop-desk', courier: 'Courier', tracking: 'Tracking', status: 'Parcel status', attempts: 'Attempts', failure: 'Failure reason', cod: 'Cash to collect', total: 'Total', sentAt: 'Sent on', lastEventAt: 'Last event', yes: 'Yes', no: 'No' },
-  ar: { sheet: 'التوصيلات', order: 'الطلب', client: 'العميل', phone: 'الهاتف', wilaya: 'الولاية', commune: 'البلدية', stopdesk: 'نقطة الاستلام', courier: 'الناقل', tracking: 'التتبع', status: 'حالة الطرد', attempts: 'المحاولات', failure: 'سبب الفشل', cod: 'المبلغ المستحق', total: 'المجموع', sentAt: 'أُرسل في', lastEventAt: 'آخر حدث', yes: 'نعم', no: 'لا' },
+  ar: { sheet: 'التوصيلات', order: 'الطلب', client: 'العميل', phone: 'الهاتف', wilaya: 'الولاية', commune: 'البلدية', stopdesk: 'مكتب الاستلام', courier: 'الناقل', tracking: 'التتبع', status: 'حالة الطرد', attempts: 'المحاولات', failure: 'سبب الفشل', cod: 'المبلغ المستحق', total: 'المجموع', sentAt: 'أُرسل في', lastEventAt: 'آخر حدث', yes: 'نعم', no: 'لا' },
 } as const;

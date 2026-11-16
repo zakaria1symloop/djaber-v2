@@ -1,5 +1,5 @@
 // Full-test 15/11 AI-CHAT-01 / -03: the server-side order confirmation (recap of an earlier turn + the customer's yes).
-import { asksCancel, confirmation, draftKey, hasDraft, isPlaceholderName, nextChosen, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, placedThisTurn, simulatedOrders, wantsCancel } from './order-confirmation';
+import { asksCancel, confirmation, draftKey, hasDraft, isPlaceholderName, lastAiText, nextChosen, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, placedThisTurn, recapShown, simulatedOrders, wantsCancel } from './order-confirmation';
 
 const base = { clientName: 'Yacine Mansouri', clientPhone: '0555987654', secondPhone: null, wilayaId: 9, communeName: 'Boufarik', address: 'cité 20 août villa 3', isStopdesk: false, stopdeskId: null, items: [{ productId: 'p1', variantId: null, quantity: 1 }, { productId: 'p2', variantId: 'v1', quantity: 2 }], replaces: null };
 
@@ -78,5 +78,28 @@ describe('full-test 15/11 — one order per recap, the playground TEST-n orders,
     expect(nextChosen(prev, { items: [{ productId: 'p2' }] }, true)).toBeNull();
     expect(placedThisTurn([{ name: 'create_order', result: { ok: true, number: 'X' } }])).toBe(true);
     expect(placedThisTurn([{ name: 'create_order', result: { ok: false } }])).toBe(false);
+  });
+});
+
+describe('journey 16/11 J04-4 — a recap the AI wrote itself in its previous message', () => {
+  const o09 = 'Bien sûr ! Voici la nouvelle commande qui remplacera TEST-1813 :\n- 2 × Hijab soie : 3 000 DA\nLivraison à Alger : 400 DA\nTotal : 3 400 DA, à payer à la livraison.\n\nNom : Karim Haddad\nTéléphone : 0770112233\nAdresse : rue des frères Bouadou n 5, Bab Ezzouar, Alger\n\nVous confirmez ? Répondez oui pour la valider.';
+  const order = { clientPhone: '0770112233', total: 3400, items: [{ name: 'Hijab soie' }], replaces: { number: 'TEST-1813' } };
+  it('the same phone, total, products and replaced order count as shown', () => {
+    expect(recapShown(o09, order)).toBe(true);
+    const o01 = 'Votre commande actuelle serait remplacée par une nouvelle commande de 2 robes :\n- Robe kabyle brodée, taille M, 2 pièces : 9800 DA\n- Total : 10450 DA\nTéléphone : 0661234567\nJe confirme le remplacement de la commande TEST-2337 par celle-ci ?';
+    expect(recapShown(o01, { clientPhone: '0661234567', total: 10450, items: [{ name: 'Robe kabyle brodée' }], replaces: { number: 'TEST-2337' } })).toBe(true);
+  });
+  it('another total, phone, product or replaced order — or no message — does not', () => {
+    expect(recapShown(o09, { ...order, total: 1900 })).toBe(false);
+    expect(recapShown(o09, { ...order, clientPhone: '0661234567' })).toBe(false);
+    expect(recapShown(o09, { ...order, items: [{ name: 'Robe kabyle brodée' }] })).toBe(false);
+    expect(recapShown(o09, { ...order, replaces: { number: 'TEST-9999' } })).toBe(false);
+    expect(recapShown('', order)).toBe(false);
+    expect(recapShown(null, order)).toBe(false);
+  });
+  it('lastAiText: the AI messages after the last customer message', () => {
+    expect(lastAiText([{ author: 'customer', text: 'a' }, { author: 'ai', text: 'b' }, { author: 'ai', text: 'c' }])).toBe('b\nc');
+    expect(lastAiText([{ author: 'ai', text: 'b' }, { author: 'customer', text: 'a' }])).toBe('');
+    expect(lastAiText([{ author: 'customer', text: 'a' }, { author: 'human', text: 'h' }])).toBe('');
   });
 });

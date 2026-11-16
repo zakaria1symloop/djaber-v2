@@ -18,7 +18,7 @@ const SERVER_REASONS = new Set(['order_limits', 'risky_client', 'blocked_word', 
 /** Rule ids of the prompt and older names the model may still write. */
 const ALIASES: Record<string, string> = { human_request: 'customer_request', human: 'customer_request', anger: 'angry', over_limits: 'order_limits', order_limit: 'order_limits', off_topic: 'off_catalogue', '3_unclear': 'unclear_streak' };
 
-export type HandoffRefusal = 'greeting' | 'no_evidence' | 'evidence_not_in_message' | 'no_shop_rule' | 'keyword_absent' | 'not_unclear';
+export type HandoffRefusal = 'greeting' | 'no_evidence' | 'evidence_not_in_message' | 'no_shop_rule' | 'keyword_absent' | 'not_unclear' | 'reason_mismatch';
 export type HandoffVerdict = { ok: true; reason: string } | { ok: false; reason: string; why: HandoffRefusal };
 
 /** The reason as the platform names it (`statusDetail` is free text: an unknown value is `other`). */
@@ -75,7 +75,47 @@ export function judgeHandoff(i: HandoffInput): HandoffVerdict {
   const evidence = (i.evidence ?? '').trim();
   if (!evidence) return { ok: false, reason, why: 'no_evidence' };
   if (isGreetingOnly(evidence) || !quotedFrom(evidence, text)) return { ok: false, reason, why: 'evidence_not_in_message' };
+  if (!reasonFits(reason, evidence, text)) return { ok: false, reason, why: 'reason_mismatch' };
   return { ok: true, reason };
+}
+
+/** Words that ask for the team (a person, the seller, a call) — fr / en / darija / arabizi / Arabic script, folded. */
+const ASKS_TEAM =
+  /human|humain|conseill|responsable|personne|quelqu|parler|appel|rappel|telephon|vendeu|proprietaire|gerant|operat|equipe|service client|someone|somebody|person|real|staff|team|representative|talk|speak|call|manager|agent|bnadem|nhder|nehder|nahder|kalem|kelem|klem|3ayet|3eyet|a3yet|انسان|مسؤول|شخص|نهدر|تهدر|نتكلم|تكلم|كلم|اتصل|عيط|موظف|بشر|صاحب المحل|البائع/;
+/** A cancellation or a change of an order asked in words. */
+const ORDER_CHANGE = /annul|cancel|batel|btel|modifi|chang|bedel|beddel|ألغ|الغ|بطل|بدل/;
+/** A refund asked in words. */
+const ASKS_REFUND = /rembours|refund|money back|argent|flous|drahm|dra7m|nerja3|nrja3|rja3|retour|retourn|rendre|return|فلوس|دراهم|ترجع|نرجع|رجع|استرجاع|ارجاع/;
+/** journey 16/11 J04-5: a discount / price / free delivery « the owner promised » — answered with the catalogue price (identity rule), never a handoff. */
+const PRICE_CLAIM = /patron|boss|owner|proprietaire|gerant|le chef|la chef|moul |صاحب|المدير|مول |remise|reduc|rabais|discount|promo|solde|moins cher|gratuit|offert|free delivery|livraison a 0|-\s?\d+\s?%|\d+\s?%|تخفيض|خصم|تخفيظ|بلاش|remiz|takhfid/;
+/** …unless the customer asks for what only the team can quote (wholesale, a custom order, a partnership). */
+const TEAM_ONLY_REQUEST = /gros|grossiste|revendeu|wholesale|reseller|jumla|jomla|جمله|sur mesure|personnalis|custom|partenariat|partner|collaboration/;
+/** journey 16/11 J04-5: a question about the assistant itself (« are you a robot? », « tu t'appelles comment ? ») — rule 11: answered. */
+const WANTS_TO_TALK = /parler|talk|speak|nhder|nehder|nahder|kalem|klem|appel|call|rappel|3ayet|a3yet|نهدر|نتكلم|تكلم|كلم|اتصل|عيط|humain svp|human please|conseiller|responsable/;
+const ABOUT_ASSISTANT = /ton nom|votre nom|your name|t'?appel+es|vous appelez|smitek|smiytek|esmek|اسمك|who are you|qui es[ -]tu|qui etes[ -]vous|chkoun nta|شكون نتا|are you (a |an )?(robot|bot|human|real|ai)\b|(t'?es|tu es|vous etes|etes[ -]vous|es[ -]tu) (un |une )?(robot|bot|ia|humain|vrai)\b|nta robot|enta robot|انت روبوت|راك روبوت/;
+
+/**
+ * journey 16/11 J04-5: the quoted words must fit the reason, not only be the customer's — « What is your name? are you a
+ * robot? » handed off as `customer_request`, « Le patron a dit -50 % » as `off_catalogue`. `customer_request` needs words
+ * asking for a person, `refund` words asking for money back; `off_catalogue` and `complaint` are never a claimed discount
+ * nor a question about the assistant. `angry` and the shop's own rules (`other`) stay the model's judgement.
+ */
+export function reasonFits(reason: string, evidence: string, message: string): boolean {
+  // curly apostrophes (« t’es », « t’appelles ») read as straight ones
+  const e = foldText(evidence).replace(/[’‘`]/g, "'");
+  const m = foldText(message).replace(/[’‘`]/g, "'");
+  // « tu t'appelles comment ? » is not « appeler » (a call)
+  const noName = (x: string) => x.replace(/t'?appel+es|vous appelez/g, ' ');
+  const either = (re: RegExp) => re.test(noName(e)) || re.test(noName(m));
+  // « are you a real person? » asks about the assistant; « je veux parler à un humain, t'es un robot ? » asks for the team
+  // or a cancellation / change the AI cannot make itself (the prompt hands off ORDER_CONFIRMED_BY_SELLER as customer_request)
+  if (reason === 'customer_request') return (either(ASKS_TEAM) || either(ORDER_CHANGE)) && !(ABOUT_ASSISTANT.test(m) && !WANTS_TO_TALK.test(noName(m)));
+  if (reason === 'refund') return either(ASKS_REFUND);
+  if (reason === 'off_catalogue' || reason === 'complaint') {
+    if (ABOUT_ASSISTANT.test(e) && !ASKS_TEAM.test(noName(e))) return false;
+    if (reason === 'off_catalogue' && PRICE_CLAIM.test(e) && !TEAM_ONLY_REQUEST.test(m)) return false;
+  }
+  return true;
 }
 
 /** What the model is told when its handoff is refused: it answers the customer in the same turn. */
@@ -88,6 +128,8 @@ export function handoffRefusedInstruction(why: HandoffRefusal): string {
     no_shop_rule: 'no handoff rule applies (reason "other" is only for a « Shop rules » item)',
     keyword_absent: 'no handoff keyword is in the current message',
     not_unclear: 'this is not the 3rd unclear message in a row',
+    reason_mismatch:
+      "the customer's words do not match that rule: a discount, a price or free delivery « the owner / the team said » is answered with the catalogue price and the delivery fee (politely, no handoff); a question about you (your name, are you a robot) is answered: you are the shop's virtual assistant; customer_request needs words asking for a person",
   };
   return `${HANDOFF_REFUSED_MARK}: ${cause[why]}. Keep the conversation and answer the customer's current message now, in their language (status OK; UNKNOWN when you have no answer — say you will check with the team and call add_faq_candidate; UNCLEAR when you did not understand). Hand off only when the customer's current message itself matches a rule, quoting their words in "evidence". Answer with the JSON object only.`;
 }

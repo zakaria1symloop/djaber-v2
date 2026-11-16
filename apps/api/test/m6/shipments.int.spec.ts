@@ -521,3 +521,73 @@ describe('UX-064 — a failed send is handled once the order is delivered / canc
     await other.post(`/orders/${order.id}/shipments`, sendBody(order)).set(idem()).expect(404);
   });
 });
+
+describe('journey J08 — self-delivery parcels and delivery figures', () => {
+  const manualShop = async () => {
+    const owner = await asOwner(app);
+    await seedFees(app, owner.workspaceId);
+    return owner;
+  };
+  const shipManual = async (owner: Awaited<ReturnType<typeof asOwner>>, order: Record<string, any>, trackingNumber?: string) =>
+    (await owner.post(`/orders/${order.id}/ship-manual`, trackingNumber ? { trackingNumber } : {}).expect(200)).body.data.shipments[0] as Record<string, any>;
+  const keys = (actions: { key: string; enabled?: boolean }[]) => new Map(actions.map((a) => [a.key, a]));
+
+  it('J08-4 a self-delivered parcel without tracking that fails is a failed attempt: Marquer livrée / retournée, no « Corriger et renvoyer », counted in « échecs du jour »; J08-9 change courier greyed without a courier', async () => {
+    const owner = await manualShop();
+    const { order } = await confirmedOrder(owner);
+    const parcel = await shipManual(owner, order);
+    expect(parcel).toMatchObject({ provider: 'manual', status: 'sent', trackingNumber: null });
+    const failed = (await owner.post(`/shipments/${parcel.id}/mark-failed`, { reason: 'unreachable' }).expect(200)).body.data;
+    const a = keys(failed.actions);
+    expect(a.has('retry')).toBe(false);
+    expect(a.get('mark_delivered')).toMatchObject({ enabled: true });
+    expect(a.get('mark_returned')).toMatchObject({ enabled: true });
+    expect(a.get('change_courier')).toMatchObject({ enabled: false, reasonCode: 'DELIVERY_NO_COURIER' });
+    // the same menu on the delivery list row
+    const [row] = (await owner.get(`/shipments?ids=${order.id}`).expect(200)).body.data;
+    expect(keys(row.actions).has('retry')).toBe(false);
+    expect(keys(row.actions).get('mark_delivered')).toMatchObject({ enabled: true });
+    // « Corriger et renvoyer » is refused on it (nothing to resend at a courier)
+    expect((await owner.post(`/shipments/${parcel.id}/retry`).expect(409)).body.error.code).toBe('CONFLICT');
+    const ov = (await owner.get('/delivery/overview').expect(200)).body.data;
+    expect(ov.tabs.failed).toBe(1);
+    expect(ov.kpis.failedToday).toBe(1);
+    // with a courier, « Changer de transporteur » is offered again
+    await addCourier(owner, 'zrexpress');
+    expect(keys((await owner.get(`/shipments/${parcel.id}`).expect(200)).body.data.actions).get('change_courier')).toMatchObject({ enabled: true });
+  });
+
+  it('J08-6 delivered after a failure with less cashed: COD encaissé = the cash (overview, parcel), 2nd attempt; J08-8 a sent self-delivery is « en transit », never « en attente de ramassage »', async () => {
+    const owner = await manualShop();
+    const { order: first } = await confirmedOrder(owner);
+    const p1 = await shipManual(owner, first, 'QA-1');
+    const ov0 = (await owner.get('/delivery/overview').expect(200)).body.data;
+    expect(ov0.kpis).toMatchObject({ pendingPickup: 0, inTransit: 1 });
+    expect(ov0.tabs.in_transit).toBe(1);
+    await owner.post(`/shipments/${p1.id}/mark-failed`, { reason: 'address' }).expect(200);
+    await owner.post(`/shipments/${p1.id}/mark-delivered`, { amountCollected: first.total - 250, reason: 'client a payé 250 DA de moins' }).set(idem()).expect(200);
+    const { order: second } = await confirmedOrder(owner);
+    const p2 = await shipManual(owner, second);
+    await owner.post(`/shipments/${p2.id}/mark-delivered`, {}).set(idem()).expect(200);
+
+    expect(await shipmentRow(p1.id)).toMatchObject({ status: 'delivered', deliveryAttempts: 2, codAmount: first.total - 250 });
+    expect(await shipmentRow(p2.id)).toMatchObject({ status: 'delivered', deliveryAttempts: 1, codAmount: second.total });
+    const cashed = (await cashOf(first.id)).reduce((n, c) => n + c.amount, 0) + (await cashOf(second.id)).reduce((n, c) => n + c.amount, 0);
+    const ov = (await owner.get('/delivery/overview').expect(200)).body.data;
+    expect(ov.kpis.byCourier).toEqual([expect.objectContaining({ provider: 'manual', delivered: 2, codCollected: cashed })]);
+    expect(cashed).toBe(first.total - 250 + second.total);
+    expect((await owner.get(`/shipments/${p1.id}`).expect(200)).body.data.codAmount).toBe(first.total - 250);
+  });
+
+  it('J08-10 stop-desk agencies: only of the couriers the shop uses (none ⇒ empty); J08-11 auto-send refused without a courier', async () => {
+    const withYalidine = await asOwner(app);
+    await addCourier(withYalidine, 'yalidine');
+    await drain(app, withYalidine.workspaceId);
+    expect((await withYalidine.get('/delivery/stopdesks?wilayaId=16').expect(200)).body.data.length).toBeGreaterThan(0);
+    const none = await manualShop();
+    expect((await none.get('/delivery/stopdesks?wilayaId=16').expect(200)).body.data).toEqual([]);
+    expect((await none.get('/delivery/stopdesks?provider=yalidine&wilayaId=16').expect(200)).body.data).toEqual([]);
+    expect((await none.patch('/workspace', { autoSendToCourier: true }).expect(422)).body.error.code).toBe('DELIVERY_NO_COURIER');
+    await none.patch('/workspace', { autoSendToCourier: false }).expect(200);
+  });
+});

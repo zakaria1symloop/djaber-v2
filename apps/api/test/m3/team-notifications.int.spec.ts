@@ -80,7 +80,7 @@ describe('team notifications', () => {
     const by = (type: string) => rows.find((n) => n.type === type)!;
     expect(by('stock_low')).toMatchObject({ title: 'Stock faible : Théière en cuivre (stock 3)', body: 'Seuil : 4. Une seule alerte par jour et par produit.' });
     expect(by('stock_out')).toMatchObject({ title: 'Rupture : Plateau' });
-    expect(by('job_finished').title).toBe('Tâche terminée : Export'); // UX-059: the job kind in words
+    expect(by('job_finished').title).toBe('Tâche terminée : Export des produits (XLSX)'); // UX-059 + journey J06-10c: what was exported and the format
     expect(exported.body.data.jobId).toBeTruthy();
     expect(rows.length).toBeGreaterThanOrEqual(3);
     for (const locale of ['fr', 'ar', 'en']) {
