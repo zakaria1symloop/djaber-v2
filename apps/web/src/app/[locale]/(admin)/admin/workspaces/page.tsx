@@ -119,6 +119,7 @@ export default function AdminWorkspacesPage() {
       <AdminFilterBar list={list} search={t('admin.ws.search')} quick={quick} panel={panel} count={query.data ? t('admin.ws.count', { count: query.data.total }) : undefined} />
       <AdminListBody
         testId="ws-list"
+        filters={[...quick, ...panel]}
         query={query}
         list={list}
         columns={columns}

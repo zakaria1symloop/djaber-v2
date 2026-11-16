@@ -407,6 +407,11 @@ export type StockMovementView = {
   reference: { type: string; id: string; label: string } | null;
   actor: { id: string; firstName: string; lastName: string; avatarUrl: string | null } | null;
   reversed: boolean;
+  /** full-test 15/11 STOCK-06: a reversal names the movement it cancels (its date), the original names its reversal */
+  reversalOf: { id: string; createdAt: string } | null;
+  reversedAt: string | null;
+  /** why « Contre-passer » is greyed: already reversed, a reversal itself, or a movement of a document (order, sale…) */
+  lockedBy: 'reversed' | 'reversal' | 'document' | null;
   createdAt: string;
   actions: ActionDescriptor[];
 };

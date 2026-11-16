@@ -10,8 +10,13 @@ export const insightDetail = (t: TFunction, detail: string | null | undefined): 
   const raw = detail?.trim();
   if (!raw) return null;
   if (raw === 'faq_candidate') return t('agents.insights.detail.faqCandidate');
+  // full-test 15/11 AGENTS-14: the error causes of an « Erreur IA » insight (`malformed_output:no_json`, `provider_error:503 …`)
+  if (/^malformed_output\b/.test(raw)) return t('agents.insights.detail.malformed');
+  if (/^(provider_error|provider_unavailable|provider|timeout|rate_limited|reaped|internal_error|aborted)\b/.test(raw)) return t('agents.insights.detail.providerError');
   const reason = queueReason(raw);
   if (reason.kind === 'transfer') {
+    // a machine value (snake_case, « code:detail ») is never printed as such
+    if (/^[a-z0-9]+(?:_[a-z0-9]+)+(?::.*)?$/.test(raw)) return t('inbox.handoff.reason.transfer');
     // free text: shown as the server wrote it
     if (reason.detail) return reason.detail;
     // UX-059: a code is never shown as such — an error code gets its sentence, any other code the plain "handed over"

@@ -21,8 +21,10 @@ export const relativeTime = (iso: string | Date | null | undefined, locale: stri
   return new Intl.RelativeTimeFormat(tag, { numeric: 'auto', style: 'narrow' }).format(0, 'second');
 };
 
-/** Whole days until an instant (0 when past). */
-export const daysUntil = (iso: string, now = Date.now()): number => Math.max(0, Math.ceil((Date.parse(iso) - now) / 86_400_000));
+/** A few minutes of difference between the browser clock and the server's are not a day (full-test 15/11 SETTINGS-14). */
+const CLOCK_SKEW_MS = 10 * 60_000;
+/** Whole days until an instant (0 when past): a 7-day link sent a few seconds ago reads « 7 j », never « 8 j ». */
+export const daysUntil = (iso: string, now = Date.now()): number => Math.max(0, Math.ceil((Date.parse(iso) - now - CLOCK_SKEW_MS) / 86_400_000));
 
 /** "4 min" / "45 s" — the wait before an action is possible again (rate limits, cooldowns). */
 export const waitLabel = (seconds: number): string => {

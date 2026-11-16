@@ -51,18 +51,21 @@ export function PlaygroundPane({ pg, agent, scenarios = true, className }: { pg:
     <div className={className ?? 'flex min-h-[28rem] min-w-0 flex-col'}>
       <div role="status" data-testid="playground-banner" className="mx-4 mb-2 flex flex-wrap items-center gap-2 rounded-card border border-line-hairline bg-ink-surface px-3 py-2 ts-label-meta text-text-muted">
         <MonoChip tone="warning">{t('agents.playground.simulation')}</MonoChip>
-        {/* basis: on a phone the turn counter goes under the sentence instead of squeezing it into a narrow column */}
-        <span className="min-w-0 flex-1 basis-48">{t('agents.playground.banner')}</span>
+        {/* basis: on a phone the turn counter goes under the sentence instead of squeezing it into a narrow column;
+            full-test 15/11 AI-CHAT-15: below 640 px the sentence is hidden once the conversation started (the thread needs the height) */}
+        <span className={pg.entries.length ? 'hidden min-w-0 flex-1 basis-48 sm:inline' : 'min-w-0 flex-1 basis-48'}>{t('agents.playground.banner')}</span>
+        {/* AI-CHAT-11: the turns of the workspace this hour (the limit is per workspace), not of this window */}
         <span data-testid="playground-turns">
-          <Ltr>{t('agents.playground.turns', { used: pg.turns, limit: PLAYGROUND_TURNS_PER_HOUR })}</Ltr>
+          <Ltr>{t('agents.playground.turns', { used: pg.hourly, limit: PLAYGROUND_TURNS_PER_HOUR })}</Ltr>
         </span>
       </div>
       <PlaygroundThread pg={pg} agentName={agent.name} empty={t('agents.playground.empty')} />
       <div className="flex flex-col gap-2 border-t border-line-hairline px-4 pt-3">
         {scenarios ? (
-          <div role="group" aria-label={t('agents.playground.scenarios')} className="flex flex-wrap gap-1.5">
+          // full-test 15/11 AI-CHAT-15: one scrolling row on a phone (the 8 chips took ~40 % of the dialog's height)
+          <div role="group" aria-label={t('agents.playground.scenarios')} className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
             {SCENARIO_KEYS.map((k) => (
-              <button key={k} type="button" data-scenario={k} disabled={pg.typing || pg.wait > 0} onClick={() => void pg.send({ text: '', scenario: k })} className="inline-flex h-6 items-center rounded-[4px] border border-line-edge px-2 ts-label-meta text-text-secondary hover:border-line-lit hover:text-text-primary disabled:opacity-50">
+              <button key={k} type="button" data-scenario={k} disabled={pg.typing || pg.wait > 0} onClick={() => void pg.send({ text: '', scenario: k })} className="inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-[4px] border border-line-edge px-2 ts-label-meta text-text-secondary hover:border-line-lit hover:text-text-primary disabled:opacity-50">
                 {t(`agents.scenario.${k}`)}
               </button>
             ))}

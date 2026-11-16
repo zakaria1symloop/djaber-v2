@@ -116,6 +116,14 @@ describe('prompt sections (04-ai-pipeline §3)', () => {
     expect(custom).toContain('RISKY_CLIENT_POLICY=handoff\nRECAP=when_unsure');
   });
 
+  it('full-test 15/11 AI-CHAT-05: the chosen product stays in the prompt (CURRENT ORDER); an id out of the slice is skipped', () => {
+    const chosen = orderRulesSection(ctx({ chosen: [{ productId: '11111111-1111-7111-8111-111111111111', variantId: '44444444-4444-7444-8444-444444444444', quantity: 2 }, { productId: 'not-in-slice', variantId: null, quantity: 1 }] }));
+    expect(chosen).toContain('CURRENT ORDER (chosen by the customer');
+    expect(chosen).toContain('2 × Robe satin bordeaux (M) [VID:44444444-4444-7444-8444-444444444444] [ID:11111111-1111-7111-8111-111111111111]');
+    expect(chosen).not.toContain('not-in-slice');
+    expect(orderRulesSection(ctx())).not.toContain('CURRENT ORDER');
+  });
+
   it('§3.8 image rule, §3.9 cross-sell, §3.10 card template, §3.11 closing', () => {
     expect(imageRuleSection(ctx())).toMatchSnapshot();
     expect(imageRuleSection(ctx({}, { imageRecognition: false }))).toBe('');

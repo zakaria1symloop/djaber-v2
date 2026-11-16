@@ -79,12 +79,16 @@ export class BulkService {
     });
   }
 
-  /** `POST /products/bulk/min-stock { ids[], minStock }` */
+  /**
+   * `POST /products/bulk/min-stock { ids[], minStock }` — a product with variants keeps its threshold per variant
+   * (CAT-09 `ProductVariant.minStock`), so every live variant gets it too (full-test 15/11 PRODUCTS-04).
+   */
   async minStock(ids: string[], minStock: number, ctx: BulkCtx) {
     return this.each(ids, ctx, async (tx, id) => {
       const p = await this.live(tx, id);
       if (!p.trackStock) throw new AppException('PRODUCT_NOT_STOCK_TRACKED');
       await tx.product.update({ where: { id }, data: { minStock, version: { increment: 1 } } });
+      if (p.hasVariants) await tx.productVariant.updateMany({ where: { productId: id, deletedAt: null }, data: { minStock } });
       await this.stock.emitProductUpdated(tx, id);
     });
   }

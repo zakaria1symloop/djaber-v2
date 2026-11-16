@@ -92,11 +92,15 @@ export function sourceDetail(s: SourceBadge, o: { member: (u: { firstName: strin
 export const shortName = (u: { firstName: string; lastName: string } | null | undefined): string => (u ? `${u.firstName}${u.lastName ? ` ${u.lastName.slice(0, 1)}.` : ''}` : '');
 
 /** "Parfum Oud ×2" + "+ 1 article" */
-export function itemsSummary(items: OrderListItem['items'], itemCount: number): { first: string; more: number } {
+/** « 6,7 » in fr / ar, « 6.7 » in en — percentages with one decimal (full-test ORDERS-24; same rule as the agents screens). */
+export const decimalLabel = (n: number, locale: string): string => (locale === 'en' ? String(n) : String(n).replace('.', ','));
+
+/** First line + the number of OTHER lines (not units: a single line ×2 has nothing more; full-test ORDERS-09). */
+export function itemsSummary(items: OrderListItem['items']): { first: string; more: number } {
   const first = items[0];
   if (!first) return { first: '', more: 0 };
   const label = `${first.name}${first.variant ? ` ${first.variant}` : ''}${first.qty > 1 ? ` ×${first.qty}` : ''}`;
-  return { first: label, more: Math.max(0, itemCount - 1) };
+  return { first: label, more: Math.max(0, items.length - 1) };
 }
 
 /* ---------- order page ---------- */
@@ -142,7 +146,8 @@ export function historyValue(field: string, value: string | null, has: (key: str
  * « COURIER_VALIDATION » → « Refusée par le transporteur (données) », « parcel_cancelled » → « colis annulé ». A member's
  * note stays as typed; a code nobody can name is left out. The server joins reason and note with « · ».
  */
-const REASON_KEYS = ['enum.Order.cancelReason', 'enum.Order.returnReason', 'orders.history.reason'];
+// full-test 15/11 MOBILE-A11Y-08: the return reasons of the « Retournée » dialog (« refused » read raw in Arabic)
+const REASON_KEYS = ['enum.Order.cancelReason', 'enum.Order.returnReason', 'orders.history.reason', 'orders.return.reason'];
 export function historyReason(reason: string | null | undefined, t: { (key: string): string; has: (key: string) => boolean }): string {
   return (reason ?? '')
     .split(' · ')
@@ -188,9 +193,10 @@ export function mergeRetry(first: BulkResponse, retry: BulkResponse): BulkRespon
 }
 
 /** Amount check of the payment dialog: integer > 0 and ≤ remaining. */
-export function paymentError(amount: number | null, remaining: number): 'validation.required' | 'validation.price' | 'orders.payment.overRemaining' | null {
+export function paymentError(amount: number | null, remaining: number): 'validation.required' | 'orders.payment.amountPositive' | 'orders.payment.overRemaining' | null {
   if (amount === null) return 'validation.required';
-  if (!Number.isInteger(amount) || amount <= 0) return 'validation.price';
+  // a payment message, not the product « selling price » one (full-test ORDERS-10)
+  if (!Number.isInteger(amount) || amount <= 0) return 'orders.payment.amountPositive';
   if (amount > remaining) return 'orders.payment.overRemaining';
   return null;
 }

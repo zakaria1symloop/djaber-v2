@@ -95,6 +95,8 @@ describe('playground (AGT-07)', () => {
     await test(owner, agent.id, say('Bonjour')).expect(200); // the 60th
     const limited = await test(owner, agent.id, say('Bonjour')).expect(429);
     expect(limited.body.error.code).toBe('PLAYGROUND_RATE_LIMITED');
+    // full-test 15/11 AI-CHAT-11: the wait is the rest of the hour (the page counted down 1:00)
+    expect(limited.body.error.params.retryAfter).toBeGreaterThan(3000);
     expect((await balanceOf(app, owner.workspaceId)).planUsed).toBe(0);
     // provider down ⇒ 503 AI_PROVIDER_ERROR, the run is closed as an error
     await app.app.get(RedisService).client.del(`rl:playground:${owner.workspaceId}`);
@@ -145,12 +147,13 @@ describe('playground (AGT-07)', () => {
     fakeAi(app).script('reply', { reply: 'Bonjour, voici le prix.', intent: 'INFO' });
     await owner.post(`/agents/${agent.id}/test-scenarios`).expect(202);
     await work(app, [owner.workspaceId]);
-    expect((await owner.get(`/agents/${agent.id}/test-scenarios`).expect(200)).body.data[0]).toMatchObject({ scenarioKey: 'darija_price', status: 'fail', summary: 'failed: language_respected' });
+    expect((await owner.get(`/agents/${agent.id}/test-scenarios`).expect(200)).body.data[0]).toMatchObject({ scenarioKey: 'darija_price', status: 'fail', summary: 'failed:language_respected' }); // full-test 15/11 AGENTS-02: the codes the wizard translates
   });
 
-  it('shared test link: public page for 24 h, only the reply and the cards are exposed, 60 turns / h per link, expired ⇒ 410 AGENT_TEST_LINK_EXPIRED', async () => {
+  it('shared test link: public page for 24 h, only the reply, the cards and the system texts are exposed, the workspace 60 turns / h, expired ⇒ 410 AGENT_TEST_LINK_EXPIRED', async () => {
     const owner = await asOwner(app);
-    const agent = await linkedAgent(owner.workspaceId, [], { displayName: 'Lina' } as never);
+    // full-test 15/11 AGENTS-16 / AI-CHAT-09: the moderated name only
+    const agent = await linkedAgent(owner.workspaceId, [], { displayName: 'Lina', approvedDisplayName: 'Lina' } as never);
     await createProduct(owner, { name: 'Robe satin bordeaux', price: 4500, stock: 5 });
     await owner.post(`/agents/${agent.id}/test-links`, { expiresInHours: 48 }).expect(422);
     const link = (await owner.post(`/agents/${agent.id}/test-links`, {}).expect(201)).body.data;
@@ -160,7 +163,7 @@ describe('playground (AGT-07)', () => {
     const visitor = anonymous(app);
     expect((await visitor.get(`/agent-test/${token}`).expect(200)).body.data).toEqual({ agentName: 'Lina', avatarUrl: null, expiresAt: link.expiresAt });
     const reply = (await visitor.post(`/agent-test/${token}/messages`, { text: 'Bonjour, combien la robe satin ?' }).expect(200)).body.data;
-    expect(Object.keys(reply).sort()).toEqual(['cards', 'reply']);
+    expect(Object.keys(reply).sort()).toEqual(['cards', 'reply', 'systemMessages']);
     expect(reply.reply).toContain('4500 DA');
     expect(reply.cards).toHaveLength(1);
     expect(await db.aiRun.count({ where: { agentId: agent.id, kind: 'test' } })).toBe(1);
@@ -168,8 +171,13 @@ describe('playground (AGT-07)', () => {
     await visitor.post(`/agent-test/${token}/messages`, { text: '' }).expect(422);
     await visitor.get('/agent-test/unknown-token-000000000000').expect(404);
     const row = await db.agentTestLink.findFirstOrThrow({ where: { agentId: agent.id } });
-    await app.app.get(RedisService).client.set(`rl:playground:link:${row.id}`, '60', 'EX', 3600);
+    // full-test 15/11 AI-CHAT-10: the link counts in the workspace's budget (it had its own 60 / h)
+    await app.app.get(RedisService).client.set(`rl:playground:${owner.workspaceId}`, '60', 'EX', 3600);
     expect((await visitor.post(`/agent-test/${token}/messages`, { text: 'Bonjour' }).expect(429)).body.error.code).toBe('PLAYGROUND_RATE_LIMITED');
+    await app.app.get(RedisService).client.del(`rl:playground:${owner.workspaceId}`);
+    // a display name still in review is not shown (the page says « Assistant de la boutique »)
+    await db.agent.update({ where: { id: agent.id }, data: { approvedDisplayName: null, approvedName: null } });
+    expect((await visitor.get(`/agent-test/${token}`).expect(200)).body.data.agentName).toBe('');
     await db.agentTestLink.update({ where: { id: row.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
     expect((await visitor.get(`/agent-test/${token}`).expect(410)).body.error.code).toBe('AGENT_TEST_LINK_EXPIRED');
     expect((await visitor.post(`/agent-test/${token}/messages`, { text: 'Bonjour' }).expect(410)).body.error.code).toBe('AGENT_TEST_LINK_EXPIRED');

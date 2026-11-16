@@ -60,7 +60,7 @@ export function WebhookDialog({
     try {
       onSaved(await save.mutateAsync(v));
     } catch (e) {
-      setFormError(applyServerErrors(form, e, t, { fields: ['url', 'events'], codeToField: { WEBHOOK_URL_INVALID: 'url' } }));
+      setFormError(applyServerErrors(form, e, t, { fields: ['url', 'events'], codeToField: { WEBHOOK_URL_INVALID: 'url', WEBHOOK_URL_PRIVATE: 'url' } }));
     }
   });
   const busy = save.isPending;

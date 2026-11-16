@@ -3,6 +3,7 @@
 // every merchant query filters on the request's workspace explicitly. Side effects (WS, `support.reply`) go through the outbox.
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { keyOfUrl, StorageService } from '../../../core/storage/storage.service';
+import { attachmentName } from '../../uploads/image-upload.service';
 import { prisma, Prisma, TenantContext, type SupportTicket, type TicketStatus, type Tx } from '@djaber/db';
 import {
   TICKET_AUTO_CLOSE_DAYS,
@@ -63,6 +64,18 @@ const contextText = (ctx: Record<string, string>) =>
     .map(([k, v]) => `${k}: ${v}`)
     .join('\n');
 
+/**
+ * The subject of a ticket opened without one: the first line of the message, ≤ 80 characters, cut at a word boundary
+ * (full-test 15/11 HELP-13: « … merci de ne pas traiter. Te… » was cut inside a word).
+ */
+export const ticketSubject = (message: string): string => {
+  const first = message.trim().split(/\r?\n/)[0]!.replace(/\s+/g, ' ').trim();
+  if (first.length <= 80) return first;
+  const cut = first.slice(0, 79);
+  const space = cut.lastIndexOf(' ');
+  return `${(space >= 40 ? cut.slice(0, space) : cut).replace(/[\s,;:.!?·—-]+$/u, '')}…`;
+};
+
 @Injectable()
 export class SupportTicketService implements OnModuleInit {
   constructor(
@@ -109,7 +122,7 @@ export class SupportTicketService implements OnModuleInit {
     const where: Prisma.UploadWhereInput = { id: { in: ids }, kind: 'ticket_attachment', ...('workspaceId' in owner ? { workspaceId: owner.workspaceId } : { createdById: owner.userId, workspaceId: null }) };
     const rows = await TenantContext.runSystem(() => db.upload.findMany({ where }));
     if (rows.length !== new Set(ids).size) throw validationError({ attachments: 'validation.invalid' });
-    return rows.map((u) => ({ uploadId: u.id, name: u.storageKey.split('/').pop() ?? u.id, url: u.url, size: u.size, mime: u.mime }));
+    return rows.map((u) => ({ uploadId: u.id, name: attachmentName(u.storageKey), url: u.url, size: u.size, mime: u.mime }));
   }
 
   private presentMessage(m: MessageRow, withInternal: boolean): TicketMessageView {
@@ -141,9 +154,10 @@ export class SupportTicketService implements OnModuleInit {
     await this.outbox.ws(tx, 'admin:platform', 'tickets.queue', { open, overSla, count: open }, `tickets.queue:${now.getTime()}:${Math.random().toString(36).slice(2, 8)}`);
   }
 
-  private async notifyReply(tx: Tx, t: Pick<SupportTicket, 'id' | 'number' | 'workspaceId' | 'userId'>, key: string) {
+  /** `status` = the ticket's new status when the notification is a status change (resolved ⇒ « résolue — donnez votre avis »). */
+  private async notifyReply(tx: Tx, t: Pick<SupportTicket, 'id' | 'number' | 'workspaceId' | 'userId'>, key: string, status?: TicketStatus) {
     if (!t.workspaceId) return;
-    await this.notifications.emit(tx, { type: 'support_reply', workspaceId: t.workspaceId, userIds: [t.userId], key: `support_reply:${t.id}:${key}`, data: { ticketId: t.id, ticket: t.number } });
+    await this.notifications.emit(tx, { type: 'support_reply', workspaceId: t.workspaceId, userIds: [t.userId], key: `support_reply:${t.id}:${key}`, data: { ticketId: t.id, ticket: t.number, ...(status ? { status } : {}) } });
   }
 
   // --- merchant ----------------------------------------------------------------------------------------------------------
@@ -186,7 +200,7 @@ export class SupportTicketService implements OnModuleInit {
     const atts = await this.attachments(prisma, input.attachments, { workspaceId: t.workspaceId });
     const now = new Date();
     const slaHours = slaHoursOf(await this.planSlug(prisma, t.workspaceId));
-    const subject = input.subject ?? (input.message.length > 80 ? `${input.message.slice(0, 77).trimEnd()}…` : input.message);
+    const subject = input.subject ?? ticketSubject(input.message);
     const ticket = await sysTx(async (tx) => {
       const number = await this.nextNumber(tx);
       const created = await tx.supportTicket.create({
@@ -252,11 +266,13 @@ export class SupportTicketService implements OnModuleInit {
   async rate(id: string, input: TicketRateInput) {
     const t = TenantContext.get();
     const row = await this.mine(id);
-    if (row.status === 'closed') throw new AppException('TICKET_CLOSED');
-    if (row.status !== 'resolved') throw new AppException('CONFLICT', {}, {}, { status: row.status });
+    // full-test 15/11 HELP-09: « satisfaction note 1–5 at close » — a resolved ticket, or one closed (by the merchant or the
+    // 30-day job) and not rated yet; a rated ticket stays closed
+    if (row.status === 'closed' && row.satisfaction !== null) throw new AppException('TICKET_CLOSED');
+    if (row.status !== 'resolved' && row.status !== 'closed') throw new AppException('CONFLICT', {}, {}, { status: row.status });
     const now = new Date();
     await sysTx(async (tx) => {
-      const updated = await tx.supportTicket.update({ where: { id }, data: { satisfaction: input.score, satisfactionNote: input.note ?? null, status: 'closed', closedAt: now } });
+      const updated = await tx.supportTicket.update({ where: { id }, data: { satisfaction: input.score, satisfactionNote: input.note ?? null, status: 'closed', closedAt: row.closedAt ?? now } });
       await this.emit(tx, updated, now);
     });
     await this.audit.write({ workspaceId: t.workspaceId, actorType: 'user', actorId: t.userId, actorRole: t.role, action: 'support.ticket_rate', entity: 'SupportTicket', entityId: id, after: { satisfaction: input.score } });
@@ -287,7 +303,8 @@ export class SupportTicketService implements OnModuleInit {
       item('assign', !closed, 'TICKET_CLOSED'),
       item('escalate', !closed, 'TICKET_CLOSED'),
       item('link_incident', !closed, 'TICKET_CLOSED'),
-    ];
+      // full-test 15/11 ADMIN-05 (UX-060): a status change the ticket's state refuses is not offered (no generic CONFLICT reason)
+    ].filter((d) => d.enabled || d.reasonCode !== 'CONFLICT');
   }
 
   private async adminFacts(rows: TicketRow[]) {
@@ -438,7 +455,7 @@ export class SupportTicketService implements OnModuleInit {
       if (!data) return row;
       return sysTx(async (tx) => {
         const updated = await tx.supportTicket.update({ where: { id }, data });
-        if (o.notify && updated.status !== row.status) await this.notifyReply(tx, updated, `${updated.status}:${now.getTime()}`);
+        if (o.notify && updated.status !== row.status) await this.notifyReply(tx, updated, `${updated.status}:${now.getTime()}`, updated.status);
         await this.emit(tx, updated, now);
         return updated;
       });

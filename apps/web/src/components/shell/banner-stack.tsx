@@ -16,13 +16,14 @@ export const BANNER_PRIORITY = [
   'credits80',
   'planExpiring',
   'approvalPending',
+  // plan picked on the pricing page before sign-up (dismissable, once): above the e-mail notice, which every new account
+  // has — below it the offer was never seen (full-test 15/11 ONBOARDING-02)
+  'planIntent',
   'emailUnverified',
   'readOnly',
   'newVersion',
   'offline',
   'announcement',
-  // plan picked on the pricing page before sign-up: a nudge, shown only when nothing else is
-  'planIntent',
 ] as const;
 export type BannerId = (typeof BANNER_PRIORITY)[number];
 

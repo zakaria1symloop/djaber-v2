@@ -64,8 +64,9 @@ export function AdminForbidden({ role }: { role: string | null }) {
       <ForbiddenState
         code={t('state.page.403.title')}
         title={t('state.detail.forbidden.title')}
-        description={t('admin.state.forbidden', { role: role ? t(`admin.shell.role.${role}`) : '—' })}
-        action={{ label: t('action.backHome'), href: `/${locale}/admin` }}
+        // full-test ROLES-09: a shop member (no platform role) reads a plain sentence and goes back to the shop
+        description={role ? t('admin.state.forbidden', { role: t(`admin.shell.role.${role}`) }) : t('admin.state.notPlatform')}
+        action={{ label: t('action.backHome'), href: role ? `/${locale}/admin` : `/${locale}/home` }}
       />
     </SystemPage>
   );
@@ -83,7 +84,7 @@ export function AdminQueryError({ error, onRetry, backHref }: { error: unknown; 
     return <ForbiddenState title={t('admin.state.twoFa.title')} description={t('error.TWO_FA_REQUIRED_FOR_ROLE')} action={{ label: t('admin.state.twoFa.action'), href: `/${locale}/settings/security` }} />;
   }
   if (error instanceof ApiError && error.status === 403) {
-    return <ForbiddenState title={t('state.detail.forbidden.title')} description={t('admin.state.forbidden', { role: role ? t(`admin.shell.role.${role}`) : '—' })} action={backHref ? { label: t('action.back'), href: backHref } : undefined} />;
+    return <ForbiddenState title={t('state.detail.forbidden.title')} description={role ? t('admin.state.forbidden', { role: t(`admin.shell.role.${role}`) }) : t('admin.state.notPlatform')} action={backHref ? { label: t('action.back'), href: backHref } : undefined} />;
   }
   if (error instanceof ApiError && error.status === 404) {
     return <NotFoundState title={t('state.detail.notFound.title')} description={t('admin.state.notFound')} action={backHref ? { label: t('action.back'), href: backHref } : undefined} />;

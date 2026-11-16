@@ -18,6 +18,7 @@ import { useT } from '@/lib/i18n';
 import { filterText } from '@/lib/list-state';
 import { useListState } from '@/lib/use-list-state';
 
+/** offered while `GET /admin/audit-logs/actions` (every slug present in the log — full-test 15/11 ADMIN-14) loads */
 const ACTIONS = ['workspace.suspend', 'workspace.reactivate', 'credits.grant', 'plan.change', 'plan.update', 'impersonation.start', 'impersonation.stop', 'user.block', 'preset.publish', 'pricing.version', 'invoice.mark_paid', 'member.role_change', 'viewer.open', 'viewer.unmask', 'audit.export'];
 const ENTITIES = ['workspace', 'user', 'plan', 'subscription', 'invoice', 'channel', 'agent_preset', 'cms_entry', 'credit_pricing', 'promo_code', 'conversation', 'product'];
 const PERIOD_DAYS: Record<string, number> = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 };
@@ -35,6 +36,8 @@ export default function AdminAuditPage() {
   const apiQuery = { ...list.apiQuery(), ...(hasRange ? {} : { period: '7d' }) };
   const query = useAdminList<AuditLogDto>('/admin/audit-logs', apiQuery);
   const team = useAdminGet<PlatformTeamDto>('/admin/platform-members');
+  const logged = useAdminGet<string[]>('/admin/audit-logs/actions');
+  const actionOptions = useMemo(() => [...(logged.data ?? ACTIONS)].sort(), [logged.data]);
   const detail = useAdminGet<AuditLogDto>(s.sheet ? `/admin/audit-logs/${s.sheet}` : null);
   const [exporting, setExporting] = useState(false);
   const [wsName, setWsName] = useState<string | undefined>(undefined);
@@ -43,7 +46,7 @@ export default function AdminAuditPage() {
   const quick: AdminFilter[] = useMemo(
     () => [
       { kind: 'single', key: 'actorId', label: t('admin.audit.filter.actor'), options: (team.data?.members ?? []).map((m) => ({ value: m.userId, label: fullName(m) })) },
-      { kind: 'multi', key: 'action', label: t('admin.audit.filter.action'), options: ACTIONS.map((a) => ({ value: a, label: a })) },
+      { kind: 'multi', key: 'action', label: t('admin.audit.filter.action'), options: actionOptions.map((a) => ({ value: a, label: a })) },
       { kind: 'multi', key: 'entity', label: t('admin.audit.filter.entity'), options: ENTITIES.map((e) => ({ value: e, label: t(`admin.audit.entity.${e}`) })) },
       {
         kind: 'custom',
@@ -58,7 +61,7 @@ export default function AdminAuditPage() {
       { kind: 'single', key: 'impersonation', label: t('admin.audit.filter.impersonation'), options: (['only', 'exclude'] as const).map((v) => ({ value: v, label: t(`admin.audit.impersonation.${v}`) })) },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [t, team.data, wsId, wsName, period],
+    [t, team.data, wsId, wsName, period, actionOptions],
   );
   const context = (r: AuditLogDto) => [r.context.ip, r.context.userAgent ? (/mobile|android|iphone/i.test(r.context.userAgent) ? 'mobile' : 'web') : r.actor.type === 'system' ? 'auto' : null].filter(Boolean).join(' · ') || '—';
   const columns: Column<AuditLogDto>[] = [
@@ -84,7 +87,7 @@ export default function AdminAuditPage() {
       }
     >
       <AdminFilterBar list={list} search={t('admin.audit.search')} quick={quick} count={query.data ? t('admin.audit.count', { count: query.data.total, period: period ? t(`admin.audit.period.${period}`) : t('admin.audit.customPeriod') }) : undefined} />
-      <AdminListBody testId="audit-list" query={query} list={list} columns={columns} rowKey={(r) => r.id} label={t('nav.admin.audit')} entity={t('admin.audit.entity')} empty={{ title: t('admin.audit.empty') }} onRowClick={(r) => list.openSheet(r.id)} rowActions={() => <span aria-hidden className="text-text-muted rtl:-scale-x-100">›</span>} />
+      <AdminListBody testId="audit-list" filters={quick} query={query} list={list} columns={columns} rowKey={(r) => r.id} label={t('nav.admin.audit')} entity={t('admin.audit.entity')} empty={{ title: t('admin.audit.empty') }} onRowClick={(r) => list.openSheet(r.id)} rowActions={() => <span aria-hidden className="text-text-muted rtl:-scale-x-100">›</span>} />
       {s.sheet ? (
         <Card className="flex flex-col gap-3 p-5" data-testid="audit-detail">
           {detail.isPending ? (

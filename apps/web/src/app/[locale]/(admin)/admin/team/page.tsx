@@ -68,7 +68,18 @@ export default function AdminTeamPage() {
     { key: 'name', header: t('admin.team.col.member'), hideable: false, cell: (mb) => `${fullName(mb)}${mb.userId === userId ? ` (${t('admin.team.you')})` : ''}` },
     { key: 'email', header: t('admin.team.col.email'), cell: (mb) => <span dir="ltr">{mb.email}</span> },
     { key: 'role', header: t('admin.team.col.role'), cell: (mb) => <MonoChip tone={mb.platformRole === 'super_admin' ? 'danger' : 'neutral'}>{t(`admin.shell.role.${mb.platformRole}`)}</MonoChip> },
-    { key: '2fa', header: '2FA', cell: (mb) => (mb.totpEnabled ? t('admin.common.yes') : <span className="text-accent-alert">{t('admin.team.noTwoFa')}</span>) },
+    // ADMIN-12: « accès bloqué » only when the rule is enforced (server `accessBlocked`); during the owner's dated pause the day
+    // it applies from, for a test exemption « exempté »
+    {
+      key: '2fa',
+      header: '2FA',
+      cell: (mb) =>
+        mb.totpEnabled ? (
+          t('admin.common.yes')
+        ) : (
+          <span className="text-accent-alert">{mb.accessBlocked ? t('admin.team.noTwoFa') : mb.twoFaRequiredFrom ? t('admin.team.noTwoFaFrom', { date: f.date(mb.twoFaRequiredFrom) }) : t('admin.team.noTwoFaExempt')}</span>
+        ),
+    },
     { key: 'last', header: t('admin.team.col.lastAction'), hideBelow: 'lg', cell: (mb) => (mb.lastAction ? `${f.ago(mb.lastAction.at)} · ${mb.lastAction.action}` : '—') },
   ];
   const memberMenu = (mb: PlatformMemberDto) => (

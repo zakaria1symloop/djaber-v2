@@ -3,12 +3,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { RegisterSchema, type RegisterInput } from '@djaber/shared';
 import { Button, EmailInput, Field, FormAlert, Input, PasswordInput } from '@djaber/ui';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { AuthCard, AuthLink, LocaleSwitch } from '@/components/auth/auth-card';
+import { AuthCard, AuthLink } from '@/components/auth/auth-card';
 import { authApi } from '@/features/auth/api';
+import { billingApi } from '@/features/billing/api';
 import { planIntentOf } from '@/features/public/logic';
 import { Link } from '@/i18n/navigation';
 import { ApiError } from '@/lib/api';
@@ -20,6 +21,8 @@ import { savePlanIntent } from '@/lib/plan-intent';
 import { useSession } from '@/lib/session';
 
 const FIELDS = ['firstName', 'lastName', 'email', 'password'] as const;
+/** Every sign-up starts with the Pro trial (D60). */
+const TRIAL_PLAN = 'pro';
 
 export default function SignupPage() {
   const t = useT();
@@ -33,7 +36,11 @@ export default function SignupPage() {
   const search = useSearchParams();
   const returnTo = search.get('returnTo');
   // pricing CTA `/signup?plan=&cycle=`: the trial is always Pro (D60); the chosen plan is offered afterwards
-  const intent = planIntentOf(search.get('plan'), search.get('cycle'));
+  const asked = planIntentOf(search.get('plan'), search.get('cycle'));
+  // full-test 15/11 PUBLIC-10: the note names the plan, and a slug that is no public plan carries nothing
+  const plans = useQuery({ queryKey: ['public', 'plans', locale], queryFn: billingApi.plans, enabled: !!asked, staleTime: 300_000, retry: false });
+  const plan = asked ? plans.data?.find((p) => p.slug === asked.plan) : undefined;
+  const intent = asked && (plan || plans.isError) ? asked : null;
 
   const submit = form.handleSubmit(async (values) => {
     setFormError(null);
@@ -67,14 +74,15 @@ export default function SignupPage() {
           <p className="mt-4">
             {t('auth.signup.haveAccount')} <AuthLink href={authHref('/login', { returnTo })}>{t('action.login')}</AuthLink>
           </p>
-          <LocaleSwitch className="mt-5" />
         </>
       }
     >
       <form onSubmit={submit} noValidate className="flex flex-col gap-4" aria-busy={busy}>
         {intent ? (
           <FormAlert tone="info">
-            <span data-testid="signup-plan-intent">{t('auth.signup.planIntent', { cycle: t(`auth.signup.planIntent.${intent.cycle}`) })}</span>
+            <span data-testid="signup-plan-intent">
+              {t(intent.plan === TRIAL_PLAN ? 'auth.signup.planIntent.trialPlan' : 'auth.signup.planIntent.named', { plan: plan?.name ?? intent.plan, cycle: t(`auth.signup.planIntent.${intent.cycle}`) })}
+            </span>
           </FormAlert>
         ) : null}
         <div className="grid grid-cols-2 gap-3">

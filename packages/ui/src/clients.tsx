@@ -26,7 +26,8 @@ export function TagChips({ tags, max = 3, moreLabel, className }: { tags: readon
   return (
     <span className={cn('inline-flex min-w-0 flex-wrap items-center gap-1', className)}>
       {shown.map((tag) => (
-        <span key={tag} className="inline-flex max-w-40 items-center truncate rounded-[4px] border border-accent-clients/40 px-1.5 py-0.5 ts-label-meta uppercase text-accent-clients">
+        // a block box so the long tag ends with « … » (a flex box cuts it without an ellipsis — full-test CLIENTS-17)
+        <span key={tag} title={tag} className="inline-block max-w-40 truncate rounded-[4px] border border-accent-clients/40 px-1.5 py-0.5 align-middle ts-label-meta uppercase text-accent-clients">
           {tag}
         </span>
       ))}

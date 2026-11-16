@@ -35,7 +35,8 @@
 | **insights**: resolve, dismiss, add to instructions | ● | ● | ● |
 | **catalog**: read (products, categories, units, services, recommendations) | ● | ● | R |
 | **catalog**: create/edit/archive, images, variants, import, export, AI from photo | ● | ● | — |
-| **stock**: adjust, movements read | ● | ● | — |
+| **stock**: adjust, reverse a movement | ● | ● | — |
+| **stock**: movements read, export (`stock.read`), inventory count (`stock.count`) | ● | ● | ● |
 | **clients**: read, create, edit | ● | ● | ● |
 | **clients**: delete, export | ● | ● | — |
 | **orders**: read, create, edit contact/notes, status change, call log, bulk status, print | ● | ● | ● |
@@ -50,7 +51,8 @@
 | **members**: invite, remove, change role | ● | — | — |
 | **workspace**: transfer ownership | ● | — | — |
 | **integrations**: API keys, outbound webhooks, Google Sheets | ● | ● | — |
-| **billing**: plans, checkout, invoices, credits ledger | ● | R | — |
+| **billing**: plans (change, cancel, renewal) | ● | R | — |
+| **billing**: credit packs checkout, invoice payment, billing info (`billing.write`), invoices and credits ledger read | ● | ● | — |
 | **workspace**: delete | ● | — | — |
 
 Footnote: `delivered → returned`, delivery-fee and discount edits are **Admin+** (04 §1.2) even though Operators may change other statuses.

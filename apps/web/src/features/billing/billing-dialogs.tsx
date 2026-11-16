@@ -3,7 +3,7 @@
 // RÉTROGRADER warning with the resources that will pause, code promo with its `PROMO_*` errors, Payer n DA (CIB /
 // Edahabia) → Chargily checkout), "Résilier" (at period end, optional reason) and the undo of a scheduled cancel.
 // Errors stay inside the open dialog (CLAUDE.md rule 8); the form keeps what was typed.
-import { formatDate, formatNumber, type AppLocale } from '@djaber/shared';
+import { formatDate, formatNumber, PROMO_CODE_MAX, type AppLocale } from '@djaber/shared';
 import { Button, Dialog, EstimateBox, Field, FormAlert, Input, RadioCards, Skeleton, Textarea, toast } from '@djaber/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
@@ -63,7 +63,8 @@ export function ChangePlanDialog({ open, plan, cycle: initialCycle, sub, onClose
   const preview = useQuery({
     queryKey: [ws, 'billing', 'preview', body],
     queryFn: () => billingApi.preview(body!),
-    enabled: open && !!body && owner,
+    // full-test 15/11 SETTINGS-04: the current plan + cycle before J−7 is not renewable (same rule as « Renouveler »)
+    enabled: open && !!body && owner && !(plan && planCta(plan, sub, cycle).kind === 'renew_later'),
     retry: false,
     staleTime: 30_000,
   });
@@ -73,6 +74,7 @@ export function ChangePlanDialog({ open, plan, cycle: initialCycle, sub, onClose
 
   if (!plan) return null;
   const direction = planCta(plan, sub, cycle);
+  const tooEarly = direction.kind === 'renew_later' ? t('billing.plan.renewLater', { date: formatDate(direction.from, locale) }) : null;
   const p: CheckoutPreview | undefined = preview.data;
   const downgrade = p ? p.mode === 'downgrade' : direction.kind === 'change' && direction.direction === 'downgrade';
   // credits / trial-extension codes do not discount a plan: they are redeemed on their own (`POST /billing/promo/redeem`)
@@ -143,7 +145,7 @@ export function ChangePlanDialog({ open, plan, cycle: initialCycle, sub, onClose
           <Button variant="ghost" onClick={onClose} disabled={checkout.isPending}>
             {t('action.cancel')}
           </Button>
-          <Button variant="primary" onClick={submit} loading={checkout.isPending} disabled={!owner || !p || preview.isFetching} disabledReason={owner ? undefined : t('billing.ownerOnly')} data-testid="change-submit">
+          <Button variant="primary" onClick={submit} loading={checkout.isPending} disabled={!owner || !!tooEarly || !p || preview.isFetching} disabledReason={owner ? (tooEarly ?? undefined) : t('billing.ownerOnly')} data-testid="change-submit">
             {cta}
           </Button>
         </>
@@ -161,7 +163,11 @@ export function ChangePlanDialog({ open, plan, cycle: initialCycle, sub, onClose
           ]}
         />
 
-        {preview.isPending && owner ? (
+        {tooEarly ? (
+          <EstimateBox tone="warning" data-testid="change-too-early">
+            {tooEarly}
+          </EstimateBox>
+        ) : preview.isPending && owner ? (
           <Skeleton className="h-12" />
         ) : preview.isError ? (
           <FormAlert>{errorMessage(preview.error, t)}</FormAlert>
@@ -211,6 +217,7 @@ export function ChangePlanDialog({ open, plan, cycle: initialCycle, sub, onClose
                 placeholder={t('billing.change.promo.placeholder')}
                 autoComplete="off"
                 dir="ltr"
+                maxLength={PROMO_CODE_MAX}
                 className="uppercase"
                 disabled={!owner}
                 data-testid="promo-input"

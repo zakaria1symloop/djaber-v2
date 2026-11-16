@@ -18,13 +18,14 @@ import { AI_GATEWAY, AiProviderError, type AiGateway, type AiMessage, type AiToo
 import { RoutingService, type RoutedModel } from './routing.service';
 import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
-import { handoffRefusedInstruction, judgeHandoff, type HandoffRefusal } from './handoff-judge';
-import { checkReply, enforceReply, guardInstruction, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
+import { fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, type HandoffRefusal } from './handoff-judge';
+import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
+import { orderConfirmationText } from './tools/order-confirmation-text';
 
 export type ExecutedTool = { callId: string; name: string; args: Record<string, unknown>; result: unknown; simulated: boolean; replayed: boolean };
 export type TurnRequest = {
   runId: string;
-  prompt: Pick<BuiltPrompt, 'system' | 'messages'>;
+  prompt: Pick<BuiltPrompt, 'system' | 'messages'> & { cachePrefix?: string };
   toolCtx: Omit<ToolRunContext, 'callId'>;
   temperature: number;
   maxTokens: number;
@@ -142,7 +143,9 @@ export class AiRunService implements OnModuleInit {
     const executed: ExecutedTool[] = [];
     const seen = new Map<string, number>();
     const messages: AiMessage[] = [...req.prompt.messages];
-    const defs = await this.tools.defsFor(req.toolCtx.workspaceId);
+    // full-test 15/11 AI-CHAT-07: no handoff tool on a message that is only an order field (refused every time, 5–10 s each)
+    const fieldOnly = fieldOnlyMessage(req.toolCtx.customerText, !!req.toolCtx.ordering);
+    const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !(fieldOnly && d.name === 'handoff_to_human'));
     let model = null as RoutedModel | null;
     let usedFallback = false;
     let repaired = false;
@@ -153,7 +156,15 @@ export class AiRunService implements OnModuleInit {
     let handoffRefused: HandoffRefusal | undefined;
     // §4.3 reply guard: the answer that broke a rule (its status, cards and fields are kept), and what it broke
     let guardFirst = null as { output: AiReplyOutput; extra: { salvaged?: boolean }; violations: GuardViolation[] } | null;
-    const ok = (output: AiReplyOutput, extra: { salvaged?: boolean; guard?: GuardOutcome } = {}): TurnResult => ({ ok: true, output, tools: executed, usage, model: model!, usedFallback, forcedHandoff, repaired, ...(handoffRefused ? { handoffRefused } : {}), ...extra });
+    // full-test 15/11 proposal 4: once create_order placed an order this turn, the customer gets the server's confirmation
+    // (number, items, total, delay, payment) in their language — never the model's own wording of it (it « corrected »
+    // itself, said the details were invented or that nothing was ordered: AI-CHAT-02)
+    const confirmationNow = () => orderConfirmationText(executed.map((t) => ({ name: canonicalTool(t.name), result: t.result })), req.guard?.lang ?? 'fr');
+    const confirmed = (output: AiReplyOutput): AiReplyOutput => {
+      const text = confirmationNow();
+      return text ? { ...output, reply: text } : output;
+    };
+    const ok = (output: AiReplyOutput, extra: { salvaged?: boolean; guard?: GuardOutcome } = {}): TurnResult => ({ ok: true, output: confirmed(output), tools: executed, usage, model: model!, usedFallback, forcedHandoff, repaired, ...(handoffRefused ? { handoffRefused } : {}), ...extra });
     const factsNow = () => withToolResults(req.guard!, executed.map((t) => t.result));
     /** The guard's last word: offending sentences dropped / greeting stripped / the safe sentence (never a handoff). */
     const enforce = (base: AiReplyOutput, text: string, violations: GuardViolation[], first: GuardViolation[], retried: boolean, extra: { salvaged?: boolean }): TurnResult => {
@@ -164,10 +175,12 @@ export class AiRunService implements OnModuleInit {
     const guardFallback = () => (guardFirst ? enforce(guardFirst.output, guardFirst.output.reply, guardFirst.violations, guardFirst.violations, true, guardFirst.extra) : null);
     /** Checks an answer about to be returned: clean ⇒ returned; broken ⇒ one corrective turn when there is room, else enforced. */
     const guarded = (output: AiReplyOutput, extra: { salvaged?: boolean }, canRetry: boolean): TurnResult | 'retry' => {
-      if (!req.guard || !output.reply.trim()) return ok(output, extra);
+      // the server's order confirmation replaces the text: nothing of the model's to check
+      if (!req.guard || !output.reply.trim() || confirmationNow()) return ok(output, extra);
       const violations = checkReply(output.reply, factsNow());
       if (!violations.length) return ok(output, extra);
-      if (canRetry && req.deadline - Date.now() > GUARD_RETRY_MIN_MS) {
+      // a slip the server fixes itself (a Latin letter inside an Arabic word) costs no model turn
+      if (canRetry && violations.some((v) => !AUTO_FIX_RULES.includes(v.rule)) && req.deadline - Date.now() > GUARD_RETRY_MIN_MS) {
         guardFirst = { output, extra, violations };
         return 'retry';
       }
@@ -178,12 +191,13 @@ export class AiRunService implements OnModuleInit {
       if (left <= 0) return guardFallback() ?? { ok: false, kind: 'provider', error: 'timeout', tools: executed, usage, model, usedFallback };
       // the corrective turn of the guard is offered no tool: an order or a cancellation is never done twice
       // full-test 15/11 AI-CHAT-02: nor the format retry — it only re-writes the answer (it cancelled the order it had just created)
-      const offerTools = toolRounds < MAX_STEPS - 1 && !forcedHandoff && !guardFirst && !repaired;
+      // full-test 15/11 proposal 13: a message that is only an order field gets 2 tool rounds at most (10–21 s turns)
+      const offerTools = toolRounds < (fieldOnly ? 2 : MAX_STEPS - 1) && !forcedHandoff && !guardFirst && !repaired;
       let res;
       try {
         res = await this.routing.call(
           'text',
-          (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose: 'reply', system: req.prompt.system, messages, tools: offerTools ? defs : undefined, temperature: req.temperature, maxTokens: req.maxTokens, timeoutMs: Math.max(1000, Math.min(timeoutMs, left)) }),
+          (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose: 'reply', system: req.prompt.system, ...(req.prompt.cachePrefix ? { systemCachePrefix: req.prompt.cachePrefix } : {}), messages, tools: offerTools ? defs : undefined, temperature: req.temperature, maxTokens: req.maxTokens, timeoutMs: Math.max(1000, Math.min(timeoutMs, left)) }),
           { only: (m) => m.supportsTools, prefer: model?.id },
         );
       } catch (e) {

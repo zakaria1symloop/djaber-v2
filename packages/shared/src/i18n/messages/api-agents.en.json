@@ -1,4 +1,6 @@
 {
+ "agent.api.bulk.notActive": "Only an active agent can be paused (this one is a draft or already paused).",
+ "agent.api.bulk.notPaused": "Only a paused agent can be resumed.",
  "agent.api.copySuffix": "(copy)",
  "agent.api.defaultName": "New agent",
  "agent.api.generatedName": "{page} agent",

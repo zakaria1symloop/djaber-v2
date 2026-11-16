@@ -6,10 +6,10 @@ import { TICKET_ATTACHMENTS_MAX } from '@djaber/shared';
 import { Button } from '@djaber/ui';
 import { Paperclip, X } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { errorMessage } from '@/lib/forms';
+import { errorCode, errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { helpApi, type UploadedFile } from './api';
-import { ATTACHMENT_MAX_BYTES } from './contact-form';
+import { ATTACHMENT_MAX_BYTES, attachmentTypeOk } from './contact-form';
 
 const ACCEPT = 'image/png,image/jpeg,image/webp,text/csv,.csv';
 
@@ -27,6 +27,10 @@ export function useTicketAttachments() {
         setError(t('help.contact.attachments.max', { max: TICKET_ATTACHMENTS_MAX }));
         break;
       }
+      if (!attachmentTypeOk(f)) {
+        setError(t('help.contact.attachments.type'));
+        continue;
+      }
       if (f.size > ATTACHMENT_MAX_BYTES) {
         setError(t('error.UPLOAD_TOO_LARGE', { max: t('help.attachments.maxSize') }));
         continue;
@@ -37,7 +41,8 @@ export function useTicketAttachments() {
         count += 1;
         setFiles((prev) => [...prev, up]);
       } catch (e) {
-        setError(errorMessage(e, t));
+        const code = errorCode(e);
+        setError(code === 'IMAGE_TYPE_INVALID' || code === 'UPLOAD_TYPE_INVALID' ? t('help.contact.attachments.type') : errorMessage(e, t));
       } finally {
         setUploading(null);
       }

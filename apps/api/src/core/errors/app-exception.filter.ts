@@ -2,6 +2,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ZodValidationException } from 'nestjs-zod';
 import { ZodError } from 'zod';
+import { formatDate, isAppLocale } from '@djaber/shared';
 import { AppException } from './app.exception';
 import { I18nService } from '../i18n/i18n.service';
 
@@ -14,6 +15,16 @@ const fieldsOf = (err: ZodError) => {
   }
   return fields;
 };
+
+/**
+ * full-test 15/11 SALES-CASH-10: a day in a message is written as the screens write it (« 01 nov. 2026 »), never
+ * `2026-11-01`; `params` keep the ISO value for the clients that format it themselves.
+ */
+const DATE_PARAMS = new Set(['date', 'deadline']);
+export const readableDates = (params: Record<string, string | number>, locale: string): Record<string, string | number> =>
+  Object.fromEntries(
+    Object.entries(params).map(([k, v]) => [k, DATE_PARAMS.has(k) && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? formatDate(v.length === 10 ? `${v}T12:00:00Z` : v, isAppLocale(locale) ? locale : 'fr') : v]),
+  );
 
 @Catch()
 export class AppExceptionFilter implements ExceptionFilter {
@@ -33,7 +44,7 @@ export class AppExceptionFilter implements ExceptionFilter {
     ) => ({
       error: {
         code,
-        message: this.i18n.t(locale, `error.${code}`, { ...params, ref }),
+        message: this.i18n.t(locale, `error.${code}`, { ...readableDates(params, locale), ref }),
         params,
         fields,
         details: details ?? null,
@@ -54,6 +65,9 @@ export class AppExceptionFilter implements ExceptionFilter {
       return res.status(422).json(body('VALIDATION_ERROR', {}, fieldsOf(err), null));
     }
     if (err instanceof HttpException) {
+      // full-test 15/11 PRODUCTS-08 / HOME-13: a malformed id in the path (`ParseUUIDPipe`) names no record — 404 like an
+      // unknown id, so the screen shows « Introuvable » instead of a « Réessayer » that can never succeed
+      if (err.getStatus() === 400 && /^Validation failed \(uuid[ )]/.test(err.message)) return res.status(404).json(body('NOT_FOUND', {}, {}, null));
       const status = err.getStatus();
       const code =
         status === 401

@@ -3,7 +3,7 @@
 import { getMessages, REPORT_DEFINITIONS, REPORT_KEYS, SIMPLE_MODE_REPORTS, PNL_LINES } from '@djaber/shared';
 import { AppException } from '../../core/errors/app.exception';
 import { previousMonth } from '../gds/reports/report-schedule.service';
-import { bucketOf, emptyDay, mergeInto, METRICS_VERSION, percentile, sumDays } from './day-metrics';
+import { bucketOf, emptyDay, mergeInto, METRICS_VERSION, percentile, percentileAbove, sumDays } from './day-metrics';
 import { addDays, daysBetween, deltaPct, eachDay, pct, resolveRange } from './range';
 
 const NOW = new Date('2026-10-13T08:00:00Z'); // 09:00 in Algiers
@@ -89,7 +89,10 @@ describe('daily figures', () => {
     h[9] = 1; // > 60 s
     expect(percentile('aiLatency', h, 0.5)).toBe(2);
     expect(percentile('aiLatency', h, 0.9)).toBe(5);
-    expect(percentile('aiLatency', h, 0.95)).toBe(120);
+    // ANALYTICS-08: the open last bucket gives its lower bound, flagged « above »
+    expect(percentile('aiLatency', h, 0.95)).toBe(60);
+    expect(percentileAbove('aiLatency', h, 0.95)).toBe(true);
+    expect(percentileAbove('aiLatency', h, 0.5)).toBe(false);
     expect(percentile('aiLatency', emptyDay().aiLatency, 0.5)).toBeNull();
   });
 });

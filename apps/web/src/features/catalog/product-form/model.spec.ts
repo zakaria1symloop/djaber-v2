@@ -100,8 +100,13 @@ describe('form schema (shared primitives, validation.* keys)', () => {
     expect(issues('create', filled({ name: 'x'.repeat(256) }))).toEqual({ name: 'validation.length' });
     expect(issues('create', filled({ description: 'x'.repeat(5001) }))).toEqual({ description: 'validation.length' });
     expect(issues('create', filled({ keywords: 'k'.repeat(51) }))).toEqual({ keywords: 'validation.length' });
-    expect(issues('create', filled({ keywords: Array.from({ length: 31 }, (_, i) => `k${i}`).join(',') }))).toEqual({ keywords: 'validation.length' });
+    expect(issues('create', filled({ keywords: Array.from({ length: 31 }, (_, i) => `k${i}`).join(',') }))).toEqual({ keywords: 'validation.keywords_count' });
     expect(issues('create', filled({ weightGrams: '1000001' }))).toEqual({ weightGrams: 'validation.range' });
+  });
+  it('old price above the selling price (full-test 15/11 PRODUCTS-09)', () => {
+    expect(issues('create', filled({ price: '4600', oldPrice: '3000' }))).toEqual({ oldPrice: 'validation.old_price' });
+    expect(issues('create', filled({ price: '4600', oldPrice: '4600' }))).toEqual({ oldPrice: 'validation.old_price' });
+    expect(issues('create', filled({ price: '4600', oldPrice: '5500' }))).toEqual({});
   });
   it('variant rows: name and price required, duplicate names flagged on the second row', () => {
     const rows = [emptyVariantRow({ name: 'Noir', price: '100' }), emptyVariantRow({ name: ' noir ', price: '100' }), emptyVariantRow({ name: '', price: '0' })];

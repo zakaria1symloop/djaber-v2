@@ -8,6 +8,13 @@ export type TFunction = ((key: string, params?: Params) => string) & { has: (key
 
 const cache = new Map<string, IntlMessageFormat>();
 
+/**
+ * A value put inside a translated sentence, isolated from the words around it (Unicode FSI … PDI): in Arabic « #ACH-1008 »,
+ * « 2 000 DA », « 100 % » or « Karim P. » keep their own order instead of becoming « ACH-1008# », « DA 2 000 », « % 100 »,
+ * « .Karim P » (full-test 15/11 STOCK-07 / SALES-CASH-23). Invisible in every language.
+ */
+export const iso = (value: string | number): string => `\u2068${value}\u2069`;
+
 /** Marks the place of a value nobody gave (removed by `stripPlaceholders`). */
 const SLOT = String.fromCharCode(0x2063); // INVISIBLE SEPARATOR
 
@@ -43,6 +50,12 @@ const fillWhatIsKnown = (template: string, params?: Params): string =>
     }),
   );
 
+/**
+ * A value that ends with its own full stop (« 21 oct. », « Amina T. ») at the end of a sentence gives « oct.. »: the
+ * sentence's stop is dropped (an ellipsis « … » / « ... » is kept) — full-test 15/11 STOCK-14.
+ */
+export const tidyStops = (text: string): string => (text.includes('.') ? text.replace(/(^|[^.])\.([\u2066-\u2069]*)\.(?![.\u2066-\u2069])/g, '$1.$2') : text);
+
 export const formatMessage = (locale: string, messages: Flat, key: string, params?: Params): string => {
   const template = messages[key];
   if (template === undefined) return key; // visible in the UI and caught by `pnpm i18n:check`
@@ -58,7 +71,7 @@ export const formatMessage = (locale: string, messages: Flat, key: string, param
     cache.set(id, fmt);
   }
   try {
-    return String(fmt.format(params as Record<string, string | number>));
+    return tidyStops(String(fmt.format(params as Record<string, string | number>)));
   } catch {
     // a value the caller did not pass (IntlMessageFormat throws): never the raw `{name}` on screen
     return fillWhatIsKnown(template, params);

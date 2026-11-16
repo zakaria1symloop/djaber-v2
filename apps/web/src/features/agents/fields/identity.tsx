@@ -87,14 +87,14 @@ export function IdentityFields({ draft: d, set, errors, readOnly, badge, nameRev
           <AgentAvatar name={d.displayName || d.name || '·'} src={d.avatarMode === 'upload' ? d.avatarUrl : null} size={96} className="self-center md:self-start" />
           <div className="grid min-w-0 flex-1 gap-4 md:grid-cols-2">
             <Field label={t('agents.identity.name')} htmlFor="agent-name" required error={issueText(t, errors.name)} hint={t('agents.identity.name.hint')}>
-              <Input id="agent-name" dir="auto" maxLength={NAME_MAX + 20} value={d.name} disabled={readOnly} placeholder={t('agents.identity.name.placeholder')} aria-invalid={!!errors.name || undefined} onChange={(e) => set({ name: e.target.value })} />
+              <Input id="agent-name" dir="auto" maxLength={NAME_MAX} value={d.name} disabled={readOnly} placeholder={t('agents.identity.name.placeholder')} aria-invalid={!!errors.name || undefined} onChange={(e) => set({ name: e.target.value })} />
             </Field>
             <Field label={t('agents.identity.displayName')} htmlFor="agent-display-name" error={issueText(t, errors.displayName)} hint={t('agents.identity.displayName.hint')}>
-              <Input id="agent-display-name" dir="auto" maxLength={NAME_MAX + 20} value={d.displayName} disabled={readOnly} placeholder={t('agents.identity.displayName.placeholder')} aria-invalid={!!errors.displayName || undefined} onChange={(e) => set({ displayName: e.target.value })} />
+              <Input id="agent-display-name" dir="auto" maxLength={NAME_MAX} value={d.displayName} disabled={readOnly} placeholder={t('agents.identity.displayName.placeholder')} aria-invalid={!!errors.displayName || undefined} onChange={(e) => set({ displayName: e.target.value })} />
             </Field>
             <NameReviewNote review={nameReview} />
             <Field label={t('agents.identity.description')} htmlFor="agent-description" error={issueText(t, errors.description)}>
-              <Textarea id="agent-description" dir="auto" className="!min-h-16" maxLength={DESCRIPTION_MAX + 50} value={d.description} disabled={readOnly} placeholder={t('agents.identity.description.placeholder')} aria-invalid={!!errors.description || undefined} onChange={(e) => set({ description: e.target.value })} />
+              <Textarea id="agent-description" dir="auto" className="!min-h-16" maxLength={DESCRIPTION_MAX} value={d.description} disabled={readOnly} placeholder={t('agents.identity.description.placeholder')} aria-invalid={!!errors.description || undefined} onChange={(e) => set({ description: e.target.value })} />
             </Field>
             <Field label={t('agents.identity.avatar')} error={avatarError ?? undefined} hint={d.avatarMode === 'upload' ? t('agents.identity.avatar.uploadHint') : undefined}>
               <SegmentedControl

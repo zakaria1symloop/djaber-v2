@@ -8,6 +8,29 @@ import { ChevronDown, MoreHorizontal, X } from 'lucide-react';
 import * as React from 'react';
 import { Button, cn, toneDot, type Tone } from './primitives';
 
+/**
+ * full-test 15/11 MOBILE-A11Y-03: a dialog / sheet opened from controlled state (menu item, icon button) has no Radix
+ * `Trigger`, so on close the focus fell to `<body>`. The element focused when it opened gets it back — for a menu item,
+ * the menu's trigger (« Actions ⌄ »).
+ */
+export function useReturnFocus(open: boolean) {
+  const opener = React.useRef<HTMLElement | null>(null);
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    let el = document.activeElement as HTMLElement | null;
+    if (el?.closest('[role="menu"]')) el = document.querySelector<HTMLElement>('[aria-haspopup="menu"][aria-expanded="true"], [aria-haspopup="menu"][data-state="open"]') ?? el;
+    opener.current = el && el !== document.body ? el : null;
+  }, [open]);
+  return React.useCallback((e: Event) => {
+    const el = opener.current;
+    opener.current = null;
+    if (el && el.isConnected) {
+      e.preventDefault();
+      el.focus();
+    }
+  }, []);
+}
+
 /* ---------- Dialog ---------- */
 export function Dialog({
   open,
@@ -31,11 +54,13 @@ export function Dialog({
   /** blocking dialogs (legal re-acceptance): no ✕, Esc and outside clicks are ignored */
   hideClose?: boolean;
 }) {
+  const returnFocus = useReturnFocus(open);
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/70" />
         <DialogPrimitive.Content
+          onCloseAutoFocus={returnFocus}
           onEscapeKeyDown={hideClose ? (e) => e.preventDefault() : undefined}
           onInteractOutside={hideClose ? (e) => e.preventDefault() : undefined}
           // the title and the footer stay put; only the body scrolls when the dialog is taller than the screen (90 dvh:
@@ -49,8 +74,9 @@ export function Dialog({
           <div className="flex shrink-0 items-start justify-between gap-4">
             <DialogPrimitive.Title className="ts-title">{title}</DialogPrimitive.Title>
             {hideClose ? null : (
-              <DialogPrimitive.Close aria-label={closeLabel} className="text-text-muted hover:text-text-primary">
-                <X className="size-4" />
+              // MOBILE-A11Y-09: a 32 px target around the 16 px icon (it was 16 × 16 on phones)
+              <DialogPrimitive.Close aria-label={closeLabel} className="-me-2 -mt-1.5 flex size-8 shrink-0 items-center justify-center rounded-card text-text-muted hover:text-text-primary">
+                <X className="size-4" aria-hidden />
               </DialogPrimitive.Close>
             )}
           </div>
@@ -131,6 +157,14 @@ export type MenuAction = {
   hint?: string;
   /** draws a separator above the item */
   separated?: boolean;
+  /** one-letter keyboard shortcut (C, R, E, A…): fires the action from the open menu or from the focused trigger */
+  shortcut?: string;
+};
+/** The enabled action of a one-letter shortcut key (no modifier), if any. */
+export const shortcutAction = (actions: readonly MenuAction[], e: { key: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean }): MenuAction | null => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return null;
+  const k = e.key.toUpperCase();
+  return actions.find((a) => a.shortcut && a.shortcut.toUpperCase() === k && !a.disabledReason && a.onSelect) ?? null;
 };
 export function ActionsMenu({
   label,
@@ -152,16 +186,30 @@ export function ActionsMenu({
   iconOnly?: boolean;
 }) {
   const disabled = actions.filter((a) => a.disabledReason);
+  const [open, setOpen] = React.useState(false);
+  // full-test 15/11 MOBILE-A11Y-06 (09-code-conventions: « shortcut key fires onSelect without opening »): the letters shown
+  // in the menu work — from the open menu (instead of the type-ahead) and from the focused « Actions » button
+  const onShortcut = (e: React.KeyboardEvent) => {
+    const a = shortcutAction(actions, e);
+    if (!a) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setOpen(false);
+    a.onSelect?.();
+  };
   if (!actions.length) return null;
+  // « Envoyer : raison » in French (space before the colon), « Send: reason » in English / Arabic (full-test ORDERS-24);
+  // the menu content renders on the client only (portal, when opened), so reading the page language is safe
+  const sep = typeof document !== 'undefined' && !document.documentElement.lang.startsWith('fr') ? ': ' : ' : ';
   return (
-    <Dropdown.Root>
+    <Dropdown.Root open={open} onOpenChange={setOpen}>
       <Dropdown.Trigger asChild>
         {iconOnly ? (
-          <Button size={size} variant={variant} aria-label={label} title={label} className="w-8 !px-0" onClick={(e) => e.stopPropagation()}>
+          <Button size={size} variant={variant} aria-label={label} title={label} className="w-8 !px-0" onClick={(e) => e.stopPropagation()} onKeyDown={onShortcut}>
             <MoreHorizontal className="size-4" aria-hidden />
           </Button>
         ) : (
-          <Button size={size} variant={variant} onClick={(e) => e.stopPropagation()}>
+          <Button size={size} variant={variant} onClick={(e) => e.stopPropagation()} onKeyDown={onShortcut}>
             {label}
             <ChevronDown className="size-3.5" aria-hidden />
           </Button>
@@ -175,6 +223,7 @@ export function ActionsMenu({
           // long state menus (orders: up to 18 items) scroll inside the space left on screen instead of overflowing it
           className="z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-48 max-w-80 overflow-y-auto rounded-card border border-line-edge bg-ink-raised p-1 shadow-xl"
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={onShortcut}
         >
           {heading ? <Dropdown.Label className="truncate px-2.5 py-1.5 ts-label-micro text-text-muted">{heading}</Dropdown.Label> : null}
           {actions.map((a) => (
@@ -199,7 +248,9 @@ export function ActionsMenu({
             <div className="mt-1 border-t border-line-hairline px-2.5 py-2 ts-label-meta text-text-muted">
               {disabled.map((a) => (
                 <div key={a.key}>
-                  {a.label} : {a.disabledReason}
+                  {a.label}
+                  {sep}
+                  {a.disabledReason}
                 </div>
               ))}
             </div>
@@ -339,7 +390,8 @@ export function ToastRegion({ label, closeLabel }: { label: string; closeLabel: 
           {t.action ? (
             <button
               type="button"
-              className="ts-label-meta text-accent-inbound hover:underline"
+              // MOBILE-A11Y-09: at least 32 px high to tap on a phone (it was 12 px)
+              className="-my-1.5 inline-flex min-h-8 items-center px-1 ts-label-meta text-accent-inbound hover:underline"
               onClick={() => {
                 t.action!.onClick();
                 dismissToast(t.id);
@@ -348,8 +400,8 @@ export function ToastRegion({ label, closeLabel }: { label: string; closeLabel: 
               {t.action.label}
             </button>
           ) : null}
-          <button type="button" aria-label={closeLabel} className="text-text-muted hover:text-text-primary" onClick={() => dismissToast(t.id)}>
-            <X className="size-3.5" />
+          <button type="button" aria-label={closeLabel} className="-my-1.5 -me-1.5 flex size-8 shrink-0 items-center justify-center rounded-card text-text-muted hover:text-text-primary" onClick={() => dismissToast(t.id)}>
+            <X className="size-3.5" aria-hidden />
           </button>
         </div>
       ))}

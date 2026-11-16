@@ -50,12 +50,13 @@ export class TurnContextService {
     return next;
   }
 
-  async load(agent: Agent, o: { text: string; lastProductIds?: string[]; lang: AiLanguage; unclearStreak?: number; now?: Date; clientId?: string | null; customer?: PromptContext['customer'] }): Promise<TurnContext> {
+  async load(agent: Agent, o: { text: string; lastProductIds?: string[]; lang: AiLanguage; unclearStreak?: number; now?: Date; clientId?: string | null; customer?: PromptContext['customer']; chosen?: PromptContext['chosen'] }): Promise<TurnContext> {
     const now = o.now ?? new Date();
     const [ws, faqs, catalogue, model, client] = await Promise.all([
       prisma.workspace.findUniqueOrThrow({ where: { id: TenantContext.workspaceId() }, select: { name: true, locale: true, freeDeliveryThreshold: true, systemMessages: true, senderWilaya: { select: { nameFr: true } } } }),
       prisma.agentFaq.findMany({ where: { agentId: agent.id, isActive: true }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], select: { question: true, answer: true } }),
-      this.catalogue.slice(agent, { text: o.text, lastProductIds: o.lastProductIds ?? [] }),
+      // the chosen products stay in the slice (CURRENT ORDER names them)
+      this.catalogue.slice(agent, { text: o.text, lastProductIds: [...new Set([...(o.chosen ?? []).map((c) => c.productId), ...(o.lastProductIds ?? [])])] }),
       this.modelOf(agent),
       o.clientId ? prisma.client.findFirst({ where: { id: o.clientId, deletedAt: null }, select: { name: true, phone: true, phone2: true, isPlaceholder: true, addresses: { orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }], take: 1, select: { address: true, communeText: true, wilaya: { select: { nameFr: true } }, commune: { select: { nameFr: true } } } } } }) : null,
     ]);
@@ -75,6 +76,7 @@ export class TurnContextService {
         outOfHours: isOutOfHours(a.businessHours, now),
         unclearStreak: o.unclearStreak ?? 0,
         customer: knownCustomer(client, o.customer),
+        chosen: o.chosen ?? null,
       },
       model,
       temperature: Number(agent.temperature),

@@ -429,7 +429,7 @@ describe('CHN-06 pause / resume / disconnect', () => {
     expect((await admin.patch(`/channels/${channel.id}`, { status: 'active' }).expect(200)).body.data.status).toBe('active');
     // validation
     expect((await admin.patch(`/channels/${channel.id}`, { status: 'disconnected' }).expect(422)).body.error.code).toBe('VALIDATION_ERROR');
-    await admin.get('/channels/not-a-uuid').expect(400);
+    await admin.get('/channels/not-a-uuid').expect(404);
     // an operator sees the management actions greyed with the reason
     const view = (await op.get(`/channels/${channel.id}`).expect(200)).body.data;
     expect(view.actions.every((a: { enabled: boolean; reasonCode?: string }) => !a.enabled && a.reasonCode === 'FORBIDDEN')).toBe(true);

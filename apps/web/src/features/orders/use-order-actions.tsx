@@ -18,6 +18,7 @@ import { AddressDialog } from './dialogs/address-dialog';
 import { refusal } from './dialogs/common';
 import { ConfirmOrderDialog } from './dialogs/confirm-dialog';
 import { AssignDialog, CallbackDialog, CancelOrderDialog, ChangeStatusDialog, DeleteOrderDialog, DeliverDialog, PaymentDialog, ReturnDialog, ShipManualDialog } from './dialogs/order-dialogs';
+import { withCourierSetup } from '@/features/delivery/logic';
 import { SendToCourierDialog } from '@/features/delivery/send-dialog';
 import type { ShipmentErrorView } from '@djaber/shared';
 
@@ -27,7 +28,7 @@ type OrderLike = Pick<OrderListItem, 'id' | 'number' | 'status' | 'version' | 'a
 /** Status targets of "Changer le statut" (04 §1.2), cancellation having its own dialog. */
 export const statusTargets = (status: OrderStatus): OrderStatus[] => ORDER_STATUSES.filter((to) => to !== 'cancelled' && canTransition(status, to));
 
-export type OrderMenuOptions = { onPage?: boolean };
+export type OrderMenuOptions = { onPage?: boolean; canManageCouriers?: boolean };
 /** Menu items of one order: handlers in the Figma menu order (first = primary after sorting). */
 export function orderMenuActions(o: OrderLike, run: (kind: OrderDialogKind | 'confirmDirect' | 'prepare', order: OrderLike) => void, nav: (href: string) => void, t: TFunction, opt: OrderMenuOptions & { canWrite: boolean }): MenuAction[] {
   const handlers: Record<string, ActionHandler> = {
@@ -55,7 +56,7 @@ export function orderMenuActions(o: OrderLike, run: (kind: OrderDialogKind | 'co
     [ORDER_ACTION.cancel]: { label: t('action.cancelOrder').replace(/^✕\s*/, ''), onSelect: () => run('cancel', o), destructive: true, separated: true },
     [ORDER_ACTION.delete]: { label: t('action.delete'), onSelect: () => run('delete', o), destructive: true },
   };
-  return toMenuActions(o.actions, handlers, t);
+  return toMenuActions(withCourierSetup(o.actions, !!opt.canManageCouriers), handlers, t);
 }
 
 /**
@@ -97,7 +98,7 @@ export function useOrderActions(o: { onDeleted?: () => void } = {}) {
   );
   /** Dialogs opened from another screen (delivery overview, tracking panel) on an order id only. */
   const openOn = useCallback((kind: OrderDialogKind, orderId: string, extra?: { error?: ShipmentErrorView | null }) => setState({ kind, id: orderId, error: extra?.error ?? null }), []);
-  const menu = useCallback((row: OrderLike, opt: OrderMenuOptions = {}) => orderMenuActions(row, run, (href) => router.push(href), t, { ...opt, canWrite: can('orders.write') }), [run, router, t, can]);
+  const menu = useCallback((row: OrderLike, opt: OrderMenuOptions = {}) => orderMenuActions(row, run, (href) => router.push(href), t, { ...opt, canWrite: can('orders.write'), canManageCouriers: can('delivery.manage') }), [run, router, t, can]);
 
   const close = () => setState((s) => (s?.after ? { kind: s.after, id: s.id } : null));
   const done = async (next?: Order | null) => {

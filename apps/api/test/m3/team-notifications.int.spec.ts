@@ -78,9 +78,9 @@ describe('team notifications', () => {
 
     const rows = (await owner.get('/notifications').expect(200)).body.data as { type: string; title: string; body: string }[];
     const by = (type: string) => rows.find((n) => n.type === type)!;
-    expect(by('stock_low')).toMatchObject({ title: 'Stock faible : Théière en cuivre (3 restants)', body: 'Seuil : 4. Une seule alerte par jour et par produit.' });
+    expect(by('stock_low')).toMatchObject({ title: 'Stock faible : Théière en cuivre (stock 3)', body: 'Seuil : 4. Une seule alerte par jour et par produit.' });
     expect(by('stock_out')).toMatchObject({ title: 'Rupture : Plateau' });
-    expect(by('job_finished').title).toBe('Tâche terminée : export');
+    expect(by('job_finished').title).toBe('Tâche terminée : Export'); // UX-059: the job kind in words
     expect(exported.body.data.jobId).toBeTruthy();
     expect(rows.length).toBeGreaterThanOrEqual(3);
     for (const locale of ['fr', 'ar', 'en']) {
@@ -91,7 +91,7 @@ describe('team notifications', () => {
     await db.notification.create({ data: { workspaceId: owner.workspaceId, userId: owner.userId, type: 'stock_low', title: {}, body: {}, data: { productId: product.id, name: 'Ancien produit', stock: 1, minStock: 2 } } });
     await db.notification.create({ data: { workspaceId: owner.workspaceId, userId: owner.userId, type: 'stock_out', title: {}, body: {}, data: {} } });
     const again = (await owner.get('/notifications').expect(200)).body.data as { type: string; title: string; body: string }[];
-    expect(again.map((n) => n.title)).toEqual(expect.arrayContaining(['Stock faible : Ancien produit (1 restants)', 'Rupture :']));
+    expect(again.map((n) => n.title)).toEqual(expect.arrayContaining(['Stock faible : Ancien produit (stock 1)', 'Rupture :']));
     for (const n of again) expect(`${n.title}\n${n.body}`).not.toMatch(/[{}]/);
     // a producer that forgets a declared text parameter is caught when it emits (tests) instead of showing "{product}"
     const producer = app.app.get(NotificationProducer);

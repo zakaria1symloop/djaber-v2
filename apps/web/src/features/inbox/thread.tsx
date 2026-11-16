@@ -359,7 +359,8 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
               </StatusPill>
             ) : null}
             {c.aiPaused ? <Pill>{t('enum.Conversation.aiPaused')}</Pill> : null}
-            {c.assignee ? <Pill tone="info">{shortUserName(c.assignee)}</Pill> : null}
+            {/* full-test 15/11 CHANNELS-INBOX-13: a Latin name keeps its period on the right side in Arabic (« .KARIM P ») */}
+            {c.assignee ? <Pill tone="info">{isolate(shortUserName(c.assignee))}</Pill> : null}
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -443,7 +444,7 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
           kind={banner}
           tone="danger"
           title={t('inbox.banner.reconnect.title', { page: isolate(c.channel.name) })}
-          description={t('inbox.banner.reconnect.description')}
+          description={c.channel.status === 'disconnected' ? t('inbox.banner.reconnect.disconnected') : t('inbox.banner.reconnect.description')}
           actions={
             can('channels.manage') ? (
               <button type="button" onClick={() => void connect.reconnect(c.channel)} disabled={connect.busy} className="ts-label-meta uppercase text-accent-inbound hover:underline disabled:opacity-50" data-testid="thread-reconnect">
@@ -474,7 +475,7 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
         <ThreadBanner
           kind={banner}
           tone="neutral"
-          title={c.blockedAt ? t('inbox.banner.blocked.by', { date: dayLabel(c.blockedAt.slice(0, 10), t, locale, now), name: shortUserName(c.blockedBy) || t('inbox.banner.blocked.system') }) : t('inbox.banner.blocked.title')}
+          title={c.blockedAt ? t('inbox.banner.blocked.by', { date: dayLabel(c.blockedAt.slice(0, 10), t, locale, now), name: isolate(shortUserName(c.blockedBy)) || t('inbox.banner.blocked.system') }) : t('inbox.banner.blocked.title')}
           description={t('inbox.banner.blocked.description')}
           actions={
             can('safety.manage') ? (
@@ -584,7 +585,7 @@ function LiveThread({ c, backHref, actions, onTogglePanel, onFocusNote }: { c: C
                 ? { tone: 'neutral', tag: t('enum.Client.blocked'), reason: t('inbox.composer.blocked') }
                 : {
                     tag: t('enum.Conversation.outsideWindow'),
-                    reason: `${t('error.REPLY_OUTSIDE_WINDOW')} (REPLY_OUTSIDE_WINDOW)${state.template || c.channel.platform === 'facebook' ? '' : ` — ${t('inbox.composer.outside.instagram')}`}`,
+                    reason: `${t('error.REPLY_OUTSIDE_WINDOW')}${state.template || c.channel.platform === 'facebook' ? '' : ` — ${t('inbox.composer.outside.instagram')}`}`,
                     action: state.template ? (
                       <Button size="sm" onClick={() => setTemplateOpen(true)} data-testid="send-template">
                         {t('inbox.composer.template')}

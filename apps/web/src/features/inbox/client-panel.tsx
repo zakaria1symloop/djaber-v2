@@ -7,14 +7,14 @@ import { formatDate, formatMoney, NOTE_MAX_CHARS } from '@djaber/shared';
 import { Button, buttonClass, Card, InternalNote, Ltr, OrderCard, Pill, SectionLabel, Skeleton, StatusPill, Textarea } from '@djaber/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
-import { useState, type RefObject } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 import { Link } from '@/i18n/navigation';
 import { errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { useSession, useWorkspaceId } from '@/lib/session';
 import { inboxApi, inboxKeys, useConversation, useNotes } from './api';
 import type { Conversation, Note } from './contracts';
-import { Phone, shortUserName, useLocale } from './ui';
+import { isolate, Phone, shortUserName, useLocale } from './ui';
 
 export function ClientPanel({ id, noteRef, onClose }: { id: string; noteRef: RefObject<HTMLTextAreaElement | null>; onClose: () => void }) {
   const t = useT();
@@ -195,6 +195,12 @@ function NewOrderButton({ c }: { c: Conversation }) {
   );
 }
 
+/**
+ * full-test 15/11 CHANNELS-INBOX-08: an unsaved internal note is kept per conversation while the tab is open — switching
+ * thread no longer throws it away (it comes back when the merchant returns to that conversation).
+ */
+const NOTE_DRAFTS = new Map<string, string>();
+
 function Notes({ id, noteRef }: { id: string; noteRef: RefObject<HTMLTextAreaElement | null> }) {
   const t = useT();
   const locale = useLocale();
@@ -202,8 +208,17 @@ function Notes({ id, noteRef }: { id: string; noteRef: RefObject<HTMLTextAreaEle
   const qc = useQueryClient();
   const { readOnly } = useSession();
   const q = useNotes(id);
-  const [body, setBody] = useState('');
+  const [body, setBodyState] = useState(() => NOTE_DRAFTS.get(id) ?? '');
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    setBodyState(NOTE_DRAFTS.get(id) ?? '');
+    setError(null);
+  }, [id]);
+  const setBody = (v: string) => {
+    setBodyState(v);
+    if (v) NOTE_DRAFTS.set(id, v);
+    else NOTE_DRAFTS.delete(id);
+  };
   const add = useMutation({ mutationFn: (text: string) => inboxApi.addNote(id, text) });
   const notes = q.data ?? [];
   const tooLong = body.length > NOTE_MAX_CHARS;
@@ -241,7 +256,7 @@ function Notes({ id, noteRef }: { id: string; noteRef: RefObject<HTMLTextAreaEle
         <ul className="flex flex-col gap-2">
           {notes.map((n) => (
             <li key={n.id}>
-              <InternalNote author={shortUserName(n.author)} time={formatDate(n.createdAt, locale)}>
+              <InternalNote author={isolate(shortUserName(n.author))} time={formatDate(n.createdAt, locale)}>
                 {n.body}
               </InternalNote>
             </li>

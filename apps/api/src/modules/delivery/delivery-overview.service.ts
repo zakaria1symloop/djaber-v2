@@ -25,6 +25,8 @@ const LATEST = Prisma.sql`LEFT JOIN LATERAL (SELECT x.* FROM "Shipment" x WHERE 
 const NOT_SENT = Prisma.sql`(o."status" IN ('confirmed','preparing') AND NOT EXISTS (SELECT 1 FROM "Shipment" y WHERE y."orderId" = o."id" AND y."status" IN ${ACTIVE}))`;
 const lastEvent = Prisma.sql`COALESCE(s."lastEventAt", s."createdAt")`;
 const SORTS: Record<string, Prisma.Sql> = {
+  // full-test DELIVERY-11: the list default — newest activity first (an order not sent yet counts from its confirmation)
+  lastEventAt: Prisma.sql`COALESCE(s."lastEventAt", s."createdAt", o."confirmedAt", o."orderedAt")`,
   lastSyncedAt: Prisma.sql`s."lastSyncedAt"`,
   createdAt: Prisma.sql`COALESCE(s."createdAt", o."confirmedAt", o."orderedAt")`,
   orderNumber: Prisma.sql`o."number"`,
@@ -65,7 +67,8 @@ export class DeliveryOverviewService implements OnModuleInit {
         { header: h.phone, value: (r: R) => r.client.phone ?? '' },
         { header: h.wilaya, value: (r: R) => r.wilaya?.name ?? '' },
         { header: h.commune, value: (r: R) => r.communeName ?? '' },
-        { header: h.stopdesk, value: (r: R) => (r.isStopdesk ? 1 : 0) },
+        // full-test DELIVERY-14: « Oui » / « Non », like the other human-readable columns
+        { header: h.stopdesk, value: (r: R) => (r.isStopdesk ? h.yes : h.no) },
         { header: h.courier, value: (r: R) => r.shipment?.courierAccount?.displayName ?? (r.shipment ? PROVIDER_NAMES[r.shipment.provider as CourierProvider] ?? r.shipment.provider : '') },
         { header: h.tracking, value: (r: R) => r.shipment?.trackingNumber ?? '' },
         { header: h.status, value: (r: R) => exportLabel(locale, ['enum.Shipment.status', 'enum.Order.deliveryStatus'], r.shipment?.status ?? 'not_sent') },
@@ -142,7 +145,7 @@ export class DeliveryOverviewService implements OnModuleInit {
         where: { id: { in: pairs.map((p) => p.id) } },
         include: { client: { select: { id: true, name: true, phone: true, riskLevel: true, isPlaceholder: true, orderCount: true } }, wilaya: { select: { id: true, nameFr: true, nameAr: true } }, commune: { select: { nameFr: true, nameAr: true } }, shipments: { where: { status: { in: ['pending', 'sent', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered'] } }, select: { id: true, provider: true, status: true } } },
       }),
-      prisma.shipment.findMany({ where: { id: { in: pairs.map((p) => p.sid).filter((x): x is string => !!x) } }, include: { courierAccount: { select: { id: true, displayName: true, baseUrl: true } } } }),
+      prisma.shipment.findMany({ where: { id: { in: pairs.map((p) => p.sid).filter((x): x is string => !!x) } }, include: { courierAccount: { select: { id: true, displayName: true, baseUrl: true } }, events: { orderBy: [{ at: 'desc' }, { id: 'desc' }], take: 1, select: { source: true } } } }),
       prisma.courierAccount.count({ where: { isActive: true } }),
       this.safety.index(),
       syncAvailability(this.redis, sids),
@@ -197,7 +200,8 @@ export class DeliveryOverviewService implements OnModuleInit {
     return out;
   }
 
-  private head(s: Shipment & { courierAccount: { id: string; displayName: string } | null }, orderStatus: string, now: number, syncAvailableAt: string | null = null): DeliveryRowView['shipment'] {
+  private head(s: Shipment & { courierAccount: { id: string; displayName: string } | null; events?: { source: string }[] }, orderStatus: string, now: number, syncAvailableAt: string | null = null): DeliveryRowView['shipment'] {
+    const lastSource = s.events?.[0]?.source;
     return {
       id: s.id,
       provider: s.provider,
@@ -211,6 +215,8 @@ export class DeliveryOverviewService implements OnModuleInit {
       codAmount: s.codAmount,
       courierCost: s.courierCost,
       lastEventAt: (s.lastEventAt ?? s.createdAt).toISOString(),
+      // full-test DELIVERY-07: who made the last event (courier webhook / poll, or a member / the system in Djaber), as in the panel
+      lastEventSource: lastSource === 'webhook' || lastSource === 'poll' ? 'courier' : 'djaber',
       lastSyncedAt: s.lastSyncedAt?.toISOString() ?? null,
       syncAvailableAt,
       noMovement: isNoMovement(s, now),
@@ -291,7 +297,7 @@ export class DeliveryOverviewService implements OnModuleInit {
 }
 
 const EXPORT_HEADERS = {
-  fr: { sheet: 'Livraisons', order: 'Commande', client: 'Client', phone: 'Téléphone', wilaya: 'Wilaya', commune: 'Commune', stopdesk: 'Point relais', courier: 'Transporteur', tracking: 'Suivi', status: 'Statut colis', attempts: 'Tentatives', failure: 'Motif d’échec', cod: 'Montant à encaisser', total: 'Total', sentAt: 'Envoyé le', lastEventAt: 'Dernier événement' },
-  en: { sheet: 'Deliveries', order: 'Order', client: 'Client', phone: 'Phone', wilaya: 'Wilaya', commune: 'Commune', stopdesk: 'Stop-desk', courier: 'Courier', tracking: 'Tracking', status: 'Parcel status', attempts: 'Attempts', failure: 'Failure reason', cod: 'Cash to collect', total: 'Total', sentAt: 'Sent on', lastEventAt: 'Last event' },
-  ar: { sheet: 'التوصيلات', order: 'الطلب', client: 'العميل', phone: 'الهاتف', wilaya: 'الولاية', commune: 'البلدية', stopdesk: 'نقطة الاستلام', courier: 'الناقل', tracking: 'التتبع', status: 'حالة الطرد', attempts: 'المحاولات', failure: 'سبب الفشل', cod: 'المبلغ المستحق', total: 'المجموع', sentAt: 'أُرسل في', lastEventAt: 'آخر حدث' },
+  fr: { sheet: 'Livraisons', order: 'Commande', client: 'Client', phone: 'Téléphone', wilaya: 'Wilaya', commune: 'Commune', stopdesk: 'Point relais', courier: 'Transporteur', tracking: 'Suivi', status: 'Statut colis', attempts: 'Tentatives', failure: 'Motif d’échec', cod: 'Montant à encaisser', total: 'Total', sentAt: 'Envoyé le', lastEventAt: 'Dernier événement', yes: 'Oui', no: 'Non' },
+  en: { sheet: 'Deliveries', order: 'Order', client: 'Client', phone: 'Phone', wilaya: 'Wilaya', commune: 'Commune', stopdesk: 'Stop-desk', courier: 'Courier', tracking: 'Tracking', status: 'Parcel status', attempts: 'Attempts', failure: 'Failure reason', cod: 'Cash to collect', total: 'Total', sentAt: 'Sent on', lastEventAt: 'Last event', yes: 'Yes', no: 'No' },
+  ar: { sheet: 'التوصيلات', order: 'الطلب', client: 'العميل', phone: 'الهاتف', wilaya: 'الولاية', commune: 'البلدية', stopdesk: 'نقطة الاستلام', courier: 'الناقل', tracking: 'التتبع', status: 'حالة الطرد', attempts: 'المحاولات', failure: 'سبب الفشل', cod: 'المبلغ المستحق', total: 'المجموع', sentAt: 'أُرسل في', lastEventAt: 'آخر حدث', yes: 'نعم', no: 'لا' },
 } as const;

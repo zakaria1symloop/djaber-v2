@@ -11,7 +11,8 @@ import { useT } from '@/lib/i18n';
 import { AdminQueryError } from '../admin-page';
 import { useAdminGet, useAdminList } from '../api';
 import { usePlatform } from '../platform';
-import { AdminPill, fullName, useFormats } from '../ui';
+import { adminReason } from '../reasons';
+import { AdminPill, courierLabel, fullName, ledgerReason, paymentMethodLabel, useFormats } from '../ui';
 import { ReleaseDialog } from './dialogs';
 import type { WsDialog } from './actions';
 import type { MenuAction } from '@djaber/ui';
@@ -104,7 +105,7 @@ function Summary({ ws, onAction }: { ws: AdminWorkspaceDetailDto; onAction: (kin
     const d = has(k);
     if (!d || !o.perm) return null;
     return (
-      <Button variant={o.primary ? 'primary' : o.danger ? 'danger' : 'secondary'} disabled={!d.enabled} title={d.enabled ? undefined : t(`error.${d.reasonCode ?? 'FORBIDDEN'}`)} onClick={() => onAction(k, ws)} data-testid={`ws-btn-${k}`}>
+      <Button variant={o.primary ? 'primary' : o.danger ? 'danger' : 'secondary'} disabled={!d.enabled} title={d.enabled ? undefined : adminReason(t, d)} onClick={() => onAction(k, ws)} data-testid={`ws-btn-${k}`}>
         {label}
       </Button>
     );
@@ -124,7 +125,7 @@ function Summary({ ws, onAction }: { ws: AdminWorkspaceDetailDto; onAction: (kin
         </Row>
         <Row label={t('admin.ws.row.subscription')}>
           {/* tester report 22/10 UX-018: a trial / the free plan has no billing cycle (billingCycle=none): no « mensuel · 0 DA » */}
-          {sub ? [sub.cycle === 'none' ? sub.planName : `${sub.planName} ${t(`admin.common.cycleOpt.${sub.cycle}`).toLowerCase()}`, sub.cycle === 'none' && !sub.appliedPrice ? null : f.money(sub.appliedPrice), sub.trialEndsAt ? t('admin.ws.trialEnds', { date: f.short(sub.trialEndsAt) }) : t('admin.ws.renews', { date: f.short(sub.currentPeriodEnd) }), sub.dunningStage ? t(`enum.Subscription.dunningStage.${sub.dunningStage}`) : null, sub.method].filter(Boolean).join(' · ') : '—'}
+          {sub ? [sub.cycle === 'none' ? sub.planName : `${sub.planName} ${t(`admin.common.cycleOpt.${sub.cycle}`).toLowerCase()}`, sub.cycle === 'none' && !sub.appliedPrice ? null : f.money(sub.appliedPrice), sub.trialEndsAt ? t('admin.ws.trialEnds', { date: f.short(sub.trialEndsAt) }) : t('admin.ws.renews', { date: f.short(sub.currentPeriodEnd) }), sub.dunningStage ? t(`enum.Subscription.dunningStage.${sub.dunningStage}`) : null, sub.method ? paymentMethodLabel(t, sub.method) : null].filter(Boolean).join(' · ') : '—'}
         </Row>
         <Row label={t('admin.ws.row.credits')}>
           {[creditsText(ws.credits, f.num, t), t('admin.ws.packsBought', { count: ws.creditsDetail.packsBought }), ws.creditsDetail.lastGrant ? t('admin.ws.lastGrant', { credits: f.num(ws.creditsDetail.lastGrant.credits), reason: ws.creditsDetail.lastGrant.reason ?? '—', date: f.short(ws.creditsDetail.lastGrant.at) }) : null].filter(Boolean).join(' · ')}
@@ -132,7 +133,7 @@ function Summary({ ws, onAction }: { ws: AdminWorkspaceDetailDto; onAction: (kin
         <Row label={t('admin.ws.row.channels')}>{ws.channels.length ? ws.channels.map((c) => `${c.name} (${t(`enum.Channel.platform.${c.platform}`)}, ${t(`enum.Channel.status.${c.status}`)})`).join(' · ') : '—'}</Row>
         <Row label={t('admin.ws.row.agents')}>{ws.agents.length ? ws.agents.map((a) => `${a.name} (${t(`enum.Agent.status.${a.status}`)})`).join(' · ') : '—'}</Row>
         <Row label={t('admin.ws.row.integrations')}>
-          {[`Sheets ${ws.integrations.sheets ? '✓' : '✗'}`, ...ws.integrations.couriers.map((c) => `${c.provider} ${c.ok ? '✓' : '✗'}`), t('admin.ws.apiKeys', { count: ws.integrations.apiKeys }), t('admin.ws.webhooks', { count: ws.integrations.webhooks, disabled: ws.integrations.webhooksDisabled })].join(' · ')}
+          {[`Sheets ${ws.integrations.sheets ? '✓' : '✗'}`, ...[...new Set(ws.integrations.couriers.map((c) => c.provider))].map((p) => `${courierLabel(t, p)} ${ws.integrations.couriers.some((x) => x.provider === p && x.ok) ? '✓' : '✗'}`), t('admin.ws.apiKeys', { count: ws.integrations.apiKeys }), t('admin.ws.webhooks', { count: ws.integrations.webhooks, disabled: ws.integrations.webhooksDisabled })].join(' · ')}
         </Row>
         <Row label={t('admin.ws.row.stock')}>
           {[t(`admin.ws.stockMode.${ws.stockMode}`), t('admin.ws.products', { count: ws.counts.products }), ws.stockMode === 'advanced' ? t('admin.ws.purchases', { count: ws.counts.purchases }) : null, ws.stockMode === 'advanced' ? t('admin.ws.sales', { count: ws.counts.sales }) : null].filter(Boolean).join(' · ')}
@@ -220,7 +221,7 @@ function Subscription({ ws }: { ws: AdminWorkspaceDetailDto }) {
       <Row label={t('admin.ws.row.price')}>{f.money(s.appliedPrice)}</Row>
       <Row label={t('admin.ws.row.periodEnd')}>{f.date(s.currentPeriodEnd)}</Row>
       {s.trialEndsAt ? <Row label={t('admin.ws.row.trialEnd')}>{f.date(s.trialEndsAt)}</Row> : null}
-      <Row label={t('admin.ws.row.method')}>{s.method ?? '—'}</Row>
+      <Row label={t('admin.ws.row.method')}>{paymentMethodLabel(t, s.method)}</Row>
     </dl>
   );
 }
@@ -237,7 +238,7 @@ function Credits({ id }: { id: string }) {
           {rows.map((r) => (
             <li key={r.id} className={itemCls}>
               <span className="ts-label-micro w-24 shrink-0 text-text-muted">{f.shortTime(r.at)}</span>
-              <span className="min-w-0 flex-1 truncate">{t.has(`enum.CreditLedger.action.${r.action}`) ? t(`enum.CreditLedger.action.${r.action}`) : r.action}{r.reason ? ` · ${r.reason}` : ''}</span>
+              <span className="min-w-0 flex-1 truncate">{[t.has(`enum.CreditLedger.action.${r.action}`) ? t(`enum.CreditLedger.action.${r.action}`) : r.action, ledgerReason(t, r.action, r.reason, r.credits)].filter(Boolean).join(' · ')}</span>
               <span dir="ltr" className={r.credits >= 0 ? 'tabular-nums text-accent-money' : 'tabular-nums'}>
                 {r.credits >= 0 ? '+' : ''}
                 {f.num(r.credits)}

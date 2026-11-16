@@ -155,7 +155,8 @@ export const orderActions = (o: Pick<Order, 'status' | 'deliveryStatus' | 'payme
     act('record_payment', 'orders.write', { reason: recordPaymentRefusal(o) }),
     act('print', 'orders.read', { shortcut: 'P' }),
     act('change_status', 'orders.write', { reason: allowedTargets(state, role).length ? null : 'ORDER_TERMINAL' }),
-    act('cancel', 'orders.write', { reason: t('cancelled'), shortcut: 'Delete' }),
+    // no « Delete » hint on « Annuler » next to « Supprimer » (full-test ORDERS-24)
+    act('cancel', 'orders.write', { reason: t('cancelled') }),
     act('delete', 'orders.money', { reason: o.status === 'delivered' ? 'ORDER_DELETE_DELIVERED' : state.courierParcel ? 'DELIVERY_ORDER_ALREADY_SENT' : null }),
     // M9 (PAY-02 / PAY-03, P2): online payment link and recorded refund — UX-060: the reason fits the order (nothing paid,
     // fully paid, refunded); « Paiement verrouillé (commande clôturée) » only for a closed order
@@ -185,7 +186,8 @@ export const presentOrderListItem = (o: OrderListRow, ctx: PresentCtx): OrderLis
     itemCount: o.items.reduce((n, i) => n + i.quantity, 0),
     total: o.total,
     amountPaid: o.amountPaid,
-    remaining: Math.max(0, o.total - o.amountPaid),
+    // nothing is left to collect on a cancelled / returned order (full-test ORDERS-11, like purchases)
+    remaining: o.status === 'cancelled' || o.status === 'returned' ? 0 : Math.max(0, o.total - o.amountPaid),
     status: o.status,
     confirmationStatus: o.confirmationStatus,
     callAttempts: o.callAttempts,

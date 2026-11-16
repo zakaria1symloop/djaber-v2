@@ -838,6 +838,13 @@ export class AdminAuditController {
     return this.audit.list(q);
   }
 
+  /** full-test 15/11 ADMIN-14: every action slug present in the log, for the « Action » filter (before `:id`). */
+  @Get('actions')
+  @RequirePlatformRole('admin.audit.read')
+  actions() {
+    return this.audit.actions();
+  }
+
   @Post('export')
   @Idempotent()
   @HttpCode(202)

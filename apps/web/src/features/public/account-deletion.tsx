@@ -207,9 +207,11 @@ function TokenFlow({ token: initial, wantsExport }: { token: string; wantsExport
     router.replace(`${pathname}?token=${encodeURIComponent(token)}`, { scroll: false });
   }, [wantsExport, graceData, startExport, router, pathname, token]);
 
-  const expired = !valid || (q.error instanceof ApiError && (q.error.code === 'ACCOUNT_DELETION_TOKEN_EXPIRED' || q.error.status === 410 || q.error.status === 404));
+  // full-test 15/11 PUBLIC-11: a cut / mistyped link (malformed, 404) is « invalide »; only a 410 is « expiré »
+  const invalid = !valid || (q.error instanceof ApiError && q.error.status === 404);
+  const expired = invalid || (q.error instanceof ApiError && (q.error.code === 'ACCOUNT_DELETION_TOKEN_EXPIRED' || q.error.status === 410));
   if (blocked) return <BlockedView blocked={blocked} />;
-  if (expired) return <ExpiredView />;
+  if (expired) return <ExpiredView invalid={invalid} />;
   if (q.isPending && !after) return <TokenSkeleton />;
   if (q.isError && !after) {
     const ref = q.error instanceof ApiError ? q.error.body.ref || '—' : '—';
@@ -331,11 +333,11 @@ function CancelledView() {
   );
 }
 
-function ExpiredView() {
+function ExpiredView({ invalid = false }: { invalid?: boolean }) {
   const t = useT();
   return (
-    <Card className="flex flex-col gap-4 px-5 py-[18px]" data-testid="deletion-state" data-state="expired">
-      <StateBlock icon={<Clock className="size-5" />} title={t('public.deletion.expired.title')} description={t('public.deletion.expired.text')} className="!border-0 !p-0" />
+    <Card className="flex flex-col gap-4 px-5 py-[18px]" data-testid="deletion-state" data-state={invalid ? 'invalid' : 'expired'}>
+      <StateBlock icon={<Clock className="size-5" />} title={invalid ? t('public.deletion.invalid.title') : t('public.deletion.expired.title')} description={invalid ? t('public.deletion.invalid.text') : t('public.deletion.expired.text')} className="!border-0 !p-0" />
       <Link href="/account/deletion" className={buttonClass({ variant: 'primary', className: 'self-center' })} data-testid="del-restart">
         {t('public.deletion.expired.action')}
       </Link>

@@ -1,4 +1,4 @@
-import { handoffReason, judgeHandoff, quotedFrom } from './handoff-judge';
+import { fieldOnlyMessage, handoffReason, judgeHandoff, quotedFrom } from './handoff-judge';
 
 // retest 12/11: « the bot still transfers to a team member for no reason, even after a hello; once confused in a chat it
 // keeps behaving abnormally » — the server checks the model's handoff against the customer's words of the turn
@@ -50,5 +50,15 @@ describe('judgeHandoff', () => {
     expect(quotedFrom('remboursement', 'je veux un remboursement')).toBe(true);
     expect(quotedFrom('remboursement', 'je veux commander')).toBe(false);
     expect(quotedFrom('je veux parler à un responsable maintenant', 'je veux commander maintenant')).toBe(false);
+  });
+});
+
+describe('full-test 15/11 AI-CHAT-07 — a message that is only an order field', () => {
+  it.each(['0770112233', '+213 661 23 45 67', '0661 23 45 67'])('a phone number alone: « %s »', (t) => expect(fieldOnlyMessage(t, false)).toBe(true));
+  it.each(['Sétif', 'Bab Ezzouar', 'Karim Haddad', 'cité 20 août villa 3', 'قسنطينة'])('while ordering, a short answer: « %s »', (t) => expect(fieldOnlyMessage(t, true)).toBe(true));
+  it.each(['je veux parler à un humain', 'un humain svp', 'remboursez-moi', 'c’est une arnaque', 'Sétif ?', 'bghit nhder m3a bnadem'])('never a request for the team: « %s »', (t) => expect(fieldOnlyMessage(t, true)).toBe(false));
+  it('no order being taken: only a phone number counts', () => {
+    expect(fieldOnlyMessage('Sétif', false)).toBe(false);
+    expect(fieldOnlyMessage('', true)).toBe(false);
   });
 });

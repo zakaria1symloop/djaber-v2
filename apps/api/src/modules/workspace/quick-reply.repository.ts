@@ -19,6 +19,12 @@ export class QuickReplyRepository {
       .count({ where: { title: { equals: title, mode: 'insensitive' }, locale, ...(exceptId ? { NOT: { id: exceptId } } : {}) } })
       .then((n) => n > 0);
   }
+  /** full-test 15/11 SETTINGS-11: « /merci » typed in the composer must insert one known reply (case-insensitive). */
+  shortcutExists(shortcut: string, exceptId?: string) {
+    return prisma.quickReply
+      .count({ where: { shortcut: { equals: shortcut, mode: 'insensitive' }, ...(exceptId ? { NOT: { id: exceptId } } : {}) } })
+      .then((n) => n > 0);
+  }
   maxSortOrder() {
     return prisma.quickReply.aggregate({ _max: { sortOrder: true } }).then((a) => a._max.sortOrder ?? -1);
   }

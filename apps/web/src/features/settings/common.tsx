@@ -35,7 +35,7 @@ export function SettingsPage({
   const t = useT();
   const locale = useLocaleCode();
   const { role } = useSession();
-  if (permission && !roleCan(role, permission)) return <Page403 role={role ? t(`enum.Membership.role.${role}`) : '—'} homeHref={`/${locale}/home`} />;
+  if (permission && !roleCan(role, permission)) return <Page403 role={role ? t(`enum.Membership.role.${role}`) : '—'} homeHref={`/${locale}/home`} permissions={[permission]} />;
   return (
     <div className="flex flex-col gap-5">
       <PageHeader title={title} description={description} actions={actions} />

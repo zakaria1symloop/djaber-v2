@@ -39,6 +39,8 @@ export function PackDialog({ pack, open, onClose }: { pack: CreditPackAdminDto |
     setFeatured(pack?.isFeatured ?? false);
     setErrors(NO_ERRORS);
   });
+  // 12 §16 Form « Validation » (full-test 15/11 ADMIN-18): a pack holds at least 1 credit, said under the field before submit
+  const creditsError = credits !== '' && !(Number(credits) > 0) ? t('admin.validation.positive') : undefined;
   const submit = async () => {
     setErrors(NO_ERRORS);
     const common = { name: { fr: name.trim() }, credits: Number(credits), priceWebDzd: Number(price), isActive: active, visibleWeb: web, visibleMobile: mobile, isFeatured: featured };
@@ -59,7 +61,7 @@ export function PackDialog({ pack, open, onClose }: { pack: CreditPackAdminDto |
       testId="dlg-pack"
       title={pack ? t('admin.credits.pack.editTitle', { name: pack.name }) : t('admin.credits.pack.newTitle')}
       submitLabel={t('action.save')}
-      disabled={!name.trim() || !Number(credits) || (!pack && !slug.trim())}
+      disabled={!name.trim() || !(Number(credits) > 0) || (!pack && !slug.trim())}
       pending={m.isPending}
       error={errors.form}
       note={t('admin.credits.pack.note')}
@@ -72,7 +74,7 @@ export function PackDialog({ pack, open, onClose }: { pack: CreditPackAdminDto |
         <Field label={t('admin.credits.col.pack')} required htmlFor="pk-name" error={errors.fields.name}>
           <Input id="pk-name" value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label={t('admin.credits.col.credits')} required htmlFor="pk-credits" error={errors.fields.credits}>
+        <Field label={t('admin.credits.col.credits')} required htmlFor="pk-credits" error={errors.fields.credits ?? creditsError}>
           <NumberInput id="pk-credits" value={credits} onValueChange={setCredits} />
         </Field>
         <Field label={t('admin.credits.col.priceWeb')} required htmlFor="pk-price" error={errors.fields.priceWebDzd}>
@@ -146,6 +148,10 @@ export function PromoDialog({ promo, open, onClose }: { promo: PromoCodeDto | nu
     setErrors(NO_ERRORS);
   });
   const used = !!promo && promo.uses > 0;
+  // full-test 15/11 ADMIN-08 (12 §16 Form « Validation »): what to fix is said under the field before submit — a percentage
+  // is 1–100 %, every other effect > 0; the end day is not before the start day (same rule as the CMS « Fin » field)
+  const valueError = value === '' || used ? undefined : !(Number(value) > 0) ? t('admin.validation.positive') : kind === 'percent_discount' && Number(value) > 100 ? t('admin.validation.percentRange') : undefined;
+  const datesError = from && to && to < from ? t('admin.cms.field.endBeforeStart') : undefined;
   const submit = async () => {
     setErrors(NO_ERRORS);
     const window = { validFrom: from || null, validTo: to || null, maxUses: maxUses ? Number(maxUses) : null };
@@ -159,7 +165,8 @@ export function PromoDialog({ promo, open, onClose }: { promo: PromoCodeDto | nu
       toast(t('admin.credits.promo.saved', { code: code.trim() }));
       onClose();
     } catch (e) {
-      setErrors(toServerErrors(e, t, ['code', 'value', 'periods', 'targetWorkspaceId', 'maxUses', 'validFrom', 'validTo'], { CONFLICT: 'code' }));
+      // a taken code comes back as `409 CONFLICT { fields.code: validation.taken }` — shown under « Code » as « déjà utilisé »
+      setErrors(toServerErrors(e, t, ['code', 'value', 'periods', 'targetWorkspaceId', 'maxUses', 'validFrom', 'validTo']));
     }
   };
   return (
@@ -170,7 +177,7 @@ export function PromoDialog({ promo, open, onClose }: { promo: PromoCodeDto | nu
       size="lg"
       title={promo ? t('admin.credits.promo.editTitle', { code: promo.code }) : t('admin.credits.promo.newTitle')}
       submitLabel={promo ? t('action.save') : t('admin.credits.promo.create')}
-      disabled={!code.trim() || !Number(value) || (target === 'workspace' && !promo && !ws)}
+      disabled={!code.trim() || !Number(value) || !!valueError || !!datesError || (target === 'workspace' && !promo && !ws)}
       pending={m.isPending}
       error={errors.form}
       note={t('admin.credits.promo.note')}
@@ -189,7 +196,7 @@ export function PromoDialog({ promo, open, onClose }: { promo: PromoCodeDto | nu
             ))}
           </Select>
         </Field>
-        <Field label={t('admin.credits.promo.value')} required htmlFor="promo-value" error={errors.fields.value} hint={t(`admin.credits.promo.unit.${kind}`)}>
+        <Field label={t('admin.credits.promo.value')} required htmlFor="promo-value" error={errors.fields.value ?? valueError} hint={t(`admin.credits.promo.unit.${kind}`)}>
           <NumberInput id="promo-value" value={value} disabled={used} onValueChange={setValue} />
         </Field>
         <Field label={t('admin.credits.promo.periods')} htmlFor="promo-periods" error={errors.fields.periods}>
@@ -227,7 +234,7 @@ export function PromoDialog({ promo, open, onClose }: { promo: PromoCodeDto | nu
         <Field label={t('admin.credits.promo.perWorkspace')} htmlFor="promo-per-ws">
           <NumberInput id="promo-per-ws" value={perWs} disabled={!!promo} onValueChange={setPerWs} />
         </Field>
-        <Field label={t('admin.credits.col.validity')} htmlFor="promo-from" error={errors.fields.validFrom ?? errors.fields.validTo} className="sm:col-span-2">
+        <Field label={t('admin.credits.col.validity')} htmlFor="promo-from" error={errors.fields.validFrom ?? errors.fields.validTo ?? datesError} className="sm:col-span-2">
           <div className="flex items-center gap-2">
             <Input id="promo-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="[color-scheme:dark]" />
             <span aria-hidden className="text-text-muted">→</span>
@@ -282,7 +289,7 @@ export function PricingHistoryDialog({ open, onClose }: { open: boolean; onClose
           {(q.data ?? []).map((v) => (
             <li key={v.id} className="flex flex-wrap items-center gap-3 py-2 text-[13px]">
               <span className="font-mono">v{v.version}</span>
-              <span className="flex-1 text-text-secondary">{t('admin.credits.history.row', { text: v.costs.text, image: v.costs.image, voice: v.costs.voice, price: v.creditPriceDzd })}</span>
+              <span className="flex-1 text-text-secondary">{t('admin.credits.history.row', { text: v.costs.text, image: v.costs.image, voice: v.costs.voice, price: f.dec(v.creditPriceDzd) })}</span>
               <span className="ts-label-micro text-text-muted">{t('admin.credits.history.effective', { date: f.date(v.effectiveAt) })}</span>
               {v.current ? <span className="ts-label-micro text-accent-money">{t('admin.credits.history.current')}</span> : null}
             </li>

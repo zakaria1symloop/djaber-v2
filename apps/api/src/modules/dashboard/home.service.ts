@@ -17,6 +17,8 @@ import { OnboardingService } from '../workspace/settings.service';
 
 type Range = { gte: Date; lt: Date };
 const DAY = 86_400_000;
+/** full-test 15/11 HOME-06: slots a full À TRAITER keeps for the cards handled in the last 24 h ("fait par …") */
+const HOME_HANDLED_SLOTS = 2;
 const kpi = (value: number, previous: number | null): HomeKpi => ({ value, previous, deltaPct: previous ? Math.round(((value - previous) * 1000) / previous) / 10 : null });
 
 /** 04 §4 "Revenue" rows: delivered orders (deliveredAt) and completed counter sales (soldAt); `aiOnly` = "AI revenue" (orders only). */
@@ -82,10 +84,15 @@ export class HomeService {
     const counts = Object.fromEntries(HOME_QUEUE_KINDS.map((k) => [k, 0])) as Record<HomeQueueKind, number>;
     for (const i of items) counts[i.kind]++;
     void locale;
-    // 03 §37 ANA-01 (M8): items handled in the last 24 h stay greyed with "fait par …" in the free slots
-    const open = items.slice(0, HOME_QUEUE_MAX);
-    const room = HOME_QUEUE_MAX - open.length;
-    const handled = room > 0 ? (await this.handled(now)).filter((h) => !items.some((i) => i.ref.orderId && i.ref.orderId === h.ref.orderId && i.kind === h.kind)).slice(0, room) : [];
+    // 03 §37 ANA-01 (M8): items handled in the last 24 h stay greyed with "fait par …". full-test 15/11 HOME-06: a full queue
+    // keeps HOME_HANDLED_SLOTS of its slots for them (they never showed in a shop with 8 open cards or more); the open ones
+    // left out stay counted in `total` and reachable through « + N »
+    const stillOpen = (h: HomeQueueItem) =>
+      items.some((i) => i.kind === h.kind && ((i.ref.orderId && i.ref.orderId === h.ref.orderId) || (h.kind === 'stock' && i.ref.productId === h.ref.productId && (i.ref.variantId ?? '') === (h.ref.variantId ?? ''))));
+    const done = (await this.handled(now)).filter((h) => !stillOpen(h));
+    const keep = Math.min(done.length, Math.max(HOME_HANDLED_SLOTS, HOME_QUEUE_MAX - items.length));
+    const open = items.slice(0, HOME_QUEUE_MAX - keep);
+    const handled = done.slice(0, HOME_QUEUE_MAX - open.length);
     return { items: [...open, ...handled], total: items.length, counts };
   }
 
@@ -99,7 +106,7 @@ export class HomeService {
     const since = new Date(now.getTime() - DAY);
     const name = (u: { firstName: string | null; lastName: string | null } | null | undefined) => (u ? `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() : '');
     const by = (id: string | null | undefined, u: { firstName: string | null; lastName: string | null } | null | undefined) => (id ? { id, name: name(u) } : null);
-    const [insights, history, closed, convs] = await Promise.all([
+    const [insights, history, closed, convs, restocked] = await Promise.all([
       prisma.agentInsight.findMany({ where: { status: { in: ['resolved', 'dismissed'] }, resolvedAt: { gte: since } }, include: { agent: { select: { id: true, name: true } }, resolvedBy: { select: { id: true, firstName: true, lastName: true } } }, orderBy: { resolvedAt: 'desc' }, take: HOME_QUEUE_MAX }),
       prisma.$queryRaw<{ orderId: string; number: string; clientName: string; field: string; actorId: string | null; at: Date; firstName: string | null; lastName: string | null }[]>`
         SELECT h."orderId", o."number", o."clientName", h."field", h."actorId", h."at", u."firstName", u."lastName"
@@ -120,6 +127,16 @@ export class HomeService {
         WHERE m."workspaceId" = ${ws}::uuid AND m."author" = 'human' AND m."sentAt" >= ${since} AND c."status" <> 'needs_human' AND c."deletedAt" IS NULL
           AND EXISTS (SELECT 1 FROM "AiRun" r WHERE r."conversationId" = c."id" AND r."status" = 'handoff' AND r."startedAt" <= m."sentAt")
         ORDER BY c."id", m."sentAt" ASC LIMIT ${HOME_QUEUE_MAX}`,
+      // HOME-06: a shortage a member restocked (an entry from at / under the threshold, the line above it now)
+      prisma.$queryRaw<{ productId: string; variantId: string | null; name: string; vname: string | null; at: Date; actorId: string; firstName: string | null; lastName: string | null }[]>`
+        SELECT DISTINCT ON (m."productId", m."variantId") m."productId", m."variantId", p."name", v."name" vname, m."createdAt" at, m."actorId", u."firstName", u."lastName"
+        FROM "StockMovement" m JOIN "Product" p ON p."id" = m."productId" LEFT JOIN "ProductVariant" v ON v."id" = m."variantId" LEFT JOIN "User" u ON u."id" = m."actorId"
+        WHERE m."workspaceId" = ${ws}::uuid AND m."createdAt" >= ${since} AND m."actorId" IS NOT NULL AND m."quantity" > 0
+          AND m."reason"::text IN ('purchase', 'correction', 'inventory', 'other')
+          AND p."deletedAt" IS NULL AND p."trackStock"
+          AND m."quantityBefore" <= COALESCE(v."minStock", p."minStock")
+          AND COALESCE(v."stock", p."stock", 0) > COALESCE(v."minStock", p."minStock")
+        ORDER BY m."productId", m."variantId", m."createdAt" DESC LIMIT ${HOME_QUEUE_MAX}`,
     ]);
     const out: HomeQueueItem[] = [];
     for (const i of insights) out.push({ key: `insight:${i.id}:handled`, kind: 'insight', urgency: 2, title: i.agent.name, subtitle: i.type, since: i.createdAt.toISOString(), path: `/agents/${i.agent.id}/insights`, ref: { insightId: i.id, agentId: i.agent.id }, handled: { at: i.resolvedAt!.toISOString(), by: by(i.resolvedBy?.id, i.resolvedBy) } });
@@ -128,6 +145,7 @@ export class HomeService {
       out.push({ key: `${kind}:${h.orderId}:handled`, kind, urgency: 2, title: `${h.number} · ${h.clientName}`, subtitle: null, since: h.at.toISOString(), path: kind === 'callback' ? `/orders/${h.orderId}#calls` : `/orders/${h.orderId}#delivery`, ref: { orderId: h.orderId }, handled: { at: h.at.toISOString(), by: by(h.actorId, h) } });
     }
     for (const h of closed) out.push({ key: `parcel:${h.orderId}:handled`, kind: 'parcel', urgency: 2, title: `${h.number} · ${h.clientName}`, subtitle: null, since: h.at.toISOString(), path: `/orders/${h.orderId}#delivery`, ref: { orderId: h.orderId }, handled: { at: h.at.toISOString(), by: h.actorType === 'user' ? by(h.actorId, h) : null } });
+    for (const x of restocked) out.push({ key: `stock:${x.productId}:${x.variantId ?? ''}:handled`, kind: 'stock', urgency: 2, title: x.vname ? `${x.name} · ${x.vname}` : x.name, subtitle: null, since: x.at.toISOString(), path: `/products/${x.productId}`, ref: { productId: x.productId, ...(x.variantId ? { variantId: x.variantId } : {}) }, handled: { at: x.at.toISOString(), by: by(x.actorId, x) } });
     for (const c of convs) out.push({ key: `conversation:${c.id}:handled`, kind: 'conversation', urgency: 2, title: c.client ?? '', subtitle: null, since: c.at.toISOString(), path: `/inbox/${c.id}`, ref: { conversationId: c.id }, handled: { at: c.at.toISOString(), by: by(c.uid, c) } });
     const seen = new Set<string>();
     return out

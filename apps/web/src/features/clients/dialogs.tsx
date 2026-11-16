@@ -2,10 +2,11 @@
 // Client dialogs — Figma "DLG — Orders, delivery & clients II — dialogs catalogue" (Nouveau client, Supprimer le client,
 // Tags) and "DLG — Orders & delivery — dialogs catalogue" (Fusionner les clients). Server errors render inside the open
 // dialog and the typed content is kept (AT-UX-04).
-import { CreateClientSchema, formatNumber, UpdateClientSchema } from '@djaber/shared';
+import { CreateClientSchema, formatNumber, formatPhoneDz, UpdateClientSchema } from '@djaber/shared';
 import { Button, Checkbox, Combobox, Dialog, EmailInput, Field, FormAlert, Input, MergeCard, PhoneInput, TagToggle, Textarea, toast, type ComboOption, type TagToggleState } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
+import { useCloseGuard } from '@/components/close-guard';
 import { CommuneCombobox, WilayaCombobox } from '@/features/delivery/geo';
 import { ApiError } from '@/lib/api';
 import { errorMessage, fieldError } from '@/lib/forms';
@@ -34,6 +35,9 @@ const fromClient = (c: Client): FormState => {
   return { name: c.isPlaceholder && /^(FB|IG) User ·/.test(c.name) ? '' : c.name, phone: c.phone ?? '', phone2: c.phone2 ?? '', email: c.email ?? '', tags: c.tags, wilayaId: a?.wilayaId ?? null, communeId: a?.communeId ?? null, address: a?.address ?? '', notes: c.notes ?? '' };
 };
 const FIELDS = ['name', 'phone', 'phone2', 'email', 'tags', 'notes', 'address', 'wilayaId', 'communeId'] as const;
+/** Limits of the shared schema (`fullName` 3–80, notes 2 000), given to the fields so nothing is cut after typing (full-test CLIENTS-06). */
+const NAME_MAX = 80;
+const NOTES_MAX = 2000;
 
 export function ClientFormDialog({ open, client, onClose, onSaved, onUseExisting }: { open: boolean; client?: Client | null; onClose: () => void; onSaved: (c: Client) => void; onUseExisting: (clientId: string) => void }) {
   const t = useT();
@@ -43,6 +47,9 @@ export function ClientFormDialog({ open, client, onClose, onSaved, onUseExisting
   const [errors, setErrors] = useState<Partial<Record<(typeof FIELDS)[number], string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [owner, setOwner] = useState<{ id: string; message: string } | null>(null);
+  const initialV = useMemo(() => (client ? fromClient(client) : blank), [client]);
+  // full-test CLIENTS-10: Esc / ✕ / Annuler with typed content asks « Quitter sans enregistrer ? »
+  const dirty = open && JSON.stringify(v) !== JSON.stringify(initialV);
   useEffect(() => {
     if (!open) return;
     setV(client ? fromClient(client) : blank);
@@ -101,20 +108,22 @@ export function ClientFormDialog({ open, client, onClose, onSaved, onUseExisting
       setFormError(errorMessage(e, t));
     }
   };
-  const fe = (k: (typeof FIELDS)[number]) => fieldError(t, errors[k]);
+  const fe = (k: (typeof FIELDS)[number]) => fieldError(t, errors[k], { max: k === 'notes' ? NOTES_MAX : NAME_MAX, min: 3 });
   const title = !edit ? t('dialog.newClient.title') : client?.isPlaceholder ? t('clients.dialog.complete.title') : t('clients.dialog.edit.title', { name: client!.name });
+  const guard = useCloseGuard(dirty, title, onClose);
   return (
+    <>
     <Dialog
       open={open}
-      onOpenChange={(o) => !o && !save.isPending && onClose()}
+      onOpenChange={(o) => !o && !save.isPending && guard.requestClose()}
       title={title}
-      description={edit ? (client?.isPlaceholder ? t('clients.dialog.complete.context', { name: client.name }) : t('clients.dialog.edit.context')) : t('clients.dialog.new.context')}
+      // full-test CLIENTS-04: what the dialog holds, never a Figma annotation (« Clients › + Nouveau · aussi depuis… »)
+      description={edit && client?.isPlaceholder ? t('clients.dialog.complete.context', { name: client.name }) : t('clients.dialog.edit.context')}
       closeLabel={t('action.close')}
       size="lg"
       footer={
         <>
-          <span className="me-auto ts-label-micro text-text-muted">{t('clients.dialog.new.note')}</span>
-          <Button variant="ghost" onClick={onClose} disabled={save.isPending}>
+          <Button variant="ghost" onClick={guard.requestClose} disabled={save.isPending}>
             {t('action.cancel')}
           </Button>
           <Button variant="primary" onClick={() => void submit()} loading={save.isPending} data-testid="client-save">
@@ -133,10 +142,10 @@ export function ClientFormDialog({ open, client, onClose, onSaved, onUseExisting
       >
         <fieldset disabled={save.isPending} className="contents">
           <Field label={t('common.name')} htmlFor="client-name" required error={fe('name')}>
-            <Input id="client-name" value={v.name} onChange={(e) => set('name', e.target.value)} aria-invalid={!!errors.name || undefined} autoComplete="off" />
+            <Input id="client-name" value={v.name} maxLength={NAME_MAX} onChange={(e) => set('name', e.target.value)} aria-invalid={!!errors.name || undefined} autoComplete="off" />
           </Field>
           <Field label={t('common.phone')} htmlFor="client-phone" required error={fe('phone')}>
-            <PhoneInput id="client-phone" value={v.phone} format={formatPhoneOnBlur} onChange={(e) => set('phone', e.target.value)} aria-invalid={!!errors.phone || !!owner || undefined} preview={owner ? null : phonePreviewLine(t, v.phone)} />
+            <PhoneInput id="client-phone" value={v.phone} format={formatPhoneOnBlur} onChange={(e) => set('phone', e.target.value)} aria-invalid={!!errors.phone || !!owner || undefined} preview={owner || errors.phone ? null : phonePreviewLine(t, v.phone)} />
             {owner ? (
               <p role="alert" className="flex flex-wrap items-center gap-2 text-[12px] text-accent-alert" data-testid="phone-conflict">
                 {owner.message}
@@ -145,6 +154,10 @@ export function ClientFormDialog({ open, client, onClose, onSaved, onUseExisting
                 </button>
               </p>
             ) : null}
+          </Field>
+          {/* full-test CLIENTS-12: the second phone (a merge adds one) can be corrected or removed */}
+          <Field label={t('clients.dialog.phone2')} htmlFor="client-phone2" error={fe('phone2')}>
+            <PhoneInput id="client-phone2" value={v.phone2} format={formatPhoneOnBlur} onChange={(e) => set('phone2', e.target.value)} aria-invalid={!!errors.phone2 || undefined} />
           </Field>
           <Field label={t('common.email')} htmlFor="client-email" error={fe('email')}>
             <EmailInput
@@ -176,26 +189,29 @@ export function ClientFormDialog({ open, client, onClose, onSaved, onUseExisting
             <Checkbox checked={!!v.wilayaId} disabled readOnly />
             {t('clients.dialog.defaultAddress')}
           </label>
-          <Field label={t('clients.dialog.notes')} htmlFor="client-notes" error={fe('notes')} className="sm:col-span-2">
-            <Textarea id="client-notes" value={v.notes} onChange={(e) => set('notes', e.target.value)} className="min-h-16" />
+          <Field label={t('clients.dialog.notes')} htmlFor="client-notes" error={fe('notes')} hint={t('clients.dialog.notesCount', { count: v.notes.length, max: NOTES_MAX })} className="sm:col-span-2">
+            <Textarea id="client-notes" value={v.notes} maxLength={NOTES_MAX} onChange={(e) => set('notes', e.target.value)} className="min-h-16" />
           </Field>
         </fieldset>
       </form>
       {formError ? <FormAlert className="mt-3">{formError}</FormAlert> : null}
     </Dialog>
+    {guard.element}
+    </>
   );
 }
 
 /* ---------- Supprimer le client « … » ? (soft; with orders ⇒ CUSTOMER_HAS_ORDERS → Archiver) ---------- */
-export function DeleteClientDialog({ client, onClose, onDone }: { client: Pick<ClientListItem, 'id' | 'name' | 'orderCount' | 'blocked'> & { conversations?: number } | null; onClose: () => void; onDone: () => void }) {
+export function DeleteClientDialog({ client, onClose, onDone }: { client: (Pick<ClientListItem, 'id' | 'name' | 'orderCount' | 'blocked'> & { conversations?: number; archive?: boolean }) | null; onClose: () => void; onDone: () => void }) {
   const t = useT();
   const refresh = useClientsRefresh();
   const [error, setError] = useState<string | null>(null);
-  const [archive, setArchive] = useState(false);
+  // full-test CLIENTS-02: a client with orders (server descriptor `archive`) opens straight in « Archiver » mode
+  const [archive, setArchive] = useState(!!client?.archive);
   useEffect(() => {
     setError(null);
-    setArchive(false);
-  }, [client?.id]);
+    setArchive(!!client?.archive);
+  }, [client?.id, client?.archive]);
   const m = useMutation({ mutationFn: (o: { archive: boolean }) => clientsApi.remove(client!.id, o) });
   const run = async () => {
     setError(null);
@@ -205,7 +221,8 @@ export function DeleteClientDialog({ client, onClose, onDone }: { client: Pick<C
       toast(archive ? t('clients.toast.archived', { name: client!.name }) : t('clients.toast.deleted', { name: client!.name }));
       onDone();
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'CUSTOMER_HAS_ORDERS') setArchive(true);
+      // the descriptor was stale (an order came in meanwhile): « Archiver » is offered, with the archive text, no error code
+      if (e instanceof ApiError && e.code === 'CUSTOMER_HAS_ORDERS') return setArchive(true);
       setError(errorMessage(e, t));
     }
   };
@@ -214,7 +231,7 @@ export function DeleteClientDialog({ client, onClose, onDone }: { client: Pick<C
     <Dialog
       open={!!client}
       onOpenChange={(o) => !o && !m.isPending && onClose()}
-      title={client ? t('dialog.deleteClient.title', { name: client.name }) : ''}
+      title={client ? (archive ? t('clients.dialog.archive.title', { name: client.name }) : t('dialog.deleteClient.title', { name: client.name })) : ''}
       description={context}
       closeLabel={t('action.close')}
       size="sm"
@@ -229,7 +246,7 @@ export function DeleteClientDialog({ client, onClose, onDone }: { client: Pick<C
         </>
       }
     >
-      <p className="ts-label-meta text-text-muted">{t('clients.dialog.delete.body')}</p>
+      <p className="ts-label-meta text-text-muted">{archive ? t('clients.dialog.archive.body') : t('clients.dialog.delete.bodyPlain')}</p>
       {error ? <FormAlert className="mt-3">{error}</FormAlert> : null}
     </Dialog>
   );
@@ -267,7 +284,7 @@ export function MergeClientsDialog({ client, onClose, onDone }: { client: Pick<C
       window.clearTimeout(id);
     };
   }, [q, client]);
-  const comboOptions: ComboOption[] = useMemo(() => options.map((o) => ({ value: o.id, label: o.name, hint: o.phone ?? t('clients.noPhone') })), [options, t]);
+  const comboOptions: ComboOption[] = useMemo(() => options.map((o) => ({ value: o.id, label: o.name, hint: o.phone ? formatPhoneDz(o.phone) : t('clients.noPhone') })), [options, t]);
   const pick = (id: string | null) => {
     const o = options.find((x) => x.id === id) ?? null;
     setOther(o);
@@ -297,7 +314,7 @@ export function MergeClientsDialog({ client, onClose, onDone }: { client: Pick<C
     <MergeCard
       key={c.id}
       name={c.name}
-      meta={[t('clients.dialog.merge.orders', { count: c.orderCount }), conversations !== undefined ? t('clients.dialog.merge.conversations', { count: conversations }) : null, c.isPlaceholder ? t('enum.Client.placeholder').toLowerCase() : c.phone, c.riskLevel === 'high' ? t('enum.Client.riskLevel.high').toLowerCase() : null].filter(Boolean).join(' · ')}
+      meta={[t('clients.dialog.merge.orders', { count: c.orderCount }), conversations !== undefined ? t('clients.dialog.merge.conversations', { count: conversations }) : null, c.isPlaceholder ? t('enum.Client.placeholder').toLowerCase() : c.phone ? formatPhoneDz(c.phone) : null, c.riskLevel === 'high' ? t('enum.Client.riskLevel.high') : null].filter(Boolean).join(' · ')}
       badge={keepId === c.id ? t('clients.dialog.merge.kept') : t('clients.dialog.merge.merged')}
       kept={keepId === c.id}
       onSelect={preview ? undefined : () => setKeepId(c.id)}
@@ -351,7 +368,11 @@ export function MergeClientsDialog({ client, onClose, onDone }: { client: Pick<C
 }
 
 /* ---------- Tags (bulk add / remove; also the row "Étiquettes" with one id) ---------- */
-export function TagsDialog({ ids, known, onClose, onDone }: { ids: string[] | null; known: string[]; onClose: () => void; onDone: (r: BulkResponse, retry: (ids: string[]) => Promise<BulkResponse>) => void }) {
+/**
+ * Étiquettes of one client (`current` = its tags, shown ticked: a click removes / keeps them; full-test CLIENTS-13) or of a
+ * selection (bulk: each tag unchanged → add → remove).
+ */
+export function TagsDialog({ ids, known, current, onClose, onDone }: { ids: string[] | null; known: string[]; current?: string[]; onClose: () => void; onDone: (r: BulkResponse, retry: (ids: string[]) => Promise<BulkResponse>) => void }) {
   const t = useT();
   const refresh = useClientsRefresh();
   const [states, setStates] = useState<Record<string, TagToggleState>>({});
@@ -376,8 +397,15 @@ export function TagsDialog({ ids, known, onClose, onDone }: { ids: string[] | nu
     }
     return out;
   }, [known, extra, workspaceTags.data]);
-  const add = tags.filter((x) => states[x] === 'add');
+  const has = (x: string) => !!current?.some((c) => c.toLowerCase() === x.toLowerCase());
+  const add = tags.filter((x) => states[x] === 'add' && !has(x));
   const remove = tags.filter((x) => states[x] === 'remove');
+  // one client: its tags are ticked (« actuelle »), a click marks them « retirer »; the others toggle « ajouter »
+  const shown = (x: string): TagToggleState => (current ? (has(x) ? (states[x] === 'remove' ? 'remove' : 'add') : states[x] === 'add' ? 'add' : 'unchanged') : (states[x] ?? 'unchanged'));
+  const toggle = (x: string, next: TagToggleState) => {
+    if (!current) return setStates((m2) => ({ ...m2, [x]: next }));
+    setStates((m2) => ({ ...m2, [x]: has(x) ? (m2[x] === 'remove' ? 'unchanged' : 'remove') : m2[x] === 'add' ? 'unchanged' : 'add' }));
+  };
   const m = useMutation({ mutationFn: () => clientsApi.bulkTags({ ids: ids!, add, remove }) });
   const run = async () => {
     setError(null);
@@ -419,7 +447,7 @@ export function TagsDialog({ ids, known, onClose, onDone }: { ids: string[] | nu
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('common.tags')}>
           {tags.map((x) => (
-            <TagToggle key={x} tag={x} state={states[x] ?? 'unchanged'} onChange={(s) => setStates((m2) => ({ ...m2, [x]: s }))} labels={{ unchanged: t('clients.dialog.tags.unchanged'), add: t('clients.dialog.tags.add'), remove: t('clients.dialog.tags.remove') }} />
+            <TagToggle key={x} tag={x} state={shown(x)} onChange={(s) => toggle(x, s)} labels={{ unchanged: t('clients.dialog.tags.unchanged'), add: current && has(x) ? t('clients.dialog.tags.current') : t('clients.dialog.tags.add'), remove: t('clients.dialog.tags.remove') }} />
           ))}
           {!tags.length ? <span className="ts-label-meta text-text-muted">{t('clients.filter.noTags')}</span> : null}
         </div>

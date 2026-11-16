@@ -237,13 +237,13 @@ export default function AdminSubscriptionsPage() {
       />
       <AdminFilterBar list={list} search={t('admin.subs.search')} quick={quick} count={total !== undefined ? t(`admin.subs.count.${tab}`, { count: total }) : undefined} />
       {tab === 'subscriptions' ? (
-        <AdminListBody testId="subs-list" query={subs} list={list} columns={subColumns} rowKey={(s) => s.id} label={t('admin.subs.tab.subscriptions')} entity={t('admin.subs.entity.subscription')} empty={{ title: t('admin.subs.empty.subscriptions') }} rowActions={subMenu} />
+        <AdminListBody testId="subs-list" filters={quick} query={subs} list={list} columns={subColumns} rowKey={(s) => s.id} label={t('admin.subs.tab.subscriptions')} entity={t('admin.subs.entity.subscription')} empty={{ title: t('admin.subs.empty.subscriptions') }} rowActions={subMenu} />
       ) : tab === 'invoices' ? (
-        <AdminListBody testId="invoices-list" query={invoices} list={list} columns={invColumns} rowKey={(i) => i.id} label={t('admin.subs.tab.invoices')} entity={t('admin.subs.entity.invoice')} empty={{ title: t('admin.subs.empty.invoices') }} rowActions={invMenu} />
+        <AdminListBody testId="invoices-list" filters={quick} query={invoices} list={list} columns={invColumns} rowKey={(i) => i.id} label={t('admin.subs.tab.invoices')} entity={t('admin.subs.entity.invoice')} empty={{ title: t('admin.subs.empty.invoices') }} rowActions={invMenu} />
       ) : tab === 'payments' ? (
-        <AdminListBody testId="payments-list" query={payments} list={list} columns={payColumns} rowKey={(p) => p.id} label={t('admin.subs.tab.payments')} entity={t('admin.subs.entity.payment')} empty={{ title: t('admin.subs.empty.payments'), description: t('admin.subs.empty.paymentsHint'), action: write ? { label: t('admin.subs.pay.cta'), onClick: () => setPicking(true) } : undefined }} rowActions={payMenu} />
+        <AdminListBody testId="payments-list" filters={quick} query={payments} list={list} columns={payColumns} rowKey={(p) => p.id} label={t('admin.subs.tab.payments')} entity={t('admin.subs.entity.payment')} empty={{ title: t('admin.subs.empty.payments'), description: t('admin.subs.empty.paymentsHint'), action: write ? { label: t('admin.subs.pay.cta'), onClick: () => setPicking(true) } : undefined }} rowActions={payMenu} />
       ) : (
-        <AdminListBody testId="packs-list" query={packs} list={list} columns={packColumns} rowKey={(p) => p.id} label={t('admin.subs.tab.packs')} entity={t('admin.subs.entity.purchase')} empty={{ title: t('admin.subs.empty.packs') }} />
+        <AdminListBody testId="packs-list" filters={quick} query={packs} list={list} columns={packColumns} rowKey={(p) => p.id} label={t('admin.subs.tab.packs')} entity={t('admin.subs.entity.purchase')} empty={{ title: t('admin.subs.empty.packs') }} />
       )}
       <RecordPaymentDialog
         open={picking}

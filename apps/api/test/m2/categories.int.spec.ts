@@ -131,7 +131,10 @@ describe('units', () => {
     const box = (await owner.post('/units', { name: 'Boîte de 6', abbreviation: 'b6', containsQty: 6, baseUnitId: piece.id }).expect(201)).body.data;
     expect(box).toMatchObject({ name: 'Boîte de 6', abbreviation: 'b6', isSystem: false, containsQty: 6, baseUnitId: piece.id });
     expect(box.actions).toEqual([{ key: 'edit', enabled: true }, { key: 'delete', enabled: true }]);
-    expect((await owner.post('/units', { name: 'boîte de 6', abbreviation: 'B6' }).expect(422)).body.error.fields).toEqual({ name: 'validation.invalid' });
+    expect((await owner.post('/units', { name: 'boîte de 6', abbreviation: 'B6' }).expect(422)).body.error.fields).toEqual({ name: 'validation.unit_name_taken', abbreviation: 'validation.unit_abbr_taken' });
+    // full-test 15/11 PRODUCTS-05: each one is unique on its own, system units included
+    expect((await owner.post('/units', { name: 'Carton', abbreviation: 'kg' }).expect(422)).body.error.fields).toEqual({ abbreviation: 'validation.unit_abbr_taken' });
+    expect((await owner.post('/units', { name: 'Kilogramme', abbreviation: 'kgx' }).expect(422)).body.error.fields).toEqual({ name: 'validation.unit_name_taken' });
     expect((await owner.post('/units', { name: 'Lot' }).expect(422)).body.error.fields.abbreviation).toBe('validation.required');
     expect((await owner.post('/units', { name: 'Lot', abbreviation: 'lot', baseUnitId: GHOST }).expect(422)).body.error.fields).toEqual({ baseUnitId: 'validation.invalid' });
     const pack = (await owner.post('/units', { name: 'Paquet', abbreviation: 'pq' }).expect(201)).body.data;

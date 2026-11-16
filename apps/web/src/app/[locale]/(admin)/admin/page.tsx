@@ -8,7 +8,7 @@ import { ChevronDown } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AdminPage, AdminQueryError } from '@/features/admin/admin-page';
 import { useAdminGet } from '@/features/admin/api';
-import { useFormats } from '@/features/admin/ui';
+import { courierLabel, useFormats } from '@/features/admin/ui';
 import { Link } from '@/i18n/navigation';
 import { compactAmount } from '@/lib/money';
 import { useT } from '@/lib/i18n';
@@ -135,7 +135,7 @@ export default function AdminOverviewPage() {
                       key={`${a.code}-${i}`}
                       data-alert={a.code}
                       tone={a.severity === 'critical' ? 'danger' : 'warning'}
-                      title={t.has(`admin.alert.${a.code}`) ? t(`admin.alert.${a.code}`, a.params) : a.code}
+                      title={t.has(`admin.alert.${a.code}`) ? t(`admin.alert.${a.code}`, a.code === 'courier_key_expired' && typeof a.params?.provider === 'string' ? { ...a.params, provider: courierLabel(t, a.params.provider) } : a.params) : a.code}
                       meta={[a.since ? t('admin.overview.alerts.since', { ago: f.ago(a.since) }) : null, t.has(`admin.alert.${a.code}.hint`) ? t(`admin.alert.${a.code}.hint`, a.params) : null].filter(Boolean).join(' · ')}
                       action={<Link href={a.link} className="hover:underline">{t(`admin.overview.alerts.link.${a.code}`)}</Link>}
                     />

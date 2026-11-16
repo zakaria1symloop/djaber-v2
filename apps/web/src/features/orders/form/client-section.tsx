@@ -2,7 +2,7 @@
 // "1 · CLIENTE" of the new order form (Figma ORD-02 "client conflict"): find a client by name or phone fragment, pick
 // one ("UTILISER"), or create one inline. A typed phone that already belongs to a client shows the notice and the
 // "Utiliser ce client" action (CLI-02: the server never creates a duplicate — 409 CLIENT_PHONE_EXISTS).
-import { formatNumber, formatPhoneDz, normalizePhoneDz } from '@djaber/shared';
+import { formatPhoneDz, normalizePhoneDz } from '@djaber/shared';
 import { Banner, Button, ClientResultRow, Field, Input, Ltr, OrderFormCard, PhoneInput, PickerSearch, StatusPill } from '@djaber/ui';
 import { useMemo, useState } from 'react';
 import type { ClientListItem } from '@/features/clients/contracts';
@@ -229,7 +229,7 @@ export function ClientSection({
         </Field>
       </div>
       {client.id && client.orderCount !== undefined && client.orderCount > 0 ? (
-        <p className="ts-label-meta text-text-muted">{t('orderForm.client.known', { count: formatNumber(client.orderCount) })}</p>
+        <p className="ts-label-meta text-text-muted">{t('orderForm.client.known', { count: client.orderCount })}</p>
       ) : null}
     </OrderFormCard>
   );

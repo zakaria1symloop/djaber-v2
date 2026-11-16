@@ -38,7 +38,8 @@ type ComposerInput = WindowInput & Pick<Conversation, 'channel' | 'blocked'> & {
  */
 export const composerState = (c: ComposerInput, o: { readOnly: boolean; now?: number }): ComposerState => {
   if (o.readOnly) return { mode: 'hidden', reason: 'readOnly', code: 'READ_ONLY_MEMBER' };
-  const inactive: ComposerState = { mode: 'disabled', reason: 'channelInactive', code: 'REPLY_CHANNEL_INACTIVE', reconnect: c.channel.status === 'needs_reconnect' };
+  // full-test 15/11 CHANNELS-INBOX-02: a disconnected page is reconnected too (« Reconnecter », not « Ouvrir la page »)
+  const inactive: ComposerState = { mode: 'disabled', reason: 'channelInactive', code: 'REPLY_CHANNEL_INACTIVE', reconnect: c.channel.status === 'needs_reconnect' || c.channel.status === 'disconnected' };
   const outside: ComposerState = { mode: 'disabled', reason: 'outsideWindow', code: 'REPLY_OUTSIDE_WINDOW', template: c.channel.platform === 'facebook' && c.composer?.humanAgentTag !== false };
   if (c.channel.status !== 'active') return inactive;
   if (c.blocked) return { mode: 'disabled', reason: 'blocked', code: 'CUSTOMER_BLOCKED' };
@@ -77,11 +78,14 @@ export const threadBanner = (c: BannerInput, o: { now?: number; channelPausedByP
   // handoff and replace the generic À TRAITER banner (GLOBAL "Credits exhausted — thread state": À TRAITER + IA EN PAUSE
   // pills with the "IA arrêtée : crédits épuisés" banner)
   if (c.status === 'needs_human') return c.creditsExhausted ? 'credits' : c.aiUnavailable ? 'aiUnavailable' : 'needsHuman';
-  if (c.channel.status === 'needs_reconnect') return 'reconnect';
+  // CHANNELS-INBOX-02 (12 §23 banner priority): a disconnected page asks for the reconnection before « hors fenêtre 24 h »
+  if (c.channel.status === 'needs_reconnect' || c.channel.status === 'disconnected') return 'reconnect';
   if (c.creditsExhausted) return 'credits';
   if (c.channel.status === 'paused' && o.channelPausedByPlan !== false) return 'pausedByPlan';
   if (c.aiUnavailable) return 'aiUnavailable';
   if (c.blocked) return 'blocked';
+  // an inactive page: the composer says « canal inactif »; « seul un message modèle est possible » would contradict it
+  if (c.channel.status !== 'active') return null;
   if (!isWithinWindow(c, o.now)) return 'outsideWindow';
   return null;
 };

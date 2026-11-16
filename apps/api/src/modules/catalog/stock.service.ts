@@ -48,7 +48,8 @@ const MOVEMENT_INCLUDE = {
   product: { select: { id: true, name: true, sku: true, price: true, hasVariants: true, trackStock: true, images: { where: { isPrimary: true }, take: 1, select: { url: true } } } },
   variant: { select: { id: true, name: true } },
   actor: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
-  reverses: { select: { id: true } },
+  reverses: { select: { id: true, createdAt: true } },
+  reversedBy: { select: { createdAt: true } },
 } satisfies Prisma.StockMovementInclude;
 type MovementRow = Prisma.StockMovementGetPayload<{ include: typeof MOVEMENT_INCLUDE }>;
 
@@ -298,7 +299,7 @@ export class StockService implements OnModuleInit {
   }
 
   // --- movements journal (GDS-02) -------------------------------------------------------------------------------------------
-  private where(q: MovementsQuery): Prisma.StockMovementWhereInput {
+  private async where(q: MovementsQuery): Promise<Prisma.StockMovementWhereInput> {
     const and: Prisma.StockMovementWhereInput[] = [];
     if (q.productId) and.push({ productId: q.productId });
     if (q.variantId) and.push({ variantId: q.variantId });
@@ -315,7 +316,23 @@ export class StockService implements OnModuleInit {
     if (q.categoryId) and.push({ product: { categoryId: q.categoryId } });
     if (q.q && q.q.length >= 2) {
       const contains = { contains: q.q, mode: 'insensitive' as const };
-      and.push({ OR: [{ product: { name: contains } }, { product: { sku: contains } }, { variant: { name: contains } }, { note: contains }] });
+      // full-test 15/11 STOCK-04: « #CMD-1023 », « ACH-1008 » or « 1023 » finds the movements of that order / sale /
+      // purchase / inventory (the RÉFÉRENCE column), as the search field promises
+      const term = q.q.trim().replace(/^#/, '');
+      const byNumber = term.length >= 2 ? { number: { contains: term, mode: 'insensitive' as const } } : null;
+      const refs = byNumber
+        ? (
+            await Promise.all([
+              prisma.order.findMany({ where: byNumber, select: { id: true }, take: 200 }),
+              prisma.sale.findMany({ where: byNumber, select: { id: true }, take: 200 }),
+              prisma.purchase.findMany({ where: byNumber, select: { id: true }, take: 200 }),
+              prisma.inventoryCount.findMany({ where: byNumber, select: { id: true }, take: 200 }),
+            ])
+          )
+            .flat()
+            .map((r) => r.id)
+        : [];
+      and.push({ OR: [{ product: { name: contains } }, { product: { sku: contains } }, { variant: { name: contains } }, { note: contains }, ...(refs.length ? [{ refId: { in: refs } }] : [])] });
     }
     return { AND: and };
   }
@@ -356,9 +373,13 @@ export class StockService implements OnModuleInit {
       after: m.quantityAfter,
       reason: m.reason,
       note: renderStoredTextIn(m.note, viewerLocale()),
-      reference: m.refType && m.refId ? { type: m.refType, id: m.refId, label: labels.get(m.refId) ?? m.refId.slice(0, 8) } : null,
+      // never a raw id as the label (STOCK-06): a reversal's refId is the movement it cancels, said by `reversalOf`
+      reference: m.refType && m.refId ? { type: m.refType, id: m.refId, label: labels.get(m.refId) ?? '' } : null,
       actor: m.actor,
       reversed: !!m.reversedByMovementId,
+      reversalOf: m.reverses ? { id: m.reverses.id, createdAt: m.reverses.createdAt.toISOString() } : null,
+      reversedAt: m.reversedBy?.createdAt.toISOString() ?? null,
+      lockedBy: reversible ? null : m.reversedByMovementId ? 'reversed' : isReversal ? 'reversal' : 'document',
       createdAt: m.createdAt.toISOString(),
       actions: [action('open_product', 'catalog.read'), action('reverse', 'stock.adjust', { reasonCode: reversible ? undefined : 'GDS_MOVEMENT_IMMUTABLE' })],
     };
@@ -373,7 +394,7 @@ export class StockService implements OnModuleInit {
     const field = (q.sort ?? '-createdAt').replace(/^-/, '');
     if (!(SORTS as readonly string[]).includes(field)) throw new AppException('BAD_REQUEST');
     const dir = (q.sort ?? '-createdAt').startsWith('-') ? 'desc' : 'asc';
-    const where = this.where(q);
+    const where = await this.where(q);
     const paging = q.limit ? { skip: 0, take: q.limit } : toSkipTake(q);
     const [rows, total] = await Promise.all([
       prisma.stockMovement.findMany({ where, include: MOVEMENT_INCLUDE, orderBy: [{ createdAt: dir }, { id: dir }], ...paging }),
@@ -384,7 +405,7 @@ export class StockService implements OnModuleInit {
 
   /** `GET /stock/movements/stats` — counts and units per type of the filtered journal (quantities are signed). */
   async movementStats(q: MovementsQuery): Promise<MovementStatsView> {
-    const where = this.where(q);
+    const where = await this.where(q);
     const rows = await prisma.stockMovement.groupBy({ by: ['type'], where, _count: { _all: true }, _sum: { quantity: true } });
     const byType = Object.fromEntries(MovementTypeValues.map((t) => [t, { count: 0, units: 0 }])) as MovementStatsView['byType'];
     let unitsIn = 0;
@@ -445,7 +466,7 @@ export class StockService implements OnModuleInit {
   }
 
   private async exportTable(q: MovementsQuery, locale: 'fr' | 'ar' | 'en') {
-    const rows = await this.views(await prisma.stockMovement.findMany({ where: this.where(q), include: MOVEMENT_INCLUDE, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 50_000 }));
+    const rows = await this.views(await prisma.stockMovement.findMany({ where: await this.where(q), include: MOVEMENT_INCLUDE, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 50_000 }));
     const h = MOVEMENT_HEADERS[locale] ?? MOVEMENT_HEADERS.fr;
     type R = StockMovementView;
     return {
@@ -523,7 +544,7 @@ export class StockService implements OnModuleInit {
   private async purchasing(): Promise<StockPurchasingView> {
     const now = new Date();
     const [open, late, due, suppliers, bought, restock] = await Promise.all([
-      prisma.purchase.count({ where: { status: { in: ['pending', 'partial'] } } }),
+      prisma.purchase.aggregate({ where: { status: { in: ['pending', 'partial'] } }, _count: { _all: true }, _sum: { total: true } }),
       prisma.purchase.count({ where: { status: { in: ['pending', 'partial'] }, expectedAt: { lt: now } } }),
       prisma.purchase.findMany({ where: { status: { in: ['pending', 'partial', 'received'] } }, select: { total: true, amountPaid: true } }),
       prisma.supplier.count({ where: { deletedAt: null, isActive: true } }),
@@ -531,7 +552,8 @@ export class StockService implements OnModuleInit {
       prisma.stockRecommendation.count({ where: { status: 'active', type: { in: ['restock', 'stockout_imminent'] } } }),
     ]);
     return {
-      pendingReceipt: open,
+      pendingReceipt: open._count._all,
+      pendingValue: open._sum.total ?? 0,
       late,
       dueToSuppliers: due.reduce((s, p) => s + Math.max(0, p.total - p.amountPaid), 0),
       activeSuppliers: suppliers,

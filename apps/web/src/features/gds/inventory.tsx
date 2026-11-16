@@ -5,7 +5,7 @@
 // validation shows the variances (before → after, %) and needs a note on each line above 10 %
 // (`INVENTORY_VARIANCE_NOTE_REQUIRED`); "Reprendre le comptage" / "Valider (n mouvements)" ⇒ one INVENTAIRE movement per
 // variance; cancel ⇒ `cancelled`. Printable count sheet.
-import { formatDateTime, formatMoney, formatNumber, type AppLocale } from '@djaber/shared';
+import { formatDateTime, formatNumber, type AppLocale } from '@djaber/shared';
 import {
   ActionsMenu,
   Banner,
@@ -46,10 +46,12 @@ import { Link, useRouter } from '@/i18n/navigation';
 import { actionState, offlineMenu, toMenuActions } from '@/lib/actions';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { downloadUrl } from '@/lib/jobs';
+import { signedMoney, signedNumber } from '@/lib/money';
 import { type ListSpec } from '@/lib/list-state';
 import { useSession, useWorkspaceId } from '@/lib/session';
 import { useListState } from '@/lib/use-list-state';
 import { useQueryClient } from '@tanstack/react-query';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { gdsApi, gdsKeys, useGdsRefresh, useInventories, useInventory, useInventoryScope } from './api';
 import type { Inventory, InventoryLine, InventoryRow, InventoryScope } from './contracts';
 import { inventoryTotals, variance } from './logic';
@@ -158,7 +160,7 @@ function InventoriesList() {
     },
     { key: 'lines', header: t('inventory.col.counted'), align: 'end', cell: (r) => <Ltr className="tabular-nums">{`${formatNumber(r.summary.counted)} / ${formatNumber(r.summary.lines)}`}</Ltr> },
     { key: 'gaps', header: t('inventory.col.gaps'), align: 'end', hideBelow: 'lg', cell: (r) => <Ltr className="tabular-nums">{formatNumber(r.summary.discrepancies)}</Ltr> },
-    { key: 'value', header: t('inventory.col.value'), align: 'end', hideBelow: 'lg', cell: (r) => <Ltr className={cn('tabular-nums', r.summary.value < 0 && 'text-accent-alert')}>{formatMoney(r.summary.value)}</Ltr> },
+    { key: 'value', header: t('inventory.col.value'), align: 'end', hideBelow: 'lg', cell: (r) => <Ltr className={cn('tabular-nums', r.summary.value < 0 && 'text-accent-alert')}>{signedMoney(r.summary.value)}</Ltr> },
     { key: 'started', header: t('inventory.col.started'), sortKey: 'startedAt', hideBelow: 'xl', cell: (r) => `${day(r.startedAt.slice(0, 10))} · ${shortName(r.startedBy) ?? '—'}` },
   ];
 
@@ -330,8 +332,21 @@ function InventoryCount({ id }: { id: string }) {
   const day = useDayLabel();
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [saving, setSaving] = useState<Record<string, 'saving' | 'error'>>({});
-  const [search, setSearch] = useState('');
-  const [show, setShow] = useState<'all' | 'todo' | 'gaps'>('all');
+  // full-test 15/11 STOCK-11: the search and the « À compter / Écarts » tab live in the URL (CLAUDE.md rule 7), so F5 keeps them
+  // (a shallow `history.replaceState`: Next.js syncs `useSearchParams` with it, no server round trip per keystroke)
+  const params = useSearchParams();
+  const pathname = usePathname();
+  const setParam = (k: string, v: string | null) => {
+    const p = new URLSearchParams(params.toString());
+    if (v) p.set(k, v);
+    else p.delete(k);
+    window.history.replaceState(null, '', `${pathname}${p.toString() ? `?${p.toString()}` : ''}`);
+  };
+  const search = params.get('q') ?? '';
+  const setSearch = (v: string) => setParam('q', v.trim() ? v : null);
+  const shownParam = params.get('show');
+  const show: 'all' | 'todo' | 'gaps' = shownParam === 'todo' || shownParam === 'gaps' ? shownParam : 'all';
+  const setShow = (v: 'all' | 'todo' | 'gaps') => setParam('show', v === 'all' ? null : v);
   const pending = useRef(new Set<string>());
   const inv = q.data;
   const editable = !!inv && (inv.status === 'draft' || inv.status === 'counting') && can('stock.count') && !offline;
@@ -415,7 +430,7 @@ function InventoryCount({ id }: { id: string }) {
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" data-testid="inventory-kpis">
         <KpiTile value={`${formatNumber(totals.counted)} / ${formatNumber(lines.length)}`} label={t('inventory.kpi.counted')} meta={`${totals.progressPct} %`} />
         <KpiTile value={formatNumber(totals.discrepancies)} label={t('inventory.kpi.gaps')} meta={t('inventory.kpi.flagged', { count: totals.flagged })} tone={totals.flagged ? 'warning' : undefined} />
-        <KpiTile value={formatNumber(totals.value)} label={t('inventory.kpi.value')} meta={t('inventory.kpi.valueMeta')} tone={totals.value < 0 ? 'danger' : undefined} />
+        <KpiTile value={signedNumber(totals.value)} label={t('inventory.kpi.value')} meta={t('inventory.kpi.valueMeta')} tone={totals.value < 0 ? 'danger' : undefined} />
         <KpiTile value={day(inv.startedAt.slice(0, 10))} label={t('inventory.kpi.started')} meta={shortName(inv.startedBy) ?? '—'} />
       </section>
       <div className="flex flex-wrap items-center gap-2">
@@ -435,11 +450,11 @@ function InventoryCount({ id }: { id: string }) {
         <table className="w-full text-[13px]" data-testid="inventory-lines">
           <thead>
             <tr className="ts-label-micro text-text-muted">
-              <th className="px-4 py-2 text-start font-normal">{t('purchases.col.productVariant')}</th>
-              <th className="px-4 py-2 text-end font-normal">{t('inventory.col.expected')}</th>
-              <th className="px-4 py-2 text-end font-normal">{t('inventory.col.countedQty')}</th>
-              <th className="px-4 py-2 text-end font-normal">{t('inventory.col.gap')}</th>
-              <th className="px-4 py-2 text-start font-normal">{t('common.note')}</th>
+              <th className="px-2 py-2 sm:px-4 text-start font-normal">{t('purchases.col.productVariant')}</th>
+              <th className="px-2 py-2 sm:px-4 text-end font-normal">{t('inventory.col.expected')}</th>
+              <th className="px-2 py-2 sm:px-4 text-end font-normal">{t('inventory.col.countedQty')}</th>
+              <th className="px-2 py-2 sm:px-4 text-end font-normal">{t('inventory.col.gap')}</th>
+              <th className="hidden px-2 py-2 sm:px-4 text-start font-normal sm:table-cell">{t('common.note')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line-hairline">
@@ -448,19 +463,35 @@ function InventoryCount({ id }: { id: string }) {
               const c = valueOf(l);
               const v = variance(l.currentExpectedQty, c);
               const d = drafts[k];
+              // the note: its own column from 640 px, under the product on a phone (STOCK-11: no column off-screen at 390 px)
+              const note = (editable && (v.noteRequired || l.note || d?.note) ? (
+                      <Input
+                        aria-label={t('inventory.page.noteFor', { name: l.name })}
+                        value={d ? d.note : (l.note ?? '')}
+                        maxLength={500}
+                        onChange={(e) => setDrafts((all) => ({ ...all, [k]: { counted: all[k]?.counted ?? (l.countedQty === null ? '' : String(l.countedQty)), note: e.target.value } }))}
+                        onBlur={() => void save(l)}
+                        placeholder={v.noteRequired ? t('inventory.page.noteRequired') : ''}
+                        className={cn('!h-8 min-w-40', v.noteRequired && !(d ? d.note : l.note) && '!border-accent-starred')}
+                      />
+                    ) : (
+                      <span className="text-text-secondary">{l.note ?? ''}</span>
+                    ));
               return (
                 <tr key={k} data-line={k} data-state={saving[k] ?? (c === null ? 'todo' : 'counted')}>
-                  <td className="px-4 py-2">
+                  <td className="px-2 py-2 sm:px-4">
                     <div>
                       {l.name}
                       {l.variantName ? <span className="text-text-secondary"> · {l.variantName}</span> : null}
                     </div>
-                    {l.sku ? <Ltr className="ts-label-micro text-text-muted">{l.sku}</Ltr> : null}
+                    {/* a SKU as stored: its case is part of the code merchants type and scan (STOCK-11) */}
+                    {l.sku ? <Ltr className="ts-label-micro !normal-case text-text-muted">{l.sku}</Ltr> : null}
+                    <div className="mt-1 sm:hidden">{note}</div>
                   </td>
-                  <td className="px-4 py-2 text-end">
-                    <Ltr className="tabular-nums text-text-secondary">{formatNumber(l.currentExpectedQty)}</Ltr>
+                  <td className="px-2 py-2 sm:px-4 text-end">
+                    <Ltr className="tabular-nums text-text-secondary">{signedNumber(l.currentExpectedQty)}</Ltr>
                   </td>
-                  <td className="px-4 py-2">
+                  <td className="px-2 py-2 sm:px-4">
                     {editable ? (
                       <NumberInput
                         aria-label={t('inventory.page.countFor', { name: [l.name, l.variantName].filter(Boolean).join(' · ') })}
@@ -475,24 +506,10 @@ function InventoryCount({ id }: { id: string }) {
                       <Ltr className="block text-end tabular-nums">{c === null ? '—' : formatNumber(c)}</Ltr>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-end">
+                  <td className="px-2 py-2 sm:px-4 text-end">
                     <VarianceValue expected={l.currentExpectedQty} counted={c} pct={v.pct} flagged={v.noteRequired} />
                   </td>
-                  <td className="px-4 py-2">
-                    {editable && (v.noteRequired || l.note || d?.note) ? (
-                      <Input
-                        aria-label={t('inventory.page.noteFor', { name: l.name })}
-                        value={d ? d.note : (l.note ?? '')}
-                        maxLength={500}
-                        onChange={(e) => setDrafts((all) => ({ ...all, [k]: { counted: all[k]?.counted ?? (l.countedQty === null ? '' : String(l.countedQty)), note: e.target.value } }))}
-                        onBlur={() => void save(l)}
-                        placeholder={v.noteRequired ? t('inventory.page.noteRequired') : ''}
-                        className={cn('!h-8 min-w-40', v.noteRequired && !(d ? d.note : l.note) && '!border-accent-starred')}
-                      />
-                    ) : (
-                      <span className="text-text-secondary">{l.note ?? ''}</span>
-                    )}
-                  </td>
+                  <td className="hidden px-2 py-2 sm:px-4 sm:table-cell">{note}</td>
                 </tr>
               );
             })}
@@ -553,7 +570,7 @@ export function ValidateInventoryDialog({ inventoryId, onClose }: { inventoryId:
       open={!!inventoryId}
       onOpenChange={(o) => !o && !s.busy && guard.requestClose()}
       title={title}
-      description={inv ? t('inventory.validate.description', { counted: formatNumber(counted.length), gaps: gaps.length, value: formatMoney(totals.value) }) : undefined}
+      description={inv ? t('inventory.validate.description', { counted: formatNumber(counted.length), gaps: gaps.length, value: signedMoney(totals.value) }) : undefined}
       closeLabel={t('action.close')}
       size="lg"
       footer={<DialogFooter onClose={guard.requestClose} busy={s.busy} onSubmit={() => void submit()} label={t('inventory.validate.submit', { count: gaps.length })} closeLabel={t('inventory.validate.resume')} disabled={!inv} note={t('inventory.validate.note')} />}

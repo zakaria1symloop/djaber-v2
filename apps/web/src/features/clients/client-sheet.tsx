@@ -9,6 +9,7 @@ import { Ltr } from '@djaber/ui';
 import type { ReactNode } from 'react';
 import { QueryError } from '@/components/global-states';
 import { SaleStatusPill } from '@/features/gds/ui';
+import { decimalLabel } from '@/features/orders/logic';
 import { Link } from '@/i18n/navigation';
 import { useHere, withBack } from '@/lib/back';
 import { useLocaleCode, useT } from '@/lib/i18n';
@@ -45,8 +46,8 @@ export function ClientDetailBody({ client: c }: { client: Client }) {
       <div className="grid grid-cols-3 gap-2">
         {/* full-test 15/11 CLIENTS-01: the same count as the list, the menu and the delete dialog (orders not cancelled + counter sales) */}
         <MetricTile label={t('clients.sheet.orders')} value={formatNumber(c.orderCount)} data-metric="orders" />
-        <MetricTile label={t('clients.sheet.spent')} value={formatNumber(c.metrics.spent)} data-metric="spent" />
-        <MetricTile label={t('clients.sheet.returns')} value={`${formatNumber(c.metrics.returnPct)} %`} tone={c.metrics.returns > 0 ? 'warning' : undefined} data-metric="returns" />
+        <MetricTile label={t('clients.sheet.spentTile')} value={formatMoney(c.metrics.spent)} data-metric="spent" />
+        <MetricTile label={t('clients.sheet.returns')} value={`${decimalLabel(c.metrics.returnPct, locale)} %`} tone={c.metrics.returns > 0 ? 'warning' : undefined} data-metric="returns" />
       </div>
       {c.metrics.sales > 0 ? (
         <p className="-mt-3 ts-label-meta text-text-muted" data-testid="client-spent-split">

@@ -37,6 +37,9 @@ describe('quick replies', () => {
 
     expect((await owner.patch(`/workspace/quick-replies/${id}`, { shortcut: '' }).expect(200)).body.data.shortcut).toBeNull(); // empty input = no shortcut
     await owner.patch(`/workspace/quick-replies/${id}`, { shortcut: '/livr' }).expect(200);
+    // full-test 15/11 SETTINGS-11: a shortcut is unique in the workspace (case-insensitive), inline under « Raccourci »
+    const dup = await owner.post('/workspace/quick-replies', { title: 'Autre réponse', body: 'Texte', shortcut: '/livr' }).expect(409);
+    expect(dup.body.error).toMatchObject({ code: 'QUICK_REPLY_SHORTCUT_TAKEN', fields: { shortcut: 'validation.invalid' } });
     const updated = await owner.patch(`/workspace/quick-replies/${id}`, { body: 'Nouveau texte', shortcut: null }).expect(200);
     expect(updated.body.data).toMatchObject({ title: 'Livraison Sétif', body: 'Nouveau texte', shortcut: null });
 
@@ -83,7 +86,7 @@ describe('quick replies', () => {
     expect(bad.body.error.fields).toMatchObject({ title: 'validation.required', body: 'validation.required', shortcut: 'validation.invalid' });
     await owner.post('/workspace/quick-replies', { title: 'a'.repeat(81), body: 'x' }).expect(422);
     await owner.post('/workspace/quick-replies', { title: 'X', body: 'y', workspaceId: owner.workspaceId }).expect(422);
-    await owner.patch('/workspace/quick-replies/not-a-uuid', { body: 'x' }).expect(400);
+    await owner.patch('/workspace/quick-replies/not-a-uuid', { body: 'x' }).expect(404);
   });
 
   it('permissions: operator reads but cannot write; admin can write', async () => {

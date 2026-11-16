@@ -26,7 +26,7 @@ export function useQueueCounts() {
   const { role } = useSession();
   const enabled = !!ws && roleCan(role, 'inbox.read');
   const counts = useQuery({ queryKey: queueKeys.counts(ws), queryFn: queueApi.counts, enabled, staleTime: 30_000 });
-  const insights = useQuery({ queryKey: queueKeys.insights(ws), queryFn: queueApi.insights, enabled, staleTime: 60_000, retry: false });
+  const insights = useQuery({ queryKey: queueKeys.insights(ws), queryFn: () => queueApi.insights(), enabled, staleTime: 60_000, retry: false });
   return { needsHuman: counts.data?.needs_human ?? 0, insights: insights.data?.total ?? 0 };
 }
 

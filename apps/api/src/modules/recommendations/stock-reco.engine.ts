@@ -48,6 +48,8 @@ export const SUPPLIER_MIN_DELIVERIES = 2;
 export const AGENT_TOPIC_MIN = 10;
 const DAY_MS = 86_400_000;
 const money = (n: number) => formatMoney(n);
+/** « 33,8 » — the decimal comma of French and Arabic texts (rule 11) */
+const comma = (n: number) => String(n).replace('.', ',');
 const full = (l: { name: string; variantName: string | null }) => (l.variantName ? `${l.name} · ${l.variantName}` : l.name);
 const same = (s: string): L => ({ fr: s, ar: s, en: s });
 const meta = (k: StockRecoRuleKey) => STOCK_RECO_RULES[k];
@@ -100,11 +102,19 @@ export function runStockRules(i: EngineInput): RecoCandidate[] {
       supplierId: l.supplier?.id ?? null,
       agentId: null,
       title: same(full(l)),
-      body: {
-        fr: `Stock ${l.stock} · ventes ${l.units30d} / 30 j → rupture dans ~${d} jours. Délai fournisseur moyen ${lead} j${sup}.`,
-        ar: `المخزون ${l.stock} · المبيعات ${l.units30d} / 30 يومًا → نفاد خلال ~${d} أيام. متوسط مهلة المورّد ${lead} أيام${sup}.`,
-        en: `Stock ${l.stock} · sales ${l.units30d} / 30 d → out of stock in ~${d} days. Average supplier lead time ${lead} d${sup}.`,
-      },
+      // full-test 15/11 ANALYTICS-11: a product already at 0 (or below) is out of stock now, not « dans ~0 jours »
+      body:
+        l.stock <= 0
+          ? {
+              fr: `En rupture${l.stock < 0 ? ` (${-l.stock} u vendues sans stock)` : ''} · ventes ${l.units30d} / 30 j. Délai fournisseur moyen ${lead} j${sup}.`,
+              ar: `نفد المخزون${l.stock < 0 ? ` (${-l.stock} وحدة بيعت دون مخزون)` : ''} · المبيعات ${l.units30d} / 30 يومًا. متوسط مهلة المورّد ${lead} أيام${sup}.`,
+              en: `Out of stock${l.stock < 0 ? ` (${-l.stock} u sold without stock)` : ''} · sales ${l.units30d} / 30 d. Average supplier lead time ${lead} d${sup}.`,
+            }
+          : {
+              fr: `Stock ${l.stock} · ventes ${l.units30d} / 30 j → rupture dans ~${d} ${d > 1 ? 'jours' : 'jour'}. Délai fournisseur moyen ${lead} j${sup}.`,
+              ar: `المخزون ${l.stock} · المبيعات ${l.units30d} / 30 يومًا → نفاد خلال ~${d} أيام. متوسط مهلة المورّد ${lead} أيام${sup}.`,
+              en: `Stock ${l.stock} · sales ${l.units30d} / 30 d → out of stock in ~${d} ${d === 1 ? 'day' : 'days'}. Average supplier lead time ${lead} d${sup}.`,
+            },
       suggestedAction: { kind: 'create_purchase', params: { productId: l.productId, variantId: l.variantId, quantity: qty, supplierId: l.supplier?.id ?? null, unitCost: l.costPrice } },
       estimatedValue: l.costPrice !== null ? qty * l.costPrice : null,
     });
@@ -150,8 +160,9 @@ export function runStockRules(i: EngineInput): RecoCandidate[] {
             agentId: null,
             title: same(p.name),
             body: {
-              fr: `Marge ${margin} % < objectif ${i.targetMarginPct} %. Coût moyen ${money(p.costPrice)}${after}.`,
-              ar: `الهامش ${margin} % < الهدف ${i.targetMarginPct} %. متوسط التكلفة ${money(p.costPrice)}${p.lastPurchaseNumber ? ` بعد #${p.lastPurchaseNumber}` : ''}.`,
+              // ANALYTICS-09: the decimal comma in French and Arabic (« 33,8 % »), the point in English
+              fr: `Marge ${comma(margin)} % < objectif ${comma(i.targetMarginPct)} %. Coût moyen ${money(p.costPrice)}${after}.`,
+              ar: `الهامش ${comma(margin)} % < الهدف ${comma(i.targetMarginPct)} %. متوسط التكلفة ${money(p.costPrice)}${p.lastPurchaseNumber ? ` بعد #${p.lastPurchaseNumber}` : ''}.`,
               en: `Margin ${margin} % < target ${i.targetMarginPct} %. Average cost ${money(p.costPrice)}${p.lastPurchaseNumber ? ` after #${p.lastPurchaseNumber}` : ''}.`,
             },
             suggestedAction: { kind: 'update_price', params: { productId: p.productId, from: p.price, price: next } },
@@ -174,9 +185,9 @@ export function runStockRules(i: EngineInput): RecoCandidate[] {
       agentId: null,
       title: same(s.name),
       body: {
-        fr: `${s.late} réceptions en retard sur ${s.deliveries} (moy. +${s.avgDelayDays} j). Pensez à commander plus tôt.`,
-        ar: `${s.late} استلامات متأخرة من ${s.deliveries} (متوسط +${s.avgDelayDays} أيام). فكّر في الطلب مبكرًا.`,
-        en: `${s.late} late deliveries out of ${s.deliveries} (avg +${s.avgDelayDays} d). Consider ordering earlier.`,
+        fr: `${s.late} ${s.late > 1 ? 'réceptions' : 'réception'} en retard sur ${s.deliveries} (moy. +${comma(s.avgDelayDays)} j). Pensez à commander plus tôt.`,
+        ar: `${s.late} استلامات متأخرة من ${s.deliveries} (متوسط +${comma(s.avgDelayDays)} أيام). فكّر في الطلب مبكرًا.`,
+        en: `${s.late} late ${s.late === 1 ? 'delivery' : 'deliveries'} out of ${s.deliveries} (avg +${s.avgDelayDays} d). Consider ordering earlier.`,
       },
       suggestedAction: { kind: 'open_supplier', params: { supplierId: s.supplierId, advanceDays: s.avgDelayDays } },
       estimatedValue: null,

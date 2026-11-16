@@ -2,13 +2,14 @@
 // MerchantShell (02-next-route-map §2.1): guard, sidebar (stock mode + permission filtering), top bar, banners,
 // legal re-acceptance interstitial, language dialog. Frames "ANA-01 — Home — default", "AUTH — States catalogue".
 import { formatDate, isMerchantPermission, type AppLocale } from '@djaber/shared';
-import { Avatar, Button, Checkbox, Dialog, FormAlert, Menu, MenuItem, MenuLabel, MenuSeparator, Spinner, toast } from '@djaber/ui';
+import { Avatar, Button, Checkbox, Dialog, FormAlert, IconButton, Menu, MenuItem, MenuLabel, MenuSeparator, Spinner, toast } from '@djaber/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, Search, X } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { RESEND_COOLDOWN_S } from '@/components/auth/forgot-form';
 import { PageSessionExpired, PageSuspended, QueryError } from '@/components/global-states';
+import { tWithLtr } from '@/components/ltr-text';
 import { useAgentEvents } from '@/features/agents/api';
 import { useAnnouncementBanners } from '@/features/announcements/announcements';
 import { authApi } from '@/features/auth/api';
@@ -35,8 +36,8 @@ import { apiSession } from '@/lib/api';
 import type { LegalPending } from '@/lib/contracts';
 import { formatClock, retryAfterSeconds, useCooldown } from '@/lib/countdown';
 import { errorMessage } from '@/lib/forms';
-import { decideApp, loginHref } from '@/lib/guards';
-import { ImpersonationBanner, ImpersonationExpired } from '@/features/admin/impersonation';
+import { CONNECT_RETURN_PATH, decideApp, isTunnelTransit, loginHref, needsOnboarding, onboardingPath } from '@/lib/guards';
+import { ImpersonationBanner, ImpersonationExpired, ImpersonationMessages } from '@/features/admin/impersonation';
 import { useImpersonation } from '@/lib/impersonation';
 import { JobToaster } from '@/lib/jobs';
 import { useWsStatus, WsProvider } from '@/lib/ws';
@@ -45,6 +46,7 @@ import { meKey, useSession } from '@/lib/session';
 import { AppShell } from './app-shell';
 import type { ShellBanner } from './banner-stack';
 import { filterNav, FOOTER_NAV, MAIN_NAV, type NavGroup } from './nav';
+import { Logo } from './sidebar';
 
 export const LOCALE_NAMES: Record<AppLocale, string> = { fr: 'Français', ar: 'العربية', en: 'English' };
 
@@ -81,7 +83,7 @@ export function MerchantShell({ children }: { children: ReactNode }) {
   );
 
   const banners = useShellBanners();
-  const impersonationExpired = useImpersonation().expired;
+  const { expired: impersonationExpired, ended: impersonationEnded } = useImpersonation();
   const can = s.can;
   const stockMode = s.workspace?.stockMode ?? 'simple';
   const groups = useMemo<NavGroup[]>(() => {
@@ -116,16 +118,40 @@ export function MerchantShell({ children }: { children: ReactNode }) {
 
   // read-only impersonation whose window (`impersonationMinutes`) is over (ADMIN_IMPERSONATION_EXPIRED): back to the admin
   if (s.impersonating && impersonationExpired) return <ImpersonationExpired />;
+  // full-test 15/11 ADMIN-15: a reload ended the session of this tab — say so instead of showing the admin's own shop
+  if (!s.impersonating && impersonationEnded) return <ImpersonationExpired ended={impersonationEnded} />;
   const suspended = decision.kind === 'state' && decision.state === 'suspended';
+  // full-test 15/11 ONBOARDING-03: the agent wizard « in transit » (tunnel step 4, « Partir de zéro ») runs without the app
+  // sidebar / top bar — their links only sent the merchant back to step 4 (12 §17 « links to other app pages hidden »)
+  if (s.workspace && needsOnboarding(s.workspace, s.role) && pathname !== CONNECT_RETURN_PATH && isTunnelTransit(pathname, s.workspace.onboardingStep)) {
+    return (
+      <WsProvider>
+        <div className="flex min-h-dvh flex-col" data-testid="tunnel-transit">
+          <header className="flex h-20 shrink-0 items-center justify-between gap-3 px-4 sm:px-8">
+            <Logo />
+            <Link href={onboardingPath(s.workspace.onboardingStep)} className="ts-label-meta text-text-secondary hover:text-text-primary">
+              {t('onboarding.transit.back')}
+            </Link>
+          </header>
+          <main id="main" className="flex flex-1 flex-col px-4 pb-16 sm:px-8">
+            {children}
+          </main>
+        </div>
+        <JobToaster />
+      </WsProvider>
+    );
+  }
   return (
     <WsProvider>
-      <LiveShell groups={groups} banners={banners} fixedBar={s.impersonating ? <ImpersonationBanner /> : undefined}>
-        {suspended ? (
-          <PageSuspended reason={t(`shell.suspendReason.${s.workspace?.suspendReason ?? 'other'}`)} supportHref={`/${locale}/help/contact`} />
-        ) : (
-          <MaintenanceGate>{children}</MaintenanceGate>
-        )}
-      </LiveShell>
+      <ImpersonationMessages>
+        <LiveShell groups={groups} banners={banners} fixedBar={s.impersonating ? <ImpersonationBanner /> : undefined}>
+          {suspended ? (
+            <PageSuspended reason={t(`shell.suspendReason.${s.workspace?.suspendReason ?? 'other'}`)} supportHref={`/${locale}/help/contact`} />
+          ) : (
+            <MaintenanceGate>{children}</MaintenanceGate>
+          )}
+        </LiveShell>
+      </ImpersonationMessages>
       <JobToaster />
       <LegalInterstitial />
     </WsProvider>
@@ -240,7 +266,7 @@ function useShellBanners(): ShellBanner[] {
     banners.push({
       id: 'emailUnverified',
       tone: 'info',
-      content: t('shell.emailUnverified', { email: s.me.email }),
+      content: tWithLtr(t, 'shell.emailUnverified', 'email', s.me.email),
       action: cooldown > 0 ? { label: t('action.resendIn', { time: formatClock(cooldown) }), disabled: true } : { label: t('action.resend'), onClick: onResend },
     });
   }
@@ -268,6 +294,48 @@ function useShellBanners(): ShellBanner[] {
   return banners;
 }
 
+/**
+ * full-test 15/11 MOBILE-A11Y-10: below 768 px the global search is a « Rechercher » icon that opens the same search over
+ * the top bar (it was `display: none` with nothing in its place).
+ */
+function PhoneSearch() {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const row = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  // a result opened: the row closes with the navigation
+  const pathname = usePathname();
+  useEffect(() => setOpen(false), [pathname]);
+  const close = () => {
+    setOpen(false);
+    window.setTimeout(() => trigger.current?.focus(), 0);
+  };
+  useEffect(() => {
+    if (!open) return;
+    row.current?.querySelector<HTMLInputElement>('input')?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+  return (
+    <>
+      <IconButton ref={trigger} label={t('shell.search.open')} variant="ghost" className="me-auto md:hidden" onClick={() => setOpen(true)} aria-expanded={open} data-testid="phone-search">
+        <Search className="size-5" aria-hidden />
+      </IconButton>
+      {open ? (
+        <div ref={row} className="fixed inset-x-0 top-0 z-40 flex h-16 items-center gap-2 border-b border-line-hairline bg-ink-surface px-3 md:hidden" data-testid="phone-search-row">
+          <div className="min-w-0 flex-1">
+            <GlobalSearch />
+          </div>
+          <IconButton label={t('action.close')} variant="ghost" onClick={close}>
+            <X className="size-5" aria-hidden />
+          </IconButton>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 /* ---------- Top bar ---------- */
 function TopBar() {
   const t = useT();
@@ -284,6 +352,7 @@ function TopBar() {
       <div className="me-auto hidden min-w-0 flex-1 md:block">
         <GlobalSearch />
       </div>
+      <PhoneSearch />
       {ws === 'reconnecting' ? (
         <span role="status" data-testid="ws-reconnecting" className="inline-flex h-5 items-center gap-1.5 rounded-full border border-accent-starred/40 px-2 ts-label-meta text-accent-starred">
           <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-accent-starred" />

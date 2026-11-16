@@ -178,9 +178,11 @@ export function ReceiveDialog({ purchaseId, onClose }: { purchaseId: string | nu
   const sum = receiveSummary(ls.map((l) => ({ ordered: l.ordered, alreadyReceived: l.already, now: int(l.now), added: l.added })));
   const missingVariant = ls.some((l) => l.added && l.hasVariants && !l.variantId);
   const pay = digitsToInt(payNow) ?? 0;
-  const remainingAfter = p ? Math.max(0, p.remaining - pay) : 0;
+  // a draft owes nothing yet but is owed in full once received (STOCK-08: never « solde dû après : 0 DA » on a draft)
+  const owed = p ? (p.status === 'draft' ? Math.max(0, p.total - p.amountPaid) : p.remaining) : 0;
+  const remainingAfter = Math.max(0, owed - pay);
   // the field already says "au-delà du reste dû": the submit is blocked the same way
-  const overPay = !!p && pay > p.remaining;
+  const overPay = !!p && pay > owed;
   const typed = useTypedFlag(!!purchaseId);
   const s = useDialogSubmit((key) =>
     gdsApi.receivePurchase(
@@ -188,7 +190,8 @@ export function ReceiveDialog({ purchaseId, onClose }: { purchaseId: string | nu
       {
         items: ls.filter((l) => !l.added).map((l) => ({ id: l.id!, receivedQty: int(l.now), unitCost: int(l.cost) })),
         newItems: ls.filter((l) => l.added && int(l.now) > 0).map((l) => ({ productId: l.productId, variantId: l.variantId, receivedQty: int(l.now), unitCost: int(l.cost) })),
-        receivedAt: new Date(`${date}T12:00:00Z`).toISOString(),
+        // today = now (the payment taken at the receipt keeps its real time, STOCK-15); a past day = its noon
+        receivedAt: (date === algiersDay() ? new Date() : new Date(`${date}T12:00:00Z`)).toISOString(),
         supplierInvoiceRef: invoice.trim() || null,
         paymentNow: pay > 0 ? { amount: pay, method } : null,
       },
@@ -322,7 +325,7 @@ export function ReceiveDialog({ purchaseId, onClose }: { purchaseId: string | nu
             </details>
             {sum.over.length ? (
               <p className="ts-label-meta !normal-case text-accent-starred" data-testid="over-receive-warning">
-                ⚠ {t('purchases.receive.overWarning', { names: ls.filter((l) => !l.added && l.already + int(l.now) > l.ordered).map((l) => l.name).join(', ') })}
+                {t('purchases.receive.overWarning', { names: ls.filter((l) => !l.added && l.already + int(l.now) > l.ordered).map((l) => l.name).join(', ') })}
               </p>
             ) : null}
             <div className="grid gap-3 sm:grid-cols-3">
@@ -332,7 +335,7 @@ export function ReceiveDialog({ purchaseId, onClose }: { purchaseId: string | nu
               <Field label={t('purchases.receive.invoice')} htmlFor="rcv-invoice" error={s.fieldError('supplierInvoiceRef')}>
                 <CodeInput id="rcv-invoice" value={invoice} maxLength={120} onChange={(e) => setInvoice(e.target.value)} placeholder="F-2026-118" />
               </Field>
-              <Field label={t('purchases.receive.payNow')} htmlFor="rcv-pay" hint={t('purchases.receive.dueAfter', { amount: formatMoney(remainingAfter) })} error={pay > p.remaining ? t('suppliers.payment.overDue', { amount: formatMoney(p.remaining) }) : s.fieldError('paymentNow.amount')}>
+              <Field label={t('purchases.receive.payNow')} htmlFor="rcv-pay" hint={t('purchases.receive.dueAfter', { amount: formatMoney(remainingAfter) })} error={overPay ? t('suppliers.payment.overDue', { amount: formatMoney(owed) }) : s.fieldError('paymentNow.amount')}>
                 <div className="flex gap-2">
                   <MoneyInput id="rcv-pay" value={payNow} onValueChange={setPayNow} />
                   {pay > 0 ? (
@@ -424,7 +427,7 @@ export function PurchasePaymentDialog({ purchaseId, onClose }: { purchaseId: str
     setMethod(p.paymentMethod ?? 'cash');
   }
   const value = digitsToInt(amount);
-  const err = !value ? 'validation.required' : p && value > p.remaining ? 'suppliers.payment.overDue' : null;
+  const err = value === null ? 'validation.required' : value === 0 ? 'validation.amount_positive' : p && value > p.remaining ? 'suppliers.payment.overDue' : null;
   const s = useDialogSubmit((key) => gdsApi.purchasePayment(purchaseId!, { amount: value!, method, reference: reference.trim() || null, paidAt: date === algiersDay() ? undefined : new Date(`${date}T12:00:00Z`).toISOString() }, key));
   const submit = async () => {
     setTouched(true);
@@ -448,7 +451,7 @@ export function PurchasePaymentDialog({ purchaseId, onClose }: { purchaseId: str
       <div className="flex flex-col gap-4" data-testid="purchase-payment-dialog">
         {loadError ? <FormAlert>{loadError}</FormAlert> : null}
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={t('gds.amount')} htmlFor="pp-amount" required error={touched && err ? t(err, { amount: formatMoney(p?.remaining ?? 0) }) : s.fieldError('amount')}>
+          <Field label={t('gds.amount')} htmlFor="pp-amount" required error={(touched || err === 'suppliers.payment.overDue') && err ? t(err, { amount: formatMoney(p?.remaining ?? 0) }) : s.fieldError('amount')}>
             <MoneyInput id="pp-amount" value={amount} onValueChange={setAmount} aria-invalid={(touched && !!err) || undefined} />
           </Field>
           <Field label={t('gds.method')} htmlFor="pp-method">

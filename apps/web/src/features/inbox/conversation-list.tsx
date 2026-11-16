@@ -244,7 +244,8 @@ export function ConversationList({
                 action={can('channels.manage') ? { label: t('inbox.empty.noChannel.cta'), onClick: () => router.push('/channels') } : undefined}
               />
             ) : isFiltered(filters) ? (
-              <ListFilteredEmpty entity={t('inbox.entity')} filters={filters.q.trim() ? `« ${filters.q.trim()} »` : t('inbox.filters.active', { count: activeFilters })} onClear={() => setFilters(resetPanelFilters(filters))} />
+              // full-test 15/11 CHANNELS-INBOX-11: the message quotes the term itself (« « zzzzqa » » was quoted twice)
+              <ListFilteredEmpty entity={t('inbox.entity')} filters={filters.q.trim()} onClear={() => setFilters(resetPanelFilters(filters))} />
             ) : (
               <ListEmpty title={t(`inbox.empty.${filters.tab}.title`)} description={t(`inbox.empty.${filters.tab}.description`)} />
             )}

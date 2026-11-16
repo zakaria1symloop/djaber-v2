@@ -103,10 +103,11 @@ export function AdjustStockDialog({
     setError(null);
     try {
       await save.mutateAsync();
-      await refresh({ productId: target.id });
       toast(t('stock.adjust.done', { name: targetName }));
       onDone?.();
+      // closed before the refetch: the fresh (possibly forced negative) stock never flashes « Stock insuffisant » (STOCK-12)
       onClose();
+      void refresh({ productId: target.id });
     } catch (e) {
       // the same key replays the stored answer; a refused request needs a new key for the corrected attempt
       setKey(uuid());
@@ -130,7 +131,7 @@ export function AdjustStockDialog({
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             {t('action.cancel')}
           </Button>
-          <Button variant="primary" onClick={submit} loading={busy} disabled={service} disabledReason={zero ? t('error.STOCK_QUANTITY_ZERO') : undefined}>
+          <Button variant="primary" onClick={submit} loading={busy} disabled={service} disabledReason={zero ? t('error.STOCK_QUANTITY_ZERO') : !reason ? t('stock.adjust.reasonMissing') : undefined}>
             {t('stock.adjust.submit')}
           </Button>
         </>
@@ -237,7 +238,8 @@ export function AdjustStockDialog({
               name: selected?.name ?? target.name,
               from: formatNumber(current),
               to: `${after < 0 ? '−' : ''}${formatNumber(Math.abs(after))}`,
-              type: t(`stock.adjust.movement.${type === 'in' || (type === 'set' && after > current) ? 'in' : 'out'}`),
+              // the type the journal shows for the row written (`adjustment_in` / `adjustment_out`, 04 §20) — STOCK-12
+              type: t(`enum.StockMovement.type.${type === 'in' || (type === 'set' && after > current) ? 'adjustment_in' : 'adjustment_out'}`),
             })}
           </p>
         ) : null}

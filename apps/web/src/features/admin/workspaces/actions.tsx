@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { toMenuActions } from '@/lib/actions';
 import { useT } from '@/lib/i18n';
 import { usePlatform } from '../platform';
+import { withAdminReasons } from '../reasons';
 import { ChangePlanDialog, CreditsDialog, ExtendDialog, RemoveCreditsDialog, ImpersonateDialog, ReasonOnlyDialog, ScheduleDeletionDialog, SuspendDialog, TrustLevelDialog } from './dialogs';
 
 export type WsDialog = 'impersonate' | 'change_plan' | 'add_credits' | 'remove_credits' | 'extend_trial' | 'suspend' | 'reactivate' | 'schedule_deletion' | 'cancel_deletion' | 'trust_level';
@@ -20,7 +21,7 @@ export function useWorkspaceActions({ openSheet }: { openSheet: (id: string) => 
   const write = can('admin.workspaces.write');
 
   const menu = (ws: AdminWorkspaceRowDto, o: { sheet?: boolean } = {}): MenuAction[] =>
-    toMenuActions(
+    withAdminReasons(toMenuActions(
       ws.actions,
       {
         open: { label: t('admin.ws.action.open'), onSelect: () => openSheet(ws.id), hidden: o.sheet, local: true },
@@ -36,7 +37,7 @@ export function useWorkspaceActions({ openSheet }: { openSheet: (id: string) => 
         cancel_deletion: { label: t('admin.ws.action.cancel_deletion'), onSelect: () => open('cancel_deletion', ws), hidden: !write },
       },
       t,
-    );
+    ), ws.actions, t);
 
   const ws = state?.ws ?? null;
   const is = (k: WsDialog) => state?.kind === k;

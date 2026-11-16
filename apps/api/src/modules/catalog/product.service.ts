@@ -33,6 +33,14 @@ const SOLD_STATUSES = MARGIN_SOLD_STATUSES;
 const belowCost = (price: number, cost: number | null | undefined): Warning[] =>
   cost !== null && cost !== undefined && price < cost ? [{ code: 'SELLING_BELOW_COST', field: 'price' }] : [];
 
+/**
+ * 04 §12 (full-test 15/11 PRODUCTS-09): the « Ancien prix » is the struck-through price of a promotion, so it is above the
+ * selling price. The error goes on the field the member changed.
+ */
+export const assertOldPrice = (price: number, oldPrice: number | null, field: 'oldPrice' | 'price') => {
+  if (oldPrice !== null && oldPrice <= price) throw validationError({ [field]: 'validation.old_price' });
+};
+
 @Injectable()
 export class ProductService implements OnModuleInit {
   constructor(
@@ -223,6 +231,7 @@ export class ProductService implements OnModuleInit {
   async create(input: CreateProductInput, source: ModerationSource = 'create'): Promise<WithWarnings<ProductView>> {
     const tracked = input.trackStock !== false;
     const variants = input.variants ?? [];
+    assertOldPrice(input.price, input.oldPrice ?? null, 'oldPrice');
     const id = await this.write(async (tx) => {
       await this.limits.assertProductSlots(tx);
       await this.assertRefs(tx, input.categoryId, input.unitId);
@@ -267,6 +276,9 @@ export class ProductService implements OnModuleInit {
     if (before.deletedAt) throw conflict({ reason: 'PRODUCT_ARCHIVED', current: await this.get(id) });
     if (version !== before.version) throw await stale();
     if (fields.sku === null) throw validationError({ sku: 'validation.required' });
+    if (fields.price !== undefined || fields.oldPrice !== undefined) {
+      assertOldPrice(fields.price ?? before.price, fields.oldPrice === undefined ? before.oldPrice : fields.oldPrice, fields.oldPrice !== undefined ? 'oldPrice' : 'price');
+    }
 
     const ok = await this.write(async (tx) => {
       await this.assertRefs(tx, fields.categoryId, fields.unitId);
@@ -444,20 +456,31 @@ export class ProductService implements OnModuleInit {
 
   /** `GET /products/:id/relations` — counts + last rows for the quick-edit sheet tabs [FIG CAT-01 quick edit]. */
   async relations(id: string) {
-    await this.rowOrNotFound(id);
+    const p = await this.rowOrNotFound(id);
+    // full-test 15/11 PRODUCTS-07: the agents that sell it — explicit links, the whole catalogue, or its category (the
+    // same scope as `GET /agents?productId=` on the product page). AT-CAT-07: an archived product is out of every agent's
+    // selection — no whole-catalogue / category agent sells it either
+    const selling: Prisma.AgentWhereInput = {
+      deletedAt: null,
+      OR: [
+        { sellAllProducts: false, products: { some: { productId: id } } },
+        { sellAllProducts: true, catalogScope: 'all' },
+        ...(p.categoryId ? [{ sellAllProducts: true, catalogScope: 'categories' as const, scopeCategoryIds: { has: p.categoryId } }] : []),
+      ],
+    };
     const [orderCount, orderItems, movementCount, movements, agents, recoCount, recos] = await Promise.all([
       prisma.order.count({ where: { items: { some: { productId: id } } } }),
       prisma.orderItem.findMany({ where: { productId: id }, orderBy: { order: { orderedAt: 'desc' } }, take: 5, select: { quantity: true, total: true, variantName: true, order: { select: { id: true, number: true, status: true, orderedAt: true } } } }),
       prisma.stockMovement.count({ where: { productId: id } }),
       this.stock.listMovements({ page: 1, pageSize: 25, limit: 5, productId: id } as never),
-      prisma.agentProduct.findMany({ where: { productId: id, agent: { deletedAt: null } }, select: { agent: { select: { id: true, name: true, status: true } } } }),
+      p.deletedAt ? [] : prisma.agent.findMany({ where: selling, select: { id: true, name: true, status: true }, orderBy: [{ name: 'asc' }, { id: 'asc' }] }),
       prisma.recommendation.count({ where: { OR: [{ productId: id }, { recommendedId: id }] } }),
       prisma.recommendation.findMany({ where: { productId: id }, orderBy: { createdAt: 'desc' }, take: 5, select: { id: true, type: true, isActive: true, recommended: { select: { id: true, name: true } } } }),
     ]);
     return {
       orders: { count: orderCount, last: orderItems.map((i) => ({ id: i.order.id, number: i.order.number, status: i.order.status, orderedAt: i.order.orderedAt.toISOString(), quantity: i.quantity, total: i.total, variantName: i.variantName })) },
       movements: { count: movementCount, last: movements.data },
-      agents: { count: agents.length, last: agents.map((a) => a.agent) },
+      agents: { count: agents.length, last: agents },
       recommendations: { count: recoCount, last: recos },
     };
   }

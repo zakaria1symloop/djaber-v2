@@ -14,6 +14,34 @@ const PDF_MIMES = new Set(['application/pdf', 'application/x-pdf']);
 const CSV_MIMES = new Set(['text/csv', 'application/csv', 'text/plain', 'application/vnd.ms-excel']);
 const IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const SHARP_FORMATS = new Set(['jpeg', 'png', 'webp', 'gif']);
+/**
+ * full-test 15/11 HELP-06: a support attachment keeps the name the merchant picked — written in its storage key as
+ * `<uuid>~<base64url(name)>.<ext>` (no schema change) and read back by `attachmentName`. Multer hands non-ASCII names
+ * as latin-1: they are decoded back to UTF-8.
+ */
+export const originalName = (raw: string | undefined): string => {
+  if (!raw) return '';
+  let name = raw;
+  if (![...raw].some((c) => c.charCodeAt(0) > 0xff)) {
+    const utf8 = Buffer.from(raw, 'latin1').toString('utf8');
+    if (!utf8.includes('\ufffd')) name = utf8;
+  }
+  const bad = (c: string) => c.charCodeAt(0) < 32 || c === '/' || c === String.fromCharCode(92);
+  return [...name.normalize('NFC')].filter((c) => !bad(c)).join('').trim().slice(0, 100);
+};
+const nameTag = (kind: UploadKind, raw: string | undefined): string => {
+  const name = kind === 'ticket_attachment' ? originalName(raw) : '';
+  return name ? `~${Buffer.from(name, 'utf8').toString('base64url')}` : '';
+};
+/** The picked name of a support attachment (key `…/<uuid>~<base64url>.<ext>`), or the last key segment for older files. */
+export const attachmentName = (storageKey: string): string => {
+  const last = storageKey.split('/').pop() ?? storageKey;
+  const m = /^[0-9a-f-]{36}~([A-Za-z0-9_-]+)\.\w+$/.exec(last);
+  if (!m) return last;
+  const name = Buffer.from(m[1]!, 'base64url').toString('utf8');
+  return name && !name.includes('\ufffd') ? name : last;
+};
+
 /** Square-ish identity pictures: 512 px is enough for every place they are shown. */
 const MAX_EDGE: Partial<Record<UploadKind, number>> = { avatar: 512, logo: 512, category_image: 512 };
 
@@ -32,7 +60,9 @@ export class ImageUploadService {
     if (!file?.buffer?.length) throw validationError({ file: 'validation.required' });
     if (IMAGE_MIMES.has(file.mimetype)) return this.store(file, kind, userId, workspaceId);
     const isPdf = PDF_MIMES.has(file.mimetype) || file.buffer.subarray(0, 5).toString('latin1') === '%PDF-';
-    const isCsv = !isPdf && o.allowCsv && (CSV_MIMES.has(file.mimetype) || /\.csv$/i.test(file.originalname ?? ''));
+    // full-test 15/11 HELP-12: « captures, CSV » — a text/plain file is a CSV only with a .csv name (a .txt was accepted)
+    const csvName = /\.csv$/i.test(file.originalname ?? '');
+    const isCsv = !isPdf && o.allowCsv && (csvName || (CSV_MIMES.has(file.mimetype) && file.mimetype !== 'text/plain'));
     if (!isPdf && !isCsv) throw new AppException('UPLOAD_TYPE_INVALID', {}, { file: 'validation.invalid' });
     if (file.size > FILE_MAX_BYTES || file.buffer.length > FILE_MAX_BYTES) throw new AppException('UPLOAD_TOO_LARGE', { max: '5 MB' }, { file: 'validation.invalid' });
     // the declared type is not trusted: a PDF starts with `%PDF-`, a CSV is text without NUL bytes
@@ -40,7 +70,7 @@ export class ImageUploadService {
     if (isCsv && file.buffer.includes(0)) throw new AppException('UPLOAD_TYPE_INVALID', {}, { file: 'validation.invalid' });
     const mime = isPdf ? 'application/pdf' : 'text/csv';
     const ext = isPdf ? 'pdf' : 'csv';
-    const key = `${kind === 'ticket_attachment' ? 'private/' : ''}${workspaceId ? `ws/${workspaceId}` : `users/${userId}`}/${kind}/${randomUUID()}.${ext}`;
+    const key = `${kind === 'ticket_attachment' ? 'private/' : ''}${workspaceId ? `ws/${workspaceId}` : `users/${userId}`}/${kind}/${randomUUID()}${nameTag(kind, file.originalname)}.${ext}`;
     const stored = await this.storage.put(key, file.buffer, mime);
     const row = await TenantContext.runSystem(() =>
       prisma.upload.create({ data: { workspaceId, storageKey: key, url: stored.url, mime, size: file.buffer.length, kind, createdById: userId } }),
@@ -68,7 +98,7 @@ export class ImageUploadService {
       throw new AppException('IMAGE_TYPE_INVALID', {}, { file: 'validation.invalid' });
     }
 
-    const key = `${kind === 'ticket_attachment' ? 'private/' : ''}${workspaceId ? `ws/${workspaceId}` : `users/${userId}`}/${kind}/${randomUUID()}.webp`;
+    const key = `${kind === 'ticket_attachment' ? 'private/' : ''}${workspaceId ? `ws/${workspaceId}` : `users/${userId}`}/${kind}/${randomUUID()}${nameTag(kind, file.originalname)}.webp`;
     const stored = await this.storage.put(key, out.data, 'image/webp');
     const row = await TenantContext.runSystem(() =>
       prisma.upload.create({

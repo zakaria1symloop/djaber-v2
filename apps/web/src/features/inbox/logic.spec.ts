@@ -111,10 +111,10 @@ describe('composer state', () => {
   it('is hidden for a read-only member, whatever the conversation', () => {
     expect(composerState(conv({ blocked: true }), { readOnly: true, now: NOW })).toEqual({ mode: 'hidden', reason: 'readOnly', code: 'READ_ONLY_MEMBER' });
   });
-  it('is disabled with REPLY_CHANNEL_INACTIVE when the page is not active; reconnect is offered for needs_reconnect only', () => {
+  it('is disabled with REPLY_CHANNEL_INACTIVE when the page is not active; reconnect is offered for needs_reconnect and disconnected (full-test 15/11 CHANNELS-INBOX-02)', () => {
     for (const status of ['needs_reconnect', 'paused', 'disabled', 'disconnected', 'pending_review'] as const) {
       const s = composerState(conv({ channel: { ...conv().channel, status } }), { readOnly: false, now: NOW });
-      expect(s).toMatchObject({ mode: 'disabled', reason: 'channelInactive', code: 'REPLY_CHANNEL_INACTIVE', reconnect: status === 'needs_reconnect' });
+      expect(s).toMatchObject({ mode: 'disabled', reason: 'channelInactive', code: 'REPLY_CHANNEL_INACTIVE', reconnect: status === 'needs_reconnect' || status === 'disconnected' });
     }
   });
   it('is disabled for a blocked customer', () => {
@@ -183,6 +183,11 @@ describe('conversation banner priority', () => {
     expect(threadBanner({ ...active, creditsExhausted: false, aiUnavailable: false }, { now: NOW })).toBe('blocked');
     expect(threadBanner({ ...active, creditsExhausted: false, aiUnavailable: false, blocked: false }, { now: NOW })).toBe('outsideWindow');
     expect(threadBanner(conv(), { now: NOW })).toBeNull();
+    // full-test 15/11 CHANNELS-INBOX-02: a disconnected page asks for the reconnection, never « hors fenêtre » + template
+    const old = { ...active, creditsExhausted: false, aiUnavailable: false, blocked: false };
+    expect(threadBanner({ ...old, channel: { ...all.channel, status: 'disconnected' } }, { now: NOW })).toBe('reconnect');
+    expect(threadBanner({ ...old, channel: { ...all.channel, status: 'disabled' } }, { now: NOW })).toBeNull();
+    expect(composerState(conv({ channel: { ...conv().channel, status: 'disconnected' } }), { readOnly: false, now: NOW })).toMatchObject({ reason: 'channelInactive', reconnect: true });
   });
   it('a manual pause on an active conversation shows the pause banner', () => {
     expect(threadBanner(conv({ aiPaused: true }), { now: NOW })).toBe('aiPaused');

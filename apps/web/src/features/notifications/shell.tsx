@@ -73,7 +73,8 @@ export function useUnreadCount(): number {
 export function NotificationBell({ className }: { className?: string }) {
   const t = useT();
   const count = useUnreadCount();
-  const label = count > 0 ? `${t('nav.notifications')} — ${t('notification.unreadServer', { count })}` : t('nav.notifications');
+  // full-test 15/11 MOBILE-A11Y-12: the spoken name of the bell has no design note (« · comptage serveur »)
+  const label = count > 0 ? `${t('nav.notifications')} — ${t('notification.bellUnread', { count })}` : t('nav.notifications');
   return (
     <Link
       href="/notifications"

@@ -26,6 +26,11 @@ export function AiRunDialog({ messageId, agentName, onClose }: { messageId: stri
   const q = useAiRun(messageId);
   const status = q.error instanceof ApiError ? q.error.status : null;
   const run = q.data;
+  // full-test 15/11 CHANNELS-INBOX-12: the intent reads like the inbox filter (Vente / Info / … / Autre), never « OTHER »
+  const intentLabel = (v: string) => {
+    const key = `inbox.filters.intent.${v.toLowerCase()}`;
+    return t.has(key) ? t(key) : v;
+  };
   const rows: InspectorRow[] = run
     ? aiRunRows(run, locale).map((r) => ({
         key: r.key,
@@ -34,8 +39,8 @@ export function AiRunDialog({ messageId, agentName, onClose }: { messageId: stri
         value:
           r.key === 'intent'
             ? r.confidence
-              ? t('inbox.aiRun.intent', { intent: r.value, confidence: r.confidence })
-              : r.value
+              ? t('inbox.aiRun.intent', { intent: intentLabel(r.value), confidence: r.confidence })
+              : intentLabel(r.value)
             : r.key === 'model'
               ? r.fallback
                 ? t('inbox.aiRun.fallback', { model: r.value })

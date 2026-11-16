@@ -6,13 +6,14 @@
 // from-scratch agent (steps 1–3 run inside the tunnel, then it comes back at step 5). Step 5 starts the page connect
 // flow (M3). A reopened step shows what already exists (product, agent, pages) and continues without creating twice;
 // leaving a reopened step never moves the saved progress back.
-import { CreateProductSchema } from '@djaber/shared';
-import { Button, buttonClass, Card, ChecklistRow, cn, Field, FormAlert, Input, MoneyInput, NumberInput, OptionCard, Skeleton, Steps, toast, Tooltip, type StepItem } from '@djaber/ui';
+import { CreateProductSchema, formatNumber } from '@djaber/shared';
+import { Button, buttonClass, Card, ChecklistRow, cn, Field, FormAlert, Input, MoneyInput, NumberInput, onRadioGroupKeyDown, OptionCard, Skeleton, Steps, toast, Tooltip, type StepItem } from '@djaber/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Bot, Box, Check, Plus, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { RESEND_COOLDOWN_S } from '@/components/auth/forgot-form';
 import { QueryError } from '@/components/global-states';
+import { tWithLtr } from '@/components/ltr-text';
 import { agentsApi, useAgents, useAgentsRefresh, usePresets } from '@/features/agents/api';
 import { authApi } from '@/features/auth/api';
 import { catalogApi, catalogKeys, useProducts } from '@/features/catalog/api';
@@ -24,13 +25,15 @@ import { checkImageFile, IMAGE_ACCEPT } from '@/features/catalog/product-form/im
 import { useOnboarding, useOnboardingStep, usePatchWorkspace } from '@/features/workspace/api';
 import { agentTestPath, agentToTest, connectedChannels, limitReached, SCRATCH_WIZARD_PATH } from './logic';
 import { presetCards, type PresetCard } from './presets';
+import { planIntentHref, type PlanIntent } from '@/features/public/logic';
+import { readPlanIntent } from '@/lib/plan-intent';
 import { Link, useRouter } from '@/i18n/navigation';
 import { checklistOf } from '@/lib/contracts';
 import { formatClock, retryAfterSeconds, useCooldown } from '@/lib/countdown';
 import { ApiError } from '@/lib/api';
-import { errorMessage, fieldError } from '@/lib/forms';
+import { errorMessage, fieldError, useLeaveGuard } from '@/lib/forms';
 import { ONBOARDING_STEPS, onboardingPath, onboardingWrite, stepNumber, type OnboardingSlug } from '@/lib/guards';
-import { useT } from '@/lib/i18n';
+import { useLocaleCode, useT } from '@/lib/i18n';
 import { digitsToInt } from '@/lib/money';
 import { useSession, useWorkspaceId } from '@/lib/session';
 
@@ -66,8 +69,10 @@ function useAdvance(slug: OnboardingSlug) {
   return { go, saving: step.isPending };
 }
 
-function Shell({ slug, title, description, children }: { slug: OnboardingSlug; title: string; description: ReactNode; children: ReactNode }) {
+/** `ask`: the leave guard of a step with a dirty form (the stepper is a programmatic navigation the guard cannot see). */
+function Shell({ slug, title, description, children, ask }: { slug: OnboardingSlug; title: string; description: ReactNode; children: ReactNode; ask?: (href: string) => void }) {
   const t = useT();
+  const locale = useLocaleCode();
   const router = useRouter();
   const { workspace } = useSession();
   const current = stepNumber(slug);
@@ -77,7 +82,7 @@ function Shell({ slug, title, description, children }: { slug: OnboardingSlug; t
     key: s,
     label: t(STEP_LABEL[s]),
     state: i + 1 === current ? 'active' : i + 1 < reached ? 'done' : 'upcoming',
-    onSelect: () => router.push(`/onboarding/${s}`),
+    onSelect: () => (ask ? ask(`/${locale}/onboarding/${s}`) : router.push(`/onboarding/${s}`)),
   }));
   return (
     <Card className="mx-auto w-full max-w-[680px] p-6 sm:p-9">
@@ -162,7 +167,7 @@ function StockMode() {
             icon={<Box className="size-5" aria-hidden />}
             title={t(`settings.stockMode.${m}.title`)}
             description={t(`settings.stockMode.${m}.description`)}
-            badge={t('enum.Workspace.status.active')}
+            badge={t('onboarding.option.selected')}
           />
         ))}
       </div>
@@ -223,12 +228,19 @@ function FirstProduct() {
     setPhoto({ file, url: URL.createObjectURL(file) });
   };
   const submit = async () => {
+    // full-test 15/11 ONBOARDING-08: every empty required field is flagged in one pass (the stock rule of the schema only
+    // ran once name / price were valid); ONBOARDING-06: a value above the maximum says so
+    const required: FirstProductErrors = {};
+    if (!name.trim()) required.name = t('validation.required');
+    if (digitsToInt(price) === null) required.price = t('validation.required');
+    if (digitsToInt(stock) === null) required.stock = t('validation.required');
     const parsed = CreateProductSchema.safeParse({ name, price: digitsToInt(price) ?? undefined, stock: digitsToInt(stock), trackStock: true });
-    if (!parsed.success) {
-      const next: FirstProductErrors = {};
-      for (const issue of parsed.error.issues) {
+    if (!parsed.success || Object.keys(required).length) {
+      const next: FirstProductErrors = { ...required };
+      for (const issue of parsed.success ? [] : parsed.error.issues) {
         const k = issue.path[0];
-        if (k === 'name' || k === 'price' || k === 'stock') next[k] ??= fieldError(t, issue.message, { max: 255 });
+        const range = issue.code === 'too_big' && (k === 'price' || k === 'stock') ? t('validation.range', { min: k === 'price' ? 1 : 0, max: formatNumber(Number(issue.maximum)) }) : null;
+        if (k === 'name' || k === 'price' || k === 'stock') next[k] ??= range ?? fieldError(t, issue.message, { max: 255 });
         else next.form ??= fieldError(t, issue.message);
       }
       return setErrors(next);
@@ -258,9 +270,13 @@ function FirstProduct() {
   // the list only prevents a duplicate: while it loads the step waits, when it fails the form is offered
   const checking = products.isLoading;
   const existing = !adding && !create.isSuccess ? (products.data?.rows[0] ?? null) : null;
+  // full-test 15/11 ONBOARDING-09: typed values / a picked photo are not thrown away by « ← Stock », the stepper, Back or F5
+  const dirty = !existing && !create.isSuccess && (!!name.trim() || price !== '' || stock !== '' || !!photo);
+  const { guard, ask } = useLeaveGuard(dirty, t('onboarding.step.product'));
   const aiReason = aiOff ? t('error.IMAGE_ANALYSIS_UNAVAILABLE') : undefined;
   return (
-    <Shell slug="first-product" title={t('onboarding.product.title')} description={t('onboarding.product.description')}>
+    <Shell slug="first-product" title={t('onboarding.product.title')} description={t('onboarding.product.description')} ask={ask}>
+      {guard}
       {checking ? (
         <div role="status" aria-label={t('common.loading')} className="grid gap-4 sm:grid-cols-[140px_1fr]">
           <Skeleton className="h-[140px]" />
@@ -337,14 +353,36 @@ function FirstProduct() {
           </div>
           <div className="flex flex-col gap-3">
             <Field label={t('common.name')} htmlFor="p-name" required error={errors.name}>
-              <Input id="p-name" dir="auto" maxLength={255} value={name} disabled={busy} aria-invalid={!!errors.name} placeholder={t('onboarding.product.namePlaceholder')} onChange={(e) => setName(e.target.value)} />
+              <Input id="p-name" dir="auto" maxLength={255} value={name} disabled={busy} aria-invalid={!!errors.name} placeholder={t('onboarding.product.namePlaceholder')} onChange={(e) => {
+                  setName(e.target.value);
+                  setErrors((x) => ({ ...x, name: undefined }));
+                }} />
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t('onboarding.product.price')} htmlFor="p-price" required error={errors.price}>
-                <MoneyInput id="p-price" value={price} onValueChange={setPrice} disabled={busy} aria-invalid={!!errors.price} />
+                <MoneyInput
+                  id="p-price"
+                  value={price}
+                  onValueChange={(v) => {
+                    setPrice(v);
+                    setErrors((x) => ({ ...x, price: undefined }));
+                  }}
+                  disabled={busy}
+                  aria-invalid={!!errors.price}
+                />
               </Field>
               <Field label={t('onboarding.product.stock')} htmlFor="p-stock" required error={errors.stock}>
-                <NumberInput id="p-stock" value={stock} onValueChange={setStock} maxDigits={8} disabled={busy} aria-invalid={!!errors.stock} />
+                <NumberInput
+                  id="p-stock"
+                  value={stock}
+                  onValueChange={(v) => {
+                    setStock(v);
+                    setErrors((x) => ({ ...x, stock: undefined }));
+                  }}
+                  maxDigits={8}
+                  disabled={busy}
+                  aria-invalid={!!errors.stock}
+                />
               </Field>
             </div>
           </div>
@@ -388,6 +426,7 @@ function FirstProduct() {
           return ['name'];
         }}
         onUnavailable={() => setAiOff(true)}
+        simple
       />
     </Shell>
   );
@@ -443,6 +482,7 @@ function AgentPreset() {
               data-preset={c.key}
               disabled={busy}
               onClick={() => setPicked(c.key)}
+              onKeyDown={onRadioGroupKeyDown}
               className={cn('flex flex-col rounded-card border bg-ink-surface p-4 text-start disabled:cursor-not-allowed', on ? 'border-accent-money' : 'border-line-hairline hover:border-line-edge')}
             >
               <span className="flex w-full items-start justify-between">
@@ -557,7 +597,7 @@ function Connect() {
             icon={<Box className="size-5" aria-hidden />}
             title={t(`onboarding.connect.${p}.title`)}
             description={t(`onboarding.connect.${p}.description`)}
-            badge={t('enum.Workspace.status.active')}
+            badge={t('onboarding.option.selected')}
           />
         ))}
       </div>
@@ -579,7 +619,8 @@ function Connect() {
       ) : null}
       {unverified ? (
         <div role="alert" className="mt-4 flex flex-wrap items-center gap-3 rounded-card border-s-2 border-s-accent-alert bg-ink-raised px-3.5 py-3 text-[13px]">
-          <span className="min-w-0 flex-1">{t('onboarding.connect.unverified', { email: me?.email ?? '' })}</span>
+          {/* full-test 15/11 ONBOARDING-15: the address is one LTR box (split / reordered in Arabic, cut at « - » in French) */}
+          <span className="min-w-0 flex-1">{tWithLtr(t, 'onboarding.connect.unverified', 'email', me?.email ?? '')}</span>
           <Button size="sm" onClick={onResend} loading={resend.isPending} disabled={cooldown > 0}>
             {cooldown > 0 ? t('action.resendIn', { time: formatClock(cooldown) }) : t('action.resend')}
           </Button>
@@ -646,13 +687,18 @@ function Ready() {
   const agents = useAgents();
   const agent = agentToTest(agents.data?.rows);
   const plan = workspace?.plan;
+  const firstProduct = useProducts(FIRST).data?.rows[0] ?? null;
   const membersFull = limitReached(plan, 'members');
   const productsFull = limitReached(plan, 'products');
   const limitReason = (l: { current: number; limit: number }, resource: string) => t('error.PLAN_LIMIT', { current: l.current, limit: l.limit, resource });
+  // full-test 15/11 ONBOARDING-02: the plan picked on /pricing is offered here too (the shell banner also offers it)
+  const [intent, setIntent] = useState<PlanIntent | null>(null);
+  useEffect(() => setIntent(readPlanIntent()), []);
   const testReason = agents.isError ? errorMessage(agents.error, t) : !agent ? t('onboarding.ready.noAgent') : !can('agents.test') ? t('error.FORBIDDEN') : undefined;
   const rows: { key: string; done: boolean; title: string; hint: string }[] = [
     { key: 'stock', done: true, title: t('onboarding.ready.stock', { mode: t(`settings.stockMode.${workspace?.stockMode ?? 'simple'}.title`) }), hint: t('onboarding.ready.stockHint') },
-    { key: 'product', done: list.product, title: t(list.product ? 'onboarding.ready.productDone' : 'onboarding.ready.productTodo'), hint: t('onboarding.ready.productHint') },
+    // full-test 15/11 ONBOARDING-04: a product waiting for Djaber's validation is not sold by the AI yet — said here
+    { key: 'product', done: list.product || !!firstProduct, title: t(list.product || firstProduct ? 'onboarding.ready.productDone' : 'onboarding.ready.productTodo'), hint: firstProduct?.moderation?.status === 'pending' ? t('onboarding.ready.productPending') : t('onboarding.ready.productHint') },
     { key: 'agent', done: list.agent, title: t(list.agent ? 'onboarding.ready.agentDone' : 'onboarding.ready.agentTodo'), hint: t('onboarding.ready.agentHint') },
     { key: 'page', done: list.channel, title: t(list.channel ? 'onboarding.ready.pageDone' : 'onboarding.ready.pageTodo'), hint: t('onboarding.ready.pageHint') },
     { key: 'sale', done: list.sale, title: t('onboarding.ready.sale'), hint: t('onboarding.ready.saleHint') },
@@ -683,6 +729,11 @@ function Ready() {
         <NextAction href="/products/import" reason={!can('catalog.write') ? t('error.FORBIDDEN') : productsFull ? limitReason(productsFull, t('products.form.planResource')) : undefined} testId="ready-import">
           {t('onboarding.ready.importCatalogue')}
         </NextAction>
+        {intent && can('billing.plan') ? (
+          <NextAction href={planIntentHref(intent)} testId="ready-plan-intent">
+            {t('onboarding.ready.choosePlan')}
+          </NextAction>
+        ) : null}
         <NextAction href="/settings/members" variant="ghost" reason={!can('members.write') ? t('error.FORBIDDEN') : membersFull ? limitReason(membersFull, t('onboarding.ready.membersResource')) : undefined} testId="ready-invite">
           {t('onboarding.ready.inviteTeam')}
         </NextAction>

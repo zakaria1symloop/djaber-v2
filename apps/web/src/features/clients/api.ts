@@ -34,6 +34,7 @@ export const clientsApi = {
   update: (id: string, b: UpdateClientInput) => api<Client>(`/clients/${id}`, { method: 'PATCH', body: b }),
   /** soft delete; a client with orders ⇒ `409 CUSTOMER_HAS_ORDERS {count}` unless `archive=true` */
   remove: (id: string, o: { archive?: boolean } = {}) => api<null>(`/clients/${id}`, { method: 'DELETE', query: { archive: o.archive || undefined } }),
+  restore: (id: string) => api<Client>(`/clients/${id}/restore`, { method: 'POST', body: {} }),
   risk: (id: string, riskLevel: 'normal' | 'high') => api<Client>(`/clients/${id}/risk`, { method: 'POST', body: { riskLevel } }),
   /** without `confirm` ⇒ `409 CUSTOMER_MERGE_IRREVERSIBLE` with the preview in `details` */
   merge: (b: MergeClientsInput) => api<Client>('/clients/merge', { method: 'POST', body: b }),

@@ -2,11 +2,12 @@
 // immutable after validation (cancel + redo), cancel ≤ 7 d with restock and refund, "Encaisser le reste", delete only
 // unpaid, ticket PDF. Blocked by an open blocking inventory count (04 §19). Effects only through SaleEffects.
 import { Injectable } from '@nestjs/common';
-import { deriveGdsPaymentStatus, SALE_CANCEL_MAX_DAYS, SALE_SORTS, storedText, type CancelSaleInput, type CreateSaleInput, type SaleClientInput, type SaleListItemView, type SalePaymentInput, type SalesQuery, type SaleStatsView, type SaleView, type UpdateSaleInput } from '@djaber/shared';
+import { deriveGdsPaymentStatus, renderStoredTextIn, SALE_CANCEL_MAX_DAYS, SALE_SORTS, storedText, type CancelSaleInput, type CreateSaleInput, type SaleClientInput, type SaleListItemView, type SalePaymentInput, type SalesQuery, type SaleStatsView, type SaleView, type UpdateSaleInput } from '@djaber/shared';
 import { prisma, TenantContext, type Prisma, type Sale, type Tx } from '@djaber/db';
 import { CounterService } from '../../core/counter/counter.service';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
 import { page, type Page } from '../../core/http/pagination';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { lastDays } from '../../core/time/period';
 import { action } from '../catalog/catalog.util';
 import { ClientService } from '../clients/client.service';
@@ -173,7 +174,7 @@ export class SaleService {
       tax: s.tax,
       payments: payments.get(id) ?? [],
       notes: s.notes,
-      cancelReason: s.cancelReason,
+      cancelReason: renderStoredTextIn(s.cancelReason, viewerLocale()),
       cancelledAt: iso(s.cancelledAt),
       cancelledBy: userRef(s.cancelledBy),
       stockRestored: s.stockRestored,

@@ -36,7 +36,7 @@ function DateBody({ list }: { list: ListController }) {
       presets={[...CLIENT_DATE_PRESETS.map((p) => ({ value: p, label: t(`common.period.${p}`) })), { value: 'custom', label: t('common.period.custom') }]}
       activePreset={matchPreset(from, to)}
       onPreset={(p) => (p === 'custom' ? undefined : set(presetRange(p as (typeof CLIENT_DATE_PRESETS)[number])))}
-      labels={{ from: t('common.from'), to: t('common.to'), presets: t('clients.filter.created') }}
+      labels={{ from: t('common.from'), to: t('common.to'), presets: t('clients.filter.created'), invalid: t('clients.filter.dateRangeInvalid') }}
     />
   );
 }
@@ -166,7 +166,8 @@ export function ClientsFilterPanel({ open, onClose, list, tags, total }: { open:
     min: filterText(s, min),
     max: filterText(s, max),
     onChange: (r: { min: string; max: string }) => list.setFilters({ [min]: r.min === '' ? null : Number(r.min), [max]: r.max === '' ? null : Number(r.max) }),
-    labels: { min: t('clients.filter.min'), max: t('clients.filter.max') },
+    // full-test CLIENTS-08: min > max is refused inline, never applied as an empty list
+    labels: { min: t('clients.filter.min'), max: t('clients.filter.max'), invalid: t('clients.filter.rangeInvalid') },
   });
   const channelValue = [...filterList(s, 'channelId'), ...(filterBool(s, 'noConversation') ? [NO_CONVERSATION] : [])];
   const orderChips = orderChipsValue(s);

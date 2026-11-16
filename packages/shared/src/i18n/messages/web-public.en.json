@@ -151,5 +151,8 @@
   "public.captcha.loading": "Anti-robot check…",
   "public.captcha.error": "The anti-robot check could not load. Close and reopen the window.",
   "public.contact.subject": "Contact Djaber",
-  "public.contact.subjectDeletion": "Account deletion"
+  "public.contact.subjectDeletion": "Account deletion",
+  "public.deletion.invalid.title": "This link is not valid.",
+  "public.deletion.invalid.text": "The link is incomplete or was copied wrong. Ask again to receive a new link (valid 24 h).",
+  "public.pricing.cta.member": "Choose this plan"
 }

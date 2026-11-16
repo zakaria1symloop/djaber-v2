@@ -90,6 +90,10 @@ describe('home queue card words (ANA-01b lines from the raw server details)', ()
   it('turns the raw details into the frame lines', () => {
     expect(queueText({ kind: 'stock', title: 'Parfum Oud', subtitle: '4 / 5' }, clock).subtitle).toEqual({ key: 'home.queue.sub.stock', params: { stock: 4, min: 5 } });
     expect(queueText({ kind: 'callback', title: 'CMD-1041 · Yacine M.', subtitle: '2026-10-12T15:00:00.000Z' }, clock).subtitle).toEqual({ key: 'home.queue.sub.callback', params: { time: '16:00' } });
+    // full-test 15/11 HOME-08 / HOME-12: an overdue callback names its day; a negative stock its true minus
+    expect(queueText({ kind: 'callback', title: 'CMD-1005', subtitle: '2026-10-22T14:29:00.000Z' }, clock, { day: () => '22 oct.', today: '2026-11-15' }).subtitle).toEqual({ key: 'home.queue.sub.callbackOn', params: { date: '22 oct.', time: '16:00' } });
+    expect(queueText({ kind: 'callback', title: 'CMD-1005', subtitle: '2026-10-22T14:29:00.000Z' }, clock, { day: () => '22 oct.', today: '2026-10-22' }).subtitle).toEqual({ key: 'home.queue.sub.callback', params: { time: '16:00' } });
+    expect(queueText({ kind: 'stock', title: 'casquette', subtitle: '-6 / 0' }, clock).subtitle).toEqual({ key: 'home.queue.sub.stock', params: { stock: '−6', min: 0 } });
     expect(queueText({ kind: 'insight', title: 'Vendeur Pro', subtitle: 'unknown_topic' }, clock).subtitle).toEqual({ key: 'enum.AgentInsight.type.unknown_topic', params: {} });
     expect(queueText({ kind: 'parcel', title: 'CMD-1037 · Lina S.', subtitle: 'unreachable' }, clock).subtitle).toEqual({ key: 'enum.Shipment.failureReason.unreachable', params: {} });
     expect(queueText({ kind: 'page', title: 'Amel Outlet', subtitle: 'facebook' }, clock).subtitle).toEqual({ key: 'home.queue.sub.page', params: { platform: 'Facebook' } });

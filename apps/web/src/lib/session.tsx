@@ -4,7 +4,7 @@
 import { memberCan, type MemberRole, type MerchantPermission } from '@djaber/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, ApiError, apiSession, refreshSession } from './api';
+import { api, ApiError, apiSession, refreshRefused, refreshSession } from './api';
 import type { AuthTokens, MeDto, Membership, WorkspaceDto } from './contracts';
 import type { SessionStatus } from './guards';
 import { useImpersonation } from './impersonation';
@@ -55,6 +55,27 @@ export const meKey = ['me'] as const;
 export const workspaceKey = (ws: string | null) => [ws, 'workspace'] as const;
 const bootKey = ['session', 'boot'] as const;
 
+/**
+ * full-test 15/11 PUBLIC-12: whether this browser holds a session, so a plain visitor does not call `POST /auth/refresh`
+ * (a 401 in the console) on every public page. '1' after a sign-in or a good refresh, '0' after a refused refresh or a
+ * sign-out; unknown (first visit, older browsers) ⇒ one refresh decides.
+ */
+const SESSION_HINT = 'djaber.session';
+const readHint = (): string | null => {
+  try {
+    return window.localStorage.getItem(SESSION_HINT);
+  } catch {
+    return null;
+  }
+};
+const writeHint = (v: '0' | '1') => {
+  try {
+    window.localStorage.setItem(SESSION_HINT, v);
+  } catch {
+    /* storage unavailable: the refresh simply runs every time */
+  }
+};
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const [expired, setExpired] = useState(false);
@@ -63,7 +84,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const boot = useQuery({
     queryKey: bootKey,
-    queryFn: async () => (apiSession.get().accessToken ? true : refreshSession()),
+    queryFn: async () => {
+      if (apiSession.get().accessToken) return true;
+      if (readHint() === '0') return false;
+      const ok = await refreshSession();
+      if (ok) writeHint('1');
+      else if (refreshRefused()) writeHint('0');
+      return ok;
+    },
     staleTime: Infinity,
     gcTime: Infinity,
     retry: false,
@@ -118,6 +146,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             : 'authenticated';
 
   const clear = useCallback(() => {
+    writeHint('0');
     apiSession.set({ accessToken: null, workspaceId: null });
     setExpired(false);
     qc.clear();
@@ -126,6 +155,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     (tokens: AuthTokens) => {
+      writeHint('1');
       apiSession.set({ accessToken: tokens.accessToken });
       setExpired(false);
       qc.removeQueries({ predicate: (q) => q.queryKey[0] !== 'session' });

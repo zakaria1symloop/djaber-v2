@@ -14,7 +14,7 @@ import { Link, usePathname } from '@/i18n/navigation';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 import { useChannelFilter, usePeriod } from './api';
-import { dayLabel } from './format';
+import { rangeLabel } from './format';
 import { ANALYTICS_PRESETS, customRangeError, periodHref, todayAlgiers, type PeriodState } from './period';
 
 /* ---------- the range answered by the open tab (chip of the shell) ---------- */
@@ -95,9 +95,9 @@ export function PeriodPicker({ period, onChange, range, showCompare = true, extr
     setOpen(false);
     onChange({ ...period, period: 'custom', from: draft.from, to: draft.to });
   };
-  const customLabel = period.period === 'custom' && period.from && period.to ? `${dayLabel(period.from, locale)} → ${dayLabel(period.to, locale)}` : t('analytics.period.custom');
+  const customLabel = period.period === 'custom' && period.from && period.to ? rangeLabel(period.from, period.to, locale) : t('analytics.period.custom');
   const hint = !draft.from && !draft.to ? t('analytics.range.pickBoth') : draft.from && !draft.to ? t('analytics.range.pickEnd') : !draft.from ? t('analytics.range.pickStart') : null;
-  const chip = range ? `${dayLabel(range.from, locale)} → ${dayLabel(range.to, locale, true)}${range.compare === 'previous' ? ` · ${t('analytics.compare.chip')}` : ''}` : null;
+  const chip = range ? `${rangeLabel(range.from, range.to, locale, { endYear: true })}${range.compare === 'previous' ? ` · ${t('analytics.compare.chip')}` : ''}` : null;
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-3" data-testid="period-picker">
       <PeriodPresets
@@ -128,10 +128,11 @@ export function PeriodPicker({ period, onChange, range, showCompare = true, extr
           ),
         }}
       />
-      <div className="flex flex-wrap items-center gap-2 md:ms-auto">
+      <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 md:ms-auto">
         {extra}
         {chip ? (
-          <MonoChip className="!h-6" title={range ? t('analytics.timezone') : undefined}>
+          // full-test 15/11 MOBILE-A11Y-13: the chip may shrink (its text is cut with « … ») — at 320 px it pushed the page sideways
+          <MonoChip className="!h-6 min-w-0" title={range ? t('analytics.timezone') : undefined}>
             <bdi data-testid="range-chip">{chip}</bdi>
           </MonoChip>
         ) : null}

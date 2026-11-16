@@ -177,7 +177,9 @@ export const productFormSchema = (mode: 'create' | 'edit') =>
       sku: text(productSku, mode === 'create'),
       keywords: z.string().superRefine((s, ctx) => {
         const list = parseKeywords(s);
-        if (list.length > KEYWORDS_MAX || list.some((k) => k.length > KEYWORD_MAX_LENGTH)) ctx.addIssue({ code: 'custom', message: 'validation.length' });
+        // full-test 15/11 PRODUCTS-10: the count and the length of one keyword are two rules, each with its own words
+        if (list.length > KEYWORDS_MAX) ctx.addIssue({ code: 'custom', message: 'validation.keywords_count' });
+        else if (list.some((k) => k.length > KEYWORD_MAX_LENGTH)) ctx.addIssue({ code: 'custom', message: 'validation.length' });
       }),
       description: z.string().refine((s) => s.trim().length <= DESCRIPTION_MAX, 'validation.length'),
       price: digits(productPrice, true),
@@ -195,6 +197,8 @@ export const productFormSchema = (mode: 'create' | 'edit') =>
     })
     .superRefine((v, ctx) => {
       if (mode === 'create' && v.trackStock && v.variants.length === 0 && v.stock === '') ctx.addIssue({ code: 'custom', path: ['stock'], message: 'validation.required' });
+      // full-test 15/11 PRODUCTS-09: the struck-through « before » price is above the selling price (04 §12)
+      if (v.oldPrice !== '' && v.price !== '' && Number(v.oldPrice) <= Number(v.price)) ctx.addIssue({ code: 'custom', path: ['oldPrice'], message: 'validation.old_price' });
       const names = new Set<string>();
       v.variants.forEach((row, i) => {
         const k = row.name.trim().toLowerCase();

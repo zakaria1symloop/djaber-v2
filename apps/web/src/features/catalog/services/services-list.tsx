@@ -89,7 +89,7 @@ export function ServicesList() {
       ) : q.isError ? (
         <QueryError error={q.error} onRetry={() => q.refetch()} />
       ) : rows.length === 0 && list.filtered ? (
-        <ListFilteredEmpty entity={t('services.entity')} filters={list.state.q.trim() ? `« ${list.state.q.trim()} »` : '—'} onClear={list.clear} />
+        <ListFilteredEmpty entity={t('services.entity')} filters={list.state.q} onClear={list.clear} />
       ) : rows.length === 0 ? (
         <ListEmpty title={t('services.empty.title')} description={t('services.empty.description')} action={canWrite ? { label: t('services.add'), onClick: () => router.push(NEW_SERVICE) } : undefined} />
       ) : (

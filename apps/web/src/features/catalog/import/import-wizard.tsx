@@ -2,7 +2,7 @@
 // /products/import — Figma "CAT-06 — Import wizard — preview with row errors" + DLG GDS I "Correspondance des colonnes".
 // FL-12: upload → analysis job → (column mapping) → preview with row errors → commit job → report. The job id lives
 // in the URL (`?job=<id>`, `&step=import` once the commit is requested) so a refresh resumes at the same step.
-import { IMPORT_FIELDS, IMPORT_MAX_ROWS, type ImportPreviewResult } from '@djaber/shared';
+import { formatNumber, IMPORT_FIELDS, IMPORT_MAX_ROWS, type ImportPreviewResult } from '@djaber/shared';
 import { Banner, Button, buttonClass, Card, FormAlert, ProgressBar, Skeleton, Steps, type StepItem } from '@djaber/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CircleCheck, FileUp } from 'lucide-react';
@@ -158,7 +158,7 @@ export function ImportWizard() {
   const usable = result ? importableCount(result.totals) : 0;
 
   return (
-    <AppPage back={{ href: '/products', label: t('nav.products') }} title={t('import.title')} description={t('import.subtitle', { rows: IMPORT_MAX_ROWS })} permission="catalog.write">
+    <AppPage back={{ href: '/products', label: t('nav.products') }} title={t('import.title')} description={t('import.subtitle', { rows: formatNumber(IMPORT_MAX_ROWS) })} permission="catalog.write">
       <Steps items={steps} label={t('import.steps.label')} />
 
       {job.isError && jobId ? (
@@ -341,7 +341,7 @@ function UploadStep({ failure, onUploaded }: { failure: { code: string; message:
         ) : (
           <>
             <div className="ts-title">{t('import.upload.title')}</div>
-            <p className="ts-label-meta max-w-md uppercase text-text-muted">{t('import.upload.limits', { rows: IMPORT_MAX_ROWS })}</p>
+            <p className="ts-label-meta max-w-md uppercase text-text-muted">{t('import.upload.limits', { rows: formatNumber(IMPORT_MAX_ROWS) })}</p>
             <Button variant="primary" onClick={() => input.current?.click()}>
               {t('import.upload.choose')}
             </Button>

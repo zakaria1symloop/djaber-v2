@@ -1,4 +1,6 @@
 {
+ "agent.api.bulk.notActive": "Seul un agent actif peut être mis en pause (celui-ci est un brouillon ou déjà en pause).",
+ "agent.api.bulk.notPaused": "Seul un agent en pause peut être relancé.",
  "agent.api.copySuffix": "(copie)",
  "agent.api.defaultName": "Nouvel agent",
  "agent.api.generatedName": "Agent de {page}",

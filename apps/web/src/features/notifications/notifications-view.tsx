@@ -2,9 +2,9 @@
 // /notifications — Figma "NTF-01 — Notifications — list" + "ANA-01b — Home & Notifications — states catalogue"
 // (type multi-filter, empty "Vous êtes à jour ✓", skeleton 5 rows). Family chips, "Non lues" toggle and the type
 // selection live in the URL; the unread count is the server count; rows are kept fresh by WS (features/notifications/shell).
-import type { NotificationGroup, NotificationView } from '@djaber/shared';
+import { formatNumber, type NotificationGroup, type NotificationView } from '@djaber/shared';
 import { Button, buttonClass, Card, cn, EmptyState, FilterCheckList, FilterDropdown, NotificationListSkeleton, NotificationRow, StatusPill, toast } from '@djaber/ui';
-import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { CheckCheck } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useMemo } from 'react';
@@ -14,6 +14,7 @@ import { ListFilteredEmpty, QueryError } from '@/components/global-states';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
+import { useImpersonation } from '@/lib/impersonation';
 import { useWorkspaceId } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
 import { notificationKeys, notificationsApi, NOTIFICATIONS_PAGE, type NotificationPage } from './api';
@@ -27,6 +28,8 @@ export function NotificationsView() {
   const t = useT();
   const locale = useLocaleCode();
   const ws = useWorkspaceId();
+  // full-test 15/11 ADMIN-07: a read-only impersonation cannot mark the shop's notifications read (403 from the API)
+  const impersonating = !!useImpersonation().session;
   const qc = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
@@ -58,6 +61,8 @@ export function NotificationsView() {
       old ? { ...old, pages: old.pages.map((pg) => ({ ...pg, rows: pg.rows.map((n) => (n.readAt || (ids !== 'all' && !ids.includes(n.id)) ? n : { ...n, readAt: now })) })) } : old,
     );
   };
+  // HOME-05: unread per family on the chips (12 §18), refreshed with the list
+  const groupCounts = useQuery({ queryKey: notificationKeys.unreadGroups(ws), queryFn: notificationsApi.unreadByGroup, enabled: !!ws, staleTime: 30_000 });
   const readOne = useMutation({ mutationFn: notificationsApi.read });
   const readAll = useMutation({ mutationFn: notificationsApi.readAll });
 
@@ -125,14 +130,15 @@ export function NotificationsView() {
               maxHeight={260}
             />
           </FilterDropdown>
-          <Button variant="primary" onClick={() => void onReadAll()} loading={readAll.isPending} disabled={unread === 0} data-testid="read-all">
+          <Button variant="primary" onClick={() => void onReadAll()} loading={readAll.isPending} disabled={unread === 0} disabledReason={impersonating ? t('admin.impersonation.readOnly') : undefined} data-testid="read-all">
             {t('action.markAllRead')}
           </Button>
         </>
       }
     >
       <div role="group" aria-label={t('notifications.filter.label')} data-testid="notification-chips" className="-mx-1 flex flex-nowrap items-center gap-1.5 overflow-x-auto px-1 pb-1">
-        <button type="button" aria-pressed={!filter.group} data-chip="all" onClick={() => setFilter(withGroup(filter, null))} className={chip(!filter.group && !filter.unread)}>
+        {/* full-test 15/11 HOME-11: « Toutes » is every notification — it clears the family and « Non lues » */}
+        <button type="button" aria-pressed={!filter.group && !filter.unread} data-chip="all" onClick={() => setFilter({ ...withGroup(filter, null), unread: false })} className={chip(!filter.group && !filter.unread)}>
           {t('notification.filter.all')}
         </button>
         <button type="button" aria-pressed={filter.unread} data-chip="unread" onClick={() => setFilter({ ...filter, unread: !filter.unread })} className={chip(filter.unread)}>
@@ -141,6 +147,7 @@ export function NotificationsView() {
         {FAMILY_CHIPS.map((c) => (
           <button key={c.group} type="button" aria-pressed={filter.group === c.group} data-chip={c.group} onClick={() => setFilter(withGroup(filter, filter.group === c.group ? null : c.group))} className={chip(filter.group === c.group)}>
             {t(c.labelKey)}
+            {groupCounts.data?.[c.group] ? <span className="ms-1.5 tabular-nums opacity-70" data-count={c.group}>{formatNumber(groupCounts.data[c.group]!)}</span> : null}
           </button>
         ))}
       </div>

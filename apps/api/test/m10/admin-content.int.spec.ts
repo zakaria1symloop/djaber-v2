@@ -326,6 +326,8 @@ describe('ADM-09 audit · ADM-17 viewers · ADM-01 overview', () => {
     expect(audit.length).toBeGreaterThanOrEqual(2);
     expect(audit[0]).toMatchObject({ action: 'viewer.open', target: { workspace: { id: owner.workspaceId } }, actor: { type: 'admin' } });
     expect((await sa.get(`/admin/audit-logs/${audit[0].id}`).expect(200)).body.data.id).toBe(audit[0].id);
+    // full-test 15/11 ADMIN-14: the « Action » filter lists every slug present in the log
+    expect((await sa.get('/admin/audit-logs/actions').expect(200)).body.data).toContain('viewer.open');
     await sa.get(`/admin/audit-logs?impersonation=nope`).expect(422);
     expect((await sa.get('/admin/audit-logs?impersonation=only&pageSize=100').expect(200)).body.data.every((r: any) => r.context.impersonationSessionId)).toBe(true);
     // export (super_admin + finance); support 403

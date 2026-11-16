@@ -158,7 +158,7 @@ export function SendToCourierDialog({
     if (!d.communeId && !d.communeText) local.commune = t('validation.commune');
     if (needsPoint && !d.stopdeskId) local.stopdesk = t('send.stopdeskRequired', { courier: courier?.displayName ?? '' });
     if (!d.isStopdesk && d.address.trim().length < 10) local.address = t('validation.address');
-    if (cod === null) local.cod = t('validation.price');
+    if (cod === null) local.cod = t('send.codRequired');
     if (weight !== undefined && (Number.isNaN(weight) || weight < 0.1 || weight > 30)) local.weight = t('send.weightRange');
   }
   const shown = (k: FieldKey) => (touched ? (local[k] ?? fields[k]) : fields[k]);
@@ -289,7 +289,8 @@ export function SendToCourierDialog({
                 options={active.map((c, i) => ({
                   value: c.id,
                   label: c.isDefault ? `${c.displayName} · ${t('couriers.default').toUpperCase()}` : c.displayName,
-                  description: [costOf(c, i), delayOf(c)].filter(Boolean).join(' · ') || t(`couriers.provider.${c.provider}`),
+                  // the brand always shows under the account name the merchant typed (« zr express » → ZR Express; full-test ORDERS-23)
+                  description: [t(`couriers.provider.${c.provider}`), costOf(c, i), delayOf(c)].filter(Boolean).join(' · '),
                 }))}
               />
             </Field>

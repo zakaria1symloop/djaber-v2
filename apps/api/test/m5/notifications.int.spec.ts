@@ -38,7 +38,9 @@ describe('preferences (NTF-02)', () => {
   it('one row per NotificationType with the matrix modes; only `pref` cells change', async () => {
     const owner = await asOwner(app);
     const list = await owner.get('/notification-preferences').expect(200);
-    expect(list.body.data).toHaveLength(NotificationTypeValues.length);
+    // the super admin notifications (`platform_admin`, assumptions-log 2026-11-09) are excluded from the merchant preferences
+    expect(list.body.data).toHaveLength(NotificationTypeValues.length - 1);
+    expect(list.body.data.map((p: any) => p.type)).toEqual(NotificationTypeValues.filter((t) => t !== 'platform_admin'));
     expect(list.body.data.find((p: any) => p.type === 'stock_low')).toMatchObject({ group: 'stock', inApp: true, email: true, push: false, emailMode: 'pref', pushMode: 'never' });
     const r = await owner.put('/notification-preferences', { preferences: [{ type: 'stock_low', email: false, sound: true }, { type: 'ai_error', email: false }] }).expect(200);
     expect(r.body.data.find((p: any) => p.type === 'stock_low')).toMatchObject({ email: false, sound: true });
@@ -70,7 +72,7 @@ describe('fan-out (03 §15 matrix)', () => {
     const email = await emailOf(owner.userId);
     await fire(owner, 'stock_low', { product: 'Robe', stock: 2, min: 5, productId: 'p' });
     const [mail] = await mailsTo(app, email, 'notification');
-    expect(mail).toMatchObject({ subject: 'Stock faible : Robe (2 restants)', params: expect.objectContaining({ url: expect.stringContaining('/fr/products?lowStock=1'), type: 'stock_low' }) });
+    expect(mail).toMatchObject({ subject: 'Stock faible : Robe (stock 2)', params: expect.objectContaining({ url: expect.stringContaining('/fr/products?lowStock=1'), type: 'stock_low' }) });
     await owner.put('/notification-preferences', { preferences: [{ type: 'stock_low', email: false }] }).expect(200);
     const before = (await mailsTo(app, email, 'notification')).length;
     await fire(owner, 'stock_low', { product: 'Sac', stock: 1, min: 5, productId: 'q' });
@@ -123,7 +125,7 @@ describe('Home (ANA-01)', () => {
     await seedFees(app, owner.workspaceId);
     const op = await asOperator(app, owner.workspaceId);
     const p = await createProduct(owner, { name: 'Robe', price: 1600, stock: 2, minStock: 1 });
-    // sale 1000 + delivered order 2000 + pending order 500 ⇒ Revenue 3000, Pipeline 500
+    // sale 1000 + delivered order 2000 + pending order 500 + confirmed order with a failed parcel 500 ⇒ Revenue 3000, Pipeline 1000
     await db.sale.create({ data: { workspaceId: owner.workspaceId, number: 'VNT-H-1', status: 'completed', subtotal: 1000, total: 1000, amountPaid: 1000, paymentStatus: 'paid', createdById: owner.userId } });
     const delivered = await newOrder(owner, {}, p); // 1600 + 400 = 2000
     await owner.post(`/orders/${delivered.order.id}/deliver`, {}).expect(200);
@@ -132,7 +134,8 @@ describe('Home (ANA-01)', () => {
     await db.order.update({ where: { id: pending.order.id }, data: { confirmationStatus: 'callback', callbackAt: new Date(Date.now() - 60_000) } });
     const failedOrder = await newOrder(owner, { status: 'confirmed' }, svc);
     await db.shipment.create({ data: { workspaceId: owner.workspaceId, orderId: failedOrder.order.id, provider: 'manual', status: 'failed', failureReason: 'unreachable', publicTrackingToken: `f-${failedOrder.order.id}`, codAmount: 1 } });
-    await db.order.update({ where: { id: failedOrder.order.id }, data: { status: 'cancelled' } }); // keep the pipeline at 500
+    // UX-064: the failure stays « to handle » only while its order can still be sent — the order stays confirmed (a
+    // cancelled order has handled it) and counts in the pipeline (500 + 500)
     const page = await connectedPage(owner, app);
     const sender = newSender();
     await receive(app, page, sender, { text: 'Bonjour' });
@@ -141,9 +144,10 @@ describe('Home (ANA-01)', () => {
     const home = await op.get('/dashboard/home').expect(200);
     const h = home.body.data;
     expect(h.kpis.revenue30d.value).toBe(3000);
-    expect(h.kpis.pipeline).toBe(500);
+    expect(h.kpis.pipeline).toBe(1000);
     expect(h.kpis.aiRevenue30d.value).toBe(0);
-    expect(h.kpis.cashCollected30d).toBe(2000);
+    // UX-052 (assumptions-log 2026-11-11): cash collected = order payments (2000) + completed counter-sale payments (1000)
+    expect(h.kpis.cashCollected30d).toBe(3000);
     expect(h.kpis.products).toMatchObject({ total: 2, lowStock: 1 });
     expect(h.queue.counts).toMatchObject({ parcel: 1, stock: 1, page: 1, callback: 1 });
     expect(h.queue.items[0].urgency).toBe(0);

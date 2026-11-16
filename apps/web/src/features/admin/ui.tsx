@@ -4,7 +4,7 @@
 import { formatDate, formatDateTime, formatMoney, formatNumber, type AppLocale } from '@djaber/shared';
 import { Ltr, MonoChip } from '@djaber/ui';
 import type { ReactNode } from 'react';
-import { useLocaleCode, useT } from '@/lib/i18n';
+import { useLocaleCode, useT, type TFunction } from '@/lib/i18n';
 import { relativeTime } from '@/lib/time';
 
 type ChipTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
@@ -62,6 +62,8 @@ export const useFormats = () => {
     ago: (iso: string | null | undefined) => relativeTime(iso, locale),
     num: (n: number | null | undefined) => (n === null || n === undefined ? '—' : formatNumber(n)),
     money: (n: number | null | undefined) => (n === null || n === undefined ? '—' : formatMoney(n)),
+    /** « 0,39 » in French / Arabic (Latin digits), « 0.39 » in English — decimals of rates and credit prices (ADMIN-19) */
+    dec: (n: number | null | undefined, digits = 2) => (n === null || n === undefined ? '—' : n.toLocaleString(locale === 'en' ? 'en-US' : 'fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: digits }).replace(/\s/g, '\u00a0')),
   };
 };
 
@@ -86,3 +88,25 @@ export const shortName = (u: { firstName?: string | null; lastName?: string | nu
   const last = (u.lastName ?? '').trim();
   return `${(u.firstName ?? '').trim()}${last ? ` ${last[0]}.` : ''}`.trim();
 };
+
+/**
+ * Full-test 15/11 ADMIN-19 — values the API keeps as codes, read as words on the admin screens (admin screens keep error
+ * codes, never raw data values): payment method / provider, courier, credit-ledger reason (`renewal`, `pack:pack-500`).
+ */
+export const paymentMethodLabel = (t: TFunction, m: string | null | undefined): string =>
+  !m ? '—' : t.has(`admin.subs.method.${m}`) ? t(`admin.subs.method.${m}`) : t.has(`admin.subs.provider.${m}`) ? t(`admin.subs.provider.${m}`) : m;
+export const courierLabel = (t: TFunction, provider: string): string => (t.has(`couriers.provider.${provider}`) ? t(`couriers.provider.${provider}`) : provider);
+export function ledgerReason(t: TFunction, action: string, reason: string | null | undefined, credits: number): string | null {
+  if (!reason || reason === action) return null;
+  if (t.has(`credits.reason.${reason}`)) return t(`credits.reason.${reason}`);
+  const m = /^([a-z_]+):(.*)$/.exec(reason);
+  if (!m) return reason;
+  const prefix = m[1]!;
+  const rest = m[2] ?? '';
+  if (prefix === 'pack') return t.has('credits.reason.pack') ? t('credits.reason.pack', { credits: formatNumber(Math.abs(credits)) }) : rest;
+  if (prefix === 'store_refund') return t.has('credits.reason.storeRefund') ? t('credits.reason.storeRefund') : null;
+  if (prefix === 'upgrade') return t.has('credits.reason.upgrade') ? t('credits.reason.upgrade') : rest;
+  if (prefix === 'promo' || prefix === 'referral') return t.has(`credits.reason.${prefix}`) ? t(`credits.reason.${prefix}`, { code: rest }) : rest;
+  if (prefix === 'admin') return rest.replace(/^[a-z_]+:/, '').trim() || null;
+  return reason;
+}

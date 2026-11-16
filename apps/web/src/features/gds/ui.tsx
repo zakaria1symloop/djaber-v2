@@ -9,6 +9,7 @@ import type { ReactNode } from 'react';
 import { AppPage } from '@/components/app-page';
 import { withoutYear } from '@/features/catalog/stock/logic';
 import { Link } from '@/i18n/navigation';
+import { iso } from '@/lib/format-message';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { filterText } from '@/lib/list-state';
 import { useSession } from '@/lib/session';
@@ -32,7 +33,7 @@ export function PaymentPill({ status, kind = 'purchase', remaining }: { status: 
   return (
     <StatusPill enumKey="Gds.paymentStatus" value={status} className={PILL}>
       {t(`enum.${kind === 'sale' ? 'Sale' : 'Purchase'}.paymentStatus.${status}`)}
-      {remaining && remaining > 0 && status !== 'paid' ? <Ltr>{` · ${t('gds.remainingShort', { amount: formatMoney(remaining) })}`}</Ltr> : null}
+      {remaining && remaining > 0 && status !== 'paid' ? ` · ${t('gds.remainingShort', { amount: iso(formatMoney(remaining)) })}` : null}
     </StatusPill>
   );
 }
@@ -82,7 +83,7 @@ export function PeriodDropdown({ list, defaultKey, keys = GDS_PERIOD_KEYS, align
           value={!custom && period ? [period] : !custom && defaultKey ? [defaultKey] : []}
           onChange={(v) => list.setFilters({ period: v[0] && v[0] !== defaultKey ? v[0] : null, from: null, to: null })}
         />
-        <FilterDateRange from={from} to={to} onChange={(r) => list.setFilters({ from: r.from || null, to: r.to || null, period: null })} labels={{ from: t('common.from'), to: t('common.to'), presets: t('gds.period.custom') }} />
+        <FilterDateRange from={from} to={to} onChange={(r) => list.setFilters({ from: r.from || null, to: r.to || null, period: null })} labels={{ from: t('common.from'), to: t('common.to'), presets: t('gds.period.custom'), invalid: t('error.INVALID_DATE_RANGE') }} />
       </div>
     </FilterDropdown>
   );
@@ -119,4 +120,5 @@ export function KpiSkeleton({ count = 4, className }: { count?: number; classNam
 }
 
 /** Person name of a `UserRef` ("Nadia F."). */
-export const shortName = (u: { firstName: string; lastName: string } | null | undefined): string | null => (u ? `${u.firstName} ${u.lastName ? `${u.lastName[0]}.` : ''}`.trim() : null);
+/** « Karim P. », isolated: inside an Arabic line its full stop stays after the initial (« .Karim P » — STOCK-07 / SALES-CASH-23). */
+export const shortName = (u: { firstName: string; lastName: string } | null | undefined): string | null => (u ? iso(`${u.firstName} ${u.lastName ? `${u.lastName[0]}.` : ''}`.trim()) : null);

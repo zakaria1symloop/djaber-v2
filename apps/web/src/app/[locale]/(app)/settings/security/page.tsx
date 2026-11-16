@@ -380,6 +380,7 @@ function PasswordConfirm2faDialog({ mode, onClose }: { mode: 'disable' | 'regene
 }
 
 /* ---------- Sessions ---------- */
+const SESSIONS_SHOWN = 5;
 function SessionsSection() {
   const t = useT();
   const locale = useLocaleCode();
@@ -399,6 +400,16 @@ function SessionsSection() {
     }
   };
   const others = (sessions.data ?? []).filter((s) => !s.current);
+  // full-test 15/11 SETTINGS-08: this device first, then the most recent ones; the first SESSIONS_SHOWN rows, « Voir tout »
+  // for the rest (177 rows pushed the safety sections thousands of px down); one device is signed out after a confirm
+  const [showAll, setShowAll] = useState(false);
+  const [confirmOne, setConfirmOne] = useState<string | null>(null);
+  const ordered = [...(sessions.data ?? []).filter((s) => s.current), ...others];
+  const shown = showAll ? ordered : ordered.slice(0, SESSIONS_SHOWN);
+  const oneLabel = (() => {
+    const s = ordered.find((x) => x.id === confirmOne);
+    return s ? describeUserAgent(s.userAgent) ?? t('settings.sessions.unknownDevice') : '';
+  })();
   // signs out every other device at once: confirmed first
   const [confirmAll, setConfirmAll] = useState(false);
   const revokeOthers = async () => {
@@ -428,7 +439,7 @@ function SessionsSection() {
         ) : (
           <Card>
             <ul className="divide-y divide-line-hairline" data-testid="sessions">
-              {sessions.data.map((s) => (
+              {shown.map((s) => (
                 <li key={s.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5" data-current={s.current}>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[13px]">{describeUserAgent(s.userAgent) ?? t('settings.sessions.unknownDevice')}</div>
@@ -442,16 +453,38 @@ function SessionsSection() {
                   {s.current ? (
                     <Pill tone="success">{t('settings.sessions.current')}</Pill>
                   ) : (
-                    <Button variant="ghost" size="sm" onClick={() => void onRevoke(s.id)} disabled={revoke.isPending || all}>
+                    <Button variant="ghost" size="sm" onClick={() => setConfirmOne(s.id)} disabled={revoke.isPending || all}>
                       {t('action.disconnect')}
                     </Button>
                   )}
                 </li>
               ))}
             </ul>
+            {ordered.length > SESSIONS_SHOWN ? (
+              <div className="border-t border-line-hairline px-3 py-2">
+                <Button variant="ghost" size="sm" onClick={() => setShowAll((v) => !v)} data-testid="sessions-toggle">
+                  {showAll ? t('settings.sessions.showLess') : t('settings.sessions.showAll', { count: ordered.length })}
+                </Button>
+              </div>
+            ) : null}
           </Card>
         )}
       </div>
+      <ConfirmDialog
+        open={confirmOne !== null}
+        onOpenChange={(o) => !o && setConfirmOne(null)}
+        title={t('settings.sessions.revokeConfirm.title')}
+        description={t('settings.sessions.revokeConfirm.description', { device: oneLabel })}
+        confirmLabel={t('action.disconnect')}
+        cancelLabel={t('action.cancel')}
+        closeLabel={t('action.close')}
+        destructive
+        onConfirm={() => {
+          const id = confirmOne;
+          setConfirmOne(null);
+          if (id) void onRevoke(id);
+        }}
+      />
       {others.length > 0 ? (
         <Button className="mt-3 border-accent-alert/60 text-accent-alert" onClick={() => setConfirmAll(true)} loading={all}>
           {t('settings.sessions.revokeOthers')}

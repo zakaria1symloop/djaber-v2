@@ -23,14 +23,14 @@ import { page, toSkipTake, type Page } from '../../core/http/pagination';
 import { MailOutbox } from '../../core/mail/mail.outbox';
 import { canPlatform } from '../../core/rbac/permission-matrix';
 import { RedisService } from '../../core/redis/redis.provider';
-import { TenantResolver } from '../../core/tenancy/tenant.resolver';
+import { TenantResolver, twoFaExempt, twoFaPaused } from '../../core/tenancy/tenant.resolver';
 import { AccountDeletionService } from '../auth/account-deletion.service';
 import { AuthService } from '../auth/auth.service';
 import { EmailTokenService } from '../auth/email-token.service';
 import { ReauthService } from '../auth/reauth.service';
 import { SessionService } from '../auth/session.service';
 import { TwoFactorService } from '../auth/two-factor.service';
-import { DAY, assertUuid, iso, requireReason, userRef, userSelect, type AdminActor } from './admin.util';
+import { DAY, STATE_REFUSED, assertUuid, iso, offered, requireReason, userRef, userSelect, type AdminActor } from './admin.util';
 
 const OPEN_DELETION = ['pending_confirmation', 'grace', 'blocked'] as const;
 type Blocked = 'ACCOUNT_OWNS_WORKSPACE' | 'WORKSPACE_HAS_DEBT';
@@ -118,16 +118,16 @@ export class AdminUsersService {
     const w = canPlatform(actor.platformRole, 'admin.users.write');
     const team = canPlatform(actor.platformRole, 'admin.team.write');
     const d = (key: string, ok: boolean, perm: boolean, reasonCode?: string): ActionDescriptor => (perm && ok ? { key, enabled: true } : { key, enabled: false, reasonCode: !perm ? 'FORBIDDEN' : reasonCode });
-    return [
+    return offered([
       { key: 'open', enabled: true, primary: true },
-      d('resend_verification', !u.emailVerifiedAt, w, 'CONFLICT'),
+      d('resend_verification', !u.emailVerifiedAt, w, STATE_REFUSED),
       d('reset_password', u.status === 'active', w, 'AUTH_USER_BLOCKED'),
-      d('disable_2fa', u.totpEnabled && u.platformRole === 'none', w, u.platformRole !== 'none' ? 'TWO_FA_REQUIRED_FOR_ROLE' : 'CONFLICT'),
+      d('disable_2fa', u.totpEnabled && u.platformRole === 'none', w, !u.totpEnabled ? STATE_REFUSED : 'TWO_FA_REQUIRED_FOR_ROLE'),
       d('revoke_sessions', true, w),
       d('promote', u.id !== actor.userId, team, 'ADMIN_CANNOT_DEMOTE_SELF'),
       u.status === 'blocked' ? d('unblock', true, w) : d('block', u.id !== actor.userId, w, 'ADMIN_CANNOT_DEMOTE_SELF'),
       d('schedule_deletion', u.status !== 'deletion_scheduled' && !u.ownedWorkspaceId, w, u.ownedWorkspaceId ? 'ACCOUNT_OWNS_WORKSPACE' : 'ACCOUNT_DELETION_PENDING'),
-    ];
+    ]);
   }
 
   async detail(id: string, actor: AdminActor): Promise<AdminUserDetailDto> {
@@ -242,6 +242,11 @@ export class AdminUsersService {
     ]);
     const last = users.length ? await prisma.$queryRaw<{ actorId: string; action: string; at: Date }[]>`SELECT DISTINCT ON ("actorId") "actorId", "action", "at" FROM "AuditLog" WHERE "actorId" IN (${Prisma.join(users.map((u) => Prisma.sql`${u.id}::uuid`))}) ORDER BY "actorId", "at" DESC` : [];
     const team = canPlatform(actor.platformRole, 'admin.team.write');
+    // full-test 15/11 ADMIN-12 (PRL-02 / D41): « accès bloqué » only when the 2FA rule is enforced for that member — not
+    // during the owner's dated pause `PLATFORM_2FA_OFF_UNTIL` (then the day it applies from is given) nor for a test exemption
+    const paused = twoFaPaused();
+    const until = paused ? this.config.get('PLATFORM_2FA_OFF_UNTIL') : '';
+    const requiredFrom = until ? new Date(Date.parse(`${until}T12:00:00Z`) + DAY).toISOString().slice(0, 10) : null;
     return {
       members: users.map((u) => {
         const l = last.find((r) => r.actorId === u.id);
@@ -252,7 +257,8 @@ export class AdminUsersService {
           email: u.email,
           platformRole: u.platformRole,
           totpEnabled: u.totpEnabled,
-          accessBlocked: !u.totpEnabled || u.status !== 'active',
+          accessBlocked: u.status !== 'active' || (!u.totpEnabled && !twoFaExempt(u.email)),
+          twoFaRequiredFrom: !u.totpEnabled && paused ? requiredFrom : null,
           lastAction: l ? { action: l.action, at: l.at.toISOString() } : null,
           lastLoginAt: iso(u.lastLoginAt),
           actions: [
@@ -337,7 +343,7 @@ export class AdminUsersService {
       const u = users.find((x) => x.id === r.userId)!;
       const open = (OPEN_DELETION as readonly string[]).includes(r.status);
       const reasons = r.status === 'blocked' ? await this.blockedReasons(r.userId) : [];
-      const a = (key: string, ok: boolean): ActionDescriptor => (can && ok ? { key, enabled: true } : { key, enabled: false, reasonCode: can ? 'CONFLICT' : 'FORBIDDEN' });
+      const a = (key: string, ok: boolean): ActionDescriptor => (can && ok ? { key, enabled: true } : { key, enabled: false, reasonCode: can ? STATE_REFUSED : 'FORBIDDEN' });
       out.push({
         id: r.id,
         source: r.source,
@@ -353,7 +359,7 @@ export class AdminUsersService {
         blockedReasons: reasons.length ? reasons : r.blockedReason ? [r.blockedReason as Blocked] : [],
         exportSentAt: r.status === 'grace' || r.status === 'anonymised' ? iso(r.confirmedAt) : null,
         membershipsRemoved: r.status === 'grace' || r.status === 'anonymised',
-        actions: [{ key: 'view', enabled: true, primary: true }, a('cancel', open), a('resolve', r.status === 'blocked'), a('process_now', r.status === 'grace')],
+        actions: offered([{ key: 'view', enabled: true, primary: true }, a('cancel', open), a('resolve', r.status === 'blocked'), a('process_now', r.status === 'grace')]),
       });
     }
     return out;

@@ -1,7 +1,7 @@
 // Pure logic of the agents module: the wizard draft (03 §30 AGV-02), per-step validation and checklist, the diff
 // between two drafts (dirty sections of AGT-04, merge by section after a 409), the business-hours model, the credit
 // estimate of the summary rail, and the view models of a playground turn and of a tool call (AGT-07).
-import { AGENT_CARD_TEMPLATE_MAX, AGENT_CLOSING_MAX, AGENT_DEFAULT_MAX_AMOUNT, AGENT_HANDOFF_KEYWORDS_MAX, AGENT_NAME_MAX, AGENT_POLICY_MAX, AGENT_RESPONSE_DELAY_MAX_S, CREDIT_COST } from '@djaber/shared';
+import { AGENT_CARD_TEMPLATE_MAX, AGENT_CLOSING_MAX, AGENT_DEFAULT_MAX_AMOUNT, AGENT_HANDOFF_KEYWORDS_MAX, AGENT_NAME_MAX, AGENT_POLICY_MAX, AGENT_RESPONSE_DELAY_MAX_S, CREDIT_COST, formatNumber } from '@djaber/shared';
 import type {
   Agent,
   AgentLanguage,
@@ -33,6 +33,8 @@ export const KEYWORD_MAX_LENGTH = 60;
 export const DELAY_MIN = 0;
 export const DELAY_MAX = AGENT_RESPONSE_DELAY_MAX_S;
 export const QTY_MAX = 1_000;
+/** full-test 15/11 AGENTS-08: the server's bound of `maxAmountPerOrder` (agents.ts schema), checked before saving. */
+export const AMOUNT_MAX = 100_000_000;
 
 /* ---------- steps ---------- */
 export const stepIndex = (slug: WizardStepKey): 1 | 2 | 3 | 4 | 5 => (WIZARD_STEPS.indexOf(slug) + 1) as 1 | 2 | 3 | 4 | 5;
@@ -270,7 +272,7 @@ export const validateKnowledge = (d: AgentDraft): Issue[] => {
 export const validateBehaviour = (d: AgentDraft): Issue[] => {
   const out: Issue[] = [];
   if (d.maxQtyPerOrder !== null && (!Number.isInteger(d.maxQtyPerOrder) || d.maxQtyPerOrder < 1 || d.maxQtyPerOrder > QTY_MAX)) out.push({ field: 'maxQtyPerOrder', key: 'agents.validation.qtyMin', params: { max: QTY_MAX } });
-  if (d.maxAmountPerOrder !== null && (!Number.isInteger(d.maxAmountPerOrder) || d.maxAmountPerOrder < 1)) out.push({ field: 'maxAmountPerOrder', key: 'agents.validation.amountMin' });
+  if (d.maxAmountPerOrder !== null && (!Number.isInteger(d.maxAmountPerOrder) || d.maxAmountPerOrder < 1 || d.maxAmountPerOrder > AMOUNT_MAX)) out.push({ field: 'maxAmountPerOrder', key: 'agents.validation.amountRange', params: { max: formatNumber(AMOUNT_MAX) } });
   if (ruleOn(d, 'keyword') && !d.handoffKeywords.length) out.push({ field: 'handoffKeywords', key: 'agents.validation.keywordRequired' });
   if (d.handoffKeywords.length > KEYWORDS_MAX) out.push({ field: 'handoffKeywords', key: 'agents.validation.keywordsMax', params: { max: KEYWORDS_MAX } });
   const hours = validateSchedule(d.businessHours);
@@ -441,6 +443,8 @@ export type TurnView = {
   turnId: string | null;
   /** the scenario message the server sent (full-test 15/11 AGENTS-03) */
   customerText?: string;
+  /** playground turns of the workspace this hour (full-test 15/11 AI-CHAT-11) */
+  hourlyUsed?: number;
 };
 const cardView = (c: TurnCard, i: number) => ({ id: c.productId ?? String(i), name: c.name, price: c.price, imageUrl: c.imageUrl ?? null, variants: c.variantLabel ?? null });
 /** One shape for the screen whatever the spelling of the server (api-contract §3.4 `PlaygroundTurnDto` / 04 §8). */
@@ -463,8 +467,14 @@ export const turnView = (t: PlaygroundTurn): TurnView => {
     systemMessages: t.systemMessages ?? [],
     turnId: t.turnId ?? null,
     ...((t as { customerText?: string }).customerText ? { customerText: (t as { customerText?: string }).customerText } : {}),
+    ...(typeof t.hourlyUsed === 'number' ? { hourlyUsed: t.hourlyUsed } : {}),
   };
 };
+/** full-test 15/11 AGENTS-11: why an agent with no page linked is silent, by status (a draft: link one before activating). */
+export const noChannelText = (t: (key: string) => string, status: string): string => (status === 'active' ? t('agents.card.noChannel.active') : status === 'paused' ? t('agents.card.noChannel.paused') : t('error.AGENT_NO_CHANNEL'));
+
+/** Welcome / out-of-hours texts go out before the reply on Messenger, the handoff text after it (full-test 15/11 AGENTS-20). */
+export const SYSTEM_BEFORE_REPLY: readonly string[] = ['welcome', 'out_of_hours'];
 /** "0,97" (fr / ar) · "0.97" (en) */
 export const confidenceLabel = (c: number, locale: string): string => {
   const s = (Math.round(c * 100) / 100).toFixed(2);
@@ -490,3 +500,16 @@ export const countedAgents = (rows: Pick<Agent, 'status'>[]): number => rows.fil
 /** "87 %" of conversations handled without a human. */
 export const handledPct = (m: { conversations: number; handledWithoutHuman: number }): number | null => (m.conversations > 0 ? Math.round((m.handledWithoutHuman * 100) / m.conversations) : null);
 export const creditsPerConv = (m: { conversations: number; credits: number }): number | null => (m.conversations > 0 ? Math.round((m.credits * 10) / m.conversations) / 10 : null);
+
+/**
+ * full-test 15/11 AGENTS-19: a placeholder chip inserts with a separator — « {name} — {price} » after another placeholder,
+ * a space after a word — never glued (« {name}{price}{stock} » previewed « La Robe satin4 900 DAen stock »).
+ */
+export const insertToken = (value: string, start: number, end: number, token: string): { next: string; caret: number } => {
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+  const lead = !before || /\s$/.test(before) ? '' : /\}$/.test(before) ? ' — ' : ' ';
+  const tail = after && !/^[\s.,;:!?)\]—-]/.test(after) ? ' ' : '';
+  const inserted = `${lead}${token}${tail}`;
+  return { next: `${before}${inserted}${after}`, caret: start + lead.length + token.length };
+};

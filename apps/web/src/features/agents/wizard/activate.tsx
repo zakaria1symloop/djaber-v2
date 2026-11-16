@@ -6,8 +6,8 @@
 // `AUTH_EMAIL_UNVERIFIED` block it. While a readiness row is blocking (✕) "Activer maintenant" / "Activer à une date"
 // are greyed with the list of what to fix; a scheduled activation can be cancelled (`DELETE /agents/:id/activate`).
 // Tests are free and never touch customers or orders.
-import { Button, buttonClass, Dialog, Field, FormAlert, FormSection, Input, ReadinessRow, Skeleton, toast } from '@djaber/ui';
-import { formatDateTime, type AppLocale, type TestScenarioKey } from '@djaber/shared';
+import { Button, buttonClass, Dialog, Field, FormAlert, FormSection, Input, Ltr, ReadinessRow, Skeleton, toast } from '@djaber/ui';
+import { formatDateTime, formatNumber, type AppLocale, type TestScenarioKey } from '@djaber/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { QueryError } from '@/components/global-states';
 import { Link } from '@/i18n/navigation';
@@ -115,6 +115,13 @@ export function ActivateStep({ agent, activation }: { agent: Agent; activation: 
                 }
               >
                 {c.label}
+                {/* full-test 15/11 AGENTS-09: the counts the server sends (how many products lack a photo, policies n / 4…) */}
+                {typeof c.count === 'number' ? (
+                  <span className="text-text-muted" data-testid="readiness-count">
+                    {' · '}
+                    {c.count < 0 ? t('agents.activate.ready.unlimited') : <Ltr>{c.total ? `${formatNumber(c.count)} / ${formatNumber(c.total)}` : formatNumber(c.count)}</Ltr>}
+                  </span>
+                ) : null}
               </ReadinessRow>
             ))}
           </ul>

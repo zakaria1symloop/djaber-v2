@@ -28,3 +28,18 @@ describe('client menu — block / unblock', () => {
     expect(clientMenuActions(row([{ key: 'block', enabled: true }]) as never, handlers(), perms, t).some((a) => a.key === 'block')).toBe(false);
   });
 });
+
+describe('client menu — archive / restore (full-test CLIENTS-02 / CLIENTS-03)', () => {
+  it('a client with orders (server `archive`) offers « Archiver le client », not « Supprimer (soft) »', () => {
+    const items = clientMenuActions(row([{ key: 'archive', enabled: true }]) as never, handlers(), perms, t);
+    expect(items.find((a) => a.key === 'archive')).toMatchObject({ label: 'clients.action.archive', destructive: true });
+    expect(items.some((a) => a.key === 'delete')).toBe(false);
+  });
+  it('an archived card offers its sheet and « Restaurer » only', () => {
+    const restore = vi.fn();
+    const items = clientMenuActions({ ...row([{ key: 'open', enabled: true }, { key: 'restore', enabled: true }]), archived: true } as never, handlers({ restore }), perms, t);
+    expect(items.map((a) => a.key)).toEqual(['open', 'restore']);
+    items.find((a) => a.key === 'restore')!.onSelect?.();
+    expect(restore).toHaveBeenCalled();
+  });
+});

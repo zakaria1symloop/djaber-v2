@@ -97,7 +97,7 @@ export default function AdminAiPage() {
     { key: 'cap', header: t('admin.ai.col.capability'), hideable: false, cell: (r) => t(`admin.ai.capLong.${r.capability}`) },
     { key: 'primary', header: t('admin.ai.col.primary'), cell: (r) => `${r.primary.provider} · ${r.primary.label}` },
     { key: 'fallback', header: t('admin.ai.col.fallback', { sec: r0(routes.data)?.timeoutSec ?? 20 }), cell: (r) => (r.fallback ? `${r.fallback.provider} · ${r.fallback.label}` : t('admin.ai.noFallback')) },
-    { key: 'cost', header: t('admin.ai.col.cost'), hideBelow: 'lg', cell: (r) => <span dir="ltr">{fmtDec(r.realCostUsdPer1k, 'en', 5)} $</span> },
+    { key: 'cost', header: t('admin.ai.col.cost'), hideBelow: 'lg', cell: (r) => <span dir="ltr">{fmtDec(r.realCostUsdPer1k, f.locale, 5)} $</span> },
     { key: 'credits', header: t('admin.ai.col.credits'), cell: (r) => (r.credits ? t(`admin.ai.creditsUnit.${r.capability}`, { count: r.credits }) : t('admin.ai.included')) },
     { key: 'margin', header: t('admin.ai.col.margin'), hideBelow: 'lg', cell: (r) => (r.marginPct === null ? '—' : `${r.marginPct} %`) },
     { key: 'state', header: t('admin.ai.col.state'), cell: (r) => (r.state === 'failover' ? <MonoChip tone="warning">{t('admin.ai.route.failoverState', { since: r.failoverSince ? f.ago(r.failoverSince) : '' })}</MonoChip> : r.state === 'degraded' ? <MonoChip tone="warning">{t('admin.ai.route.degraded')}</MonoChip> : <MonoChip tone="success">OK</MonoChip>) },

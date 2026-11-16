@@ -10,6 +10,7 @@ import { ShoppingBag } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AppPage } from '@/components/app-page';
 import { ListFilteredEmpty, ListLoading, OfflineBanner, QueryError } from '@/components/global-states';
+import { JobParamBanner } from '@/components/job-param-banner';
 import { ListPagination, Money } from '@/features/catalog/ui';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useLocaleCode, useT } from '@/lib/i18n';
@@ -18,7 +19,7 @@ import { useSession } from '@/lib/session';
 import { useListState } from '@/lib/use-list-state';
 import { useOrders, useOrderStats } from '../api';
 import type { OrderListItem } from '../contracts';
-import { algiersDay, algiersTime, itemsSummary, sourceSplit } from '../logic';
+import { algiersDay, algiersTime, decimalLabel, itemsSummary, sourceSplit } from '../logic';
 import { useOffline } from '../offline';
 import { ClientCell, ConfirmationPill, DeliveryPill, OrderStatusPill, RiskPill, SourceCell } from '../ui';
 import { useOrderActions } from '../use-order-actions';
@@ -86,18 +87,20 @@ export function OrdersList() {
       ),
     },
     { key: 'client', header: t('common.client'), sortKey: 'clientName', hideable: false, className: 'max-w-[220px]', cell: (r) => <ClientCell client={r.client} onOpen={can('clients.read') ? () => router.push(`/clients?sheet=${r.client.id}`) : undefined} /> },
-    { key: 'source', header: t('common.source'), hideBelow: 'lg', className: 'max-w-[160px]', cell: (r) => <SourceCell source={r.source} /> },
+    // full-test ORDERS-17: below 1536 px the secondary columns (source, risk) give way so DELIVERY is never under the sticky
+    // « Actions » column; the source detail is truncated inside its own box (no overlap with ARTICLES in Arabic)
+    { key: 'source', header: t('common.source'), hideBelow: '2xl', className: 'max-w-[160px]', cell: (r) => <div className="max-w-[160px] overflow-hidden"><SourceCell source={r.source} /></div> },
     {
       key: 'items',
       header: t('common.items'),
       hideBelow: 'xl',
       className: 'max-w-[200px]',
       cell: (r) => {
-        const it = itemsSummary(r.items, r.itemCount);
+        const it = itemsSummary(r.items);
         return (
           <div className="min-w-0">
             <div className="truncate text-[13px]">{it.first || '—'}</div>
-            {it.more ? <div className="ts-label-micro text-text-muted">{t('common.itemsMore', { count: it.more })}</div> : null}
+            {it.more ? <div className="ts-label-micro text-text-muted">{t('orders.list.itemsMore', { count: it.more })}</div> : null}
           </div>
         );
       },
@@ -132,7 +135,7 @@ export function OrdersList() {
         </div>
       ),
     },
-    { key: 'risk', header: t('common.risk'), hideBelow: 'xl', cell: (r) => <RiskPill client={r.client} risk={r.riskLevel} /> },
+    { key: 'risk', header: t('common.risk'), hideBelow: '2xl', cell: (r) => <RiskPill client={r.client} risk={r.riskLevel} /> },
   ];
   // inside a status tab the status column repeats the tab: it gives its place
   const hidden = s.tab ? [...s.hide, 'status'] : s.hide;
@@ -173,6 +176,7 @@ export function OrdersList() {
       }
     >
       {offline ? <OfflineBanner since={since} onRetry={() => void orders.refetch()} /> : null}
+      <JobParamBanner />
 
       <section aria-label={t('orders.kpi.label')} className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5" data-testid="orders-kpis">
         {st ? (
@@ -180,7 +184,7 @@ export function OrdersList() {
             <KpiTile value={formatNumber(st.toConfirm)} label={t('orders.kpi.toConfirm')} meta={t('orders.kpi.uncalled', { count: st.uncalledOver2h })} tone={st.uncalledOver2h ? 'warning' : undefined} data-kpi="toConfirm" />
             <KpiTile value={formatNumber(st.confirmedNotSent)} label={t('orders.kpi.toShip')} meta={t('orders.kpi.confirmedNotSent')} data-kpi="toShip" />
             <KpiTile value={formatNumber(st.inTransit)} label={t('orders.kpi.inTransit')} meta={t('orders.kpi.stale', { count: st.staleOver5d })} tone={st.staleOver5d ? 'warning' : undefined} data-kpi="inTransit" />
-            <KpiTile value={`${st.deliveredPct30d} %`} label={t('orders.kpi.delivered')} meta={t('orders.kpi.returns', { count: st.returns })} data-kpi="delivered" />
+            <KpiTile value={`${decimalLabel(st.deliveredPct30d, locale)} %`} label={t('orders.kpi.delivered')} meta={t('orders.kpi.returns', { count: st.returns })} data-kpi="delivered" />
             <KpiTile value={st.revenue30d < 1_000_000 ? formatNumber(st.revenue30d) : compactAmount(st.revenue30d, locale)} label={t('orders.kpi.revenue')} meta={split ? t('orders.kpi.split', { ai: split.aiPct, manual: split.manualPct }) : undefined} data-kpi="revenue" />
           </>
         ) : stats.isError ? null : (
@@ -248,7 +252,7 @@ export function OrdersList() {
           ) : null}
         </Card>
       ) : empty ? (
-        <ListFilteredEmpty entity={t('orders.entity')} filters={t('orders.list.currentFilters')} onClear={list.clear} />
+        <ListFilteredEmpty entity={t('orders.entity')} filters={s.q} onClear={list.clear} />
       ) : (
         <DataTable<OrderListItem>
           label={t('nav.orders')}

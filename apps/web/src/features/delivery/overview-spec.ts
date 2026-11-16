@@ -18,7 +18,7 @@ export const TAB_PRESETS: Record<DeliveryTab, ApiQuery> = {
 export const SHIPMENT_FILTER_STATUSES = ['not_sent', 'pending', 'sent', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered', 'failed', 'returned', 'cancelled', 'stale'] as const;
 export const LAST_EVENTS = ['lt24h', '2_5d', 'gt5d_stale'] as const;
 export const LAST_ERRORS = ['COURIER_VALIDATION', 'COURIER_CREDENTIALS_INVALID', 'COURIER_UNAVAILABLE', 'TRACKING_NOT_FOUND'] as const;
-export const DELIVERY_SORTS = ['lastSyncedAt', 'createdAt', 'orderNumber'] as const;
+export const DELIVERY_SORTS = ['lastEventAt', 'lastSyncedAt', 'createdAt', 'orderNumber'] as const;
 
 export const DELIVERY_LIST: ListSpec = {
   filters: {
@@ -36,7 +36,8 @@ export const DELIVERY_LIST: ListSpec = {
     ids: 'list',
   },
   sorts: DELIVERY_SORTS,
-  defaultSort: '-lastSyncedAt',
+  // full-test DELIVERY-11: « Dernier événement ↓ » (lastSyncedAt is null for manual / never-synced parcels)
+  defaultSort: '-lastEventAt',
   tabs: DELIVERY_TAB_LIST,
 };
 

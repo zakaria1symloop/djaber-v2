@@ -187,7 +187,7 @@ function QuickReplyDialog({ target, onClose, onSaved }: { target: QuickReplyView
       onSaved();
     } catch (e) {
       // QUICK_REPLY_TITLE_TAKEN → inline under the title, content preserved
-      setFormError(applyServerErrors(form, e, t, { fields: ['body', 'shortcut', 'locale'], codeToField: { QUICK_REPLY_TITLE_TAKEN: 'title' } }));
+      setFormError(applyServerErrors(form, e, t, { fields: ['body', 'shortcut', 'locale'], codeToField: { QUICK_REPLY_TITLE_TAKEN: 'title', QUICK_REPLY_SHORTCUT_TAKEN: 'shortcut' } }));
     }
   });
   const busy = save.isPending;

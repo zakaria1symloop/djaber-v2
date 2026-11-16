@@ -48,6 +48,7 @@ import { useOffline } from '@/features/orders/offline';
 import { useRouter } from '@/i18n/navigation';
 import { ApiError } from '@/lib/api';
 import { toMenuActions } from '@/lib/actions';
+import { decimal } from '@/features/analytics/format';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { isJobRunning, useJob } from '@/lib/jobs';
 import { filterList, filterText, type ListSpec } from '@/lib/list-state';
@@ -160,6 +161,7 @@ function GenerationBanner({ jobId, lastRunAt, onDone }: { jobId: string | null; 
 /* ---------- cards ---------- */
 function Cards({ list, offline, simple }: { list: ReturnType<typeof useListState>; offline: boolean; simple: boolean }) {
   const t = useT();
+  const locale = useLocaleCode();
   const router = useRouter();
   const day = useDayLabel();
   const { can } = useSession();
@@ -243,7 +245,7 @@ function Cards({ list, offline, simple }: { list: ReturnType<typeof useListState
             <KpiTile value={formatNumber(k.active)} label={t('recos.kpi.active')} meta={t('recos.kpi.high', { count: k.highPriority })} data-kpi="active" />
             <KpiTile value={formatNumber(k.restock.count)} label={t('recos.kpi.restock')} meta={t('recos.kpi.value', { amount: formatMoney(k.restock.estimatedValue) })} data-kpi="restock" />
             <KpiTile value={formatNumber(k.promote.count)} label={t('recos.kpi.promote')} meta={t('recos.kpi.dormant')} data-kpi="promote" />
-            <KpiTile value={k.last30d.applicationRatePct === null ? '—' : `${k.last30d.applicationRatePct} %`} label={t('recos.kpi.rate')} meta={t('recos.kpi.rateMeta', { applied: k.last30d.applied, dismissed: k.last30d.dismissed, expired: k.last30d.expired })} data-kpi="rate" />
+            <KpiTile value={k.last30d.applicationRatePct === null ? '—' : `${decimal(k.last30d.applicationRatePct, locale)} %`} label={t('recos.kpi.rate')} meta={t('recos.kpi.rateMeta', { applied: k.last30d.applied, dismissed: k.last30d.dismissed, expired: k.last30d.expired })} data-kpi="rate" />
           </>
         ) : (
           [0, 1, 2, 3].map((i) => <KpiTileSkeleton key={i} />)
@@ -394,7 +396,8 @@ function History({ list }: { list: ReturnType<typeof useListState> }) {
       header: t('common.status'),
       cell: (r) => (
         <StatusPill enumKey="Recommendation.status" value={r.status} className="!rounded-[4px]">
-          {t(`enum.StockReco.status.${r.status}`)}
+          {/* one row's state (« Appliquée »), not the plural filter label (ANALYTICS-09) */}
+          {t(`recos.status.row.${r.status}`)}
         </StatusPill>
       ),
     },
@@ -450,6 +453,7 @@ function CrossSellActions({ reason }: { reason?: string }) {
 
 function CrossSell({ list, offline }: { list: ReturnType<typeof useListState>; offline: boolean }) {
   const t = useT();
+  const locale = useLocaleCode();
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useNextRouter();
@@ -530,8 +534,8 @@ function CrossSell({ list, offline }: { list: ReturnType<typeof useListState>; o
         {k ? (
           <>
             <KpiTile value={formatNumber(k.active)} label={t('recos.cross.kpi.active')} meta={t('recos.cross.kpi.rules', { count: k.rules, manual: k.manual, generated: k.generated })} />
-            <KpiTile value={formatNumber(k.impressions30d)} label={t('recos.cross.kpi.impressions')} meta={t('recos.cross.kpi.period')} />
-            <KpiTile value={formatNumber(k.conversions30d)} label={t('recos.cross.kpi.conversions')} meta={k.conversionRatePct30d === null ? '—' : `${k.conversionRatePct30d} %`} />
+            <KpiTile value={formatNumber(k.impressions30d)} label={t('recos.cross.kpi.impressions', { count: k.impressions30d })} meta={t('recos.cross.kpi.period')} />
+            <KpiTile value={formatNumber(k.conversions30d)} label={t('recos.cross.kpi.conversions')} meta={k.conversionRatePct30d === null ? '—' : `${decimal(k.conversionRatePct30d, locale)} %`} />
             <KpiTile value={formatNumber(k.revenue30d)} label={t('recos.cross.kpi.revenue')} meta={k.lastRun.at ? t('recos.cross.kpi.lastRun', { date: day(k.lastRun.at.slice(0, 10)) }) : t('recos.cross.kpi.neverRun')} />
           </>
         ) : (
@@ -636,14 +640,15 @@ export function RuleDialog({ rule, onClose }: { rule: CrossSellRule | 'new' | nu
     setTouched(false);
   });
   const same = !!product && !!recommended && product.id === recommended.id;
+  const scoreBad = score !== '' && Number(score) > 100;
   const s = useDialogSubmit(() =>
     editing
       ? gdsApi.updateCrossSell(editing.id, { type, score: Number(score) || 0, reason: reason.trim() || null, isActive: active === '1' })
-      : gdsApi.createCrossSell({ productId: product!.id, recommendedId: recommended!.id, type, score: Math.min(100, Number(score) || 0), reason: reason.trim() || null, isActive: active === '1' }),
+      : gdsApi.createCrossSell({ productId: product!.id, recommendedId: recommended!.id, type, score: Number(score) || 0, reason: reason.trim() || null, isActive: active === '1' }),
   );
   const submit = async () => {
     setTouched(true);
-    if (!product || !recommended || same) return;
+    if (!product || !recommended || same || scoreBad) return;
     const r = await s.submit();
     if (!r) return;
     toast(t(editing ? 'recos.cross.saved' : 'recos.cross.created'));
@@ -694,8 +699,9 @@ export function RuleDialog({ rule, onClose }: { rule: CrossSellRule | 'new' | nu
           ]}
         />
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={t('recos.rule.score')} htmlFor="rule-score" error={s.fieldError('score')}>
-            <NumberInput id="rule-score" value={score} onValueChange={(v) => setScore(String(Math.min(100, Number(v) || 0)))} maxDigits={3} />
+          {/* full-test 15/11 ANALYTICS-13: 101 is refused with its bounds, never saved as 100 without a word */}
+          <Field label={t('recos.rule.score')} htmlFor="rule-score" error={scoreBad ? t('validation.range', { min: 0, max: 100 }) : s.fieldError('score', { min: 0, max: 100 })}>
+            <NumberInput id="rule-score" value={score} onValueChange={setScore} maxDigits={3} aria-invalid={scoreBad || undefined} />
           </Field>
           <Field label={t('recos.rule.active')} htmlFor="rule-active">
             <Select id="rule-active" value={active} onChange={(e) => setActive(e.target.value)}>

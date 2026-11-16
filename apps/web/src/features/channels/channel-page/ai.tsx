@@ -77,7 +77,12 @@ export function ChannelAi() {
                   <Button size="sm" variant="primary" onClick={() => link.pick(c)} disabled={busy} disabledReason={lockedReason} data-testid="agent-attach">
                     {t('channels.ai.attach')}
                   </Button>
-                  {can('agents.manage') ? (
+                  {/* full-test 15/11 CHANNELS-INBOX-09: on a disconnected page the new agent could not be linked — greyed like « Rattacher » */}
+                  {can('agents.manage') && gone ? (
+                    <Button size="sm" disabledReason={lockedReason} data-testid="agent-create">
+                      {t('channels.ai.createAgent')}
+                    </Button>
+                  ) : can('agents.manage') ? (
                     <Link href={`/agents/new?channel=${c.id}`} className={buttonClass({ size: 'sm' })} data-testid="agent-create">
                       {t('channels.ai.createAgent')}
                     </Link>

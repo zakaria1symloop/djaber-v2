@@ -252,7 +252,7 @@ describe('AUTH-02 / AUTH-04 refresh, logout, sessions', () => {
     await stranger.delete(`/me/sessions/${other.id}`).expect(404);
     await u.delete(`/me/sessions/${other.id}`).expect(204);
     await u.delete(`/me/sessions/${other.id}`).expect(404);
-    await u.delete('/me/sessions/not-a-uuid').expect(400);
+    await u.delete('/me/sessions/not-a-uuid').expect(404);
     await refresh(refreshCookie(second)!).expect(401);
     expect((await u.get('/me/sessions').expect(200)).body.data).toHaveLength(1);
     await anonymous(app).get('/me/sessions').expect(401);
@@ -333,6 +333,8 @@ describe('AUTH-09 e-mail verification', () => {
     expect((await u.get('/me').expect(200)).body.data.emailVerifiedAt).not.toBeNull();
     await api(app).post('/api/v1/auth/verify-email').send({ token: second }).expect(410);
     await api(app).post('/api/v1/auth/verify-email').send({ token: 'x' }).expect(422);
+    // full-test 15/11 PUBLIC-11: a well-formed token that was never issued is « invalide », not « expiré »
+    expect((await api(app).post('/api/v1/auth/verify-email').send({ token: 'a'.repeat(43) }).expect(400)).body.error.code).toBe('AUTH_VERIFY_TOKEN_INVALID');
     // already verified: resend is a no-op
     await clearRate(app, 'rl:verify-resend*');
     expect((await u.post('/auth/verify-email/resend').expect(200)).body.data.sent).toBe(false);

@@ -11,7 +11,8 @@ import { prisma, type Prisma } from '@djaber/db';
 import { fold } from './wilaya-aliases';
 
 export const DRAFT_TTL_MS = 2 * 3_600_000;
-export type OrderCallHistory = { result: unknown; at: Date }[];
+/** `create_order` / `cancel_order` results of the earlier runs (`name` absent on old rows: create_order). */
+export type OrderCallHistory = { result: unknown; at: Date; name?: string }[];
 type DraftContent = { clientName: string; clientPhone: string; secondPhone: string | null; wilayaId: number; communeName: string | null; address: string | null; isStopdesk: boolean; stopdeskId: string | null; items: { productId: string; variantId: string | null; quantity: number }[]; replaces?: { number: string } | null };
 
 const norm = (s: string | null | undefined) => fold(s ?? '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
@@ -68,9 +69,61 @@ export const confirmation = (text: string): 'yes' | 'no' | 'unclear' => {
   return has(w, YES) || EMOJI_YES.test(text) ? 'yes' : 'unclear';
 };
 
-/** The `create_order` results of the earlier runs (`aiRun` filter: this conversation, or this playground session) of the last 2 hours. */
+/** The `create_order` / `cancel_order` results of the earlier runs (`aiRun` filter: this conversation, or this playground session) of the last 2 hours. */
 export const orderHistoryOf = async (aiRun: Prisma.AiRunWhereInput): Promise<OrderCallHistory> =>
-  (await prisma.aiToolCall.findMany({ where: { name: 'create_order', executedAt: { gte: new Date(Date.now() - DRAFT_TTL_MS) }, aiRun }, orderBy: { executedAt: 'desc' }, take: 20, select: { result: true, executedAt: true } })).map((c) => ({ result: c.result, at: c.executedAt! }));
+  (await prisma.aiToolCall.findMany({ where: { name: { in: ['create_order', 'cancel_order'] }, executedAt: { gte: new Date(Date.now() - DRAFT_TTL_MS) }, aiRun }, orderBy: { executedAt: 'desc' }, take: 30, select: { name: true, result: true, executedAt: true } })).map((c) => ({ name: c.name, result: c.result, at: c.executedAt! }));
 
+const isCreate = (h: OrderCallHistory[number]) => (h.name ?? 'create_order') === 'create_order';
+type Placed = { ok?: unknown; number?: unknown; draft?: unknown; simulated?: unknown; total?: unknown; replaced?: unknown };
+/** full-test 15/11 proposal 4 (C06: TEST-2998 then TEST-2283 on « oui c'est bon »): the number of the order an earlier turn already placed with this content. */
+export const orderedBefore = (history: OrderCallHistory | undefined, key: string, now = Date.now()): string | null => {
+  const hit = history?.find((h) => isCreate(h) && now - h.at.getTime() <= DRAFT_TTL_MS && (h.result as Placed | null)?.ok === true && (h.result as Placed).draft === key);
+  return hit ? String((hit.result as Placed).number ?? '') || null : null;
+};
+/** Numbers of the orders the AI placed in this conversation / session (last 2 hours). */
+export const placedNumbers = (history: OrderCallHistory | undefined): string[] =>
+  (history ?? []).filter((h) => isCreate(h) && (h.result as Placed | null)?.ok === true && typeof (h.result as Placed).number === 'string').map((h) => String((h.result as Placed).number));
+/**
+ * full-test 15/11 AI-CHAT-16: the playground's own TEST-n orders (dry run), so the merchant can test a change or a
+ * cancellation of the order the agent just took — minus those a later simulated cancel or replacement removed.
+ */
+export const simulatedOrders = (history: OrderCallHistory | undefined): { number: string; total: number; at: Date }[] => {
+  const gone = new Set<string>();
+  for (const h of history ?? []) {
+    const r = h.result as (Placed & { cancelled?: unknown }) | null;
+    if (!r?.simulated) continue;
+    if (!isCreate(h) && r.ok === true && typeof r.cancelled === 'string') gone.add(r.cancelled.toLowerCase());
+    const replaced = r.replaced && typeof r.replaced === 'object' ? (r.replaced as { number?: unknown }).number : null;
+    if (isCreate(h) && typeof replaced === 'string') gone.add(replaced.toLowerCase());
+  }
+  return (history ?? [])
+    .filter((h) => isCreate(h) && (h.result as Placed | null)?.ok === true && (h.result as Placed).simulated === true && typeof (h.result as Placed).number === 'string')
+    .map((h) => ({ number: String((h.result as Placed).number), total: Number((h.result as Placed).total ?? 0) || 0, at: h.at }))
+    .filter((o) => !gone.has(o.number.toLowerCase()));
+};
+
+const CANCEL_WORDS = /annul|cancel|batel|btel|ألغ|الغ|بطل|باطل|نلغ/;
+/** The customer's own words ask for a cancellation (« annule », « cancel », « batel », « ألغي »). */
+export const asksCancel = (text: string): boolean => CANCEL_WORDS.test(fold(text)) || CANCEL_WORDS.test(text.toLowerCase());
 /** The customer's message of this turn asks for the cancellation (or confirms the one the AI asked about). */
-export const wantsCancel = (text: string): boolean => confirmation(text) === 'yes' || /annul|cancel|batel|btel|ألغ|الغ|بطل|باطل|نلغ/.test(fold(text));
+export const wantsCancel = (text: string): boolean => confirmation(text) === 'yes' || asksCancel(text);
+
+/** full-test 15/11 AI-CHAT-05 (proposal 6): what the customer chose for the order being taken (`context.chosen`). */
+export type ChosenItem = { productId: string; variantId: string | null; quantity: number | null };
+/**
+ * The chosen items after a turn: the model's `cart` when it reported one (an empty list never erases — a name-only
+ * message must not lose the product), none once an order was placed this turn.
+ */
+export const nextChosen = (previous: ChosenItem[] | null | undefined, reported: { items?: { productId?: unknown; variantId?: unknown; quantity?: unknown }[] } | null | undefined, placed: boolean): ChosenItem[] | null => {
+  if (placed) return null;
+  const items = (reported?.items ?? [])
+    .filter((i) => typeof i.productId === 'string' && i.productId.trim())
+    .slice(0, 10)
+    .map((i) => {
+      const q = Math.floor(Number(i.quantity));
+      return { productId: String(i.productId).trim(), variantId: typeof i.variantId === 'string' && i.variantId.trim() ? i.variantId.trim() : null, quantity: Number.isFinite(q) && q >= 1 && q <= 10_000 ? q : null };
+    });
+  return items.length ? items : (previous ?? null);
+};
+/** Did a `create_order` of this turn place an order? */
+export const placedThisTurn = (tools: { name: string; result: unknown }[]): boolean => tools.some((t) => t.name === 'create_order' && (t.result as { ok?: unknown } | null)?.ok === true);

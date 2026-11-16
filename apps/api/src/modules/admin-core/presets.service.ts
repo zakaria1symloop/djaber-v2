@@ -7,7 +7,7 @@ import { Prisma, prisma, type AgentPreset, type AgentPresetVersion } from '@djab
 import { AuditService } from '../../core/audit/audit.service';
 import { AppException, notFound } from '../../core/errors/app.exception';
 import { canPlatform } from '../../core/rbac/permission-matrix';
-import { assertUuid, fromLocalized, iso, toLocalized, userRef, userSelect, type AdminActor } from './admin.util';
+import { STATE_REFUSED, assertUuid, fromLocalized, iso, offered, toLocalized, userRef, userSelect, type AdminActor } from './admin.util';
 
 const LOCALES = ['fr', 'ar', 'en'] as const;
 type Loc = (typeof LOCALES)[number];
@@ -47,7 +47,7 @@ export class PresetAdminService {
   private dto(p: AgentPreset & { versions: VersionRow[] }, agents: number, actor: AdminActor, withVersions: boolean): AgentPresetAdminDto {
     const draft = p.versions.find((v) => v.status === 'draft');
     const can = canPlatform(actor.platformRole, 'admin.presets.write');
-    const a = (key: string, ok: boolean, reasonCode = 'CONFLICT'): ActionDescriptor => (can && ok ? { key, enabled: true } : { key, enabled: false, reasonCode: can ? reasonCode : 'FORBIDDEN' });
+    const a = (key: string, ok: boolean, reasonCode = STATE_REFUSED): ActionDescriptor => (can && ok ? { key, enabled: true } : { key, enabled: false, reasonCode: can ? reasonCode : 'FORBIDDEN' });
     return {
       id: p.id,
       key: p.key,
@@ -62,13 +62,14 @@ export class PresetAdminService {
       sortOrder: p.sortOrder,
       archivedAt: iso(p.archivedAt),
       agents,
-      actions: [
-        { ...a('edit', !p.archivedAt, 'PRESET_ARCHIVED'), primary: true },
+      // ADMIN-05 (UX-060): an archived preset is restored, not edited — « Modifier » is not offered
+      actions: offered([
+        { ...a('edit', !p.archivedAt), primary: true },
         a('duplicate', true),
         { key: 'preview', enabled: true },
         p.archivedAt ? a('restore', true) : a('archive', true),
         a('delete', p.currentVersion === 0, 'PRESET_PUBLISHED_IMMUTABLE'),
-      ],
+      ]),
       ...(withVersions ? { versions: p.versions.map((v) => this.versionDto(v)) } : {}),
     };
   }

@@ -44,7 +44,7 @@ function Overview({ d }: { d: AnalyticsOverviewView }) {
           name="revenue"
           label={t('analytics.figure.revenue')}
           meta={k.revenue.deltaPct !== undefined ? t('analytics.vsPrevious') : undefined}
-          sub={t('analytics.overview.revenueSub', { sales: formatNumber(hintNum(k.revenue, 'salesCount') ?? 0), orders: formatNumber(hintNum(k.revenue, 'deliveredOrders') ?? 0) })}
+          sub={t('analytics.overview.revenueSub', { sales: formatNumber(hintNum(k.revenue, 'salesCount') ?? 0), salesN: hintNum(k.revenue, 'salesCount') ?? 0, orders: formatNumber(hintNum(k.revenue, 'deliveredOrders') ?? 0), ordersN: hintNum(k.revenue, 'deliveredOrders') ?? 0 })}
           title={t('analytics.revenueDefinition')}
         />
         <Kpi k={k.orders} name="orders" label={t('analytics.unit.orders')} meta={t('analytics.overview.confirmedPct', { pct: fig(hintNum(k.orders, 'confirmedPct'), 'pct') })} sub={t('analytics.overview.aiOrders', { count: formatNumber(hintNum(k.orders, 'aiOrders') ?? 0) })} />
@@ -101,9 +101,9 @@ function Overview({ d }: { d: AnalyticsOverviewView }) {
             rows={[
               { key: 'conversations', label: t('analytics.funnel.conversations'), value: d.funnel.conversations, formatted: formatNumber(d.funnel.conversations), tone: 'inbound' },
               { key: 'purchaseIntent', label: t('analytics.funnel.purchaseIntent'), value: d.funnel.purchaseIntent, formatted: formatNumber(d.funnel.purchaseIntent), tone: 'inbound' },
-              { key: 'ordersCreated', label: t('analytics.funnel.ordersCreated'), value: d.funnel.ordersCreated, formatted: formatNumber(d.funnel.ordersCreated), tone: 'orders' },
-              { key: 'confirmed', label: t('analytics.funnel.confirmed'), value: d.funnel.confirmed, formatted: formatNumber(d.funnel.confirmed), tone: 'orders' },
-              { key: 'delivered', label: t('analytics.funnel.delivered'), value: d.funnel.delivered, formatted: formatNumber(d.funnel.delivered), tone: 'money' },
+              // ANALYTICS-07: AI orders only, from the conversations above (all sources: the Commandes tab)
+              { key: 'ordersCreated', label: t('analytics.funnel.aiOrdersCreated'), value: d.funnel.ordersCreated, formatted: formatNumber(d.funnel.ordersCreated), tone: 'orders' },
+              { key: 'delivered', label: t('analytics.funnel.aiDelivered'), value: d.funnel.delivered, formatted: formatNumber(d.funnel.delivered), tone: 'money' },
             ]}
           />
         </ChartPanel>
@@ -157,10 +157,11 @@ function Overview({ d }: { d: AnalyticsOverviewView }) {
           )}
           rows={d.byChannel.map((c) => ({
             key: c.channelId ?? 'manual',
-            label: c.channelId ? `${c.name ?? '—'}${c.platform ? ` (${c.platform === 'facebook' ? 'FB' : 'IG'})` : ''}${c.agent ? ` · ${c.agent.name}` : ''}` : t('analytics.overview.manual'),
+            label: c.channelId ? `${c.name ?? '—'}${c.platform ? ` (${c.platform === 'facebook' ? 'FB' : 'IG'})` : ''}${c.agent ? ` · ${c.agent.name}` : ''}` : t('analytics.overview.noChannel'),
             value: t('analytics.overview.channelLine', { orders: formatNumber(c.orders), conversations: formatNumber(c.conversations) }),
             delta: <DeltaBadge value={c.deltaPct} />,
-            href: c.channelId ? `/orders?channelId=${c.channelId}&${range}` : `/orders?source=manual&${range}`,
+            // ANALYTICS-07: the row counts every order without a page (manual, import, mobile, API): the link opens the same ones
+            href: c.channelId ? `/orders?channelId=${c.channelId}&${range}` : `/orders?source=manual,import,mobile,api&${range}`,
           }))}
         />
       </div>

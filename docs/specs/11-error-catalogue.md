@@ -43,9 +43,10 @@ UI behaviour legend: **inline** (field), **toast** (transient, auto-dismiss 5 s,
 | 410 | `AUTH_RESET_TOKEN_EXPIRED` | Lien expiré, demandez-en un nouveau. | انتهت صلاحية الرابط، اطلب رابطًا جديدًا. | Link expired, request a new one. | state (reset page) | resend |
 | 400 | `AUTH_RESET_TOKEN_INVALID` | Lien invalide. | رابط غير صالح. | Invalid link. | state | resend |
 | 410 | `AUTH_VERIFY_TOKEN_EXPIRED` | Lien de vérification expiré. | انتهت صلاحية رابط التحقق. | Verification link expired. | state | resend |
+| 400 | `AUTH_VERIFY_TOKEN_INVALID` | Lien de vérification invalide. | رابط التحقق غير صالح. | Invalid verification link. | state « Lien invalide » (full-test 15/11 PUBLIC-11: an unknown / mistyped token, not « expiré ») | resend |
 | 403 | `AUTH_EMAIL_UNVERIFIED` | Vérifiez votre e-mail pour continuer. | تحقق من بريدك للمتابعة. | Verify your email to continue. | dialog with resend | verify |
 | 503 | `MAIL_NOT_CONFIGURED` | Envoi d'e-mail indisponible. | إرسال البريد غير متاح. | Email sending unavailable. | toast | contact support |
-| 422 | `ACCOUNT_OWNS_WORKSPACE` | Supprimez votre espace d'abord. | احذف مساحتك أولًا. | Delete your workspace first. | dialog | go to danger zone |
+| 422 | `ACCOUNT_OWNS_WORKSPACE` | Supprimez votre espace d'abord. | احذف مساحتك أولًا. | Delete your workspace first. | dialog | go to danger zone · admin « Créer un espace (pour un client) » with an owner who already owns one: `fields.ownerEmail = validation.owns_workspace` under the field (full-test 15/11 ADMIN-06) |
 | 403 | `TWO_FA_REQUIRED_FOR_ROLE` | La 2FA est obligatoire pour ce rôle. | المصادقة الثنائية إلزامية لهذا الدور. | 2FA is mandatory for this role. | toast | — |
 | 401 | `AUTH_MFA_TOKEN_EXPIRED` | Vérification expirée, reconnectez-vous. | انتهت صلاحية التحقق، سجّل الدخول مجددًا. | Verification expired, sign in again. | state → login | — |
 | 401 | `AUTH_REFRESH_REUSED` | Session révoquée par sécurité, reconnectez-vous. | أُلغيت الجلسة لأسباب أمنية، سجّل الدخول من جديد. | Session revoked for security, sign in again. | state → login (all sessions of the family revoked) | sign in again |
@@ -68,6 +69,8 @@ UI behaviour legend: **inline** (field), **toast** (transient, auto-dismiss 5 s,
 | 403 | `PAGE_ANALYSIS_PERMISSION_REQUIRED` | Reconnectez la page avec la permission "contenu". | أعد ربط الصفحة مع صلاحية "المحتوى". | Reconnect the page with the "content" permission. | state + Reconnect | reconnect |
 | 401 | `PAGE_TOKEN_EXPIRED` | Page déconnectée par Meta, reconnectez-la. | فصلت ميتا الصفحة، أعد ربطها. | Page disconnected by Meta, reconnect it. | banner + card state | reconnect |
 | 409 | `CHANNEL_PAUSED_BY_PLAN` | Page en pause (limite du plan). | الصفحة متوقفة (حد الخطة). | Page paused (plan limit). | badge + banner | upgrade |
+| 409 | `CHANNEL_DISCONNECTED` | Page déconnectée : reconnectez-la d’abord. | الصفحة غير متصلة: أعد ربطها أولًا. | Page disconnected: reconnect it first. | greyed reason of the page actions (full-test 15/11 CHANNELS-INBOX-10) | reconnect |
+| 409 | `CHANNEL_ALREADY_DISCONNECTED` | Page déjà déconnectée. | الصفحة غير متصلة بالفعل. | Page already disconnected. | greyed « Déconnecter la page » reason (full-test 15/11 CHANNELS-INBOX-04) | — |
 | 503 | `META_UNAVAILABLE` | Meta ne répond pas, réessayez. | ميتا لا تستجيب، أعد المحاولة. | Meta is not responding, retry. | toast | retry |
 | 422 | `REPLY_OUTSIDE_WINDOW` | Hors fenêtre de 24 h : le client doit écrire d'abord. | خارج نافذة 24 ساعة: يجب أن يكتب العميل أولًا. | Outside the 24 h window: the customer must write first. | inline in composer | wait for customer |
 | 422 | `REPLY_CHANNEL_INACTIVE` | Page en pause ou déconnectée. | الصفحة متوقفة أو مفصولة. | Page paused or disconnected. | composer disabled + reason | reconnect/resume |
@@ -81,7 +84,7 @@ UI behaviour legend: **inline** (field), **toast** (transient, auto-dismiss 5 s,
 |---|---|---|---|---|---|---|
 | 409 | `AGENT_PAGE_ALREADY_ASSIGNED` {agentName} | Page déjà liée à « {agentName} ». La déplacer ? | الصفحة مرتبطة بـ «{agentName}». نقلها؟ | Page already linked to "{agentName}". Move it? | dialog (Move / Cancel) | confirm move |
 | 422 | `AGENT_MODEL_UNAVAILABLE` | Modèle IA indisponible, un modèle de secours est utilisé. | نموذج الذكاء الاصطناعي غير متاح، يُستخدم نموذج احتياطي. | AI model unavailable, a fallback model is used. | toast (merchant) / inline (admin AI routes) | platform routing falls back (`AiRoute`); admin fixes the route |
-| 429 | `PLAYGROUND_RATE_LIMITED` | Limite de test atteinte (60/h). | بلغت حد الاختبار (60/س). | Test limit reached (60/h). | inline in playground | wait |
+| 429 | `PLAYGROUND_RATE_LIMITED` {retryAfter} | Limite de test atteinte (60/h). | بلغت حد الاختبار (60/س). | Test limit reached (60/h). | inline in playground (+ « réessayez dans m:ss » from `retryAfter` = seconds left in the hour; full-test 15/11 AI-CHAT-11) | wait |
 | 429 | `ANALYSIS_RATE_LIMITED` | 3 analyses par jour max. | 3 تحليلات يوميًا كحد أقصى. | Max 3 analyses per day. | toast | tomorrow |
 | 503 | `AI_PROVIDER_ERROR` | L'IA ne répond pas ; la conversation passe en file. | الذكاء الاصطناعي لا يستجيب؛ المحادثة في قائمة الانتظار. | AI not responding; conversation queued for a human. | thread banner | human reply; retry later |
 | 422 | `INSIGHT_ALREADY_RESOLVED` | Déjà traité. | تمت معالجته. | Already handled. | toast | — |
@@ -102,9 +105,9 @@ UI behaviour legend: **inline** (field), **toast** (transient, auto-dismiss 5 s,
 | 409 | `ANALYSIS_PRODUCT_EXISTS` {name} | Déjà dans le catalogue : {name}. | موجود مسبقًا في الكتالوج: {name}. | Already in the catalogue: {name}. | per-row result (page analysis import) | edit the existing product |
 | 409 | `CATEGORY_IN_USE` {count} | Utilisée par {count} produits. Réassigner ? | مستخدمة في {count} منتجات. إعادة تعيين؟ | Used by {count} products. Reassign? | dialog with reassign select | reassign |
 | 409 | `UNIT_IN_USE` {count} | Utilisée par {count} produits. Réassigner ? | مستخدمة في {count} منتجات. إعادة تعيين؟ | Used by {count} products. Reassign? | dialog with reassign select | reassign |
-| 403 | `UNIT_SYSTEM_READONLY` | Unité système non modifiable. | وحدة النظام غير قابلة للتعديل. | System unit is read-only. | toast | — |
+| 403 | `UNIT_SYSTEM_READONLY` | Unité système : ni modifiable ni supprimable. | وحدة النظام غير قابلة للتعديل أو الحذف. | System unit: it can't be edited or deleted. | toast | — |
 | 422 | `IMPORT_COLUMNS_MISSING` {columns} | Colonnes manquantes : {columns}. | أعمدة ناقصة: {columns}. | Missing columns: {columns}. | state (import step 1) | fix file |
-| 422 | `IMPORT_TOO_LARGE` | Max 5 Mo et 2000 lignes. | 5 م.ب و2000 سطر كحد أقصى. | Max 5 MB and 2000 rows. | inline | split file |
+| 422 | `IMPORT_TOO_LARGE` | Max 5 Mo et 2 000 lignes. | 5 م.ب و2 000 سطر كحد أقصى. | Max 5 MB and 2 000 rows. | inline | split file |
 | — | `IMPORT_DUPLICATE_SKU_IN_FILE` {row} | Ligne {row} : SKU en double dans le fichier. | السطر {row}: رمز مكرر في الملف. | Row {row}: duplicate SKU in file. | row error in preview | fix file |
 | 413 | `IMAGE_TOO_LARGE` | Image trop lourde (5 Mo max). | الصورة كبيرة جدًا (5 م.ب كحد أقصى). | Image too large (5 MB max). | inline | compress |
 | 415 | `IMAGE_TYPE_INVALID` | Format non supporté (jpg, png, webp, gif). | صيغة غير مدعومة (jpg, png, webp, gif). | Unsupported format (jpg, png, webp, gif). | inline | — |
@@ -133,7 +136,7 @@ UI behaviour legend: **inline** (field), **toast** (transient, auto-dismiss 5 s,
 | 422 | `DELIVERY_ORDER_DELIVERED` | Cette commande est déjà livrée : elle ne peut plus être envoyée à un transporteur. | هذا الطلب مُسلَّم بالفعل: لا يمكن إرساله إلى ناقل بعد الآن. | This order is already delivered: it can't be sent to a courier. | greyed reason / inline in the send dialog (UX-064: send, fix and resend, change courier, mark shipped on a delivered order) | — |
 | 422 | `DELIVERY_ORDER_CANCELLED` | Cette commande est annulée : elle ne peut plus être envoyée à un transporteur. | هذا الطلب ملغى: لا يمكن إرساله إلى ناقل بعد الآن. | This order is cancelled: it can't be sent to a courier. | greyed reason / inline in the send dialog (UX-064) | — |
 | 422 | `DELIVERY_ORDER_RETURNED` | Cette commande est retournée : elle ne peut plus être envoyée à un transporteur. | هذا الطلب مُرتجَع: لا يمكن إرساله إلى ناقل بعد الآن. | This order is returned: it can't be sent to a courier. | greyed reason / inline in the send dialog (UX-064) | — |
-| 422 | `DELIVERY_NO_COURIER` | Aucun transporteur configuré. | لا يوجد ناقل مُعدّ. | No courier configured. | dialog state with link | configure |
+| 422 | `DELIVERY_NO_COURIER` | Aucun transporteur actif : activez-en un (Livraison › Transporteurs) ou utilisez la livraison propre. | لا توجد شركة توصيل مفعّلة: فعّلوا واحدة (التوصيل › شركات التوصيل) أو استعملوا التوصيل الذاتي. | No active courier: activate one (Delivery › Couriers) or use self-delivery. | dialog state with link (full-test 15/11 DELIVERY-04: couriers may exist but be deactivated) | configure |
 | 422 | `COURIER_VALIDATION` {field, message} | Transporteur : {message}. | الناقل: {message}. | Courier: {message}. | inline mapped to field | fix and retry |
 | 401 | `COURIER_CREDENTIALS_INVALID` | Identifiants transporteur refusés. | بيانات الناقل مرفوضة. | Courier credentials rejected. | inline (settings) / banner | update credentials |
 | 503 | `COURIER_UNAVAILABLE` | Transporteur indisponible, envoi mis en attente. | الناقل غير متاح، الإرسال في الانتظار. | Courier unavailable, sending queued. | toast + order state "sending…" | auto-retry; manual retry |
@@ -165,6 +168,7 @@ Usage rule: `STOCK_INSUFFICIENT` is returned by stock adjustments and **sale** l
 |---|---|---|---|---|---|---|
 | 404 | `PLAN_NOT_FOUND` | Plan indisponible. | الخطة غير متاحة. | Plan unavailable. | toast | reload plans |
 | 422 | `PLAN_IS_FREE` | Aucun paiement requis pour ce plan. | لا يلزم دفع لهذه الخطة. | No payment required for this plan. | toast | — |
+| 422 | `RENEWAL_NOT_OPEN` | Renouvellement possible 7 jours avant l’échéance. | التجديد ممكن قبل 7 أيام من تاريخ الاستحقاق. | Renewal opens 7 days before the due date. | inline in « Changer de plan » (full-test 15/11 SETTINGS-04: same plan + cycle before J−7, outside dunning) | wait for J−7 |
 | 409 | `PLAN_IN_USE` {count} | Plan utilisé par {count} espaces : désactivez-le. | الخطة مستخدمة من {count} مساحات: عطّلها. | Plan used by {count} workspaces: deactivate it. | dialog (admin) | deactivate |
 | 409 | `CREDIT_PACK_HAS_PURCHASES` {count} | Pack déjà acheté {count} fois : désactivez-le plutôt que de le supprimer. | تم شراء هذه الباقة {count} مرة: عطّلها بدل حذفها. | Pack already bought {count} times: deactivate it instead of deleting it. | dialog (admin) | deactivate |
 | 409 | `SUBSCRIPTION_ALREADY_ACTIVE` | Un abonnement actif existe déjà. | يوجد اشتراك نشط بالفعل. | An active subscription already exists. | dialog (admin) | end it first |
@@ -174,6 +178,7 @@ Usage rule: `STOCK_INSUFFICIENT` is returned by stock adjustments and **sale** l
 | 401 | `WEBHOOK_SIGNATURE_INVALID` | — | — | — | silent (logged, admin alert) | — |
 | 422 | `SHEETS_NOT_CONNECTED` | Google Sheets non connecté. | Google Sheets غير متصل. | Google Sheets not connected. | state (integration card) | connect |
 | 401 | `SHEETS_TOKEN_REVOKED` | Accès Google révoqué, reconnectez-vous. | تم إلغاء وصول Google، أعد الربط. | Google access revoked, reconnect. | banner | reconnect |
+| 409 | `SHEETS_BACKFILL_RUNNING` | Un export de l’historique est déjà en cours. | تصدير السجل جارٍ بالفعل. | A history export is already running. | greyed « Exporter l’historique » reason (full-test 15/11 SETTINGS-05) | wait for the job |
 | 404 | `SHEETS_SPREADSHEET_NOT_FOUND` | Feuille introuvable (supprimée ?). | الجدول غير موجود (محذوف؟). | Spreadsheet not found (deleted?). | banner | pick another |
 | 429 | `SHEETS_QUOTA` | Quota Google atteint, nouvel essai automatique. | بلغ حصة Google، إعادة المحاولة تلقائيًا. | Google quota reached, retrying automatically. | silent | — |
 | 401 | `API_KEY_REVOKED` | Clé API révoquée. | مفتاح API ملغى. | API key revoked. | — (API) | new key |
@@ -329,7 +334,7 @@ Every code drawn in a Figma frame (dialog footers, greyed menu items, grey "ÉTA
 | 409 | `COURIER_ADDRESS_LOCKED` | Adresse verrouillée : annulez le colis d'abord. | العنوان مقفل: ألغِ الطرد أولًا. | Address locked: cancel the parcel first. | dialog (Annuler le colis) | cancel parcel |
 | 429 | `TRACKING_SYNC_RATE_LIMITED` {retryAfter} | Actualisation possible dans {retryAfter} (1 / 5 min). | التحديث ممكن بعد {retryAfter} (مرة كل 5 د). | Refresh possible in {retryAfter} (1 per 5 min). | disabled button "Limite 1 / 5 min" | wait |
 | 409 | `CUSTOMER_MERGE_IRREVERSIBLE` | Fusion irréversible : confirmez. | الدمج لا رجعة فيه: أكّد. | Merge is irreversible: confirm. | dialog (confirm flag) | confirm |
-| 409 | `CUSTOMER_HAS_ORDERS` {count} | {count} commandes : archivez plutôt le client. | {count} طلبات: أرشف العميل بدلًا من ذلك. | {count} orders: archive the client instead. | dialog (Archiver) | archive |
+| 409 | `CUSTOMER_HAS_ORDERS` {count} | Ce client a des commandes ({count}) : archivez-le plutôt. | لهذا العميل طلبات ({count}): أرشفوه بدلًا من ذلك. | This client has orders ({count}): archive it instead. | dialog (Archiver; the dialog opens in « Archiver » mode from the `archive` descriptor — full-test 15/11 CLIENTS-02) | archive |
 | 409 | `CUSTOMER_BLOCKED` {clientName} | Client bloqué : commande refusée. | العميل محظور: الطلب مرفوض. | Client blocked: order refused. | dialog (confirm flag, manual orders: re-send with `confirm=true`) · silent (AI) | unblock (Admin+) |
 | 403 | `CUSTOMER_BLOCKED_BY_PLATFORM` | Bloqué par la plateforme : contestez via le support. | محظور من المنصة: اعترض عبر الدعم. | Blocked by the platform: contest through support. | tooltip (no Débloquer) | support |
 
@@ -353,7 +358,9 @@ Every code drawn in a Figma frame (dialog footers, greyed menu items, grey "ÉTA
 | HTTP | Code | fr | ar | en | UI | Recovery |
 |---|---|---|---|---|---|---|
 | 422 | `WEBHOOK_URL_INVALID` | URL invalide (HTTPS obligatoire). | رابط غير صالح (HTTPS إلزامي). | Invalid URL (HTTPS required). | inline | — |
+| 422 | `WEBHOOK_URL_PRIVATE` | Adresse privée ou locale refusée : utilisez une adresse publique. | عنوان خاص أو محلي مرفوض: استخدم عنوانًا عامًّا. | Private or local address refused: use a public address. | inline (full-test 15/11 SETTINGS-12: https on localhost / 10.x / 127.x / 169.254.x in production) | — |
 | 409 | `QUICK_REPLY_TITLE_TAKEN` | Titre déjà utilisé. | العنوان مستخدم مسبقًا. | Title already used. | inline | — |
+| 409 | `QUICK_REPLY_SHORTCUT_TAKEN` | Raccourci déjà utilisé par une autre réponse. | الاختصار مستخدم في رد آخر. | Shortcut already used by another reply. | inline under « Raccourci » (full-test 15/11 SETTINGS-11: unique per workspace, case-insensitive) | pick another shortcut |
 | 422 | `CMS_LOCALE_MISSING` {locales} | Langue(s) manquante(s) : {locales}. Cochez « replier sur FR » ou traduisez. | لغات ناقصة: {locales}. فعّل «الرجوع إلى FR» أو ترجم. | Missing language(s): {locales}. Tick "fallback to FR" or translate. | inline (admin) | translate / fallback |
 | 409 | `CMS_SLUG_TAKEN` | Slug déjà utilisé. | المعرّف مستخدم مسبقًا. | Slug already used. | inline | — |
 | 500 | `REPORT_EXPORT_FAILED` {ref} | Export échoué (réf. {ref}). Réessayez. | فشل التصدير (مرجع {ref}). أعد المحاولة. | Export failed (ref. {ref}). Retry. | row state ÉCHEC + Réessayer | retry |

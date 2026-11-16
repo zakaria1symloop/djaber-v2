@@ -57,6 +57,11 @@ describe('new sale totals (GDS-08)', () => {
   it('caps a discount at the subtotal and a percent at 100', () => {
     expect(saleTotals(lines, { discount: '99 999', discountMode: 'amount', received: '0' }).total).toBe(0);
     expect(saleTotals(lines, { discount: '250', discountMode: 'percent', received: '0' }).total).toBe(0);
+    // full-test 15/11 SALES-CASH-09: the sheet says so (and blocks) instead of saving a silent 0 DA
+    expect(saleTotals(lines, { discount: '250', discountMode: 'percent', received: '0' }).discountOver).toBe(true);
+    expect(saleTotals(lines, { discount: '99 999', discountMode: 'amount', received: '0' }).discountOver).toBe(true);
+    expect(saleTotals(lines, { discount: '100', discountMode: 'percent', received: '0' }).discountOver).toBe(false);
+    expect(saleTotals(lines, { discount: '5', discountMode: 'percent', received: '0' }).discountOver).toBe(false);
   });
   it('marks an edited price ("PRIX MODIFIÉ 4 500 → 4 200")', () => {
     expect(priceEdited(lines[2]!)).toBe(true);

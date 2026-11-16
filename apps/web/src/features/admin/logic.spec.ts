@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { decideAdmin } from '@/lib/guards';
 import { impersonation, minutesLeft } from '@/lib/impersonation';
 import { reasonOk } from './dialog-kit';
+import { adminReason } from './reasons';
+import { courierLabel, ledgerReason, paymentMethodLabel } from './ui';
 import { EMPTY_PLAN, hasOneLimit, yearlyDiscount } from './plans/form';
 import { creditsText, workspacePill } from './workspaces/status';
 
@@ -95,5 +97,29 @@ describe('workspace credits figure (recette 11/11 M-31)', () => {
   });
   it('an unlimited plan reads « illimité », never « / -1 »', () => {
     expect(creditsText({ used: 40, limit: -1, pack: 0 }, num, t)).toBe('40 / illimité');
+  });
+});
+
+describe('admin reasons and coded values (full-test 15/11 ADMIN-05 / ADMIN-19)', () => {
+  const messages: Record<string, string> = {
+    'admin.reason.ACCOUNT_OWNS_WORKSPACE': 'Cet utilisateur possède « {workspace} » : transférez la propriété ou supprimez l’espace d’abord.',
+    'error.ACCOUNT_OWNS_WORKSPACE': 'Supprimez votre espace d’abord.',
+    'error.FORBIDDEN': 'Action non autorisée.',
+    'credits.reason.renewal': 'Renouvellement du plan',
+    'credits.reason.pack': 'Pack de {credits} crédits',
+    'admin.subs.provider.chargily': 'Chargily (CIB / Edahabia)',
+    'couriers.provider.zrexpress': 'ZR Express',
+  };
+  const t = Object.assign((key: string, p?: Record<string, unknown>) => (messages[key] ?? key).replace(/\{(\w+)\}/g, (_, k: string) => String(p?.[k] ?? '')), { has: (key: string) => key in messages });
+  it('an admin menu speaks about the account, not to the merchant', () => {
+    expect(adminReason(t as never, { reasonCode: 'ACCOUNT_OWNS_WORKSPACE' }, { workspace: 'Boutique Test' })).toBe('Cet utilisateur possède « Boutique Test » : transférez la propriété ou supprimez l’espace d’abord.');
+    expect(adminReason(t as never, { reasonCode: 'FORBIDDEN' })).toBe('Action non autorisée.');
+  });
+  it('ledger reasons, payment methods and couriers read as words', () => {
+    expect(ledgerReason(t as never, 'renewal', 'renewal', 300)).toBeNull();
+    expect(ledgerReason(t as never, 'pack_purchase', 'pack:pack-500', 500)).toBe('Pack de 500 crédits');
+    expect(ledgerReason(t as never, 'grant', 'Geste commercial après incident', 50)).toBe('Geste commercial après incident');
+    expect(paymentMethodLabel(t as never, 'chargily')).toBe('Chargily (CIB / Edahabia)');
+    expect(courierLabel(t as never, 'zrexpress')).toBe('ZR Express');
   });
 });

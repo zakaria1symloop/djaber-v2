@@ -277,10 +277,11 @@ export class AgentService implements OnModuleInit {
     if (q.productId) {
       // "Agents qui le vendent": the catalogue scope of `CatalogueService.scopeWhere` read the other way round. A product of
       // another workspace (or an unknown id) is a 404, like every cross-workspace reference.
-      const p = await prisma.product.findFirst({ where: { id: q.productId }, select: { id: true, categoryId: true } });
+      const p = await prisma.product.findFirst({ where: { id: q.productId }, select: { id: true, categoryId: true, deletedAt: true } });
       if (!p) throw notFound();
+      // AT-CAT-07: an archived product is out of every agent's selection (whole catalogue and category scopes included)
       and.push({
-        OR: [
+        OR: p.deletedAt ? [{ id: { in: [] } }] : [
           { sellAllProducts: false, products: { some: { productId: p.id } } },
           { sellAllProducts: true, catalogScope: 'all' },
           ...(p.categoryId ? [{ sellAllProducts: true, catalogScope: 'categories' as const, scopeCategoryIds: { has: p.categoryId } }] : []),
@@ -291,6 +292,8 @@ export class AgentService implements OnModuleInit {
     const dir = sort.startsWith('-') ? 'desc' : 'asc';
     const orderBy: Prisma.AgentOrderByWithRelationInput[] = sort.endsWith('name') ? [{ name: dir }, { id: 'asc' }] : [{ lastActiveAt: { sort: dir, nulls: 'last' } }, { createdAt: 'desc' }];
     const rows = await prisma.agent.findMany({ where: { AND: and }, include, orderBy });
+    // full-test 15/11 AGENTS-13: « Nom » ignores the case and the accents (Postgres sorted capitals first)
+    if (sort.endsWith('name')) rows.sort((x, y) => x.name.localeCompare(y.name, locale, { sensitivity: 'base', numeric: true }) * (dir === 'asc' ? 1 : -1) || x.id.localeCompare(y.id));
     return this.present(rows, locale);
   }
 
@@ -714,7 +717,10 @@ export class AgentService implements OnModuleInit {
         results.push({ id, ok: true });
       } catch (e) {
         if (!(e instanceof AppException)) throw e;
-        results.push({ id, ok: false, error: { code: e.code, message: this.i18n.t(ctx.locale, `error.${e.code}`, e.params), params: e.params, ref: ctx.ref } });
+        // full-test 15/11 AGENTS-12: « not in this state » is said as it is (the generic CONFLICT text invited a useless reload)
+        const reason = e.code === 'CONFLICT' ? (e.details as { reason?: unknown } | undefined)?.reason : undefined;
+        const message = reason === 'AGENT_NOT_ACTIVE' || reason === 'AGENT_NOT_PAUSED' ? this.i18n.t(ctx.locale, agentTextKey(`bulk.${reason === 'AGENT_NOT_ACTIVE' ? 'notActive' : 'notPaused'}`)) : this.i18n.t(ctx.locale, `error.${e.code}`, e.params);
+        results.push({ id, ok: false, error: { code: e.code, message, params: e.params, ref: ctx.ref } });
       }
     }
     return { results };
@@ -758,7 +764,8 @@ export class AgentService implements OnModuleInit {
       prisma.product.count({ where: scope }),
       prisma.product.count({ where: { AND: [scope, { images: { none: {} } }] } }),
       prisma.deliveryFeeRule.count({ where: { isActive: true } }),
-      prisma.product.count({ where: { deletedAt: null, isActive: true, moderationStatus: 'pending', ...(a.sellAllProducts ? {} : { agentProducts: { some: { agentId: id } } }) } }),
+      // full-test 15/11 AI-CHAT-17: the pending products the agent would sell (its own scope: list, categories or all) — not the whole shop's
+      prisma.product.count({ where: { deletedAt: null, isActive: true, moderationStatus: 'pending', ...(!a.sellAllProducts ? { agentProducts: { some: { agentId: id } } } : a.catalogScope === 'categories' ? { categoryId: { in: a.scopeCategoryIds } } : {}) } }),
       this.credits.balance(t.workspaceId),
       t.userId ? prisma.user.findUnique({ where: { id: t.userId }, select: { emailVerifiedAt: true } }) : null,
     ]);
@@ -768,7 +775,7 @@ export class AgentService implements OnModuleInit {
       { key: 'catalog', ok: products > 0, label: label('catalog'), count: products, link: '/products', blocking: false },
       { key: 'productsWithoutPhoto', ok: withoutPhoto === 0, label: label('productsWithoutPhoto'), count: withoutPhoto, link: '/products', blocking: false },
       { key: 'feeGrid', ok: fees > 0, label: label('feeGrid'), count: fees, link: '/delivery/fees', blocking: false },
-      { key: 'policies', ok: ['delivery', 'payment', 'returns'].every((k) => (policies[k] ?? '').trim().length > 0), label: label('policies'), blocking: false },
+      { key: 'policies', ok: ['delivery', 'payment', 'returns'].every((k) => (policies[k] ?? '').trim().length > 0), label: label('policies'), count: ['delivery', 'payment', 'returns', 'hours'].filter((k) => (policies[k] ?? '').trim()).length, total: 4, blocking: false },
       { key: 'channels', ok: a.channels.length > 0, label: label('channels'), count: a.channels.length, link: '/channels', blocking: true },
       { key: 'emailVerified', ok: !!user?.emailVerifiedAt, label: label('emailVerified'), link: '/settings/security', blocking: true },
       { key: 'credits', ok: !balance.exhausted, label: label('credits'), count: balance.unlimited ? -1 : balance.total, link: '/settings/credits', blocking: false },

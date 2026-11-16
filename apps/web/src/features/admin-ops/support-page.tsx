@@ -14,6 +14,7 @@ import { AdminFilterBar, AdminListBody, type AdminFilter } from '@/features/admi
 import { usePlatform } from '@/features/admin/platform';
 import { Link, useRouter } from '@/i18n/navigation';
 import { toMenuActions } from '@/lib/actions';
+import { withAdminReasons } from '@/features/admin/reasons';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import type { ApiQuery, ListSpec } from '@/lib/list-state';
@@ -101,7 +102,7 @@ export function SupportPage() {
     <ActionsMenu
       label={t('action.actions')}
       heading={`#${r.number}`}
-      actions={toMenuActions(
+      actions={withAdminReasons(toMenuActions(
         r.actions,
         {
           reply: { label: t('adminSupport.action.reply'), onSelect: () => list.openSheet(r.id), hidden: !write.allowed },
@@ -113,7 +114,7 @@ export function SupportPage() {
           open_workspace: { label: t('adminSupport.context.openWorkspace'), onSelect: () => r.workspace && router.push(`/admin/workspaces?sheet=${r.workspace.id}`), local: !!r.workspace },
         },
         t,
-      ).map((a) => (write.offline && a.key !== 'open' && a.key !== 'open_workspace' ? { ...a, onSelect: undefined, disabledReason: t('banner.offline') } : a))}
+      ), r.actions, t).map((a) => (write.offline && a.key !== 'open' && a.key !== 'open_workspace' ? { ...a, onSelect: undefined, disabledReason: t('banner.offline') } : a))}
     />
   );
 
@@ -193,6 +194,7 @@ export function SupportPage() {
       <PillTabs tabs={tabs} value={tab} onChange={(k) => list.set({ tab: k === 'open' ? null : k, page: 1, sheet: null })} label={t('adminSupport.tab.label')} />
       <AdminFilterBar list={list} search={t('adminSupport.search')} quick={quick} count={tickets.data ? t('adminSupport.count', { count: tickets.data.total }) : undefined} />
       <AdminListBody<AdminTicketDto>
+        filters={quick}
         query={tickets}
         list={{ ...list, filtered: list.activeCount > 0 || s.q.trim().length >= 2 }}
         columns={columns}

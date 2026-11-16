@@ -15,7 +15,7 @@ import { useAgents } from '@/features/agents/api';
 import { ListPagination } from '@/features/catalog/ui';
 import { Section, SettingsPage } from '@/features/settings/common';
 import { Link } from '@/i18n/navigation';
-import { useLocaleCode, useT } from '@/lib/i18n';
+import { useLocaleCode, useT, type TFunction } from '@/lib/i18n';
 import { filterList, filterText, type ApiQuery, type ListSpec } from '@/lib/list-state';
 import { useSession } from '@/lib/session';
 import { useListState } from '@/lib/use-list-state';
@@ -229,7 +229,7 @@ function Ledger() {
       <div className="flex flex-col gap-3" data-testid="credits-ledger">
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('action.filters')}>
           <FilterDropdown label={from || to ? `${from ? day(from) : '…'} → ${to ? day(to) : '…'}` : t('credits.filter.period')} count={from || to ? 1 : undefined}>
-            <FilterDateRange from={from} to={to} onChange={(r) => list.setFilters({ from: r.from || null, to: r.to || null })} labels={{ from: t('common.from'), to: t('common.to'), presets: t('credits.filter.period') }} />
+            <FilterDateRange from={from} to={to} onChange={(r) => list.setFilters({ from: r.from || null, to: r.to || null })} labels={{ from: t('common.from'), to: t('common.to'), presets: t('credits.filter.period'), invalid: t('error.INVALID_DATE_RANGE') }} />
           </FilterDropdown>
           <FilterDropdown label={t('credits.filter.action')} count={actions.length || undefined}>
             <FilterChips multiple label={t('credits.filter.action')} options={actionOptions} value={actions} onChange={(next) => list.setFilter('action', next.length ? next : null)} />
@@ -287,6 +287,34 @@ function Ledger() {
 
 const CREDIT_REASONS = ['trial', 'renewal', 'dev'] as const;
 
+/**
+ * full-test 15/11 SETTINGS-06: reasons the server writes as `prefix:value` codes (`pack:pack-500`, `upgrade:pro`,
+ * `promo:CODE`, `referral:CODE`, `store_refund:…`, `admin:<type>:<text>`) read as merchant sentences, never as slugs.
+ */
+function codedReason(raw: string, credits: number, t: TFunction): string {
+  const m = /^([a-z_]+):(.*)$/.exec(raw);
+  if (!m) return raw;
+  const [, prefix, rest] = m as unknown as [string, string, string];
+  switch (prefix) {
+    case 'pack':
+      return t('credits.reason.pack', { credits: formatNumber(Math.abs(credits)) });
+    case 'store_refund':
+      return t('credits.reason.storeRefund');
+    case 'upgrade':
+      return t('credits.reason.upgrade');
+    case 'promo':
+      return t('credits.reason.promo', { code: rest });
+    case 'referral':
+      return t('credits.reason.referral', { code: rest });
+    case 'admin': {
+      const note = rest.replace(/^[a-z_]+:/, '').trim();
+      return note ? `${t('credits.reason.admin')} · ${note}` : t('credits.reason.admin');
+    }
+    default:
+      return raw;
+  }
+}
+
 function LedgerLine({ row: r, locale }: { row: LedgerRow; locale: AppLocale }) {
   const t = useT();
   const { can } = useSession();
@@ -295,7 +323,7 @@ function LedgerLine({ row: r, locale }: { row: LedgerRow; locale: AppLocale }) {
   // the API falls back to the action code when a row has no reason (`detail = reason ?? action`): the pill already says it
   const raw = r.detail && r.detail !== r.action ? r.detail : '';
   // reasons written by the server as codes (trial grant, plan renewal, dev adjustment) get their label
-  const detail = raw && (CREDIT_REASONS as readonly string[]).includes(raw) ? t(`credits.reason.${raw as (typeof CREDIT_REASONS)[number]}`) : raw;
+  const detail = raw && (CREDIT_REASONS as readonly string[]).includes(raw) ? t(`credits.reason.${raw as (typeof CREDIT_REASONS)[number]}`) : codedReason(raw, r.credits, t);
   return (
     <Tr data-testid="ledger-row" data-action={r.action} data-bucket={r.bucket} className={cn(muted && 'text-text-muted')}>
       <Td className="whitespace-nowrap">
@@ -306,16 +334,20 @@ function LedgerLine({ row: r, locale }: { row: LedgerRow; locale: AppLocale }) {
           <StatusPill enumKey="Credit.action" value={r.action} className="!rounded-[4px]">
             {key ? t(key) : r.action}
           </StatusPill>
-          {r.bucket === 'pack' ? <span className="ts-label-micro text-text-muted">{t('enum.Credits.pack')}</span> : null}
+          {/* SETTINGS-06: the pill of a pack purchase / refund already says PACK */}
+          {r.bucket === 'pack' && r.action !== 'pack_purchase' && r.action !== 'store_refund' ? <span className="ts-label-micro text-text-muted">{t('enum.Credits.pack')}</span> : null}
         </span>
       </Td>
       <Td className="max-w-[28rem]">
         <span dir="auto" className="break-words">
-          {r.agent ? `${r.agent.name}${detail ? ' · ' : ''}` : ''}
+          {r.agent ? <bdi>{r.agent.name}</bdi> : null}
+          {r.agent && detail ? ' · ' : ''}
           {detail || (r.agent ? '' : '—')}
         </span>
+        {/* SETTINGS-06: a space (and a bidi isolate) between the agent name and the link — « pedro 2CONVERSATION › » */}
+        {r.conversationId && can('inbox.read') ? ' ' : null}
         {r.conversationId && can('inbox.read') ? (
-          <Link href={`/inbox/${r.conversationId}`} className="ms-2 ts-label-meta uppercase text-accent-inbound hover:underline">
+          <Link href={`/inbox/${r.conversationId}`} className="ms-1 inline-block ts-label-meta uppercase text-accent-inbound hover:underline">
             {t('credits.ledger.conversation')}
           </Link>
         ) : null}

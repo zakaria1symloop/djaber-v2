@@ -133,7 +133,7 @@ async function publicCall<T>(path: string, locale: string, init: { method?: 'GET
 }
 export const sharedTestApi = {
   get: (token: string, locale: string) => publicCall<SharedTest>(`/agent-test/${encodeURIComponent(token)}`, locale),
-  send: (token: string, locale: string, b: { text: string; history?: { role: 'user' | 'assistant'; text: string }[] }) => publicCall<SharedReply>(`/agent-test/${encodeURIComponent(token)}/messages`, locale, { method: 'POST', body: b }),
+  send: (token: string, locale: string, b: { text: string; history?: { role: 'user' | 'assistant'; text: string }[]; sessionId?: string }) => publicCall<SharedReply>(`/agent-test/${encodeURIComponent(token)}/messages`, locale, { method: 'POST', body: b }),
 };
 
 /* ---------- cache keys: every key starts with the workspace id ---------- */

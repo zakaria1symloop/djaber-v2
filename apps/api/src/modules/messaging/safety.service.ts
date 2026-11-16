@@ -183,7 +183,7 @@ export class SafetyService {
   }
 
   /** `POST /conversations/:id/block` — keyed on the client, its phone and the sender identity of the thread. */
-  async blockConversation(conversationId: string, o: { reason: BlockReason; note?: string | null; reportId?: string | null }, tx?: Tx): Promise<CustomerBlock> {
+  async blockConversation(conversationId: string, o: { reason?: BlockReason | null; note?: string | null; reportId?: string | null }, tx?: Tx): Promise<CustomerBlock> {
     const run = async (db: Tx) => {
       const c = await db.conversation.findFirst({ where: { id: conversationId, deletedAt: null }, include: { client: true } });
       if (!c) throw notFound();

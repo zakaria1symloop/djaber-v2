@@ -14,7 +14,7 @@ import { useSession } from '@/lib/session';
 import { useAiRoutes } from '../api';
 import type { CapabilityKey } from '../contracts';
 import { CAPABILITY_KEYS, HANDOFF_RULES } from '../contracts';
-import { CLOSING_MAX, DELAY_MAX, DELAY_MIN, KEYWORD_MAX_LENGTH, KEYWORDS_MAX, ruleOn, setOrderField, setRule, TEMPLATE_MAX } from '../logic';
+import { CLOSING_MAX, DELAY_MAX, DELAY_MIN, insertToken, KEYWORD_MAX_LENGTH, KEYWORDS_MAX, ruleOn, setOrderField, setRule, TEMPLATE_MAX } from '../logic';
 import { ModelBadge } from '../ui';
 import { issueText, type SectionProps } from './identity';
 
@@ -43,11 +43,11 @@ export function BehaviourFields({ draft: d, set, errors, readOnly, badge, inTunn
     const token = `{${p}}`;
     const start = el ? el.selectionStart : value.length;
     const end = el ? el.selectionEnd : value.length;
-    const next = `${value.slice(0, start)}${token}${value.slice(end)}`;
+    const { next, caret } = insertToken(value, start, end, token);
     set({ productCardTemplate: next });
     window.requestAnimationFrame(() => {
       el?.focus();
-      el?.setSelectionRange(start + token.length, start + token.length);
+      el?.setSelectionRange(caret, caret);
     });
   };
 
@@ -152,7 +152,7 @@ export function BehaviourFields({ draft: d, set, errors, readOnly, badge, inTunn
       <FormSection title={t('agents.template.title')} description={t('agents.template.description')} data-section="template">
         <div className="grid gap-4 lg:grid-cols-2">
           <Field label={t('agents.template.label')} htmlFor="agent-template" error={issueText(t, errors.productCardTemplate)} hint={t('agents.template.hint')}>
-            <Textarea ref={templateRef} id="agent-template" dir="auto" value={d.productCardTemplate} maxLength={TEMPLATE_MAX + 100} disabled={readOnly} placeholder="{name} — {price}" aria-invalid={!!errors.productCardTemplate || undefined} onChange={(e) => set({ productCardTemplate: e.target.value })} />
+            <Textarea ref={templateRef} id="agent-template" dir="auto" value={d.productCardTemplate} maxLength={TEMPLATE_MAX} disabled={readOnly} placeholder="{name} — {price}" aria-invalid={!!errors.productCardTemplate || undefined} onChange={(e) => set({ productCardTemplate: e.target.value })} />
             {/* recette 09/11 (Badro): the placeholders are picked, not typed — one click writes « {price} » where the cursor is */}
             <div role="group" aria-label={t('agents.template.insert')} className="flex flex-wrap items-center gap-1.5" data-testid="template-placeholders">
               <span className="ts-label-meta text-text-muted">{t('agents.template.insert')}</span>
@@ -179,7 +179,7 @@ export function BehaviourFields({ draft: d, set, errors, readOnly, badge, inTunn
           </div>
         </div>
         <Field label={t('agents.closing.label')} htmlFor="agent-closing" error={issueText(t, errors.closingInstructions)} hint={t('agents.closing.hint')}>
-          <Textarea id="agent-closing" dir="auto" className="!min-h-16" value={d.closingInstructions} maxLength={CLOSING_MAX + 100} disabled={readOnly} aria-invalid={!!errors.closingInstructions || undefined} onChange={(e) => set({ closingInstructions: e.target.value })} />
+          <Textarea id="agent-closing" dir="auto" className="!min-h-16" value={d.closingInstructions} maxLength={CLOSING_MAX} disabled={readOnly} aria-invalid={!!errors.closingInstructions || undefined} onChange={(e) => set({ closingInstructions: e.target.value })} />
         </Field>
       </FormSection>
 

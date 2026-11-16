@@ -65,7 +65,8 @@ export function LegalView({ entry, previewToken }: { entry: CmsEntryDto; preview
           {entry.versions.map((v) => (
             <li key={v.version} className={cn('rounded-[4px] border px-2 py-1 ts-label-meta', v.version === entry.version ? 'border-line-lit text-text-primary' : 'border-line-edge text-text-muted')}>
               {t('public.legal.historyItem', { version: v.version, date: formatDate(v.publishedAt, locale) })}
-              {v.version === entry.version ? <span className="ms-1.5 text-signal-live">· {t('public.legal.current')}</span> : null}
+              {/* full-test 15/11 PUBLIC-16: a real space before « · » (« 14 oct. 2026· en vigueur ») */}
+              {v.version === entry.version ? <span className="text-signal-live">{` · ${t('public.legal.current')}`}</span> : null}
             </li>
           ))}
         </ul>

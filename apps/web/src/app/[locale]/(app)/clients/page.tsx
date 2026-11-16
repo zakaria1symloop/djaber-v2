@@ -9,6 +9,7 @@ import { Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AppPage } from '@/components/app-page';
 import { ListFilteredEmpty, ListLoading, QueryError } from '@/components/global-states';
+import { JobParamBanner } from '@/components/job-param-banner';
 import { ListPagination } from '@/features/catalog/ui';
 import { clientsApi, useClients, useClientsExport, useClientTags } from '@/features/clients/api';
 import { ClientsBulkBar } from '@/features/clients/bulk';
@@ -60,7 +61,7 @@ export default function ClientsPage() {
     { key: 'phone', header: t('common.phone'), cell: (r) => <Phone value={r.phone} /> },
     { key: 'source', header: t('common.source'), hideBelow: 'lg', cell: (r) => <ClientSourcePill source={r.source} /> },
     { key: 'orders', header: t('clients.col.orders'), align: 'end', cell: (r) => <Ltr className="ts-numeral-m tabular-nums">{formatNumber(r.orderCount)}</Ltr> },
-    { key: 'spent', header: t('clients.col.spent'), sortKey: 'totalSpent', align: 'end', cell: (r) => <Ltr className="whitespace-nowrap tabular-nums text-text-secondary">{r.totalSpent ? formatMoney(r.totalSpent) : '0'}</Ltr> },
+    { key: 'spent', header: t('clients.col.spent'), sortKey: 'totalSpent', align: 'end', cell: (r) => <Ltr className="whitespace-nowrap tabular-nums text-text-secondary">{formatMoney(r.totalSpent)}</Ltr> },
     { key: 'last', header: t('clients.col.last'), sortKey: 'lastOrderAt', cell: (r) => <ShortDate iso={r.lastOrderAt} /> },
     {
       key: 'tags',
@@ -69,7 +70,8 @@ export default function ClientsPage() {
       cell: (r) => (
         <span className="flex flex-wrap items-center gap-1">
           <TagChips tags={r.tags} max={2} />
-          {r.pill && r.pill !== 'reliable' && r.pill !== 'unknown' ? <ClientPillView client={r} /> : null}
+          {/* full-test CLIENTS-16: the same pills as the phone cards and the sheet (FIABLE / INCONNU included) */}
+          {r.pill ? <ClientPillView client={r} /> : null}
         </span>
       ),
     },
@@ -84,7 +86,6 @@ export default function ClientsPage() {
   return (
     <AppPage
       wide
-      eyebrow={t('clients.eyebrow')}
       title={t('nav.clients')}
       description={summary}
       permission="clients.read"
@@ -99,6 +100,7 @@ export default function ClientsPage() {
         </>
       }
     >
+      <JobParamBanner />
       <div className="flex flex-wrap items-center gap-2">
         <div className="min-w-0 flex-1">
           <ClientsFilterBar list={list} tags={tags} onOpenPanel={() => setPanel(true)} />
@@ -137,7 +139,7 @@ export default function ClientsPage() {
           ) : null}
         </Card>
       ) : empty ? (
-        <ListFilteredEmpty entity={t('clients.entity')} filters={t('clients.list.currentFilters')} onClear={list.clear} />
+        <ListFilteredEmpty entity={t('clients.entity')} filters={list.state.q} onClear={list.clear} />
       ) : (
         <DataTable<ClientListItem>
           label={t('nav.clients')}

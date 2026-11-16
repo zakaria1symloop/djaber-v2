@@ -257,12 +257,12 @@ function PlanCardFor({ plan, sub, cycle, owner, onChange, onCancel }: { plan: Pl
       badge={badge}
       current={current}
       note={note}
-      action={<PlanAction cta={cta} plan={plan} owner={owner} onChange={onChange} onCancel={onCancel} />}
+      action={<PlanAction cta={cta} plan={plan} owner={owner} onChange={onChange} onCancel={onCancel} switchCycle={current && isPaidSubscription(sub) && sub.billingCycle !== cycle ? cycle : null} />}
     />
   );
 }
 
-function PlanAction({ cta, plan, owner, onChange, onCancel }: { cta: PlanCta; plan: Plan; owner: boolean; onChange: () => void; onCancel: () => void }) {
+function PlanAction({ cta, plan, owner, onChange, onCancel, switchCycle }: { cta: PlanCta; plan: Plan; owner: boolean; onChange: () => void; onCancel: () => void; switchCycle?: Cycle | null }) {
   const t = useT();
   const locale = useLocaleCode() as AppLocale;
   const ownerReason = owner ? undefined : t('billing.ownerOnly');
@@ -297,7 +297,8 @@ function PlanAction({ cta, plan, owner, onChange, onCancel }: { cta: PlanCta; pl
     case 'change':
       return (
         <Button className="w-full" variant={cta.direction === 'downgrade' ? 'secondary' : 'primary'} onClick={onChange} disabled={!owner} disabledReason={ownerReason} data-testid={testid} data-cta={cta.direction}>
-          {t('action.upgrade', { plan: plan.name })}
+          {/* full-test 15/11 SETTINGS-15: the current plan in the other cycle reads « Passer à l'annuel / au mensuel » */}
+          {switchCycle ? t(switchCycle === 'yearly' ? 'billing.plan.cta.toYearly' : 'billing.plan.cta.toMonthly') : t('action.upgrade', { plan: plan.name })}
         </Button>
       );
   }

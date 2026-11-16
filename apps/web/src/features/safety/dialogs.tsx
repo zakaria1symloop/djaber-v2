@@ -57,7 +57,7 @@ export function BlockCustomerDialog({
   const [error, setError] = useState<string | null>(null);
   const block = useMutation({
     mutationFn: () =>
-      clientId ? safetyApi.createBlock({ clientId, ...(reason ? { reason } : {}), ...(note.trim() ? { note: note.trim() } : {}) }) : safetyApi.blockConversation(conversationId!, { reason: reason || 'other', note: note.trim() || undefined }),
+      clientId ? safetyApi.createBlock({ clientId, ...(reason ? { reason } : {}), ...(note.trim() ? { note: note.trim() } : {}) }) : safetyApi.blockConversation(conversationId!, { ...(reason ? { reason } : {}), note: note.trim() || undefined }),
   });
   useEffect(() => {
     if (open) {

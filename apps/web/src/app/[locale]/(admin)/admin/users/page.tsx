@@ -64,6 +64,7 @@ export default function AdminUsersPage() {
       <AdminFilterBar list={list} search={t('admin.users.search')} quick={quick} count={query.data ? t('admin.users.count', { count: query.data.total }) : undefined} />
       <AdminListBody
         testId="users-list"
+        filters={quick}
         query={query}
         list={list}
         columns={columns}

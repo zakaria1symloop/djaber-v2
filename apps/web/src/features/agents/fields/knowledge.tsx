@@ -108,7 +108,7 @@ export function KnowledgeFields({ draft: d, set, errors, readOnly, badge, inTunn
                 {t(`agents.policies.${k}`)}
               </label>
               <div>
-                <Input id={`policy-${k}`} dir="auto" value={d.policies[k] ?? ''} maxLength={POLICY_MAX + 50} disabled={readOnly} placeholder={t(`agents.policies.${k}.placeholder`)} aria-invalid={!!issue || undefined} onChange={(e) => set({ policies: { ...d.policies, [k]: e.target.value } })} />
+                <Input id={`policy-${k}`} dir="auto" value={d.policies[k] ?? ''} maxLength={POLICY_MAX} disabled={readOnly} placeholder={t(`agents.policies.${k}.placeholder`)} aria-invalid={!!issue || undefined} onChange={(e) => set({ policies: { ...d.policies, [k]: e.target.value } })} />
                 {issue ? (
                   <p role="alert" className="mt-1 text-[12px] text-accent-alert">
                     {issueText(t, issue)}

@@ -151,5 +151,8 @@
   "public.captcha.loading": "Vérification anti-robot…",
   "public.captcha.error": "La vérification anti-robot n’a pas pu se charger. Fermez puis rouvrez la fenêtre.",
   "public.contact.subject": "Contact Djaber",
-  "public.contact.subjectDeletion": "Suppression de compte"
+  "public.contact.subjectDeletion": "Suppression de compte",
+  "public.deletion.invalid.title": "Ce lien n’est pas valide.",
+  "public.deletion.invalid.text": "Le lien est incomplet ou mal copié. Refaites une demande pour recevoir un nouveau lien (valable 24 h).",
+  "public.pricing.cta.member": "Choisir ce plan"
 }

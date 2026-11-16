@@ -24,7 +24,7 @@ test('NTF-01 empty state: "Vous êtes à jour ✓", server count 0, "Tout marque
   await page.goto('/fr/notifications');
   await expect(page.getByRole('heading', { name: 'Notifications', level: 1 })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Vous êtes à jour ✓' })).toBeVisible();
-  await expect(page.getByTestId('unread-count')).toHaveText('0 non lues · comptage serveur');
+  await expect(page.getByTestId('unread-count')).toHaveText('0 non lues');
   await expect(page.getByTestId('read-all')).toBeDisabled();
   // the 13 chips of the frame
   const chips = page.getByRole('group', { name: 'Filtrer les notifications' });
@@ -115,7 +115,7 @@ test('AT-NTF-03 "Tout marquer comme lu": server count 0, no unread dot, the "Non
   await page.goto('/fr/notifications');
   await page.getByTestId('read-all').click();
   await expect(page.getByText('Toutes les notifications sont marquées comme lues')).toBeVisible();
-  await expect(page.getByTestId('unread-count')).toHaveText('0 non lues · comptage serveur');
+  await expect(page.getByTestId('unread-count')).toHaveText('0 non lues');
   await expect(page.getByTestId('notifications').locator('li[data-unread=true]')).toHaveCount(0);
   expect(await unreadCount(request, account)).toBe(0);
   await expect(page.getByTestId('read-all')).toBeDisabled();

@@ -1,4 +1,6 @@
 {
+ "agent.api.bulk.notActive": "يمكن إيقاف الوكيل النشط فقط مؤقتًا (هذا الوكيل مسودة أو متوقف مسبقًا).",
+ "agent.api.bulk.notPaused": "يمكن استئناف الوكيل المتوقف فقط.",
  "agent.api.copySuffix": "(نسخة)",
  "agent.api.defaultName": "وكيل جديد",
  "agent.api.generatedName": "وكيل {page}",

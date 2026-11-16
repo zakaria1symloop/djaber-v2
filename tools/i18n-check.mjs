@@ -14,7 +14,9 @@ for (const l of ['fr', 'ar', 'en']) {
   for (const [code, text] of Object.entries(errors)) cat[l][`error.${code}`] = text;
 }
 const problems = [];
-const ph = (s) => [...String(s).matchAll(/\{(\w+)[,}]/g)].map((m) => m[1]).sort().join(',');
+// the set of placeholder names (a language with more plural forms repeats them: Arabic two / few / many)
+// (a plural branch « one {impression} » is text, not a placeholder)
+const ph = (s) => [...new Set([...String(s).matchAll(/(?<!(?:zero|one|two|few|many|other|=\d+)\s*)\{(\w+)[,}]/g)].map((m) => m[1]))].sort().join(',');
 for (const key of Object.keys(cat.fr)) {
   for (const l of ['ar', 'en']) {
     const v = cat[l][key];
@@ -30,7 +32,7 @@ const walk = (d, out = []) => {
     const p = join(d, f);
     if (statSync(p).isDirectory()) {
       if (f !== 'node_modules' && f !== '.next') walk(p, out);
-    } else if (/\.(tsx?|mts)$/.test(f)) out.push(p);
+    } else if (/\.(tsx?|mts)$/.test(f) && !/\.spec\.tsx?$/.test(f)) out.push(p); // tests use made-up keys
   }
   return out;
 };

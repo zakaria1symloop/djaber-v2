@@ -194,7 +194,7 @@ export function SheetsTab() {
             </Row>
             <Row label={t('settings.integrations.sheets.row.rows')}>
               <span data-testid="sheets-rows" className="tabular-nums">
-                {t('settings.integrations.sheets.rows', { count: formatNumber(rowsSynced) })}
+                {t('settings.integrations.sheets.rows', { count: rowsSynced, value: formatNumber(rowsSynced) })}
                 {live && live.pendingRows > 0 ? <span className="text-text-muted"> · {t('settings.integrations.sheets.pending', { count: formatNumber(live.pendingRows) })}</span> : null}
               </span>
             </Row>

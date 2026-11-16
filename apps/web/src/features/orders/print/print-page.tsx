@@ -38,7 +38,8 @@ export function slipProps(o: Order, shop: string | Shop, lang: Lang, withPrices:
   const s: Shop = typeof shop === 'string' ? { name: shop } : shop;
   const address = slipAddress(o.address, tr);
   const phone = [formatPhoneDz(o.clientPhone), o.clientPhone2 ? formatPhoneDz(o.clientPhone2) : null].filter(Boolean).join(' / ');
-  const tracking = o.shipments[0]?.publicTrackingUrl;
+  // the parcel in progress only — never the link of a cancelled parcel (same rule as the PDF; full-test ORDERS-24)
+  const tracking = o.shipments.find((x) => x.status !== 'cancelled')?.publicTrackingUrl;
   return {
     shop: s.name,
     shopLogoUrl: s.logoUrl ?? null,

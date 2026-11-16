@@ -11,9 +11,10 @@ export const queueApi = {
   counts: () => api<ConversationCounts>('/conversations/counts'),
   conversation: (id: string) => api<ConversationView>(`/conversations/${id}`),
   patch: (id: string, body: UpdateConversationInput) => api<ConversationView>(`/conversations/${id}`, { method: 'PATCH', body }),
-  insights: async (): Promise<InsightsResult> => {
+  /** full-test 15/11 HOME-07: « Charger plus » asks 50 then 100 (the page sizes the API serves) */
+  insights: async (pageSize: 25 | 50 | 100 = 25): Promise<InsightsResult> => {
     try {
-      const r = await apiRaw<AgentInsight[]>('/agent-insights', { query: { status: 'pending', pageSize: 25 } });
+      const r = await apiRaw<AgentInsight[]>('/agent-insights', { query: { status: 'pending', pageSize } });
       const rows = Array.isArray(r.data) ? r.data : [];
       return { available: true, rows, total: r.meta?.total ?? rows.length };
     } catch (e) {

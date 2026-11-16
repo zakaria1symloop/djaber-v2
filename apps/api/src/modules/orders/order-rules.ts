@@ -136,6 +136,7 @@ export const transitionPlan = (from: OrderStatusName, to: OrderStatusName, o: { 
       plan.aggregates = true;
       break;
     case 'returned':
+      plan.clearCallback = true;
       plan.deliveryStatus = 'returned';
       plan.shipment = 'mark_returned';
       plan.stock = o.restoreStock === false ? 'loss_trail' : 'restore_return';

@@ -58,6 +58,9 @@ export function GenerateVariantsDialog({
   const total = comboCount(attributes);
   const { kept, created } = useMemo(() => splitExisting(variantMatrix(attributes), existing), [attributes, existing]);
   const overLimit = total > VARIANTS_MAX || exceedsVariantLimit(existing.length, created.length);
+  // the matrix stops at VARIANTS_MAX + 1 rows: over the limit the real number of combinations is said (11 × 11 = 121,
+  // not « 101 » — full-test 15/11 PRODUCTS-14)
+  const shownCount = total > VARIANTS_MAX ? total : created.length;
   const badLine = (i: number) => lines[i]!.trim() !== '' && !parseAttributeLine(lines[i]!);
   const priceValue = digitsToInt(price);
   const stockValue = digitsToInt(stock);
@@ -99,7 +102,7 @@ export function GenerateVariantsDialog({
             {t('action.cancel')}
           </Button>
           <Button variant="primary" onClick={submit} loading={busy} disabledReason={overLimit ? t('error.VARIANT_LIMIT') : undefined}>
-            {t('products.variants.generate.submit', { count: created.length })}
+            {t('products.variants.generate.submit', { count: shownCount })}
           </Button>
         </>
       }
@@ -147,7 +150,7 @@ export function GenerateVariantsDialog({
           <FormAlert>{t('error.VARIANT_LIMIT')}</FormAlert>
         ) : total > 0 ? (
           <p className="rounded-card border border-line-edge bg-ink-raised px-3 py-2.5 ts-label-meta text-text-secondary" data-testid="generate-preview">
-            {t('products.variants.generate.preview', { count: created.length, sample })}
+            {t('products.variants.generate.preview', { count: shownCount, sample })}
             {kept.length ? ` ${t('products.variants.generate.kept', { count: kept.length, names: kept.slice(0, 3).map((k) => k.name).join(', ') })}` : ''} {t('products.variants.generate.max', { max: VARIANTS_MAX })}
           </p>
         ) : null}

@@ -17,6 +17,7 @@ const view = (r: QuickReply) => ({
 });
 const isUniqueViolation = (e: unknown) => (e as { code?: string } | null)?.code === 'P2002';
 const titleTaken = () => new AppException('QUICK_REPLY_TITLE_TAKEN', {}, { title: 'validation.invalid' });
+const shortcutTaken = () => new AppException('QUICK_REPLY_SHORTCUT_TAKEN', {}, { shortcut: 'validation.invalid' });
 
 @Injectable()
 export class QuickReplyService {
@@ -30,6 +31,7 @@ export class QuickReplyService {
     // a quick reply is sent to customers: it defaults to the shop's language, not the member's screen (07 §4 Language source)
     const locale = input.locale ?? TenantContext.get().locale;
     if (await this.repo.titleExists(input.title, locale)) throw titleTaken();
+    if (input.shortcut && (await this.repo.shortcutExists(input.shortcut))) throw shortcutTaken();
     const sortOrder = (await this.repo.maxSortOrder()) + 1;
     try {
       return view(await this.repo.create({ title: input.title, body: input.body, shortcut: input.shortcut || null, locale, sortOrder }));
@@ -44,6 +46,7 @@ export class QuickReplyService {
     const locale = input.locale ?? current.locale;
     const title = input.title ?? current.title;
     if ((input.title !== undefined || input.locale !== undefined) && (await this.repo.titleExists(title, locale, id))) throw titleTaken();
+    if (input.shortcut && (await this.repo.shortcutExists(input.shortcut, id))) throw shortcutTaken();
     try {
       return view(
         await this.repo.update(id, {

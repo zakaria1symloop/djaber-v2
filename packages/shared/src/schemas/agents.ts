@@ -33,7 +33,7 @@ export const AGENT_FAQ_MAX_CHARS = 20_000;
 export const AGENT_RESPONSE_DELAY_MAX_S = 10;
 export const AGENT_DEFAULT_MAX_AMOUNT = 50_000;
 export const AGENT_HANDOFF_KEYWORDS_MAX = 30;
-/** AGT-07: playground turns per hour per workspace (also per shared test link). */
+/** AGT-07: playground turns per hour per workspace — the shared test links of the workspace count in it (full-test 15/11 AI-CHAT-10). */
 export const PLAYGROUND_TURNS_PER_HOUR = 60;
 export const PLAYGROUND_MAX_MESSAGES = 40;
 export const AGENT_TEST_LINK_HOURS = 24;
@@ -238,7 +238,12 @@ export const PlaygroundExportQuerySchema = z.object({ sessionId: z.string().trim
 export const TestLinkSchema = z.object({ expiresInHours: z.number().int().min(1).max(AGENT_TEST_LINK_HOURS).default(AGENT_TEST_LINK_HOURS) }).strict();
 /** Public shared playground: `POST /agent-test/:token/messages`. */
 export const SharedTestMessageSchema = z
-  .object({ text: z.string().trim().min(1, 'validation.required').max(2000, 'validation.length'), history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(2000) }).strict()).max(PLAYGROUND_MAX_MESSAGES).optional() })
+  .object({
+    text: z.string().trim().min(1, 'validation.required').max(2000, 'validation.length'),
+    history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(2000) }).strict()).max(PLAYGROUND_MAX_MESSAGES).optional(),
+    /** full-test 15/11 AI-CHAT-10: the visitor's own session (one per open page), so two colleagues never share one */
+    sessionId: z.string().trim().regex(/^[A-Za-z0-9-]{8,64}$/, 'validation.invalid').optional(),
+  })
   .strict();
 
 // --- generate from page (AGT-03) / page analysis (CHN-08) -----------------------------------------------------------------------
@@ -394,7 +399,8 @@ export type AgentPresetDto = {
 export type AgentVersionDto = { version: number; createdAt: string; createdBy: AgentUserRef; note: string | null; source: string; isCurrent: boolean; restoredFromVersion?: number | null };
 export type AgentVersionDetailDto = AgentVersionDto & { snapshot: Record<string, unknown> };
 export type AgentVersionDiffDto = { version: number; against: number; changes: { field: string; before: unknown; after: unknown }[] };
-export type AgentReadinessCheck = { key: string; ok: boolean; label: string; count?: number; link?: string; blocking?: boolean };
+/** `count` (−1 = unlimited) and `total` (policies n / 4) are shown beside the label (full-test 15/11 AGENTS-09). */
+export type AgentReadinessCheck = { key: string; ok: boolean; label: string; count?: number; total?: number; link?: string; blocking?: boolean };
 export type AgentReadinessDto = { ready: boolean; checks: AgentReadinessCheck[] };
 export type AgentFaqDto = { id: string; question: string; answer: string; source: 'manual' | 'page_extraction' | 'ai_suggested' | 'file_import'; askedCount: number | null; sortOrder: number; isActive: boolean; createdAt: string };
 export type PlaygroundCard = { productId: string; name: string; price: number; imageUrl: string | null; variantLabel?: string | null };
@@ -421,11 +427,14 @@ export type PlaygroundTurnDto = {
   promptSections: { key: string; chars: number }[];
   /** system texts the customer would also receive in production (welcome, out-of-hours, handoff) */
   systemMessages: { key: string; text: string }[];
+  /** full-test 15/11 AI-CHAT-11: playground turns of the workspace this hour, this one included (limit PLAYGROUND_TURNS_PER_HOUR) */
+  hourlyUsed?: number;
 };
 export type AgentTestScenarioDto = { scenarioKey: (typeof TestScenarioKeyValues)[number]; status: 'pass' | 'fail' | 'error' | null; summary: string | null; at: string | null; agentVersion: number | null };
 export type AgentTestLinkDto = { url: string; expiresAt: string };
 export type SharedTestInfoDto = { agentName: string; avatarUrl: string | null; expiresAt: string };
-export type SharedTestReplyDto = { reply: string; cards: PlaygroundCard[] };
+/** full-test 15/11 AI-CHAT-09: + the system texts a customer would also get (welcome, out of hours, handoff) */
+export type SharedTestReplyDto = { reply: string; cards: PlaygroundCard[]; systemMessages: { key: string; text: string }[] };
 export type AgentInsightDto = {
   id: string;
   agent: AgentRefView;

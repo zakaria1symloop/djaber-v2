@@ -43,5 +43,7 @@ export type PromptContext = {
   descriptionMax: number;
   /** A4: what is already known of the customer (client record + details given in the conversation) */
   customer?: { name?: string; phone?: string; phone2?: string; wilaya?: string; commune?: string; address?: string } | null;
+  /** full-test 15/11 AI-CHAT-05: what the customer chose for the order being taken (CURRENT ORDER line) */
+  chosen?: { productId: string; variantId: string | null; quantity: number | null }[] | null;
 };
 export type PromptSection = { key: string; text: string };

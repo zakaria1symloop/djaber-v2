@@ -38,6 +38,22 @@ describe('cancel — the reason says what blocks it in this state', () => {
   });
 });
 
+describe('self-delivered parcel (full-test DELIVERY-06): no courier pickup, no courier space', () => {
+  const failedManual = parcel({ provider: 'manual', status: 'failed', trackingNumber: 'QA-DLV-0001' });
+  it('a failed self-delivery can be cancelled or handed to a courier; « Relancer la livraison » is not offered', () => {
+    expect(cancelRefusal(failedManual, NO_CANCEL)).toBeNull();
+    expect(changeCourierRefusal(failedManual, NO_CANCEL)).toBeNull();
+    expect(isNotOfferedRefusal(retryDeliveryRefusal(failedManual, RETRY))).toBe(true);
+    const m = menu(failedManual);
+    expect(m.get('cancel')).toEqual({ key: 'cancel', enabled: true });
+    expect(m.get('change_courier')).toEqual({ key: 'change_courier', enabled: true });
+    expect(m.has('retry_delivery')).toBe(false);
+  });
+  it('delivered / returned / cancelled self-delivery ⇒ nothing to cancel', () => {
+    expect(isNotOfferedRefusal(cancelRefusal(parcel({ provider: 'manual', status: 'returned' }), CANCEL))).toBe(true);
+  });
+});
+
 describe('change courier', () => {
   it('failed send, queued parcel, manual parcel ⇒ allowed', () => {
     expect(changeCourierRefusal(parcel({ status: 'failed', trackingNumber: null }), NO_CANCEL)).toBeNull();

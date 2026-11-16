@@ -24,7 +24,7 @@ export function ClientPillView({ client }: { client: Parameters<typeof clientPil
 export function ClientSourcePill({ source }: { source: ClientListItem['source'] }) {
   const t = useT();
   return (
-    <StatusPill enumKey="Client.source" value={source} className="!rounded-[4px]">
+    <StatusPill enumKey="Client.source" value={source} className="!rounded-[4px] whitespace-nowrap">
       {t(`clients.source.${source}`)}
     </StatusPill>
   );

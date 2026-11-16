@@ -27,9 +27,23 @@ const M = 36;
 const ROW_H = 18;
 
 export const money = (n: number) => formatSlipAmount(n);
+
+/**
+ * full-test 15/11 SALES-CASH-20: the embedded fonts have no emoji / dingbats — pdfkit printed « ? » for « ✓ » and « 😀 ».
+ * Those signs are left out (letters of every script, digits and punctuation stay).
+ */
+const NO_GLYPH = /\p{Extended_Pictographic}|[\u2600-\u27BF\u2B00-\u2BFF\uFE0E\uFE0F\u200D\u20E3]|[\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}]/gu;
+export const printable = (text: string): string => (text ? text.replace(NO_GLYPH, '').replace(/[ \t]{2,}/g, ' ').trim() : text);
 export const dateLabel = (iso: string) => formatSlipDate(iso);
 
-export async function renderGdsDocument(d: GdsDocument): Promise<Buffer> {
+export async function renderGdsDocument(input: GdsDocument): Promise<Buffer> {
+  const d: GdsDocument = {
+    ...input,
+    shopName: printable(input.shopName),
+    meta: input.meta.map((m) => ({ label: m.label, value: printable(m.value) })),
+    rows: input.rows.map((row) => row.map(printable)),
+    note: input.note ? printable(input.note) : input.note,
+  };
   return new Promise<Buffer>((resolvePdf, reject) => {
     const doc = new PDFDocument({ autoFirstPage: false, margin: 0, lang: d.lang === 'ar' ? 'ar-DZ' : d.lang === 'fr' ? 'fr-DZ' : 'en', info: { Title: `${d.title} ${d.number}`, Creator: 'Djaber', Producer: 'Djaber' } });
     const chunks: Buffer[] = [];

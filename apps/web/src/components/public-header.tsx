@@ -11,6 +11,7 @@ import { Logo } from '@/components/shell/sidebar';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { PUBLIC_NAV } from '@/features/public/logic';
 import { useT } from '@/lib/i18n';
+import { useSession } from '@/lib/session';
 
 const isCurrent = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
@@ -19,6 +20,7 @@ export function PublicHeader({ actions, wideActions }: { actions?: ReactNode; wi
   const t = useT();
   const pathname = usePathname();
   const router = useRouter();
+  const signedIn = useSession().status === 'authenticated';
   return (
     <header className="border-b border-line-hairline" data-testid="public-header">
       <div className="mx-auto flex h-[88px] max-w-[1344px] items-center gap-4 px-4 md:px-12 lg:gap-[18px]">
@@ -57,12 +59,19 @@ export function PublicHeader({ actions, wideActions }: { actions?: ReactNode; wi
                   {t(n.key)}
                 </MenuItem>
               ))}
-              <MenuItem className="sm:hidden" onSelect={() => router.push('/login')}>
-                {t('public.header.login')}
-              </MenuItem>
+              {signedIn ? null : (
+                <MenuItem className="sm:hidden" onSelect={() => router.push('/login')}>
+                  {t('public.header.login')}
+                </MenuItem>
+              )}
             </Menu>
           </span>
-          {actions ?? (
+          {actions ?? (signedIn ? (
+            // full-test 15/11 PUBLIC-13: a signed-in member opens the app (as on /status), not « Se connecter / Essai gratuit »
+            <Link href="/home" className={buttonClass({ variant: 'primary', className: 'shrink-0 !whitespace-nowrap' })} data-testid="public-open-app">
+              {t('status.openApp')}
+            </Link>
+          ) : (
             <>
               <Link href="/login" className="whitespace-nowrap text-[14px] font-medium text-text-secondary hover:text-text-primary max-sm:hidden">
                 {t('public.header.login')}
@@ -71,7 +80,7 @@ export function PublicHeader({ actions, wideActions }: { actions?: ReactNode; wi
                 {t('public.header.trial')}
               </Link>
             </>
-          )}
+          ))}
         </div>
       </div>
     </header>

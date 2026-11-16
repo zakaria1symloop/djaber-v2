@@ -101,9 +101,12 @@ export type MessagesQuery = z.infer<typeof MessagesQuerySchema>;
 export const CreateNoteSchema = z.object({ body: z.string({ required_error: 'validation.required' }).trim().min(1, 'validation.required').max(NOTE_MAX_CHARS, 'validation.length') }).strict();
 export type CreateNoteInput = z.infer<typeof CreateNoteSchema>;
 
-/** `POST /conversations/:id/block` [FIG DLG "Bloquer le client"]. */
+/**
+ * `POST /conversations/:id/block` [FIG DLG "Bloquer le client"]. The motif is optional like on « Clients bloqués »
+ * (full-test 15/11 CHANNELS-INBOX-06: « Aucun motif » was sent as « Autre »).
+ */
 export const BlockConversationSchema = z
-  .object({ reason: z.enum(BlockReasonValues, { errorMap: () => ({ message: 'validation.required' }) }), note: z.string().trim().max(500, 'validation.length').optional() })
+  .object({ reason: z.enum(BlockReasonValues, { errorMap: () => ({ message: 'validation.invalid' }) }).optional(), note: z.string().trim().max(500, 'validation.length').optional() })
   .strict();
 export type BlockConversationInput = z.infer<typeof BlockConversationSchema>;
 

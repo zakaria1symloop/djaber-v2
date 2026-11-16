@@ -85,7 +85,7 @@ describe('structured output (§4.1)', () => {
 
 describe('tools (§4.2) and runs (§5)', () => {
   it('tool names are final; aliases resolve; every offered tool has a JSON Schema', () => {
-    expect(RUN_TOOLS).toEqual(['search_products', 'get_product', 'quote_delivery', 'lookup_order', 'add_faq_candidate', 'handoff_to_human', 'create_order', 'cancel_order']);
+    expect(RUN_TOOLS).toEqual(['search_products', 'get_product', 'check_availability', 'quote_delivery', 'lookup_order', 'add_faq_candidate', 'handoff_to_human', 'create_order', 'cancel_order']);
     expect([canonicalTool('get_shipping_fee'), canonicalTool('get_order_status'), canonicalTool('search_products')]).toEqual(['quote_delivery', 'lookup_order', 'search_products']);
     for (const name of RUN_TOOLS) expect(TOOL_DEFS[name]).toMatchObject({ name, parameters: { type: 'object' } });
     expect((TOOL_DEFS.create_order.parameters as any).required).toEqual(['clientName', 'clientPhone', 'wilayaId', 'items', 'customerConfirmed']);

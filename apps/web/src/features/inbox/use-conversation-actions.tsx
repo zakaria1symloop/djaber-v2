@@ -184,7 +184,7 @@ export function useConversationActions(o: { onDeleted?: (id: string) => void } =
       block: { label: t('inbox.menu.block'), onSelect: () => setToBlock(row), destructive: true, separated: true, hidden: row.blocked || hidden('block', can('safety.block')) },
       unblock: { label: t('action.unblock'), onSelect: () => void unblock(row), separated: true, hidden: !row.blocked || hidden('unblock', can('safety.manage')) },
       report: { label: t('inbox.menu.report'), onSelect: () => setToReport({ target: { type: 'customer', conversationId: row.id, clientId: row.client?.id }, name }), hidden: hidden('report', can('safety.block')) },
-      delete: { label: t('inbox.menu.delete'), onSelect: () => setToDelete(row), destructive: true, separated: true, hint: t('inbox.menu.deleteHint'), hidden: hidden('delete', can('inbox.delete')) },
+      delete: { label: t('inbox.menu.delete'), onSelect: () => setToDelete(row), destructive: true, separated: true, hidden: hidden('delete', can('inbox.delete')) }, // full-test 15/11 CHANNELS-INBOX-05: no « ADMIN · SOFT » hint
     };
     return toMenuActions(descriptors, handlers, t).map((a) => (a.key === 'open' ? { ...a, primary: true } : a));
   };

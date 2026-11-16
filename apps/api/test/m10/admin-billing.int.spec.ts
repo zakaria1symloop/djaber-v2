@@ -48,7 +48,7 @@ describe('ADM-04 plans', () => {
     expect((await fin.delete(`/admin/plans/${plan.id}`).expect(409)).body.error).toMatchObject({ code: 'PLAN_IN_USE', params: { count: 2 } });
     const list = (await fin.get('/admin/plans').expect(200)).body.data;
     expect(list.find((p: any) => p.id === plan.id)).toMatchObject({ subscribers: 2 });
-    expect(list.find((p: any) => p.id === plan.id).actions.find((x: any) => x.key === 'delete')).toEqual({ key: 'delete', enabled: false, reasonCode: 'PLAN_IN_USE' });
+    expect(list.find((p: any) => p.id === plan.id).actions.find((x: any) => x.key === 'delete')).toMatchObject({ key: 'delete', enabled: false, reasonCode: 'PLAN_IN_USE', reasonParams: { count: expect.any(Number) } });
     // migrate subscribers to starter now
     const starter = await planId('starter');
     await fin.post(`/admin/plans/${plan.id}/migrate`, { toPlanId: starter, when: 'now' }).expect(422);

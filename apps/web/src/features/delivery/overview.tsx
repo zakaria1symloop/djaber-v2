@@ -38,11 +38,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ListFilteredEmpty, ListLoading, OfflineBanner, QueryError } from '@/components/global-states';
 import { ListPagination } from '@/features/catalog/ui';
 import { useOffline } from '@/features/orders/offline';
-import { algiersTime } from '@/features/orders/logic';
+import { algiersTime, decimalLabel } from '@/features/orders/logic';
 import { Link, useRouter } from '@/i18n/navigation';
 import { actionState, reasonText } from '@/lib/actions';
 import { useLocaleCode, useT } from '@/lib/i18n';
-import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
+import { downloadUrl, jobFileName, trackJob, useJob } from '@/lib/jobs';
 import { filterList, filterText, listQueryString, patchListState } from '@/lib/list-state';
 import { useSession } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
@@ -57,7 +57,7 @@ import { BulkSendDialog, BulkSendResults, type SendTarget } from './bulk-send';
 import { COURIER_PROVIDERS, FAILURE_REASONS, type DeliveryRow } from './contracts';
 import { wilayaLabel } from './geo';
 import { PrintLabelsDialog } from './labels';
-import { daysSince } from './logic';
+import { daysSince, shipmentStatusKey, withCourierSetup } from './logic';
 import { currentTab, DELIVERY_LIST, DELIVERY_TAB_LIST, deliveryChips, LAST_ERRORS, LAST_EVENTS, panelFilterCount, SHIPMENT_FILTER_STATUSES, shipmentsQuery } from './overview-spec';
 import { TrackingPanel } from './tracking-panel';
 import { ParcelActionsMenu, parcelOfRow, useParcelActions } from './use-parcel-actions';
@@ -76,6 +76,10 @@ export function DeliveryOverviewPage() {
   // `?job=<id>`: the "envoi groupé terminé" notification (Job bulk_send) opens its per-order results here
   const params = useSearchParams();
   const bulkJob = params.get('job');
+  // 12 §20 « Delivery deep links » (full-test DELIVERY-12): a bulk-send job ⇒ its results dialog; any other job — or one
+  // that is gone — ⇒ the job banner only, never both surfaces at once (same cached `GET /jobs/:id`)
+  const jobQ = useJob(bulkJob);
+  const isBulkSend = jobQ.data?.kind === 'bulk_send';
   const withoutJob = (next = s) => {
     const qs = listQueryString(DELIVERY_LIST, next, [...params.entries()].filter(([key]) => key !== 'job'));
     router.replace(qs ? `/delivery?${qs}` : '/delivery', { scroll: false });
@@ -117,6 +121,7 @@ export function DeliveryOverviewPage() {
   const k = overview.data?.kpis;
   const tabs = overview.data?.tabs;
   const noCourier = overview.data ? overview.data.couriers.active === 0 : couriers.data ? couriers.data.filter((c) => c.isActive).length === 0 : false;
+  const inactiveOnly = noCourier && !!couriers.data?.length && couriers.data.every((c) => !c.isActive);
   const canSend = can('delivery.send');
 
   const lastEvent = (r: DeliveryRow) => {
@@ -125,11 +130,11 @@ export function DeliveryOverviewPage() {
     const at = sh.lastEventAt ?? sh.createdAt;
     const days = daysSince(at);
     const when = days !== null && days >= 2 ? `${formatDate(at, locale).replace(/ \d{4}$/, '')} · ${t('delivery.row.days', { count: days })}` : `${relativeTime(at, locale)} · ${algiersTime(at)}`;
-    return { title: t(`tracking.event.${sh.status}`), meta: [when, sh.courierAccount ? t('delivery.row.byCourier') : t('tracking.source.djaber')].join(' · ') };
+    return { title: t(`tracking.event.${sh.status}`), meta: [when, sh.lastEventSource === 'courier' ? t('delivery.row.byCourier') : t('tracking.source.djaber')].join(' · ') };
   };
-  const subject = (r: DeliveryRow) => ({ orderId: r.orderId, parcel: parcelOfRow(r), actions: r.actions, phone: r.client.phone, error: r.shipment?.error ?? null, syncAvailableAt: r.shipment?.syncAvailableAt ?? null });
+  const subject = (r: DeliveryRow) => ({ orderId: r.orderId, parcel: parcelOfRow(r), actions: withCourierSetup(r.actions, can('delivery.manage')), phone: r.client.phone, error: r.shipment?.error ?? null, syncAvailableAt: r.shipment?.syncAvailableAt ?? null });
   // UX-056 leftovers: « Actualiser le suivi » is greyed with the live wait here too (same `syncAvailableAt` as the panel)
-  const menu = (r: DeliveryRow) => <ParcelActionsMenu parcels={parcels} subject={subject(r)} label={t('action.actions')} heading={[`#${r.orderNumber}`, r.shipment ? t(`enum.Shipment.status.${r.shipment.status}`) : t('delivery.row.notSentPill'), r.wilaya?.name].filter(Boolean).join(' · ')} />;
+  const menu = (r: DeliveryRow) => <ParcelActionsMenu parcels={parcels} subject={subject(r)} label={t('action.actions')} heading={[`#${r.orderNumber}`, r.shipment ? t(shipmentStatusKey(r.shipment)) : t('delivery.row.notSentPill'), r.wilaya?.name].filter(Boolean).join(' · ')} />;
 
   const columns: Column<DeliveryRow>[] = [
     {
@@ -205,8 +210,8 @@ export function DeliveryOverviewPage() {
         }
         return (
           <div className="flex flex-col items-start gap-1">
-            <StatusPill enumKey="Shipment.status" value={sh.status} className="!rounded-[4px]">
-              {t(`enum.Shipment.status.${sh.status}`)}
+            <StatusPill enumKey="Shipment.status" value={sh.status} className="!rounded-[4px] whitespace-nowrap">
+              {t(shipmentStatusKey(sh))}
             </StatusPill>
             {sh.noMovement ? <span className="ts-label-micro text-accent-starred">{t('delivery.row.noMovement')}</span> : null}
           </div>
@@ -216,7 +221,7 @@ export function DeliveryOverviewPage() {
     {
       key: 'event',
       header: t('delivery.col.lastEvent'),
-      sortKey: 'lastSyncedAt',
+      sortKey: 'lastEventAt',
       hideBelow: 'lg',
       className: 'max-w-[260px]',
       cell: (r) => {
@@ -224,7 +229,8 @@ export function DeliveryOverviewPage() {
         return (
           <div className="min-w-0">
             <div className="truncate text-[14px]">{e.title}</div>
-            <div className="ts-label-micro truncate text-text-muted">{e.meta}</div>
+            {/* full-test DELIVERY-18: the meta line wraps instead of cutting « شركة التوصيل » */}
+            <div className="ts-label-micro text-text-muted">{e.meta}</div>
           </div>
         );
       },
@@ -314,7 +320,7 @@ export function DeliveryOverviewPage() {
   return (
     <div className="flex flex-col gap-5">
       {offline ? <OfflineBanner since={since} onRetry={() => void rowsQ.refetch()} /> : null}
-      <JobParamBanner />
+      {bulkJob && (isBulkSend || jobQ.isPending) ? null : <JobParamBanner />}
 
       <section aria-label={t('delivery.kpi.label')} className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" data-testid="delivery-kpis">
         {k ? (
@@ -323,7 +329,7 @@ export function DeliveryOverviewPage() {
             <KpiTile value={formatNumber(k.pendingPickup)} label={t('delivery.kpi.created')} meta={t('delivery.kpi.pendingPickup')} data-kpi="pendingPickup" />
             <KpiTile value={formatNumber(k.inTransit)} label={t('delivery.kpi.inTransit')} meta={t('delivery.kpi.stale', { count: k.staleOver5d })} tone={k.staleOver5d ? 'warning' : undefined} data-kpi="inTransit" />
             <KpiTile value={formatNumber(k.failedToday)} label={t('delivery.kpi.failed')} meta={t('delivery.kpi.failedMeta')} tone={k.failedToday ? 'danger' : undefined} data-kpi="failed" />
-            <KpiTile value={formatNumber(k.delivered30d)} label={t('delivery.kpi.delivered')} meta={`${k.deliveredPct30d} %`} data-kpi="delivered" />
+            <KpiTile value={formatNumber(k.delivered30d)} label={t('delivery.kpi.delivered')} meta={`${decimalLabel(k.deliveredPct30d, locale)} %`} data-kpi="delivered" />
             <KpiTile value={formatNumber(k.returned30d)} label={t('delivery.kpi.returned')} meta={`${k.returnedPct30d} %`} data-kpi="returned" />
           </>
         ) : overview.isError ? null : (
@@ -335,12 +341,13 @@ export function DeliveryOverviewPage() {
         <Card className="flex flex-col gap-3 p-5 md:flex-row md:items-center" data-testid="delivery-no-courier">
           <Truck className="size-5 shrink-0 text-text-secondary" aria-hidden />
           <div className="min-w-0 flex-1">
-            <h2 className="ts-title">{t('delivery.noCourier.title')}</h2>
-            <p className="ts-label-meta mt-1 text-text-muted">{t('delivery.noCourier.description')}</p>
+            {/* full-test DELIVERY-04: couriers configured but all deactivated ⇒ « aucun transporteur actif », not « configuré » */}
+            <h2 className="ts-title">{inactiveOnly ? t('delivery.noCourier.inactiveTitle') : t('delivery.noCourier.title')}</h2>
+            <p className="ts-label-meta mt-1 text-text-muted">{inactiveOnly ? t('delivery.noCourier.inactiveDescription', { count: couriers.data!.length }) : t('delivery.noCourier.description')}</p>
           </div>
           {can('delivery.manage') ? (
-            <Link href="/delivery/couriers?add=1" className={buttonClass({ variant: 'primary' })} data-testid="no-courier-cta">
-              {t('delivery.noCourier.cta')}
+            <Link href={inactiveOnly ? '/delivery/couriers' : '/delivery/couriers?add=1'} className={buttonClass({ variant: 'primary' })} data-testid="no-courier-cta">
+              {inactiveOnly ? t('delivery.noCourier.manage') : t('delivery.noCourier.cta')}
             </Link>
           ) : null}
           <Link href="/delivery?tab=to_send" className={buttonClass({ variant: 'ghost' })} title={t('delivery.noCourier.manualHint')}>
@@ -397,7 +404,7 @@ export function DeliveryOverviewPage() {
       ) : rowsQ.isError && !rowsQ.data ? (
         <QueryError error={rowsQ.error} onRetry={() => rowsQ.refetch()} />
       ) : empty && panelFiltered ? (
-        <ListFilteredEmpty entity={t('delivery.entity')} filters={t('delivery.currentFilters')} onClear={() => clearPanel(list)} />
+        <ListFilteredEmpty entity={t('delivery.entity')} filters={s.q} onClear={() => clearPanel(list)} />
       ) : empty ? (
         <Card className="flex flex-col items-center gap-3 px-6 py-12 text-center" data-testid="delivery-empty" data-tab={tab}>
           <PackageCheck className="size-5 text-text-secondary" aria-hidden />
@@ -431,8 +438,8 @@ export function DeliveryOverviewPage() {
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   {r.shipment ? (
-                    <StatusPill enumKey="Shipment.status" value={r.shipment.status} className="!rounded-[4px]">
-                      {t(`enum.Shipment.status.${r.shipment.status}`)}
+                    <StatusPill enumKey="Shipment.status" value={r.shipment.status} className="!rounded-[4px] whitespace-nowrap">
+                      {t(shipmentStatusKey(r.shipment))}
                     </StatusPill>
                   ) : (
                     <StatusPill enumKey="Order.deliveryStatus" value="not_sent" className="!rounded-[4px]">
@@ -445,7 +452,7 @@ export function DeliveryOverviewPage() {
               {menu(r)}
             </div>
           )}
-          footer={<ListPagination page={s.page} pageSize={s.pageSize} total={total} onChange={(p) => list.set(p)} note={t('delivery.sortNote')} />}
+          footer={<ListPagination page={s.page} pageSize={s.pageSize} total={total} onChange={(p) => list.set(p)} note={t('delivery.sortNoteEvent', { dir: list.sort.dir === 'asc' ? '↑' : '↓' })} />}
         />
       )}
 
@@ -480,7 +487,7 @@ export function DeliveryOverviewPage() {
       />
       <BulkSendResults
         jobId={bulkJob}
-        open={!!bulkJob}
+        open={!!bulkJob && isBulkSend}
         title={t('send.bulk.resultTitle')}
         names={{}}
         courierName={null}
@@ -556,7 +563,8 @@ function DeliveryFilterPanel({ open, onClose, list, total }: { open: boolean; on
       open={open}
       onClose={onClose}
       title={t('action.filters')}
-      summary={total === null ? t('orders.filter.summaryLoading', { count }) : t('orders.filter.summary', { count, results: formatNumber(total) })}
+      // full-test DELIVERY-08: the delivery tiles are the shop's indicators (GET /delivery/overview) — the panel does not claim they follow it
+      summary={total === null ? t('delivery.filter.summaryLoading', { count }) : t('delivery.filter.summary', { count, results: formatNumber(total) })}
       resetLabel={t('products.filter.reset')}
       onReset={() => clearPanel(list)}
       applyLabel={total === null ? t('action.apply') : t('orders.filter.show', { count: total })}

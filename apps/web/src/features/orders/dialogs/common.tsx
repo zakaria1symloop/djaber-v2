@@ -48,7 +48,7 @@ export function useDialogSubmit<T>(run: (key: string) => Promise<T>) {
       setBusy(false);
     }
   };
-  const fieldError = (name: string) => (fields[name] ? (t.has(fields[name]!) ? t(fields[name]!, { max: '', min: '' }) : fields[name]) : undefined);
+  const fieldError = (name: string, limits?: Record<string, string | number>) => (fields[name] ? (t.has(fields[name]!) ? t(fields[name]!, { max: '', min: '', ...limits }) : fields[name]) : undefined);
   return { submit, busy, error, setError, fieldError, conflict, clearConflict: () => setConflict(null) };
 }
 

@@ -65,7 +65,8 @@ export function ChannelShell({ id, children }: { id: string; children: ReactNode
   const base = `/channels/${c.id}`;
   const sync = actions.descriptor(c, 'syncInfo');
   const facts = [
-    c.followersCount !== null ? t('channels.page.followers', { count: formatNumber(c.followersCount) }) : null,
+    // full-test 15/11 CHANNELS-INBOX-15: « 0 abonnés » next to the Meta block « — » (unknown) is not shown
+    c.followersCount ? t('channels.page.followers', { count: formatNumber(c.followersCount) }) : null,
     t('channels.page.connected', { date: formatDate(c.connectedAt, locale), name: c.connectedBy ? c.connectedBy.firstName : '—' }),
     t(c.health?.webhookSubscribed ? 'channels.page.webhooksOk' : 'channels.page.webhooksOff'),
     c.health?.lastInboundAt ? t('channels.page.lastMessage', { ago: relativeTime(c.health.lastInboundAt, locale) }) : null,

@@ -64,11 +64,16 @@ export function applyServerErrors<T extends FieldValues>(
   return errorMessage(e, t);
 }
 
+/** `pending` value of the browser « Back » button (no href: the previous page is the history's). */
+const BACK = '__back__';
+
 /**
  * Leave guard for dirty forms: warns on tab close / reload and intercepts in-app link clicks with the
  * "Quitter sans enregistrer ?" dialog. Render the returned `guard` element once in the page. `onLeave` runs when the
  * merchant confirms leaving (e.g. a form kept in sessionStorage drops its copy); `ask(href)` opens the same dialog for a
- * programmatic exit ("Annuler" buttons).
+ * programmatic exit ("Annuler" buttons). The browser « Back » button asks too (full-test 15/11 PRODUCTS-06): while the form
+ * is dirty one extra history entry of the same URL sits on top; « Back » pops it, the dialog opens and the entry is put
+ * back — « Quitter » then goes back past it.
  */
 export function useLeaveGuard(dirty: boolean, name: string, onLeave?: () => void) {
   const router = useRouter();
@@ -76,8 +81,19 @@ export function useLeaveGuard(dirty: boolean, name: string, onLeave?: () => void
   const onLeaveRef = useRef(onLeave);
   onLeaveRef.current = onLeave;
 
+  const leavingRef = useRef(false);
+
   useEffect(() => {
     if (!dirty) return;
+    leavingRef.current = false;
+    // the extra entry (Next.js copies its own router state into it, so going back to it is a plain traverse)
+    const armed = () => (window.history.state as { djaberLeaveGuard?: boolean } | null)?.djaberLeaveGuard === true;
+    if (!armed()) window.history.pushState({ djaberLeaveGuard: true }, '');
+    const onPop = () => {
+      if (leavingRef.current || armed()) return;
+      window.history.pushState({ djaberLeaveGuard: true }, '');
+      setPending(BACK);
+    };
     const onUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
     };
@@ -91,9 +107,11 @@ export function useLeaveGuard(dirty: boolean, name: string, onLeave?: () => void
       setPending(a.href);
     };
     window.addEventListener('beforeunload', onUnload);
+    window.addEventListener('popstate', onPop);
     document.addEventListener('click', onClick, true);
     return () => {
       window.removeEventListener('beforeunload', onUnload);
+      window.removeEventListener('popstate', onPop);
       document.removeEventListener('click', onClick, true);
     };
   }, [dirty]);
@@ -103,6 +121,11 @@ export function useLeaveGuard(dirty: boolean, name: string, onLeave?: () => void
     setPending(null);
     if (!href) return;
     onLeaveRef.current?.();
+    if (href === BACK) {
+      leavingRef.current = true;
+      window.history.go(-2); // the guard entry, then the page itself
+      return;
+    }
     const u = new URL(href, window.location.origin);
     // programmatic navigation is not intercepted by the click listener above
     router.push(u.pathname + u.search + u.hash);

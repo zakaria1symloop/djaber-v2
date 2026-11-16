@@ -24,6 +24,26 @@ export function deliveryBlockState(
   return { handled, openFailure, fixable, showSend: !isOrderSendClosed(orderStatus) && (!parcel || fixable) };
 }
 
+/**
+ * i18n key of a parcel status pill. A self-delivered parcel (`provider=manual`, 04 §1.2) that is `sent` is on its way
+ * with the merchant — « ENVOYÉE », not the courier wording « CRÉÉE » (parcel created, waiting for pickup; full-test ORDERS-23).
+ */
+export const shipmentStatusKey = (s: { status: ShipmentStatus; provider?: string | null }): string => (s.provider === 'manual' && s.status === 'sent' ? 'parcel.manual.sent' : `enum.Shipment.status.${s.status}`);
+
+/**
+ * 12 §20 « Send dialog without courier » (full-test DELIVERY-04): a member who manages the couriers (`delivery.manage`)
+ * opens « Envoyer au transporteur » even without an active courier — the dialog offers « Configurer un transporteur » there.
+ * Every other refusal (and every other member) keeps the greyed item with its reason.
+ */
+export function withCourierSetup(actions: readonly ActionDescriptor[], canManage: boolean): ActionDescriptor[] {
+  if (!canManage) return [...actions];
+  return actions.map((a) => {
+    if (a.key !== 'send_courier' || a.reasonCode !== 'DELIVERY_NO_COURIER') return a;
+    const { reasonCode: _c, reasonParams: _r, ...rest } = a;
+    return { ...rest, enabled: true };
+  });
+}
+
 /* ---------- public page steps: Créée → Ramassée → En transit → En livraison → Livrée ---------- */
 const FLOW = ['sent', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered'] as const;
 export type FlowKey = (typeof FLOW)[number] | 'failed' | 'returned' | 'cancelled';

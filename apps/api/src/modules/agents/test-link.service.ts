@@ -1,6 +1,8 @@
 // 06 §8.7 / §12 — shared playground link: `POST /agents/:id/test-links { expiresInHours }` gives a URL anyone can open
 // for 24 h (`/agent-test/<token>`). Only the SHA-256 of the token is stored. The public page talks to the agent through
-// the same dry-run turn as the playground (no order, nothing sent, no credit), 60 turns / h per link.
+// the same dry-run turn as the playground (no order, nothing sent, no credit). Full-test 15/11 AI-CHAT-09 / -10, AGENTS-16:
+// the turns count in the workspace's 60 / h (no extra budget per link), each visitor page has its own session, the header
+// shows the moderated name only (none while in review, like the AI itself) and the system texts of a turn are returned.
 import { Injectable } from '@nestjs/common';
 import type { AgentTestLinkDto, PlaygroundTurnInput, SharedTestInfoDto, SharedTestReplyDto } from '@djaber/shared';
 import { prisma, TenantContext } from '@djaber/db';
@@ -42,19 +44,22 @@ export class TestLinkService {
 
   info(token: string): Promise<SharedTestInfoDto> {
     return this.withLink(token, async (link) => {
-      const agent = await prisma.agent.findFirst({ where: { id: link.agentId, deletedAt: null }, select: { name: true, displayName: true, avatar: { select: { url: true } } } });
+      const agent = await prisma.agent.findFirst({ where: { id: link.agentId, deletedAt: null }, select: { approvedName: true, approvedDisplayName: true, avatar: { select: { url: true } } } });
       if (!agent) throw notFound();
-      return { agentName: agent.displayName?.trim() || agent.name, avatarUrl: agent.avatar?.url ?? null, expiresAt: link.expiresAt.toISOString() };
+      // the name a moderator approved (empty while it is in review: the page then says « Assistant de <shop> »)
+      return { agentName: agent.approvedDisplayName?.trim() || agent.approvedName?.trim() || '', avatarUrl: agent.avatar?.url ?? null, expiresAt: link.expiresAt.toISOString() };
     });
   }
 
-  message(token: string, input: { text: string; history?: { role: 'user' | 'assistant'; text: string }[] }): Promise<SharedTestReplyDto> {
+  message(token: string, input: { text: string; history?: { role: 'user' | 'assistant'; text: string }[]; sessionId?: string }): Promise<SharedTestReplyDto> {
     return this.withLink(token, async (link) => {
       const messages: PlaygroundTurnInput['messages'] = [...(input.history ?? []), { role: 'user' as const, text: input.text }];
-      const turn = await this.playground.request(link.agentId, { sessionId: `link:${link.id}`, messages }, { rateSubject: `link:${link.id}`, userId: null });
+      // one session per visitor page (the reply guard and the simulated orders read the session's earlier turns)
+      const sessionId = `link:${link.id.slice(0, 8)}:${input.sessionId ?? 'shared'}`.slice(0, 80);
+      const turn = await this.playground.request(link.agentId, { sessionId, messages }, { userId: null });
       await prisma.agentTestLink.update({ where: { id: link.id }, data: { usedCount: { increment: 1 } } });
-      // the visitor sees what a customer would see: the text and the cards, nothing about the model or the tools
-      return { reply: turn.reply, cards: turn.cards };
+      // the visitor sees what a customer would see: the text, the cards and the shop's system texts — nothing about the model or the tools
+      return { reply: turn.reply, cards: turn.cards, systemMessages: turn.systemMessages };
     });
   }
 }

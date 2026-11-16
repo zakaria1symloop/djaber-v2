@@ -54,8 +54,44 @@ export const renderStoredText = (value: string | null | undefined, t: (key: stri
 export const textIn = (key: string, locale: string, params: Record<string, string | number> = {}): string | null => {
   const l: AppLocale = isAppLocale(locale) ? locale : 'fr';
   const template = getMessages(l)[key] ?? getMessages('fr')[key];
-  return template === undefined ? null : formatMessage(template, params);
+  if (template === undefined) return null;
+  // full-test 15/11 SALES-CASH-14: a value that is itself a token without values (`§sales.cancel.reason.entry_error`, a
+  // reason picked from a list) is read in the reader's language too — typed text stays as typed
+  const shown = Object.fromEntries(Object.entries(params).map(([k, v]) => [k, typeof v === 'string' && v.startsWith(STORED_TEXT_MARK) && !v.includes('|') ? (textIn(v.slice(STORED_TEXT_MARK.length), l) ?? '') : v]));
+  return formatMessage(template, shown);
+};
+
+/**
+ * full-test 15/11 ANALYTICS-10: cash rows written before UX-056 hold the French sentence of a `stored.cash.*` key
+ * (« Achat #ACH-1002 (paiement fournisseur) »). A text that is exactly one of those sentences is read as that key, so it is
+ * shown in the reader's language too (no data migration); any other text stays as typed.
+ */
+let legacyPatterns: { key: string; re: RegExp; names: string[] }[] | null = null;
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export const legacyStoredText = (text: string): string | null => {
+  legacyPatterns ??= Object.entries(getMessages('fr'))
+    .filter(([key]) => key.startsWith('stored.cash.'))
+    .map(([key, template]) => {
+      const names: string[] = [];
+      const body = template
+        .split(/(\{\w+\})/)
+        .map((part) => {
+          const slot = /^\{(\w+)\}$/.exec(part);
+          if (!slot) return escapeRe(part);
+          names.push(slot[1]!);
+          return '(.+?)';
+        })
+        .join('');
+      return { key, re: new RegExp(`^${body}$`), names };
+    });
+  const value = text.trim();
+  for (const p of legacyPatterns) {
+    const m = p.re.exec(value);
+    if (m) return storedText(p.key, Object.fromEntries(p.names.map((n, i) => [n, m[i + 1]])));
+  }
+  return null;
 };
 
 /** `renderStoredText` with the shared catalogue, in `locale` (French when the key has no translation there). */
-export const renderStoredTextIn = (value: string | null | undefined, locale: string): string | null => renderStoredText(value, (key, params) => textIn(key, locale, params));
+export const renderStoredTextIn = (value: string | null | undefined, locale: string): string | null =>
+  renderStoredText(value && !value.includes(STORED_TEXT_MARK) ? (legacyStoredText(value) ?? value) : value, (key, params) => textIn(key, locale, params));

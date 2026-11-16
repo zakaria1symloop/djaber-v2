@@ -157,7 +157,7 @@ export class PlatformSettingsService implements OnModuleInit {
     return this.presentMaintenance((row?.value ?? null) as MaintenanceValue | null);
   }
   async setMaintenance(input: MaintenanceInput, actor: PlatformActor): Promise<MaintenanceDto> {
-    if (input.scheduledFrom && input.scheduledTo && new Date(input.scheduledTo) <= new Date(input.scheduledFrom)) throw validationError({ scheduledTo: 'validation.range' });
+    if (input.scheduledFrom && input.scheduledTo && new Date(input.scheduledTo) <= new Date(input.scheduledFrom)) throw validationError({ scheduledTo: 'validation.end_before_start' });
     const value: MaintenanceValue = { enabled: input.enabled, from: input.scheduledFrom ?? (input.enabled ? new Date().toISOString() : null), to: input.scheduledTo ?? null, scope: input.scope, text: input.text ?? null };
     const { before } = await sysTx((tx) => this.writeSetting(tx, 'maintenance', value, actor, input.reason ?? null));
     resetMaintenanceCache();

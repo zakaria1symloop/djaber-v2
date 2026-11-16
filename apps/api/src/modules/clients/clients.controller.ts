@@ -126,6 +126,14 @@ export class ClientsController {
     return this.clients.remove(id, q.archive === true);
   }
 
+  /** full-test CLIENTS-03: an archived client is restored (its orders and risk history come back with it). */
+  @Post(':id/restore')
+  @HttpCode(200)
+  @RequirePermission('clients.delete')
+  restore(@Id() id: string) {
+    return this.clients.restore(id);
+  }
+
   @Post(':id/risk')
   @HttpCode(200)
   @RequirePermission('clients.write')

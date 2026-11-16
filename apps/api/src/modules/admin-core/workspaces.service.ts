@@ -39,7 +39,7 @@ import { ChannelService } from '../channels/channel.service';
 import { CreditService } from '../credits/credit.service';
 import { NotificationProducer } from '../notifications/notification.producer';
 import { ProvisioningService } from '../workspace/provisioning.service';
-import { DAY, assertUuid, iso, freePlanName, pickLocal, requireReason, userSelect, type AdminActor } from './admin.util';
+import { DAY, STATE_REFUSED, assertUuid, iso, freePlanName, offered, pickLocal, requireReason, userSelect, type AdminActor } from './admin.util';
 
 const ROW_SORTS = ['createdAt', 'name'] as const;
 type CreditFig = { planNet: number; planLimit: number; planUsed: number; pack: number; packTotal?: number };
@@ -200,16 +200,18 @@ export class AdminWorkspacesService {
       return { key, enabled, ...(enabled ? {} : { reasonCode: !allowed ? 'FORBIDDEN' : extra.reasonCode }) };
     };
     const deleting = w.status === 'deletion_scheduled';
-    return [
+    return offered([
       { key: 'open', enabled: true, primary: true },
       a('impersonate', 'admin.workspaces.impersonate'),
       a('change_plan', 'admin.workspaces.write', { enabled: !deleting, reasonCode: 'WORKSPACE_DELETION_SCHEDULED' }),
       a('add_credits', 'admin.workspaces.credits', { enabled: !deleting, reasonCode: 'WORKSPACE_DELETION_SCHEDULED' }),
       a('remove_credits', 'admin.billing.write', { enabled: !deleting, reasonCode: 'WORKSPACE_DELETION_SCHEDULED' }),
-      a('extend_trial', 'admin.workspaces.write', { enabled: !deleting && (subStatus === 'trial' || subStatus === 'active' || subStatus === 'dunning'), reasonCode: deleting ? 'WORKSPACE_DELETION_SCHEDULED' : 'CONFLICT' }),
+      a('extend_trial', 'admin.workspaces.write', { enabled: !deleting && (subStatus === 'trial' || subStatus === 'active' || subStatus === 'dunning'), reasonCode: deleting ? 'WORKSPACE_DELETION_SCHEDULED' : STATE_REFUSED }),
+      // ADMIN-04 (02 §3.5 `/admin/workspaces`): DLG « Niveau de confiance » → `POST /admin/workspaces/:id/trust-level`
+      a('trust_level', 'admin.moderation.write'),
       w.status === 'suspended' ? a('reactivate', 'admin.workspaces.write') : a('suspend', 'admin.workspaces.write', { enabled: !deleting, reasonCode: 'WORKSPACE_DELETION_SCHEDULED' }),
       deleting ? a('cancel_deletion', 'admin.workspaces.write') : a('schedule_deletion', 'admin.workspaces.write'),
-    ];
+    ]);
   }
 
   // --- detail & sub-resources ----------------------------------------------------------------------------------------------
@@ -316,7 +318,8 @@ export class AdminWorkspacesService {
     const out = await prisma.$transaction(async (db) => {
       const tx = db as Tx;
       let user = await tx.user.findUnique({ where: { email: input.ownerEmail } });
-      if (user?.ownedWorkspaceId) throw new AppException('CONFLICT', {}, { ownerEmail: 'validation.taken' });
+      // full-test 15/11 ADMIN-06: one account owns one workspace (04 §1) — said under « E-mail du propriétaire »
+      if (user?.ownedWorkspaceId) throw new AppException('ACCOUNT_OWNS_WORKSPACE', {}, { ownerEmail: 'validation.owns_workspace' });
       if (user && user.status !== 'active') throw new AppException('CONFLICT', {}, { ownerEmail: 'validation.invalid' });
       const created = !user;
       user ??= await tx.user.create({

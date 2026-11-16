@@ -156,7 +156,8 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     await resetAi();
     fakeAi(app).script('reply', { toolCalls: [createCall(s)] }, { reply: 'Déjà enregistrée', intent: 'SALE' });
     const t = await turn(s, sender, 'oui je confirme encore');
-    expect(lastResult(t.runs)).toMatchObject({ ok: true, number: 'CMD-1001', duplicateOf: 'CMD-1001' });
+    // full-test 15/11 proposal 4: the same content placed by an earlier turn is refused before the port (duplicate guard as a fallback)
+    expect(lastResult(t.runs)).toMatchObject({ ok: false, error: { code: 'ORDER_ALREADY_PLACED', number: 'CMD-1001' } });
     expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(1);
     expect(await held(s)).toBe(1);
   });

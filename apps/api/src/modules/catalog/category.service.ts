@@ -2,7 +2,7 @@
 // (7 system units + custom). Delete is blocked while products use the row, with a reassign option.
 import { Injectable } from '@nestjs/common';
 import { prisma, TenantContext, type Category, type Prisma, type Tx, type Unit } from '@djaber/db';
-import { systemUnitText, type CategoryView, type CreateCategoryInput, type CreateUnitInput, type UnitView, type UpdateCategoryInput, type UpdateUnitInput } from '@djaber/shared';
+import { LOCALES, systemUnitText, type CategoryView, type CreateCategoryInput, type CreateUnitInput, type UnitView, type UpdateCategoryInput, type UpdateUnitInput } from '@djaber/shared';
 import { AppException, notFound, validationError } from '../../core/errors/app.exception';
 import { action, isUnique } from './catalog.util';
 import { viewLocale } from './product.presenter';
@@ -149,8 +149,6 @@ export class CategoryService {
   }
 }
 
-const unitExists = () => validationError({ name: 'validation.invalid' });
-
 @Injectable()
 export class UnitService {
   /** `Unit` is not a tenant model (system units have no workspace): the scope is explicit in every query. */
@@ -192,13 +190,32 @@ export class UnitService {
     return u;
   }
 
+  /**
+   * Name and abbreviation are each unique in the workspace, system units included in every language they are shown in
+   * (the import and the labels match a unit by its abbreviation) — full-test 15/11 PRODUCTS-05.
+   */
   private async assertFree(tx: Tx, name: string, abbreviation: string, exceptId?: string) {
-    const n = await tx.unit.count({
-      where: {
-        AND: [this.visible(), { name: { equals: name, mode: 'insensitive' }, abbreviation: { equals: abbreviation, mode: 'insensitive' } }, exceptId ? { NOT: { id: exceptId } } : {}],
-      },
-    });
-    if (n) throw unitExists();
+    const rows = await tx.unit.findMany({ where: { AND: [this.visible(), exceptId ? { NOT: { id: exceptId } } : {}] }, select: { name: true, abbreviation: true, isSystem: true, workspaceId: true } });
+    const key = (v: string) => v.trim().toLocaleLowerCase();
+    const names = new Set<string>();
+    const abbrs = new Set<string>();
+    for (const u of rows) {
+      names.add(key(u.name));
+      abbrs.add(key(u.abbreviation));
+      if (u.isSystem || !u.workspaceId) {
+        for (const l of LOCALES) {
+          const shown = systemUnitText(u.abbreviation, l);
+          if (shown) {
+            names.add(key(shown.name));
+            abbrs.add(key(shown.abbreviation));
+          }
+        }
+      }
+    }
+    const fields: Record<string, string> = {};
+    if (names.has(key(name))) fields.name = 'validation.unit_name_taken';
+    if (abbrs.has(key(abbreviation))) fields.abbreviation = 'validation.unit_abbr_taken';
+    if (Object.keys(fields).length) throw validationError(fields);
   }
 
   private async assertBase(tx: Tx, baseUnitId: string, selfId?: string) {

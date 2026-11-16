@@ -33,10 +33,14 @@ export function CreditsPillLink() {
   const pack = packLeft(q.data);
   const pu = packUsage(q.data);
   const p = { used: formatNumber(used), limit: formatNumber(limit), pack: formatNumber(pack), packUsed: formatNumber(pu.used), packTotal: formatNumber(pu.total) };
-  const text = pack > 0 ? t('topbar.creditsPacks', p) : t('topbar.credits', p);
+  // full-test 15/11 MOBILE-A11Y-04 / SETTINGS-16: each « used / total » is one left-to-right isolate (U+2066 … U+2069), so
+  // the Arabic pill reads « 0 / 5 باقات · 6 / 5 000 » and never « 5 / 0 »
+  const [lri, pdi] = [String.fromCharCode(0x2066), String.fromCharCode(0x2069)];
+  const iso = { ...p, used: lri + p.used, limit: p.limit + pdi, packUsed: lri + p.packUsed, packTotal: p.packTotal + pdi };
+  const text = pack > 0 ? t('topbar.creditsPacks', iso) : t('topbar.credits', iso);
   const title = level === 'exhausted' ? t('credits.pill.exhausted') : pack > 0 ? t('credits.pill.packs', p) : level === 'warning' ? t('credits.pill.warning') : t('credits.pill.title');
   return (
-    <Link href="/settings/credits" aria-label={pack > 0 ? t('credits.pill.labelPacks', p) : t('credits.pill.label', p)} className="inline-flex rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-inbound">
+    <Link href="/settings/credits" aria-label={pack > 0 ? t('credits.pill.labelPacks', p) : t('credits.pill.label', p)} className="inline-flex min-h-6 items-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-inbound">
       <CreditsPill text={text} level={level} title={title} />
     </Link>
   );

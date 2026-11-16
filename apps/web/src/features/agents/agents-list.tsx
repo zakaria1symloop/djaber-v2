@@ -23,7 +23,7 @@ import { agentsApi, useAgents, useAgentsRefresh, useInsights, usePresets } from 
 import type { Agent, AgentInsight } from './contracts';
 import { LANGUAGES } from './contracts';
 import { isAlreadyResolved, ignoreInsight, ResolveInsightDialog } from './insights/resolve-dialog';
-import { cardState, limitReached, stepSlug } from './logic';
+import { cardState, limitReached, noChannelText, stepSlug } from './logic';
 import { AgentStatusPill, ChannelChips, InsightTypePill, ModelBadge } from './ui';
 import { useAgentActions, type AgentActions } from './use-agent-actions';
 
@@ -220,8 +220,9 @@ export function AgentsList() {
           deselectLabel={t('action.deselect')}
           onDeselect={() => setSelected(new Set())}
           actions={[
-            { key: 'pause', label: t('action.pause'), onSelect: () => setBulk('pause') },
-            { key: 'resume', label: t('action.resume'), onSelect: () => setBulk('resume') },
+            // full-test 15/11 AGENTS-12: greyed with the reason when no selected agent is in the right state
+            { key: 'pause', label: t('action.pause'), onSelect: () => setBulk('pause'), disabledReason: picked.some((a) => a.status === 'active') ? undefined : t('agents.bulk.noneActive') },
+            { key: 'resume', label: t('action.resume'), onSelect: () => setBulk('resume'), disabledReason: picked.some((a) => a.status === 'paused') ? undefined : t('agents.bulk.nonePaused') },
             { key: 'delete', label: t('action.delete'), onSelect: () => setBulk('delete'), destructive: true },
           ]}
         />
@@ -307,7 +308,8 @@ function AgentCard({ agent: a, actions, selecting, selected, onToggle }: { agent
           <span className="flex size-10 shrink-0 items-center justify-center rounded-card border border-line-edge bg-ink-raised text-signal-live">
             <Bot className="size-4" aria-hidden />
           </span>
-          <div className="min-w-0 flex-1">
+          {/* full-test 15/11 AGENTS-05: a basis, so on a phone the switch / Tester / Actions row wraps under the name instead of squeezing it to 5 px */}
+          <div className="min-w-0 flex-1 basis-40">
             <Link href={draft ? actions.editHref(a) : `/agents/${a.id}`} className="block truncate ts-display-s hover:underline">
               {a.name}
             </Link>
@@ -384,9 +386,7 @@ function AgentCard({ agent: a, actions, selecting, selected, onToggle }: { agent
           <Pill tone="warning" className="!rounded-[4px]">
             {t('agents.card.noChannel.label')}
           </Pill>
-          <span className="min-w-0 flex-1 text-text-secondary">
-            {t('error.AGENT_NO_CHANNEL')}
-          </span>
+          <span className="min-w-0 flex-1 basis-48 text-text-secondary">{noChannelText(t, a.status)}</span>
           {actions.manage ? (
             <Link href={`/agents/${a.id}/configuration?section=channels`} className={buttonClass({ size: 'sm', variant: 'ghost' })}>
               {t('agents.card.noChannel.link')}

@@ -4,7 +4,7 @@
 // DLG GDS II "Ventes — verrous & confirmations" (modifier le paiement · mode, Supprimer: brouillon ou non payée
 // uniquement `SALE_DELETE_PAID` → Annuler la vente) and "Lier à un client" (GDS-07 fix). Menu items come from the
 // server descriptors (`actions`), greyed with their code.
-import { formatMoney, formatPhoneDz } from '@djaber/shared';
+import { formatMoney, formatPhoneDz, storedText } from '@djaber/shared';
 import { Checkbox, ConfirmDialog, Dialog, Field, FormAlert, Input, Ltr, MoneyInput, Pill, PickerSearch, Select, Textarea, toast, type MenuAction } from '@djaber/ui';
 import { useState } from 'react';
 import type { ClientListItem } from '@/features/clients/contracts';
@@ -157,7 +157,8 @@ export function CollectDialog({ saleId, onClose }: { saleId: string | null; onCl
     setMethod(s.paymentMethod);
   }
   const value = digitsToInt(amount);
-  const err = !value ? 'validation.required' : s && value > s.remaining ? 'suppliers.payment.overDue' : null;
+  // full-test 15/11 SALES-CASH-22: « 0 » is not « empty »: it says the amount must be above 0
+  const err = value === null ? 'validation.required' : value === 0 ? 'validation.amount_positive' : s && value > s.remaining ? 'suppliers.payment.overDue' : null;
   const sub = useDialogSubmit((key) => gdsApi.salePayment(saleId!, { amount: value!, method, note: note.trim() || null }, key));
   const submit = async () => {
     setTouched(true);
@@ -181,7 +182,7 @@ export function CollectDialog({ saleId, onClose }: { saleId: string | null; onCl
       <div className="flex flex-col gap-4" data-testid="collect-dialog">
         {loadError ? <FormAlert>{loadError}</FormAlert> : null}
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={t('gds.amount')} htmlFor="col-amount" error={touched && err ? t(err, { amount: formatMoney(s?.remaining ?? 0) }) : sub.fieldError('amount')}>
+          <Field label={t('gds.amount')} htmlFor="col-amount" error={(touched || err === 'suppliers.payment.overDue') && err ? t(err, { amount: formatMoney(s?.remaining ?? 0) }) : sub.fieldError('amount')}>
             <MoneyInput id="col-amount" value={amount} onValueChange={setAmount} />
           </Field>
           <Field label={t('gds.method')} htmlFor="col-method">
@@ -220,7 +221,9 @@ export function CancelSaleDialog({ saleId, onClose }: { saleId: string | null; o
     setRefund(true);
     setTouched(false);
   });
-  const text = reason === 'other' ? other.trim() : t(`sales.cancel.reason.${reason}`);
+  // full-test 15/11 SALES-CASH-14: a reason picked in the list is stored as its key (read in each viewer's language);
+  // « Autre motif » stays as typed
+  const text = reason === 'other' ? other.trim() : storedText(`sales.cancel.reason.${reason}`);
   const invalid = text.length < 2;
   const sub = useDialogSubmit(() => gdsApi.cancelSale(saleId!, { reason: text, restoreStock: restock, refund: refund && (s?.amountPaid ?? 0) > 0 }));
   const submit = async () => {
@@ -285,7 +288,13 @@ export function ClientPicker({ value, onPick, id = 'client-picker' }: { value: C
       <div className="flex items-center gap-2 rounded-card border border-line-edge px-3 py-2 text-[13px]" data-testid="picked-client">
         <span className="min-w-0 flex-1 truncate">
           {value.name}
-          {value.phone ? <Ltr className="text-text-muted">{` · ${formatPhoneDz(value.phone)}`}</Ltr> : null}
+          {/* the « · » outside the left-to-right number, so it keeps its spaces in Arabic (SALES-CASH-22) */}
+          {value.phone ? (
+            <span className="text-text-muted">
+              {' · '}
+              <Ltr>{formatPhoneDz(value.phone)}</Ltr>
+            </span>
+          ) : null}
         </span>
         <button type="button" className="ts-label-meta text-text-muted hover:text-text-primary" onClick={() => onPick(null)}>
           {t('action.remove')}

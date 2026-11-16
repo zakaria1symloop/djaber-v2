@@ -303,7 +303,7 @@ export default function ProductsPage() {
           ) : null}
         </Card>
       ) : empty ? (
-        <ListFilteredEmpty entity={t('products.entity')} filters={t('products.list.currentFilters')} onClear={list.clear} />
+        <ListFilteredEmpty entity={t('products.entity')} filters={list.state.q} onClear={list.clear} />
       ) : s.layout === 'grid' ? (
         <div className={cn('flex flex-col gap-3', products.isPlaceholderData && 'opacity-60')}>
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" data-testid="products-grid">

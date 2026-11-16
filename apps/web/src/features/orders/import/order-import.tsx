@@ -11,12 +11,12 @@ import { usePathname, useRouter as useNextRouter, useSearchParams } from 'next/n
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppPage } from '@/components/app-page';
 import { QueryError } from '@/components/global-states';
-import { checkImportFile, IMPORT_ACCEPT } from '@/features/catalog/import/logic';
+import { BOM, checkImportFile, csvCell, IMPORT_ACCEPT } from '@/features/catalog/import/logic';
 import { Link } from '@/i18n/navigation';
 import { api, ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useT, type TFunction } from '@/lib/i18n';
-import { isJobRunning, jobKey, useJob, type JobDto, type JobRef } from '@/lib/jobs';
+import { downloadUrl, isJobRunning, jobKey, useJob, type JobDto, type JobRef } from '@/lib/jobs';
 import { useWorkspaceId } from '@/lib/session';
 import { uploadWithProgress } from '@/lib/upload';
 import { uuid } from '@/lib/uuid';
@@ -49,6 +49,28 @@ export const describeOrderRowError = (t: TFunction, e: OrderImportPreviewRow['er
   const text = t.has(key) ? t(key, { product: '', available: '', ...e.params }) : e.code;
   return field ? `${field} : ${text}` : text;
 };
+
+/**
+ * Error report of an order import (02 route map « done … error report download », full-test ORDERS-21): one line per row
+ * skipped at the preview or refused at the commit — row, client, phone, wilaya, items, reasons as shown on screen and the
+ * « Code (support) » column (12 GLOBAL). `;`-separated, BOM, formula-safe (same format as the catalogue import).
+ */
+export function orderImportErrorsCsv(
+  result: Pick<OrderImportPreviewResult, 'rows' | 'report'>,
+  o: { headers: { row: string; client: string; phone: string; wilaya: string; items: string; errors: string; code: string }; describe: (e: OrderImportPreviewRow['errors'][number]) => string },
+): string {
+  const lines = [[o.headers.row, o.headers.client, o.headers.phone, o.headers.wilaya, o.headers.items, o.headers.errors, o.headers.code].map(csvCell).join(';')];
+  const failed = new Map((result.report?.failed ?? []).map((f) => [f.row, f]));
+  for (const r of result.rows) {
+    const errs: OrderImportPreviewRow['errors'] = r.ok ? [] : r.errors;
+    const late = failed.get(r.row);
+    const all = late ? [...errs, { field: null, code: late.code, params: late.params }] : errs;
+    if (!all.length) continue;
+    const v = r.values;
+    lines.push([r.row, v.clientName ?? '', v.phone ?? '', v.wilaya ?? (v.wilayaId ?? ''), v.items.map((i) => `${i.sku} × ${i.quantity}`).join(', '), all.map(o.describe).join(' | '), all.map((e) => e.code).join(' | ')].map(csvCell).join(';'));
+  }
+  return `${BOM}${lines.join('\r\n')}\r\n`;
+}
 
 const api_ = {
   upload: (file: File, o: { onProgress?: (pct: number) => void; signal?: AbortSignal }) => {
@@ -124,6 +146,17 @@ export function OrderImportWizard() {
   const startOver = () => {
     setError(null);
     setUrl({ job: null, step: null, from: null, tab: null });
+  };
+  const errorCount = result ? result.rows.filter((r) => !r.ok).length + (result.report?.failed.length ?? 0) : 0;
+  const downloadErrors = () => {
+    if (!result) return;
+    const csv = orderImportErrorsCsv(result, {
+      headers: { row: t('import.col.row'), client: t('orderImport.field.clientName'), phone: t('orderImport.field.phone'), wilaya: t('orderImport.field.wilaya'), items: t('orderImport.field.items'), errors: t('import.col.error'), code: t('import.col.code') },
+      describe: (e) => describeOrderRowError(t, e),
+    });
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    downloadUrl(url, t('import.errors.fileName', { name: result.fileName.replace(/\.[^.]+$/, '') }));
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
   };
 
   const step = phase === 'upload' || phase === 'analysing' || phase === 'analysisFailed' || phase === 'loading' ? 1 : phase === 'mapping' || phase === 'preview' ? 2 : 3;
@@ -207,14 +240,14 @@ export function OrderImportWizard() {
                   <dd className={cn('ts-numeral-l', k === 'created' && 'text-accent-money')}>
                     <Ltr>{formatNumber(result.report![k])}</Ltr>
                   </dd>
-                  <dt className="ts-label-micro mt-1.5 uppercase text-text-muted">{t(`orderImport.done.${k}`)}</dt>
+                  <dt className="ts-label-micro mt-1.5 uppercase text-text-muted">{t(`orderImport.done.${k}Label`, { count: result.report![k] })}</dt>
                 </div>
               ))}
               <div className="rounded-card border border-line-edge px-4 py-3" data-testid="order-report-failed">
                 <dd className={cn('ts-numeral-l', result.report.failed.length && 'text-accent-alert')}>
                   <Ltr>{formatNumber(result.report.failed.length)}</Ltr>
                 </dd>
-                <dt className="ts-label-micro mt-1.5 uppercase text-text-muted">{t('orderImport.done.failed')}</dt>
+                <dt className="ts-label-micro mt-1.5 uppercase text-text-muted">{t('orderImport.done.failedLabel', { count: result.report.failed.length })}</dt>
               </div>
             </dl>
           ) : null}
@@ -229,6 +262,11 @@ export function OrderImportWizard() {
             <Link href="/orders?source=import" className={buttonClass({ variant: 'primary' })}>
               {t('orderImport.done.see')}
             </Link>
+            {errorCount ? (
+              <Button onClick={downloadErrors} data-testid="order-import-errors">
+                {t('import.errors.download')}
+              </Button>
+            ) : null}
             <Button onClick={startOver}>{t('import.another')}</Button>
           </div>
         </Card>

@@ -14,9 +14,10 @@ import { DeliveryPill } from '@/features/orders/ui';
 import { actionState } from '@/lib/actions';
 import { useCountdown } from '@/lib/countdown';
 import { useLocaleCode, useT } from '@/lib/i18n';
+import { useSession } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
 import { SHIPMENT_ACTION } from './action-keys';
-import { algiersClock, deliveryBlockState, shipmentTone, waitLabel } from './logic';
+import { algiersClock, deliveryBlockState, shipmentStatusKey, shipmentTone, waitLabel, withCourierSetup } from './logic';
 import { parcelOfShipment, type useParcelActions } from './use-parcel-actions';
 
 const MAX_ATTEMPTS = 3;
@@ -27,7 +28,8 @@ export const currentShipment = (o: Pick<Order, 'shipments'>) => newestFirst(o.sh
 export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: Order; onSend: () => void; onShip: () => void; parcels: ReturnType<typeof useParcelActions> }) {
   const t = useT();
   const locale = useLocaleCode() as AppLocale;
-  const send = actionState(order.actions, ORDER_ACTION.sendToCourier, t);
+  const { can } = useSession();
+  const send = actionState(withCourierSetup(order.actions, can('delivery.manage')), ORDER_ACTION.sendToCourier, t);
   const ship = actionState(order.actions, ORDER_ACTION.shipManual, t);
   const s = currentShipment(order);
   const margin = order.courierCost !== null ? order.total - order.courierCost : null;
@@ -64,7 +66,7 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
             </Pill>
           ) : active ? (
             <StatusPill enumKey="Shipment.status" value={active.status} className="!rounded-[4px]">
-              {t(`enum.Shipment.status.${active.status}`)}
+              {t(shipmentStatusKey(active))}
             </StatusPill>
           ) : (
             <DeliveryPill row={order} />
@@ -97,7 +99,7 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
               t('orders.page.noParcel')
             ),
           },
-          { key: 'fee', label: t('orders.page.clientFee'), value: <span><Ltr className="!inline">{formatMoney(order.deliveryFee)}</Ltr>{order.feeExplanation ? <span className="text-text-muted"> ({order.feeExplanation})</span> : null}</span> },
+          { key: 'fee', label: t('orders.page.clientFee'), value: !order.address?.wilayaId && order.deliveryFee === 0 ? <span className="text-text-muted">{t('orders.confirm.feeUnknown')}</span> : <span><Ltr className="!inline">{formatMoney(order.deliveryFee)}</Ltr>{order.feeExplanation ? <span className="text-text-muted"> ({order.feeExplanation})</span> : null}</span> },
           ...(order.courierCost !== null ? [{ key: 'cost', label: t('orders.page.courierCost'), value: <span><Ltr className="!inline">{formatMoney(order.courierCost)}</Ltr> · {t('orders.page.margin', { amount: formatMoney(margin ?? 0) })}</span> }] : []),
           ...(order.returnFee ? [{ key: 'returnFee', label: t('orders.page.returnFee'), value: <Ltr className="!inline">{formatMoney(order.returnFee)}</Ltr> }] : []),
           ...(active ? [{ key: 'cod', label: t('tracking.panel.cod'), value: <Ltr className="!inline">{formatMoney(active.codAmount)}</Ltr> }] : []),
@@ -173,10 +175,13 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
               {t('parcel.menu.label')}
             </Button>
           ) : null}
-          <span className="ts-label-micro text-text-muted">
-            {active.lastSyncedAt ? t('tracking.sync.last', { ago: relativeTime(active.lastSyncedAt, locale) }) : t('tracking.sync.never')}
-            {active.syncAvailableAt && Date.parse(active.syncAvailableAt) > Date.now() ? ` · ${t('tracking.sync.next', { wait: waitLabel(Math.ceil((Date.parse(active.syncAvailableAt) - Date.now()) / 1000)) })}` : ''}
-          </span>
+          {/* a self-delivered parcel is never synced with a courier: no « Jamais synchronisé » line (full-test ORDERS-23) */}
+          {active.provider !== 'manual' ? (
+            <span className="ts-label-micro text-text-muted">
+              {active.lastSyncedAt ? t('tracking.sync.last', { ago: relativeTime(active.lastSyncedAt, locale) }) : t('tracking.sync.never')}
+              {active.syncAvailableAt && Date.parse(active.syncAvailableAt) > Date.now() ? ` · ${t('tracking.sync.next', { wait: waitLabel(Math.ceil((Date.parse(active.syncAvailableAt) - Date.now()) / 1000)) })}` : ''}
+            </span>
+          ) : null}
         </div>
       ) : null}
 

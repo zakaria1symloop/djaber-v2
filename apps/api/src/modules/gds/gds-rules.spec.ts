@@ -1,6 +1,7 @@
 // M7 pure rules: AT-GDS-16 weighted-average cost, AT-ORD-11 P&L (COGS, never purchases twice), 04 §19 variance %,
 // GDS payment status, purchase transitions (04 §20).
 import { deriveGdsPaymentStatus, inventoryNeedsNote, inventoryVariancePct, PURCHASE_STATUS_TRANSITIONS, weightedAverageCost } from '@djaber/shared';
+import { printable } from './gds-document.pdf';
 import { cogsOf, profitAndLoss } from './money-figures';
 
 describe('AT-GDS-16 weighted-average cost (04 §20, R-M)', () => {
@@ -62,5 +63,13 @@ describe('04 §20 purchase transitions', () => {
     expect(PURCHASE_STATUS_TRANSITIONS.partial).toEqual(['received', 'cancelled']);
     expect(PURCHASE_STATUS_TRANSITIONS.received).toEqual([]);
     expect(PURCHASE_STATUS_TRANSITIONS.cancelled).toEqual([]);
+  });
+});
+
+describe('full-test 15/11 SALES-CASH-20: PDF text without the signs the fonts cannot draw', () => {
+  it('drops emoji / dingbats, keeps Latin, Arabic, digits and punctuation', () => {
+    expect(printable('QA sales-cash note ✓ ملاحظة 😀')).toBe('QA sales-cash note ملاحظة');
+    expect(printable('Robe kabyle 👍🏽 · 4 900 DA')).toBe('Robe kabyle · 4 900 DA');
+    expect(printable('Vente #VNT-1013 (remboursement) — Erreur de saisie')).toBe('Vente #VNT-1013 (remboursement) — Erreur de saisie');
   });
 });

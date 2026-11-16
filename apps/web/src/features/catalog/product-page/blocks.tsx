@@ -12,6 +12,7 @@ import { useRef, useState } from 'react';
 import { QueryError } from '@/components/global-states';
 import { Link } from '@/i18n/navigation';
 import { useLocaleCode, useT } from '@/lib/i18n';
+import { signedNumber } from '@/lib/money';
 import { useSession } from '@/lib/session';
 import { useMovements } from '../api';
 import type { Product, ProductImage } from '../contracts';
@@ -177,12 +178,14 @@ export function MovementsBlock({ productId }: { productId: string }) {
                       <Num value={incoming ? Math.abs(m.quantity) : -Math.abs(m.quantity)} signed />
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5">
-                      <Ltr className="tabular-nums">{`${formatNumber(m.before)} → ${formatNumber(m.after)}`}</Ltr>
+                      <Ltr className="tabular-nums">{`${signedNumber(m.before)} → ${signedNumber(m.after)}`}</Ltr>
                     </td>
                     <td className="px-3 py-2.5 text-text-secondary">
-                      {m.reference?.label ? <Ltr>{m.reference.label}</Ltr> : null}
-                      {m.reference?.label && m.reason ? ' · ' : ''}
-                      {m.reason || !m.reference?.label ? reason(m.reason) : null}
+                      {/* full-test 15/11 STOCK-06: a reversal names the movement it cancels, never a raw id */}
+                      {m.reversalOf ? t('movements.reversalOf', { date: formatDate(m.reversalOf.createdAt, locale) }) : m.reference?.label ? <Ltr>{m.reference.label}</Ltr> : null}
+                      {(m.reversalOf || m.reference?.label) && m.reason ? ' · ' : ''}
+                      {m.reason || !(m.reversalOf || m.reference?.label) ? reason(m.reason) : null}
+                      {m.reversedAt ? ` · ${t('movements.reversedOn', { date: formatDate(m.reversedAt, locale) })}` : ''}
                       {m.variant ? ` · ${m.variant.name}` : ''}
                     </td>
                   </tr>

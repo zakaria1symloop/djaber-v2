@@ -40,6 +40,8 @@ export type ConversationContext = {
   aiUnavailable?: 'credits' | 'quota' | 'error' | null;
   /** A4: order details the customer gave (reported by the AI turn after turn), shown to the next turns as KNOWN CUSTOMER */
   customer?: { name?: string; phone?: string; phone2?: string; wilaya?: string; commune?: string; address?: string };
+  /** full-test 15/11 AI-CHAT-05: the product(s), variant and quantity the customer chose for the order being taken (CURRENT ORDER) */
+  chosen?: { productId: string; variantId: string | null; quantity: number | null }[] | null;
 };
 export const contextOf = (c: Pick<Conversation, 'context'>): ConversationContext => (c.context && typeof c.context === 'object' && !Array.isArray(c.context) ? (c.context as ConversationContext) : {});
 

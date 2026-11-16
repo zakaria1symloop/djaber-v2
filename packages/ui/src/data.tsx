@@ -19,7 +19,7 @@ export function PageHeader({
     <header className="flex flex-wrap items-end justify-between gap-4 md:flex-nowrap md:items-start">
       <div className="min-w-0 md:flex-1">
         {eyebrow ? <div className="ts-label-meta mb-2 uppercase text-text-muted">{eyebrow}</div> : null}
-        <h1 className="ts-display-m truncate" title={title}>
+        <h1 className="ts-display-m [overflow-wrap:anywhere] md:truncate" title={title}>
           {title}
         </h1>
         {description ? <p className="ts-body mt-2 text-text-secondary">{description}</p> : null}

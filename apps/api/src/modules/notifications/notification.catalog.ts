@@ -35,7 +35,12 @@ const GROUP_BY_PREFIX: Record<string, NotificationGroup> = {
   legal: 'platform',
   platform: 'platform',
 };
-export const notificationGroup = (type: string): NotificationGroup => GROUP_BY_PREFIX[type.split('_')[0]!] ?? 'platform';
+/**
+ * Types filed by what they are, not by their prefix: full-test 15/11 HOME-09 — « Nom d'agent validé / refusé » is a
+ * moderation result (with the validated products), not a « Problème IA ».
+ */
+const GROUP_BY_TYPE: Record<string, NotificationGroup> = { agent_name_approved: 'moderation', agent_name_rejected: 'moderation' };
+export const notificationGroup = (type: string): NotificationGroup => GROUP_BY_TYPE[type] ?? GROUP_BY_PREFIX[type.split('_')[0]!] ?? 'platform';
 export const typesOfGroup = (group: string, all: readonly string[]) => all.filter((t) => notificationGroup(t) === group);
 
 type Data = Record<string, unknown>;
@@ -51,14 +56,21 @@ const JOB_PATH: Record<string, (d: Data) => string> = {
   labels: (d) => `/delivery?job=${s(d.jobId)}`,
   generation: (d) => `/agents/generate?job=${s(d.jobId)}`,
   faq_extraction: (d) => (s(d.agentId) ? `/agents/${s(d.agentId)}/configuration` : '/agents'),
+  // full-test ROLES-04: an export opens the list it came from (its `?job=` banner holds the file) — /reports is Admin+, so
+  // an operator's movements / clients / parcels export never leads to a 403 page
+  export: (d) => `${EXPORT_PAGE[s(d.exportKind)] ?? '/reports'}?job=${s(d.jobId)}`,
 };
+/** List page of each export source (`ExportKind`); the others (report, ledger, cash, purchases, sales, products) stay on /reports. */
+const EXPORT_PAGE: Record<string, string> = { movements: '/movements', clients: '/clients', orders: '/orders', shipments: '/delivery' };
 /** Web path of a job (notifications `job_finished` / `job_failed`, Home queue "task" cards). */
 export const jobPath = (d: Data) => (JOB_PATH[s(d.kind)] ?? ((x: Data) => `/reports?job=${s(x.jobId)}`))(d);
-/** What `jobPath` reads from a job payload (job name, page, agent). */
-export const jobRefs = (payload: unknown): { name?: string; channelId?: string; agentId?: string } => {
+/** What `jobPath` reads from a job payload (job name, page, agent, export source). */
+export const jobRefs = (payload: unknown): { name?: string; channelId?: string; agentId?: string; exportKind?: string } => {
   const p = (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>;
-  const out: { name?: string; channelId?: string; agentId?: string } = {};
+  const out: { name?: string; channelId?: string; agentId?: string; exportKind?: string } = {};
   for (const k of ['name', 'channelId', 'agentId'] as const) if (typeof p[k] === 'string' && p[k]) out[k] = p[k] as string;
+  // the export job keeps its source in `payload.kind` (export.service)
+  if (typeof p.kind === 'string' && p.kind) out.exportKind = p.kind;
   return out;
 };
 /** A failed parcel: the delivery list filtered on its order (`ids`, api-contract §4 ShipmentsQuery) with its tracking panel open. */
@@ -202,8 +214,13 @@ export const NOTIFICATION_PARAMS: Record<NotificationType, readonly string[]> = 
 };
 
 /** Template variants of a type: `job.finished.import` when an import job reports its counts. */
-export const NOTIFICATION_VARIANTS: Partial<Record<NotificationType, { suffix: string; params: readonly string[]; when: (d: Data) => boolean }[]>> = {
+export const NOTIFICATION_VARIANTS: Partial<Record<NotificationType, { suffix: string; params: readonly string[]; when: (d: Data) => boolean; example?: Data }[]>> = {
   job_finished: [{ suffix: 'import', params: ['imported', 'skipped'], when: (d) => d.kind === 'import' && d.imported !== undefined && d.skipped !== undefined }],
+  // full-test 15/11 HELP-08: a status change of a ticket says what happened (it read « Réponse du support » with no reply)
+  support_reply: [
+    { suffix: 'resolved', params: ['status'], when: (d) => d.status === 'resolved', example: { status: 'resolved' } },
+    { suffix: 'pending', params: ['status'], when: (d) => d.status === 'pending_customer', example: { status: 'pending_customer' } },
+  ],
 };
 
 /** Keys older rows used for the same value (rows written before the parameter names were aligned with the templates). */

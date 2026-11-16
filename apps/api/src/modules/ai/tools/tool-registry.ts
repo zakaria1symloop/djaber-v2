@@ -17,9 +17,9 @@ import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
 import { fold, WILAYA_ALIASES } from './wilaya-aliases';
 import { handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
-import { confirmation, draftKey, wantsCancel, hasDraft, isPlaceholderName, phoneCheckAsked, phonesIn, type OrderCallHistory } from './order-confirmation';
+import { asksCancel, confirmation, draftKey, wantsCancel, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, simulatedOrders, type OrderCallHistory } from './order-confirmation';
 
-export type ToolName = 'search_products' | 'get_product' | 'quote_delivery' | 'create_order' | 'cancel_order' | 'lookup_order' | 'handoff_to_human' | 'add_faq_candidate' | 'create_payment_link';
+export type ToolName = 'search_products' | 'get_product' | 'check_availability' | 'quote_delivery' | 'create_order' | 'cancel_order' | 'lookup_order' | 'handoff_to_human' | 'add_faq_candidate' | 'create_payment_link';
 export type ToolRunContext = {
   workspaceId: string;
   agent: Agent;
@@ -37,6 +37,8 @@ export type ToolRunContext = {
   orderHistory?: OrderCallHistory;
   /** full-test 15/11 AI-CHAT-01: every customer message of the conversation (the phone of an order must be one of theirs) */
   customerHistory?: string;
+  /** full-test 15/11 proposal 9: an order is being taken (the customer chose a product, `context.chosen`) */
+  ordering?: boolean;
 };
 
 /** Plain status words the model may relay (04-ai-pipeline §4.2) — never the courier's raw status code. */
@@ -76,6 +78,12 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
     name: 'get_product',
     description: 'Full details of one catalogue product (description, variants with stock, recommendations).',
     parameters: { type: 'object', required: ['productId'], additionalProperties: false, properties: { productId: { type: 'string' } } },
+  },
+  // full-test 15/11 proposal 2 (C05 T1, C07 T4, C02 T5): a real stock / quantity check, so create_order is never a probe
+  check_availability: {
+    name: 'check_availability',
+    description: 'Can this quantity of a product (or of one of its variants) be ordered now? Use it for any stock or quantity question. It never gives a stock count unless the quantity is short; never call create_order to check.',
+    parameters: { type: 'object', required: ['productId'], additionalProperties: false, properties: { productId: { type: 'string' }, variantId: { type: 'string' }, quantity: { type: 'integer', minimum: 1, default: 1 } } },
   },
   quote_delivery: {
     name: 'quote_delivery',
@@ -140,7 +148,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
   },
 };
 /** §4.2 "Tool availability per run": order-taking is always on (D23); the payment link is conditional. */
-export const RUN_TOOLS: ToolName[] = ['search_products', 'get_product', 'quote_delivery', 'lookup_order', 'add_faq_candidate', 'handoff_to_human', 'create_order', 'cancel_order'];
+export const RUN_TOOLS: ToolName[] = ['search_products', 'get_product', 'check_availability', 'quote_delivery', 'lookup_order', 'add_faq_candidate', 'handoff_to_human', 'create_order', 'cancel_order'];
 
 const invalid = (field: string, example?: string | number): ToolResult => ({ ok: false, error: { code: 'VALIDATION', field, ...(example !== undefined ? { example } : {}) } });
 const str = z.string().trim();
@@ -212,6 +220,8 @@ export class ToolRegistry {
         return this.search(args, ctx);
       case 'get_product':
         return this.product(args, ctx);
+      case 'check_availability':
+        return this.availability(args, ctx);
       case 'quote_delivery':
         return this.quote(args);
       case 'lookup_order':
@@ -282,6 +292,29 @@ export class ToolRegistry {
     return { ...this.view(p), description: p.description, recommendations: p.also };
   }
 
+  /**
+   * full-test 15/11 proposal 2: `{ available }` for the quantity asked — STOCK_PRIVATE holds: the count
+   * (`availableQuantity`) only comes back when the quantity is short, with the other variants that have stock.
+   */
+  async availability(args: Record<string, unknown>, ctx: ToolRunContext): Promise<ToolResult> {
+    const id = typeof args.productId === 'string' ? args.productId.trim() : '';
+    const qty = Math.max(1, Math.floor(Number(args.quantity ?? 1)) || 1);
+    const [p] = id ? await this.catalogue.byIds(ctx.agent, [id], true) : [];
+    if (!p) return { ok: false, error: { code: 'PRODUCT_NOT_AVAILABLE', productId: id } };
+    const sell = p.sellOutOfStock;
+    const variantId = typeof args.variantId === 'string' && args.variantId.trim() ? args.variantId.trim() : null;
+    const v = p.hasVariants ? p.variants.find((x) => x.id === variantId) : null;
+    if (p.hasVariants && !v) return { ok: true, productId: p.id, variantRequired: true, variants: p.variants.map((x) => ({ id: x.id, name: x.name, price: x.price, available: sell || x.stock >= qty })), say: 'ask which variant the customer wants (only the available ones)' };
+    const stock = v ? v.stock : p.stock;
+    const base = { ok: true, productId: p.id, ...(v ? { variantId: v.id, variant: v.name } : {}), quantity: qty };
+    if (stock === null) return { ...base, available: true, service: true };
+    if (stock >= qty) return { ...base, available: true };
+    // the shop takes orders beyond the stock (PV 22/10): orderable, the extra units may take longer
+    if (sell) return { ...base, available: true, beyondStock: true, say: 'orderable: say that part of it may take a little longer to deliver' };
+    const others = v ? p.variants.filter((x) => x.id !== v.id && x.stock > 0).map((x) => ({ variantId: x.id, name: x.name, price: x.price })) : [];
+    return { ...base, available: false, ...(stock > 0 ? { availableQuantity: stock } : {}), ...(others.length ? { otherVariants: others } : {}), say: stock > 0 ? 'offer availableQuantity (and the other variants); never more' : 'say it is out of stock (OUT_OF_STOCK) and offer the other variants or a similar product' };
+  }
+
   private async wilaya(a: { wilayaId?: number; wilayaName?: string }) {
     if (a.wilayaId) return prisma.wilaya.findUnique({ where: { id: a.wilayaId } });
     const wanted = fold(a.wilayaName ?? '');
@@ -342,6 +375,9 @@ export class ToolRegistry {
     // a phone / tracking number the customer typed: exactly those orders; otherwise the customer's own orders
     const asked: Prisma.OrderWhereInput[] = [...byPhone(phone ? [phone] : []), ...(tracking ? [{ shipments: { some: { trackingNumber: { equals: tracking, mode: 'insensitive' as const } } } }] : [])];
     const who: Prisma.OrderWhereInput[] = asked.length ? asked : [...(ctx.clientId ? [{ clientId: ctx.clientId }] : []), ...byPhone(own)];
+    // full-test 15/11 AI-CHAT-16: the playground sees the TEST-n orders of its session (status new, not shipped)
+    const simulated = ctx.dryRun && !phone && !tracking ? simulatedOrders(ctx.orderHistory).filter((o) => !number || o.number.toLowerCase() === number.toLowerCase()).map((o) => ({ number: o.number, status: 'new', deliveryStatus: 'not_sent', courier: null, trackingNumber: null, trackingUrl: null, lastEvent: null, total: o.total, orderedAt: aiDateTime(o.at), simulated: true })) : [];
+    if (simulated.length) return { orders: simulated };
     if (!who.length) return { orders: [] };
     const old = new Date(Date.now() - 30 * 86_400_000);
     const rows = await prisma.order.findMany({
@@ -372,7 +408,7 @@ export class ToolRegistry {
   }
 
   /** Validation, catalogue check and limits of `create_order` (04 §5, FL-02); the write itself is the `OrderTools` port. */
-  async prepareOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<{ ok: true; request: CreateOrderRequest; beyondStock?: { name: string; quantity: number }[] } | { ok: false; result: ToolResult }> {
+  async prepareOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<{ ok: true; request: CreateOrderRequest; draft: string; beyondStock?: { name: string; quantity: number }[] } | { ok: false; result: ToolResult }> {
     const fail = (result: ToolResult) => ({ ok: false as const, result });
     const a = OrderArgs.safeParse(args);
     if (!a.success) {
@@ -395,7 +431,10 @@ export class ToolRegistry {
     // A9: the order it replaces must be this customer's and not confirmed by the shop yet; its units count as free here
     let replaces: CreateOrderRequest['replaces'] = null;
     const freed = new Map<string, number>();
-    if (d.replacesOrder) {
+    // full-test 15/11 AI-CHAT-16: in the playground, a TEST-n order of this session can be replaced (nothing is written)
+    const simulatedOld = ctx.dryRun && d.replacesOrder ? simulatedOrders(ctx.orderHistory).find((o) => o.number.toLowerCase() === d.replacesOrder!.trim().toLowerCase()) : undefined;
+    if (simulatedOld) replaces = { id: 'simulated', number: simulatedOld.number };
+    else if (d.replacesOrder) {
       const old = ctx.clientId ? await prisma.order.findFirst({ where: { clientId: ctx.clientId, number: { equals: d.replacesOrder.trim(), mode: 'insensitive' } }, include: { items: true } }) : null;
       if (!old || old.status === 'cancelled' || old.status === 'returned' || old.status === 'delivered' || old.deliveryStatus !== 'not_sent') return fail({ ok: false, error: { code: 'ORDER_NOT_REPLACEABLE', number: d.replacesOrder } });
       if (old.status !== 'new') return fail({ ok: false, error: { code: 'ORDER_CONFIRMED_BY_SELLER', number: old.number }, hint: 'handoff' });
@@ -450,6 +489,12 @@ export class ToolRegistry {
     // recap the server sent — the model's `customerConfirmed` is never enough on its own
     if (ctx.customerHistory !== undefined && !(await this.knownPhones(ctx)).has(phone)) return ask('clientPhone');
     const draft = draftKey(request);
+    // full-test 15/11 proposal 4: one order per confirmed recap — never a second one in the same turn, never the same
+    // content again in a later turn (C06: TEST-2998 then TEST-2283 on « oui c'est bon »)
+    const placedNow = await this.placedThisRun(ctx);
+    if (placedNow) return fail({ ok: false, error: { code: 'ORDER_ALREADY_PLACED', number: placedNow }, say: 'An order was already placed in this turn: confirm that one to the customer, never create another one now.' });
+    const before = orderedBefore(ctx.orderHistory, draft);
+    if (before) return fail({ ok: false, error: { code: 'ORDER_ALREADY_PLACED', number: before }, say: 'This exact order was already placed: confirm it to the customer. Create another order only when the customer clearly asks for an additional one.' });
     const recap = {
       items: items.map((i) => ({ name: i.name, variant: i.variant, quantity: i.quantity, unitPrice: i.unitPrice })),
       subtotal, deliveryFee, total: subtotal + deliveryFee, clientName: d.clientName, clientPhone: phone, ...(phone2 ? { secondPhone: phone2 } : {}),
@@ -464,7 +509,14 @@ export class ToolRegistry {
     if (said === 'unclear') return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft }, recap, say: 'The customer has not clearly confirmed this recap yet: nothing is ordered. Answer their message, then ask them to reply « oui » to confirm the order (or say what to change).' });
     // 04 §21: `phoneConfirmed` counts only once the tool asked the customer to re-confirm this number
     if (d.phoneConfirmed && phoneCheckAsked(ctx.orderHistory, phone)) request.phoneConfirmed = true;
-    return { ok: true, request, ...(beyondStock.length ? { beyondStock } : {}) };
+    return { ok: true, request, draft, ...(beyondStock.length ? { beyondStock } : {}) };
+  }
+
+  /** The number of the order a `create_order` of this very run already placed, else null. */
+  private async placedThisRun(ctx: ToolRunContext): Promise<string | null> {
+    const calls = await prisma.aiToolCall.findMany({ where: { aiRunId: ctx.runId, name: 'create_order', executedAt: { not: null } }, select: { result: true } });
+    const hit = calls.map((c) => c.result as { ok?: unknown; number?: unknown } | null).find((r) => r?.ok === true && typeof r.number === 'string');
+    return hit ? String(hit.number) : null;
   }
 
   /** The phones this customer typed in the conversation or has on their client record (a returning customer) — never one the model reported. */
@@ -493,17 +545,31 @@ export class ToolRegistry {
     const prepared = await this.prepareOrder(args, ctx);
     if (!prepared.ok) return prepared.result;
     const r = prepared.request;
-    const beyond = prepared.beyondStock ? { beyondStock: prepared.beyondStock } : {};
+    // `draft`: the content key (a later turn never places the same order again); `etaDays`: the server's confirmation text
+    const beyond = { ...(prepared.beyondStock ? { beyondStock: prepared.beyondStock } : {}), draft: prepared.draft, etaDays: '2–5' };
     // §8 dry run: everything validated, nothing written
-    if (ctx.dryRun) return { ok: true, orderId: null, number: `TEST-${seqOf(ctx.callId)}`, simulated: true, subtotal: r.subtotal, deliveryFee: r.deliveryFee, total: r.total, items: r.items.map((i) => ({ name: i.name, variant: i.variant, quantity: i.quantity, unitPrice: i.unitPrice })), duplicateOf: null, paymentOptions: ['cod'], ...beyond };
+    if (ctx.dryRun) return { ok: true, orderId: null, number: `TEST-${seqOf(ctx.callId)}`, simulated: true, subtotal: r.subtotal, deliveryFee: r.deliveryFee, total: r.total, items: r.items.map((i) => ({ name: i.name, variant: i.variant, quantity: i.quantity, unitPrice: i.unitPrice })), duplicateOf: null, paymentOptions: ['cod'], ...(r.replaces ? { replaced: { number: r.replaces.number } } : {}), ...beyond };
     const created = await this.orders.createOrder({ workspaceId: ctx.workspaceId, agentId: ctx.agent.id, conversationId: ctx.conversationId, clientId: ctx.clientId, channelId: ctx.channelId, runId: ctx.runId, callId: ctx.callId }, r);
     return created && typeof created === 'object' && (created as { ok?: unknown }).ok !== false ? { ...(created as object), ...beyond } : created;
   }
 
   /** FL-02 F-5: this client's open orders only; one confirmed ⇒ cancel, several ⇒ ask which, none ⇒ hand off. */
   private async cancelOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<ToolResult> {
-    if (!ctx.clientId) return { ok: false, error: { code: 'NO_OPEN_ORDER' } };
     const number = typeof args.orderNumber === 'string' && args.orderNumber.trim() ? args.orderNumber.trim().toLowerCase() : null;
+    // full-test 15/11 AI-CHAT-16: the playground cancels its own TEST-n orders (nothing is written)
+    if (ctx.dryRun) {
+      const mine = simulatedOrders(ctx.orderHistory);
+      if (mine.length) {
+        const target = number ? mine.find((o) => o.number.toLowerCase() === number) : mine.length === 1 ? mine[0] : undefined;
+        const candidates = mine.map((o) => ({ number: o.number, total: o.total, status: 'new', orderedAt: aiDateTime(o.at) }));
+        if (number && !target) return { ok: false, error: { code: 'ORDER_NOT_CANCELLABLE' } };
+        if (!target || args.customerConfirmed !== true) return { ok: true, candidates, simulated: true };
+        if (await this.placedThisRun(ctx)) return { ok: false, error: { code: 'ORDER_JUST_CREATED', number: target.number }, say: "This order was just created at the customer's request: keep it. Cancel only if the customer asks in a later message." };
+        if (ctx.customerText !== undefined && !asksCancel(ctx.customerText)) return { ok: true, candidates, simulated: true, say: 'Nothing is cancelled: the customer did not ask to cancel this order in their message. Keep it; to cancel, they must say so (« annuler »).' };
+        return { ok: true, cancelled: target.number, simulated: true };
+      }
+    }
+    if (!ctx.clientId) return { ok: false, error: { code: 'NO_OPEN_ORDER' } };
     // A8 (tester report 2026-10-20): only orders the shop has not confirmed yet; a confirmed one is the team's to cancel
     const open = await prisma.order.findMany({ where: { clientId: ctx.clientId, status: 'new', deliveryStatus: 'not_sent' }, orderBy: { orderedAt: 'desc' }, take: 10 });
     const candidates: CancellableOrder[] = open.map((o) => ({ id: o.id, number: o.number, total: o.total, status: o.status, orderedAt: aiDateTime(o.orderedAt) }));
@@ -522,6 +588,9 @@ export class ToolRegistry {
     const createdNow = (await prisma.aiToolCall.findMany({ where: { aiRunId: ctx.runId, name: 'create_order', executedAt: { not: null } }, select: { result: true } })).some((c) => (c.result as { ok?: unknown } | null)?.ok === true);
     if (createdNow) return { ok: false, error: { code: 'ORDER_JUST_CREATED', number: target.number }, say: "This order was just created at the customer's request: keep it. Cancel only if the customer asks in a later message." };
     if (ctx.customerText !== undefined && !wantsCancel(ctx.customerText)) return { ok: true, candidates: publicList, say: 'Nothing is cancelled: ask the customer to confirm the cancellation of this order.' };
+    // full-test 15/11 proposal 4: an order the AI placed in this conversation is cancelled only on the customer's own
+    // cancel words (« oui » / « merci » right after the confirmation cancelled it — C08 T6, X01)
+    if (ctx.customerText !== undefined && placedNumbers(ctx.orderHistory).some((n) => n.toLowerCase() === target.number.toLowerCase()) && !asksCancel(ctx.customerText)) return { ok: true, candidates: publicList, say: 'Nothing is cancelled: this order was just placed and the customer did not ask to cancel it in their message. Keep it; to cancel, they must say so (« annuler »).' };
     return this.orders.cancelOrder({ workspaceId: ctx.workspaceId, agentId: ctx.agent.id, conversationId: ctx.conversationId, clientId: ctx.clientId, channelId: ctx.channelId, runId: ctx.runId, callId: ctx.callId }, target, typeof args.reason === 'string' ? args.reason.slice(0, 200) : null);
   }
 

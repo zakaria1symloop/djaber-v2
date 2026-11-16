@@ -2,10 +2,11 @@
 // A help guide read inside the app (HELP-01): side sheet over the current page, `?article=<key>` in the URL (shareable,
 // Back closes it). `GET /help/articles/:key?lang=` — FR fallback banner when the user's locale is missing (12 §27).
 import { formatDate, type AppLocale } from '@djaber/shared';
-import { Banner, SideSheet, Skeleton } from '@djaber/ui';
+import { Banner, NotFoundState, SideSheet, Skeleton } from '@djaber/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
 import { QueryError } from '@/components/global-states';
+import { ApiError } from '@/lib/api';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useHelpArticle } from './api';
 import { articleBlocks } from './logic';
@@ -38,7 +39,7 @@ export function ArticleSheet() {
   const q = useHelpArticle(key);
   const a = q.data;
   return (
-    <SideSheet open={!!key} onClose={close} title={a?.title ?? t('help.article.loading')} subtitle={a?.publishedAt ? t('help.article.updated', { date: formatDate(a.publishedAt, locale) }) : undefined} closeLabel={t('action.close')} width={460}>
+    <SideSheet open={!!key} onClose={close} title={a?.title ?? (q.isError ? t('help.article.notFound.title') : t('help.article.loading'))} subtitle={a?.publishedAt ? t('help.article.updated', { date: formatDate(a.publishedAt, locale) }) : undefined} closeLabel={t('action.close')} width={460}>
       <div data-testid="help-article" data-key={key ?? ''} className="flex flex-col gap-3">
         {q.isPending ? (
           <div role="status" aria-label={t('common.loading')} className="flex flex-col gap-2">
@@ -46,6 +47,9 @@ export function ArticleSheet() {
               <Skeleton key={i} className="h-4 w-full" />
             ))}
           </div>
+        ) : q.isError && q.error instanceof ApiError && q.error.status === 404 ? (
+          // full-test 15/11 HELP-13: guides are shared by every shop — « appartient à un autre espace » made no sense here
+          <NotFoundState title={t('help.article.notFound.title')} description={t('help.article.notFound.description')} />
         ) : q.isError ? (
           <QueryError error={q.error} onRetry={() => void q.refetch()} />
         ) : a ? (

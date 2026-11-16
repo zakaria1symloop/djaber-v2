@@ -3,7 +3,7 @@
 // Immutable journal (advanced stock mode): nothing is edited or deleted, a correction is a new inverse movement.
 // `GET /stock/movements`, `POST /stock/movements/:id/reverse`, `GET /stock/snapshot?date`, `GET /stock/movements/export`.
 import type { ActionDescriptor } from '@djaber/shared';
-import { formatDateTime, formatNumber } from '@djaber/shared';
+import { formatDate, formatDateTime, formatNumber } from '@djaber/shared';
 import { ActionsMenu, ActiveFilters, Button, buttonClass, Card, cn, DataTable, EmptyState, KpiTile, KpiTileSkeleton, Ltr, SearchInput, TableViewMenu, toast, type Column } from '@djaber/ui';
 import { ArrowLeftRight, ArrowUpRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -13,10 +13,12 @@ import { Link, useRouter } from '@/i18n/navigation';
 import { toMenuActions } from '@/lib/actions';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
+import { JobParamBanner } from '@/components/job-param-banner';
 import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
 import { useSession } from '@/lib/session';
 import { useListState } from '@/lib/use-list-state';
 import { useMovementStats } from '@/features/gds/api';
+import { signedNumber } from '@/lib/money';
 import { AdjustStockDialog } from '../adjust-stock-dialog';
 import { catalogApi, useMovements } from '../api';
 import type { StockMovement } from '../contracts';
@@ -105,8 +107,10 @@ function Journal() {
   };
 
   const openProduct = (m: StockMovement) => router.push(`/products/${m.product.id}`);
-  const actionsOf = (m: StockMovement) =>
-    toMenuActions(
+  // why « Contre-passer » is greyed, in words that fit the row (STOCK-06): already reversed / a reversal / a document's movement
+  const lockText = (m: StockMovement) => (m.lockedBy === 'reversed' && m.reversedAt ? t('movements.locked.reversed', { date: formatDate(m.reversedAt, locale) }) : m.lockedBy === 'reversal' ? t('movements.locked.reversal') : m.lockedBy === 'document' ? t('movements.locked.document') : undefined);
+  const actionsOf = (m: StockMovement) => {
+    const items = toMenuActions(
       descriptorsOf(m),
       {
         open_product: { label: t('movements.action.openProduct'), hint: t('movements.action.hint.page'), onSelect: () => openProduct(m) },
@@ -117,6 +121,9 @@ function Journal() {
       },
       t,
     );
+    const lock = lockText(m);
+    return lock ? items.map((a) => (a.key === 'reverse' && a.disabledReason ? { ...a, disabledReason: lock } : a)) : items;
+  };
 
   const columns: Column<StockMovement>[] = [
     {
@@ -173,6 +180,8 @@ function Journal() {
         </>
       }
     >
+      {/* `?job=` of the « Tâche terminée : Export » notification: progress / file of the export (full-test ROLES-04) */}
+      <JobParamBanner />
       <MovementKpis stats={stats.data} period={f.periodLabel} />
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput value={list.state.q} onChange={(q) => list.set({ q })} placeholder={t('movements.search.placeholder')} label={t('action.search')} clearLabel={t('movements.search.clear')} className="basis-64" />
@@ -276,7 +285,10 @@ function Quantity({ movement: m }: { movement: StockMovement }) {
 /** `#CMD-1042` · a variant name (link to its product) · the type label alone for manual / import references. */
 function Reference({ movement: m }: { movement: StockMovement }) {
   const t = useT();
-  if (!m.reference) return <span className="text-text-muted">—</span>;
+  const locale = useLocaleCode() as 'fr' | 'ar' | 'en';
+  // full-test 15/11 STOCK-06: « Contre-passation du 15 nov. » on the reversal, « contre-passé le … » on the original
+  if (m.reversalOf) return <span>{t('movements.reversalOf', { date: formatDate(m.reversalOf.createdAt, locale) })}</span>;
+  if (!m.reference) return m.reversedAt ? <span className="text-text-muted">{t('movements.reversedOn', { date: formatDate(m.reversedAt, locale) })}</span> : <span className="text-text-muted">—</span>;
   const kind = referenceKind(m.reference.type);
   const typeKey = `movements.refType.${m.reference.type}`;
   const label = kind === 'number' ? `#${m.reference.label}` : kind === 'name' ? m.reference.label : t.has(typeKey) ? t(typeKey) : m.reference.type;
@@ -299,14 +311,14 @@ function MovementKpis({ stats, period }: { stats: ReturnType<typeof useMovementS
       {stats ? (
         <>
           <KpiTile value={'+' + formatNumber(stats.unitsIn)} label={t('movements.kpi.in', { period: when })} meta={t('movements.kpi.inMeta')} data-kpi="in" />
-          <KpiTile value={'−' + formatNumber(stats.unitsOut)} label={t('movements.kpi.out', { period: when })} meta={t('movements.kpi.outMeta')} data-kpi="out" />
+          <KpiTile value={(stats.unitsOut ? '−' : '') + formatNumber(stats.unitsOut)} label={t('movements.kpi.out', { period: when })} meta={t('movements.kpi.outMeta')} data-kpi="out" />
           <KpiTile
             value={formatNumber(stats.byType.adjustment_in.count + stats.byType.adjustment_out.count)}
             label={t('movements.kpi.adjustments')}
             meta={t('movements.kpi.adjustmentsMeta', { inventories: stats.byType.inventory.count, returns: stats.byType.return.count })}
             data-kpi="adjustments"
           />
-          <KpiTile value={(stats.net > 0 ? '+' : stats.net < 0 ? '−' : '') + formatNumber(Math.abs(stats.net))} label={t('movements.kpi.net')} meta={stats.netValue === null ? t('movements.kpi.count', { count: stats.count }) : t('movements.kpi.netValue', { amount: formatNumber(stats.netValue) })} data-kpi="net" />
+          <KpiTile value={(stats.net > 0 ? '+' : stats.net < 0 ? '−' : '') + formatNumber(Math.abs(stats.net))} label={t('movements.kpi.net')} meta={stats.netValue === null ? t('movements.kpi.count', { count: stats.count }) : t('movements.kpi.netValue', { amount: signedNumber(stats.netValue) })} data-kpi="net" />
         </>
       ) : (
         Array.from({ length: 4 }).map((_, i) => <KpiTileSkeleton key={i} />)

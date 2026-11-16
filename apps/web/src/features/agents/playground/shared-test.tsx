@@ -17,7 +17,7 @@ import { sharedTestApi } from '../api';
 import type { TurnView } from '../logic';
 import { PlaygroundComposer, PlaygroundThread, usePlayground, type ChatTransport } from './chat';
 
-const replyView = (r: { reply: string; cards: { productId: string; name: string; price: number; imageUrl: string | null; variantLabel?: string | null }[] }): TurnView => ({
+const replyView = (r: { reply: string; cards: { productId: string; name: string; price: number; imageUrl: string | null; variantLabel?: string | null }[]; systemMessages?: { key: string; text: string }[] }): TurnView => ({
   reply: r.reply,
   status: 'OK',
   intent: '',
@@ -31,7 +31,8 @@ const replyView = (r: { reply: string; cards: { productId: string; name: string;
   creditsInProd: 0,
   language: '',
   prompt: [],
-  systemMessages: [],
+  // full-test 15/11 AI-CHAT-09: the shop's texts (welcome, handoff…) a customer would also get — a handoff turn showed nothing
+  systemMessages: r.systemMessages ?? [],
   turnId: null,
 });
 const isExpired = (e: unknown) => e instanceof ApiError && (e.status === 410 || e.code === 'AGENT_TEST_LINK_EXPIRED' || e.status === 404);
@@ -41,12 +42,14 @@ export function SharedTest({ token }: { token: string }) {
   const locale = useLocaleCode() as AppLocale;
   useDocumentTitle(t('agents.shared.title'));
   const q = useQuery({ queryKey: ['public', 'agent-test', token], queryFn: () => sharedTestApi.get(token, locale), retry: (n, e) => !(e instanceof ApiError && e.status < 500) && n < 1 });
-  const transport = useCallback<ChatTransport>(async (history, input) => replyView(await sharedTestApi.send(token, locale, { text: input.text, history: history.map((h) => ({ role: h.role, text: h.text })) })), [token, locale]);
+  // full-test 15/11 AI-CHAT-10: one server session per open page (two colleagues never share one)
+  const transport = useCallback<ChatTransport>(async (history, input, sessionId) => replyView(await sharedTestApi.send(token, locale, { text: input.text, history: history.map((h) => ({ role: h.role, text: h.text })), sessionId })), [token, locale]);
   const pg = usePlayground(transport);
   // the link may expire while the page is open: the next message answers 410
   const expiredLater = pg.entries.some((e) => e.role === 'error' && e.code === 'AGENT_TEST_LINK_EXPIRED');
   const expired = (q.isError && isExpired(q.error)) || expiredLater;
-  const state = q.isPending ? 'loading' : expired ? 'expired' : q.isError ? 'error' : pg.wait > 0 ? 'rate-limited' : pg.entries.length ? 'conversation' : 'intro';
+  const invalid = q.isError && q.error instanceof ApiError && q.error.status === 404;
+  const state = q.isPending ? 'loading' : invalid ? 'invalid' : expired ? 'expired' : q.isError ? 'error' : pg.wait > 0 ? 'rate-limited' : pg.entries.length ? 'conversation' : 'intro';
 
   return (
     <div className="flex w-full max-w-2xl flex-col gap-4" data-testid="shared-test" data-state={state}>
@@ -64,6 +67,9 @@ export function SharedTest({ token }: { token: string }) {
           <Skeleton className="h-10 w-1/2" />
           <Skeleton className="min-h-0 flex-1" />
         </Card>
+      ) : invalid ? (
+        // full-test 15/11 PUBLIC-11: a link that never existed (mistyped / cut) is « invalide », not « expiré »
+        <StateBlock icon={<Clock className="size-5" />} title={t('agents.shared.invalid.title')} description={t('agents.shared.invalid.description')} />
       ) : expired ? (
         <StateBlock icon={<Clock className="size-5" />} title={t('agents.shared.expired.title')} description={`${t('error.AGENT_TEST_LINK_EXPIRED')} ${t('agents.shared.expired.description')}`} />
       ) : q.isError ? (
@@ -71,15 +77,16 @@ export function SharedTest({ token }: { token: string }) {
       ) : (
         <Card className="flex h-[min(78vh,46rem)] min-h-[26rem] flex-col overflow-hidden">
           <div className="flex items-center gap-3 border-b border-line-hairline px-4 py-3" data-testid="shared-intro">
-            <AgentAvatar name={q.data.agentName} src={q.data.avatarUrl} size={40} />
+            {/* full-test 15/11 AGENTS-16 / AI-CHAT-09: the moderated name only — none while it is in review, like the AI itself */}
+            <AgentAvatar name={q.data.agentName || t('agents.shared.assistant')} src={q.data.avatarUrl} size={40} />
             <div className="min-w-0 flex-1">
-              <h1 className="truncate ts-title">{q.data.agentName}</h1>
+              <h1 className="truncate ts-title">{q.data.agentName || t('agents.shared.assistant')}</h1>
               <p className="ts-label-meta mt-1 text-text-muted">
                 <Ltr>{t('agents.shared.expires', { date: formatDateTime(q.data.expiresAt, locale) })}</Ltr>
               </p>
             </div>
           </div>
-          <PlaygroundThread pg={pg} agentName={q.data.agentName} showTools={false} empty={t('agents.shared.intro')} className="pt-2" />
+          <PlaygroundThread pg={pg} agentName={q.data.agentName || t('agents.shared.assistant')} showTools={false} empty={t('agents.shared.intro')} className="pt-2" />
           <div className="border-t border-line-hairline p-3">
             <PlaygroundComposer pg={pg} placeholder={t('agents.playground.placeholder')} />
           </div>

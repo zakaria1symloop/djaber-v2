@@ -76,6 +76,8 @@ export const FAMILY_CHIPS: readonly { group: NotificationGroup; labelKey: string
   { group: 'members', labelKey: 'notification.filter.members' },
   { group: 'integrations', labelKey: 'notification.filter.integrations' },
   { group: 'jobs', labelKey: 'notification.filter.jobs' },
+  // full-test 15/11 HOME-09: the moderation results (products, agent names) have their own chip
+  { group: 'moderation', labelKey: 'notification.filter.moderation' },
 ];
 
 export const isNotificationType = (v: string): v is NotificationType => (NotificationTypeValues as readonly string[]).includes(v);

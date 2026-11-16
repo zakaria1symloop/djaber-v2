@@ -103,6 +103,8 @@ export function useSupplierActions() {
     }
   };
   const menu = (s: SupplierRow, o: { onOpen?: () => void } = {}): MenuAction[] =>
+    // full-test 15/11 STOCK-09: nothing owed ⇒ « Enregistrer un paiement » greyed with its reason
+    withNothingDue(s, t('suppliers.payment.nothingDue'),
     // an inactive supplier is not offered in the purchase form: "Nouvel achat" stays visible, greyed with its reason
     withInactiveReason(s, t('suppliers.inactivePurchaseReason'), toMenuActions(
       s.actions,
@@ -116,7 +118,7 @@ export function useSupplierActions() {
         delete: { label: t('action.delete'), onSelect: () => setDel(s), destructive: true },
       },
       t,
-    ));
+    )));
   const element = (
     <>
       <SupplierDialog open={edit !== null} supplier={edit === 'new' ? null : edit} onClose={() => setEdit(null)} />
@@ -459,7 +461,7 @@ export function SupplierDialog({ open, supplier, onClose, onCreated }: { open: b
   // tester report 2026-10-20 (UX-003): a supplier with the same name is pointed out (allowed: two suppliers may share a
   // name); the same phone or e-mail is refused by the API (SUPPLIER_ALREADY_EXISTS)
   const [nameChecked, setNameChecked] = useState('');
-  const twins = useSuppliers({ q: nameChecked, pageSize: 5 }, open && nameChecked.length >= 2);
+  const twins = useSuppliers({ q: nameChecked, pageSize: 25 }, open && nameChecked.length >= 2); // 25 | 50 | 100 only (api-contract §1.6, STOCK-03)
   const sameName = (twins.data?.rows ?? []).filter((x) => x.id !== supplier?.id && x.name.trim().toLowerCase() === f.name.trim().toLowerCase());
   useOnOpen(open, () => {
     setF(toForm(source));
@@ -547,10 +549,10 @@ export function SupplierDialog({ open, supplier, onClose, onCreated }: { open: b
           <Input id="sup-address" value={f.address} maxLength={500} onChange={(e) => set('address')(e.target.value)} />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={t('suppliers.dialog.paymentDays')} htmlFor="sup-pay-days" error={s.fieldError('paymentTermsDays')}>
+          <Field label={t('suppliers.dialog.paymentDays')} htmlFor="sup-pay-days" error={s.fieldError('paymentTermsDays', { min: 0, max: 365 })}>
             <NumberInput id="sup-pay-days" value={f.paymentTermsDays} onValueChange={set('paymentTermsDays')} maxDigits={3} placeholder="30" />
           </Field>
-          <Field label={t('suppliers.dialog.leadDays')} htmlFor="sup-lead" error={s.fieldError('avgLeadDays')}>
+          <Field label={t('suppliers.dialog.leadDays')} htmlFor="sup-lead" error={s.fieldError('avgLeadDays', { min: 0, max: 365 })}>
             <NumberInput id="sup-lead" value={f.avgLeadDays} onValueChange={set('avgLeadDays')} maxDigits={3} placeholder="5" />
           </Field>
         </div>
@@ -567,6 +569,10 @@ export function SupplierDialog({ open, supplier, onClose, onCreated }: { open: b
 }
 
 /* ---------- Enregistrer un paiement fournisseur ---------- */
+/** `record_payment` greyed when the supplier is owed nothing (its balance is the sum of what its purchases still owe). */
+const withNothingDue = (s: SupplierRow, reason: string, items: MenuAction[]): MenuAction[] =>
+  s.balance > 0 ? items : items.map((a) => (a.key === 'record_payment' && a.onSelect ? { ...a, onSelect: undefined, disabledReason: reason } : a));
+
 export function SupplierPaymentDialog({ supplier, onClose, purchaseId }: { supplier: SupplierRow | null; onClose: () => void; purchaseId?: string | null }) {
   const t = useT();
   const ws = useWorkspaceId();
@@ -592,7 +598,7 @@ export function SupplierPaymentDialog({ supplier, onClose, purchaseId }: { suppl
   });
   const max = target ? (dueRows.find((p) => p.id === target)?.remaining ?? supplier?.balance ?? 0) : (supplier?.balance ?? 0);
   const value = digitsToInt(amount);
-  const err = !value ? 'validation.required' : value > max ? 'suppliers.payment.overDue' : null;
+  const err = value === null ? 'validation.required' : value === 0 ? 'validation.amount_positive' : value > max ? 'suppliers.payment.overDue' : null;
   const s = useDialogSubmit((key) => gdsApi.supplierPayment(supplier!.id, { amount: value!, method, purchaseId: target || null, reference: reference.trim() || null }, key));
   const submit = async () => {
     setTouched(true);
@@ -616,7 +622,7 @@ export function SupplierPaymentDialog({ supplier, onClose, purchaseId }: { suppl
     >
       <div className="flex flex-col gap-4" data-testid="supplier-payment-dialog">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={t('gds.amount')} htmlFor="sp-amount" required hint={t('suppliers.payment.maxHint')} error={touched && err ? t(err, { amount: formatMoney(max) }) : s.fieldError('amount')}>
+          <Field label={t('gds.amount')} htmlFor="sp-amount" required hint={t('suppliers.payment.maxHint')} error={(touched || err === 'suppliers.payment.overDue') && err ? t(err, { amount: formatMoney(max) }) : s.fieldError('amount')}>
             <MoneyInput id="sp-amount" value={amount} onValueChange={setAmount} aria-invalid={(touched && !!err) || undefined} />
           </Field>
           <Field label={t('gds.method')} htmlFor="sp-method">
@@ -642,7 +648,7 @@ export function SupplierPaymentDialog({ supplier, onClose, purchaseId }: { suppl
         <Field label={t('suppliers.payment.reference')} htmlFor="sp-ref">
           <CodeInput id="sp-ref" value={reference} maxLength={120} onChange={(e) => setReference(e.target.value)} />
         </Field>
-        <p className="ts-label-micro !normal-case text-text-muted">{t('suppliers.payment.note', { number: first ? `#${first.number}` : '—' })}</p>
+        {first ? <p className="ts-label-micro !normal-case text-text-muted">{t('suppliers.payment.note', { number: `#${first.number}` })}</p> : null}
         {s.error ? <FormAlert>{s.error}</FormAlert> : null}
       </div>
     </Dialog>

@@ -154,16 +154,16 @@ function PurchaseForm({ purchase }: { purchase?: Purchase }) {
     else if (l.hasVariants && !l.variantId) errs[`items.${i}.variantId`] = t('error.VARIANT_REQUIRED');
   });
   if (totals.overpaid) errs.amountPaid = t('purchases.form.overpaid');
+  // full-test 15/11 STOCK-14: the summary follows the form — it shrinks / goes away as the merchant fixes the lines
+  const errCount = Object.keys(errs).length;
+  const summary = touched && errCount ? t('state.form.validationSummary', { count: errCount, list: Object.values(errs).slice(0, 3).join(' · ') }) : null;
   const shown = (k: string) => (touched ? errs[k] : undefined) ?? (fields[k] ? (t.has(fields[k]!) ? t(fields[k]!, { max: '', min: '' }) : fields[k]) : undefined);
 
   const save = async (status: 'draft' | 'pending') => {
     setTouched(true);
     setError(null);
     setFields({});
-    if (Object.keys(errs).length) {
-      setError(t('state.form.validationSummary', { count: Object.keys(errs).length, list: Object.values(errs).slice(0, 3).join(' · ') }));
-      return;
-    }
+    if (errCount) return;
     setBusy(status);
     const items = f.lines.map((l) => ({ productId: l.productId, variantId: l.variantId, quantity: l.quantity, unitCost: int(l.unitCost) }));
     const common = {
@@ -352,7 +352,7 @@ function PurchaseForm({ purchase }: { purchase?: Purchase }) {
             </Button>
           </div>
         </div>
-        {error ? <FormAlert>{error}</FormAlert> : null}
+        {summary || error ? <FormAlert>{summary ?? error}</FormAlert> : null}
         <p className="ts-label-micro !normal-case text-text-muted">{t('purchases.form.legend')}</p>
       </Card>
       <SupplierDialog

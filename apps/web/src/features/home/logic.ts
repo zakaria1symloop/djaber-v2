@@ -1,6 +1,6 @@
 // Home dashboard rules (Figma "ANA-01 — Home — default", "ANA-01 — Home — new workspace + banners", "ANA-01b — Home &
 // Notifications — states catalogue"; 12 §3, §18; `HomeView` of `GET /dashboard/home`). Pure functions, unit tested.
-import { compareHomeQueueItems, HOME_QUEUE_KINDS, HOME_QUEUE_MAX, type HomePageCard, type HomeQueueItem, type HomeQueueKind, type HomeView } from '@djaber/shared';
+import { algiersDayOf, compareHomeQueueItems, HOME_QUEUE_KINDS, HOME_QUEUE_MAX, type HomePageCard, type HomeQueueItem, type HomeQueueKind, type HomeView } from '@djaber/shared';
 
 /* ---------- "À TRAITER" cards ---------- */
 /** Tone key of the `Home.queue` pill map (the API kind `task` is the TÂCHE card = `job` colour). */
@@ -62,17 +62,21 @@ export const queueHref = (item: Pick<HomeQueueItem, 'path' | 'kind'>): string =>
  * failure reason, platform): they become the ANA-01b lines ("4 restants (seuil 5)", "Rappeler à 16:00"…).
  */
 export type QueueText = { title: { key: string; params: Record<string, string | number> } | string; subtitle: { key: string; params: Record<string, string | number> } | string | null };
-export function queueText(item: Pick<HomeQueueItem, 'kind' | 'title' | 'subtitle'>, clock: (iso: string) => string): QueueText {
+export function queueText(item: Pick<HomeQueueItem, 'kind' | 'title' | 'subtitle'>, clock: (iso: string) => string, o: { day?: (iso: string) => string; today?: string } = {}): QueueText {
   const raw = item.subtitle ?? null;
   switch (item.kind) {
     case 'insight':
       return { title: item.title, subtitle: raw ? { key: `enum.AgentInsight.type.${raw}`, params: {} } : null };
     case 'stock': {
       const m = /^(-?\d+)\s*\/\s*(\d+)$/.exec(raw ?? '');
-      return { title: item.title, subtitle: m ? { key: 'home.queue.sub.stock', params: { stock: Number(m[1]), min: Number(m[2]) } } : raw };
+      // full-test 15/11 HOME-12: a negative stock with the true minus (« −6 »), the sentence without « restants »
+      return { title: item.title, subtitle: m ? { key: 'home.queue.sub.stock', params: { stock: Number(m[1]) < 0 ? `−${-Number(m[1])}` : Number(m[1]), min: Number(m[2]) } } : raw };
     }
     case 'callback':
-      return { title: item.title, subtitle: raw && !Number.isNaN(Date.parse(raw)) ? { key: 'home.queue.sub.callback', params: { time: clock(raw) } } : raw };
+      if (!raw || Number.isNaN(Date.parse(raw))) return { title: item.title, subtitle: raw };
+      // full-test 15/11 HOME-08: a callback of another day says its day (« Rappeler le 22 oct. à 15:29 »), not the time alone
+      if (o.day && algiersDayOf(raw) !== (o.today ?? algiersDayOf(new Date()))) return { title: item.title, subtitle: { key: 'home.queue.sub.callbackOn', params: { date: o.day(raw), time: clock(raw) } } };
+      return { title: item.title, subtitle: { key: 'home.queue.sub.callback', params: { time: clock(raw) } } };
     case 'parcel':
       return { title: item.title, subtitle: raw ? { key: `enum.Shipment.failureReason.${raw}`, params: {} } : null };
     case 'page':

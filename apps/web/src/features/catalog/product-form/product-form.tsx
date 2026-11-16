@@ -21,7 +21,7 @@ import { isOwnChange } from '@/lib/origin';
 import { conflictOf } from '@/lib/conflict';
 import { errorMessage, fieldError, useLeaveGuard } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
-import { digitsToInt, marginPct } from '@/lib/money';
+import { digitsToInt, marginPct, pctText } from '@/lib/money';
 import { useSession, useWorkspaceId } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
 import { AdjustStockDialog } from '../adjust-stock-dialog';
@@ -41,6 +41,7 @@ import {
   emptyForm,
   emptyVariantRow,
   KEYWORD_MAX_LENGTH,
+  KEYWORDS_MAX,
   mergeAiFill,
   productFormSchema,
   rebaseForm,
@@ -413,7 +414,7 @@ export function ProductForm(props: Props) {
       </span>
     ) : null;
   const tint = (f: RejectedField | AiFillField) => (rejected.has(f as RejectedField) ? 'border-accent-alert' : (f === 'name' || f === 'description' || f === 'categoryId' || f === 'unitId') && ai(f) ? 'border-accent-money' : undefined);
-  const params = (f: ScalarField): Record<string, string | number> => (f === 'description' ? { max: formatNumber(DESCRIPTION_MAX) } : f === 'keywords' ? { max: KEYWORD_MAX_LENGTH } : f === 'weightGrams' ? { min: 0, max: formatNumber(WEIGHT_MAX) } : { max: 255 });
+  const params = (f: ScalarField): Record<string, string | number> => (f === 'description' ? { max: formatNumber(DESCRIPTION_MAX) } : f === 'keywords' ? { max: KEYWORD_MAX_LENGTH, count: KEYWORDS_MAX } : f === 'weightGrams' ? { min: 0, max: formatNumber(WEIGHT_MAX) } : { max: 255 });
   const err = (f: ScalarField) => fieldError(t, errors[f]?.message, params(f));
 
   const archive = actionState(product?.actions, 'archive', t);
@@ -561,7 +562,7 @@ export function ProductForm(props: Props) {
             </div>
             {belowCost ? (
               <p role="status" data-testid="below-cost" className="rounded-[6px] border-s-2 border-s-accent-starred bg-ink-raised px-3 py-2.5 text-[13px] text-accent-starred">
-                {margin !== null ? <WithLtr text={t('products.form.price.belowCost', { margin: SLOT })} value={`${margin < 0 ? '−' : ''}${Math.abs(margin)} %`} /> : t('products.form.price.belowCostSaved')}
+                {margin !== null ? <WithLtr text={t('products.form.price.belowCost', { margin: SLOT })} value={pctText(margin)} /> : t('products.form.price.belowCostSaved')}
               </p>
             ) : null}
           </Section>

@@ -13,6 +13,7 @@ import { useOffline } from '@/features/orders/offline';
 import { Link, useRouter } from '@/i18n/navigation';
 import { actionState } from '@/lib/actions';
 import { useBack } from '@/lib/back';
+import { iso } from '@/lib/format-message';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSale } from './api';
 import { ActionButton } from './purchase-dialogs';
@@ -55,9 +56,11 @@ function SaleDetail({ id }: { id: string }) {
   const collect = actionState(s.actions, 'collect', t);
   const link = actionState(s.actions, 'link_client', t);
   const units = s.items.reduce((n, i) => n + i.quantity, 0);
+  // a cancelled sale with its money given back (the refund rows reverse the payments; `amountPaid` goes to 0)
+  const refunded = s.status === 'cancelled' && s.amountPaid === 0 ? s.payments.reduce((n, p) => n + p.amount, 0) : 0;
   return (
     <AppPage
-      title={t('sales.page.title', { number: s.number })}
+      title={t('sales.page.title', { number: iso(`#${s.number}`) })}
       back={back}
       permission="gds.read"
       badges={
@@ -91,7 +94,12 @@ function SaleDetail({ id }: { id: string }) {
                     {s.client.name}
                     <ArrowUpRight className="size-3 rtl:-scale-x-100" aria-hidden />
                   </Link>
-                  {s.client.phone ? <Ltr>{` · ${formatPhoneDz(s.client.phone)}`}</Ltr> : null}
+                  {s.client.phone ? (
+                    <>
+                      {' · '}
+                      <Ltr>{formatPhoneDz(s.client.phone)}</Ltr>
+                    </>
+                  ) : null}
                 </span>
               ) : (
                 <span className="text-text-secondary">{[s.customerName ?? t('sales.walkIn'), s.customerPhone ? formatPhoneDz(s.customerPhone) : null].filter(Boolean).join(' · ')}</span>
@@ -101,13 +109,16 @@ function SaleDetail({ id }: { id: string }) {
             {
               key: 'payments',
               label: t('sales.page.payments'),
-              value: (
-                <Ltr>
-                  {[...s.payments.map((p) => `${formatMoney(p.amount)} ${t(`orders.payment.method.${p.method}`).toLowerCase()} (${withoutYear(formatDateTime(p.paidAt, locale))})`), s.remaining > 0 ? t('sales.page.remaining', { amount: formatMoney(s.remaining) }) : null]
-                    .filter(Boolean)
-                    .join(' · ') || '—'}
-                </Ltr>
-              ),
+              // full-test 15/11 SALES-CASH-19 / -17 / -23: the method as labelled elsewhere (« CCP », not « ccp »), the refund of a
+              // cancelled sale, each value isolated so Arabic keeps « 2 000 DA » in order
+              value:
+                [
+                  ...s.payments.map((p) => `${iso(formatMoney(p.amount))} ${t(`orders.payment.method.${p.method}`)} (${iso(withoutYear(formatDateTime(p.paidAt, locale)))})`),
+                  refunded > 0 ? t('sales.page.refunded', { amount: iso(formatMoney(refunded)) }) : null,
+                  s.remaining > 0 ? t('sales.page.remaining', { amount: iso(formatMoney(s.remaining)) }) : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || '—',
             },
             {
               key: 'movements',
@@ -115,7 +126,7 @@ function SaleDetail({ id }: { id: string }) {
               value:
                 s.status === 'completed' || (s.status === 'cancelled' && s.stockRestored !== null) ? (
                   <Link href={`/movements?refType=sale&refId=${s.id}`} className="inline-flex items-center gap-1 hover:underline" data-testid="sale-movements">
-                    {t('sales.page.movementsLine', { count: s.items.length })}
+                    {s.status === 'cancelled' && s.stockRestored ? t('sales.page.movementsLineReturned', { count: s.items.length }) : t('sales.page.movementsLine', { count: s.items.length })}
                     <ArrowUpRight className="size-3 rtl:-scale-x-100" aria-hidden />
                   </Link>
                 ) : (
@@ -181,7 +192,8 @@ function SaleDetail({ id }: { id: string }) {
           </table>
         </Card>
       </section>
-      <p className="ts-label-micro !normal-case text-text-muted">{t('sales.page.footnote', { date: day(s.cancellableUntil.slice(0, 10)) })}</p>
+      {/* the cancel window only means something on a validated sale (SALES-CASH-17) */}
+      {s.status === 'completed' ? <p className="ts-label-micro !normal-case text-text-muted">{t('sales.page.footnote', { date: day(s.cancellableUntil.slice(0, 10)) })}</p> : null}
       {actions.element}
     </AppPage>
   );

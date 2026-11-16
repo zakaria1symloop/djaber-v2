@@ -59,7 +59,7 @@ describe('free-delivery rule', () => {
     expect(freeRule(5000)).toEqual({ enabled: true, amount: 5000 });
   });
   it('switching on reuses the last value or 5 000, off sends null', () => {
-    expect(thresholdOnToggle(true, null)).toBe(5000);
+    expect(thresholdOnToggle(true, null)).toBeUndefined();
     expect(thresholdOnToggle(true, 8000)).toBe(8000);
     expect(thresholdOnToggle(false, 8000)).toBeNull();
   });

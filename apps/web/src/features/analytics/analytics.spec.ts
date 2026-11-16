@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { choroplethStep, wilayaGeometry, WILAYA_SEATS } from '../../../../../packages/ui/src/wilaya-geo';
-import { bestPoint, dayLabel, decimal, formatValue, kpiDelta } from './format';
+import { bestPoint, dayLabel, decimal, formatValue, kpiDelta, rangeLabel } from './format';
 import { customRangeError, parsePeriod, periodHref, periodQuery, periodSearch, rangeDays } from './period';
 
 const params = (qs: string) => new URLSearchParams(qs);
@@ -52,7 +52,10 @@ describe('analytics figures (rule 11)', () => {
     expect(formatValue(1.9, 'seconds', 'en', units)).toBe('1.9 s');
     expect(formatValue(18.4, 'minutes', 'fr', units)).toBe('18 min');
     expect(formatValue(3.25, 'days', 'fr', units)).toBe('3,3 j');
-    expect(formatValue(12.4, 'usd', 'fr', units)).toBe('$12.40');
+    // full-test 15/11 ANALYTICS-08 / -09: the French decimal comma for dollars too; two hours and more in hours
+    expect(formatValue(12.4, 'usd', 'fr', units).replace(/\s/g, ' ')).toBe('12,40 $');
+    expect(formatValue(12.4, 'usd', 'en', units)).toBe('$12.40');
+    expect(formatValue(2880, 'minutes', 'fr', { ...units, h: 'h' }).replace(/\s/g, ' ')).toBe('48 h');
     expect(formatValue(null, 'count', 'fr', units)).toBe('—');
     expect(decimal(-4.25, 'fr')).toBe('-4,3');
   });
@@ -61,6 +64,11 @@ describe('analytics figures (rule 11)', () => {
     expect(kpiDelta({ unit: 'money', deltaPct: 18 })).toEqual({ value: 18, unit: '%' });
     expect(kpiDelta({ unit: 'count' })).toBeNull();
     expect(kpiDelta({ unit: 'pct', deltaPts: null })).toBeNull();
+  });
+  it('full-test 15/11 ANALYTICS-04: a range across years names both years', () => {
+    expect(rangeLabel('2024-11-14', '2026-11-15', 'fr', { currentYear: '2026' })).toMatch(/^14 nov\.? 2024 → 15 nov\.? 2026$/);
+    expect(rangeLabel('2026-10-14', '2026-11-15', 'fr', { currentYear: '2026' })).toMatch(/^14 oct\.? → 15 nov\.?$/);
+    expect(rangeLabel('2026-10-14', '2026-11-15', 'fr', { currentYear: '2026', endYear: true })).toMatch(/^14 oct\.? → 15 nov\.? 2026$/);
   });
   it('labels days and finds the best day', () => {
     expect(dayLabel('2026-10-05', 'fr')).toMatch(/^05 oct/);

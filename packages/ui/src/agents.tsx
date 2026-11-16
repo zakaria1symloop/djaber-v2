@@ -5,6 +5,7 @@
 // All copy comes in through props; logical CSS only.
 import { Check, ChevronDown, Lock, Pencil, X, Zap } from 'lucide-react';
 import * as React from 'react';
+import { isolateNumbers } from './bidi';
 import { Button, Card, Checkbox, cn, Input, Switch, type Tone } from './primitives';
 
 /* ---------- Wizard frame: numbered step chips, title, body + right rail, sticky footer ---------- */
@@ -187,7 +188,7 @@ export function PreviewPanel({ label, messages, note, className }: { label: stri
         {messages.map((m, i) => (
           <div key={i} className={cn('flex', m.author === 'ai' ? 'justify-end' : 'justify-start')}>
             <p dir="auto" data-preview={m.author} className={cn('max-w-[85%] whitespace-pre-wrap break-words rounded-card px-3 py-2 text-[13px] leading-snug', m.author === 'ai' ? 'border border-line-edge bg-ink-surface' : 'bg-ink-raised')}>
-              {m.text}
+              {isolateNumbers(m.text)}
             </p>
           </div>
         ))}
@@ -266,10 +267,11 @@ export function TagInput({
       )}
     >
       {value.map((tag) => (
-        <span key={tag} data-tag={tag} className="inline-flex h-6 items-center gap-1 rounded-[4px] border border-line-edge bg-ink-raised ps-2 pe-1 text-[12px]">
-          <bdi>{tag}</bdi>
+        // full-test 15/11 AGENTS-17: a long tag truncates inside the field; its « × » always stays reachable
+        <span key={tag} data-tag={tag} title={tag} className="inline-flex h-6 min-w-0 max-w-full items-center gap-1 rounded-[4px] border border-line-edge bg-ink-raised ps-2 pe-1 text-[12px]">
+          <bdi className="min-w-0 truncate">{tag}</bdi>
           {disabled ? null : (
-            <button type="button" aria-label={removeLabel(tag)} onClick={() => onChange(value.filter((v) => v !== tag))} className="flex size-4 items-center justify-center text-text-muted hover:text-text-primary">
+            <button type="button" aria-label={removeLabel(tag)} onClick={() => onChange(value.filter((v) => v !== tag))} className="flex size-4 shrink-0 items-center justify-center text-text-muted hover:text-text-primary">
               <X className="size-3" aria-hidden />
             </button>
           )}
@@ -658,13 +660,14 @@ export function CreditsPill({ text, level, title, className }: { text: string; l
       data-level={level}
       title={title}
       className={cn(
-        'inline-flex h-5 items-center gap-1.5 rounded-full border px-2 ts-label-meta tabular-nums',
+        'inline-flex h-5 items-center gap-1.5 whitespace-nowrap rounded-full border px-2 ts-label-meta tabular-nums',
         level === 'exhausted' ? 'border-accent-alert/60 text-accent-alert' : level === 'warning' ? 'border-accent-starred/50 text-accent-starred' : 'border-line-edge text-text-secondary',
         className,
       )}
     >
       <Zap className="size-3" aria-hidden />
-      <bdi dir="ltr">{text}</bdi>
+      {/* the caller isolates each « used / total » (left to right); the text itself follows the page language */}
+      <bdi>{text}</bdi>
     </span>
   );
 }

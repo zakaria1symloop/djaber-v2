@@ -1,7 +1,7 @@
 // GDS-10 — the 23 reports (00-build-order M8 Risks: one template + a per-report column map). Column / KPI / chart metadata
 // lives in `@djaber/shared` (`REPORT_DEFINITIONS`); this file holds the query of each report. Figures reuse the analytics
 // rollups (sales by period, P&L revenue) and `money-figures.ts` (P&L), so Revenue is the same number everywhere (AT-ORD-10).
-import { renderStoredTextIn, type ReportFilterKey, type ReportKey, type ReportRow } from '@djaber/shared';
+import { renderStoredTextIn, textIn, type ReportFilterKey, type ReportKey, type ReportRow } from '@djaber/shared';
 import { Prisma, prisma } from '@djaber/db';
 import { algiersDay } from '../../../core/time/algiers';
 import type { DailyStatsService } from '../../analytics/daily-stats.service';
@@ -549,8 +549,9 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     ]);
     const q = str(ctx, 'q')?.toLowerCase();
     const rows: ReportRow[] = [
-      ...cash.map((t) => ({ date: day(t.date), kind: t.isAutomatic ? 'return' : 'cash', category: t.category, description: renderStoredTextIn(t.description, ctx.locale), product: null, amount: t.amount, _ref: t.isAutomatic && t.sourceId ? { type: 'order' as const, id: t.sourceId } : null })),
-      ...pex.filter((e) => !prod || e.pid === prod).map((e) => ({ date: day(e.date), kind: 'product', category: e.category, description: e.isPerUnit ? `${e.description ?? ''} (${e.units} ×)`.trim() : e.description, product: e.product, amount: e.amount, _ref: productRef(e.pid) })),
+      // full-test 15/11 ANALYTICS-05: the category in words of the reader (« Frais », « Loyer »), never `shipping` / `rent`
+      ...cash.map((t) => ({ date: day(t.date), kind: t.isAutomatic ? 'return' : 'cash', category: textIn(`enum.Cash.category.${t.category}`, ctx.locale) ?? t.category, description: renderStoredTextIn(t.description, ctx.locale), product: null, amount: t.amount, _ref: t.isAutomatic && t.sourceId ? { type: 'order' as const, id: t.sourceId } : null })),
+      ...pex.filter((e) => !prod || e.pid === prod).map((e) => ({ date: day(e.date), kind: 'product', category: textIn(`enum.ProductExpense.category.${e.category}`, ctx.locale) ?? e.category, description: e.isPerUnit ? `${e.description ?? ''} (${e.units} ×)`.trim() : e.description, product: e.product, amount: e.amount, _ref: productRef(e.pid) })),
     ].filter((x) => !q || [x.description, x.product, x.category].some((v) => typeof v === 'string' && v.toLowerCase().includes(q)));
     const by = (k: string) => rows.filter((x) => x.kind === k).reduce((s, x) => s + n(x.amount), 0);
     return { rows, kpis: { total: sumOf(rows, 'amount'), manual: by('cash'), product: by('product'), returns: by('return') } };

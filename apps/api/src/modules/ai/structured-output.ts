@@ -23,6 +23,11 @@ export const AiReplyOutputSchema = z
       .object({ name: z.string().max(80).optional(), phone: z.string().max(30).optional(), phone2: z.string().max(30).optional(), wilaya: z.string().max(60).optional(), commune: z.string().max(100).optional(), address: z.string().max(500).optional() })
       .strict()
       .optional(),
+    /** full-test 15/11 AI-CHAT-05: the product(s) the customer chose for the order being taken — printed as CURRENT ORDER next turn */
+    cart: z
+      .object({ items: z.array(z.object({ productId: z.string().max(80), variantId: z.string().max(80).nullish(), quantity: z.union([z.number(), z.string().max(10)]).nullish() }).passthrough()).max(20).optional() })
+      .passthrough()
+      .nullish(),
   })
   .strict();
 export type AiReplyOutput = z.infer<typeof AiReplyOutputSchema>;
@@ -47,6 +52,12 @@ export const AI_REPLY_JSON_SCHEMA = {
       additionalProperties: false,
       description: 'order details the customer has given so far in this conversation (only what they actually said)',
       properties: { name: { type: 'string' }, phone: { type: 'string' }, phone2: { type: 'string' }, wilaya: { type: 'string' }, commune: { type: 'string' }, address: { type: 'string' } },
+    },
+    cart: {
+      type: 'object',
+      additionalProperties: false,
+      description: 'the product(s), variant and quantity the customer chose for the order being taken (ids from the catalogue); omit when no product is chosen',
+      properties: { items: { type: 'array', maxItems: 20, items: { type: 'object', required: ['productId'], properties: { productId: { type: 'string' }, variantId: { type: 'string' }, quantity: { type: 'integer', minimum: 1 } } } } },
     },
   },
 } as const;

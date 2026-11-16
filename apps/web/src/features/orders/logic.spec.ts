@@ -103,8 +103,9 @@ describe('pills', () => {
     expect(sourceDetail({ source: 'import', importFileName: 'CSV', importedAt: '2026-10-04T10:00:00Z' }, o)).toBe('CSV · 04 oct.');
   });
   it('items summary', () => {
-    expect(itemsSummary([{ name: 'Parfum Oud', variant: null, qty: 2 }], 3)).toEqual({ first: 'Parfum Oud ×2', more: 2 });
-    expect(itemsSummary([], 0)).toEqual({ first: '', more: 0 });
+    expect(itemsSummary([{ name: 'Parfum Oud', variant: null, qty: 2 }])).toEqual({ first: 'Parfum Oud ×2', more: 0 });
+    expect(itemsSummary([{ name: 'Parfum Oud', variant: null, qty: 2 }, { name: 'Sac', variant: null, qty: 1 }])).toEqual({ first: 'Parfum Oud ×2', more: 1 });
+    expect(itemsSummary([])).toEqual({ first: '', more: 0 });
   });
 });
 
@@ -157,7 +158,7 @@ describe('order page rules', () => {
   });
   it('payment amount: integer > 0 and ≤ remaining (AT-ORD-22)', () => {
     expect(paymentError(null, 1000)).toBe('validation.required');
-    expect(paymentError(0, 1000)).toBe('validation.price');
+    expect(paymentError(0, 1000)).toBe('orders.payment.amountPositive');
     expect(paymentError(1200, 1000)).toBe('orders.payment.overRemaining');
     expect(paymentError(300, 1000)).toBeNull();
   });

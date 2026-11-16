@@ -547,6 +547,8 @@ export type DeliveryRowView = {
     codAmount: number;
     courierCost: number | null;
     lastEventAt: string | null;
+    /** full-test DELIVERY-07: source of the last event — `courier` (webhook / poll) or `djaber` (member, system, creation) */
+    lastEventSource: 'courier' | 'djaber';
     lastSyncedAt: string | null;
     /** UX-056 leftovers: end of the « Actualiser » wait (1 / 5 min), same as `ShipmentView.syncAvailableAt` — the row menu greys the item with the live countdown */
     syncAvailableAt: string | null;

@@ -12,6 +12,7 @@ import { useT } from '@/lib/i18n';
 import { adminWrite, useAdminInvalidate } from '../api';
 import { AdminDialog, NO_ERRORS, ReasonField, reasonOk, toServerErrors, useOnOpen, type ServerErrors } from '../dialog-kit';
 import { usePlatform } from '../platform';
+import { withAdminReasons } from '../reasons';
 import { ChangeRoleDialog } from '../team/dialogs';
 import { fullName } from '../ui';
 
@@ -78,7 +79,7 @@ export function useUserActions({ openSheet }: { openSheet: (id: string) => void 
   const write = can('admin.users.write');
   const on = (action: UserAction, user: AdminUserRowDto) => () => setState({ action, user });
   const menu = (u: AdminUserRowDto, o: { sheet?: boolean } = {}): MenuAction[] =>
-    toMenuActions(
+    withAdminReasons(toMenuActions(
       u.actions,
       {
         open: { label: t('admin.users.action.open'), onSelect: () => openSheet(u.id), hidden: o.sheet, local: true },
@@ -92,7 +93,7 @@ export function useUserActions({ openSheet }: { openSheet: (id: string) => void 
         schedule_deletion: { label: t('admin.users.action.schedule_deletion'), onSelect: on('schedule_deletion', u), destructive: true, hidden: !write },
       },
       t,
-    );
+    ), u.actions, t, { workspace: u.workspaces.find((w) => w.role === 'owner')?.name ?? u.workspaces[0]?.name });
   const dialogs = (
     <>
       <UserActionDialog user={state?.user ?? null} action={state?.action ?? null} onClose={() => setState(null)} />

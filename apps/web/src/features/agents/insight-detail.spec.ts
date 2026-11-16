@@ -25,4 +25,9 @@ describe('insight detail in words', () => {
     expect(insightDetail(t, 'AI_PROVIDER_TIMEOUT')).toBe('<error.AI_PROVIDER_TIMEOUT>');
     expect(insightDetail(t, 'SOME_UNKNOWN_CODE')).toBeNull();
   });
+  it('full-test 15/11 AGENTS-14: AI error causes are said in words', () => {
+    expect(insightDetail(t, 'malformed_output:no_json')).toBe('<agents.insights.detail.malformed>');
+    expect(insightDetail(t, 'provider_error:503 overloaded_error')).toBe('<agents.insights.detail.providerError>');
+    expect(insightDetail(t, 'timeout')).toBe('<agents.insights.detail.providerError>');
+  });
 });

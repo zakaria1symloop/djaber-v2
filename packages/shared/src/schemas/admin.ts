@@ -761,7 +761,7 @@ export type AdminJobDto = { id: string; kind: string; status: 'queued' | 'runnin
 /** `POST /admin/platform-members/invitations` — `@djaber.ai` only (`ADMIN_EMAIL_DOMAIN_INVALID`); role ≠ none. */
 export const AdminInviteMemberSchema = z.object({ email: z.string({ required_error: 'validation.required' }).trim().toLowerCase().email('validation.email'), platformRole: z.enum(PlatformRoleValues) }).strict();
 export type AdminInviteMemberInput = z.infer<typeof AdminInviteMemberSchema>;
-export type PlatformMemberDto = { userId: string; firstName: string; lastName: string; email: string; platformRole: string; totpEnabled: boolean; accessBlocked: boolean; lastAction: { action: string; at: string } | null; lastLoginAt: string | null; actions: ActionDescriptor[] };
+export type PlatformMemberDto = { userId: string; firstName: string; lastName: string; email: string; platformRole: string; totpEnabled: boolean; accessBlocked: boolean; /** day (YYYY-MM-DD) the 2FA rule applies again while the owner's dated pause runs (ADMIN-12) */ twoFaRequiredFrom?: string | null; lastAction: { action: string; at: string } | null; lastLoginAt: string | null; actions: ActionDescriptor[] };
 export type PlatformInvitationDto = { id: string; email: string; platformRole: string; invitedBy: AdminUserRef | null; expiresAt: string; createdAt: string; acceptedAt: string | null };
 export type PlatformTeamDto = { members: PlatformMemberDto[]; invitations: PlatformInvitationDto[] };
 export const AdminDeletionRequestsQuerySchema = z.object({ ...paging, status: csv(z.enum(DeletionStatusValues)).optional(), q }).strict();

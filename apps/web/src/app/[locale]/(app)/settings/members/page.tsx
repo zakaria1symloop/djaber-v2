@@ -145,8 +145,12 @@ export default function MembersPage() {
                     {fullName(m)}
                     {m.user.id === me?.id ? ` ${t('settings.members.you')}` : ''}
                   </div>
-                  <div className="ts-label-meta truncate text-text-muted">
-                    <bdi dir="ltr">{m.user.email}</bdi> · {m.readOnly ? t('settings.members.readOnlyHint') : t(`settings.members.roleHint.${m.role}`)}
+                  {/* full-test 15/11 SETTINGS-16: the e-mail is its own LTR box, cut at its end (in Arabic the start was cut) */}
+                  <div className="ts-label-meta flex min-w-0 gap-1 text-text-muted">
+                    <span dir="ltr" className="min-w-0 truncate">
+                      {m.user.email}
+                    </span>
+                    <span className="min-w-0 shrink-[2] truncate">· {m.readOnly ? t('settings.members.readOnlyHint') : t(`settings.members.roleHint.${m.role}`)}</span>
                   </div>
                 </div>
                 {m.readOnly ? <Pill tone="warning">{t('settings.members.readOnlyPill')}</Pill> : null}
@@ -270,8 +274,8 @@ function InvitationRow({ invitation: i, canWrite, onChanged }: { invitation: Inv
   return (
     <li className="flex flex-wrap items-center gap-3 px-4 py-3" data-invitation={i.email}>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[14px] font-medium">
-          <bdi dir="ltr">{i.email}</bdi>
+        <div dir="ltr" className="truncate text-[14px] font-medium rtl:text-right">
+          {i.email}
         </div>
         <div className="ts-label-meta uppercase text-text-muted">
           {t(`enum.Membership.role.${i.role}`)} · {t('settings.members.sent', { ago: relativeTime(i.sentAt, locale) })} · {t('settings.members.expiresIn', { days: daysUntil(i.expiresAt) })}

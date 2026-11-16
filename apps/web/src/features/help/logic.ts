@@ -15,8 +15,11 @@ export const TICKET_PILL_TONE: Record<TicketPillKey, Tone> = { open: 'info', ans
 
 /** The merchant can still write in the thread (a closed ticket answers TICKET_CLOSED). */
 export const canReply = (t: Pick<Ticket, 'status'>) => t.status !== 'closed';
-/** Satisfaction 1–5 is asked once the ticket is resolved and not yet rated (HELP-04; the API closes it on rating, 409 otherwise). */
-export const canRate = (t: Pick<Ticket, 'status' | 'satisfaction'>) => t.status === 'resolved' && (t.satisfaction === null || t.satisfaction === undefined);
+/**
+ * Satisfaction 1–5 is asked once the ticket is resolved — or closed (full-test 15/11 HELP-09: « at close ») — and not yet
+ * rated (HELP-04; the API closes it on rating, 409 otherwise).
+ */
+export const canRate = (t: Pick<Ticket, 'status' | 'satisfaction'>) => (t.status === 'resolved' || t.status === 'closed') && (t.satisfaction === null || t.satisfaction === undefined);
 
 export const messageTooShort = (m: string) => m.trim().length < TICKET_MESSAGE_MIN;
 
@@ -86,6 +89,19 @@ export const clientLabel = (ua: string): string => {
 
 export type AutoContext = { workspace: string; plan: string; client: string; page: string; lastError: string };
 export const CONTEXT_KEYS: readonly (keyof AutoContext)[] = ['workspace', 'plan', 'client', 'page', 'lastError'];
+
+/**
+ * full-test 15/11 HELP-07: the auto-context system message is stored as `key: value` lines; the merchant reads the form's
+ * labels (« Espace : … », « Navigateur : … »), never the raw keys. Other lines are kept as they are.
+ */
+export const labelContextLines = (body: string, label: (key: keyof AutoContext) => string): string =>
+  body
+    .split('\n')
+    .map((line) => {
+      const m = /^(\w+): (.*)$/.exec(line);
+      return m && (CONTEXT_KEYS as readonly string[]).includes(m[1]!) ? `${label(m[1] as keyof AutoContext)} : ${m[2]}` : line;
+    })
+    .join('\n');
 
 /** The editable "CONTEXTE JOINT" block (HELP-03): workspace, plan, browser, current page, last error — never customer messages. */
 export const buildContext = (i: { workspace?: string | null; plan?: string | null; userAgent: string; page?: string | null; lastError?: { code: string; ref: string; at: string } | null; formatAt: (iso: string) => string }): AutoContext => ({

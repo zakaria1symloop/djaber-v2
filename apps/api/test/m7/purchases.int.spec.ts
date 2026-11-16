@@ -222,5 +222,9 @@ describe('purchases (GDS-06, 04 §20)', () => {
     const mv = await owner.get(`/stock/movements?refType=purchase&refId=${ach.id}`).expect(200);
     expect(mv.body.data[0]).toMatchObject({ type: 'in', reason: 'purchase', reference: { type: 'purchase', id: ach.id, label: ach.number } });
     expect(mv.body.data[0].actions.find((a: any) => a.key === 'reverse')).toMatchObject({ enabled: false, reasonCode: 'GDS_MOVEMENT_IMMUTABLE' });
+    expect(mv.body.data[0].lockedBy).toBe('document');
+    // full-test 15/11 STOCK-04: the search finds the movements of a reference number (« #ACH-… »)
+    const found = await owner.get(`/stock/movements?q=${encodeURIComponent(`#${ach.number}`)}`).expect(200);
+    expect(found.body.data.map((m: any) => m.reference?.id)).toContain(ach.id);
   });
 });

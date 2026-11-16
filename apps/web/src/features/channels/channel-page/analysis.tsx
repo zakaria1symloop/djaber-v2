@@ -59,7 +59,9 @@ export function ChannelAnalysis() {
   const qc = useQueryClient();
   const { channel: c, actions, connect } = useChannelPage();
   const manage = actions.manage;
-  const q = useChannelAnalysis(c.id, manage);
+  // full-test 15/11 CHANNELS-INBOX-01: a disconnected page has no analysis (the API answers 404): its own state, no request
+  const disconnected = c.status === 'disconnected';
+  const q = useChannelAnalysis(c.id, manage && !disconnected);
   const dto = q.data ?? null;
   const [startCode, setStartCode] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
@@ -98,6 +100,13 @@ export function ChannelAnalysis() {
     return (
       <Card className="px-6 py-10 text-center text-[13px] text-text-secondary" data-testid="analysis-forbidden">
         {t('channels.analysis.forbidden')}
+      </Card>
+    );
+  }
+  if (disconnected) {
+    return (
+      <Card className="px-6 py-10 text-center text-[13px] text-text-secondary" data-testid="analysis-disconnected">
+        {t('channels.analysis.disconnected')}
       </Card>
     );
   }

@@ -59,6 +59,15 @@ describe('clients', () => {
     expect((await owner.get('/clients').expect(200)).body.data.map((c: any) => c.id)).not.toContain(id);
     expect((await owner.get(`/clients/${id}`).expect(200)).body.data).toMatchObject({ archived: true });
     expect(await db.auditLog.count({ where: { action: 'client.delete', entityId: id } })).toBe(1);
+    // full-test CLIENTS-03: the archived card keeps its phone (no 2nd card without its history) and can be restored
+    const archivedPhone = order.clientPhone;
+    expect((await owner.get(`/clients/${id}`).expect(200)).body.data.actions.map((a: any) => a.key)).toContain('restore');
+    expect((await owner.post('/clients', { name: 'Karim Retour', phone: archivedPhone }).expect(409)).body.error).toMatchObject({ code: 'CLIENT_PHONE_EXISTS', details: { clientId: id, archived: true } });
+    await op.post(`/clients/${id}/restore`).expect(403);
+    expect((await owner.post(`/clients/${id}/restore`).expect(200)).body.data).toMatchObject({ id, archived: false });
+    expect((await owner.get('/clients').expect(200)).body.data.map((c: any) => c.id)).toContain(id);
+    await owner.post(`/clients/${id}/restore`).expect(409);
+    await owner.delete(`/clients/${id}?archive=true`).expect(200);
     // without orders: soft delete straight away
     const lone = await owner.post('/clients', { name: 'Sans commande', phone: phone() }).expect(201);
     await owner.delete(`/clients/${lone.body.data.id}`).expect(200);

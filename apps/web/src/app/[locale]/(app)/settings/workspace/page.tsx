@@ -10,7 +10,9 @@ import { Controller, useForm } from 'react-hook-form';
 import { ConflictDialog } from '@/components/global-states';
 import { LOCALE_NAMES } from '@/components/shell/merchant-shell';
 import { Section, SettingsPage, useImageUpload } from '@/features/settings/common';
-import { conflictOf, usePatchWorkspace, useWilayas, useWorkspaceCache, type WorkspacePatch } from '@/features/workspace/api';
+import { conflictOf, useOnboardingStep, usePatchWorkspace, useWilayas, useWorkspaceCache, type WorkspacePatch } from '@/features/workspace/api';
+import { useRouter } from '@/i18n/navigation';
+import { ONBOARDING_SKIPPED, onboardingPath } from '@/lib/guards';
 import { routing } from '@/i18n/routing';
 import type { WorkspaceDto } from '@/lib/contracts';
 import { applyServerErrors, errorMessage, fieldError, useLeaveGuard } from '@/lib/forms';
@@ -46,7 +48,35 @@ export default function WorkspaceSettingsPage() {
   return (
     <SettingsPage title={t('settings.workspace.title')} description={t('settings.workspace.description')} permission="workspace.settings">
       <WorkspaceForm />
+      <ResumeSetup />
     </SettingsPage>
+  );
+}
+
+/**
+ * full-test 15/11 ONBOARDING-10: « Passer la configuration » is not final — the owner can reopen the guided setup here
+ * (step 1: the resume rule then leads through the tunnel again; « Passer » stays available).
+ */
+function ResumeSetup() {
+  const t = useT();
+  const { workspace, role } = useSession();
+  const step = useOnboardingStep();
+  const router = useRouter();
+  if (role !== 'owner' || workspace?.onboardingStep !== ONBOARDING_SKIPPED) return null;
+  const resume = async () => {
+    try {
+      await step.mutateAsync(1);
+      router.push(onboardingPath(1));
+    } catch (e) {
+      toast({ tone: 'danger', message: errorMessage(e, t) });
+    }
+  };
+  return (
+    <Section title={t('settings.workspace.setup.title')} description={t('settings.workspace.setup.hint')}>
+      <Button onClick={() => void resume()} loading={step.isPending} data-testid="resume-onboarding">
+        {t('settings.workspace.setup.resume')}
+      </Button>
+    </Section>
   );
 }
 

@@ -650,7 +650,7 @@ export type CashStatsView = {
   expense: number;
   net: number;
   currentBalance: number;
-  counts: { rows: number; sales: number; cod: number; purchases: number; fees: number };
+  counts: { rows: number; sales: number; cod: number; purchases: number; fees: number; otherIncome: number; otherExpense: number };
   unclosedDays: string[];
   /** single-day selection: that day's closing state */
   day: { day: string; closed: boolean; theoreticalCash: number } | null;
@@ -784,7 +784,10 @@ export type ProductStatsView = {
 // =====================================================================================================================
 export type StockPurchasingView = {
   pendingReceipt: number;
+  /** total of the purchases waiting for receipt (pending + partial) — shown with `pendingReceipt` (full-test 15/11 STOCK-05) */
+  pendingValue: number;
   late: number;
+  /** still owed on every ordered purchase (pending, partial and received): its own row, « Dû aux fournisseurs » */
   dueToSuppliers: number;
   activeSuppliers: number;
   purchased30d: number;

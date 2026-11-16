@@ -86,7 +86,10 @@ export function useLocalImages() {
       const valid = already + ref.current.filter((i) => !i.rejected).length;
       const next = checkImageBatch(files, valid).map((c) => toLocal(c.file, c.error));
       setImages((list) => [...list, ...next]);
-      for (const img of next) if (!img.rejected) void readImageSize(img.file).then((s) => s && patch(img.key, { smallPx: smallSide(s.width, s.height) }));
+      // full-test 15/11 PRODUCTS-12: a file the browser cannot decode is not a picture whatever its name (« fake.jpg »):
+      // refused on its tile at once, never sent on « Enregistrer »
+      for (const img of next)
+        if (!img.rejected) void readImageSize(img.file).then((s) => patch(img.key, s ? { smallPx: smallSide(s.width, s.height) } : { rejected: true, error: 'IMAGE_TYPE_INVALID', status: 'error' }));
     },
     [patch],
   );

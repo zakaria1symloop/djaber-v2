@@ -109,6 +109,14 @@ describe('preview', () => {
     expect(r.totals).toMatchObject({ valid: 0, invalid: 1 });
   });
 
+  it('full-test 15/11 PRODUCTS-11 / -09: a decimal price is « not a whole number », an old price at or under the price is refused', () => {
+    const r = preview(headers, [['A', 'Tapis', '1999.5', '', '', '', '', '']]);
+    expect(r.rows[0]!.errors).toEqual([{ field: 'price', code: 'validation.price_integer' }]);
+    const old = preview(['Nom', 'Prix', 'Ancien prix'], [['Robe', '4600', '3000'], ['Jupe', '4600', '5500']]);
+    expect(old.rows[0]!.errors).toEqual([{ field: 'oldPrice', code: 'validation.old_price' }]);
+    expect(old.rows[1]!.errors).toEqual([]);
+  });
+
   it('retest 11/11 UX-054: a value that is not a number is kept as typed for the error screen and file', () => {
     const r = preview(headers, [['A', 'Tapis', 'abc', '12x', '-3', '', '', '']]);
     expect(r.rows[0]!.values).toMatchObject({ price: 'abc', costPrice: '12x', stock: -3 });

@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { actionState, reasonText, toMenuActions } from './actions';
 import type { ActionDescriptor } from '@djaber/shared';
-import { makeT, stripPlaceholders } from './format-message';
+import { iso, makeT, stripPlaceholders, tidyStops } from './format-message';
 
 const FR = {
   'error.ORDER_INVALID_TRANSITION': 'Passage {from} → {to} impossible.',
@@ -93,5 +93,18 @@ describe('a transition the state machine refuses is not offered', () => {
   it('buttons outside the menu: absent', () => {
     expect(actionState(descriptors, 'return', fr)).toEqual({ present: false, enabled: false });
     expect(actionState(descriptors, 'sync', fr, { params: { retryAfter: 9 } })).toEqual({ present: true, enabled: false, reason: 'Actualisation possible dans 9 s (1 / 5 min).' });
+  });
+});
+
+describe('full-test 15/11 STOCK-14 / STOCK-07: values inside sentences', () => {
+  it('a value ending with its own stop does not double the sentence stop; an ellipsis stays', () => {
+    expect(tidyStops('Inventaire validé le 19 oct. par Amina T..')).toBe('Inventaire validé le 19 oct. par Amina T.');
+    expect(tidyStops('En retard : réception prévue le 21 oct..')).toBe('En retard : réception prévue le 21 oct.');
+    expect(tidyStops('Chargement...')).toBe('Chargement...');
+    const t = makeT('fr', { k: 'Reçu le {date}.' });
+    expect(t('k', { date: '21 oct.' })).toBe('Reçu le 21 oct.');
+  });
+  it('iso() wraps a value in invisible isolates', () => {
+    expect(iso('#ACH-1008')).toBe(`${String.fromCharCode(0x2068)}#ACH-1008${String.fromCharCode(0x2069)}`);
   });
 });

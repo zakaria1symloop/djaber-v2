@@ -15,7 +15,7 @@ import { RoutingService } from '../ai/routing.service';
 import { NotificationProducer } from '../notifications/notification.producer';
 import { announcementTargetWhere } from '../public-site/announcements.service';
 import { AdminJobsService } from './admin-jobs.service';
-import { assertUuid, iso, userRef, userSelect, type AdminActor } from './admin.util';
+import { STATE_REFUSED, assertUuid, iso, offered, userRef, userSelect, type AdminActor } from './admin.util';
 
 /** Types with a public page (`/legal/:key`, `/help/:key`, `/preview/cms/:key` ⇒ page): only they get a signed preview link. */
 const PREVIEWABLE: readonly string[] = ['legal', 'help', 'page'];
@@ -54,8 +54,11 @@ export class CmsAdminService implements OnModuleInit {
 
   private dto(e: Full, actor: AdminActor): CmsEntryAdminDto {
     const can = canPlatform(actor.platformRole, 'admin.cms.write');
-    const a = (key: string, ok = true): ActionDescriptor => (can && ok ? { key, enabled: true } : { key, enabled: false, reasonCode: can ? 'CONFLICT' : 'FORBIDDEN' });
+    const a = (key: string, ok = true): ActionDescriptor => (can && ok ? { key, enabled: true } : { key, enabled: false, reasonCode: can ? STATE_REFUSED : 'FORBIDDEN' });
     const missing = LOCALES.filter((l) => !this.filled(e.locales.find((x) => x.locale === l)));
+    // ADMIN-05: the French text is the source of every other language — without it, publish / translate stay greyed with
+    // that reason; an entry already published is simply not offered « Publier » / « Programmer » (UX-060)
+    const needsFr = (d: ActionDescriptor): ActionDescriptor => (can && !d.enabled && missing.includes('fr') ? { key: d.key, enabled: false, reasonCode: 'CMS_LOCALE_MISSING', reasonParams: { locales: 'FR' } } : d);
     const last = [...e.locales].sort((x, y) => y.updatedAt.getTime() - x.updatedAt.getTime())[0];
     return {
       id: e.id,
@@ -79,18 +82,18 @@ export class CmsAdminService implements OnModuleInit {
       createdAt: e.createdAt.toISOString(),
       updatedAt: e.updatedAt.toISOString(),
       updatedBy: userRef(last?.updatedBy ?? null) ?? userRef(e.createdBy),
-      actions: [
+      actions: offered([
         { ...a('edit', e.status !== 'archived'), primary: true },
-        a('publish', e.status !== 'published' && !missing.includes('fr')),
+        e.status === 'published' ? a('publish', false) : needsFr(a('publish', !missing.includes('fr'))),
         a('schedule', e.status !== 'published'),
         a('unpublish', e.status === 'published' || e.status === 'scheduled'),
-        a('translate', !missing.includes('fr')),
+        needsFr(a('translate', !missing.includes('fr'))),
         // tester report 22/10 UX-025: the signed 24 h link is for the entries with a public page only (03 PUB-03); an
         // announcement is previewed in the admin as the clients see it — banner, notification, public site (tester log
         // 26/10 UX-035); e-mails / plan texts / system messages have no preview
         ...(PREVIEWABLE.includes(e.type) || e.type === 'announcement' ? [{ key: 'preview', enabled: true }] : []),
-        { key: 'versions', enabled: e.currentVersion > 0 },
-      ],
+        ...(e.currentVersion > 0 ? [{ key: 'versions', enabled: true }] : []),
+      ]),
     };
   }
 
@@ -125,7 +128,7 @@ export class CmsAdminService implements OnModuleInit {
   private window(startsAt?: string | null, endsAt?: string | null) {
     const s = startsAt ? new Date(startsAt) : null;
     const e = endsAt ? new Date(endsAt) : null;
-    if (s && e && e <= s) throw new AppException('VALIDATION_ERROR', {}, { endsAt: 'validation.range' });
+    if (s && e && e <= s) throw new AppException('VALIDATION_ERROR', {}, { endsAt: 'validation.end_before_start' });
     return { s, e };
   }
 

@@ -7,10 +7,12 @@ import { buttonClass, PlanCard } from '@djaber/ui';
 import type { Cycle } from '@/features/billing/logic';
 import { Link } from '@/i18n/navigation';
 import { useT } from '@/lib/i18n';
-import { cardPrice, isFree, planLines, signupHref, type PublicPlan } from './logic';
+import { useSession } from '@/lib/session';
+import { cardPrice, isFree, planIntentHref, planLines, signupHref, type PublicPlan } from './logic';
 
 export function PricingCards({ plans, cycle }: { plans: PublicPlan[]; cycle: Cycle }) {
   const t = useT();
+  const signedIn = useSession().status === 'authenticated';
   if (!plans.length) return <p className="text-center text-[13px] text-text-muted">{t('public.pricing.empty')}</p>;
   return (
     <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3" data-testid="pricing-cards" data-cycle={cycle}>
@@ -31,9 +33,16 @@ export function PricingCards({ plans, cycle }: { plans: PublicPlan[]; cycle: Cyc
             features={planLines(p, t, formatNumber)}
             note={!free && cycle === 'yearly' ? t('public.pricing.billedYearly', { amount: formatNumber(p.priceYearly) }) : undefined}
             action={
-              <Link href={signupHref(p, cycle)} className={buttonClass({ variant: 'primary', className: 'w-full' })} data-testid={`pricing-cta-${p.slug}`}>
-                {free || p.trialDays <= 0 ? t('public.pricing.cta.free') : t('public.pricing.cta.trial', { days: p.trialDays })}
-              </Link>
+              signedIn ? (
+                // full-test 15/11 PUBLIC-13: a signed-in member goes to Plan & facturation with this plan (route map /pricing)
+                <Link href={planIntentHref({ plan: p.slug, cycle })} className={buttonClass({ variant: 'primary', className: 'w-full' })} data-testid={`pricing-cta-${p.slug}`}>
+                  {t('public.pricing.cta.member')}
+                </Link>
+              ) : (
+                <Link href={signupHref(p, cycle)} className={buttonClass({ variant: 'primary', className: 'w-full' })} data-testid={`pricing-cta-${p.slug}`}>
+                  {free || p.trialDays <= 0 ? t('public.pricing.cta.free') : t('public.pricing.cta.trial', { days: p.trialDays })}
+                </Link>
+              )
             }
           />
         );

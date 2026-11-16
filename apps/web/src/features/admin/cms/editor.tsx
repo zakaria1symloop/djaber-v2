@@ -55,7 +55,7 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
   const dirty = JSON.stringify(d) !== JSON.stringify(base);
   // tester report 22/10 UX-026: a link to a page that does not exist is refused before it is published
   const linkBad = !!d.link.trim() && !isAnnouncementLink(d.link);
-  // tester log 26/10 UX-037: the end comes after the start (the server refuses it too: endsAt validation.range)
+  // tester log 26/10 UX-037: the end comes after the start (the server refuses it too: endsAt validation.end_before_start)
   const endBad = !!d.startsAt && !!d.endsAt && d.endsAt <= d.startsAt;
   const blocked = linkBad ? t('validation.announcementLink') : endBad ? t('admin.cms.field.endBeforeStart') : undefined;
   const { guard } = useLeaveGuard(dirty, entry.key);

@@ -18,8 +18,15 @@ import { useStickToBottom } from '@/lib/stick-to-bottom';
 import { useWsEvent } from '@/lib/ws';
 import { useTicketAttachments } from './attachments';
 import { helpApi, helpKeys, useTicket, type Ticket } from './api';
-import { canRate, canReply } from './logic';
+import { canRate, canReply, labelContextLines } from './logic';
 import { TicketPill } from './shared';
+
+/**
+ * full-test 15/11 HELP-04: « #T-2026-00012 — subject » with the number kept left to right and the subject in its own
+ * direction (bidi isolates), so the Arabic page never shows « …traiter. Te# ».
+ */
+const [LRI, FSI, PDI] = [String.fromCharCode(0x2066), String.fromCharCode(0x2068), String.fromCharCode(0x2069)];
+export const ticketTitle = (tk: { number: string; subject: string }) => `${LRI}#${tk.number.replace(/^#/, '')}${PDI} — ${FSI}${tk.subject}${PDI}`;
 
 export function TicketPage({ id }: { id: string }) {
   const t = useT();
@@ -38,7 +45,7 @@ export function TicketPage({ id }: { id: string }) {
   // the thread scrolls inside its own box (sized to the viewport) so the reply form stays on screen (M11 layout pass)
   const thread = useStickToBottom<HTMLDivElement>(tk ? `${tk.id}:${tk.messages.length}` : null);
   return (
-    <AppPage title={tk ? `#${tk.number.replace(/^#/, '')} — ${tk.subject}` : t('help.ticket.title')} permission="support.write" back={{ href: '/help/tickets', label: t('help.tickets.title') }} badges={tk ? <TicketPill ticket={tk} /> : undefined}>
+    <AppPage title={tk ? ticketTitle(tk) : t('help.ticket.title')} permission="support.write" back={{ href: '/help/tickets', label: t('help.tickets.title') }} badges={tk ? <TicketPill ticket={tk} /> : undefined}>
       {q.isPending ? (
         <div role="status" aria-label={t('common.loading')} className="flex flex-col gap-3">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -59,7 +66,7 @@ export function TicketPage({ id }: { id: string }) {
                 kind={m.authorKind}
                 author={m.authorKind === 'system' ? t('help.ticket.author.system') : m.author ? `${m.author.firstName} ${m.author.lastName.slice(0, 1)}.${m.authorKind === 'support' ? ` (${t('help.ticket.author.support')})` : ''}` : t('help.ticket.author.support')}
                 at={formatDateTime(m.at, locale)}
-                body={m.body}
+                body={m.authorKind === 'system' ? labelContextLines(m.body, (k) => t(`help.contact.context.${k}`)) : m.body}
                 attachments={m.attachments.map((a) => ({ name: a.name, url: a.url }))}
               />
             ))}

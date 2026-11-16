@@ -547,7 +547,7 @@ export function NewOrderForm() {
           <ValidationChecklist title={t('orderForm.check.title')} items={checklist.map((c) => ({ key: c.key, state: c.state, label: checkLabel(c) }))} />
           <div className="rounded-card border border-line-edge bg-ink-surface p-4">
             <div className="ts-label-micro text-text-muted">{t('orderForm.onSave.title')}</div>
-            <p className="mt-2 text-[13px] text-text-secondary">{t('orderForm.onSave.text')}</p>
+            <p className="mt-2 text-[13px] text-text-secondary">{t(values.status === 'confirmed' ? 'orderForm.onSave.textConfirmed' : 'orderForm.onSave.textNew')}</p>
           </div>
         </aside>
       </form>
@@ -561,7 +561,7 @@ export function NewOrderForm() {
 
       <div className="sticky -bottom-6 z-20 -mx-4 -mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line-hairline bg-ink-base px-4 py-3 md:-mx-8 md:px-8" data-testid="form-footer">
         <p className={cn('min-w-0 flex-1 ts-label-micro', dirty ? 'text-text-secondary' : 'text-text-muted')} aria-live="polite" data-testid="draft-note">
-          {saving ? t('common.saving') : dirty ? t('orderForm.footer.draft') : t('orderForm.footer.idle')}
+          {saving ? t('common.saving') : dirty ? t('orderForm.footer.draftSaved') : t('orderForm.footer.idle')}
         </p>
         {saving ? (
           <Button variant="ghost" disabled>

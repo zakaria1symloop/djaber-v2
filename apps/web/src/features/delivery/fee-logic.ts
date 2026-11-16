@@ -39,10 +39,13 @@ export function filterRows<T extends Pick<FeeRule, 'code' | 'nameFr' | 'nameAr' 
 /** Free-delivery rule of the workspace (`Workspace.freeDeliveryThreshold`): off when null. */
 export const freeRule = (threshold: number | null | undefined): { enabled: boolean; amount: number | null } => ({ enabled: threshold !== null && threshold !== undefined && threshold > 0, amount: threshold ?? null });
 
-/** Threshold proposed when the rule is switched on without a previous value (Figma DLV-01: 5 000 DA). */
+/** Placeholder of the amount field when the rule is switched on without a previous value (Figma DLV-01: 5 000 DA). */
 export const DEFAULT_FREE_THRESHOLD = 5_000;
-/** `PATCH /workspace { freeDeliveryThreshold }` when the switch is flipped. */
-export const thresholdOnToggle = (enabled: boolean, last: number | null): number | null => (enabled ? (last && last > 0 ? last : DEFAULT_FREE_THRESHOLD) : null);
+/**
+ * What flipping the switch saves: off ⇒ `null` (rule removed); on ⇒ the last amount, or nothing yet (`undefined`) — the
+ * rule applies once the merchant typed his amount, never a 5 000 DA he did not choose (full-test DELIVERY-10).
+ */
+export const thresholdOnToggle = (enabled: boolean, last: number | null): number | null | undefined => (enabled ? (last && last > 0 ? last : undefined) : null);
 
 /** Rows written by a seed ("12 wilayas complétées"): the answer's `written`, else the custom / missing difference. */
 export function seedCount(before: { missing: number; custom: number }, after: { missing: number; custom: number; written?: number }, overwrite: boolean): number {

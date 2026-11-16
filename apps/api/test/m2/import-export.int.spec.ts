@@ -77,7 +77,7 @@ describe('catalogue import', () => {
     expect(rows.map((r: any) => [r.row, r.ok, r.action])).toEqual([[2, true, 'create'], [3, true, 'create'], [4, false, 'skip'], [5, false, 'skip'], [6, false, 'skip'], [7, false, 'skip'], [8, true, 'create'], [9, false, 'skip']]);
     expect(rows[0].values).toMatchObject({ sku: 'IMP-1', name: 'Tapis berbère', price: 12500, costPrice: 8000, stock: 4, category: 'Maison', unit: 'pc', minStock: 1, keywords: 'tapis, laine', isActive: true });
     expect(rows[2].errors).toEqual([{ field: 'name', code: 'validation.required' }]);
-    expect(rows[3].errors).toEqual([{ field: 'price', code: 'validation.price' }]);
+    expect(rows[3].errors).toEqual([{ field: 'price', code: 'validation.price_integer' }]); // 04 §1 « Import amounts » (not a whole number of DA)
     expect(rows[4].errors).toEqual([{ field: 'sku', code: 'IMPORT_DUPLICATE_SKU_IN_FILE', params: { row: 2 } }]);
     expect(rows[5].errors).toEqual([{ field: 'sku', code: 'PRODUCT_SKU_ALREADY_EXISTS' }]);
     expect(rows[6].values).toMatchObject({ sku: null, price: 1200, isActive: false });
@@ -116,11 +116,11 @@ describe('catalogue import', () => {
     // retest 11/11 UX-054: the value as typed comes before the reason
     expect(report[0]).toEqual(['row', 'sku', 'name', 'column', 'value', 'error', 'code']);
     expect(report.slice(1).every((r) => !!r[5] && r[5] !== r[6] && !r[5].startsWith('validation.'))).toBe(true);
-    expect(report[2]![5]).toBe('Prix de vente requis (> 0)');
+    expect(report[2]![5]).toBe('Prix invalide : nombre entier en DA');
     expect(report[2]![4]).toBe('gratuit');
     expect(report.slice(1).map((r) => [r[0], r[1], r[2], r[3], r[6]])).toEqual([
       ['4', 'IMP-3', '', 'Nom', 'validation.required'],
-      ['5', 'IMP-4', 'Plateau', 'Prix de vente', 'validation.price'],
+      ['5', 'IMP-4', 'Plateau', 'Prix de vente', 'validation.price_integer'],
       ['6', 'IMP-1', 'Doublon', 'Référence', 'IMPORT_DUPLICATE_SKU_IN_FILE'],
       ['7', 'EXIST-1', 'Conflit', 'Référence', 'PRODUCT_SKU_ALREADY_EXISTS'],
       ['9', 'IMP-8', 'Verre', 'Quantité', 'validation.quantity'],
@@ -200,7 +200,7 @@ describe('catalogue import', () => {
     sheet.push(['XL-2001', 'Un de trop', '', '', 10, '', 0, 0]);
     const tooMany = await startImport(owner, { buffer: writeXlsx('Produits', sheet), name: 'trop.xlsx', type: XLSX });
     await drain(app, owner.workspaceId);
-    expect(await jobOf(owner, tooMany)).toMatchObject({ status: 'failed', error: { code: 'IMPORT_TOO_LARGE', message: expect.stringContaining('2000') } });
+    expect(await jobOf(owner, tooMany)).toMatchObject({ status: 'failed', error: { code: 'IMPORT_TOO_LARGE', message: expect.stringMatching(/2\s000/u) } }); // « 2 000 » (rule 11)
     const heavy = await upload(owner, app, '/products/import', 'file', [{ buffer: Buffer.concat([Buffer.from('nom,prix\n'), Buffer.alloc(5 * 1024 * 1024 + 1, 'a')]), name: 'lourd.csv', type: 'text/csv' }]).expect(422);
     expect(heavy.body.error.code).toBe('IMPORT_TOO_LARGE');
   }, 120_000);
@@ -318,7 +318,8 @@ describe('exports and jobs', () => {
     await drain(app, owner.workspaceId);
     const csvResult = await jobOf(owner, csvJob);
     const text = (await download(csvResult.resultUrl).expect(200)).body.toString('utf8');
-    expect(parseCsv(text)).toEqual([['SKU', 'Nom', 'Variante', 'SKU variante', 'Catégorie', 'Unité', 'Prix', 'Ancien prix', 'Coût', 'Stock', 'Seuil', 'Actif'], ['TEA-1', 'Thé vert', '', '', 'Thés', '', '800', '950', '300', '12', '2', 'Oui']]); // workspace locale (fr), not the request's
+    // the language of the member who asked for it (weak-points audit 12/11, 07 §4 « Language source »), not the shop's (fr)
+    expect(parseCsv(text)).toEqual([['SKU', 'Name', 'Variant', 'Variant SKU', 'Category', 'Unit', 'Price', 'Old price', 'Cost', 'Stock', 'Threshold', 'Active'], ['TEA-1', 'Thé vert', '', '', 'Thés', '', '800', '950', '300', '12', '2', 'Yes']]);
 
     // selection export, archived rows included
     await owner.delete(`/products/${a.id}`).expect(204);

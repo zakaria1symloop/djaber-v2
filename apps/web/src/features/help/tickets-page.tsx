@@ -25,7 +25,8 @@ export function TicketsPage() {
   const { can } = useSession();
   const list = useListState(TICKETS_SPEC);
   const s = list.state;
-  const statuses = filterList(s, 'status');
+  // full-test 15/11 HELP-11: an unknown status of an old / hand-edited link is dropped (« STATUT : BOGUS » + a 422)
+  const statuses = filterList(s, 'status').filter((v) => (TICKET_STATUSES as readonly string[]).includes(v));
   const all = can('support.read_all');
   const scope = all && filterText(s, 'scope') === 'workspace' ? 'workspace' : 'mine';
   const query = useMemo<ApiQuery>(() => {

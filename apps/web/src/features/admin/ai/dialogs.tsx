@@ -81,7 +81,8 @@ export function ProviderKeyDialog({ providers, initial, open, onClose }: { provi
       onClose={onClose}
       testId="dlg-provider-key"
       title={t('admin.ai.key.title')}
-      context={t('admin.ai.key.context', { name: provider?.displayName ?? key })}
+      // full-test 15/11 ADMIN-19.6: « remplacer la clé » only when the provider has one
+      context={t(provider?.keyHint ? 'admin.ai.key.context' : 'admin.ai.key.contextNew', { name: provider?.displayName ?? key })}
       submitLabel={t('action.save')}
       disabled={apiKey.trim().length < 8 || result?.state === 'testing' || result?.state === 'rejected'}
       pending={save.isPending}

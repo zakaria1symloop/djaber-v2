@@ -95,15 +95,18 @@ export class AdminViewersService {
   }
 
   // --- products ------------------------------------------------------------------------------------------------------------
-  private productRow(p: Prisma.ProductGetPayload<{ include: { workspace: { select: { id: true; name: true } }; images: true } }>): AdminViewerProductRowDto {
+  private productRow(p: Prisma.ProductGetPayload<{ include: { workspace: { select: { id: true; name: true } }; images: true } }> & { moderationItems?: { status: string }[] }): AdminViewerProductRowDto {
     const img = p.images.find((i) => i.isPrimary) ?? p.images[0];
     const aiStatus = !p.isActive || p.moderationStatus === 'rejected' ? 'excluded' : p.moderationStatus === 'pending' && p.approvedSnapshot ? 'stale' : 'proposed';
-    return { id: p.id, name: p.name, sku: p.sku, price: p.price, stock: p.stock ?? 0, status: p.deletedAt ? 'archived' : p.isActive ? 'active' : 'inactive', moderationStatus: p.moderationStatus, aiStatus, imageUrl: img?.url ?? null, workspace: p.workspace };
+    // full-test 15/11 ADMIN-10: the product stays `pending` while the merchant fixes it; the pill follows the latest moderation
+    // decision (« MODIFICATION DEMANDÉE »), like the moderation queue
+    const moderationStatus = p.moderationStatus === 'pending' && p.moderationItems?.[0]?.status === 'changes_requested' ? 'changes_requested' : p.moderationStatus;
+    return { id: p.id, name: p.name, sku: p.sku, price: p.price, stock: p.stock ?? 0, status: p.deletedAt ? 'archived' : p.isActive ? 'active' : 'inactive', moderationStatus, aiStatus, imageUrl: img?.url ?? null, workspace: p.workspace };
   }
 
   async products(q: { page: number; pageSize: number; workspaceId: string; moderationStatus?: string[]; q?: string }): Promise<Page<AdminViewerProductRowDto>> {
     const where: Prisma.ProductWhereInput = { workspaceId: q.workspaceId, deletedAt: null, ...(q.moderationStatus?.length ? { moderationStatus: { in: q.moderationStatus as never } } : {}), ...(q.q ? { OR: [{ name: { contains: q.q, mode: 'insensitive' } }, { sku: { contains: q.q, mode: 'insensitive' } }] } : {}) };
-    const [total, rows] = await Promise.all([prisma.product.count({ where }), prisma.product.findMany({ where, include: { workspace: { select: { id: true, name: true } }, images: { orderBy: { sortOrder: 'asc' } } }, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }], ...toSkipTake(q) })]);
+    const [total, rows] = await Promise.all([prisma.product.count({ where }), prisma.product.findMany({ where, include: { workspace: { select: { id: true, name: true } }, images: { orderBy: { sortOrder: 'asc' } }, moderationItems: { orderBy: { submittedAt: 'desc' }, take: 1, select: { status: true } } }, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }], ...toSkipTake(q) })]);
     return page(rows.map((p) => this.productRow(p)), total, q);
   }
 

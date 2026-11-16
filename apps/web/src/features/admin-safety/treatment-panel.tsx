@@ -63,7 +63,9 @@ function Body({ report: r, canWrite, refetch }: { report: ReportAdminDto; canWri
       }
     }
   };
-  const lines = r.excerpt.map((l) => ({ author: l.author, text: l.text, time: excerptTime(l.at), reported: l.reported }));
+  // full-test 15/11 ADMIN-19.5: authors and signals in words, never `system : « » ` lines nor `MERCHANT_REPORTS_30D:1`
+  const lines = r.excerpt.filter((l) => l.text.trim()).map((l) => ({ author: t.has(`adminSafety.author.${l.author}`) ? t(`adminSafety.author.${l.author}`) : l.author, text: l.text, time: excerptTime(l.at), reported: l.reported }));
+  const signals = r.signals.map((sig) => signalText(t, sig)).filter((x): x is string => !!x);
   const workspace = r.workspace ? ` (${r.workspace.name})` : '';
   return (
     <div data-report={r.id} data-status={r.status}>
@@ -75,7 +77,7 @@ function Body({ report: r, canWrite, refetch }: { report: ReportAdminDto; canWri
         <div className="flex flex-col gap-2">
           <ReportExcerpt title={t('adminSafety.panel.excerpt', { count: lines.length })} lines={lines} emptyLabel={r.details ?? t('adminSafety.panel.noExcerpt')} />
           {r.details && lines.length ? <p className="ts-label-meta text-text-muted">{r.details}</p> : null}
-          {r.signals.length ? <p className="ts-label-micro text-accent-starred">{r.signals.join(' · ')}</p> : null}
+          {signals.length ? <p className="ts-label-micro text-accent-starred">{signals.join(' · ')}</p> : null}
         </div>
         <div>
           <div className="ts-label-micro uppercase text-text-muted">{t('adminSafety.panel.decision')}</div>
@@ -120,4 +122,12 @@ function Body({ report: r, canWrite, refetch }: { report: ReportAdminDto; canWri
       {guard}
     </div>
   );
+}
+
+/** `merchant_reports_30d:3` ⇒ « 3 signalements sur cette boutique en 30 j »; an unknown signal is left out (UX-059). */
+export function signalText(t: TFunction, signal: string): string | null {
+  const [code, n] = signal.split(':');
+  const key = `adminSafety.signal.${code}`;
+  if (!code || !t.has(key)) return null;
+  return t(key, { count: n !== undefined && /^\d+$/.test(n) ? Number(n) : 0 });
 }

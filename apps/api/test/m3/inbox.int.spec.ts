@@ -609,7 +609,9 @@ describe('D37 block / report a customer (merchant side)', () => {
     expect(block.body.data).toMatchObject({ reason: 'harassment', source: 'manual', unblockable: true, phone: '0770112233', blockedBy: { id: op.userId }, client: { id: conversation.clientId, blocked: true } });
     // blocking twice is the same block
     expect((await op.post(`/conversations/${conversation.id}/block`, { reason: 'spam' }).expect(200)).body.data.id).toBe(block.body.data.id);
-    expect((await op.post(`/conversations/${conversation.id}/block`, {}).expect(422)).body.error.code).toBe('VALIDATION_ERROR');
+    // full-test 15/11 CHANNELS-INBOX-06: the motif is optional (an empty body is the same block); a wrong motif is refused
+    expect((await op.post(`/conversations/${conversation.id}/block`, {}).expect(200)).body.data.id).toBe(block.body.data.id);
+    expect((await op.post(`/conversations/${conversation.id}/block`, { reason: 'nope' }).expect(422)).body.error.code).toBe('VALIDATION_ERROR');
 
     expect((await owner.get('/conversations').expect(200)).body.data).toEqual([]);
     expect((await owner.get('/conversations?blocked=1').expect(200)).body.data.map((c: any) => [c.id, c.blocked])).toEqual([[conversation.id, true]]);
@@ -768,8 +770,8 @@ describe('FL-03 handoff reminder and the notification centre', () => {
     await app.app.get(ChannelService).markNeedsReconnect(channel.id, 'test');
     await work(app, [owner.workspaceId]);
 
-    expect((await owner.get('/notifications/unread-count').expect(200)).body.data).toEqual({ count: 4 });
-    expect((await op.get('/notifications/unread-count').expect(200)).body.data).toEqual({ count: 3 }); // channel alerts go to Owner + Admins
+    expect((await owner.get('/notifications/unread-count').expect(200)).body.data).toMatchObject({ count: 4 });
+    expect((await op.get('/notifications/unread-count').expect(200)).body.data).toMatchObject({ count: 3 }); // channel alerts go to Owner + Admins
     const all = await owner.get('/notifications').expect(200);
     expect(all.body.data.map((n: any) => n.type)).toEqual(['channel_needs_reconnect', 'conversation_handoff', 'conversation_handoff', 'conversation_handoff']);
     expect(all.body.data[0]).toMatchObject({ group: 'pages', deepLink: { web: `/channels/${channel.id}`, mobile: `djaber://channels/${channel.id}` } });
@@ -799,8 +801,8 @@ describe('FL-03 handoff reminder and the notification centre', () => {
     await stranger.post(`/notifications/${mine}/read`).expect(404);
     expect((await stranger.get('/notifications').expect(200)).body.data).toEqual([]);
     expect((await owner.post('/notifications/read-all').expect(200)).body.data).toEqual({ updated: 3, unreadCount: 0 });
-    expect((await owner.get('/notifications/unread-count').expect(200)).body.data).toEqual({ count: 0 });
-    expect((await op.get('/notifications/unread-count').expect(200)).body.data).toEqual({ count: 3 });
+    expect((await owner.get('/notifications/unread-count').expect(200)).body.data).toEqual({ count: 0, byGroup: {} });
+    expect((await op.get('/notifications/unread-count').expect(200)).body.data).toEqual({ count: 3, byGroup: { queue: 3 } }); // 06 §Notifications: unread per family (the chips)
     expect((await wsOf(`user:${owner.userId}`, 'notification.read')).pop()!.payload).toEqual({ ids: 'all', unreadCount: 0 });
   });
 });

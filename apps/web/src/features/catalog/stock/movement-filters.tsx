@@ -131,7 +131,7 @@ function PeriodFilter({ list, f }: { list: ListController; f: MovementFilters })
       presets={f.options.periodOptions}
       activePreset={f.period}
       onPreset={f.setPeriod}
-      labels={{ from: t('common.from'), to: t('common.to'), presets: t('movements.filter.period') }}
+      labels={{ from: t('common.from'), to: t('common.to'), presets: t('movements.filter.period'), invalid: t('error.INVALID_DATE_RANGE') }}
     />
   );
 }

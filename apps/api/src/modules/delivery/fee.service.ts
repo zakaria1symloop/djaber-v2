@@ -100,8 +100,9 @@ export class FeeService {
       prisma.workspace.findUniqueOrThrow({ where: { id: TenantContext.workspaceId() }, select: { freeDeliveryThreshold: true, defaultCourierAccountId: true } }),
     ]);
     const by = new Map(rules.map((r) => [r.wilayaId, r]));
-    // M6: the cached home rate of the default courier (informational, D15)
-    const rates = ws.defaultCourierAccountId ? await prisma.courierRateCache.findMany({ where: { courierAccountId: ws.defaultCourierAccountId } }) : [];
+    // M6: the cached home rate of the default courier (informational, D15) — only while that courier is active: a
+    // deactivated account's cache is not « its cost » any more (full-test DELIVERY-09, DLV-07 « — » otherwise)
+    const rates = ws.defaultCourierAccountId ? await prisma.courierRateCache.findMany({ where: { courierAccountId: ws.defaultCourierAccountId, courierAccount: { isActive: true } } }) : [];
     const cost = new Map(rates.map((x) => [x.wilayaId, x.homePrice]));
     const data = wilayas.map((w) => this.view(w, by.get(w.id), cost.get(w.id) ?? null));
     return { data, meta: { freeDeliveryThreshold: ws.freeDeliveryThreshold, custom: rules.filter((r) => r.source === 'custom').length, inactive: data.filter((r) => !r.isActive).length, missing: WILAYA_COUNT - rules.length } };

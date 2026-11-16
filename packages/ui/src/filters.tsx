@@ -126,26 +126,36 @@ export function FilterRange({
   max: string;
   onChange: (next: { min: string; max: string }) => void;
   unit?: string;
-  labels: { min: string; max: string };
+  /** `invalid`: the inline message when min > max (full-test CLIENTS-08); the range is then not applied. */
+  labels: { min: string; max: string; invalid?: string };
 }) {
   const [draft, setDraft] = React.useState({ min, max });
   // each bound follows its own prop: committing "min" (blur) must not wipe a "max" already being typed
   React.useEffect(() => setDraft((d) => ({ ...d, min })), [min]);
   React.useEffect(() => setDraft((d) => ({ ...d, max })), [max]);
+  const bad = !!labels.invalid && draft.min !== '' && draft.max !== '' && Number(draft.min) > Number(draft.max);
   const commit = () => {
+    if (bad) return;
     if (draft.min !== min || draft.max !== max) onChange(draft);
   };
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') commit();
   };
   return (
+    <div className="flex flex-col gap-1.5">
     <div className="flex items-center gap-2" dir="ltr">
       <NumberInput aria-label={labels.min} placeholder={labels.min} value={draft.min} onValueChange={(v) => setDraft((d) => ({ ...d, min: v }))} onBlur={commit} onKeyDown={onKey} className="!h-9 text-[13px]" />
       <span aria-hidden className="text-text-muted">
         —
       </span>
-      <NumberInput aria-label={labels.max} placeholder={labels.max} value={draft.max} onValueChange={(v) => setDraft((d) => ({ ...d, max: v }))} onBlur={commit} onKeyDown={onKey} className="!h-9 text-[13px]" />
+      <NumberInput aria-label={labels.max} placeholder={labels.max} value={draft.max} aria-invalid={bad || undefined} onValueChange={(v) => setDraft((d) => ({ ...d, max: v }))} onBlur={commit} onKeyDown={onKey} className="!h-9 text-[13px]" />
       {unit ? <span className="ts-label-micro w-8 shrink-0 text-text-muted">{unit}</span> : null}
+    </div>
+    {bad ? (
+      <p role="alert" className="ts-label-meta text-accent-alert" data-testid="filter-range-invalid">
+        {labels.invalid}
+      </p>
+    ) : null}
     </div>
   );
 }
@@ -166,8 +176,19 @@ export function FilterDateRange({
   presets?: FilterOption[];
   activePreset?: string | null;
   onPreset?: (value: string) => void;
-  labels: { from: string; to: string; presets: string };
+  /** `invalid`: the inline message when « du » is after « au » (INVALID_DATE_RANGE); the range is then not applied. */
+  labels: { from: string; to: string; presets: string; invalid?: string };
 }) {
+  // full-test 15/11 SETTINGS-07: a « du » after « au » was dropped without a word — the typed pair is kept here, refused
+  // inline, and applied only once it is in order
+  const [draft, setDraft] = React.useState({ from, to });
+  React.useEffect(() => setDraft({ from, to }), [from, to]);
+  const bad = !!labels.invalid && !!draft.from && !!draft.to && draft.from > draft.to;
+  const commit = (next: { from: string; to: string }) => {
+    setDraft(next);
+    if (labels.invalid && next.from && next.to && next.from > next.to) return;
+    onChange(next);
+  };
   return (
     <div className="flex flex-col gap-2">
       {presets?.length ? (
@@ -185,12 +206,17 @@ export function FilterDateRange({
         <span aria-hidden className="ts-label-micro text-text-muted">
           {labels.from}
         </span>
-        <DateInput aria-label={labels.from} value={from} max={to || undefined} onValueChange={(v) => onChange({ from: v, to })} className="!h-9 w-full min-w-0 text-[13px]" />
+        <DateInput aria-label={labels.from} value={draft.from} max={labels.invalid ? undefined : to || undefined} aria-invalid={bad || undefined} onValueChange={(v) => commit({ from: v, to: draft.to })} className="!h-9 w-full min-w-0 text-[13px]" />
         <span aria-hidden className="ts-label-micro text-text-muted">
           {labels.to}
         </span>
-        <DateInput aria-label={labels.to} value={to} min={from || undefined} onValueChange={(v) => onChange({ from, to: v })} className="!h-9 w-full min-w-0 text-[13px]" />
+        <DateInput aria-label={labels.to} value={draft.to} min={labels.invalid ? undefined : from || undefined} aria-invalid={bad || undefined} onValueChange={(v) => commit({ from: draft.from, to: v })} className="!h-9 w-full min-w-0 text-[13px]" />
       </div>
+      {bad ? (
+        <p role="alert" className="ts-label-meta text-accent-alert" data-testid="filter-date-range-invalid">
+          {labels.invalid}
+        </p>
+      ) : null}
     </div>
   );
 }

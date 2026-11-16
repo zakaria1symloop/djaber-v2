@@ -13,7 +13,7 @@ import { Link } from '@/i18n/navigation';
 import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
-import { digitsToInt, marginPct, moneyDigits } from '@/lib/money';
+import { digitsToInt, marginPct, moneyDigits, pctText } from '@/lib/money';
 import { useSession, useWorkspaceId } from '@/lib/session';
 import { catalogApi, catalogKeys, useCatalogRefresh, useProduct, useProductRelations } from '../api';
 import { GenerateVariantsDialog } from '../generate-variants-dialog';
@@ -137,7 +137,9 @@ function Body({ product, setStatus }: { product: Product; setStatus: (s: Status)
       fail('isActive', e);
     }
   };
-  const margin = advanced ? marginPct(digitsToInt(values.price), digitsToInt(values.costPrice)) : null;
+  // the saved prices: the server margin (on the true cost, as the list and the product page); typed ones: computed here
+  const unchanged = digitsToInt(values.price) === product.price && digitsToInt(values.costPrice) === product.costPrice;
+  const margin = !advanced ? null : unchanged ? product.marginPct : marginPct(digitsToInt(values.price), digitsToInt(values.costPrice));
 
   const priceField = (field: PriceField, label: string) => (
     <Field label={label} htmlFor={`quick-${field}`} error={errors[field]}>
@@ -170,7 +172,7 @@ function Body({ product, setStatus }: { product: Product; setStatus: (s: Status)
           </span>
           {margin !== null ? (
             <Pill tone={margin < 0 ? 'danger' : 'success'} className="!rounded-[4px]">
-              <span>{t('products.quick.margin')}</span> <Ltr>{`${margin} %`}</Ltr>
+              <span>{t('products.quick.margin')}</span> <Ltr>{pctText(margin)}</Ltr>
             </Pill>
           ) : null}
         </div>

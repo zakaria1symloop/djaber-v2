@@ -34,7 +34,7 @@ import { CreditService } from '../credits/credit.service';
 import { PROVIDER_NAMES } from '../delivery/adapters/courier-adapter';
 import { deadStock } from '../gds/reports/stock-queries';
 import { DailyStatsService } from './daily-stats.service';
-import { percentile, sumDays, type DayMetrics } from './day-metrics';
+import { percentile, percentileAbove, sumDays, type DayMetrics, type HistName } from './day-metrics';
 import { addDays, deltaPct, eachDay, pct, resolveRange, round1, type DayRange } from './range';
 
 const DAY = 86_400_000;
@@ -57,6 +57,8 @@ const revenueOf = (m: DayMetrics) => m.revenue.sales + m.revenue.orders;
 /** 04 §4 Cash collected = Σ amountPaid of the orders placed in the period + of the completed counter sales (UX-052). */
 const cashOf = (m: DayMetrics) => m.orders.cashCollected + (m.revenue.salesPaid ?? 0);
 const median = (h: Parameters<typeof percentile>[0], counts: number[]) => percentile(h, counts, 0.5);
+/** p95 + « above the last bucket » flags (1 / 0) of a histogram KPI — the screen writes « > 50 » (ANALYTICS-08) */
+const spread = (h: HistName, counts: number[]) => ({ p95: percentile(h, counts, 0.95), p95Above: percentileAbove(h, counts, 0.95) ? 1 : 0, medianAbove: percentileAbove(h, counts, 0.5) ? 1 : 0 });
 const sum = (o: Record<string, number>) => Object.values(o).reduce((s, v) => s + v, 0);
 const usd = (micro: number) => Math.round(micro / 100) / 10_000;
 
@@ -174,7 +176,8 @@ export class AnalyticsService {
     return new Map(rows.map((r) => [r.id, r]));
   }
 
-  private async wilayaRows(ctx: Ctx, limit?: number): Promise<AnalyticsWilayaRow[]> {
+  /** `by: 'delivered'` — the overview card « Top wilayas (commandes livrées) » ranks by its own figure (ANALYTICS-06). */
+  private async wilayaRows(ctx: Ctx, limit?: number, by: 'orders' | 'delivered' = 'orders'): Promise<AnalyticsWilayaRow[]> {
     const ids = Object.keys(ctx.cur.wilayas).map(Number).filter((n) => n > 0);
     if (!ids.length) return [];
     const names = new Map((await prisma.wilaya.findMany({ where: { id: { in: ids } } })).map((w) => [w.id, w]));
@@ -198,7 +201,7 @@ export class AnalyticsService {
         deltaPts: ctx.compare && deliveredPct !== null && previousDeliveredPct !== null ? round1(deliveredPct - previousDeliveredPct) : null,
       };
     });
-    rows.sort((a, b) => b.orders - a.orders || b.delivered - a.delivered || a.wilayaId - b.wilayaId);
+    rows.sort((a, b) => (by === 'delivered' ? b.delivered - a.delivered || b.orders - a.orders : b.orders - a.orders || b.delivered - a.delivered) || a.wilayaId - b.wilayaId);
     return limit ? rows.slice(0, limit) : rows;
   }
 
@@ -226,7 +229,7 @@ export class AnalyticsService {
   // --- overview ---------------------------------------------------------------------------------------------------------
   private async overview(ctx: Ctx): Promise<AnalyticsOverviewView> {
     const { cur, prev } = ctx;
-    const [money, credits, names, topProducts, topWilayas] = await Promise.all([this.moneyKpis(ctx), this.creditsHint(cur), this.channelNames(), this.productRows(ctx, 5), this.wilayaRows(ctx, 5)]);
+    const [money, credits, names, topProducts, topWilayas] = await Promise.all([this.moneyKpis(ctx), this.creditsHint(cur), this.channelNames(), this.productRows(ctx, 5), this.wilayaRows(ctx, 5, 'delivered')]);
     const series = this.series(ctx, ['revenue', 'orders'], (m, k) => (k === 'revenue' ? revenueOf(m) : m.orders.created));
     let bestDay: AnalyticsOverviewView['bestDay'] = null;
     for (const p of series.points) if (p.values.revenue > 0 && (!bestDay || p.values.revenue > bestDay.revenue)) bestDay = { day: p.day, revenue: p.values.revenue };
@@ -256,7 +259,9 @@ export class AnalyticsService {
       },
       series,
       bestDay,
-      funnel: { conversations: cur.conv.created, purchaseIntent: cur.conv.purchaseIntent, ordersCreated: cur.orders.created, confirmed: cur.orders.confirmed, delivered: cur.orders.delivered },
+      // full-test 15/11 ANALYTICS-07: the conversation funnel follows the AI orders (the manual / imported ones never came from
+      // these conversations — the « funnel » grew from 1 to 23); `confirmed` stays the all-source count (Commandes tab)
+      funnel: { conversations: cur.conv.created, purchaseIntent: cur.conv.purchaseIntent, ordersCreated: cur.srcCreated.ai ?? 0, confirmed: cur.orders.confirmed, delivered: cur.srcDelivered.ai ?? 0 },
       topProducts,
       topWilayas,
       byChannel,
@@ -287,9 +292,9 @@ export class AnalyticsService {
       kpis: {
         conversations: kpi(ctx, 'count', cur.conv.created, prev?.conv.created),
         aiHandledPct: kpi(ctx, 'pct', aiPct(cur), aiPct(prev), { hint: { handoffs: cur.conv.handoffs } }),
-        messagesPerConversation: kpi(ctx, 'count', median('msgPerConv', cur.msgPerConv), prev ? median('msgPerConv', prev.msgPerConv) : null, { hint: { p95: percentile('msgPerConv', cur.msgPerConv, 0.95) } }),
-        aiResponseTime: kpi(ctx, 'seconds', median('aiLatency', cur.aiLatency), prev ? median('aiLatency', prev.aiLatency) : null, { hint: { p95: percentile('aiLatency', cur.aiLatency, 0.95) } }),
-        humanResponseTime: kpi(ctx, 'minutes', median('humanLatency', cur.humanLatency), prev ? median('humanLatency', prev.humanLatency) : null, { hint: { p95: percentile('humanLatency', cur.humanLatency, 0.95) } }),
+        messagesPerConversation: kpi(ctx, 'count', median('msgPerConv', cur.msgPerConv), prev ? median('msgPerConv', prev.msgPerConv) : null, { hint: spread('msgPerConv', cur.msgPerConv) }),
+        aiResponseTime: kpi(ctx, 'seconds', median('aiLatency', cur.aiLatency), prev ? median('aiLatency', prev.aiLatency) : null, { hint: spread('aiLatency', cur.aiLatency) }),
+        humanResponseTime: kpi(ctx, 'minutes', median('humanLatency', cur.humanLatency), prev ? median('humanLatency', prev.humanLatency) : null, { hint: spread('humanLatency', cur.humanLatency) }),
       },
       languages,
       hours,
@@ -555,7 +560,7 @@ export class AnalyticsService {
       ...this.base(ctx),
       kpis: {
         shipped: kpi(ctx, 'count', cur.ship.created, prev?.ship.created, { hint: Object.fromEntries(couriers.filter((c) => c.parcels).map((c) => [c.name, c.parcels])) }),
-        avgDays: kpi(ctx, 'days', avg(cur), avg(prev), { hint: { p95: percentile('shipDays', cur.shipDays, 0.95) } }),
+        avgDays: kpi(ctx, 'days', avg(cur), avg(prev), { hint: { p95: percentile('shipDays', cur.shipDays, 0.95), p95Above: percentileAbove('shipDays', cur.shipDays, 0.95) ? 1 : 0 } }),
         firstAttemptPct: kpi(ctx, 'pct', pct(cur.ship.firstAttempt, cur.ship.delivered), prev ? pct(prev.ship.firstAttempt, prev.ship.delivered) : null, { hint: { secondAttemptPct: pct(cur.ship.secondAttempt, cur.ship.delivered) } }),
         openFailures: snap('count', openFailures, { hint: { over48h } }),
         courierFees: kpi(ctx, 'money', cur.ship.courierFees, prev?.ship.courierFees, { hint: { customerFees: cur.ship.customerFees } }),

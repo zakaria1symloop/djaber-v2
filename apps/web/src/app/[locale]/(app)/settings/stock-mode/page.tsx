@@ -55,6 +55,7 @@ export default function StockModePage() {
                 title={t(`settings.stockMode.${m}.title`)}
                 description={t(`settings.stockMode.${m}.description`)}
                 badge={t('enum.Workspace.status.active')}
+                arrowSelects={false}
               />
             ))}
           </div>

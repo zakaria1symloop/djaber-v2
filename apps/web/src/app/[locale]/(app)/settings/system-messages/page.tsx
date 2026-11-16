@@ -51,7 +51,9 @@ export default function SystemMessagesPage() {
   const { guard } = useLeaveGuard(dirty, t('nav.settings.systemMessages'));
   const tooLong = !!draft && SYSTEM_MESSAGE_KEYS.some((k) => routing.locales.some((l) => (draft[k][l] ?? '').length > MAX));
 
-  const preview = (text: string) => text.replaceAll('{shop}', workspace?.name ?? '').replaceAll('{product}', t('settings.systemMessages.sampleProduct'));
+  // full-test 15/11 SETTINGS-13: the sample product is in the tab's language (« عذرًا، La Robe satin … » in the Arabic tab)
+  const preview = (text: string, lang: AppLocale = locale) =>
+    text.replaceAll('{shop}', workspace?.name ?? '').replaceAll('{product}', getMessages(lang)['settings.systemMessages.sampleProduct'] ?? t('settings.systemMessages.sampleProduct'));
   const onSave = async () => {
     if (!draft) return;
     setError(null);
@@ -180,7 +182,7 @@ export default function SystemMessagesPage() {
         {resetKey ? (
           <div className="flex flex-col gap-3">
             <p className="rounded-card border border-line-edge bg-ink-raised px-2.5 py-2 text-[13px]" dir={uiLocale === 'ar' ? 'rtl' : 'ltr'}>
-              {preview(getMessages(uiLocale)[`customer.${resetKey}`] ?? '')}
+              {preview(getMessages(uiLocale)[`customer.${resetKey}`] ?? '', uiLocale)}
             </p>
             <p className="ts-label-meta text-text-muted">{t('settings.systemMessages.resetNote')}</p>
             {resetError ? <FormAlert>{resetError}</FormAlert> : null}

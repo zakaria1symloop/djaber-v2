@@ -51,8 +51,9 @@ test.describe('sign-up and login', () => {
     expect(Object.keys(w.systemMessages).sort()).toEqual(['handoff', 'out_of_hours', 'out_of_stock', 'welcome']);
     for (const k of Object.keys(w.systemMessages)) expect(Object.keys(w.systemMessages[k]!).sort()).toEqual(['ar', 'en', 'fr']);
 
-    // "Passer la configuration" → Home with the checklist at 0 / 4
-    await page.getByRole('button', { name: 'Passer la configuration' }).click();
+    // "Passer la configuration" (confirmed, full-test 15/11 ONBOARDING-10) → Home with the checklist at 0 / 4
+    await page.getByTestId('onboarding-skip').click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Passer la configuration' }).click();
     await expectUrl(page, '**/fr/home');
     await expect(page.getByTestId('checklist-count')).toHaveText('0 / 4');
   });
@@ -360,7 +361,8 @@ test.describe('members, ownership and deletion', () => {
     await page.locator('#name').fill('Atelier E2E');
     await page.getByRole('button', { name: 'Créer et démarrer l’onboarding' }).click();
     await expectUrl(page, '**/fr/onboarding/welcome');
-    await page.getByRole('button', { name: 'Passer la configuration' }).click();
+    await page.getByTestId('onboarding-skip').click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Passer la configuration' }).click();
     await expectUrl(page, '**/fr/home');
     // two memberships ⇒ the switcher appears; the menu no longer offers a creation
     await expect(page.getByRole('button', { name: 'Changer d’espace' })).toContainText('Atelier E2E');

@@ -91,3 +91,19 @@ export function handoffRefusedInstruction(why: HandoffRefusal): string {
   };
   return `${HANDOFF_REFUSED_MARK}: ${cause[why]}. Keep the conversation and answer the customer's current message now, in their language (status OK; UNKNOWN when you have no answer — say you will check with the team and call add_faq_candidate; UNCLEAR when you did not understand). Hand off only when the customer's current message itself matches a rule, quoting their words in "evidence". Answer with the JSON object only.`;
 }
+
+/** Words that can ask for the team in a short message (« un humain svp », « rembourse », « arnaque »…). */
+const TEAM_WORDS = /human|humain|conseill|responsable|personne|parler|appel|rappel|rembours|refund|arnaq|plainte|voleur|scam|manager|agent|bnadem|nhder|nehder|انسان|مسؤول|شخص|نهدر|سارق|نصاب|ترجع|فلوس|flous/;
+/**
+ * full-test 15/11 AI-CHAT-07 (proposal 9): a message that is only an order field — a phone number, or, while an order is
+ * being taken, a short answer with no question and no word asking for the team (« Sétif », « Bab Ezzouar », « Karim
+ * Haddad », « cité 20 août villa 3 »). The `handoff_to_human` tool is then not offered: every such handoff was refused
+ * by the judge and cost a model round of 5–10 s. A real request still goes through `status = HANDOFF` (judged).
+ */
+export function fieldOnlyMessage(text: string | undefined, ordering: boolean): boolean {
+  const t = (text ?? '').trim();
+  if (!t || t.length > 120) return false;
+  if (/^[\s+()\d.\-/٠-٩]{9,20}$/.test(t)) return true;
+  if (!ordering || /[?؟!]/.test(t) || TEAM_WORDS.test(foldText(t))) return false;
+  return words(t).length <= 6;
+}

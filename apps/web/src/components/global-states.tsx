@@ -16,6 +16,7 @@ import {
   SystemPage,
   type StateAction,
 } from '@djaber/ui';
+import { roleCan, type MerchantPermission } from '@djaber/shared';
 import { ApiError } from '@/lib/api';
 import { useT } from '@/lib/i18n';
 
@@ -28,12 +29,15 @@ export function ListEmpty({ title, description, action }: { title: string; descr
   return <EmptyState title={title} description={description} action={action} />;
 }
 
+/** `filters` = what the member typed / picked (search term, chip labels). Empty ⇒ « … with the current filters » — never a
+ *  placeholder quoted as if it were the search, never « Aucun(e) » (full-test 15/11 ORDERS-18 / DELIVERY-13 / CLIENTS-07). */
 export function ListFilteredEmpty({ entity, filters, onClear }: { entity: string; filters: string; onClear: () => void }) {
   const t = useT();
+  const term = filters.trim();
   return (
     <FilteredEmptyState
       title={t('state.list.filteredEmpty.title')}
-      description={t('state.list.filteredEmpty.description', { entity, filters })}
+      description={term ? t('state.list.filteredEmpty.description', { entity, filters: term }) : t('state.list.filteredEmpty.descriptionNoTerm', { entity })}
       action={{ label: t('action.clearFilters'), onClick: onClear }}
     />
   );
@@ -69,14 +73,21 @@ export function OfflineBanner({ since, onRetry }: { since: string; onRetry?: () 
   return <OfflineNotice action={onRetry ? { label: t('action.retry'), onClick: onRetry } : undefined}>{t('state.offline.banner', { date: since })}</OfflineNotice>;
 }
 
-export function Page403({ role, homeHref }: { role: string; homeHref: string }) {
+/** The lowest role that holds every key of the page: the 403 text names who may open it (full-test ROLES-03). */
+export const requiredRole = (permissions: readonly MerchantPermission[] | undefined): 'operator' | 'admin' | 'owner' | null => {
+  if (!permissions?.length) return null;
+  return (['operator', 'admin', 'owner'] as const).find((r) => permissions.every((k) => roleCan(r, k))) ?? null;
+};
+
+export function Page403({ role, homeHref, permissions }: { role: string; homeHref: string; permissions?: readonly MerchantPermission[] }) {
   const t = useT();
+  const needed = requiredRole(permissions);
   return (
     <SystemPage>
       <ForbiddenState
         code={t('state.page.403.title')}
         title={t('state.detail.forbidden.title')}
-        description={t('state.page.403.description', { role })}
+        description={needed ? t(`state.page.403.for.${needed}`, { role }) : t('state.page.403.description', { role })}
         action={{ label: t('action.backHome'), href: homeHref }}
       />
     </SystemPage>

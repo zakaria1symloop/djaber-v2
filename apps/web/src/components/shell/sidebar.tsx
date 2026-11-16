@@ -2,6 +2,7 @@
 // Sidebar: 240 px ≥ 1280, icon rail 64 px at 1024–1279, drawer < 1024 (Figma RESP frame).
 import { cn } from '@djaber/ui';
 import { X } from 'lucide-react';
+import * as React from 'react';
 import { Link, usePathname } from '@/i18n/navigation';
 import { useT } from '@/lib/i18n';
 import type { NavGroup, NavItem } from './nav';
@@ -76,10 +77,61 @@ export function Sidebar({
   const all = [...groups.flatMap((g) => g.items), ...footer];
   const best = all.filter((i) => isActive(i.href)).sort((a, b) => b.href.length - a.href.length)[0];
 
+  // full-test 15/11 MOBILE-A11Y-01: below 1024 px the sidebar is a drawer — closed, it is out of the Tab order (`inert`);
+  // open, it is a modal dialog: focus moves in, Tab stays inside, Esc closes (focus goes back to « Menu », AppShell)
+  const asideRef = React.useRef<HTMLElement>(null);
+  const [drawer, setDrawer] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023.98px)');
+    const sync = () => setDrawer(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+  const modal = drawer && open;
+  React.useEffect(() => {
+    const el = asideRef.current;
+    if (!el) return;
+    if (drawer && !open) el.setAttribute('inert', '');
+    else el.removeAttribute('inert');
+  }, [drawer, open]);
+  React.useEffect(() => {
+    if (!modal) return;
+    const el = asideRef.current;
+    const focusables = () => Array.from(el?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? []);
+    focusables()[0]?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const list = focusables();
+      if (!list.length) return;
+      const first = list[0]!;
+      const last = list[list.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [modal, onClose]);
+
   return (
     <>
       {open ? <div className="fixed inset-0 z-30 bg-black/70 lg:hidden" onClick={onClose} aria-hidden /> : null}
       <aside
+        ref={asideRef}
+        id="app-drawer"
+        role={modal ? 'dialog' : undefined}
+        aria-modal={modal || undefined}
+        aria-label={modal ? t('nav.menu') : undefined}
         className={cn(
           'fixed inset-y-0 start-0 z-40 flex w-60 flex-col border-e border-line-hairline bg-ink-surface transition-transform',
           'lg:static lg:z-auto lg:w-16 lg:translate-x-0 xl:w-60',
@@ -95,8 +147,9 @@ export function Sidebar({
               <Logo compact />
             </span>
           </Link>
-          <button type="button" className="text-text-muted lg:hidden" onClick={onClose} aria-label={t('action.close')}>
-            <X className="size-5" />
+          {/* MOBILE-A11Y-09: a finger-sized target (40 px), the icon stays 20 px */}
+          <button type="button" className="-me-2.5 flex size-10 items-center justify-center rounded-card text-text-muted hover:text-text-primary lg:hidden" onClick={onClose} aria-label={t('action.close')}>
+            <X className="size-5" aria-hidden />
           </button>
         </div>
         {header ? <div className="px-5 pb-2 lg:max-xl:hidden">{header}</div> : null}

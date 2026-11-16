@@ -27,7 +27,7 @@ import { memo, type ReactNode } from 'react';
 import { useLocaleCode, useT, type TFunction } from '@/lib/i18n';
 import type { Attachment, Message } from './contracts';
 import { clockOf, durationOf, fileSize, isOptimistic } from './logic';
-import { shortUserName } from './ui';
+import { isolate, shortUserName } from './ui';
 
 const param = (v: unknown): string => (v === null || v === undefined ? '' : String(v));
 
@@ -117,8 +117,8 @@ export const MessageView = memo(function MessageView({ message: m, grouped, unre
   const inspect = author === 'ai' && !!onInspect && !!m.aiRunId && !isOptimistic(m);
   const parts: string[] = [];
   if (author === 'customer') parts.push(time, t('inbox.meta.customer'));
-  else if (author === 'ai') parts.push(time, ...(m.agent?.name ? [m.agent.name] : []), ...(inspect ? [] : [t('enum.Conversation.author.ai')]));
-  else parts.push(shortUserName(m.authorUser) || t('inbox.meta.team'), time);
+  else if (author === 'ai') parts.push(time, ...(m.agent?.name ? [isolate(m.agent.name)] : []), ...(inspect ? [] : [t('enum.Conversation.author.ai')]));
+  else parts.push(isolate(shortUserName(m.authorUser)) || t('inbox.meta.team'), time);
   if (m.payload?.templateKey) parts.push(t('inbox.meta.template'));
   if (m.payload?.external) parts.push(t('inbox.meta.external'));
   if (unread) parts.push(t('inbox.meta.unread'));

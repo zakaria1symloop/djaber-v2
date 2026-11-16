@@ -38,5 +38,15 @@ export const webhookUrlAllowed = (raw: string, production: boolean): boolean => 
   return u.protocol === 'https:' || u.protocol === 'http:';
 };
 
+/** An `https://` URL whose host is loopback / private / link-local (refused in production as WEBHOOK_URL_PRIVATE). */
+export const isPrivateHttps = (raw: string): boolean => {
+  try {
+    const u = new URL(raw);
+    return u.protocol === 'https:' && !u.username && !u.password && isLocalHost(u.hostname);
+  } catch {
+    return false;
+  }
+};
+
 export const newWebhookSecret = (bytes: Buffer) => `whsec_${bytes.toString('base64url')}`;
 export const secretHint = (secret: string) => `whsec_…${secret.slice(-4)}`;

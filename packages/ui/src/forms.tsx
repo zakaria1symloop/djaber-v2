@@ -4,6 +4,7 @@
 import { Check, Eye, EyeOff, Loader2 } from 'lucide-react';
 import * as React from 'react';
 import { cn, Input } from './primitives';
+import { onRadioGroupKeyDown } from './radio-keys';
 
 /* ---------- Spinner ---------- */
 export function Spinner({ label, className }: { label: string; className?: string }) {
@@ -212,10 +213,24 @@ export function SegmentedControl<T extends string>({
 
 /* ---------- Settings sub-navigation (SettingsShell §2.2) ---------- */
 export function SubNav({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
+  // full-test 15/11 SETTINGS-16: on a phone the sub-nav is one horizontal strip — the active entry is scrolled into view
+  // (« Notifications » was hidden to the right); only the strip scrolls, never the page
+  const strip = React.useRef<HTMLDivElement>(null);
+  const shown = React.useRef<Element | null>(null);
+  React.useEffect(() => {
+    const box = strip.current;
+    const el = box?.querySelector('[aria-current="page"]') as HTMLElement | null;
+    if (!box || !el || el === shown.current) return;
+    shown.current = el;
+    if (box.scrollWidth <= box.clientWidth) return;
+    const b = box.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    if (r.left < b.left || r.right > b.right) box.scrollLeft += r.left - b.left - (b.width - r.width) / 2;
+  });
   return (
     <nav aria-label={title} className={cn('flex flex-col gap-0.5', className)}>
       <div className="ts-label-meta px-1 pb-2 uppercase text-text-muted max-lg:hidden">{title}</div>
-      <div className="flex gap-0.5 max-lg:overflow-x-auto lg:flex-col">{children}</div>
+      <div ref={strip} className="flex gap-0.5 max-lg:overflow-x-auto lg:flex-col">{children}</div>
     </nav>
   );
 }
@@ -237,9 +252,12 @@ export function OptionCard({
   disabled,
   name,
   className,
+  arrowSelects = true,
 }: {
   selected: boolean;
   onSelect: () => void;
+  /** the arrow keys also choose (default); false when choosing saves at once — then Space / Enter choose */
+  arrowSelects?: boolean;
   title: string;
   description: string;
   /** small label on the end side (e.g. ACTIF) shown when selected */
@@ -257,13 +275,19 @@ export function OptionCard({
       data-name={name}
       disabled={disabled}
       onClick={onSelect}
+      // full-test 15/11 ONBOARDING-05 / -13: a visible selection (lit border + radio dot, Figma ONB-01) and the arrow keys
+      // of a radio group
+      onKeyDown={(e) => onRadioGroupKeyDown(e, { select: arrowSelects })}
       className={cn(
         'flex w-full flex-col gap-2 rounded-card border bg-ink-surface p-4 text-start transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-        selected ? 'border-line-lit' : 'border-line-hairline hover:border-line-edge',
+        selected ? 'border-accent-money bg-ink-raised' : 'border-line-hairline hover:border-line-edge',
         className,
       )}
     >
       <span className="flex w-full items-center gap-3">
+        <span aria-hidden className={cn('flex size-4 shrink-0 items-center justify-center rounded-full border', selected ? 'border-accent-money' : 'border-line-lit')}>
+          {selected ? <span className="size-2 rounded-full bg-accent-money" /> : null}
+        </span>
         {icon ? <span className="text-text-secondary">{icon}</span> : null}
         <span className="min-w-0 flex-1 text-[14px] font-medium text-text-primary">{title}</span>
         {selected && badge ? <span className="ts-label-micro text-text-primary">{badge}</span> : null}

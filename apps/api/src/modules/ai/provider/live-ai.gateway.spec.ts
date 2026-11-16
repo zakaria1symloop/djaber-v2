@@ -229,6 +229,17 @@ describe('LiveAiGateway.generate — Anthropic, Google, Groq', () => {
     });
   });
 
+  it('full-test 15/11 proposal 13: Anthropic caches the stable start of the system prompt (cache_control on the first block)', async () => {
+    expectHost('api.anthropic.com').reply({ json: { id: 'msg_fixture_c', type: 'message', role: 'assistant', model: 'claude-3-5-haiku-20241022', content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', usage: { input_tokens: 9, output_tokens: 1 } } });
+    const prefix = `IDENTITY ${'catalogue line. '.repeat(300)}`;
+    await gateway.generate(request('anthropic', 'claude-3-5-haiku-20241022', { system: `${prefix}\n\nLANGUAGE: French`, systemCachePrefix: prefix }));
+    expect(net.calls[0]!.json.system).toEqual([{ type: 'text', text: prefix, cache_control: { type: 'ephemeral' } }, { type: 'text', text: 'LANGUAGE: French' }]);
+    // a short prompt (under the provider's minimum), or a prefix that is not the start: one plain block
+    expectHost('api.anthropic.com').reply({ json: { id: 'msg_fixture_d', type: 'message', role: 'assistant', model: 'claude-3-5-haiku-20241022', content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', usage: { input_tokens: 9, output_tokens: 1 } } });
+    await gateway.generate(request('anthropic', 'claude-3-5-haiku-20241022', { systemCachePrefix: 'something else' }));
+    expect(net.calls.at(-1)!.json.system).toEqual([{ type: 'text', text: SYSTEM }]);
+  });
+
   it('Anthropic: assistant tool call + tool result are serialised as tool_use / tool_result blocks', async () => {
     expectHost('api.anthropic.com').reply({ json: { id: 'msg_fixture_2', type: 'message', role: 'assistant', model: 'claude-3-5-haiku-20241022', content: [{ type: 'text', text: 'Disponible.' }], stop_reason: 'end_turn', usage: { input_tokens: 90, output_tokens: 4 } } });
     const res = await gateway.generate(

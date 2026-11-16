@@ -35,7 +35,7 @@
   "settings.integrations.sheets.row.lastError": "Dernière erreur",
   "settings.integrations.sheets.tabNote": "(onglet « {tab} » de votre feuille, une colonne cachée permet à Djaber de reconnaître chaque commande)",
   "settings.integrations.sheets.noSheet": "Aucune feuille choisie",
-  "settings.integrations.sheets.rows": "{count} commandes synchronisées",
+  "settings.integrations.sheets.rows": "{count, plural, one {{value} commande synchronisée} other {{value} commandes synchronisées}}",
   "settings.integrations.sheets.pending": "{count} en attente",
   "settings.integrations.sheets.noError": "aucune",
   "settings.integrations.sheets.filters.allPages": "Toutes les pages",

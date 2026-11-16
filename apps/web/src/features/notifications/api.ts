@@ -19,6 +19,8 @@ export const notificationsApi = {
     return { rows: r.data ?? [], nextCursor: r.meta?.nextCursor ?? null, hasMore: r.meta?.hasMore ?? false };
   },
   unreadCount: async () => readCount(await api<unknown>('/notifications/unread-count')),
+  /** full-test 15/11 HOME-05: unread per family (`byGroup` of the same call) for the chip counts */
+  unreadByGroup: async (): Promise<Record<string, number>> => ((await api<{ byGroup?: Record<string, number> }>('/notifications/unread-count')).byGroup ?? {}),
   read: (id: string) => api<unknown>(`/notifications/${id}/read`, { method: 'POST', body: {} }),
   readAll: () => api<unknown>('/notifications/read-all', { method: 'POST', body: {} }),
   /** public: no session needed */
@@ -31,4 +33,5 @@ export const notificationKeys = {
   list: (ws: string, q: unknown) => [ws, 'notifications', 'list', q] as const,
   lists: (ws: string) => [ws, 'notifications', 'list'] as const,
   unread: (ws: string) => [ws, 'notifications', 'unread-count'] as const,
+  unreadGroups: (ws: string) => [ws, 'notifications', 'unread-groups'] as const,
 };

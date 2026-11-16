@@ -229,7 +229,8 @@ export function ItemsBlock({
           <tbody>
             {lines.map((l) => (
               <tr key={l.id} className="border-b border-line-hairline" data-item={l.id}>
-                <td className="px-4 py-3">
+                {/* full-test ORDERS-17: on a phone the product cell truncates so PRICE / QTY / TOTAL stay readable */}
+                <td className="px-4 py-3 max-md:max-w-[150px] max-md:px-3">
                   <div className="flex items-center gap-3">
                     <ProductThumb src={l.product.primaryImageUrl} name={l.productName} size={36} />
                     <div className="min-w-0">
@@ -243,7 +244,7 @@ export function ItemsBlock({
                     </div>
                   </div>
                 </td>
-                <td className="px-3 py-3 text-end">
+                <td className="whitespace-nowrap px-3 py-3 text-end max-md:px-2">
                   <Ltr className="tabular-nums">{formatMoney(l.unitPrice)}</Ltr>
                 </td>
                 <td className="px-3 py-3 text-center">
@@ -253,7 +254,7 @@ export function ItemsBlock({
                     <Ltr className="tabular-nums">{l.qty}</Ltr>
                   )}
                 </td>
-                <td className="px-4 py-3 text-end font-medium">
+                <td className="whitespace-nowrap px-4 py-3 text-end font-medium max-md:px-3">
                   <Ltr className="tabular-nums">{formatMoney(l.unitPrice * l.qty - l.discount)}</Ltr>
                 </td>
                 {editing ? (
@@ -371,6 +372,7 @@ export function PaymentBlock({ order, onRecord, onLink, onRefund }: { order: Ord
 }
 
 /* ---------- HISTORIQUE ---------- */
+const MONEY_FIELDS = new Set(['amountPaid', 'deliveryFee', 'total', 'discount', 'subtotal']);
 export function HistoryBlock({ order }: { order: Order }) {
   const t = useT();
   const locale = useLocaleCode() as AppLocale;
@@ -383,7 +385,11 @@ export function HistoryBlock({ order }: { order: Order }) {
     // an AI line without a named agent reads « IA » once (not « IA (IA) »); the server names it in the viewer's language
     const name = kind === 'ai' ? (h.actor.name && h.actor.name !== t('actor.label.ai') ? t('orders.history.ai', { name: h.actor.name }) : t('actor.label.ai')) : kind === 'system' ? t('orders.history.system') : h.actor.name;
     const fieldKey = `orders.history.field.${h.field}`;
-    const text = h.field === 'created' ? t('orders.history.created') : `${t.has(fieldKey) ? t(fieldKey) : h.field} : ${h.from ? `${value(h.field, h.from)} → ` : ''}${value(h.field, h.to)}`;
+    // full-test 15/11 MOBILE-A11Y-08: the arrow follows the reading direction (« جديد ← مُسلَّم » read right to left), amounts
+    // are money (« 1 400 DA », never « 0 → 1400 »)
+    const arrow = locale === 'ar' ? ' ← ' : ' → ';
+    const shown = (v: string | null) => (MONEY_FIELDS.has(h.field) && v !== null && /^-?\d+$/.test(v) ? formatMoney(Number(v)) : value(h.field, v));
+    const text = h.field === 'created' ? t('orders.history.created') : `${t.has(fieldKey) ? t(fieldKey) : h.field} : ${h.from ? `${shown(h.from)}${arrow}` : ''}${shown(h.to)}`;
     return {
       key: `${h.at}-${i}`,
       time: algiersTime(h.at),

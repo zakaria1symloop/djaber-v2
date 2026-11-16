@@ -3,7 +3,7 @@
 import { useDocumentTitle } from '@/lib/document-title';
 import { Card, cn, Pill, type Tone } from '@djaber/ui';
 import { useSearchParams } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import { Logo } from '@/components/shell/sidebar';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
@@ -46,6 +46,11 @@ export function AuthCard({
       {description ? <p className="ts-body mt-4 text-text-secondary">{description}</p> : null}
       {children ? <div className="mt-5">{children}</div> : null}
       {footer ? <div className="mt-6 text-center text-[13px] text-text-secondary">{footer}</div> : null}
+      {/* full-test 15/11 PUBLIC-14: FR · AR · EN under every auth card (forgot / reset password, verify e-mail, invitation —
+          a user who opens an e-mail link in the wrong language can change it), not only on login / sign-up */}
+      <Suspense>
+        <LocaleSwitch className="mt-5" />
+      </Suspense>
     </Card>
   );
 }

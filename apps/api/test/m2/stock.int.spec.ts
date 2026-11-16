@@ -253,7 +253,9 @@ describe('movements journal (GDS-02), reverse, snapshot', () => {
     const reversed = await owner.post(`/stock/movements/${out.id}/reverse`, { note: 'Erreur de saisie' }).expect(201);
     expect(reversed.body.data).toMatchObject({ type: 'adjustment_in', quantity: 5, before: 15, after: 20, reason: 'correction', note: 'Erreur de saisie', reference: { type: 'manual', id: out.id } });
     const original = (await owner.get(`/stock/movements/${out.id}`).expect(200)).body.data;
-    expect(original).toMatchObject({ reversed: true, quantity: -5 });
+    expect(original).toMatchObject({ reversed: true, quantity: -5, lockedBy: 'reversed', reversedAt: expect.any(String) });
+    // full-test 15/11 STOCK-06: the reversal names the movement it cancels, never a raw id as its reference label
+    expect(reversed.body.data).toMatchObject({ reversalOf: { id: out.id }, lockedBy: 'reversal', reference: { label: '' } });
     expect(original.actions.find((x: any) => x.key === 'reverse')).toEqual({ key: 'reverse', enabled: false, reasonCode: 'GDS_MOVEMENT_IMMUTABLE' });
     expect((await owner.post(`/stock/movements/${out.id}/reverse`).expect(403)).body.error.code).toBe('GDS_MOVEMENT_IMMUTABLE'); // once (a body is optional)
     expect((await owner.post(`/stock/movements/${reversed.body.data.id}/reverse`, {}).expect(403)).body.error.code).toBe('GDS_MOVEMENT_IMMUTABLE'); // a reversal is final

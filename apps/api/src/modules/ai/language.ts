@@ -46,5 +46,40 @@ export const detectLanguage = (text: string | null | undefined, previous?: AiLan
   return previous && previous !== 'ar' ? previous : 'en';
 };
 
+/**
+ * full-test 15/11 AI-CHAT-04 (proposal 5): the language of an AI reply, only when it is clear — a reply too short to
+ * tell, or with no clue (« 12 500 DA ? »), gives undefined. Used by the reply guard (`language_switch`) and the step-5
+ * scenarios (`language_respected`).
+ */
+export const replyLanguage = (text: string): AiLanguage | undefined => {
+  const clean = text.replace(/https?:\/\/\S+/g, ' ');
+  const arabic = (clean.match(/[؀-ۿ]/g) ?? []).length;
+  const latin = (clean.match(/[A-Za-zÀ-ÿ]/g) ?? []).length;
+  if (arabic + latin < 12) return undefined;
+  if (arabic / (arabic + latin) > 0.6) return 'ar';
+  if (arabic / (arabic + latin) > 0.1) return 'mixed';
+  if (words(clean).filter((w) => /[a-zà-ÿ]/i.test(w)).length < 4) return undefined;
+  return detectLanguage(clean, undefined, { neutral: 'previous' });
+};
+
+/**
+ * Does the reply break the language rule (04-ai-pipeline §4.3 rule 13)? Conservative: only a clear switch counts —
+ * arabizi / Arabic script answered in French or English, Arabic script answered in Latin letters, French answered in
+ * English or Arabic, English answered in French. Mixed customers and unclear replies always pass.
+ */
+export const languageSwitched = (customer: AiLanguage, reply: string): boolean => {
+  const r = replyLanguage(reply);
+  if (!r || r === 'mixed' || customer === 'mixed') return false;
+  if (customer === 'arabizi') return r === 'fr' || r === 'en';
+  if (customer === 'ar') return r === 'fr' || r === 'en' || r === 'arabizi';
+  if (customer === 'fr') return r === 'en' || r === 'ar';
+  return r === 'fr';
+};
+
+/** Moroccan darija words an Algerian shop never writes (« chno », « dyal », « walakin », « daba »…). */
+export const MOROCCAN_WORDS = /(?<![\p{L}\p{N}_])(chno|chnou|chnu|dyal|dyalek|dyali|dyalna|dyalo|walakin|nqdar|ndirolek|daba|شنو|ديال|ديالك|دابا|والاكين)(?![\p{L}\p{N}_])/iu;
+/** A Latin letter glued inside an Arabic word (« وnعاونك », rule 16 « one script per sentence »). */
+export const SCRIPT_GLUE = /(?<=[؀-ۿ])[A-Za-z]{1,3}(?=[؀-ۿ])/gu;
+
 /** Locale of the workspace system messages: `ar` for Arabic script, `en` for English, French otherwise. */
 export const systemLocale = (lang: string | undefined, fallback: AppLocale = 'fr'): AppLocale => (lang === 'ar' ? 'ar' : lang === 'en' ? 'en' : lang === 'fr' || lang === 'arabizi' || lang === 'mixed' ? 'fr' : fallback);

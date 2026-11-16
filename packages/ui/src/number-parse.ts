@@ -12,7 +12,7 @@ export type IntegerParse = { ok: false } | { ok: true; value: string; fraction: 
 
 const DIGIT_MAP: Record<string, string> = Object.fromEntries([...'٠١٢٣٤٥٦٧٨٩'].map((d, i) => [d, String(i)]).concat([...'۰۱۲۳۴۵۶۷۸۹'].map((d, i) => [d, String(i)])));
 const latin = (s: string) => s.replace(/[٠-٩۰-۹]/g, (d) => DIGIT_MAP[d] ?? d);
-const SPACES = /[\s  ']/g;
+const SPACES = /[\s\u00a0\u202f']/g;
 /** a currency word pasted with the amount (« 2 500 DA », « 2500 دج ») */
 const CURRENCY = /\s*(da|dzd|dinars?|دج|د\.ج)\s*$/i;
 

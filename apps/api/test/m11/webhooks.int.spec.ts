@@ -6,7 +6,7 @@ import { createTestApp, type TestApp } from '../support/app';
 import { adjust, createProduct } from '../support/m2';
 import { newOrder, seedFees, status } from '../support/m5';
 import { db, localNetworkOnly, receiver, withKey, work, type Receiver } from '../support/m11';
-import { verifyWebhookSignature, webhookUrlAllowed } from '../../src/modules/integrations/webhook-signing';
+import { isPrivateHttps, verifyWebhookSignature, webhookUrlAllowed } from '../../src/modules/integrations/webhook-signing';
 
 let app: TestApp;
 let net: ReturnType<typeof localNetworkOnly>;
@@ -84,6 +84,8 @@ describe('endpoints (API-03)', () => {
     expect(webhookUrlAllowed('https://192.168.1.10/hooks', true)).toBe(false);
     expect(webhookUrlAllowed('https://user:pw@erp.amel.dz/', true)).toBe(false);
     expect(webhookUrlAllowed('http://127.0.0.1:9999/hook', false)).toBe(true);
+    // full-test 15/11 SETTINGS-12: an https URL on a private host gets its own reason (WEBHOOK_URL_PRIVATE)
+    expect([isPrivateHttps('https://169.254.169.254/x'), isPrivateHttps('https://localhost/x'), isPrivateHttps('http://10.0.0.1/x'), isPrivateHttps('https://erp.amel.dz/')]).toEqual([true, true, false, false]);
   });
 });
 

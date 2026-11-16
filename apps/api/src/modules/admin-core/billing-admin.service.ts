@@ -46,7 +46,7 @@ import { PlanService } from '../billing/plan.service';
 import { SubscriptionService } from '../billing/subscription.service';
 import { CreditService } from '../credits/credit.service';
 import { NotificationProducer } from '../notifications/notification.producer';
-import { DAY, assertUuid, fromLocalized, adminLocale, iso, pickLocal, requireReason, toLocalized, userRef, userSelect, type AdminActor } from './admin.util';
+import { DAY, STATE_REFUSED, assertUuid, fromLocalized, adminLocale, iso, offered, pickLocal, requireReason, toLocalized, userRef, userSelect, type AdminActor } from './admin.util';
 
 const LIMIT_KEYS = ['maxPages', 'maxAgents', 'maxProducts', 'maxConversationsPerMonth', 'maxMembers', 'maxApiKeys', 'maxWebhooks', 'monthlyCredits'] as const;
 const PLAN_SNAPSHOT_KEYS = ['name', 'description', 'priceMonthly', 'priceYearly', 'trialDays', ...LIMIT_KEYS, 'syncHistoryDays', 'features', 'isVisible', 'isFeatured', 'sortOrder'] as const;
@@ -74,7 +74,7 @@ export class AdminBillingCatalogService {
   private can(actor: AdminActor) {
     return canPlatform(actor.platformRole, 'admin.billing.write');
   }
-  private act(actor: AdminActor, key: string, ok = true, reasonCode = 'CONFLICT'): ActionDescriptor {
+  private act(actor: AdminActor, key: string, ok = true, reasonCode = STATE_REFUSED): ActionDescriptor {
     const perm = this.can(actor);
     return perm && ok ? { key, enabled: true } : { key, enabled: false, reasonCode: perm ? reasonCode : 'FORBIDDEN' };
   }
@@ -102,13 +102,15 @@ export class AdminBillingCatalogService {
       syncHistoryDays: p.syncHistoryDays,
       features: p.features,
       sortOrder: p.sortOrder,
-      actions: [
-        this.act(actor, 'edit', !p.archivedAt, 'PRESET_ARCHIVED'),
+      // ADMIN-05 (UX-060): an action the plan's state refuses (edit an archived plan — restore it, archive / delete the free
+      // plan, migrate a plan nobody uses) is not offered; « Supprimer » stays greyed while subscribers remain (PLAN_IN_USE)
+      actions: offered([
+        this.act(actor, 'edit', !p.archivedAt),
         this.act(actor, 'duplicate'),
-        p.archivedAt ? this.act(actor, 'restore') : this.act(actor, 'archive', p.slug !== 'free', 'CONFLICT'),
-        this.act(actor, 'migrate', subscribers > 0, 'CONFLICT'),
-        this.act(actor, 'delete', subscribers === 0 && p.slug !== 'free', subscribers > 0 ? 'PLAN_IN_USE' : 'CONFLICT'),
-      ],
+        p.archivedAt ? this.act(actor, 'restore') : this.act(actor, 'archive', p.slug !== 'free'),
+        this.act(actor, 'migrate', subscribers > 0),
+        { ...this.act(actor, 'delete', subscribers === 0 && p.slug !== 'free', subscribers > 0 ? 'PLAN_IN_USE' : STATE_REFUSED), ...(subscribers > 0 && this.can(actor) ? { reasonParams: { count: subscribers } } : {}) },
+      ]),
     };
   }
 
@@ -327,7 +329,7 @@ export class AdminBillingCatalogService {
         cancelAtPeriodEnd: s.cancelAtPeriodEnd,
         lastPayment: pay ? { method, label: raw.data?.card_last4 ? `${method?.toUpperCase()} ••${raw.data.card_last4}` : null, at: iso(pay.paidAt) } : null,
         unpaidInvoice: inv ? { id: inv.id, number: inv.number, amount: inv.amount, remaining, dueAt: iso(inv.dueAt) } : null,
-        actions: [
+        actions: offered([
           { key: 'invoices', enabled: true, primary: !inv },
           { ...this.act(actor, 'mark_paid', !!inv), primary: !!inv },
           this.act(actor, 'resend_dunning', s.status === 'dunning' && !!inv),
@@ -336,7 +338,7 @@ export class AdminBillingCatalogService {
           this.act(actor, 'discount', live && isPaid(s)),
           this.act(actor, 'cancel', live && isPaid(s) && !s.cancelAtPeriodEnd),
           this.act(actor, 'cancel_now', live && s.plan.slug !== 'free'),
-        ],
+        ]),
       });
     }
     return out;
@@ -523,7 +525,7 @@ export class AdminBillingCatalogService {
     const out: AdminInvoiceRowDto[] = [];
     for (const inv of rows) {
       const dto = await TenantContext.runAs(inv.workspaceId, () => this.invoices.toDto(inv, 'fr'));
-      out.push({ ...dto, workspace: inv.workspace, actions: [{ key: 'pdf', enabled: true }, { ...this.act(actor, 'mark_paid', inv.status === 'unpaid' || inv.status === 'upcoming'), primary: inv.status === 'unpaid' }] });
+      out.push({ ...dto, workspace: inv.workspace, actions: offered([{ key: 'pdf', enabled: true }, { ...this.act(actor, 'mark_paid', inv.status === 'unpaid' || inv.status === 'upcoming'), primary: inv.status === 'unpaid' }]) });
     }
     return page(out, total, q);
   }
@@ -713,7 +715,7 @@ export class AdminBillingCatalogService {
     if (input.targetWorkspaceId && !(await prisma.workspace.findUnique({ where: { id: input.targetWorkspaceId } }))) throw new AppException('VALIDATION_ERROR', {}, { targetWorkspaceId: 'validation.id' });
     const from = this.date(input.validFrom);
     const to = this.date(input.validTo, true);
-    if (from && to && to <= from) throw new AppException('VALIDATION_ERROR', {}, { validTo: 'validation.range' });
+    if (from && to && to <= from) throw new AppException('VALIDATION_ERROR', {}, { validTo: 'validation.end_before_start' });
     const p = await prisma.promoCode.create({ data: { code: input.code, kind: input.kind, value: input.value, periods: input.periods ?? null, planSlugs: input.planSlugs, target: input.target, targetWorkspaceId: input.target === 'workspace' ? input.targetWorkspaceId ?? null : null, maxUses: input.maxUses ?? null, perWorkspaceLimit: input.perWorkspaceLimit, validFrom: from ?? null, validTo: to ?? null, createdById: actor.userId, notes: input.notes ?? null }, include: this.promoInclude });
     await this.log(actor, 'promo_code.create', 'PromoCode', p.id, null, input, null);
     return (await this.promoDtos([p]))[0]!;

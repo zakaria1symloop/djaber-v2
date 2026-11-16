@@ -123,7 +123,8 @@ describe('report filters of ANA-04 (M8 row)', () => {
     const byVariant = (await owner.get('/reports/sales_by_product?period=30d').expect(200)).body.data;
     expect(byVariant.rows.map((r: any) => [r.variant, r.quantity]).sort()).toEqual([['L', 2], ['M', 1]]);
     const byProduct = (await owner.get('/reports/sales_by_product?period=30d&groupBy=product').expect(200)).body.data;
-    expect(byProduct.rows).toEqual([expect.objectContaining({ product: 'Robe kabyle', variant: null, quantity: 3, revenue: 12000, sharePct: 100, _ref: { type: 'product', id: p.id } })]);
-    expect(byProduct.totals).toMatchObject({ quantity: 3, revenue: 12000 });
+    // full-test 15/11 ANALYTICS-01…03 (assumptions-log 2026-11-16): the product reports show `grossSales` (before discounts)
+    expect(byProduct.rows).toEqual([expect.objectContaining({ product: 'Robe kabyle', variant: null, quantity: 3, grossSales: 12000, sharePct: 100, _ref: { type: 'product', id: p.id } })]);
+    expect(byProduct.totals).toMatchObject({ quantity: 3, grossSales: 12000 });
   });
 });

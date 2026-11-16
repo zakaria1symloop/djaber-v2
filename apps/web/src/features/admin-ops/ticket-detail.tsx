@@ -148,7 +148,7 @@ function TicketView({ ticket, label, fill }: { ticket: AdminTicketDto; label: st
     return [who, formatDateTime(m.at, locale), m.authorKind === 'user' ? t(`adminSupport.channel.${ticket.channel}`) : null, m.isInternal ? t('adminSupport.internal') : null].filter(Boolean).join(' · ');
   };
   const workspace = ticket.workspace;
-  const disabledReason = write.disabledReason ?? (closed ? `${t('error.TICKET_CLOSED')} (TICKET_CLOSED)` : undefined);
+  const disabledReason = write.disabledReason ?? (closed ? `${t('admin.reason.TICKET_CLOSED')} (TICKET_CLOSED)` : undefined);
 
   return (
     <div

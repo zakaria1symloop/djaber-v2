@@ -95,8 +95,9 @@ describe('pre-screen and auto-approval', () => {
     expect(k.moderation.status).toBe('rejected');
     expect(await itemOf(k.id)).toMatchObject({ status: 'rejected', rejectedFields: ['keywords'] });
     expect(await catalogueSees(owner.workspaceId, k.id)).toBeNull();
-    // inside another word (« motinterdits ») it may be innocent: flagged, a moderator decides
-    const w = await createProduct(owner, { name: 'Robe midi', description: 'Coton.', keywords: ['motinterdits'] });
+    // inside another word (« supermotinterdit ») it may be innocent: flagged, a moderator decides — the plural « motinterdits »
+    // is the word itself since recette 09/11 UX-043 (plural / feminine endings), so it is no example of « inside a word »
+    const w = await createProduct(owner, { name: 'Robe midi', description: 'Coton.', keywords: ['supermotinterdit'] });
     expect(w.moderation.status).toBe('pending');
     expect(await itemOf(w.id)).toMatchObject({ status: 'pending', aiFlags: expect.arrayContaining([expect.objectContaining({ code: 'blocked_word' })]) });
     // the variant added later to an approved product is rejected the same way

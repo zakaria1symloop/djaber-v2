@@ -163,7 +163,7 @@ describe('invitations', () => {
     // AT-AUTH-11: ids of another workspace
     await other.post(`/workspace/invitations/${inv.id}/resend`).expect(404);
     await other.delete(`/workspace/invitations/${inv.id}`).expect(404);
-    await owner.post('/workspace/invitations/not-a-uuid/resend').expect(400);
+    await owner.post('/workspace/invitations/not-a-uuid/resend').expect(404);
 
     await db.invitation.update({ where: { id: inv.id }, data: { lastSentAt: new Date(Date.now() - 61_000) } });
     const resent = await owner.post(`/workspace/invitations/${inv.id}/resend`).expect(200);
@@ -247,7 +247,7 @@ describe('members', () => {
     // AT-AUTH-11
     await other.patch(`/workspace/members/${idOf(operator.userId)}`, { role: 'admin' }).expect(404);
     await other.delete(`/workspace/members/${idOf(operator.userId)}`).expect(404);
-    await owner.patch('/workspace/members/not-a-uuid', { role: 'admin' }).expect(400);
+    await owner.patch('/workspace/members/not-a-uuid', { role: 'admin' }).expect(404);
 
     // promote the operator: effective immediately (tenant cache invalidated)
     await operator.patch('/workspace', { name: 'Avant' }).expect(403);

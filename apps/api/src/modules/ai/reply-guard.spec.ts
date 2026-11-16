@@ -1,6 +1,6 @@
 // 04-ai-pipeline §4.3 — the reply guard (weak-points audit 12/11, pattern 1). Positive AND negative examples in French,
 // Arabic script (darija), arabizi and English: a false positive costs a corrective model turn, so the negatives matter.
-import { amountAllowed, buildGuardFacts, checkReply, enforceReply, foldGuard, greetingAt, guardInstruction, moneyAmounts, SAFE_SENTENCES, splitSentences, stockCounts, stripGreeting, withToolResults, type GuardFacts, type GuardFactsInput } from './reply-guard';
+import { amountAllowed, buildGuardFacts, checkReply, enforceReply, fixScriptMix, foldGuard, greetingAt, guardInstruction, moneyAmounts, SAFE_SENTENCES, splitSentences, stockCounts, stripGreeting, withToolResults, type GuardFacts, type GuardFactsInput } from './reply-guard';
 
 const product = (name: string, sku: string, price: number, o: { oldPrice?: number; variants?: { name: string; price: number }[]; also?: { name: string; price: number }[]; description?: string } = {}) => ({
   name,
@@ -100,7 +100,8 @@ describe('reply guard — unknown_amount', () => {
     ["the customer's own figure", 'Je ne peux pas vous la faire à 3500 DA, son prix est 4500 DA.'],
     ['a number of a shop text', 'Échange sous 7 jours.'],
   ])('allowed: %s', (_what, reply) => {
-    expect(rules(reply, facts({ customerText: 'faites-la moi à 3500 DA' }))).toEqual([]);
+    // these tables check the amounts (the language of a French conversation is checked by its own tests below)
+    expect(rules(reply, facts({ customerText: 'faites-la moi à 3500 DA' })).filter((r) => r !== 'language_switch')).toEqual([]);
   });
 
   it.each([
@@ -112,7 +113,7 @@ describe('reply guard — unknown_amount', () => {
     ['English invented', 'The watch is 11350 DA today.', 11350],
     ['base price of a product sold by variant only', 'Le jogging gris est à 3800 DA.', 3800],
   ])('flagged: %s', (_what, reply, value) => {
-    const v = checkReply(reply, facts());
+    const v = checkReply(reply, facts()).filter((x) => x.rule !== 'language_switch');
     expect(v).toEqual([expect.objectContaining({ rule: 'unknown_amount', value })]);
   });
 
@@ -344,5 +345,67 @@ describe('reply guard — corrective instruction and enforcement', () => {
   it('a clean reply has no violation', () => {
     expect(checkReply('Oui, la robe satin bordeaux est disponible à 4500 DA. Quelle taille souhaitez-vous ?', facts())).toEqual([]);
     expect(checkReply('', facts())).toEqual([]);
+  });
+});
+
+describe('full-test 15/11 — language, dialect and script (AI-CHAT-04, proposal 5)', () => {
+  it.each([
+    ['arabizi answered in French', 'arabizi', 'Salam 👋 Livraison à Oran : 600 DA à domicile, le délai est de 2 à 5 jours.'],
+    ['arabizi answered in English', 'arabizi', 'The Nike Air basket is available, which size do you want please?'],
+    ['French answered in English', 'fr', 'Delivery to Tamanrasset is 1400 DA to your home, or 900 DA to a stop-desk.'],
+    ['Arabic script answered in French', 'ar', 'Bonjour, la montre connectée est disponible, voulez-vous la commander ?'],
+  ] as const)('flagged: %s', (_what, lang, reply) => {
+    expect(rules(reply, facts({ lang, customerText: 'x' }, []))).toContain('language_switch');
+  });
+  it.each([
+    ['arabizi answered in arabizi with French words', 'arabizi', 'Ih kayen, taille M disponible, t7ebb nsajjel lek la commande wela la ?'],
+    ['French answered in French', 'fr', 'La livraison à Oran coûte 600 DA, le délai est de 2 à 5 jours.'],
+    ['a reply too short to tell', 'arabizi', 'Ok 👍'],
+    ['a price alone', 'fr', '4500 DA.'],
+    ['a mixed customer', 'mixed', 'The watch is available, do you want it?'],
+    ['Arabic script answered in Arabic script', 'ar', 'إيه كاينة، تحب نسجلك الطلبية؟'],
+  ] as const)('not flagged: %s', (_what, lang, reply) => {
+    expect(rules(reply, facts({ lang, customerText: 'x' }, []))).not.toContain('language_switch');
+  });
+  it('Moroccan words in an arabizi / Arabic-script reply; never in French', () => {
+    expect(rules('Chno t7eb tchouf ? 3andna bezzaf dyal les modèles.', facts({ lang: 'arabizi', customerText: 'x' }, []))).toContain('moroccan_darija');
+    expect(rules('شنو بغيتي؟', facts({ lang: 'ar', customerText: 'x' }, []))).toContain('moroccan_darija');
+    expect(rules('Wach t7ebb tchouf ? 3andna bezzaf les modèles.', facts({ lang: 'arabizi', customerText: 'x' }, []))).not.toContain('moroccan_darija');
+  });
+  it('a Latin letter inside an Arabic word is fixed by the server, without a model turn', () => {
+    expect(rules('مرحبا، كيفاش وnعاونك؟', facts({ lang: 'ar', customerText: 'x' }, []))).toContain('script_mix');
+    expect(fixScriptMix('كيفاش وnعاونك؟')).toBe('كيفاش وعاونك؟');
+    expect(rules('التوصيل لـ Oran بـ 600 دج', facts({ lang: 'ar', customerText: 'x' }, [{ ok: true, fee: 600 }]))).not.toContain('script_mix');
+    const e = enforceReply('مرحبا، كيفاش وnعاونك اليوم؟', [{ rule: 'script_mix', sentence: 0 }], facts({ lang: 'ar' }), { hasCards: false });
+    expect(e.reply).toBe('مرحبا، كيفاش وعاونك اليوم؟');
+  });
+  it('a language slip the corrective turn did not fix is sent as it is (kept)', () => {
+    const reply = 'Delivery to Tamanrasset is 1400 DA to your home.';
+    expect(enforceReply(reply, [{ rule: 'language_switch', sentence: 0 }], facts(), { hasCards: false })).toEqual({ reply, action: 'kept' });
+    expect(guardInstruction([{ rule: 'language_switch', sentence: 0 }], facts())).toContain('the customer writes French');
+  });
+});
+
+describe('full-test 15/11 — false confession about a placed order (AI-CHAT-02, proposal 3)', () => {
+  it.each([
+    ["j'ai utilisé des coordonnées inventées", "Je dois corriger : j'ai utilisé des coordonnées inventées pour la commande CMD-1042."],
+    ['enregistrée par erreur', 'Une commande a été enregistrée par erreur de notre côté.'],
+    ["la commande n'existe pas", "La commande CMD-1042 n'existe pas, rien n'a été créé."],
+    ["je n'ai pas récupéré vos informations", "Je n'ai pas récupéré vos informations (nom, téléphone)."],
+    ['nothing was ordered', 'Sorry, nothing was ordered yet.'],
+  ])('flagged once an order was placed: %s', (_what, reply) => {
+    const f = facts({}, [ORDER]);
+    expect(f.ordersPlaced).toEqual(['CMD-1042']);
+    expect(rules(reply, f)).toContain('false_confession');
+    expect(guardInstruction(checkReply(reply, f), f)).toContain('order CMD-1042 was placed');
+  });
+  it('not flagged when no order was placed, nor for a plain confirmation', () => {
+    expect(rules("Rien n'a été commandé pour le moment : voulez-vous que je prépare le récapitulatif ?", facts())).not.toContain('false_confession');
+    expect(rules('Votre commande CMD-1042 est bien enregistrée.', facts({}, [ORDER]))).not.toContain('false_confession');
+  });
+  it('the sentence is dropped when the corrective turn still says it', () => {
+    const reply = "Votre commande CMD-1042 est enregistrée. J'ai utilisé des coordonnées inventées, désolé.";
+    const f = facts({}, [ORDER]);
+    expect(enforceReply(reply, checkReply(reply, f), f, { hasCards: false }).reply).toBe('Votre commande CMD-1042 est enregistrée.');
   });
 });

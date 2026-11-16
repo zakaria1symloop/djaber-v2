@@ -15,7 +15,7 @@ import { actionState } from '@/lib/actions';
 import { SHIPMENT_ACTION } from './action-keys';
 import { useShipment } from './api';
 import type { Shipment } from './contracts';
-import { algiersClock, shipmentTone, waitLabel } from './logic';
+import { algiersClock, shipmentStatusKey, shipmentTone, waitLabel } from './logic';
 import { parcelOfShipment, type useParcelActions } from './use-parcel-actions';
 
 const MAX_ATTEMPTS = 3;
@@ -27,12 +27,22 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
   const s = q.data && q.data.id === shipmentId ? q.data : null;
   const [sync, setSync] = useState<{ state: SyncState; message?: string; until?: number; since?: number } | null>(null);
   useEffect(() => setSync(null), [shipmentId]);
+  // full-test DELIVERY-03: the stored courier error of a parcel in progress is the sync state (« Suivi introuvable chez le
+  // transporteur », refused credentials) — on opening, and when a queued refresh lands — never « À jour »
+  const storedSync = (x: Pick<Shipment, 'status' | 'lastError'> | null): { state: SyncState; message: string } | null => {
+    if (!x?.lastError || !(['sent', 'picked_up', 'in_transit', 'out_for_delivery', 'stale'] as string[]).includes(x.status)) return null;
+    const code = x.lastError;
+    if (code === 'TRACKING_NOT_FOUND') return { state: 'not_found', message: t('error.TRACKING_NOT_FOUND') };
+    if (code === 'COURIER_UNAVAILABLE') return { state: 'unavailable', message: t('tracking.sync.unavailable') };
+    if (code === 'COURIER_CREDENTIALS_INVALID') return { state: 'unavailable', message: t('error.COURIER_CREDENTIALS_INVALID', { message: '' }) };
+    return null;
+  };
   // the refresh is queued (202): "Actualisation…" until the courier answer lands (WS `shipment.updated`, polled too)
   useEffect(() => {
     if (sync?.state !== 'syncing' || !sync.since) return;
-    if (s?.lastSyncedAt && Date.parse(s.lastSyncedAt) >= sync.since - 2_000) return setSync({ state: 'fresh', message: t('tracking.sync.fresh'), until: sync.until });
+    if (s?.lastSyncedAt && Date.parse(s.lastSyncedAt) >= sync.since - 2_000) return setSync({ ...(storedSync(s) ?? { state: 'fresh', message: t('tracking.sync.fresh') }), until: sync.until });
     const poll = setInterval(() => void q.refetch(), 2_000);
-    const stop = setTimeout(() => setSync({ state: 'fresh', message: t('tracking.sync.requested'), until: sync.until }), 30_000);
+    const stop = setTimeout(() => setSync({ ...(storedSync(s) ?? { state: 'fresh', message: t('tracking.sync.requested') }), until: sync.until }), 30_000);
     return () => (clearInterval(poll), clearTimeout(stop));
   }, [sync, s?.lastSyncedAt, q, t]);
   const until = sync?.until ?? (s?.syncAvailableAt ? Date.parse(s.syncAvailableAt) : null);
@@ -57,11 +67,13 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
     }
   };
 
-  const title = s ? [`#${s.orderNumber}`, s.trackingNumber].filter(Boolean).join(' · ') : t('common.loading');
+  // a parcel that cannot be read shows one « Introuvable » state, not « Chargement… » next to the error (full-test DELIVERY-12)
+  const title = s ? [`#${s.orderNumber}`, s.trackingNumber].filter(Boolean).join(' · ') : q.isError ? t('state.detail.notFound.title') : t('common.loading');
   // UX-060: the greyed « Actualiser » says the live wait (« 54 s »), never `{retryAfter}`
   const syncAction = s ? actionState(s.actions, SHIPMENT_ACTION.sync, t, wait > 0 ? { params: { retryAfter: wait } } : {}) : null;
   const limited = wait > 0;
-  const state: SyncState = sync?.state === 'syncing' ? 'syncing' : limited && sync?.state !== 'fresh' && sync?.state !== 'not_found' && sync?.state !== 'unavailable' ? 'limited' : (sync?.state ?? 'idle');
+  const stored = sync ? null : storedSync(s);
+  const state: SyncState = sync?.state === 'syncing' ? 'syncing' : stored ? stored.state : limited && sync?.state !== 'fresh' && sync?.state !== 'not_found' && sync?.state !== 'unavailable' ? 'limited' : (sync?.state ?? 'idle');
   const message =
     state === 'limited'
       ? t('error.TRACKING_SYNC_RATE_LIMITED', { retryAfter: waitLabel(wait) })
@@ -69,7 +81,7 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
         ? limited
           ? `${t('tracking.sync.fresh')} · ${t('tracking.sync.next', { wait: waitLabel(wait) })}`
           : t('tracking.sync.fresh')
-        : sync?.message;
+        : (stored?.message ?? sync?.message);
 
   const events: TrackingStep[] = s
     ? newestFirst(s.events, (e) => e.at).map((e, i) => {
@@ -93,7 +105,7 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
       open={!!shipmentId}
       onClose={onClose}
       title={title}
-      subtitle={s ? [s.courierAccount?.displayName ?? t(`couriers.provider.${s.provider}`), t(`enum.Shipment.status.${s.status}`)].join(' · ') : undefined}
+      subtitle={s ? [s.courierAccount?.displayName ?? t(`couriers.provider.${s.provider}`), t(shipmentStatusKey(s))].join(' · ') : undefined}
       nav={nav}
       width={460}
       closeLabel={t('action.close')}

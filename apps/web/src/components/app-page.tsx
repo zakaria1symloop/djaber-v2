@@ -49,7 +49,7 @@ export function AppPage({
   const { role } = useSession();
   useDocumentTitle(title);
   const keys = permission ? (Array.isArray(permission) ? permission : [permission]) : [];
-  if (keys.some((k) => !roleCan(role, k))) return <Page403 role={role ? t(`enum.Membership.role.${role}`) : '—'} homeHref={`/${locale}/home`} />;
+  if (keys.some((k) => !roleCan(role, k))) return <Page403 role={role ? t(`enum.Membership.role.${role}`) : '—'} homeHref={`/${locale}/home`} permissions={keys} />;
   return (
     <div className={cn('flex w-full flex-col gap-5', fill && 'xl:h-full')}>
       {back ? (
@@ -64,7 +64,7 @@ export function AppPage({
           <div className="min-w-0 md:flex-1">
             {eyebrow ? <div className="ts-label-meta mb-2 uppercase text-text-muted">{eyebrow}</div> : null}
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="ts-display-m min-w-0 truncate" title={title}>
+              <h1 className="ts-display-m min-w-0 [overflow-wrap:anywhere] md:truncate" title={title}>
                 {title}
               </h1>
               {badges}

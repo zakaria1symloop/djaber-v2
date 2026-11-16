@@ -61,9 +61,11 @@ export function AgentOverview() {
     else next.set('period', p);
     router.replace(next.size ? `${pathname}?${next}` : pathname, { scroll: false });
   };
-  const metricsQ = useAgentMetrics(a.id, lastDays(Number(period)), period !== '30');
-  const m = period === '30' ? a.metrics30d : metricsQ.data;
-  const extra = period === '30' ? null : (metricsQ.data ?? null);
+  // full-test 15/11 AGENTS-15: the same tiles for every period — 30 j reads the metrics endpoint too (the embedded 30-day
+  // figures, which have no AI replies / hand-offs, only fill the tiles while it loads; the metas wait for it)
+  const metricsQ = useAgentMetrics(a.id, lastDays(Number(period)), true);
+  const m = metricsQ.data ?? (period === '30' ? a.metrics30d : undefined);
+  const extra = metricsQ.data ?? null;
   const draft = draftFromAgent(a);
   const lines = summaryLines(t, a, draft);
   const base = `/agents/${a.id}/configuration`;
@@ -93,8 +95,8 @@ export function AgentOverview() {
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" data-testid="agent-kpis">
-          <KpiTile data-kpi="conversations" value={formatNumber(m.conversations)} label={t('agents.kpi.conversations', { days: Number(period) })} meta={extra ? t('agents.kpi.aiMessages', { count: formatNumber(extra.aiMessages) }) : undefined} />
-          <KpiTile data-kpi="handled" value={pct === null ? '—' : `${pct} %`} label={t('agents.kpi.handled')} meta={extra ? t('agents.kpi.handoffs', { count: formatNumber(extra.handoffs) }) : t('agents.kpi.handledCount', { count: formatNumber(m.handledWithoutHuman) })} />
+          <KpiTile data-kpi="conversations" value={formatNumber(m.conversations)} label={t('agents.kpi.conversations', { days: Number(period) })} meta={extra ? t('agents.kpi.aiMessages', { count: extra.aiMessages }) : undefined} />
+          <KpiTile data-kpi="handled" value={pct === null ? '—' : `${pct} %`} label={t('agents.kpi.handled')} meta={extra ? t('agents.kpi.handoffs', { count: extra.handoffs }) : undefined} />
           <KpiTile data-kpi="orders" value={formatNumber(m.orders)} label={t('agents.kpi.orders')} meta={t('agents.kpi.ordersMeta', { confirmed: m.confirmedPct, delivered: formatNumber(m.delivered) })} />
           <KpiTile data-kpi="latency" value={secondsLabel(m.avgLatencyMs, locale)} label={t('agents.kpi.latency')} meta={t('agents.kpi.p95', { value: secondsLabel(m.p95LatencyMs, locale) })} />
           <KpiTile data-kpi="credits" value={formatNumber(m.credits)} label={t('agents.kpi.credits')} meta={perConv === null ? undefined : t('agents.kpi.perConv', { value: locale === 'en' ? String(perConv) : String(perConv).replace('.', ',') })} />

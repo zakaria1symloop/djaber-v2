@@ -29,6 +29,20 @@ const knownCustomerLines = (c: PromptContext): string[] => {
   return parts.length ? [`KNOWN CUSTOMER (already given — confirm it in the recap, do not ask again): ${parts.join(' · ')}`] : [];
 };
 
+/**
+ * full-test 15/11 AI-CHAT-05 (proposal 6): what the customer chose for the order being taken, from `context.chosen` —
+ * printed like KNOWN CUSTOMER so a message with only a name or a wilaya can no longer make the model forget the product.
+ */
+const currentOrderLines = (c: PromptContext): string[] => {
+  const items = (c.chosen ?? []).flatMap((i) => {
+    const p = c.catalogue.products.find((x) => x.id === i.productId);
+    if (!p) return [];
+    const v = i.variantId ? p.variants.find((x) => x.id === i.variantId) : null;
+    return [`${i.quantity ?? '?'} × ${p.name}${v ? ` (${v.name}) [VID:${v.id}]` : ''} [ID:${p.id}]`];
+  });
+  return items.length ? [`CURRENT ORDER (chosen by the customer — keep it while you collect the other fields; change it only when they change it; « ? » = quantity still to ask): ${items.join(' · ')}`] : [];
+};
+
 export const orderRulesSection = (c: PromptContext): string => {
   const fields = c.agent.orderFields;
   const required = fields.length ? fields.filter((f) => f.required).map((f) => f.key as string) : DEFAULT_REQUIRED;
@@ -48,19 +62,21 @@ export const orderRulesSection = (c: PromptContext): string => {
     `RISKY_CLIENT_POLICY=${c.agent.riskyClientBehavior ?? 'take_and_flag'}`,
     `RECAP=${c.agent.recapMode ?? 'always'}`,
     ...knownCustomerLines(c),
+    ...currentOrderLines(c),
     'Ask one field at a time; never invent a value; re-ask an invalid value with an example (0555123456). Never ask again for a value the customer already gave (KNOWN CUSTOMER or earlier messages): reuse it in the recap.',
     // recette 09/11 (Badro): the product was asked again after the wilaya, and a returning customer got an order with fields never asked
     'The product, variant and quantity the customer chose stay chosen while you collect the other fields (a message with only a wilaya, a phone or a name does not cancel them): never ask for them again unless the customer changes them.',
     'A KNOWN CUSTOMER value is confirmed in the recap, never used silently; a required field that is neither known nor given in this conversation is asked before the recap. create_order answers VALIDATION with missing=true for a required field still missing: ask for it.',
-    'Report in "customer" the order details the customer has given so far (name, phone, phone2, wilaya, commune, address).',
+    'Report in "customer" the order details the customer has given so far (name, phone, phone2, wilaya, commune, address), and in "cart" the product(s), variant and quantity they chose for this order.',
     // retest 12/11 (Badro: « the bot blocked after the phone number, again after the address »)
     'A message with only a phone number, a name, a wilaya, a commune or an address while you take an order is the value you asked for: record it, never treat it as UNCLEAR, as a request for a call or as a reason to hand off, and ask the next missing field (or show the recap).',
     'A place that is both a wilaya and a commune (Blida, Médéa, Sétif, Oran…) given once is that wilaya AND its commune of the same name, unless the customer says another commune: do not ask for the commune again.',
     // full-test 15/11 AI-CHAT-01: the recap and the confirmation are checked by the server
     'When every required field is known, call create_order: the first call only returns CONFIRMATION_REQUIRED with the recap (items, quantities, prices, delivery fee, total, name, phone, address) — show that recap and ask the customer to confirm. Nothing is ordered until the customer answers yes in their NEXT message; then call create_order again with the same values. Never use create_order to check a price, the stock or a fee, and never with a value the customer did not give (no « Client », no 0555000000).',
     // PV 09/11: the model refused orders on its own reading of STOCK; the tool knows the stock, the reservations and the shop's « sell out of stock » choice
-    'Never refuse an order yourself because of STOCK: call create_order — when the stock is short its result says ORDER_INSUFFICIENT_STOCK with `available` for what was asked and, for a product with variants, `otherVariants` and `availableAllVariants`: offer `available`, and when the customer wants more, propose to complete it with the other variants (never more than availableAllVariants in total). A stock shortage is never a reason to hand off (retest 11/11).',
-    'Call create_order only once per confirmed recap. If the tool says the order already exists (duplicateOf), confirm that order instead of creating another one.',
+    // full-test 15/11 proposal 2: check_availability answers stock / quantity questions — create_order is never a probe
+    'Never refuse an order yourself because of STOCK, and never promise a quantity you did not check: to know whether a quantity can be sold, call check_availability (productId, variantId, quantity). available=false gives `availableQuantity` and `otherVariants`: offer that quantity, and when the customer wants more, propose to complete it with the other variants. create_order is only for a full recap; if it still answers ORDER_INSUFFICIENT_STOCK, offer `available` (never more than availableAllVariants in total). A stock shortage is never a reason to hand off (retest 11/11).',
+    'Call create_order only once per confirmed recap. If the tool says the order already exists (duplicateOf, ORDER_ALREADY_PLACED), confirm that order instead of creating another one. Once an order is placed, the platform sends the customer its confirmation (number, items, total, delay): never cancel or re-create it unless the customer asks in a later message.',
     'To cancel: cancel_order works only on an order the shop has NOT confirmed yet (ask which one when there are several). ORDER_CONFIRMED_BY_SELLER ⇒ never promise a cancellation or a change: say the shop will contact them, then hand off (status=HANDOFF, statusDetail=customer_request).',
     'To change an order already placed (product, size, quantity, address): show the new recap, wait for the confirmation, then call create_order with replacesOrder=<its number> — the new order is created first, then the old one is cancelled. Never cancel an order to replace it. replaced=null in the result ⇒ hand off.',
     'Payment is cash on delivery unless a payment link tool is available.',

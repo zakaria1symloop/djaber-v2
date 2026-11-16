@@ -49,3 +49,30 @@ describe('handoff_to_human checked against the customer words of the turn (retes
     expect(reg.forcedHandoff('handoff_to_human', { reason: 'customer_request' }, asked)).toBe('customer_request');
   });
 });
+
+describe('full-test 15/11 proposal 2 — check_availability (create_order is never a probe)', () => {
+  const product = (o: Partial<{ stock: number | null; sellOutOfStock: boolean; hasVariants: boolean; variants: { id: string; name: string; price: number; stock: number }[] }> = {}) => ({ id: 'p1', name: 'Robe kabyle', price: 4900, stock: 2, sellOutOfStock: false, hasVariants: false, variants: [], ...o });
+  const reg = (p: unknown) => Object.assign(Object.create(ToolRegistry.prototype) as object, { catalogue: { byIds: async () => (p ? [p] : []) } }) as unknown as ToolRegistry;
+  const ctx = { workspaceId: 'w', agent: {} as never, conversationId: null, clientId: null, channelId: null, runId: 'r', callId: 'c', dryRun: true };
+  it('enough stock ⇒ available, no count', async () => {
+    const r = await reg(product()).execute('check_availability', { productId: 'p1', quantity: 2 }, ctx);
+    expect(r).toMatchObject({ ok: true, available: true });
+    expect(r).not.toHaveProperty('availableQuantity');
+  });
+  it('short ⇒ not available with the quantity left (the only count the reply may give) and the other variants', async () => {
+    const variants = [{ id: 'xl', name: 'XL', price: 5200, stock: 2 }, { id: 'm', name: 'M', price: 4900, stock: 4 }, { id: 'l', name: 'L', price: 4900, stock: 0 }];
+    const r = await reg(product({ hasVariants: true, variants, stock: null })).execute('check_availability', { productId: 'p1', variantId: 'xl', quantity: 3 }, ctx);
+    expect(r).toMatchObject({ ok: true, available: false, availableQuantity: 2, variant: 'XL', otherVariants: [{ variantId: 'm', name: 'M' }] });
+  });
+  it('sold beyond the stock ⇒ orderable; a variant product without a variant ⇒ the variants; unknown ⇒ not available', async () => {
+    expect(await reg(product({ stock: 0, sellOutOfStock: true })).execute('check_availability', { productId: 'p1', quantity: 3 }, ctx)).toMatchObject({ available: true, beyondStock: true });
+    expect(await reg(product({ hasVariants: true, variants: [{ id: 's', name: 'S', price: 4900, stock: 0 }] })).execute('check_availability', { productId: 'p1' }, ctx)).toMatchObject({ variantRequired: true, variants: [{ id: 's', available: false }] });
+    expect(await reg(null).execute('check_availability', { productId: 'zz' }, ctx)).toMatchObject({ ok: false, error: { code: 'PRODUCT_NOT_AVAILABLE' } });
+  });
+  it('AI-CHAT-16: the playground sees its own TEST-n orders (lookup_order, cancel_order candidates)', async () => {
+    const orderHistory = [{ name: 'create_order', result: { ok: true, number: 'TEST-8354', simulated: true, total: 7300, items: [] }, at: new Date() }];
+    const r = reg(product());
+    expect(await r.execute('lookup_order', {}, { ...ctx, orderHistory })).toMatchObject({ orders: [{ number: 'TEST-8354', status: 'new', simulated: true }] });
+    expect(await r.execute('cancel_order', {}, { ...ctx, orderHistory })).toMatchObject({ ok: true, candidates: [{ number: 'TEST-8354' }], simulated: true });
+  });
+});

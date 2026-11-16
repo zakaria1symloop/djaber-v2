@@ -41,15 +41,30 @@ function courierState(c: CourierAccount, t: TFunction): { label: string; tone: T
   return c.lastTest.error === 'COURIER_UNAVAILABLE' ? { label: t('couriers.state.unreachable'), tone: 'warning' } : { label: t('couriers.state.invalid'), tone: 'danger' };
 }
 /** "OK · 420 MS · 58 WILAYAS" / "REFUSÉ" / "INJOIGNABLE" from a test answer. */
-export function testView(r: Pick<TestResult, 'ok' | 'latencyMs' | 'error' | 'message' | 'accountName' | 'wilayasServed'>, t: TFunction): { state: CourierTestState; label: string; detail: string } {
+/**
+ * Result line of a connection test. Full-test DELIVERY-05: the merchant reads a sentence (« Identifiants transporteur
+ * refusés · vérifiez clé API + ID tenant »), never the code, and the hint names the credentials of THIS account.
+ */
+export function testView(r: Pick<TestResult, 'ok' | 'latencyMs' | 'error' | 'message' | 'accountName' | 'wilayasServed'>, t: TFunction, credentials?: string): { state: CourierTestState; label: string; detail: string } {
   if (r.ok)
     return {
       state: 'ok',
       label: t('couriers.test.ok', { ms: r.latencyMs ?? '—' }),
       detail: [r.accountName ? t('couriers.test.account', { name: r.accountName }) : null, r.wilayasServed ? t('couriers.test.wilayas', { count: r.wilayasServed }) : null].filter(Boolean).join(' · '),
     };
-  if (r.error === 'COURIER_UNAVAILABLE') return { state: 'unreachable', label: t('couriers.test.unreachable'), detail: `COURIER_UNAVAILABLE · ${t('couriers.test.unreachableHint')}` };
-  return { state: 'rejected', label: t('couriers.test.rejected'), detail: `${r.error ?? 'COURIER_CREDENTIALS_INVALID'} · ${r.message ?? t('couriers.test.rejectedHint')}` };
+  if (r.error === 'COURIER_UNAVAILABLE') return { state: 'unreachable', label: t('couriers.test.unreachable'), detail: `${t('error.COURIER_UNAVAILABLE', { message: '' })} · ${t('couriers.test.unreachableHint')}` };
+  const hint = r.message ?? (credentials ? t('couriers.test.rejectedHintFor', { credentials: credentials.toLowerCase() }) : t('couriers.test.rejectedHint'));
+  return { state: 'rejected', label: t('couriers.test.rejected'), detail: `${t('error.COURIER_CREDENTIALS_INVALID', { message: '' })} · ${hint}` };
+}
+
+/** The stored last test of an account (edit dialog, card), shown until a new test runs (full-test DELIVERY-16). */
+export function lastTestView(c: Pick<CourierAccount, 'lastTest' | 'provider' | 'platform'>, t: TFunction, locale: string): { state: CourierTestState; label: string; detail: string } | null {
+  const lt = c.lastTest;
+  if (!lt) return null;
+  const ago = t('couriers.testedAgo', { ago: relativeTime(lt.at, locale as AppLocale) });
+  if (lt.ok) return { state: 'ok', label: lt.latencyMs !== null ? t('couriers.test.ok', { ms: lt.latencyMs }) : t('couriers.state.connected'), detail: ago };
+  const v = testView({ ok: false, latencyMs: null, error: lt.error, message: null, accountName: null, wilayasServed: null }, t, credentialsLabel(c.provider, c.platform, t));
+  return { ...v, detail: `${v.detail} · ${ago}` };
 }
 
 const yes = (v: boolean) => (v ? '✓' : '✗');
@@ -89,7 +104,7 @@ export function CouriersPage() {
     setTests((m) => ({ ...m, [c.id]: { state: 'testing', label: t('couriers.test.testing'), detail: t('couriers.test.testingHint') } }));
     try {
       const r = await deliveryApi.testCourier(c.id);
-      setTests((m) => ({ ...m, [c.id]: testView(r, t) }));
+      setTests((m) => ({ ...m, [c.id]: testView(r, t, credentialsLabel(c.provider, c.platform, t)) }));
       if (r.account) write(r.account);
     } catch (e) {
       setTests((m) => ({ ...m, [c.id]: { state: 'unreachable', label: t('couriers.test.unreachable'), detail: refusal(e, t) } }));
@@ -192,7 +207,7 @@ export function CouriersPage() {
                     {sender ? <p>{t('couriers.sender', { sender })}</p> : null}
                     <p>{t('couriers.capabilities', { parcel: yes(caps.parcel), tracking: yes(caps.tracking), rates: yes(caps.rates), label: yes(caps.label) }) + (caps.label ? '' : ` ${t('couriers.djaberLabel')}`)}</p>
                     <p>{t('couriers.stats', { sent: c.stats.sent, failed: c.stats.failed30d, active: formatNumber(c.stats.activeShipments) })}</p>
-                    {tr ? <CourierTestResult state={tr.state} label={tr.label} detail={tr.detail} /> : c.lastTest && !c.lastTest.ok ? <CourierTestResult {...testView({ ok: false, latencyMs: null, error: c.lastTest.error, message: null, accountName: null, wilayasServed: null }, t)} /> : null}
+                    {tr ? <CourierTestResult state={tr.state} label={tr.label} detail={tr.detail} /> : c.lastTest && !c.lastTest.ok ? <CourierTestResult {...testView({ ok: false, latencyMs: null, error: c.lastTest.error, message: null, accountName: null, wilayasServed: null }, t, credentialsLabel(c.provider, c.platform, t))} /> : null}
                   </CourierCard>
                 );
               })}
@@ -282,6 +297,7 @@ const formOf = (c: CourierAccount | null, existing: CourierAccount[]): Form => (
 /** Add / edit a courier account; also opened in place from the send dialog when no courier is configured. */
 export function CourierDialog({ open, account, provider: initial, providers, existing, onClose, onSaved }: { open: boolean; account: CourierAccount | null; provider: ProviderKey; providers: CourierProviderInfo[]; existing: CourierAccount[]; onClose: () => void; onSaved: (c: CourierAccount) => void }) {
   const t = useT();
+  const locale = useLocaleCode();
   const typed = useTypedFlag(open);
   const [provider, setProvider] = useState<ProviderKey>(initial);
   // ZR Express: new platform (API key + tenant id) or Procolis (token + key)
@@ -345,7 +361,7 @@ export function CourierDialog({ open, account, provider: initial, providers, exi
     setTest({ state: 'testing', label: t('couriers.test.testing'), detail: t('couriers.test.testingHint') });
     try {
       const r = await deliveryApi.testCourier(c.id);
-      setTest(testView(r, t));
+      setTest(testView(r, t, credentialsLabel(c.provider, c.platform, t)));
       if (r.account) onSaved(r.account);
       return r.ok;
     } catch (e) {
@@ -488,7 +504,13 @@ export function CourierDialog({ open, account, provider: initial, providers, exi
             </label>
             <div className="flex flex-col gap-1.5">
               <span className="ts-label-micro text-text-muted">{t('couriers.test.section')}</span>
-              {test ? <CourierTestResult state={test.state} label={test.label} detail={test.detail} /> : <span className="ts-label-micro !normal-case text-text-muted">{t('couriers.test.none')}</span>}
+              {test ? (
+                <CourierTestResult state={test.state} label={test.label} detail={test.detail} />
+              ) : current && lastTestView(current, t, locale) ? (
+                <CourierTestResult {...lastTestView(current, t, locale)!} />
+              ) : (
+                <span className="ts-label-micro !normal-case text-text-muted">{t('couriers.test.none')}</span>
+              )}
             </div>
             {error ? <FormAlert>{error}</FormAlert> : null}
           </>
@@ -557,7 +579,8 @@ function DeleteCourierDialog({ account, onClose, onDeactivate, onDeleted }: { ac
       <div className="flex flex-col gap-3" data-testid="delete-courier-dialog" data-blocked={blocked !== null}>
         {blocked !== null ? (
           <FormAlert tone="danger">
-            <span data-testid="courier-delete-blocked">{t('couriers.delete.blocked', { count: blocked })}</span>
+            {/* full-test DELIVERY-16: « Désactivez-le » only when it is still active */}
+            <span data-testid="courier-delete-blocked">{t(account.isActive ? 'couriers.delete.blocked' : 'couriers.delete.blockedInactive', { count: blocked })}</span>
           </FormAlert>
         ) : (
           <p className="text-[13px] text-text-secondary">{t('couriers.delete.confirm')}</p>

@@ -77,6 +77,8 @@ export class OrderWorkflowService implements OnModuleInit {
     if (plan.confirmationStatus && o.confirmationStatus !== 'confirmed') data.confirmationStatus = plan.confirmationStatus;
     if (plan.deliveryStatus) data.deliveryStatus = plan.deliveryStatus as Order['deliveryStatus'];
     if (plan.clearCallback && o.callbackAt) data.callbackAt = null;
+    // a pending callback ends with the order's progress: no « RAPPEL » pill / reminder on a shipped or closed order (full-test ORDERS-16)
+    if (plan.clearCallback && o.confirmationStatus === 'callback' && !data.confirmationStatus) data.confirmationStatus = to === 'cancelled' ? 'rejected' : 'confirmed';
     if (to === 'cancelled') {
       data.cancelReason = (CancelReasonValues as readonly string[]).includes(opt.reason ?? '') ? (opt.reason as CancelReasonName) : 'other';
       data.cancelNote = opt.note ?? null;
@@ -88,7 +90,9 @@ export class OrderWorkflowService implements OnModuleInit {
     if (opt.shipmentHandled) {
       // courier parcels: ShipmentService / TrackingService own the Shipment rows and their events
     } else if (plan.shipment === 'create_manual') {
-      await tx.shipment.create({ data: { workspaceId: o.workspaceId, orderId: o.id, provider: 'manual', status: 'sent', trackingNumber: opt.trackingNumber ?? null, publicTrackingToken: randomBytes(12).toString('base64url'), codAmount: Math.max(0, o.total - o.amountPaid) } });
+      // full-test 15/11 PUBLIC-06: a self-delivered parcel has its history from the start (the tracking page said « Pas encore d'événement »)
+      const sent = await tx.shipment.create({ data: { workspaceId: o.workspaceId, orderId: o.id, provider: 'manual', status: 'sent', trackingNumber: opt.trackingNumber ?? null, publicTrackingToken: randomBytes(12).toString('base64url'), codAmount: Math.max(0, o.total - o.amountPaid) } });
+      await tx.shipmentEvent.create({ data: { shipmentId: sent.id, rawStatus: 'sent', mappedStatus: 'sent', at, source: 'manual', actorId: actorUserId } });
     } else if (active && plan.shipment === 'mark_delivered') {
       await tx.shipment.update({ where: { id: active.id }, data: { status: 'delivered' } });
       await tx.shipmentEvent.create({ data: { shipmentId: active.id, rawStatus: 'delivered', mappedStatus: 'delivered', at, source: 'manual', actorId: actorUserId } });
@@ -96,8 +100,11 @@ export class OrderWorkflowService implements OnModuleInit {
       const reason = (FailureReasonValues as readonly string[]).includes(opt.reason ?? '') ? (opt.reason as FailureReasonName) : null;
       // the parcel keeps the reason (unclaimed parcels drive the auto-block rule); a self-delivered order gets a manual parcel record
       const target = active ?? o.shipments[0] ?? null;
-      if (target) await tx.shipment.update({ where: { id: target.id }, data: { status: 'returned', failureReason: reason } });
-      else await tx.shipment.create({ data: { workspaceId: o.workspaceId, orderId: o.id, provider: 'manual', status: 'returned', failureReason: reason, publicTrackingToken: randomBytes(12).toString('base64url'), codAmount: o.total } });
+      const returned = target
+        ? await tx.shipment.update({ where: { id: target.id }, data: { status: 'returned', failureReason: reason } })
+        : await tx.shipment.create({ data: { workspaceId: o.workspaceId, orderId: o.id, provider: 'manual', status: 'returned', failureReason: reason, publicTrackingToken: randomBytes(12).toString('base64url'), codAmount: o.total } });
+      // PUBLIC-06: the event that made the parcel « Retournée » (courier parcels get theirs from the tracking sync)
+      if (!target || target.status !== 'returned') await tx.shipmentEvent.create({ data: { shipmentId: returned.id, rawStatus: 'returned', mappedStatus: 'returned', at, source: 'manual', actorId: actorUserId } });
     } else if (active && plan.shipment === 'cancel_manual' && active.provider === 'manual') {
       await tx.shipment.update({ where: { id: active.id }, data: { status: 'cancelled', cancelledAt: new Date() } });
     }
@@ -278,7 +285,7 @@ export class OrderWorkflowService implements OnModuleInit {
   /** `sched-order-reminders`: one `order.callback_due` per (order, callbackAt) — idempotency key `cb:<orderId>:<ISO>`. */
   async remindDue(now = new Date()) {
     const due = await TenantContext.runSystem(() =>
-      prisma.order.findMany({ where: { confirmationStatus: 'callback', callbackAt: { lte: now, gte: new Date(now.getTime() - DAY) } }, select: { id: true, workspaceId: true, number: true, clientName: true, assigneeId: true, callbackAt: true } }),
+      prisma.order.findMany({ where: { confirmationStatus: 'callback', status: { notIn: ['delivered', 'cancelled', 'returned'] }, callbackAt: { lte: now, gte: new Date(now.getTime() - DAY) } }, select: { id: true, workspaceId: true, number: true, clientName: true, assigneeId: true, callbackAt: true } }),
     );
     for (const o of due) {
       await TenantContext.runAs(o.workspaceId, () =>

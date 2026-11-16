@@ -24,6 +24,8 @@ import { PromoService } from './promo.service';
 type Mode = CheckoutPreviewDto['mode'];
 export type Quote = { mode: Mode; plan: Plan; cycle: 'monthly' | 'yearly'; amountNow: number; amountBeforePromo: number; prorataDays: number | null; nextAmount: number; nextAt: Date; effectiveAt: Date; creditsNow: number; promo: PromoCode | null; paused: PausedResourceView[]; current: SubWithPlan | null };
 export type Platform = 'web' | 'mobile';
+/** Days before the period end from which the same plan + cycle can be renewed (BIL-05, web `RENEW_WINDOW_DAYS`). */
+export const RENEW_WINDOW_DAYS = 7;
 
 @Injectable()
 export class SubscriptionService implements OnModuleInit {
@@ -73,7 +75,10 @@ export class SubscriptionService implements OnModuleInit {
       const upward = plan.priceMonthly > curPlan.priceMonthly || (samePlan && c.billingCycle === 'monthly' && cycle === 'yearly') || (!samePlan && plan.priceMonthly === curPlan.priceMonthly);
       const pr = prorata({ price, currentPrice: c.appliedPrice, periodStart: c.currentPeriodStart, periodEnd: c.currentPeriodEnd, now });
       if (samePlan && c.billingCycle === cycle) {
-        q = { ...base, mode: 'renewal', amountNow: price, amountBeforePromo: price, prorataDays: null, nextAmount: price, nextAt: addCycle(c.currentPeriodEnd, cycle), effectiveAt: c.currentPeriodEnd, creditsNow: 0, paused: [] };
+        // full-test 15/11 SETTINGS-04: the same renewal window as « Renouveler » (J−7, or a dunning stage) — the change
+        // dialog could pay the next period 11 days early
+        if (!c.dunningStage && c.currentPeriodEnd.getTime() - now.getTime() > RENEW_WINDOW_DAYS * 86_400_000) throw new AppException('RENEWAL_NOT_OPEN');
+        q ={ ...base, mode: 'renewal', amountNow: price, amountBeforePromo: price, prorataDays: null, nextAmount: price, nextAt: addCycle(c.currentPeriodEnd, cycle), effectiveAt: c.currentPeriodEnd, creditsNow: 0, paused: [] };
       } else if (upward && c.billingCycle === cycle) {
         const credits = plan.monthlyCredits < 0 || curPlan.monthlyCredits < 0 ? plan.monthlyCredits : Math.max(0, plan.monthlyCredits - curPlan.monthlyCredits);
         q = { ...base, mode: 'upgrade', amountNow: pr.amount, amountBeforePromo: pr.amount, prorataDays: pr.remainingDays, nextAmount: price, nextAt: c.currentPeriodEnd, effectiveAt: now, creditsNow: credits, paused: await this.limits.preview(db, plan) };

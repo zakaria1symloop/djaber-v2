@@ -151,5 +151,8 @@
   "public.captcha.loading": "التحقق من أنك لست روبوتًا…",
   "public.captcha.error": "تعذّر تحميل التحقق من الروبوت. أغلق النافذة ثم أعد فتحها.",
   "public.contact.subject": "تواصل مع Djaber",
-  "public.contact.subjectDeletion": "حذف الحساب"
+  "public.contact.subjectDeletion": "حذف الحساب",
+  "public.deletion.invalid.title": "هذا الرابط غير صالح.",
+  "public.deletion.invalid.text": "الرابط غير مكتمل أو نُسخ بشكل خاطئ. أعد الطلب لتتلقى رابطًا جديدًا (صالحًا لمدة 24 ساعة).",
+  "public.pricing.cta.member": "اختيار هذه الخطة"
 }

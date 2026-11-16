@@ -50,8 +50,11 @@ describe('plans & subscription (BIL-01)', () => {
     const up = (await owner.post('/billing/preview', { planId: pro, cycle: 'monthly' }).expect(200)).body.data;
     const p = prorata({ price: 4900, currentPrice: 1900, periodStart: sub.currentPeriodStart, periodEnd: sub.currentPeriodEnd, now: new Date() });
     expect(up).toMatchObject({ mode: 'upgrade', amountNow: p.amount, prorataDays: p.remainingDays, nextAmount: 4900, nextAt: sub.currentPeriodEnd.toISOString(), creditsNow: 3500 });
-    expect((await owner.post('/billing/preview', { planId: starter, cycle: 'monthly' }).expect(200)).body.data).toMatchObject({ mode: 'renewal', amountNow: 1900, creditsNow: 0 });
+    // full-test 15/11 SETTINGS-04: the same plan + cycle is renewed from J−7 only (20 days left ⇒ refused)
+    expect((await owner.post('/billing/preview', { planId: starter, cycle: 'monthly' }).expect(422)).body.error.code).toBe('RENEWAL_NOT_OPEN');
     expect((await owner.post('/billing/preview', { planId: pro, cycle: 'yearly' }).expect(200)).body.data).toMatchObject({ mode: 'new_period', amountNow: 49000 - p.unused, prorataDays: p.remainingDays, creditsNow: 5000 });
+    await makePaid(app, owner.workspaceId, 'starter', 'monthly', new Date(Date.now() + 5 * 86_400_000));
+    expect((await owner.post('/billing/preview', { planId: starter, cycle: 'monthly' }).expect(200)).body.data).toMatchObject({ mode: 'renewal', amountNow: 1900, creditsNow: 0 });
 
     await makePaid(app, owner.workspaceId, 'pro', 'monthly');
     await channels(owner.workspaceId, 3);
@@ -154,18 +157,20 @@ describe('checkout → Chargily → activation (BIL-02, FL-28)', () => {
     expect(await db.creditLedger.count({ where: { workspaceId: owner.workspaceId, action: 'grant', credits: 3500, reason: 'upgrade:pro' } })).toBe(1);
     const inv = await db.invoice.findFirstOrThrow({ where: { workspaceId: owner.workspaceId }, orderBy: { createdAt: 'desc' } });
     expect(inv).toMatchObject({ amount: r.preview.amountNow, status: 'paid' });
-    // renewal of the same plan + cycle: the end moves one month
+    // renewal of the same plan + cycle (inside the J−7 window, SETTINGS-04): the end moves one month
+    const soon = new Date(Date.now() + 5 * 86_400_000);
+    await db.subscription.update({ where: { id: sub.id }, data: { currentPeriodEnd: soon } });
     const ren = (await checkout(owner, { planId: await planId('pro'), cycle: 'monthly' }).expect(200)).body.data;
     expect(ren.preview.mode).toBe('renewal');
     await payFake(app, ren.checkoutUrl, 'paid');
     const renewed = await currentSubOf(owner.workspaceId);
-    expect(renewed.currentPeriodEnd.getTime()).toBeGreaterThan(sub.currentPeriodEnd.getTime() + 27 * 86_400_000);
+    expect(renewed.currentPeriodEnd.getTime()).toBeGreaterThan(soon.getTime() + 27 * 86_400_000);
     expect(renewed.currentPeriodStart.toISOString()).toBe(sub.currentPeriodStart.toISOString());
   });
 
   it('UX-011 a discount code paid with a renewal is a redemption (admin count, single use, discount periods run from it)', async () => {
     const owner = await asOwner(app);
-    const sub = await makePaid(app, owner.workspaceId, 'starter', 'monthly');
+    const sub = await makePaid(app, owner.workspaceId, 'starter', 'monthly', new Date(Date.now() + 5 * 86_400_000));
     const admin = await db.user.findFirstOrThrow({ where: { platformRole: 'super_admin' } });
     const promo = await db.promoCode.create({ data: { code: `RENEW-${Date.now()}`, kind: 'percent_discount', value: 20, periods: 2, createdById: admin.id } });
     const ren = (await checkout(owner, { planId: await planId('starter'), cycle: 'monthly', promoCode: promo.code }).expect(200)).body.data;

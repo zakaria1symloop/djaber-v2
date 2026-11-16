@@ -12,6 +12,8 @@ export const trustLabel = (t: TFunction, level: string | null | undefined) => (l
 /** AI flag sentence: the label of its code with the matched value, or the server message when it is an i18n key. */
 export function flagText(t: TFunction, f: ModerationAiFlagView): string {
   if (f.message && t.has(f.message)) return t(f.message);
+  // full-test 15/11 ADMIN-09: `single_image` carries the image count — 0 is « Aucune image », 1 « 1 seule image », never « (0) »
+  if (f.code === 'single_image') return t(f.message === '0' ? 'adminMod.flag.no_image' : 'adminMod.flag.single_image');
   const label = t.has(`adminMod.flag.${f.code}`) ? t(`adminMod.flag.${f.code}`) : f.code;
   // the pre-screen puts the matched value in `message` (brand, word): "Marque protégée (dior)"
   return f.message && f.message !== f.code ? `${label} (${f.message})` : label;

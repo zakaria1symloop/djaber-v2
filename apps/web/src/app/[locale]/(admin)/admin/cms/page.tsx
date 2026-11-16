@@ -17,6 +17,7 @@ import { usePlatform } from '@/features/admin/platform';
 import { CMS_LIST } from '@/features/admin/specs';
 import { AdminPill, useFormats } from '@/features/admin/ui';
 import { toMenuActions } from '@/lib/actions';
+import { withAdminReasons } from '@/features/admin/reasons';
 import { api } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
@@ -79,7 +80,7 @@ export default function AdminCmsPage() {
     <ActionsMenu
       label={t('action.actions')}
       heading={e.key}
-      actions={toMenuActions(
+      actions={withAdminReasons(toMenuActions(
         e.actions,
         {
           edit: { label: t('admin.cms.action.edit'), onSelect: () => list.openSheet(e.id) },
@@ -91,7 +92,7 @@ export default function AdminCmsPage() {
           versions: { label: t('admin.cms.action.versions'), onSelect: () => list.openSheet(e.id) },
         },
         t,
-      )}
+      ), e.actions, t)}
     />
   );
   const columns: Column<CmsEntryAdminDto>[] = [
@@ -123,7 +124,7 @@ export default function AdminCmsPage() {
     >
       <PillTabs label={t('admin.cms.tabs')} value={type} onChange={(k) => list.set({ tab: k === 'announcement' ? null : k, sheet: null })} tabs={TYPES.map((k) => ({ key: k, label: t(`admin.cms.type.${k}`), count: counts?.[k] ?? null }))} />
       <AdminFilterBar list={list} search={t('admin.cms.search')} quick={quick} count={query.data ? t(`admin.cms.count`, { count: query.data.total }) : undefined} />
-      <AdminListBody testId="cms-list" query={query} list={list} columns={columns} rowKey={(e) => e.id} label={t('nav.admin.cms')} entity={t('admin.cms.entity')} empty={{ title: t('admin.cms.empty', { type: t(`admin.cms.type.${type}`) }), action: write ? { label: t('admin.cms.new'), onClick: () => setCreate(true) } : undefined }} rowActions={menu} onRowClick={(e) => list.openSheet(e.id)} />
+      <AdminListBody testId="cms-list" filters={quick} query={query} list={list} columns={columns} rowKey={(e) => e.id} label={t('nav.admin.cms')} entity={t('admin.cms.entity')} empty={{ title: t('admin.cms.empty', { type: t(`admin.cms.type.${type}`) }), action: write ? { label: t('admin.cms.new'), onClick: () => setCreate(true) } : undefined }} rowActions={menu} onRowClick={(e) => list.openSheet(e.id)} />
       {list.state.sheet && open.data ? <CmsEditor key={`${open.data.id}:${open.data.updatedAt}`} entry={open.data} canWrite={write} onClose={() => list.openSheet(null)} /> : null}
       <NewCmsDialog open={create} type={type} onClose={() => setCreate(false)} onCreated={(id, ty) => list.set({ tab: ty === 'announcement' ? null : ty, sheet: id })} />
       {previewed ? <AnnouncementPreviewDialog open onClose={() => setPreviewed(null)} text={entryText(previewed)} channels={previewed.channels} link={previewed.link} /> : null}

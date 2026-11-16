@@ -5,7 +5,7 @@
 // and the public shared link (`POST /agent-test/:token/messages`, reply + cards only). Nothing is ever sent to a
 // customer and no order is written (tools run in dry-run on the API).
 import { BubbleText, Button, cn, FormAlert, IconButton, Ltr, MessageBubble, ProductCards, SystemEvent, ToolCallChip, TypingChip } from '@djaber/ui';
-import { formatMoney, type TestScenarioKey } from '@djaber/shared';
+import { formatMoney, PLAYGROUND_TURNS_PER_HOUR, type TestScenarioKey } from '@djaber/shared';
 import { Camera, Mic, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '@/lib/api';
@@ -14,7 +14,7 @@ import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { agentsApi } from '../api';
 import type { PlaygroundMessage } from '../contracts';
-import { confidenceLabel, type TurnView } from '../logic';
+import { confidenceLabel, SYSTEM_BEFORE_REPLY, type TurnView } from '../logic';
 import { uuid } from '@/lib/uuid';
 
 export type Attachment = { kind: 'image' | 'audio'; uploadId: string; name: string; url?: string };
@@ -33,6 +33,8 @@ export function usePlayground(transport: ChatTransport) {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [typing, setTyping] = useState(false);
   const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
+  /** playground turns of the workspace this hour, as the server counted them (null until the first answer) */
+  const [hourly, setHourly] = useState<number | null>(null);
   const [sessionId, setSessionId] = useState(newSession);
   const seq = useRef(0);
   const sending = useRef(false);
@@ -57,13 +59,20 @@ export function usePlayground(transport: ChatTransport) {
       setTyping(true);
       try {
         const turn = await transportRef.current(history, input, sessionId);
+        if (typeof turn.hourlyUsed === 'number') setHourly(turn.hourlyUsed);
         // a scenario chip: the customer bubble takes the message the server sent (shown, and part of the next turns' history)
         const said = (turn as { customerText?: string }).customerText;
         setEntries((old) => [...old.map((e) => (said && e.role === 'user' && e.at === now && !e.text ? { ...e, text: said } : e)), { id: ++seq.current, role: 'ai', at: Date.now(), turn }]);
       } catch (e) {
         const code = e instanceof ApiError ? e.code : null;
-        if (code === 'PLAYGROUND_RATE_LIMITED' || (e instanceof ApiError && e.status === 429)) setBlockedUntil(Date.now() + retryAfterSeconds(e, 60) * 1000);
-        setEntries((old) => [...old, { id: ++seq.current, role: 'error', at: Date.now(), message: errorMessage(e, t), code, input }]);
+        // full-test 15/11 AI-CHAT-11: the wait is the rest of the hour the server gives (retryAfter), not one minute
+        if (code === 'PLAYGROUND_RATE_LIMITED' || (e instanceof ApiError && e.status === 429)) {
+          setBlockedUntil(Date.now() + retryAfterSeconds(e, 3600) * 1000);
+          setHourly(PLAYGROUND_TURNS_PER_HOUR);
+        }
+        // AI-CHAT-14 / AGENTS-03: nothing is queued in a simulation — the playground says so in its own words
+        const message = code === 'AI_PROVIDER_ERROR' ? t('agents.playground.providerError') : errorMessage(e, t);
+        setEntries((old) => [...old, { id: ++seq.current, role: 'error', at: Date.now(), message, code, input }]);
       } finally {
         sending.current = false;
         setTyping(false);
@@ -86,6 +95,8 @@ export function usePlayground(transport: ChatTransport) {
     sessionId,
     /** AI turns of this session */
     turns: entries.filter((e) => e.role === 'ai').length,
+    /** turns of the workspace this hour (the server's count; this session's turns until it answered once) */
+    hourly: hourly ?? entries.filter((e) => e.role === 'ai').length,
     /** seconds until the rate limit lifts (0 = free) */
     wait,
     retry: failed ? () => void send(failed.input) : null,
@@ -131,8 +142,8 @@ export function PlaygroundThread({ pg, agentName, empty, showTools = true, class
           return (
             <div key={e.id} className="mt-3" data-testid="playground-error" data-code={e.code ?? ''}>
               <FormAlert tone={e.code === 'PLAYGROUND_RATE_LIMITED' ? 'warning' : 'danger'}>
+                {/* the wait itself is shown once, above the composer (AI-CHAT-11: it was printed twice) */}
                 {e.message}
-                {e.code === 'PLAYGROUND_RATE_LIMITED' && pg.wait > 0 ? <> · {t('agents.playground.retryIn', { time: formatClock(pg.wait) })}</> : null}
               </FormAlert>
               {pg.retry && pg.wait === 0 ? (
                 <Button size="sm" className="mt-2" onClick={pg.retry} data-testid="playground-retry">
@@ -142,8 +153,14 @@ export function PlaygroundThread({ pg, agentName, empty, showTools = true, class
             </div>
           );
         const turn = e.turn;
+        // full-test 15/11 AGENTS-20: welcome / out-of-hours go out before the reply on Messenger, the handoff text after it
+        const system = (before: boolean) =>
+          turn.systemMessages
+            .filter((m) => SYSTEM_BEFORE_REPLY.includes(m.key) === before)
+            .map((m) => <SystemEvent key={m.key}>{t('agents.playground.systemMessage', { key: t(`agents.playground.systemKey.${m.key}`), text: m.text })}</SystemEvent>);
         return (
           <div key={e.id} data-testid="playground-turn" data-status={turn.status} className="flex flex-col">
+            {system(true)}
             {showTools
               ? turn.tools.map((tool, i) => (
                   <ToolCallChip key={i} className="mt-3" name={tool.name} toolLabel={t('agents.playground.tool')} simulatedLabel={t('agents.playground.simulated')} toggleLabel={t('agents.playground.toolToggle')} args={tool.args} result={tool.result} simulated={tool.simulated} failed={tool.failed} />
@@ -170,9 +187,7 @@ export function PlaygroundThread({ pg, agentName, empty, showTools = true, class
                 <ProductCards label={t('agents.playground.cards')} cards={turn.cards.map((c) => ({ id: c.id, name: c.name, price: formatMoney(c.price), imageUrl: c.imageUrl, variants: [c.variants, showTools ? t('agents.playground.realCard') : null].filter(Boolean).join(' · ') || null }))} />
               </div>
             ) : null}
-            {turn.systemMessages.map((m) => (
-              <SystemEvent key={m.key}>{t('agents.playground.systemMessage', { key: m.key, text: m.text })}</SystemEvent>
-            ))}
+            {system(false)}
           </div>
         );
       })}

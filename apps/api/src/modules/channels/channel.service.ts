@@ -112,9 +112,11 @@ export class ChannelService {
       a('reconnect', true, undefined, c.status === 'needs_reconnect' || c.status === 'disconnected'),
       a('pause', c.status === 'active', 'REPLY_CHANNEL_INACTIVE'),
       a('resume', resumable && (slotsFree || c.parentChannelId !== null), resumable ? 'PLAN_LIMIT' : 'CONFLICT'),
-      a('syncInfo', live && c.accessToken !== null, 'PAGE_TOKEN_EXPIRED'),
+      // full-test 15/11 CHANNELS-INBOX-10 / -04: the reasons are true for the page — a page a member disconnected is not
+      // « déconnectée par Meta », and an already disconnected page is not « modifié entre-temps »
+      a('syncInfo', live && c.accessToken !== null, live ? 'PAGE_TOKEN_EXPIRED' : 'CHANNEL_DISCONNECTED'),
       a('syncHistory', c.status === 'active', 'REPLY_CHANNEL_INACTIVE'),
-      a('disconnect', live, 'CONFLICT'),
+      a('disconnect', live, 'CHANNEL_ALREADY_DISCONNECTED'),
     ];
   }
 

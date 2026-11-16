@@ -20,7 +20,8 @@ export class NotificationsController {
   @Get('unread-count')
   @RequirePermission('notifications.own')
   async unreadCount() {
-    return { count: await this.notifications.unreadCount() };
+    const [count, byGroup] = await Promise.all([this.notifications.unreadCount(), this.notifications.unreadByGroup()]);
+    return { count, byGroup };
   }
 
   @Post('read-all')

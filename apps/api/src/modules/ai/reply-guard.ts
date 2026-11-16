@@ -9,14 +9,21 @@
 //   stock_count      how many units are in stock / left (STOCK_PRIVATE), except the number a tool gave
 //   repeat_greeting  a greeting / self-introduction at the start of a reply when the AI already answered this visit
 //   self_name        a personal name other than the moderated agent name (none approved ⇒ no personal name at all)
+//   language_switch  full-test 15/11 AI-CHAT-04: a clear switch away from the customer's language (arabizi → French…)
+//   moroccan_darija  Moroccan words (« chno », « dyal », « walakin ») in an arabizi / Arabic-script reply
+//   script_mix       a Latin letter glued inside an Arabic word (« وnعاونك »): fixed by the server, no model turn
+//   false_confession full-test 15/11 AI-CHAT-02: « coordonnées inventées », « commande enregistrée par erreur », « la
+//                    commande n'existe pas » while an order of this conversation was placed
 // Pure: no I/O. Conservative by design — a false positive costs one corrective model turn and, at worst, a dropped sentence.
 import { GUARD_MARK } from './ai.constants';
-import type { AiLanguage } from './language';
+import { languageSwitched, MOROCCAN_WORDS, SCRIPT_GLUE, type AiLanguage } from './language';
 import type { CatalogueProduct } from './catalogue.service';
 import type { PromptContext } from './prompt/prompt.types';
 import { TOOL_ALIASES, TOOL_DEFS } from './tools/tool-registry';
 
-export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name';
+export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession';
+/** Rules the server fixes itself: no corrective model turn for them alone. */
+export const AUTO_FIX_RULES: readonly GuardRule[] = ['script_mix'];
 export type LeakKind = 'uuid' | 'tool' | 'code' | 'key' | 'json' | 'marker';
 /** `sentence` = index in `splitSentences(reply)`; `value` = the amount / count (never message text) */
 export type GuardViolation = { rule: GuardRule; sentence: number; value?: number; kind?: LeakKind };
@@ -56,6 +63,8 @@ export type GuardFacts = {
   customerGreets: boolean;
   /** « name — price DA » lines for the corrective instruction */
   priceList: string[];
+  /** numbers of the orders a tool placed in this conversation (this turn or earlier turns) */
+  ordersPlaced?: string[];
 };
 
 // --- text helpers -------------------------------------------------------------------------------------------------------------
@@ -158,7 +167,7 @@ const TOOL_RE = new RegExp(`${B}(?:${TOOL_NAMES.join('|')})${E}`, 'u');
 const UUID_RE = /(?<![\p{L}\p{N}])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\p{L}\p{N}])/iu;
 const CODE_RE = /(?<![\p{L}\p{N}_-])[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+(?![\p{L}\p{N}_-])/gu;
 /** Output-contract and tool-result keys (camelCase: never a word of a customer reply). */
-const CONTRACT_KEYS = ['productCards', 'productPhotos', 'statusDetail', 'handoffWords', 'recommendedId', 'sourceId', 'customerConfirmed', 'replacesOrder', 'wilayaId', 'communeId', 'productId', 'variantId', 'orderId', 'isStopdesk', 'stopdeskId', 'stopdeskFee', 'deliveryFee', 'freeFrom', 'trackingUrl', 'trackingNumber', 'duplicateOf', 'beyondStock', 'availableAllVariants', 'otherVariants', 'availableVariants', 'suggestInsight', 'clientPhone', 'clientName', 'secondPhone', 'hasVariants', 'unitPrice', 'orderNumber', 'lastEvent', 'paymentOptions'];
+const CONTRACT_KEYS = ['productCards', 'productPhotos', 'statusDetail', 'handoffWords', 'recommendedId', 'sourceId', 'customerConfirmed', 'replacesOrder', 'wilayaId', 'communeId', 'productId', 'variantId', 'orderId', 'isStopdesk', 'stopdeskId', 'stopdeskFee', 'deliveryFee', 'freeFrom', 'trackingUrl', 'trackingNumber', 'duplicateOf', 'beyondStock', 'availableAllVariants', 'availableQuantity', 'otherVariants', 'availableVariants', 'suggestInsight', 'clientPhone', 'clientName', 'secondPhone', 'hasVariants', 'unitPrice', 'orderNumber', 'lastEvent', 'paymentOptions'];
 const KEY_RE = new RegExp(`${B}(?:${CONTRACT_KEYS.join('|')})${E}`, 'u');
 const JSON_RE = /\{\s*"[A-Za-z_]+"\s*:|"(?:reply|status|intent|confidence|language|evidence|productCards)"\s*:/;
 const MARKER_RE = /\[(?:ID|VID):|(?<![\p{L}])VID:|\[tool (?:call|result)|\bIMAGE RESULT\b|\[NEW VISIT|\[BACK TO YOU|\[human:|\bstatus\s*=\s*[A-Z]{3,}|\bstatusDetail\b/u;
@@ -333,8 +342,28 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
     if (selfNames(s, facts).length) out.push({ rule: 'self_name', sentence: i });
   });
   if (facts.answeredBefore && !facts.freshStart && !facts.customerGreets && greetingAt(reply, facts.agentName) > 0) out.push({ rule: 'repeat_greeting', sentence: 0 });
+  // full-test 15/11 AI-CHAT-04 (proposal 5): the language rules (13, 14, 16) checked at run time
+  if (languageSwitched(facts.lang, reply)) out.push({ rule: 'language_switch', sentence: 0 });
+  else if ((facts.lang === 'arabizi' || facts.lang === 'ar') && MOROCCAN_WORDS.test(reply)) out.push({ rule: 'moroccan_darija', sentence: 0 });
+  if (new RegExp(SCRIPT_GLUE.source, 'u').test(reply)) out.push({ rule: 'script_mix', sentence: 0 });
+  // full-test 15/11 AI-CHAT-02 (proposal 3): a placed order is never « invented », « by mistake » or « nonexistent »
+  if (facts.ordersPlaced?.length) parts.forEach((s, i) => {
+    if (FALSE_CONFESSION.test(foldGuard(s))) out.push({ rule: 'false_confession', sentence: i });
+  });
   return out;
 }
+
+/** Folded phrases of a false confession about an order the tools did place (fr / en / arabizi / Arabic script). */
+const FALSE_CONFESSION = new RegExp(
+  [
+    String.raw`j'?ai (utilise|mis|ecrit|donne|rempli)[^.]{0,40}invente`, String.raw`(coordonnees|informations|donnees) inventees`, String.raw`(enregistree?|creee?|passee?) par erreur`, String.raw`par erreur de notre (cote|part)`, String.raw`fausses? (coordonnees|informations|donnees)`, String.raw`rempli (ces|les|vos) (informations|coordonnees) moi`,
+    String.raw`n'?ai pas (recupere|eu|recu|obtenu) (vos|de vous|tes)`, String.raw`(vous|tu) ne m'?(avez|as) pas (donne|communique)`, String.raw`commande \S+ n'?existe pas`,
+    String.raw`rien n'?a (ete|encore ete) (commande|cree|enregistre|valide)`, String.raw`aucune commande n'?a (ete|encore ete) (creee|enregistree|passee)`,
+    String.raw`made (it|them|this) up`, String.raw`by mistake`, String.raw`does ?n[o']t exist`, String.raw`nothing (was|has been) ordered`,
+    String.raw`bel ?ghalet`, String.raw`b(el|l) ?khata`, 'بالغلط', 'بالخطا', 'اخترعت', 'ما تسجلت', 'لم يتم تسجيل',
+  ].join('|'),
+  'u',
+);
 
 export { GUARD_MARK };
 
@@ -355,6 +384,10 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
   if (rules.includes('technical_leak')) lines.push('- NO TECHNICAL TEXT: no internal id, code in capitals, tool name, field name, JSON or bracket note in "reply": plain words for the customer.');
   if (rules.includes('repeat_greeting')) lines.push('- NO NEW GREETING: you already answered this customer in this conversation; do not greet or introduce yourself again — start with the answer.');
   if (rules.includes('self_name')) lines.push(facts.agentName ? `- YOUR NAME is "${facts.agentName}": never give yourself another name.` : "- YOU HAVE NO PERSONAL NAME: never give yourself one; if asked, you are the shop's assistant.");
+  if (rules.includes('language_switch')) lines.push(`- LANGUAGE: the customer writes ${LANGUAGE_NAMES[facts.lang] ?? facts.lang}. Rewrite "reply" in that language and script, as they write it (never switch on your own).`);
+  if (rules.includes('moroccan_darija')) lines.push('- ALGERIAN DARIJA: the shop is Algerian. Replace the Moroccan words (chno, dyal, walakin, daba, nqdar, شنو, ديال, دابا) with Algerian ones (wach, ta3 / تاع, bessah / بصح, dork / درك, nqder).');
+  if (rules.includes('false_confession'))
+    lines.push(`- ORDER PLACED: order ${(facts.ordersPlaced ?? []).join(', ')} was placed with the details the customer gave in this conversation. Never say you invented them, that it was a mistake, that it does not exist or that nothing was ordered; never offer to cancel it unless the customer asks.`);
   return lines.join('\n');
 }
 
@@ -383,7 +416,12 @@ const selfSentence = (loc: 'fr' | 'en' | 'ar' | 'arabizi', name: string | null):
   })[loc];
 const safeLocale = (lang: AiLanguage): 'fr' | 'en' | 'ar' | 'arabizi' => (lang === 'ar' ? 'ar' : lang === 'en' ? 'en' : lang === 'arabizi' ? 'arabizi' : 'fr');
 
-const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name'];
+const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession'];
+/** Rules about the form of the reply: the text is kept when the corrective turn did not fix them (a reply is better than none). */
+const STYLE_RULES: GuardRule[] = ['language_switch', 'moroccan_darija', 'script_mix', 'repeat_greeting'];
+const LANGUAGE_NAMES: Record<string, string> = { ar: 'Arabic script (Algerian darija)', arabizi: 'Latin-script Algerian darija (arabizi)', fr: 'French', en: 'English' };
+/** « وnعاونك » → « وعاونك ». */
+export const fixScriptMix = (text: string): string => text.replace(SCRIPT_GLUE, '');
 const wordCount = (s: string) => (s.match(/[\p{L}\p{N}]+/gu) ?? []).length;
 
 /** Words that go with a greeting (« Bonjour Madame, », « Salam khouya ! », « Hello again, »). */
@@ -417,8 +455,10 @@ export function enforceReply(reply: string, violations: GuardViolation[], facts:
   const drop = new Set(violations.filter((v) => CONTENT_RULES.includes(v.rule)).map((v) => v.sentence));
   let text = parts.filter((_, i) => !drop.has(i)).join('').trim();
   if (violations.some((v) => v.rule === 'repeat_greeting')) text = stripGreeting(text, facts.agentName).trim();
+  if (violations.some((v) => v.rule === 'script_mix')) text = fixScriptMix(text);
   text = text.replace(/\n{3,}/g, '\n\n');
-  if (wordCount(text) >= 2) return { reply: text, action: 'stripped' };
+  // a language / dialect slip the corrective turn did not fix: the reply is sent as it is
+  if (wordCount(text) >= 2) return { reply: text, action: text === reply.trim() && violations.every((v) => STYLE_RULES.includes(v.rule)) ? 'kept' : 'stripped' };
   const rules = new Set(violations.map((v) => v.rule));
   const loc = safeLocale(facts.lang);
   if (!rules.has('unknown_amount') && !rules.has('stock_count') && !rules.has('technical_leak')) {
@@ -435,13 +475,13 @@ export function enforceReply(reply: string, violations: GuardViolation[], facts:
 const PRICE_KEYS = new Set(['price', 'unitPrice', 'oldPrice']);
 const FEE_KEYS = new Set(['fee', 'stopdeskFee', 'deliveryFee', 'homeFee']);
 const THRESHOLD_KEYS = new Set(['freeFrom', 'freeDeliveryThreshold']);
-const COUNT_KEYS = new Set(['available', 'availableAllVariants']);
+const COUNT_KEYS = new Set(['available', 'availableAllVariants', 'availableQuantity']);
 const TOKEN_KEYS = new Set(['number', 'trackingNumber', 'sku', 'name', 'variant', 'wilayaName', 'courier']);
 const ID_KEYS = new Set(['wilayaId', 'communeId', 'count']);
 
 /** Adds the numbers and names of tool results (this turn's or earlier turns') to the facts. */
 export function withToolResults(facts: GuardFacts, results: unknown[]): GuardFacts {
-  const f: GuardFacts = { ...facts, prices: [...facts.prices], amounts: [...facts.amounts], fees: [...facts.fees], thresholds: [...facts.thresholds], stockCounts: [...facts.stockCounts], tokens: [...facts.tokens], priceList: [...facts.priceList] };
+  const f: GuardFacts = { ...facts, prices: [...facts.prices], amounts: [...facts.amounts], fees: [...facts.fees], thresholds: [...facts.thresholds], stockCounts: [...facts.stockCounts], tokens: [...facts.tokens], priceList: [...facts.priceList], ordersPlaced: [...(facts.ordersPlaced ?? [])] };
   const walk = (v: unknown, key: string | null, depth: number) => {
     if (depth > 6 || v === null || v === undefined) return;
     if (typeof v === 'number' && Number.isFinite(v)) {
@@ -464,6 +504,8 @@ export function withToolResults(facts: GuardFacts, results: unknown[]): GuardFac
     if (typeof v === 'object') {
       const o = v as Record<string, unknown>;
       if (typeof o.name === 'string' && typeof o.price === 'number') f.priceList.push(`${o.name} ${o.price} DA`);
+      // a create_order that placed an order (dry run included): its number
+      if (depth === 0 && o.ok === true && typeof o.number === 'string' && Array.isArray(o.items)) f.ordersPlaced!.push(o.number);
       for (const [k, x] of Object.entries(o)) walk(x, k, depth + 1);
     }
   };

@@ -37,7 +37,9 @@ export function saleTotals(lines: readonly SaleLineDraft[], o: { discount: strin
   const paid = Math.min(received, total);
   const change = Math.max(0, received - total);
   const remaining = Math.max(0, total - paid);
-  return { subtotal, discount, total, received, paid, change, remaining, partial: remaining > 0 && total > 0 };
+  // full-test 15/11 SALES-CASH-09: more than the subtotal (or 100 %) is refused with a message, never silently capped
+  const discountOver = raw > 0 && (o.discountMode === 'percent' ? raw > 100 : raw > subtotal);
+  return { subtotal, discount, total, received, paid, change, remaining, partial: remaining > 0 && total > 0, discountOver };
 }
 /** "PRIX MODIFIÉ (4 500 → 4 200)" when the line price differs from the catalogue price. */
 export const priceEdited = (l: SaleLineDraft): boolean => int(l.unitPrice) !== l.catalogPrice;
@@ -157,9 +159,11 @@ export function periodDays(p: GdsPeriodKey, today: string = algiersDay()): { fro
  */
 export type CashSelection = { kind: 'day'; day: string } | { kind: 'period'; period: GdsPeriodKey } | { kind: 'range'; from: string; to: string };
 export function cashSelection(s: { day?: string; period?: string; from?: string; to?: string }, today: string = algiersDay()): CashSelection {
-  if (s.from || s.to) return { kind: 'range', from: s.from || s.to!, to: s.to || s.from! };
+  // full-test 15/11 SALES-CASH-15: a day after today (typed in the URL; the picker stops at today) is today
+  const notAfterToday = (d: string) => (d > today ? today : d);
+  if (s.from || s.to) return { kind: 'range', from: notAfterToday(s.from || s.to!), to: notAfterToday(s.to || s.from!) };
   if (s.period && s.period !== 'today' && (['7d', '30d', 'month', 'last_month', '90d', 'year'] as string[]).includes(s.period)) return { kind: 'period', period: s.period as GdsPeriodKey };
-  return { kind: 'day', day: s.day && /^\d{4}-\d{2}-\d{2}$/.test(s.day) ? s.day : today };
+  return { kind: 'day', day: s.day && /^\d{4}-\d{2}-\d{2}$/.test(s.day) ? notAfterToday(s.day) : today };
 }
 export const cashSelectionQuery = (sel: CashSelection): Record<string, string> => (sel.kind === 'day' ? { day: sel.day } : sel.kind === 'period' ? { period: sel.period } : { from: sel.from, to: sel.to });
 /** the single day of a selection (close / reopen act on one day), else null */

@@ -128,7 +128,9 @@ describe('courier accounts (DLV-03)', () => {
     const owner = await asOwner(app);
     const zr = await addCourier(owner, 'zrexpress');
     const op = await asOperator(app, owner.workspaceId);
-    await op.get('/delivery/couriers').expect(200);
+    // full-test ROLES-06: the operator reads names / capabilities only — no courier settings
+    const opRows = (await op.get('/delivery/couriers').expect(200)).body.data;
+    expect(opRows[0]).toMatchObject({ credentialHints: {}, sender: { name: null, phone: null, address: null, wilayaId: null }, lastTest: null, webhookUrl: null });
     await op.get('/delivery/couriers/providers').expect(200);
     await op.patch(`/delivery/couriers/${zr.id}`, { displayName: 'ZR' }).expect(403);
     await op.post(`/delivery/couriers/${zr.id}/test`).expect(403);

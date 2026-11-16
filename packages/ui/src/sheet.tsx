@@ -4,6 +4,7 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import * as React from 'react';
+import { useReturnFocus } from './overlays';
 import { Button, cn } from './primitives';
 
 export type SheetNav = { onPrev?: () => void; onNext?: () => void; position?: string; prevLabel: string; nextLabel: string };
@@ -53,11 +54,13 @@ export function SideSheet({
       nav.onNext();
     }
   };
+  const returnFocus = useReturnFocus(open);
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/40" />
         <DialogPrimitive.Content
+          onCloseAutoFocus={returnFocus}
           onKeyDown={onKeyDown}
           style={{ maxWidth: width }}
           className="fixed inset-y-0 end-0 z-50 flex w-full flex-col border-s border-line-edge bg-ink-surface shadow-2xl focus:outline-none"
@@ -75,8 +78,9 @@ export function SideSheet({
               )}
             </div>
             {headerAction}
-            <DialogPrimitive.Close aria-label={closeLabel} className="mt-0.5 text-text-muted hover:text-text-primary">
-              <X className="size-4" />
+            {/* MOBILE-A11Y-09: a 32 px target around the 16 px icon */}
+            <DialogPrimitive.Close aria-label={closeLabel} className="-me-2 -mt-1 flex size-8 shrink-0 items-center justify-center rounded-card text-text-muted hover:text-text-primary">
+              <X className="size-4" aria-hidden />
             </DialogPrimitive.Close>
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>

@@ -9,7 +9,7 @@ import { ApiError } from '@/lib/api';
 import { useT } from '@/lib/i18n';
 import { adminWrite, useAdminInvalidate } from '../api';
 import { AdminDialog, NO_ERRORS, ReasonField, reasonOk, toServerErrors, useOnOpen, type ServerErrors } from '../dialog-kit';
-import { useFormats, useLimit } from '../ui';
+import { useLimit } from '../ui';
 import { EMPTY_PLAN, FeatureChips, hasOneLimit, MoneyField, SignedField, toPlanInput, yearlyDiscount, type PlanDraft } from './form';
 
 const LIMIT_FIELDS = ['maxPages', 'maxAgents', 'maxProducts', 'maxConversationsPerMonth', 'maxMembers', 'monthlyCredits'] as const;
@@ -228,7 +228,6 @@ export function DeletePlanDialog({ plan, plans, open, onClose }: { plan: PlanAdm
 
 export function MigratePlanDialog({ plan, plans, open, onClose }: { plan: PlanAdminDto | null; plans: PlanAdminDto[]; open: boolean; onClose: () => void }) {
   const t = useT();
-  const f = useFormats();
   const invalidate = useAdminInvalidate();
   const [target, setTarget] = useState('');
   const [when, setWhen] = useState<'now' | 'next_period'>('next_period');
@@ -260,7 +259,7 @@ export function MigratePlanDialog({ plan, plans, open, onClose }: { plan: PlanAd
       testId="dlg-plan-migrate"
       size="sm"
       title={t('admin.plans.migrate.title')}
-      context={t('admin.plans.migrate.context', { name: plan.name, count: f.num(plan.subscribers) })}
+      context={t('admin.plans.migrate.context', { name: plan.name, count: plan.subscribers })}
       submitLabel={t('admin.plans.migrate.submit')}
       disabled={!target || !reasonOk(reason)}
       pending={m.isPending}

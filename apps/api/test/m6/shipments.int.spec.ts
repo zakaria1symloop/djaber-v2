@@ -469,16 +469,18 @@ describe('UX-064 — a failed send is handled once the order is delivered / canc
     expect(overview.failures.map((r: any) => r.id)).not.toContain(order.id);
     const [row] = (await owner.get(`/shipments?ids=${order.id}`).expect(200)).body.data;
     expect(row.shipment).toMatchObject({ id: parcel.id, status: 'failed', failureHandled: 'delivered' });
-    for (const key of ['send_courier', 'ship_manual', 'retry', 'change_courier']) expect(action(row.actions, key)).toMatchObject({ enabled: false, reasonCode: 'DELIVERY_ORDER_DELIVERED' });
+    // merge of UX-060 + UX-064 (assumptions-log 2026-11-12): no send action is offered on a delivered order — left out of
+    // `actions`, not greyed (`DELIVERY_ORDER_DELIVERED` is a NOT_OFFERED reason); the API still refuses them, below
+    for (const key of ['send_courier', 'ship_manual', 'retry', 'change_courier']) expect(action(row.actions, key)).toBeUndefined();
     expect(row.actions.some((a: any) => a.primary && ['retry', 'change_courier', 'send_courier'].includes(a.key))).toBe(false);
 
     // the order page agrees (same presenters, same shared rule)
     const o = await reloadOrder(owner, order.id);
     expect(o.status).toBe('delivered');
-    for (const key of ['send_courier', 'ship_manual']) expect(action(o.actions, key)).toMatchObject({ enabled: false, reasonCode: 'DELIVERY_ORDER_DELIVERED' });
+    for (const key of ['send_courier', 'ship_manual']) expect(action(o.actions, key)).toBeUndefined();
     const view = (await owner.get(`/shipments/${parcel.id}`).expect(200)).body.data;
     expect(view.failureHandled).toBe('delivered');
-    for (const key of ['retry', 'change_courier']) expect(action(view.actions, key)).toMatchObject({ enabled: false, reasonCode: 'DELIVERY_ORDER_DELIVERED' });
+    for (const key of ['retry', 'change_courier']) expect(action(view.actions, key)).toBeUndefined();
 
     // the server refuses every send with the readable code (never « Transition delivered → shipped »), nothing created
     const shipments = await db.shipment.count({ where: { orderId: order.id } });

@@ -74,8 +74,37 @@ export function useClientActions(o: { openSheet: (id: string) => void; afterDele
       },
     });
 
+  // full-test CLIENTS-03: an archived card comes back (its orders and risk history with it)
+  const restore = (c: Row) =>
+    confirm.ask({
+      title: t('clients.restore.title', { name: c.name }),
+      description: t('clients.restore.description'),
+      confirmLabel: t('clients.action.restore'),
+      run: async () => {
+        try {
+          await clientsApi.restore(c.id);
+          await refresh({ clientId: c.id });
+          toast(t('clients.toast.restored', { name: c.name }));
+        } catch (e) {
+          fail(e);
+        }
+      },
+    });
+  // full-test CLIENTS-14: a list row has no conversation list — its first conversation is read from the card
+  const openFirstConversation = async (c: Row) => {
+    try {
+      const full = isFull(c) ? c : await clientsApi.client(c.id);
+      const id = full.conversations[0]?.id;
+      if (id) router.push(`/inbox/${id}`);
+      else toast({ tone: 'warning', message: t('clients.toast.noConversation') });
+    } catch (e) {
+      fail(e);
+    }
+  };
+
   const menu = (c: Row, opts: { sheet?: boolean } = {}): MenuAction[] => {
     const conversationId = isFull(c) ? (c.conversations[0]?.id ?? null) : null;
+    const hasConversation = !!conversationId || (!isFull(c) && c.actions.some((a) => a.key === 'open_conversation' && a.enabled));
     return clientMenuActions(
       c,
       {
@@ -83,7 +112,7 @@ export function useClientActions(o: { openSheet: (id: string) => void; afterDele
         edit: () => void edit(c),
         complete: () => void edit(c),
         merge: () => setMerge(c),
-        openConversation: conversationId ? () => router.push(`/inbox/${conversationId}`) : undefined,
+        openConversation: conversationId ? () => router.push(`/inbox/${conversationId}`) : hasConversation ? () => void openFirstConversation(c) : undefined,
         newOrder: () => router.push(`/orders/new?clientId=${c.id}`),
         orders: () => router.push(`/orders?clientId=${c.id}`),
         tags: () => setTags(c),
@@ -92,6 +121,7 @@ export function useClientActions(o: { openSheet: (id: string) => void; afterDele
         block: () => setBlockFor(c),
         unblock: () => unblock(c),
         delete: () => setDel(c),
+        restore: () => restore(c),
       },
       perms,
       t,
@@ -115,7 +145,7 @@ export function useClientActions(o: { openSheet: (id: string) => void; afterDele
         }}
       />
       <DeleteClientDialog
-        client={del ? { id: del.id, name: del.name, orderCount: del.orderCount, blocked: del.blocked, conversations: isFull(del) ? del.metrics.conversations : undefined } : null}
+        client={del ? { id: del.id, name: del.name, orderCount: del.orderCount, blocked: del.blocked, conversations: isFull(del) ? del.metrics.conversations : undefined, archive: del.actions.some((a) => a.key === 'archive') } : null}
         onClose={() => setDel(null)}
         onDone={() => {
           const id = del?.id;
@@ -143,7 +173,8 @@ export function useClientActions(o: { openSheet: (id: string) => void; afterDele
       {confirm.element}
       <TagsDialog
         ids={tags ? [tags.id] : null}
-        known={[...new Set([...(o.knownTags ?? []), ...(tags?.tags ?? [])])]}
+        known={[...new Set([...(tags?.tags ?? []), ...(o.knownTags ?? [])])]}
+        current={tags?.tags ?? []}
         onClose={() => setTags(null)}
         onDone={(r) => {
           setTags(null);

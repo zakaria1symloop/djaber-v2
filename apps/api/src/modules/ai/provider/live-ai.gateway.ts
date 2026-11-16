@@ -157,6 +157,9 @@ const MODEL_LISTS: Record<AiProviderName, { url: string; headers: (key: string) 
   google: { url: 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', headers: (k) => ({ 'x-goog-api-key': k }), ids: (j) => idsOf((j as Row | null)?.models, 'name').map((n) => n.replace(/^models\//, '')) },
 };
 
+/** Below ~1 000 tokens (Anthropic's minimum cacheable prompt) the cache marker is not sent. */
+const CACHE_MIN_CHARS = 3_500;
+
 export class LiveAiGateway implements AiGateway {
   readonly driver = 'live' as const;
   constructor(private readonly options: LiveAiGatewayOptions = {}) {}
@@ -211,11 +214,19 @@ export class LiveAiGateway implements AiGateway {
     const signal = AbortSignal.timeout(req.timeoutMs);
     try {
       const tools = toTools(req.tools);
+      // full-test 15/11 proposal 13 (18 255 input tokens for one turn of a 10-product shop): Anthropic caches the stable
+      // start of the system prompt (identity → catalogue, ≥ ~1 000 tokens) — the next turns of the conversation re-read it
+      // from the cache; the rest of the system prompt (order state, language guess…) follows as a second block
+      const prefix = req.systemCachePrefix;
+      const cached = provider === 'anthropic' && !!prefix && prefix.length >= CACHE_MIN_CHARS && req.system.startsWith(prefix);
+      const systemMessages: CoreMessage[] = cached
+        ? [{ role: 'system', content: prefix!, providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } } }, ...(req.system.slice(prefix!.length).trim() ? [{ role: 'system' as const, content: req.system.slice(prefix!.length).trim() }] : [])]
+        : [];
       const run = (dropTemperature: boolean) =>
         generateText({
           model: this.languageModel(req.model, apiKey, dropTemperature),
-          system: req.system,
-          messages: toMessages(tools ? req.messages : flattenTools(req.messages)),
+          ...(cached ? {} : { system: req.system }),
+          messages: [...systemMessages, ...toMessages(tools ? req.messages : flattenTools(req.messages))],
           ...(tools ? { tools } : {}),
           ...(req.temperature !== undefined && !dropTemperature ? { temperature: req.temperature } : {}),
           ...(req.maxTokens !== undefined ? { maxTokens: req.maxTokens } : {}),

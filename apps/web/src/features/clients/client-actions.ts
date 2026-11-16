@@ -22,10 +22,18 @@ export type ClientHandlers = {
   block?: () => void;
   unblock?: () => void;
   delete: () => void;
+  /** full-test CLIENTS-03: an archived card (server descriptor `restore`) */
+  restore?: () => void;
 };
 export type ClientPerms = { write: boolean; remove: boolean; orders: boolean; ordersWrite: boolean; inbox: boolean };
 
-export function clientMenuActions(c: Pick<ClientListItem, 'actions' | 'riskLevel' | 'isPlaceholder' | 'orderCount' | 'name'> & { conversationId?: string | null }, h: ClientHandlers, p: ClientPerms, t: TFunction, o: { sheet?: boolean } = {}): MenuAction[] {
+export function clientMenuActions(c: Pick<ClientListItem, 'actions' | 'riskLevel' | 'isPlaceholder' | 'orderCount' | 'name'> & { conversationId?: string | null; archived?: boolean }, h: ClientHandlers, p: ClientPerms, t: TFunction, o: { sheet?: boolean } = {}): MenuAction[] {
+  // full-test CLIENTS-03: an archived card offers its sheet and « Restaurer » only (no new order, merge, delete…)
+  if (c.archived) {
+    return toMenuActions(c.actions, { [K.open]: { label: t('clients.action.open'), onSelect: h.open, hint: t('clients.hint.sheet'), hidden: o.sheet }, [K.restore]: { label: t('clients.action.restore'), onSelect: h.restore ?? (() => undefined), hint: t('clients.hint.confirm'), hidden: !h.restore } }, t);
+  }
+  // the server descriptor says whether the client is deleted or archived (any order, cancelled included — the DELETE rule)
+  const archive = c.actions?.some((a) => a.key === K.archive) ?? c.orderCount > 0;
   return toMenuActions(
     c.actions,
     {
@@ -36,12 +44,12 @@ export function clientMenuActions(c: Pick<ClientListItem, 'actions' | 'riskLevel
       [K.openConversation]: { label: t('clients.action.openConversation'), onSelect: h.openConversation ?? (() => undefined), hint: t('clients.hint.inbox'), hidden: !p.inbox || !h.openConversation, separated: true, local: true },
       [K.newOrder]: { label: t('clients.action.newOrder'), onSelect: h.newOrder, hint: t('clients.hint.newOrder'), hidden: !p.ordersWrite, local: true },
       [K.orders]: { label: t('clients.action.orders', { count: c.orderCount }), onSelect: h.orders, hint: t('clients.hint.orders'), hidden: !p.orders, local: true },
-      [K.tags]: { label: t('clients.action.tags'), onSelect: h.tags, hint: t('clients.hint.tags'), hidden: !p.write, separated: true, local: true },
+      [K.tags]: { label: t('clients.action.tags'), onSelect: h.tags, hint: t('clients.hint.dialog'), hidden: !p.write, separated: true, local: true },
       [K.export]: { label: t('clients.action.export'), onSelect: h.export, hint: t('clients.hint.export'), hidden: !p.remove, local: true },
       [c.riskLevel === 'high' ? K.unmarkRisk : K.markRisk]: { label: c.riskLevel === 'high' ? t('clients.action.markReliable') : t('clients.action.markRisk'), onSelect: h.risk, hidden: !p.write, local: true },
       [K.block]: { label: t('clients.action.block'), onSelect: h.block ?? (() => undefined), hint: t('clients.hint.confirm'), destructive: true, separated: true, hidden: !h.block },
       [K.unblock]: { label: t('clients.action.unblock'), onSelect: h.unblock ?? (() => undefined), hint: t('clients.hint.confirm'), separated: true, hidden: !h.unblock },
-      [c.orderCount > 0 ? K.archive : K.delete]: { label: t('clients.action.delete'), onSelect: h.delete, hint: t('clients.hint.confirm'), destructive: true, separated: true, hidden: !p.remove, local: true },
+      [archive ? K.archive : K.delete]: { label: archive ? t('clients.action.archive') : t('clients.action.deleteClient'), onSelect: h.delete, hint: t('clients.hint.confirm'), destructive: true, separated: true, hidden: !p.remove, local: true },
     },
     t,
   );

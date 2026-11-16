@@ -120,19 +120,35 @@ export function Field({
   children: React.ReactNode;
   className?: string;
 }) {
+  // full-test 15/11 MOBILE-A11Y-11 (WCAG 1.3.1 / 3.3.1): the control named by `htmlFor` is tied to its message
+  // (`aria-describedby`) and says it is required (`aria-required`) — the asterisk was the only sign
+  const msgId = htmlFor ? `${htmlFor}-msg` : undefined;
+  const message = error || hint;
+  React.useEffect(() => {
+    if (!htmlFor || !msgId) return;
+    const el = document.getElementById(htmlFor);
+    if (!el) return;
+    const ids = (el.getAttribute('aria-describedby') ?? '').split(/\s+/).filter((x) => x && x !== msgId);
+    if (message) ids.push(msgId);
+    if (ids.length) el.setAttribute('aria-describedby', ids.join(' '));
+    else el.removeAttribute('aria-describedby');
+    if (required) el.setAttribute('aria-required', 'true');
+  }, [htmlFor, msgId, message, required]);
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
       <Label htmlFor={htmlFor}>
         {label}
-        {required ? <span className="text-accent-alert"> *</span> : null}
+        {required ? <span aria-hidden className="text-accent-alert"> *</span> : null}
       </Label>
       {children}
       {error ? (
-        <p role="alert" className="text-[12px] text-accent-alert">
+        <p id={msgId} role="alert" className="text-[12px] text-accent-alert">
           {error}
         </p>
       ) : hint ? (
-        <p className="text-[12px] text-text-muted">{hint}</p>
+        <p id={msgId} className="text-[12px] text-text-muted">
+          {hint}
+        </p>
       ) : null}
     </div>
   );

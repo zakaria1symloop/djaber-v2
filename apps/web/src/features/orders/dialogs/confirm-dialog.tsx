@@ -40,7 +40,7 @@ function ContactCard({ order }: { order: Order }) {
       <div className="text-end">
         <Ltr className="ts-numeral-l">{formatMoney(order.total)}</Ltr>
         <div className="ts-label-micro text-text-muted">
-          {[t('orders.confirm.items', { count: order.itemCount }), order.deliveryFee === 0 ? t('orders.confirm.freeDelivery') : t('orders.confirm.delivery', { amount: formatMoney(order.deliveryFee) }), t(`enum.Order.paymentMethod.${order.paymentMethod}`)].join(' · ')}
+          {[t('orders.confirm.items', { count: order.itemCount }), !order.address?.wilayaId ? t('orders.confirm.feeUnknown') : order.deliveryFee === 0 ? t('orders.confirm.freeDelivery') : t('orders.confirm.delivery', { amount: formatMoney(order.deliveryFee) }), t(`enum.Order.paymentMethod.${order.paymentMethod}`)].join(' · ')}
         </div>
         {misses ? <div className="ts-label-micro text-accent-starred">{t('orders.confirm.previousMisses', { count: misses })}</div> : null}
       </div>

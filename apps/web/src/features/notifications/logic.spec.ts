@@ -68,7 +68,7 @@ describe('families (filter chips of NTF-01)', () => {
   });
 
   it('the 11 chips of the frame, in order', () => {
-    expect(FAMILY_CHIPS.map((c) => c.group)).toEqual(['orders', 'queue', 'ai', 'stock', 'parcels', 'payments', 'pages', 'credits_plan', 'members', 'integrations', 'jobs']);
+    expect(FAMILY_CHIPS.map((c) => c.group)).toEqual(['orders', 'queue', 'ai', 'stock', 'parcels', 'payments', 'pages', 'credits_plan', 'members', 'integrations', 'jobs', 'moderation']);
   });
 
   it('family → types, in enum order', () => {

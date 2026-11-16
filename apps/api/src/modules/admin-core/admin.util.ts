@@ -1,6 +1,6 @@
 // Shared helpers of the platform admin core (M10, api-a): actor, reason rule, masking, small presenters.
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-import { ADMIN_REASON_MIN, type AdminUserRef } from '@djaber/shared';
+import { ADMIN_REASON_MIN, type ActionDescriptor, type AdminUserRef } from '@djaber/shared';
 import { TenantContext } from '@djaber/db';
 import { AppException, notFound } from '../../core/errors/app.exception';
 import { viewerLocale } from '../../core/i18n/viewer-locale';
@@ -20,6 +20,15 @@ export const requireReason = (r: string | null | undefined, field = 'reason'): s
   if (v.length < ADMIN_REASON_MIN) throw new AppException('ADMIN_REASON_REQUIRED', {}, { [field]: 'validation.length' });
   return v;
 };
+
+/**
+ * 12 §16 « Disabled reasons » (UX-060, full-test 15/11 ADMIN-05): an action the record's state does not allow (resend the
+ * verification of a verified e-mail, publish a published entry, resolve a request that is not blocked…) is not offered at
+ * all. The builders mark it with the internal `STATE_REFUSED` reason and this drops it, so a menu never shows the generic
+ * « Modifié entre-temps, rechargez. » as a reason; greyed items keep a reason the admin can act on (permission, a named blocker).
+ */
+export const STATE_REFUSED = 'CONFLICT';
+export const offered = <T extends Pick<ActionDescriptor, 'enabled' | 'reasonCode'>>(list: T[]): T[] => list.filter((d) => d.enabled || d.reasonCode !== STATE_REFUSED);
 
 export const assertUuid = (id: string) => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw notFound();

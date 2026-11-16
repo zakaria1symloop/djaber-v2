@@ -1,5 +1,5 @@
 // Integer DZD helpers for forms (CLAUDE.md rule 11: integer DZD, Latin digits, `12 500 DA`).
-import { formatNumber } from '@djaber/shared';
+import { formatMoney, formatNumber } from '@djaber/shared';
 
 const ARABIC_ZERO = 0x0660;
 
@@ -23,12 +23,24 @@ export const moneyDigits = (n: number | null | undefined): string => (n === null
 /** Number sent to the API from the digits of an input (`''` → null). */
 export const digitsToInt = (digits: string): number | null => (digits === '' ? null : Number(digits));
 
-/** Margin in percent of the selling price, half-up, null when it cannot be computed (04 §2: (price − cost) / price). */
+/**
+ * Margin in percent of the selling price, one decimal half-up (the server's `marginPct`, so the quick-edit sheet, the
+ * list and the product page print the same « 55,6 % » — full-test 15/11 PRODUCTS-07), null when it cannot be computed
+ * (04 §2: (price − cost) / price).
+ */
 export function marginPct(price: number | null, cost: number | null): number | null {
   if (price === null || cost === null || price <= 0) return null;
-  const x = ((price - cost) * 100) / price;
-  return x >= 0 ? Math.floor(x + 0.5) : -Math.floor(-x + 0.5);
+  const x = ((price - cost) * 1000) / price;
+  return (x >= 0 ? Math.floor(x + 0.5) : -Math.floor(-x + 0.5)) / 10;
 }
+
+/** `−8 000` / `12 500` — a negative number with the true minus « − », never the hyphen (full-test 15/11 STOCK-14). */
+export const signedNumber = (n: number): string => `${n < 0 ? '−' : ''}${formatNumber(Math.abs(n))}`;
+/** `−8 000 DA` / `12 500 DA` */
+export const signedMoney = (n: number): string => `${n < 0 ? '−' : ''}${formatMoney(Math.abs(n))}`;
+
+/** `55,6 %` / `−6,1 %` (true minus, decimal comma). */
+export const pctText = (value: number): string => `${value < 0 ? '−' : ''}${String(Math.abs(Math.round(value * 10) / 10)).replace('.', ',')} %`;
 
 /** `1 240 000` → `1,24 M` (fr / ar) or `1.24 M` (en) for KPI tiles; under one million the plain grouped number. */
 export function compactAmount(n: number, locale: string): string {

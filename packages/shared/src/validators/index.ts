@@ -42,6 +42,8 @@ export const email = z
   .string()
   .trim()
   .toLowerCase()
+  // full-test 15/11 PUBLIC-15: an empty e-mail is « Champ requis », like the other required fields of the same forms
+  .min(1, 'validation.required')
   .max(254, 'validation.email')
   .regex(/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/, 'validation.email');
 export const sellingPrice = z.coerce.number().int('validation.price').gt(0, 'validation.price');

@@ -97,6 +97,8 @@ describe('04 §3 effects plan of every allowed transition', () => {
   it('return without restock writes the loss trail instead of the return movement (AT-ORD-28)', () => {
     expect(transitionPlan('shipped', 'returned', { restoreStock: false, paymentStatus: 'unpaid', hasActiveShipment: true }).stock).toBe('loss_trail');
     expect(transitionPlan('shipped', 'returned', { restoreStock: true, paymentStatus: 'unpaid', hasActiveShipment: true }).stock).toBe('restore_return');
+    // full-test ORDERS-16: closing the order ends a pending callback
+    expect(transitionPlan('delivered', 'returned', { restoreStock: true, paymentStatus: 'paid', hasActiveShipment: false }).clearCallback).toBe(true);
   });
 
   it('customer texts and webhooks', () => {

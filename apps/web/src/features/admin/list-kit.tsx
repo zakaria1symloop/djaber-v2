@@ -109,7 +109,7 @@ export function AdminFilterBar({ list, search, quick, panel = [], count, end }: 
       </div>
       <AdminActiveChips list={list} filters={[...quick, ...panel]} />
       {panel.length ? (
-        <FilterPanel open={open} onClose={() => setOpen(false)} title={t('action.filters')} resetLabel={t('action.clearAll')} onReset={list.clear} applyLabel={t('action.apply')} closeLabel={t('action.close')}>
+        <FilterPanel open={open} onClose={() => setOpen(false)} title={t('action.filters')} resetLabel={t('action.clearAll')} onReset={() => clearFilters(list)} applyLabel={t('action.apply')} closeLabel={t('action.close')}>
           {panel.map((f) => (
             <FilterGroup key={f.key} label={f.label}>
               <FilterBody f={f} list={list} />
@@ -121,8 +121,11 @@ export function AdminFilterBar({ list, search, quick, panel = [], count, end }: 
   );
 }
 
-export function AdminActiveChips({ list, filters }: { list: ListController; filters: AdminFilter[] }) {
-  const t = useT();
+/** Clears the search and every filter but keeps the tab — an admin tab is a record kind, not a filter (ADMIN-13). */
+const clearFilters = (list: ListController) => list.set({ q: '', filters: Object.fromEntries(Object.keys(list.state.filters).map((k) => [k, null])) });
+
+/** Active filters as chips (search first); `AdminActiveChips` shows them, the filtered-empty state names them (ADMIN-16). */
+function activeChips(list: ListController, filters: AdminFilter[]): { key: string; label: string; onRemove: () => void }[] {
   const s = list.state;
   const items: { key: string; label: string; onRemove: () => void }[] = [];
   if (s.q.trim()) items.push({ key: 'q', label: `« ${s.q.trim()} »`, onRemove: () => list.set({ q: '' }) });
@@ -144,11 +147,22 @@ export function AdminActiveChips({ list, filters }: { list: ListController; filt
       if (a || b) items.push({ key: f.key, label: `${f.label} : ${a || '…'} → ${b || '…'}`, onRemove: () => list.setFilters({ [f.from]: null, [f.to]: null }) });
     } else if (s.filters[f.key] === true) items.push({ key: f.key, label: f.label, onRemove: () => list.setFilter(f.key, null) });
   }
-  if (!items.length) return null;
-  return <ActiveFilters label={t('list.activeFilters')} items={items} clearLabel={t('action.clearAll')} onClear={items.length > 1 ? list.clear : undefined} removeLabel={(label) => t('list.removeFilter', { label })} />;
+  return items;
 }
 
-/** The six L6 states around a DataTable. `empty` = unfiltered empty copy (+ optional CTA). */
+export function AdminActiveChips({ list, filters }: { list: ListController; filters: AdminFilter[] }) {
+  const t = useT();
+  const items = activeChips(list, filters);
+  if (!items.length) return null;
+  return <ActiveFilters label={t('list.activeFilters')} items={items} clearLabel={t('action.clearAll')} onClear={items.length > 1 ? () => clearFilters(list) : undefined} removeLabel={(label) => t('list.removeFilter', { label })} />;
+}
+
+/**
+ * The six L6 states around a DataTable. `empty` = unfiltered empty copy (+ optional CTA). A tab of an admin list is the
+ * kind of record shown (CMS types, Abonnements / Factures / Paiements…), not a filter: an empty tab is the « Vide » state
+ * with its CTA (full-test 15/11 ADMIN-13). `filters` (the bar's dropdowns) let the filtered-empty state name what is
+ * active — « Aucun résultat pour « zzzz · Statut : Suspendu » » (ADMIN-16); « Effacer les filtres » keeps the tab.
+ */
 export function AdminListBody<Row>({
   query,
   list,
@@ -161,6 +175,7 @@ export function AdminListBody<Row>({
   onRowClick,
   card,
   testId,
+  filters,
 }: {
   query: UseQueryResult<AdminList<Row, unknown>>;
   list: ListController;
@@ -174,6 +189,7 @@ export function AdminListBody<Row>({
   onRowClick?: (r: Row) => void;
   card?: (r: Row) => ReactNode;
   testId?: string;
+  filters?: AdminFilter[];
 }) {
   const t = useT();
   const locale = useLocaleCode() as AppLocale;
@@ -183,15 +199,17 @@ export function AdminListBody<Row>({
   if (query.isError && !query.data) return <AdminQueryError error={query.error} onRetry={() => void query.refetch()} />;
   const rows = query.data?.rows ?? [];
   const total = query.data?.total ?? 0;
+  // the tab is not a filter here (ADMIN-13); a screen may narrow `list.filtered` further (support: 2-letter search)
+  const filtered = list.filtered && (s.q.trim().length > 0 || Object.keys(s.filters).length > 0);
   return (
     <div className="flex flex-col gap-3" data-testid={testId}>
       {!online && query.data ? <OfflineBanner since={formatDateTime(new Date(query.dataUpdatedAt).toISOString(), locale)} onRetry={() => void query.refetch()} /> : null}
-      {rows.length === 0 && !list.filtered ? (
+      {rows.length === 0 && !filtered ? (
         <Card className="py-6" data-testid="list-empty">
           <EmptyState title={empty.title} description={empty.description} action={empty.action ? { label: empty.action.label, onClick: empty.action.onClick, variant: 'primary' } : undefined} />
         </Card>
       ) : rows.length === 0 ? (
-        <ListFilteredEmpty entity={entity} filters={t('admin.list.currentFilters')} onClear={list.clear} />
+        <ListFilteredEmpty entity={entity} filters={[s.q.trim(), ...activeChips(list, filters ?? []).filter((c) => c.key !== 'q').map((c) => c.label)].filter(Boolean).join(' · ')} onClear={() => clearFilters(list)} />
       ) : (
         <DataTable<Row>
           label={label}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { HelpArticle } from './api';
-import { allowedCategories, articleBlocks, buildContext, canRate, canReply, clientLabel, contextKey, contextPayload, countByCategory, messageTooShort, safeFrom, suggestGuide, ticketPill } from './logic';
+import { allowedCategories, articleBlocks, buildContext, canRate, canReply, clientLabel, contextKey, contextPayload, countByCategory, labelContextLines, messageTooShort, safeFrom, suggestGuide, ticketPill } from './logic';
 
 const art = (key: string, title: string, category: string | null, excerpt = ''): HelpArticle => ({ key, title, category, excerpt, locale: 'fr', requestedLocale: 'fr', fallback: false, version: 1, publishedAt: null, contexts: [] });
 
@@ -25,7 +25,9 @@ describe('help center rules (HELP-01…04)', () => {
     expect(canRate({ status: 'resolved', satisfaction: null })).toBe(true);
     expect(canRate({ status: 'resolved', satisfaction: 4 })).toBe(false);
     expect(canRate({ status: 'open', satisfaction: null })).toBe(false);
-    expect(canRate({ status: 'closed', satisfaction: null })).toBe(false);
+    // full-test 15/11 HELP-09: asked at close too, once
+    expect(canRate({ status: 'closed', satisfaction: null })).toBe(true);
+    expect(canRate({ status: 'closed', satisfaction: 3 })).toBe(false);
   });
 
   it('message of at least 20 characters', () => {
@@ -77,5 +79,14 @@ describe('help center rules (HELP-01…04)', () => {
       { kind: 'p', text: '<b>gras</b>' },
     ]);
     expect(articleBlocks(null)).toEqual([]);
+  });
+});
+
+describe('auto-context labels (full-test 15/11 HELP-07)', () => {
+  it('reads the form labels instead of the raw keys, other lines unchanged', () => {
+    const NL = String.fromCharCode(10);
+    const label = (k: string) => ({ workspace: 'Espace', client: 'Navigateur', page: 'Page' } as Record<string, string>)[k] ?? k;
+    const body = ['workspace: Boutique', 'client: web Chrome 156', 'page: /orders', 'note: x'].join(NL);
+    expect(labelContextLines(body, label).split(NL)).toEqual(['Espace : Boutique', 'Navigateur : web Chrome 156', 'Page : /orders', 'note: x']);
   });
 });

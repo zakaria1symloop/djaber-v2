@@ -207,8 +207,10 @@ function RecentMovement({ movement: m, locale }: { movement: StockMovement; loca
   const tone = quantityTone(qty);
   const when = movementTimeLabel(m.createdAt);
   const kind = referenceKind(m.reference?.type);
-  const reference = !m.reference ? null : kind === 'number' ? `#${m.reference.label}` : kind === 'name' ? m.reference.label : null;
-  const line = [m.reason ? reason(m.reason) : null, reference, m.note, actorName(m.actor) ?? t('movements.system')].filter(Boolean);
+  const reference = m.reversalOf ? t('movements.reversalOf', { date: formatDate(m.reversalOf.createdAt, locale) }) : !m.reference ? null : kind === 'number' ? `#${m.reference.label}` : kind === 'name' ? m.reference.label : null;
+  // full-test 15/11 STOCK-14: a note that only repeats the reference (« CMD-1024 ») is not said twice
+  const note = m.note && m.reference?.label && m.note.replace(/^#/, '').trim() === m.reference.label ? null : m.note;
+  const line = [m.reason ? reason(m.reason) : null, reference, note, actorName(m.actor) ?? t('movements.system')].filter((x): x is string => !!x);
   return (
     <li className="flex items-center gap-3 px-4 py-3" data-movement={m.id}>
       <span className="w-24 shrink-0">
@@ -219,7 +221,15 @@ function RecentMovement({ movement: m, locale }: { movement: StockMovement; loca
           {m.product.name}
           {m.variant ? ` · ${m.variant.name}` : ''}
         </Link>
-        <div className="ts-label-meta mt-0.5 truncate text-text-muted">{line.join(' · ')}</div>
+        <div className="ts-label-meta mt-0.5 truncate text-text-muted">
+          {/* each part isolated: in Arabic « #ACH-1011 » keeps its « # » and a name its full stop (STOCK-07) */}
+          {line.map((part, i) => (
+            <span key={i}>
+              {i ? ' · ' : null}
+              <bdi>{part}</bdi>
+            </span>
+          ))}
+        </div>
       </div>
       <Ltr className={cn('ts-numeral-m tabular-nums', tone === 'in' && 'text-accent-money', tone === 'out' && 'text-accent-alert')}>{m.type === 'inventory' && qty === 0 ? `= ${formatNumber(m.after)}` : formatSigned(qty)}</Ltr>
       <span className="ts-label-meta w-14 shrink-0 text-end uppercase text-text-muted" title={formatDate(m.createdAt, locale)}>
@@ -233,7 +243,9 @@ function RecentMovement({ movement: m, locale }: { movement: StockMovement; loca
 function PurchasingBlock({ p }: { p: NonNullable<import('../contracts').StockOverview['purchasing']> }) {
   const t = useT();
   const rows: { key: string; label: string; value: ReactNode; href: string }[] = [
-    { key: 'pending', label: t('stock.dashboard.purchasing.pending'), value: <Ltr className="tabular-nums">{`${formatNumber(p.pendingReceipt)} · ${formatNumber(p.dueToSuppliers)} DA`}</Ltr>, href: '/purchases?status=pending,partial' },
+    // full-test 15/11 STOCK-05: the count and the value of the same purchases (the list it opens); what is owed is its own row
+    { key: 'pending', label: t('stock.dashboard.purchasing.pending'), value: <Ltr className="tabular-nums">{`${formatNumber(p.pendingReceipt)} · ${formatNumber(p.pendingValue)} DA`}</Ltr>, href: '/purchases?status=pending,partial' },
+    { key: 'due', label: t('stock.dashboard.purchasing.due'), value: <Ltr className="tabular-nums">{`${formatNumber(p.dueToSuppliers)} DA`}</Ltr>, href: '/suppliers?hasBalance=1' },
     { key: 'received', label: t('stock.dashboard.purchasing.purchased'), value: <Ltr className="tabular-nums">{`${formatNumber(p.purchased30d)} DA`}</Ltr>, href: '/purchases?period=30d' },
     { key: 'suppliers', label: t('stock.dashboard.purchasing.suppliers'), value: <Ltr className="tabular-nums">{formatNumber(p.activeSuppliers)}</Ltr>, href: '/suppliers' },
   ];

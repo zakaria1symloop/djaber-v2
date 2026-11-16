@@ -38,7 +38,7 @@ import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
 import { guardFactsOf } from './reply-guard';
 import { AiProviderError } from './provider/ai.gateway';
 import { canonicalTool } from './tools/tool-registry';
-import { orderHistoryOf } from './tools/order-confirmation';
+import { nextChosen, orderHistoryOf, placedThisTurn } from './tools/order-confirmation';
 import { TurnContextService } from './turn-context.service';
 import { VisionService, visionNoteText, type VisionNote } from './vision.service';
 
@@ -276,7 +276,7 @@ export class ReplyProcessor implements OnModuleInit {
     const noteLines = batch.images.map((img) => `[image]\n${visionNoteText(notes[`${img.messageId}:${img.index}`] ?? { kind: 'unavailable' })}`);
     const batchText = [batch.text, ...noteLines].filter(Boolean).join('\n');
     const matchedIds = Object.values(notes).flatMap((n) => (n.kind === 'match' ? [n.productId] : []));
-    const turnCtx = await this.context.load(agent, { text: batch.plain, lastProductIds: [...matchedIds, ...(ctx.lastProductIds ?? [])], lang, unclearStreak: ctx.unclearStreak ?? 0, clientId: conv.clientId, customer: ctx.customer });
+    const turnCtx = await this.context.load(agent, { text: batch.plain, lastProductIds: [...matchedIds, ...(ctx.lastProductIds ?? [])], lang, unclearStreak: ctx.unclearStreak ?? 0, clientId: conv.clientId, customer: ctx.customer, chosen: ctx.chosen ?? null });
     const history = await this.history(conv, batch.messages[0]!.createdAt);
     const lead = history.resumed ? RESUMED_NOTE : history.newVisit ? NEW_VISIT_NOTE : null;
     const prompt = PromptBuilder.build(turnCtx.prompt, history.messages, lead ? `${lead}\n${batchText}` : batchText, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });
@@ -297,7 +297,7 @@ export class ReplyProcessor implements OnModuleInit {
       runId: run.id,
       prompt,
       // retest 12/11: a handoff is checked against the customer's words of this batch (handoff-judge)
-      toolCtx: { workspaceId: conv.workspaceId, agent, conversationId: conv.id, clientId: conv.clientId, channelId: conv.channelId, runId: run.id, dryRun: false, customerText: batch.plain, unclearStreak: ctx.unclearStreak ?? 0, orderHistory, customerHistory },
+      toolCtx: { workspaceId: conv.workspaceId, agent, conversationId: conv.id, clientId: conv.clientId, channelId: conv.channelId, runId: run.id, dryRun: false, customerText: batch.plain, unclearStreak: ctx.unclearStreak ?? 0, orderHistory, customerHistory, ordering: !!ctx.chosen?.length },
       temperature: turnCtx.temperature,
       maxTokens: turnCtx.maxTokens,
       deadline,
@@ -432,6 +432,8 @@ export class ReplyProcessor implements OnModuleInit {
         aiUnavailable: null,
         // A4: what the customer gave is kept, a later turn only adds or corrects (an empty value never erases)
         customer: mergeCustomer(contextOf(latest).customer, out.customer),
+        // full-test 15/11 AI-CHAT-05: the chosen product(s) stay until an order is placed (CURRENT ORDER)
+        chosen: nextChosen(contextOf(latest).chosen, out.cart, placedThisTurn(turn.tools.map((t) => ({ name: canonicalTool(t.name), result: t.result })))),
       };
       await tx.conversation.update({ where: { id: conv.id }, data: { lastAiIntent: intentOf(out.intent), agentId: agent.id, context: context as Prisma.InputJsonValue } });
       await tx.agent.update({ where: { id: agent.id }, data: { lastActiveAt: new Date() } });

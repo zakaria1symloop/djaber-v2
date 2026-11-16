@@ -16,7 +16,13 @@ import { customInstructionsSection, faqSection, policiesSection } from './sectio
 import { deliverySection, orderRulesSection } from './sections/orders';
 
 export type HistoryMessage = { author: 'customer' | 'ai' | 'human'; text: string; humanName?: string | null };
-export type BuiltPrompt = { system: string; messages: AiMessage[]; sections: PromptSection[]; estimatedTokens: number; dropped: { history: number; faqChars: number; descriptions: boolean } };
+export type BuiltPrompt = { system: string; messages: AiMessage[]; sections: PromptSection[]; estimatedTokens: number; dropped: { history: number; faqChars: number; descriptions: boolean }; /** full-test 15/11 proposal 13: the cacheable start of `system` (sections up to the catalogue) */ cachePrefix: string };
+/** Sections that stay the same from one turn to the next (the provider caches them): everything up to the catalogue. */
+const CACHED_UNTIL: SectionKey = 'catalogue';
+export const cachePrefixOf = (sections: PromptSection[]): string => {
+  const end = sections.findIndex((s) => s.key === CACHED_UNTIL);
+  return end < 0 ? '' : sections.slice(0, end + 1).map((s) => s.text).join('\n\n');
+};
 
 /** The 14 sections of §3, in order. */
 export const SECTION_ORDER = ['identity', 'policies', 'custom_instructions', 'faq', 'catalogue', 'delivery', 'order_rules', 'image_rule', 'cross_sell', 'card_template', 'closing', 'handoff', 'language', 'output_contract'] as const;
@@ -136,6 +142,6 @@ export class PromptBuilder {
       descriptionMax = DESCRIPTION_TRUNCATED;
       out = assemble();
     }
-    return { system: out.system, messages: out.messages, sections: out.sections, estimatedTokens: out.tokens, dropped: { history: Math.min(history.length, HISTORY_MESSAGES) - kept.length, faqChars: FAQ_MAX_CHARS - faqChars, descriptions: descriptionMax !== DESCRIPTION_MAX } };
+    return { system: out.system, cachePrefix: cachePrefixOf(out.sections), messages: out.messages, sections: out.sections, estimatedTokens: out.tokens, dropped: { history: Math.min(history.length, HISTORY_MESSAGES) - kept.length, faqChars: FAQ_MAX_CHARS - faqChars, descriptions: descriptionMax !== DESCRIPTION_MAX } };
   }
 }

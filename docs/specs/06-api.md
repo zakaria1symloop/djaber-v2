@@ -20,7 +20,7 @@ One REST API serves the web app, the mobile app and API clients `[CDC §8]`.
 | Bulk | `POST …/bulk` always `200 { data: { results: BulkResult[] }, meta: { ok, failed } }` with `BulkResult = { id, ok, error?, data? }`, never all-or-nothing. |
 | Errors | `{ error: { code, message, params, fields, details, ref } }` — `code` from [11](11-error-catalogue.md); `message` localized; `params` interpolation values; `fields` = `{ field: validationKey }`; `details` = provider message or per-item list; `ref` = request id echoed in `X-Request-Id` (shown in support tickets `[FIG HELP]`). `params`, `fields`, `details` are optional; `ref` is always present. Full contract in `../implementation/api-contract.md` §1.5. |
 | Saved views | Any list page accepts `?view=<savedViewId>`; the server expands the stored filters and the explicit query params override them (05 §16, D42). |
-| Status codes | 400 malformed / `WORKSPACE_REQUIRED` · 401 unauthenticated · 402 `INSUFFICIENT_CREDITS` · 403 `FORBIDDEN` / `PLAN_LIMIT` / `WORKSPACE_SUSPENDED` · 404 not found / other workspace · 409 conflict / `WORKSPACE_DELETION_SCHEDULED` · 410 expired token · 413/415 uploads · 422 validation / business rule · 426 `APP_UPDATE_REQUIRED` · 429 `RATE_LIMITED` · 500 `INTERNAL` · 503 provider down / `MAINTENANCE_MODE`. |
+| Status codes | 400 malformed / `WORKSPACE_REQUIRED` (a malformed id in the path ⇒ 404 `NOT_FOUND`) · 401 unauthenticated · 402 `INSUFFICIENT_CREDITS` · 403 `FORBIDDEN` / `PLAN_LIMIT` / `WORKSPACE_SUSPENDED` · 404 not found / other workspace · 409 conflict / `WORKSPACE_DELETION_SCHEDULED` · 410 expired token · 413/415 uploads · 422 validation / business rule · 426 `APP_UPDATE_REQUIRED` · 429 `RATE_LIMITED` · 500 `INTERNAL` · 503 provider down / `MAINTENANCE_MODE`. |
 | Rate limits | auth per 02 AUTH-08; users 1200/min; API keys 600/min; playground 60/h; page analysis / FAQ extraction / agent generation 3 per day per workspace (`ANALYSIS_RATE_LIMITED`). |
 | Uploads | `POST /uploads` multipart: image ≤ 5 MB (jpg, png, webp, gif; min 600 px on the short side, else warning `IMAGE_SMALL`; 10 images per product, `IMAGES_LIMIT`) / pdf ≤ 10 MB / audio ≤ 25 MB; returns `{ id, url }` (public https for Meta sends). |
 | Jobs | long operations return `202 { data: { jobId } }`; `GET /jobs/:id` → `{ id, kind, status, progress, result, error? }` (`JobKind`, `JobStatus`); WS `job.updated`. |
@@ -151,7 +151,7 @@ GET /reports · GET /reports/:key?from&to&format=json|xlsx|pdf (→ 202 when > 5
 
 ### Notifications, home, analytics
 ```
-GET /notifications?type&types&group&unread&from&to&cursor · GET /notifications/unread-count → { count } · POST /notifications/:id/read · POST /notifications/read-all
+GET /notifications?type&types&group&unread&from&to&cursor · GET /notifications/unread-count → { count, byGroup } (unread per `NotificationGroup`, the family chips — full-test 15/11 HOME-05) · POST /notifications/:id/read · POST /notifications/read-all
 GET|PUT /notification-preferences
 GET /dashboard/home
 GET /analytics/overview?from&to|period&compare=previous → { kpis: { [key]: { value, previous?, deltaPct? } }, series[] }   `[FIG ANA-02 overview]`
@@ -276,7 +276,7 @@ GET /moderation/summary → { pending, rejected, appealed, trustLevel }  (banner
 ### 8.3 Trust & safety — merchant side
 ```
 GET /safety/blocks?q&source&page · POST /safety/blocks { clientId | phone, reason: BlockReason, note? } · DELETE /safety/blocks/:id (Admin+; 403 CUSTOMER_BLOCKED_BY_PLATFORM for rows with source=platform)   `[FIG SAFE]`
-POST /conversations/:id/block { reason: BlockReason, note? } · POST /conversations/:id/unblock · POST /conversations/bulk/block { ids[] }
+POST /conversations/:id/block { reason?: BlockReason, note? } (motif optional, full-test 15/11 CHANNELS-INBOX-06) · POST /conversations/:id/unblock · POST /conversations/bulk/block { ids[] }
 POST /safety/reports { type: conversation|customer|ai_message|product, conversationId?, clientId?, messageId?, productId?, reason: ReportReason, details?, blockAlso? } → { id, status } (Operator+; ABUSE_REPORT_ALREADY_OPEN / ABUSE_REPORT_RATE_LIMITED / ABUSE_REPORT_SELF) `[FIG SAFE Signaler à Djaber]`
 GET /safety/reports (mine / workspace) · GET /safety/reports/:id   (`GET /reports` is the reports hub, §2)
 GET|PUT /safety/rules { riskAfterReturns, autoBlockEnabled, autoBlockAfterUncollected (≥ 1), handoffOnRisk } (Admin+) · GET|PUT /safety/blocked-words { words[] }
@@ -311,11 +311,11 @@ Public tracking page: `GET /track/:publicToken` (§12).
 
 ### 8.6 Catalogue & GDS — dialogs and bulk actions not covered in §2
 ```
-POST /products/bulk/category { ids[], categoryId } · POST /products/bulk/agent { ids[], agentId } · POST /products/bulk/min-stock { ids[], minStock }
+POST /products/bulk/category { ids[], categoryId } · POST /products/bulk/agent { ids[], agentId } · POST /products/bulk/min-stock { ids[], minStock } (a product with variants: every live variant gets the threshold too)
 POST /products/bulk/price { ids[], op: increase|decrease|set, value, unit: percent|dzd, roundUpTens?, applyToVariants? } → per-item results + warnings SELLING_BELOW_COST   `[FIG DLG Modifier les prix en masse]`
 POST /products/bulk/archive { ids[], releaseStock? } · POST /products/bulk/labels { ids[] } → 202 · POST /products/bulk/export { ids[] } → 202
 POST /products/:id/duplicate { name, copyImages, copyVariants, copyCost } · POST /products/:id/variants/generate { attributes: [{name, values[]}], defaultPrice, defaultStock } (VARIANT_LIMIT)
-GET /products/:id/card-preview → rendered Messenger card · GET /products/:id/relations → { orders, movements, agents, recommendations } counts + last rows   `[FIG CAT-01 quick edit]`
+GET /products/:id/card-preview → rendered Messenger card · GET /products/:id/relations → { orders, movements, agents, recommendations } counts + last rows (agents = those that sell it: explicit links, whole catalogue, its category — as `GET /agents?productId=`; an archived product: none, AT-CAT-07)   `[FIG CAT-01 quick edit]`
 DELETE /products/:id?mode=archive|hard&releaseStock (hard only if no order/sale line: PRODUCT_HAS_ORDERS)
 POST /products/import/mapping { jobId, mapping, updateExisting?, saveMapping? }   `[FIG DLG Correspondance des colonnes]`
 POST /products/ai-fill (multipart 1–5 photos, 5 credits) → { name, description, categoryId?, attributes } (the only create-from-photo endpoint)   `[FIG DLG Créer depuis une photo]`
@@ -493,7 +493,7 @@ Conventions: multi-value = comma list; ranges = `min<Field>`/`max<Field>`; dates
 | Agents `[MECH Agents]` | `GET /agents` | `status` (`AgentStatus`: draft, active, paused), `channelId`, `modelId`, `capabilities` (voice/image/orders), `presetKey`, `activeDays` (7/30), `defaultLanguage`, `hasPendingInsights`, `q`, `sort` (lastActiveAt, name) |
 | Pages connectées `[MECH Channels]` | `GET /channels` | `platform` (`ChannelPlatform`: facebook, instagram), `status` (`ChannelStatus`: active, paused, pending_review, needs_reconnect, disabled, disconnected), `agentId` / `noAgent`, `pausedBy` (`PausedReason`: manual, plan, moderation), `q` (name, externalId), `sort` |
 | Livraison & suivi `[MECH Delivery]` | `GET /shipments` (joined with Order) | `shipmentStatus` (`not_sent` = no active shipment, then the full `ShipmentStatus` enum: pending, sent, picked_up, in_transit, out_for_delivery, delivered, failed, returned, cancelled, stale), `provider` (`ShipmentProvider`: manual, zrexpress, ecotrack, yalidine), `deliveryType` (home/stopdesk), `wilayaId`, `communeId`, `orderStatus` (`OrderStatus`), `lastEvent` (lt24h/2_5d/gt5d_stale — "Sans mouvement" = no event > 5 d while status ∈ sent, picked_up, in_transit), `failureReason` (`FailureReason`: address, unreachable, refused, damaged, other), `lastError` (`COURIER_CREDENTIALS_INVALID`, `COURIER_VALIDATION`, `COURIER_UNAVAILABLE`, `TRACKING_NOT_FOUND`), `from`/`to` (shipment createdAt or order confirmedAt), `q` (number, tracking, client), `sort` (lastSyncedAt) |
-| Mouvements `[GDS-05 filter panel]` | `GET /stock/movements` | `productId`, `variantId`, `type` (`MovementType`: in, out, adjustment_in, adjustment_out, inventory, return), `reason` (`MovementReason`, 16 values), `refType` (`MovementRefType`: order, sale, purchase, inventory, import, manual, variant), `refId`, `createdById` (`system`), `from`/`to`, `minQty`/`maxQty` (abs), `categoryId`, `q` (product, variant, reference), `sort` (createdAt) |
+| Mouvements `[GDS-05 filter panel]` | `GET /stock/movements` | `productId`, `variantId`, `type` (`MovementType`: in, out, adjustment_in, adjustment_out, inventory, return), `reason` (`MovementReason`, 16 values), `refType` (`MovementRefType`: order, sale, purchase, inventory, import, manual, variant), `refId`, `createdById` (`system`), `from`/`to`, `minQty`/`maxQty` (abs), `categoryId`, `q` (product, SKU, variant, note, and the number of the order / sale / purchase / count of the RÉFÉRENCE column: « #CMD-1023 », « ACH-1008 », « 1023 » — full-test 15/11 STOCK-04), `sort` (createdAt) |
 | Achats `[GDS-07]` | `GET /purchases` | `status` (`PurchaseStatus`: draft, pending, partial, received, cancelled), `supplierId`, `paymentStatus` (`GdsPaymentStatus`: unpaid, partial, paid), `late` (expectedAt < now ∧ not received), `from`/`to`, `q`, `sort` |
 | Ventes `[GDS-08]` | `GET /sales` | `paymentStatus` (`GdsPaymentStatus`), `status` (`SaleStatus`: draft, completed, cancelled), `createdById`, `clientId`, `from`/`to`, `q`, `sort` |
 | Fournisseurs `[GDS-06]` | `GET /suppliers` | `hasBalance`, `lastPurchase` (period), `isActive`, `q` (name, phone, email), `sort` |

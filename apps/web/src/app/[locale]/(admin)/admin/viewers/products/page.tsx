@@ -26,7 +26,8 @@ export default function AdminViewersPage() {
   return (
     <AdminPage
       permission="admin.workspaces.read"
-      title={t('admin.viewers.title', { workspace: ws.data?.name ?? '…' })}
+      // full-test 15/11 ADMIN-17: without a workspace (or while it loads) the page is « Visionneuses (lecture seule) », never « … — »
+      title={ws.data?.name ? t('admin.viewers.title', { workspace: ws.data.name }) : t('admin.viewers.titlePlain')}
       description={t('admin.viewers.description')}
       badges={<MonoChip tone="danger">{t('admin.viewers.badge')}</MonoChip>}
     >

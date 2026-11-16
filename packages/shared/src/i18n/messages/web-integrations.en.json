@@ -35,7 +35,7 @@
   "settings.integrations.sheets.row.lastError": "Last error",
   "settings.integrations.sheets.tabNote": "(tab “{tab}” of your sheet; a hidden column lets Djaber recognise each order)",
   "settings.integrations.sheets.noSheet": "No sheet chosen",
-  "settings.integrations.sheets.rows": "{count} orders synced",
+  "settings.integrations.sheets.rows": "{count, plural, one {{value} order synced} other {{value} orders synced}}",
   "settings.integrations.sheets.pending": "{count} pending",
   "settings.integrations.sheets.noError": "none",
   "settings.integrations.sheets.filters.allPages": "All pages",

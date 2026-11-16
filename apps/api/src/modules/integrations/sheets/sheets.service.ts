@@ -99,7 +99,8 @@ export class SheetsService {
         act('connect', featureEnabled && !connected, featureEnabled ? 'CONFLICT' : 'PLAN_FEATURE_REQUIRED', !connected),
         act('change_sheet', connected && c.lastError !== 'SHEETS_TOKEN_REVOKED', connected ? 'SHEETS_TOKEN_REVOKED' : 'SHEETS_NOT_CONNECTED', state === 'pick_sheet'),
         act('edit_filters', hasSheet, 'SHEETS_NOT_CONNECTED'),
-        act('backfill', hasSheet && state === 'active' && !(job && (OPEN_JOB as readonly string[]).includes(job.status)), hasSheet ? 'CONFLICT' : 'SHEETS_NOT_CONNECTED'),
+        // full-test 15/11 SETTINGS-05: the true reason (token revoked / sheet missing / export running), never the generic CONFLICT
+        act('backfill', hasSheet && state === 'active' && !(job && (OPEN_JOB as readonly string[]).includes(job.status)), !hasSheet ? 'SHEETS_NOT_CONNECTED' : state !== 'active' ? (errCode ?? 'SHEETS_NOT_CONNECTED') : 'SHEETS_BACKFILL_RUNNING'),
         act('disconnect', connected, 'SHEETS_NOT_CONNECTED'),
         act('reconnect', connected && c.status === 'error' && c.lastError === 'SHEETS_TOKEN_REVOKED', 'CONFLICT', true),
       ],

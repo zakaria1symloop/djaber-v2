@@ -34,7 +34,7 @@ describe('ADM-02 workspaces list & detail', () => {
     const row = list.data[0];
     expect(row).toMatchObject({ id: b.workspaceId, plan: { slug: 'starter' }, subscriptionStatus: 'active', status: 'active', pages: { count: 0 } });
     expect(row.owner.email).toContain('@');
-    expect(row.actions.map((x: any) => x.key)).toEqual(['open', 'impersonate', 'change_plan', 'add_credits', 'remove_credits', 'extend_trial', 'suspend', 'schedule_deletion']);
+    expect(row.actions.map((x: any) => x.key)).toEqual(['open', 'impersonate', 'change_plan', 'add_credits', 'remove_credits', 'extend_trial', 'trust_level', 'suspend', 'schedule_deletion']);
     expect((await sa.get(`/admin/workspaces?planSlug=starter&pageSize=100`).expect(200)).body.data.map((w: any) => w.id)).toContain(b.workspaceId);
     expect((await sa.get(`/admin/workspaces?planSlug=starter&pageSize=100`).expect(200)).body.data.map((w: any) => w.id)).not.toContain(a.workspaceId);
     expect((await sa.get(`/admin/workspaces?withPages=true&pageSize=100`).expect(200)).body.data.map((w: any) => w.id)).not.toContain(b.workspaceId);
@@ -117,7 +117,7 @@ describe('ADM-02 workspaces list & detail', () => {
     expect(JSON.stringify(row.payload)).toContain(`${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`);
   });
 
-  it('create a workspace for a client (owner created + invite link, plan, trial months, initial credits); duplicate owner ⇒ 409; idempotent replay', async () => {
+  it('create a workspace for a client (owner created + invite link, plan, trial months, initial credits); duplicate owner ⇒ 422 ACCOUNT_OWNS_WORKSPACE; idempotent replay', async () => {
     const sa = await asPlatform(app);
     const email = `client-${randomUUID().slice(0, 6)}@shop.dz`;
     const body = { name: 'Boutique Client', ownerEmail: email, ownerFirstName: 'Amel', planSlug: 'starter', trialMonths: 2, initialCredits: 500, sendInvite: true, assistedOnboarding: true, reason: REASON };
@@ -135,7 +135,8 @@ describe('ADM-02 workspaces list & detail', () => {
     expect((await lastAudit('workspace.create', d.id))!.reason).toBe(REASON);
     const replay = await sa.post('/admin/workspaces', body).set('Idempotency-Key', key).expect(201);
     expect(replay.body.data.id).toBe(d.id);
-    expect((await sa.post('/admin/workspaces', { ...body, name: 'Autre' }).expect(409)).body.error.code).toBe('CONFLICT');
+    // full-test 15/11 ADMIN-06: the owner already owns a workspace ⇒ 422 ACCOUNT_OWNS_WORKSPACE under « E-mail du propriétaire »
+    expect((await sa.post('/admin/workspaces', { ...body, name: 'Autre' }).expect(422)).body.error).toMatchObject({ code: 'ACCOUNT_OWNS_WORKSPACE', fields: { ownerEmail: 'validation.owns_workspace' } });
   });
 
   it('AT-DEL-05 schedule deletion ⇒ channels disconnected, subscription cancelled, Owner e-mail, mutations WORKSPACE_DELETION_SCHEDULED; cancel ⇒ active, channels stay disconnected', async () => {

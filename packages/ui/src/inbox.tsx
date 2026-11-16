@@ -6,6 +6,7 @@
 import { AlertTriangle, ArrowUpRight, Check, Clock, Download, FileText, Flag, MapPin, Paperclip, Pause, Play, X } from 'lucide-react';
 import * as React from 'react';
 import { Avatar } from './forms';
+import { isolateNumbers } from './bidi';
 import { Button, cn, type Tone } from './primitives';
 
 /* ---------- Three panes: list · thread · panel (≥ 1280), list · thread (1024–1279, panel as a drawer), one pane below ---------- */
@@ -295,7 +296,7 @@ export function MessageBubble({
 export function BubbleText({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <p dir="auto" className={cn('whitespace-pre-wrap break-words', className)}>
-      {children}
+      {typeof children === 'string' ? isolateNumbers(children) : children}
     </p>
   );
 }

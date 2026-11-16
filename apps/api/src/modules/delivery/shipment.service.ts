@@ -24,7 +24,7 @@ import { COURIER_ERROR_CODE, isCourierError, type CreateShipmentInput as Adapter
 import { CourierAccountService } from './courier-account.service';
 import { CourierLimiter } from './courier-limiter';
 import { ShipmentEffects } from './shipment-effects.service';
-import { cancelRefusal, changeCourierRefusal, courierFieldErrors, encodeShipmentError, errorCodeOf, isNotOfferedRefusal, isSendFailure, parseShipmentError, presentShipment, retryDeliveryRefusal, SHIPMENT_INCLUDE, type ShipmentRow } from './shipment.presenter';
+import { cancelRefusal, changeCourierRefusal, courierFieldErrors, encodeShipmentError, errorCodeOf, isNotOfferedRefusal, isSendFailure, manualOpen, parseShipmentError, presentShipment, retryDeliveryRefusal, SHIPMENT_INCLUDE, type ShipmentRow } from './shipment.presenter';
 import { syncAvailableFromTtl, syncCooldownKey } from './sync-cooldown';
 import { CREATE_MAX_ATTEMPTS, CREATE_RETRY_DELAYS_MS, nextSyncAt } from './tracking-rules';
 
@@ -454,7 +454,7 @@ export class ShipmentService implements OnModuleInit {
       const closed = sendClosedCode(o.status);
       if (closed) throw new AppException(closed);
       const queued = s.status === 'pending';
-      const manualSent = s.provider === 'manual' && s.status === 'sent';
+      const manualSent = manualOpen(s);
       // same rule as the menu (UX-056 leftovers): created at a courier => cancel it first; picked up => « Retournée »
       const refused = changeCourierRefusal(s, await this.capsOf(tx, s));
       if (refused) throw new AppException(isNotOfferedRefusal(refused) ? 'CONFLICT' : refused);

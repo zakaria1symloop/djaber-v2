@@ -1,14 +1,16 @@
 'use client';
 // OnboardingLayout (02-next-route-map §1): logo, "Passer la configuration", guard (owner session, resume rule).
-import { Button, Spinner, toast } from '@djaber/ui';
+import { Banner, Button, ConfirmDialog, Spinner, toast } from '@djaber/ui';
 import { useParams, useSearchParams } from 'next/navigation';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { PageSessionExpired, QueryError } from '@/components/global-states';
 import { Logo } from '@/components/shell/sidebar';
 import { useOnboardingStep } from '@/features/workspace/api';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import { errorMessage } from '@/lib/forms';
-import { decideOnboarding, loginHref, ONBOARDING_SKIPPED } from '@/lib/guards';
+import { decideOnboarding, loginHref, ONBOARDING_SKIPPED, ONBOARDING_STEPS } from '@/lib/guards';
+
+const RESUME_KEY = 'djaber.onboardingResumeShown';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 
@@ -21,6 +23,24 @@ export function OnboardingFrame({ children }: { children: ReactNode }) {
   const search = useSearchParams().toString();
   const { step = '' } = useParams<{ step?: string }>();
   const skip = useOnboardingStep();
+  const [confirmSkip, setConfirmSkip] = useState(false);
+  // full-test 15/11 ONBOARDING-11: « reprise (banner at next login) » — the first tunnel page of a browser session that
+  // resumes a saved step says so once
+  const [resumed, setResumed] = useState<number | null>(null);
+  const savedStep = s.workspace?.onboardingStep ?? 0;
+  const loaded = !!s.workspace;
+  useEffect(() => {
+    if (!loaded) return;
+    // the step seen first in this browser session decides (a step reached in the same session is not a « reprise »)
+    try {
+      if (window.sessionStorage.getItem(RESUME_KEY)) return;
+      window.sessionStorage.setItem(RESUME_KEY, '1');
+    } catch {
+      return;
+    }
+    if (savedStep >= 2 && savedStep <= 5) setResumed(savedStep);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- first load of the workspace only
+  }, [loaded]);
 
   const decision = decideOnboarding({
     status: s.status,
@@ -62,6 +82,7 @@ export function OnboardingFrame({ children }: { children: ReactNode }) {
   }
 
   const onSkip = async () => {
+    setConfirmSkip(false);
     try {
       await skip.mutateAsync(ONBOARDING_SKIPPED);
       router.replace('/home');
@@ -73,11 +94,29 @@ export function OnboardingFrame({ children }: { children: ReactNode }) {
     <div className="flex min-h-dvh flex-col">
       <header className="flex h-20 shrink-0 items-center justify-between px-4 sm:px-8">
         <Logo />
-        <Button variant="ghost" onClick={onSkip} loading={skip.isPending && skip.variables === ONBOARDING_SKIPPED}>
+        {/* full-test 15/11 ONBOARDING-10: one click no longer ends the setup — it is confirmed, and says where to resume */}
+        <Button variant="ghost" onClick={() => setConfirmSkip(true)} loading={skip.isPending && skip.variables === ONBOARDING_SKIPPED} data-testid="onboarding-skip">
           {t('onboarding.skip')}
         </Button>
+        <ConfirmDialog
+          open={confirmSkip}
+          onOpenChange={setConfirmSkip}
+          title={t('onboarding.skipConfirm.title')}
+          description={t('onboarding.skipConfirm.description')}
+          confirmLabel={t('onboarding.skip')}
+          cancelLabel={t('onboarding.skipConfirm.stay')}
+          closeLabel={t('action.close')}
+          onConfirm={() => void onSkip()}
+        />
       </header>
       <main id="main" className="flex flex-1 flex-col justify-center px-4 pb-20 pt-4">
+        {resumed ? (
+          <div className="mx-auto mb-4 w-full max-w-[680px]" data-testid="onboarding-resume">
+            <Banner tone="info" onDismiss={() => setResumed(null)} dismissLabel={t('action.close')}>
+              {t('onboarding.resume.banner', { step: resumed, total: ONBOARDING_STEPS.length })}
+            </Banner>
+          </div>
+        ) : null}
         {children}
       </main>
     </div>

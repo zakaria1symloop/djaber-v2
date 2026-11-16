@@ -56,6 +56,9 @@ export class PublicTrackingService {
       if (events.length && events[events.length - 1]!.status === st) continue;
       events.push({ at: e.at.toISOString(), status: st, label: label(st), location: e.location });
     }
+    // full-test 15/11 PUBLIC-06: a parcel whose status was set without a history line (older self-delivered returns)
+    // still shows the step that brought it there
+    if (!events.length && s.status !== 'pending') events.push({ at: (s.lastEventAt ?? s.updatedAt).toISOString(), status: s.status as ShipmentStatusName, label: label(s.status), location: null });
     const web = this.config.get('PUBLIC_WEB_URL').replace(/\/$/, '');
     return {
       orderNumber: s.order.number,
@@ -63,7 +66,8 @@ export class PublicTrackingService {
       status: s.status,
       statusLabel: label(s.status),
       events,
-      courier: s.courierAccount?.displayName ?? PROVIDER_NAMES[s.provider as CourierProvider] ?? s.provider,
+      // PUBLIC-06: « Livraison propre » is a text of the page language (courier brands stay as they are)
+      courier: s.courierAccount?.displayName ?? (s.provider === 'manual' ? this.i18n.t(locale, 'couriers.provider.manual') : (PROVIDER_NAMES[s.provider as CourierProvider] ?? s.provider)),
       trackingNumber: s.trackingNumber,
       wilayaName: s.order.wilaya ? (locale === 'ar' ? s.order.wilaya.nameAr : s.order.wilaya.nameFr) : null,
       isStopdesk: s.order.isStopdesk,

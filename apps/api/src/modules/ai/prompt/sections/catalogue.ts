@@ -8,13 +8,15 @@ import type { PromptContext } from '../prompt.types';
  * no stock count any more — only « in stock » / « out of stock » — so no count can reach a customer. The exact number
  * comes back only from create_order when the customer asks for more than is left (ORDER_INSUFFICIENT_STOCK).
  */
-export const stockWord = (stock: number | null, sellOutOfStock = false): string => (stock === null ? 'service' : stock > 0 ? 'in stock' : sellOutOfStock ? 'out of stock (orderable)' : 'out of stock');
+// full-test 15/11 AI-CHAT-08 (proposal 8): « out of stock (orderable) » made the model write the out-of-stock sentence,
+// mainly in Arabic, for a product the shop sells beyond its stock
+export const stockWord = (stock: number | null, sellOutOfStock = false): string => (stock === null ? 'service' : stock > 0 ? 'in stock' : sellOutOfStock ? 'orderable (delivery may take longer)' : 'out of stock');
 
 export const productBlock = (p: CatalogueProduct, n: number, descriptionMax: number): string => {
   // a product with variants is sold through one of them only: its price is the variants' range, never the base price
   const prices = p.variants.map((v) => v.price);
   const [min, max] = [Math.min(...prices), Math.max(...prices)];
-  const price = !p.hasVariants ? `${p.price} DA${p.oldPrice ? ` (was ${p.oldPrice} DA)` : ''}` : !prices.length ? 'no variant available' : min === max ? `${min} DA` : `${min}-${max} DA by variant`;
+  const price = !p.hasVariants ? `${p.price} DA${p.oldPrice && p.oldPrice > p.price ? ` (was ${p.oldPrice} DA)` : ''}` : !prices.length ? 'no variant available' : min === max ? `${min} DA` : `${min}-${max} DA by variant`;
   const lines = [`#${n} ${p.name} [ID:${p.id}] SKU:${p.sku} PRICE:${price} STOCK:${stockWord(p.stock, p.sellOutOfStock)}`];
   const description = (p.description ?? '').replace(/\s+/g, ' ').trim().slice(0, descriptionMax);
   if (description) lines.push(description);
@@ -32,7 +34,7 @@ export const productBlock = (p: CatalogueProduct, n: number, descriptionMax: num
 export const catalogueSection = (c: PromptContext): string => {
   const { catalogue } = c;
   const head = catalogue.full
-    ? `CATALOGUE (${catalogue.count} products — the complete list; never mention a product, a variant, a price or a stock that is not below)`
+    ? `CATALOGUE (${catalogue.count} products — the complete list; never mention a product, a variant, a price or a stock that is not below; a product listed here needs no search_products call)`
     : `CATALOGUE: ${catalogue.count} products. Use search_products before naming any product.`;
   const blocks = catalogue.products.map((p, i) => productBlock(p, i + 1, c.descriptionMax));
   const sentence = c.workspace.systemMessages.out_of_stock?.[systemLocale(c.lang, c.locale)] ?? c.workspace.systemMessages.out_of_stock?.fr ?? '';
@@ -45,12 +47,15 @@ export const catalogueSection = (c: PromptContext): string => {
       : 'NOT_LISTED: a product or a variant (colour, size, model…) that search_products / get_product does not return is not available, even when the customer names it or an earlier message mentioned it: say it is not available, never confirm it, show it or take an order for it',
   );
   rules.push(
-    'STOCK_PRIVATE: never tell the customer how many units are in stock or left (no « il en reste 5 », « we have 12 », « 3 pièces disponibles »), even when they ask: say it is available or not. Only when they ask for more than is left does create_order give the number you may offer (ORDER_INSUFFICIENT_STOCK).',
+    'STOCK_PRIVATE: never tell the customer how many units are in stock or left (no « il en reste 5 », « we have 12 », « 3 pièces disponibles »), even when they ask: say it is available or not. Only when they ask for more than is left does check_availability (or create_order) give the number you may offer (availableQuantity, ORDER_INSUFFICIENT_STOCK).',
   );
+  // full-test 15/11 AI-CHAT-13 (C19): a photo described in words is not a photo the AI saw
+  rules.push('PHOTO_NOT_SEEN: a photo the customer only describes in words (« comme sur la photo », « celle de votre page », « like in your post ») is one you have not seen: never confirm it is a given product; name the closest listed product as a question and ask them to send the photo.');
   if (sentence) rules.push(`OUT_OF_STOCK_SENTENCE: "${sentence}"`);
   // tester notes 25/10: the shop's sentence word for word (it was paraphrased, so an edit seemed not applied)
   const say = sentence ? 'write OUT_OF_STOCK_SENTENCE word for word ({product} = the product name; translate it only when the customer writes another language), never a sentence of your own' : 'say the product is out of stock';
   rules.push(c.agent.outOfStockBehavior === 'suggest_alternative' ? `OUT_OF_STOCK: ${say}, then suggest an alternative from the same category` : `OUT_OF_STOCK: ${say}, nothing else about it`);
-  if (c.agent.showMissingVariants) rules.push('MISSING_VARIANT: say which sizes remain');
+  // full-test 15/11 AI-CHAT-08 (X02: « Sac à main cuir est en rupture » when only the red one was)
+  if (c.agent.showMissingVariants) rules.push('MISSING_VARIANT: when only some variants are out of stock the product is available: say which variants remain, never that the whole product is out of stock');
   return [head, ...(catalogue.count === 0 ? ['(no product available: do not invent any)'] : blocks), ...rules].join('\n');
 };

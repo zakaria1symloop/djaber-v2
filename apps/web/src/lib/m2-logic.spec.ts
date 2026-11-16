@@ -198,9 +198,9 @@ describe('money', () => {
     expect(digitsToInt('0')).toBe(0);
   });
   it('margin on the selling price, half-up, negative when selling below cost', () => {
-    expect(marginPct(4900, 2600)).toBe(47);
-    expect(marginPct(4900, 5200)).toBe(-6);
-    expect(marginPct(1000, 995)).toBe(1);
+    expect(marginPct(4900, 2600)).toBe(46.9);
+    expect(marginPct(4900, 5200)).toBe(-6.1);
+    expect(marginPct(1000, 995)).toBe(0.5);
     expect(marginPct(0, 10)).toBeNull();
     expect(marginPct(100, null)).toBeNull();
   });

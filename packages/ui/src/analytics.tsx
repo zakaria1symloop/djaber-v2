@@ -103,10 +103,11 @@ export function AnaKpiTile({
 } & Omit<React.HTMLAttributes<HTMLDivElement>, 'onClick' | 'title'>) {
   const body = (
     <>
-      <div className="flex min-h-3 items-center gap-1.5 truncate ts-label-micro !normal-case text-text-muted">
+      {/* full-test 15/11 ANALYTICS-12: the hint lines carry real figures — they wrap instead of ending in « … » */}
+      <div className="flex min-h-3 flex-wrap items-center gap-x-1.5 ts-label-micro !normal-case text-text-muted">
         {delta}
         {delta && meta ? <span aria-hidden>·</span> : null}
-        {meta ? <span className="truncate">{meta}</span> : null}
+        {meta ? <span className="min-w-0 [overflow-wrap:anywhere]">{meta}</span> : null}
       </div>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5">
         <bdi dir="ltr" className="ts-numeral-l tabular-nums">
@@ -115,7 +116,7 @@ export function AnaKpiTile({
         <span className="ts-label-micro text-text-muted">{unit}</span>
       </div>
       {sub ? (
-        <div className="mt-1 truncate ts-label-micro !normal-case text-text-muted">{sub}</div>
+        <div className="mt-1 ts-label-micro !normal-case text-text-muted [overflow-wrap:anywhere]">{sub}</div>
       ) : null}
     </>
   );
@@ -527,7 +528,7 @@ export function FunnelBars({
       {rows.map((r) => (
         <li key={r.key} data-row={r.key} title={r.hint}>
           <div className="flex items-baseline justify-between gap-3 text-[13px]">
-            <span className="truncate text-text-secondary">{r.label}</span>
+            <span className="min-w-0 text-text-secondary [overflow-wrap:anywhere]">{r.label}</span>
             <bdi dir="ltr" className="tabular-nums">
               {r.formatted}
             </bdi>
@@ -585,7 +586,7 @@ export function RankPanel({
           {rows.map((r) => {
             const inner = (
               <>
-                <span className="min-w-0 flex-1 truncate">{r.label}</span>
+                <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{r.label}</span>
                 <bdi dir="ltr" className="whitespace-nowrap tabular-nums">
                   {r.value}
                 </bdi>
@@ -676,7 +677,7 @@ export function DonutChart({
           {slices.map((s) => (
             <li key={s.key} className="flex items-center gap-2 text-[12px]" data-slice={s.key}>
               <span aria-hidden className={cn('size-2 shrink-0 rounded-[2px]', BG[s.tone])} />
-              <span className="min-w-0 flex-1 truncate text-text-secondary">{s.label}</span>
+              <span className="min-w-0 flex-1 text-text-secondary [overflow-wrap:anywhere]">{s.label}</span>
               <bdi dir="ltr" className="tabular-nums">
                 {format(s.value)}
               </bdi>
@@ -996,9 +997,9 @@ export function ReportRow({
       {renderLink(
         <>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[14px]">{name}</span>
+            <span className="block text-[14px] [overflow-wrap:anywhere]">{name}</span>
             {description ? (
-              <span className="block truncate ts-label-micro !normal-case text-text-muted">
+              <span className="block ts-label-micro !normal-case text-text-muted [overflow-wrap:anywhere]">
                 {description}
               </span>
             ) : null}
@@ -1056,8 +1057,8 @@ export function ExportJobRow({
   return (
     <li className="flex flex-wrap items-center gap-3 px-4 py-3" data-state={state} {...rest}>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[14px]">{title}</div>
-        <div className="mt-0.5 truncate ts-label-micro !normal-case text-text-muted">
+        <div className="text-[14px] [overflow-wrap:anywhere]">{title}</div>
+        <div className="mt-0.5 ts-label-micro !normal-case text-text-muted [overflow-wrap:anywhere]">
           {meta ?? '—'}
         </div>
         {state === 'running' && progress !== undefined ? (

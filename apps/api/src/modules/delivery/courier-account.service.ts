@@ -144,11 +144,13 @@ export class CourierAccountService {
     } catch {
       creds = {};
     }
-    const credentialHints: CourierAccountView['credentialHints'] = {};
-    for (const f of fieldsOf(provider, platform)) credentialHints[f.key] = this.hint(f.key, creds[f.key]);
-    const s = stats ?? { sent: 0, failed30d: 0, activeShipments: 0 };
     const role = TenantContext.get().role;
     const manage = can(role, 'delivery.manage');
+    // full-test ROLES-06: a member who only sends parcels (operator) gets the names / capabilities the send dialog needs —
+    // never the courier settings (credential hints, sender phone / address, test results, webhook URL), 02 §3
+    const credentialHints: CourierAccountView['credentialHints'] = {};
+    if (manage) for (const f of fieldsOf(provider, platform)) credentialHints[f.key] = this.hint(f.key, creds[f.key]);
+    const s = stats ?? { sent: 0, failed30d: 0, activeShipments: 0 };
     const act = (key: string, reasonCode: string | null = null) => {
       const code = !manage ? 'FORBIDDEN' : reasonCode;
       return { key, enabled: !code, ...(code ? { reasonCode: code } : {}) };
@@ -161,13 +163,13 @@ export class CourierAccountService {
       platform,
       isActive: a.isActive,
       isDefault: a.isDefault,
-      sender: { name: a.senderName, phone: a.senderPhone, address: a.senderAddress, wilayaId: a.senderWilayaId },
+      sender: manage ? { name: a.senderName, phone: a.senderPhone, address: a.senderAddress, wilayaId: a.senderWilayaId } : { name: null, phone: null, address: null, wilayaId: null },
       capabilities: wireCapabilities(caps),
-      lastTest: a.lastTestedAt ? { at: a.lastTestedAt.toISOString(), ok: !!a.lastTestOk, latencyMs: a.lastTestLatencyMs, error: (a.lastTestError as 'COURIER_CREDENTIALS_INVALID' | 'COURIER_UNAVAILABLE' | null) ?? null } : null,
+      lastTest: manage && a.lastTestedAt ? { at: a.lastTestedAt.toISOString(), ok: !!a.lastTestOk, latencyMs: a.lastTestLatencyMs, error: (a.lastTestError as 'COURIER_CREDENTIALS_INVALID' | 'COURIER_UNAVAILABLE' | null) ?? null } : null,
       stats: s,
       credentialsSet: true,
       credentialHints,
-      webhookUrl: caps.webhook ? `${this.config.get('PUBLIC_API_URL').replace(/\/$/, '')}/api/v1/webhooks/couriers/${a.id}` : null,
+      webhookUrl: manage && caps.webhook ? `${this.config.get('PUBLIC_API_URL').replace(/\/$/, '')}/api/v1/webhooks/couriers/${a.id}` : null,
       webhookSecretSet: !!a.webhookSecret,
       createdAt: a.createdAt.toISOString(),
       updatedAt: a.updatedAt.toISOString(),

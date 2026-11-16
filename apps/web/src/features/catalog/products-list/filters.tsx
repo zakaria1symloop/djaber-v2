@@ -137,7 +137,7 @@ export function ProductsFilterPanel({ open, onClose, list, categories, total, ad
       open={open}
       onClose={onClose}
       title={t('action.filters')}
-      summary={total === null ? t('products.filter.summaryLoading', { count: list.activeCount }) : t('products.filter.summary', { count: list.activeCount, results: formatNumber(total) })}
+      summary={total === null ? t('products.filter.summaryLoading', { count: list.activeCount }) : t('products.filter.summary', { count: list.activeCount, n: total, results: formatNumber(total) })}
       resetLabel={t('products.filter.reset')}
       onReset={list.clear}
       applyLabel={total === null ? t('action.apply') : t('products.filter.show', { count: total })}
@@ -205,7 +205,7 @@ export function ProductsFilterPanel({ open, onClose, list, categories, total, ad
           presets={[...DATE_PRESETS.map((p) => ({ value: p, label: t(`common.period.${p}`) })), { value: 'custom', label: t('common.period.custom') }]}
           activePreset={preset}
           onPreset={(p) => (p === 'custom' ? undefined : setDates(presetRange(p as DatePreset)))}
-          labels={{ from: t('common.from'), to: t('common.to'), presets: t('products.filter.dates') }}
+          labels={{ from: t('common.from'), to: t('common.to'), presets: t('products.filter.dates'), invalid: t('error.INVALID_DATE_RANGE') }}
         />
       </FilterGroup>
       <FilterGroup label={t('products.filter.sort')} source="sort=…">

@@ -149,8 +149,8 @@ export function newCategoryNames(rows: readonly ImportPreviewRow[], existing: re
 export const importableCount = (totals: Pick<ImportPreviewResult['totals'], 'valid'>): number => Math.max(0, totals.valid ?? 0);
 
 /* ---------- error report (client side) ---------- */
-const BOM = String.fromCharCode(0xfeff);
-const csvCell = (v: unknown): string => {
+export const BOM = String.fromCharCode(0xfeff);
+export const csvCell = (v: unknown): string => {
   let s = v === null || v === undefined ? '' : String(v);
   // a cell starting with = + - @ would be run as a formula by spreadsheet software
   if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;

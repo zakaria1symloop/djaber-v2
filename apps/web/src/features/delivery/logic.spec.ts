@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseListState } from '@/lib/list-state';
-import { bulkRowState, courierErrorField, credentialErrors, daysLabel, daysSince, deliveryBlockState,isHttpsUrl, parcelSteps, parseWeight, shipmentTone, syncUntil, syncWait, waitLabel, withSyncWait } from './logic';
+import { bulkRowState, courierErrorField, credentialErrors, daysLabel, daysSince, deliveryBlockState,isHttpsUrl, parcelSteps, parseWeight, shipmentStatusKey, shipmentTone, syncUntil, syncWait, waitLabel, withCourierSetup, withSyncWait } from './logic';
 import { currentTab, DELIVERY_LIST, deliveryChips, panelFilterCount, shipmentsQuery, TAB_PRESETS } from './overview-spec';
 
 const params = (q: string) => new URLSearchParams(q);
@@ -185,5 +185,19 @@ describe('/delivery URL state', () => {
     });
     expect(chips.map((c) => c.label)).toEqual(['« 0555 »', 'ZR', 'ECO', 'Stop-desk', 'ADRESSE', '2026-10-01→']);
     expect(panelFilterCount(s)).toBe(5);
+  });
+});
+
+describe('full-test 15/11 — parcel pill of a self-delivery, send without courier', () => {
+  it('ORDERS-23: a manual parcel `sent` reads « ENVOYÉE », a courier one « CRÉÉE »', () => {
+    expect(shipmentStatusKey({ status: 'sent', provider: 'manual' })).toBe('parcel.manual.sent');
+    expect(shipmentStatusKey({ status: 'sent', provider: 'zrexpress' })).toBe('enum.Shipment.status.sent');
+    expect(shipmentStatusKey({ status: 'delivered', provider: 'manual' })).toBe('enum.Shipment.status.delivered');
+  });
+  it('DELIVERY-04: « Envoyer au transporteur » opens for a courier manager without an active courier, stays greyed otherwise', () => {
+    const acts = [{ key: 'send_courier', enabled: false, reasonCode: 'DELIVERY_NO_COURIER' }, { key: 'ship_manual', enabled: true }];
+    expect(withCourierSetup(acts, true)[0]).toEqual({ key: 'send_courier', enabled: true });
+    expect(withCourierSetup(acts, false)[0]).toMatchObject({ enabled: false, reasonCode: 'DELIVERY_NO_COURIER' });
+    expect(withCourierSetup([{ key: 'send_courier', enabled: false, reasonCode: 'DELIVERY_ORDER_NOT_CONFIRMED' }], true)[0]).toMatchObject({ enabled: false });
   });
 });

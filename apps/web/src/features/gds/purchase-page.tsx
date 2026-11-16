@@ -12,6 +12,7 @@ import { useOffline } from '@/features/orders/offline';
 import { Link, useRouter } from '@/i18n/navigation';
 import { actionState } from '@/lib/actions';
 import { useBack } from '@/lib/back';
+import { iso } from '@/lib/format-message';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { usePurchase } from './api';
 import { ActionButton, usePurchaseActions } from './purchase-dialogs';
@@ -55,15 +56,21 @@ function PurchaseDetail({ id }: { id: string }) {
   const off = <A extends { present: boolean }>(a: A) => (offline && a.present ? { ...a, enabled: false, reason: t('banner.offline') } : a);
   const history = [
     t('purchases.page.created', { date: day(p.createdAt.slice(0, 10)) }),
-    p.status !== 'draft' && p.status !== 'cancelled' ? t('purchases.page.orderedOn', { date: day(p.purchasedAt.slice(0, 10)) }) : null,
+    // a cancelled purchase that had been ordered (paid or partly received) keeps its « commandé » step (STOCK-15)
+    p.status !== 'draft' && (p.status !== 'cancelled' || p.payments.length > 0 || p.units.received > 0) ? t('purchases.page.orderedOn', { date: day(p.purchasedAt.slice(0, 10)) }) : null,
     p.receivedAt ? t('purchases.page.receivedOn', { date: day(p.receivedAt.slice(0, 10)) }) : null,
-    ...p.payments.map((x) => t('purchases.page.paidOn', { date: day(x.paidAt.slice(0, 10)), amount: formatMoney(x.amount) })),
+    ...p.payments.map((x) => t('purchases.page.paidOn', { date: day(x.paidAt.slice(0, 10)), amount: iso(formatMoney(x.amount)) })),
     p.cancelledAt ? t('purchases.page.cancelledOn', { date: day(p.cancelledAt.slice(0, 10)) }) : null,
   ].filter(Boolean);
   const pct = p.units.ordered ? Math.round((p.units.received * 100) / p.units.ordered) : 0;
+  // STOCK-08: a draft owes nothing yet, but it says what will be owed once ordered — the « reste dû » of its form
+  const remaining = p.status === 'draft' ? Math.max(0, p.total - p.amountPaid) : p.remaining;
+  // STOCK-15: every method used, not only the first one
+  const methods = [...new Set(p.payments.map((x) => x.method))];
+  const methodText = methods.length ? methods.map((m) => t(`orders.payment.method.${m}`)).join(' + ') : p.paymentMethod ? t(`orders.payment.method.${p.paymentMethod}`) : '—';
   return (
     <AppPage
-      title={t('purchases.page.title', { number: p.number })}
+      title={t('purchases.page.title', { number: iso(`#${p.number}`) })}
       back={back}
       permission="gds.read"
       badges={
@@ -95,17 +102,22 @@ function PurchaseDetail({ id }: { id: string }) {
                     {p.supplier.name}
                     <ArrowUpRight className="size-3 rtl:-scale-x-100" aria-hidden />
                   </Link>
-                  {p.supplierInvoiceRef ? <Ltr>{` · ${p.supplierInvoiceRef}`}</Ltr> : null}
+                  {p.supplierInvoiceRef ? (
+                    <>
+                      {' · '}
+                      <Ltr>{p.supplierInvoiceRef}</Ltr>
+                    </>
+                  ) : null}
                 </span>
               ) : (
                 '—'
               ),
             },
-            { key: 'items', label: t('purchases.col.items'), value: t('purchases.page.itemsLine', { lines: p.itemCount, units: formatNumber(p.units.ordered), pct, date: p.receivedAt ? day(p.receivedAt.slice(0, 10)) : '—' }) },
+            { key: 'items', label: t('purchases.col.items'), value: t('purchases.page.itemsLine', { lines: p.itemCount, units: iso(formatNumber(p.units.ordered)), pct: iso(`${pct} %`), date: p.receivedAt ? day(p.receivedAt.slice(0, 10)) : '—' }) },
             {
               key: 'amounts',
               label: t('purchases.page.amounts'),
-              value: <Ltr>{t('purchases.page.amountsLine', { total: formatNumber(p.total), paid: formatNumber(p.amountPaid), method: p.paymentMethod ? t(`orders.payment.method.${p.paymentMethod}`) : '—', remaining: formatNumber(p.remaining) })}</Ltr>,
+              value: t('purchases.page.amountsLine', { total: iso(formatNumber(p.total)), paid: iso(formatNumber(p.amountPaid)), method: methodText, remaining: iso(formatNumber(remaining)) }),
             },
             {
               key: 'movements',
@@ -132,32 +144,32 @@ function PurchaseDetail({ id }: { id: string }) {
           <table className="w-full text-[13px]" data-testid="purchase-items">
             <thead>
               <tr className="ts-label-micro text-text-muted">
-                <th className="px-4 py-2 text-start font-normal">{t('purchases.col.productVariant')}</th>
-                <th className="px-4 py-2 text-end font-normal">{t('purchases.receive.ordered')}</th>
-                <th className="px-4 py-2 text-end font-normal">{t('purchases.receive.already')}</th>
-                <th className="px-4 py-2 text-end font-normal">{t('purchases.col.unitCost')}</th>
-                <th className="px-4 py-2 text-end font-normal">{t('purchases.col.total')}</th>
+                <th className="px-2 sm:px-4 py-2 text-start font-normal">{t('purchases.col.productVariant')}</th>
+                <th className="px-2 sm:px-4 py-2 text-end font-normal">{t('purchases.receive.ordered')}</th>
+                <th className="px-2 sm:px-4 py-2 text-end font-normal">{t('purchases.receive.already')}</th>
+                <th className="px-2 sm:px-4 py-2 text-end font-normal">{t('purchases.col.unitCost')}</th>
+                <th className="px-2 sm:px-4 py-2 text-end font-normal">{t('purchases.col.total')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line-hairline">
               {p.items.map((i) => (
                 <tr key={i.id} data-line={i.product.id}>
-                  <td className="px-4 py-2.5">
+                  <td className="px-2 sm:px-4 py-2.5">
                     <Link href={`/products/${i.product.id}`} className="hover:underline">
                       {i.productName}
                       {i.variantName ? <span className="text-text-secondary"> · {i.variantName}</span> : null}
                     </Link>
                   </td>
-                  <td className="px-4 py-2.5 text-end">
+                  <td className="px-2 sm:px-4 py-2.5 text-end">
                     <Ltr className="tabular-nums">{formatNumber(i.quantity)}</Ltr>
                   </td>
-                  <td className="px-4 py-2.5 text-end">
+                  <td className="px-2 sm:px-4 py-2.5 text-end">
                     <Ltr className={i.receivedQty >= i.quantity ? 'tabular-nums text-accent-money' : 'tabular-nums'}>{formatNumber(i.receivedQty)}</Ltr>
                   </td>
-                  <td className="px-4 py-2.5 text-end">
+                  <td className="px-2 sm:px-4 py-2.5 text-end">
                     <Ltr className="tabular-nums">{formatMoney(i.unitCost)}</Ltr>
                   </td>
-                  <td className="px-4 py-2.5 text-end">
+                  <td className="px-2 sm:px-4 py-2.5 text-end">
                     <Ltr className="tabular-nums">{formatMoney(i.total)}</Ltr>
                   </td>
                 </tr>
@@ -165,24 +177,24 @@ function PurchaseDetail({ id }: { id: string }) {
             </tbody>
             <tfoot className="border-t border-line-edge text-text-secondary">
               <tr>
-                <td colSpan={4} className="px-4 py-1.5 text-end">{t('common.subtotal')}</td>
-                <td className="px-4 py-1.5 text-end"><Ltr className="tabular-nums">{formatMoney(p.subtotal)}</Ltr></td>
+                <td colSpan={4} className="px-2 sm:px-4 py-1.5 text-end">{t('common.subtotal')}</td>
+                <td className="px-2 sm:px-4 py-1.5 text-end"><Ltr className="tabular-nums">{formatMoney(p.subtotal)}</Ltr></td>
               </tr>
               {p.tax ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-1.5 text-end">{t('purchases.form.tax')}</td>
-                  <td className="px-4 py-1.5 text-end"><Ltr className="tabular-nums">{formatMoney(p.tax)}</Ltr></td>
+                  <td colSpan={4} className="px-2 sm:px-4 py-1.5 text-end">{t('purchases.form.tax')}</td>
+                  <td className="px-2 sm:px-4 py-1.5 text-end"><Ltr className="tabular-nums">{formatMoney(p.tax)}</Ltr></td>
                 </tr>
               ) : null}
               {p.shippingCost ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-1.5 text-end">{t('purchases.form.shipping')}</td>
-                  <td className="px-4 py-1.5 text-end"><Ltr className="tabular-nums">{formatMoney(p.shippingCost)}</Ltr></td>
+                  <td colSpan={4} className="px-2 sm:px-4 py-1.5 text-end">{t('purchases.form.shipping')}</td>
+                  <td className="px-2 sm:px-4 py-1.5 text-end"><Ltr className="tabular-nums">{formatMoney(p.shippingCost)}</Ltr></td>
                 </tr>
               ) : null}
               <tr className="font-semibold text-text-primary">
-                <td colSpan={4} className="px-4 py-2 text-end">{t('common.total')}</td>
-                <td className="px-4 py-2 text-end"><Ltr className="tabular-nums">{formatMoney(p.total)}</Ltr></td>
+                <td colSpan={4} className="px-2 sm:px-4 py-2 text-end">{t('common.total')}</td>
+                <td className="px-2 sm:px-4 py-2 text-end"><Ltr className="tabular-nums">{formatMoney(p.total)}</Ltr></td>
               </tr>
             </tfoot>
           </table>
@@ -197,7 +209,10 @@ function PurchaseDetail({ id }: { id: string }) {
               {p.payments.map((x) => (
                 <li key={x.id} className="flex items-center gap-3 px-4 py-2.5 text-[13px]">
                   <span className="min-w-0 flex-1 truncate">
-                    {[formatDateTime(x.paidAt, locale), t(`orders.payment.method.${x.method}`), x.reference, shortName(x.createdBy)].filter(Boolean).join(' · ')}
+                    {[formatDateTime(x.paidAt, locale), t(`orders.payment.method.${x.method}`), x.reference, shortName(x.createdBy)]
+                      .filter((v): v is string => !!v)
+                      .map(iso)
+                      .join(' · ')}
                   </span>
                   <Ltr className="font-medium tabular-nums">{formatMoney(x.amount)}</Ltr>
                 </li>
@@ -208,7 +223,6 @@ function PurchaseDetail({ id }: { id: string }) {
           <p className="ts-label-meta text-text-muted">{t('purchases.page.noPayment')}</p>
         )}
       </section>
-      <p className="ts-label-micro !normal-case text-text-muted">{t('purchases.page.footnote')}</p>
       {actions.element}
     </AppPage>
   );

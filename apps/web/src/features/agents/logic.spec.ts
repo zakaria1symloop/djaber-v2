@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Agent, AgentPreset, PlaygroundTurn } from './contracts';
 import {
   issueSummary,
+  insertToken,
   sectionOfField,
   serverIssues,
   blockingChecks,
@@ -127,6 +128,9 @@ describe('step validation', () => {
     expect(validateBehaviour({ ...valid(), maxQtyPerOrder: 0 })[0]?.key).toBe('agents.validation.qtyMin');
     expect(validateBehaviour({ ...valid(), maxQtyPerOrder: null })).toEqual([]);
     expect(validateBehaviour({ ...valid(), maxAmountPerOrder: 0 })[0]?.field).toBe('maxAmountPerOrder');
+    // full-test 15/11 AGENTS-08: the server's upper bound is checked before saving, with the range in the message
+    expect(validateBehaviour({ ...valid(), maxAmountPerOrder: 200_000_000 })[0]).toMatchObject({ field: 'maxAmountPerOrder', key: 'agents.validation.amountRange' });
+    expect(validateBehaviour({ ...valid(), maxAmountPerOrder: 100_000_000 })).toEqual([]);
     const withKeyword = { ...valid(), handoffRules: setRule(valid(), 'keyword', true) };
     expect(validateBehaviour(withKeyword)[0]?.key).toBe('agents.validation.keywordRequired');
     expect(validateBehaviour({ ...withKeyword, handoffKeywords: ['avocat'] })).toEqual([]);
@@ -340,5 +344,18 @@ describe('activation (AGT-02 step 5)', () => {
     expect(sectionOfField('policies.delivery')).toBe('knowledge');
     expect(sectionOfField('responseDelaySec')).toBe('behaviour');
     expect(sectionOfField('nowhere')).toBeNull();
+  });
+});
+
+describe('full-test 15/11 AGENTS-19 — card template placeholders insert with a separator', () => {
+  it('a placeholder after another one gets « — », after a word a space, at the start nothing', () => {
+    expect(insertToken('', 0, 0, '{name}')).toEqual({ next: '{name}', caret: 6 });
+    const v = '🛍 {name}';
+    expect(insertToken(v, v.length, v.length, '{price}').next).toBe('🛍 {name} — {price}');
+    expect(insertToken('Prix', 4, 4, '{price}').next).toBe('Prix {price}');
+    expect(insertToken('Prix ', 5, 5, '{price}').next).toBe('Prix {price}');
+    // in the middle of a word: a space after too, and the caret right after the token
+    const r = insertToken('ab', 1, 1, '{x}');
+    expect(r).toEqual({ next: 'a {x} b', caret: 5 });
   });
 });

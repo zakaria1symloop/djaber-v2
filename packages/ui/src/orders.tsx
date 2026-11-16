@@ -58,7 +58,7 @@ const SOURCE_TONE: Record<string, string> = {
 };
 export function SourceTag({ source, label, detail, className }: { source: string; label: string; detail?: string; className?: string }) {
   return (
-    <span className={cn('inline-flex min-w-0 flex-col', className)} data-source={source}>
+    <span className={cn('inline-flex min-w-0 max-w-full flex-col', className)} data-source={source}>
       <span className={cn('ts-label-micro whitespace-nowrap', SOURCE_TONE[source] ?? 'text-text-secondary')}>{label}</span>
       {detail ? <span className="ts-label-micro truncate !normal-case text-text-muted">{detail}</span> : null}
     </span>

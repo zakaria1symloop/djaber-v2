@@ -2,11 +2,12 @@
 // Generic shell frame (sidebar + top bar + banner stack + content) used by MerchantShell and AdminShell.
 import { IconButton } from '@djaber/ui';
 import { Menu as MenuIcon } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAutoTitles } from '@/lib/auto-title';
 import { useT } from '@/lib/i18n';
 import { BannerStack, type ShellBanner } from './banner-stack';
 import type { NavGroup, NavItem } from './nav';
+import { ShortcutsDialog } from './shortcuts-dialog';
 import { Sidebar } from './sidebar';
 
 export function AppShell({
@@ -33,6 +34,12 @@ export function AppShell({
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  // MOBILE-A11Y-01: closing the drawer gives the focus back to « Menu »
+  const closeDrawer = useCallback(() => {
+    setOpen(false);
+    window.setTimeout(() => menuButton.current?.focus(), 0);
+  }, []);
   // truncated names / previews show their full text in a tooltip
   useAutoTitles();
   useEffect(() => {
@@ -52,18 +59,23 @@ export function AppShell({
 
   return (
     <div className="flex h-dvh flex-col">
+      {/* full-test 15/11 MOBILE-A11Y-07 (WCAG 2.4.1): the first Tab stop skips the 25 sidebar links */}
+      <a href="#main" className="sr-only z-50 rounded-card bg-white px-3 py-2 text-[13px] font-medium text-black focus:not-sr-only focus:fixed focus:start-3 focus:top-3">
+        {t('a11y.skipToContent')}
+      </a>
       {fixedBar}
       <div className="flex min-h-0 flex-1">
-        <Sidebar groups={groups} footer={footer} counters={counters} header={sidebarHeader} open={open} onClose={() => setOpen(false)} homeHref={homeHref} />
+        <Sidebar groups={groups} footer={footer} counters={counters} header={sidebarHeader} open={open} onClose={closeDrawer} homeHref={homeHref} />
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line-hairline px-4 md:px-8">
-            <IconButton label={t('nav.menu')} variant="ghost" className="lg:hidden" onClick={() => setOpen(true)}>
+            <IconButton ref={menuButton} label={t('nav.menu')} variant="ghost" className="lg:hidden" onClick={() => setOpen(true)} aria-expanded={open} aria-controls="app-drawer">
               <MenuIcon className="size-5" />
             </IconButton>
             <div className="flex min-w-0 flex-1 items-center justify-end gap-3">{topBar}</div>
           </header>
           <BannerStack banners={banners ?? []} dismissLabel={t('action.close')} />
-          <main id="main" className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8">
+          <ShortcutsDialog />
+          <main id="main" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto px-4 py-6 focus:outline-none md:px-8">
             {children}
           </main>
         </div>

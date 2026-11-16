@@ -110,4 +110,24 @@ describe('AiRunService.turn — reply guard', () => {
     const t = await svc.turn(req(facts()));
     expect(t).toMatchObject({ ok: true, output: { reply: 'La robe est à 4500 DA.' }, guard: { retried: true, action: 'rewritten' } });
   });
+
+  it('full-test 15/11 proposal 4: once create_order placed an order, the customer gets the server confirmation (the model text is never checked nor sent)', async () => {
+    const placed = { ok: true, number: 'CMD-1042', subtotal: 4500, deliveryFee: 400, total: 4900, items: [{ name: 'Robe satin bordeaux', variant: null, quantity: 1, unitPrice: 4500 }], duplicateOf: null, etaDays: '2–5' };
+    const { gateway, svc, req } = setup(placed);
+    gateway.script('reply', { toolCalls: [{ name: 'create_order', args: {} }] }, { reply: "Je dois corriger : j'ai utilisé des coordonnées inventées pour CMD-1042.", intent: 'SALE' });
+    const t = await svc.turn(req(facts(), 'oui'));
+    expect(t.ok && t.output.reply.split(String.fromCharCode(10))[0]).toBe('Votre commande CMD-1042 est bien enregistrée ✅');
+    expect((t as { guard?: unknown }).guard).toBeUndefined();
+    expect(gateway.calls).toHaveLength(2);
+  });
+
+  it('full-test 15/11 AI-CHAT-07: a message that is only an order field is not offered handoff_to_human', async () => {
+    const { gateway, svc, req } = setup();
+    (svc as unknown as { tools: { defsFor: () => Promise<unknown[]> } }).tools.defsFor = async () => [{ name: 'quote_delivery', description: '', parameters: {} }, { name: 'handoff_to_human', description: '', parameters: {} }];
+    gateway.script('reply', { reply: 'Merci, quelle est votre commune ?', intent: 'SALE' });
+    const r = req(facts({ customerText: 'Sétif' }), 'Sétif');
+    await svc.turn({ ...r, toolCtx: { ...r.toolCtx, ordering: true } });
+    expect((gateway.calls[0]!.tools ?? []).map((d) => d.name)).toEqual(['quote_delivery']);
+  });
 });
+

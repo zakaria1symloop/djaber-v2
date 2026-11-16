@@ -7,7 +7,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { AuthCard, AuthLink, LocaleSwitch, MetaLink } from '@/components/auth/auth-card';
+import { AuthCard, AuthLink, MetaLink } from '@/components/auth/auth-card';
 import { authApi } from '@/features/auth/api';
 import { ApiError } from '@/lib/api';
 import { isMfaChallenge } from '@/lib/contracts';
@@ -73,7 +73,6 @@ function CredentialsStep({ notice, onMfa }: { notice: string | null; onMfa: (tok
           <p>
             {t('auth.login.noAccount')} <AuthLink href={authHref('/signup', { returnTo })}>{t('auth.login.createAccount')}</AuthLink>
           </p>
-          <LocaleSwitch className="mt-5" />
         </>
       }
     >

@@ -109,6 +109,9 @@ describe('merchant tickets (HELP-03 / HELP-04)', () => {
     // merchant close
     const c = await ticket(owner);
     expect((await owner.post(`/support/tickets/${c.id}/close`).expect(200)).body.data.status).toBe('closed');
+    // full-test 15/11 HELP-09: the satisfaction note 1–5 is asked at close too (once)
+    expect((await owner.post(`/support/tickets/${c.id}/rate`, { score: 4 }).expect(200)).body.data).toMatchObject({ status: 'closed', satisfaction: 4 });
+    expect((await owner.post(`/support/tickets/${c.id}/rate`, { score: 5 }).expect(409)).body.error.code).toBe('TICKET_CLOSED');
   });
 
   it('AT-HELP-04 SLA from the plan (Pro 1 business hour, Free one business day); overdue ⇒ slaBreached, sorted first, counted in stats and the SLA sweep', async () => {
@@ -230,6 +233,9 @@ describe('attachments and help center', () => {
     const t = await ticket(op, { attachments: [pdf.id, csv.id] });
     const msgs = (await op.get(`/support/tickets/${t.id}`).expect(200)).body.data.messages;
     expect(msgs.at(-1).attachments).toHaveLength(2);
+    // full-test 15/11 HELP-06: the chips show the picked names, not the storage UUID; HELP-12: a .txt is not a CSV
+    expect(msgs.at(-1).attachments.map((a: any) => a.name).sort()).toEqual(['export.csv', 'facture.pdf']);
+    await uploadFile(op, 'ticket_attachment', Buffer.from('notes'), 'notes.txt', 'text/plain').expect(415);
     const other = await asOwner(app);
     const foreign = (await uploadFile(other, 'ticket_attachment', PDF, 'f.pdf', 'application/pdf').expect(201)).body.data;
     expect((await op.post(`/support/tickets/${t.id}/messages`, { body: 'Voici', attachments: [foreign.id] }).expect(422)).body.error.fields.attachments).toBe('validation.invalid');

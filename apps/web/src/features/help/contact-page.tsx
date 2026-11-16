@@ -13,7 +13,7 @@ export function ContactPage() {
   const from = safeFrom(useSearchParams().get('from'));
   return (
     <AppPage title={t('help.contact.title')} permission="support.write" back={{ href: '/help', label: t('nav.help') }}>
-      <HelpCard title={t('help.contact.title')} sub={t('help.contact.sub')}>
+      <HelpCard title={t('help.contact.formTitle')} sub={t('help.contact.sub')}>
         <ContactForm from={from} />
       </HelpCard>
     </AppPage>

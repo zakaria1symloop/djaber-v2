@@ -291,17 +291,19 @@ export function OrdersBulkBar({
     const a = actionState(r.actions, ORDER_ACTION.sendToCourier, t);
     return { id: r.id, number: r.number, label: `#${r.number} · ${r.client.name}`, blocked: a.present && a.enabled ? null : (a.reason ?? t('error.DELIVERY_ORDER_NOT_CONFIRMED')) };
   });
+  // an action no selected order allows is greyed with its reason (12 §5 « only valid actions »; full-test ORDERS-15)
+  const noneAllows = (key: string) => (chosen.length && chosen.every((r) => !actionState(r.actions, key, t).enabled) ? t('orders.bulk.noneAllowed') : undefined);
   const sendForbidden = !can('delivery.send') ? t('toast.forbidden') : offline ? t('banner.offline') : undefined;
   const actions: BulkAction[] = [
-    { key: 'confirm', label: busy === 'confirmed' ? t('common.saving') : t('action.confirm'), onSelect: () => void status('confirmed', t('orders.bulk.title', { action: t('action.confirm'), count: ids.length })), disabledReason: forbidden ?? (busy ? t('common.saving') : undefined) },
-    { key: 'prepare', label: t('action.prepare'), onSelect: () => void status('preparing', t('orders.bulk.title', { action: t('action.prepare'), count: ids.length })), disabledReason: forbidden ?? (busy ? t('common.saving') : undefined) },
-    { key: 'ship', label: t('orders.bulk.ship'), onSelect: () => void status('shipped', t('orders.bulk.title', { action: t('orders.bulk.ship'), count: ids.length })), disabledReason: forbidden ?? (busy ? t('common.saving') : undefined) },
+    { key: 'confirm', label: busy === 'confirmed' ? t('common.saving') : t('action.confirm'), onSelect: () => void status('confirmed', t('orders.bulk.title', { action: t('action.confirm'), count: ids.length })), disabledReason: forbidden ?? noneAllows(ORDER_ACTION.confirm) ?? (busy ? t('common.saving') : undefined) },
+    { key: 'prepare', label: t('action.prepare'), onSelect: () => void status('preparing', t('orders.bulk.title', { action: t('action.prepare'), count: ids.length })), disabledReason: forbidden ?? noneAllows(ORDER_ACTION.prepare) ?? (busy ? t('common.saving') : undefined) },
+    { key: 'ship', label: t('orders.bulk.ship'), onSelect: () => void status('shipped', t('orders.bulk.title', { action: t('orders.bulk.ship'), count: ids.length })), disabledReason: forbidden ?? noneAllows(ORDER_ACTION.shipManual) ?? (busy ? t('common.saving') : undefined) },
     { key: 'assign', label: t('action.assign'), onSelect: () => setDialog('assign'), disabledReason: forbidden },
     { key: 'send', label: t('action.sendToCourier'), onSelect: () => setDialog('send'), disabledReason: sendForbidden ?? (sendTargets.length && sendTargets.every((x) => x.blocked) ? t('delivery.bulk.noneSendable') : undefined) },
     { key: 'labels', label: t('action.labels'), onSelect: () => setDialog('labels'), disabledReason: sendForbidden },
     { key: 'print', label: t('action.print'), onSelect: () => setDialog('print'), disabledReason: forbidden },
     ...(can('orders.money') ? [{ key: 'export', label: t('action.export'), onSelect: onExport, disabledReason: offline ? t('banner.offline') : undefined }] : []),
-    { key: 'cancel', label: t('action.cancel'), onSelect: () => setDialog('cancel'), destructive: true, disabledReason: forbidden },
+    { key: 'cancel', label: t('action.cancel'), onSelect: () => setDialog('cancel'), destructive: true, disabledReason: forbidden ?? noneAllows(ORDER_ACTION.cancel) },
   ];
   const allOnPage = rows.length > 0 && rows.every((r) => selected.has(r.id));
   return (

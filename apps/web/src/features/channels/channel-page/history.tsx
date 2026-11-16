@@ -10,7 +10,7 @@ import { ListEmpty, ListFilteredEmpty, ListLoading, QueryError } from '@/compone
 import { reasonText } from '@/lib/actions';
 import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
-import { useLocaleCode, useT } from '@/lib/i18n';
+import { useLocaleCode, useT, type TFunction } from '@/lib/i18n';
 import { isJobRunning, useJob } from '@/lib/jobs';
 import { channelsApi, useChannelEventsList, useChannelsRefresh, useChannelSummary } from '../api';
 import { CHANNEL_EVENT_KINDS, SYNC_DAYS, type ChannelEventKind, type SyncDays, type SyncResult } from '../contracts';
@@ -18,6 +18,23 @@ import { eventsQuery, HISTORY_PERIODS, parseEventKinds, parseHistoryPeriod, type
 import { useChannelPage } from './channel-shell';
 
 const isTokenExpired = (code: string | null | undefined) => code === 'PAGE_SYNC_TOKEN_EXPIRED' || code === 'PAGE_TOKEN_EXPIRED';
+
+
+/**
+ * full-test 15/11 CHANNELS-INBOX-03: the server stores short codes as the detail of a page event (`invalid:send:190`,
+ * `refreshed`, `paused`, `swapped`, `12/340`); the merchant reads a sentence, never the code.
+ */
+export function eventText(t: TFunction, kind: string, description: string | null | undefined): string {
+  const label = t(`channels.event.${kind}`);
+  const d = (description ?? '').trim();
+  if (!d) return label;
+  const synced = /^(\d+)\/(\d+)$/.exec(d);
+  if (synced && kind === 'history_synced') return t('channels.event.detail.historySynced', { conversations: Number(synced[1]), messages: Number(synced[2]) });
+  if (d.startsWith('invalid:')) return t('channels.event.detail.tokenRefused');
+  if (d === 'refreshed' || d === 'paused' || d === 'swapped') return t(`channels.event.detail.${d}`);
+  // any other code-like value (no space, snake / colon) is not shown as is
+  return /^[A-Za-z0-9_:./-]+$/.test(d) ? label : d;
+}
 
 export function ChannelHistory() {
   const t = useT();
@@ -128,7 +145,7 @@ export function ChannelHistory() {
             {rows.map((e) => (
               <li key={e.id} data-kind={e.kind} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3">
                 <Ltr className="ts-label-meta w-32 shrink-0 text-text-muted">{formatDateTime(e.at, locale)}</Ltr>
-                <span className="min-w-0 flex-1 text-[13px]">{e.description || t(`channels.event.${e.kind}`)}</span>
+                <span className="min-w-0 flex-1 text-[13px]">{eventText(t, e.kind, e.description)}</span>
                 <span className="ts-label-meta text-text-muted">{e.actor ? `${e.actor.firstName} ${e.actor.lastName.slice(0, 1)}.` : t('channels.history.system')}</span>
               </li>
             ))}

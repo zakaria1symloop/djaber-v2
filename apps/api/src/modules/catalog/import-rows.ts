@@ -91,7 +91,9 @@ const parseRow = (cell: (f: ImportField) => string, mapped: (f: ImportField) => 
   // retest 11/11 UX-054: a value that is not a number stays as typed (« abc »), so the merchant sees what to correct
   const rawPrice = cell('price');
   const price = parseInteger(rawPrice);
-  if (price === null || price <= 0) err('price', 'validation.price');
+  // full-test 15/11 PRODUCTS-11: « 1999.5 » is a price, just not a whole number of DA — say so
+  if (price === null && rawPrice) err('price', 'validation.price_integer');
+  else if (price === null || price <= 0) err('price', 'validation.price');
   values.price = price ?? (rawPrice || null);
 
   if (mapped('sku')) {
@@ -118,7 +120,10 @@ const parseRow = (cell: (f: ImportField) => string, mapped: (f: ImportField) => 
       continue;
     }
     const n = parseInteger(raw);
-    if (n === null || n < (f === 'oldPrice' ? 1 : 0)) err(f, 'validation.price');
+    if (n === null) err(f, 'validation.price_integer');
+    else if (n < (f === 'oldPrice' ? 1 : 0)) err(f, 'validation.price');
+    // 04 §12 (PRODUCTS-09): the struck-through price is above the selling price
+    else if (f === 'oldPrice' && typeof price === 'number' && price > 0 && n <= price) err(f, 'validation.old_price');
     values[f] = n ?? raw;
   }
   for (const f of ['stock', 'minStock', 'weightGrams'] as const) {

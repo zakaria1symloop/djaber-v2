@@ -75,8 +75,11 @@ export function toMenuActions(descriptors: readonly ActionDescriptor[] | undefin
       onSelect: enabled ? h.onSelect : undefined,
       primary: d?.primary,
       destructive: h.destructive,
-      hint: h.hint ?? d?.shortcut,
+      // a key name is shown in the member's language (« Entrée », « إدخال »), never the raw « ENTER » (full-test ORDERS-24)
+      hint: h.hint ?? (d?.shortcut ? (t.has(`kbd.${d.shortcut}`) ? t(`kbd.${d.shortcut}`) : d.shortcut) : undefined),
       separated: h.separated,
+      // MOBILE-A11Y-06: a one-letter shortcut of the descriptor (C, R, E, A…) works from the menu
+      shortcut: d?.shortcut && /^[A-Za-z]$/.test(d.shortcut) ? d.shortcut : undefined,
       disabledReason: enabled ? undefined : descriptorReason(t, d, o),
     });
   }

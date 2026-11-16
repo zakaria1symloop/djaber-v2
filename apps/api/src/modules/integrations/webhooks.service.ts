@@ -24,7 +24,7 @@ import { AppException, conflict, notFound } from '../../core/errors/app.exceptio
 import { page, toSkipTake, type Page } from '../../core/http/pagination';
 import { act, auditActor, iso, planAllowance, withinLimit } from './integrations.util';
 import { WebhookDispatchService, deliverySummary, maxAttemptsOf } from './webhook-dispatch.service';
-import { newWebhookSecret, secretHint, webhookUrlAllowed } from './webhook-signing';
+import { isPrivateHttps, newWebhookSecret, secretHint, webhookUrlAllowed } from './webhook-signing';
 
 @Injectable()
 export class WebhooksService {
@@ -114,7 +114,11 @@ export class WebhooksService {
   }
 
   private assertUrl(url: string) {
-    if (!webhookUrlAllowed(url, this.config.isProd)) throw new AppException('WEBHOOK_URL_INVALID', {}, { url: 'validation.url_https' });
+    if (!webhookUrlAllowed(url, this.config.isProd)) {
+      // full-test 15/11 SETTINGS-12: an https URL on a private / local host is refused for that reason, not « HTTPS obligatoire »
+      if (this.config.isProd && isPrivateHttps(url)) throw new AppException('WEBHOOK_URL_PRIVATE', {}, { url: 'validation.url_private' });
+      throw new AppException('WEBHOOK_URL_INVALID', {}, { url: 'validation.url_https' });
+    }
   }
 
   async byId(id: string): Promise<WebhookEndpoint> {

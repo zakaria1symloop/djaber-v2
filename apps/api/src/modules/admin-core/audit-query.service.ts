@@ -76,6 +76,12 @@ export class AuditQueryService implements OnModuleInit {
     return page(await this.dtos(rows), total, q);
   }
 
+  /** `GET /admin/audit-logs/actions` — the distinct action slugs of the log, sorted (ADMIN-14: the filter offered 15 fixed ones). */
+  async actions(): Promise<string[]> {
+    const rows = await prisma.$queryRaw<{ action: string }[]>`SELECT DISTINCT "action" FROM "AuditLog" ORDER BY "action"`;
+    return rows.map((r) => r.action);
+  }
+
   async get(id: string): Promise<AuditLogDto> {
     assertUuid(id);
     const r = await prisma.auditLog.findUnique({ where: { id }, include: this.include });

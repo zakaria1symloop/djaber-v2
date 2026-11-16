@@ -112,7 +112,7 @@ test('intro state: agent, expiry, SIMULATION, no app shell; a message shows the 
   });
 });
 
-test('expired link ⇒ "Lien expiré" (410 AGENT_TEST_LINK_EXPIRED), no composer; an unknown link shows the same state', async ({ page }) => {
+test('expired link ⇒ "Lien expiré" (410 AGENT_TEST_LINK_EXPIRED), no composer; an unknown link ⇒ "Lien invalide"', async ({ page }) => {
   // mock: a link lives at least 1 h (`expiresInHours` ≥ 1), so the API cannot answer 410 during a run: the opening
   // read of a real link is answered with the error the API sends once it expired
   await failOnce(page, new RegExp(`/api/v1/agent-test/${token}$`), 'GET', 410, 'AGENT_TEST_LINK_EXPIRED', 'Lien de test expiré (24 h).', { times: Infinity });
@@ -124,12 +124,13 @@ test('expired link ⇒ "Lien expiré" (410 AGENT_TEST_LINK_EXPIRED), no composer
   await expect(shared(page).getByText('SIMULATION', { exact: true })).toBeVisible();
   await expect(page).toHaveTitle("Test d'un agent · Djaber.ai");
 
-  // a token the API does not know (real 404): the same dead end, never an error page
+  // a token the API does not know (real 404): a dead end too, never an error page — called « invalide », not « expiré »
+  // (full-test 15/11 PUBLIC-11)
   const unknown = randomUUID().replace(/-/g, '');
   const res = await page.request.get(`${API}/agent-test/${unknown}`);
   expect(res.status()).toBe(404);
-  await enter(page, pathOf(unknown), () => state(page, 'expired'));
-  await expect(page.getByRole('heading', { name: 'Lien expiré' })).toBeVisible();
+  await enter(page, pathOf(unknown), () => state(page, 'invalid'));
+  await expect(page.getByRole('heading', { name: 'Lien invalide' })).toBeVisible();
   await expect(page.getByTestId('playground-composer')).toHaveCount(0);
 });
 

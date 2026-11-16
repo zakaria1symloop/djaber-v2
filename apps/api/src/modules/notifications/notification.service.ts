@@ -1,7 +1,7 @@
 // NTF-01 — the notification centre of the current user: list (cursor), unread count from the server, read / read-all.
 // Rows belong to a user; inside a workspace the list shows that workspace's rows plus the account-level ones.
 import { Injectable } from '@nestjs/common';
-import { isAppLocale, NotificationTypeValues, type AppLocale, type NotificationsQuery, type NotificationView } from '@djaber/shared';
+import { isAppLocale, NotificationTypeValues, type AppLocale, type NotificationGroup, type NotificationsQuery, type NotificationView } from '@djaber/shared';
 import { prisma, TenantContext, type Notification, type NotificationType, type Prisma } from '@djaber/db';
 import { notFound } from '../../core/errors/app.exception';
 import type { CursorPage } from '../../core/http/pagination';
@@ -64,6 +64,17 @@ export class NotificationService {
 
   async unreadCount(): Promise<number> {
     return prisma.notification.count({ where: { AND: [this.scope(), { readAt: null }] } });
+  }
+
+  /** full-test 15/11 HOME-05 (12 §18 « family tabs with counts », AT-ST-04): unread notifications per family. */
+  async unreadByGroup(): Promise<Partial<Record<NotificationGroup, number>>> {
+    const rows = await prisma.notification.groupBy({ by: ['type'], where: { AND: [this.scope(), { readAt: null }] }, _count: { _all: true } });
+    const out: Partial<Record<NotificationGroup, number>> = {};
+    for (const r of rows) {
+      const g = notificationGroup(r.type);
+      out[g] = (out[g] ?? 0) + r._count._all;
+    }
+    return out;
   }
 
   async read(id: string) {

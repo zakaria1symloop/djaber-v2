@@ -412,17 +412,31 @@ describe('tools', () => {
     const run = (await runsOf(conversation.id)).at(-1);
     expect(run).toMatchObject({ status: 'ok', attempt: 2, creditsCharged: 1, toolCallCount: 1 });
     expect(run!.toolCalls).toHaveLength(1);
-    expect((await aiMessages(conversation.id)).map((m) => m.text).at(-1)).toBe('Votre commande CMD-1042 est enregistrée. Total : 4900 DA.');
+    // full-test 15/11 proposal 4: the customer gets the server's confirmation built from the create_order result
+    expect((await aiMessages(conversation.id)).map((m) => m.text).at(-1)).toBe(['Votre commande CMD-1042 est bien enregistrée ✅', 'Livraison : 400 DA', 'Total : 4 900 DA, à payer à la livraison.', 'Délai de livraison : 2 à 5 jours.', 'Merci pour votre confiance !'].join('\n'));
     expect((await outMessages(conversation.id)).length).toBeGreaterThan(outBefore);
     expect(sends(sender).filter((c) => String(c.args.message.text).includes('CMD-1042'))).toHaveLength(1);
     expect(await debits(s.owner.workspaceId)).toHaveLength(debitsBefore + 1);
 
-    // AT-AI-06 (order rule itself: M5) — an existing order returned by the port reaches the model untouched
+    // full-test 15/11 proposal 4: the same content in a later turn of this conversation is refused by the server
+    // (ORDER_ALREADY_PLACED with the number) — the port is not called again
     create.mockResolvedValue({ ok: true, orderId: 'o-1', number: 'CMD-1042', total: 4900, duplicateOf: 'CMD-1042' });
     await resetAi();
     fakeAi(app).script('reply', { toolCalls: [call] }, { reply: 'Votre commande CMD-1042 est déjà enregistrée.', intent: 'SALE' });
     const again = await turn(s, sender, { text: 'oui je confirme' });
-    expect((again.runs.at(-1)!.toolCalls[0]!.result as any).duplicateOf).toBe('CMD-1042');
+    expect(again.runs.at(-1)!.toolCalls[0]!.result).toMatchObject({ ok: false, error: { code: 'ORDER_ALREADY_PLACED', number: 'CMD-1042' } });
+    expect(create).toHaveBeenCalledTimes(1);
+    // AT-AI-06 (order rule itself: M5) — an existing order returned by the port reaches the model untouched
+    // (another conversation: recap in a first turn, the customer's yes in the next one)
+    const other = newSender();
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [call] }, { reply: 'Récapitulatif … Vous confirmez ?', intent: 'SALE' });
+    await turn(s, other, { text: 'Amine Benali, 0555123456, Bab Ezzouar' });
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [call] }, { reply: 'Votre commande CMD-1042 est déjà enregistrée.', intent: 'SALE' });
+    const dup = await turn(s, other, { text: 'oui je confirme' });
+    expect(create).toHaveBeenCalledTimes(2);
+    expect((dup.runs.at(-1)!.toolCalls[0]!.result as any).duplicateOf).toBe('CMD-1042');
     create.mockRestore();
   });
 
@@ -637,11 +651,12 @@ describe('handoff, insights, safety', () => {
     await receive(app, s.page, sender, { text: 'allo ?' });
     expect(await replyJob(app, t.conversationId)).toBeNull();
     // … a greeting is a new conversation: the AI answers it, the thread shows « IA reprise »
-    fakeAi(app).script('reply', { reply: 'Bonjour ! Comment puis-je vous aider ?', intent: 'GREETING' });
+    // (in the customer's arabizi: a French answer would be a `language_switch` for the reply guard, full-test 15/11 AI-CHAT-04)
+    fakeAi(app).script('reply', { reply: 'Salam! Kifach n9der n3awnek?', intent: 'GREETING' });
     const back = await turn(s, sender, { text: 'Salam alikoum 👋' });
     expect(back.conversation).toMatchObject({ status: 'active', aiPaused: false });
     expect((back.conversation.context as any).handoffReason).toBeNull();
-    expect(back.out.at(-1)).toMatchObject({ author: 'ai', text: 'Bonjour ! Comment puis-je vous aider ?' });
+    expect(back.out.at(-1)).toMatchObject({ author: 'ai', text: 'Salam! Kifach n9der n3awnek?' });
     expect(back.out.some((m) => (m.payload as any)?.system?.kind === 'ai_resumed')).toBe(true);
     // the model reads the greeting as a fresh start, not the earlier trouble (RESUMED note on the message it answers)
     expect(String((fakeAi(app).callsOf('reply').at(-1)!.messages.at(-1) as { content?: unknown }).content)).toContain('[BACK TO YOU');
@@ -1068,11 +1083,16 @@ describe('providers, credits', () => {
     const s = await shop();
     await setCredits(app, s.owner.workspaceId, 5);
     const b = await balanceOf(app, s.owner.workspaceId);
-    // plan limit 5000 + a negative adjustment: usage is measured against the plan limit
+    // plan 5000 + a take-back of 4995 (`adjustment` debit): since contre-recette 11/11 M-31 a take-back lowers the month's
+    // limit (5) instead of counting as « used »; usage is what the AI consumed, measured against that limit
     expect(b.total).toBe(5);
     await turn(s, newSender(), { text: 'Bonjour, la robe satin ?' });
     const events = (await db.outbox.findMany({ where: { topic: 'ws' } })).map((r) => r.payload as any).filter((p) => p.room === `ws:${s.owner.workspaceId}` && p.event === 'credits.updated');
-    expect(events.at(-1)!.payload).toMatchObject({ planLimit: 5000, packBalance: 0, exhausted: false });
+    expect(events.at(-1)!.payload).toMatchObject({ planUsed: 1, planLimit: 5, packBalance: 0, exhausted: false });
+    // 80 %: 4 of 5 used ⇒ one `credits_80` notification for the period
+    for (let i = 0; i < 3; i++) await turn(s, newSender(), { text: 'Bonjour, la robe satin ?' });
+    expect((await balanceOf(app, s.owner.workspaceId)).planUsed).toBe(4);
+    expect(await db.notification.count({ where: { workspaceId: s.owner.workspaceId, type: 'credits_80' } })).toBe(1);
     // quota: a plan with 1 conversation per month
     const free = await asOwner(app, 'free');
     const page = await connectedPage(free, app);

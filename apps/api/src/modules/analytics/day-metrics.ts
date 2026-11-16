@@ -64,17 +64,29 @@ export const bucketOf = (h: HistName, v: number) => {
   const i = edges.findIndex((e) => v <= e);
   return i === -1 ? edges.length : i;
 };
-export const percentile = (h: HistName, counts: number[], p: number): number | null => {
+const lastEdge = (h: HistName) => HIST[h].edges[HIST[h].edges.length - 1] as number;
+/** Bucket index holding the percentile, null without data. */
+const percentileBucket = (h: HistName, counts: number[], p: number): number | null => {
   const total = counts.reduce((s, n) => s + n, 0);
   if (!total) return null;
   const target = Math.max(1, Math.ceil(total * p));
   let cum = 0;
   for (let i = 0; i < counts.length; i++) {
     cum += counts[i] ?? 0;
-    if (cum >= target) return i < HIST[h].edges.length ? (HIST[h].edges[i] as number) : HIST[h].over;
+    if (cum >= target) return i;
   }
-  return HIST[h].over;
+  return HIST[h].edges.length;
 };
+/**
+ * Upper edge of the bucket holding the percentile. full-test 15/11 ANALYTICS-08: in the last, open bucket the value is only
+ * known to be above the last edge — the last edge is returned and `percentileAbove` says « > » (never the made-up `over`).
+ */
+export const percentile = (h: HistName, counts: number[], p: number): number | null => {
+  const i = percentileBucket(h, counts, p);
+  if (i === null) return null;
+  return i < HIST[h].edges.length ? (HIST[h].edges[i] as number) : lastEdge(h);
+};
+export const percentileAbove = (h: HistName, counts: number[], p: number): boolean => percentileBucket(h, counts, p) === HIST[h].edges.length;
 const zeros = (n: number) => Array.from({ length: n }, () => 0);
 
 export const emptyDay = (): DayMetrics => ({

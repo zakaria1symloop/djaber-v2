@@ -20,7 +20,7 @@ import { DEFAULT_PRESET } from './period';
 export function useFigure() {
   const t = useT();
   const locale = useLocaleCode();
-  const units = { s: t('analytics.unit.s'), min: t('analytics.unit.min'), d: t('analytics.unit.d') };
+  const units = { s: t('analytics.unit.s'), min: t('analytics.unit.min'), d: t('analytics.unit.d'), h: t('analytics.unit.h') };
   return (value: number | null | undefined, unit: Unit) => formatValue(value, unit, locale, units);
 }
 
@@ -31,7 +31,8 @@ export function Kpi({ k, name, label, meta, sub, title, onClick }: { k: Analytic
   return (
     <AnaKpiTile
       data-kpi={name}
-      value={fig(k?.value ?? null, k?.unit ?? 'count')}
+      // ANALYTICS-08: a median in the open last bucket of its histogram is only « above » that value
+      value={`${hintNum(k, 'medianAbove') === 1 ? '> ' : ''}${fig(k?.value ?? null, k?.unit ?? 'count')}`}
       unit={label}
       delta={d ? <DeltaBadge value={d.value} unit={d.unit} invert={INVERTED_KPIS.has(name)} /> : undefined}
       meta={meta}

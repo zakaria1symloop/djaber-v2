@@ -103,7 +103,8 @@ export function HelpCenterPage() {
       {searching ? (
         <Card className="flex flex-col gap-3 p-4" data-testid="help-results">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-[15px] font-medium">{hp.category ? t(`help.category.${hp.category}`) : t('help.results.title', { q: hp.q })}</h2>
+            <h2 className="text-[15px] font-medium">{/* full-test 15/11 HELP-13: category + typed words — both are applied, both are named */}
+              {hp.category && hp.q.trim().length >= 2 ? t('help.results.titleInCategory', { q: hp.q.trim(), category: t(`help.category.${hp.category}`) }) : hp.category ? t(`help.category.${hp.category}`) : t('help.results.title', { q: hp.q })}</h2>
             <Button size="sm" variant="ghost" onClick={() => hp.set({ q: '', category: null })}>
               {t('action.clearFilters')}
             </Button>

@@ -14,13 +14,22 @@ export const reasonOk = (r: string) => r.trim().length >= REASON_MIN;
 export type ServerErrors = { form: string | null; fields: Record<string, string> };
 export const NO_ERRORS: ServerErrors = { form: null, fields: {} };
 
+/**
+ * One field message. `validation.range` names its bounds only when the envelope carries them (`params.min` / `max`); without
+ * them it reads « Valeur hors limites. », never « Valeur hors limites (–) » (full-test 15/11 ADMIN-08).
+ */
+const fieldText = (t: ReturnType<typeof useT>, key: string, params: Record<string, string | number> | undefined): string => {
+  if (key === 'validation.range' && (params?.min === undefined || params?.max === undefined)) return t('admin.validation.range');
+  return fieldError(t, key, params) ?? key;
+};
+
 /** Error envelope → per-field messages (translated) + a form-level message for the rest. */
 export function toServerErrors(e: unknown, t: ReturnType<typeof useT>, known: readonly string[], codeToField: Record<string, string> = {}): ServerErrors {
   if (!(e instanceof ApiError)) return { form: errorMessage(e, t), fields: {} };
   const fields: Record<string, string> = {};
   let unknown = false;
   for (const [f, key] of Object.entries(e.body.fields ?? {})) {
-    if (known.includes(f)) fields[f] = e.code !== 'VALIDATION_ERROR' && !key.startsWith('validation.') ? errorMessage(e, t) : (fieldError(t, key) ?? key);
+    if (known.includes(f)) fields[f] = e.code !== 'VALIDATION_ERROR' && !key.startsWith('validation.') ? errorMessage(e, t) : fieldText(t, key, e.body.params ?? undefined);
     else unknown = true;
   }
   const direct = codeToField[e.code];

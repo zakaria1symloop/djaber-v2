@@ -18,6 +18,8 @@ export const CLIENT_ACTIONS = {
   delete: 'delete',
   /** a client with orders: the server sends `archive` in place of `delete` (soft delete after confirmation) */
   archive: 'archive',
+  /** an archived card (full-test CLIENTS-03, `POST /clients/:id/restore`) */
+  restore: 'restore',
 } as const;
 export type ClientActionKey = (typeof CLIENT_ACTIONS)[keyof typeof CLIENT_ACTIONS];
 

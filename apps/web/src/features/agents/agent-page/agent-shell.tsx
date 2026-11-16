@@ -15,7 +15,7 @@ import { useSession } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
 import { useAgent } from '../api';
 import type { Agent } from '../contracts';
-import { cardState, enabledCapabilities, draftFromAgent, resumePath } from '../logic';
+import { cardState, enabledCapabilities, draftFromAgent, noChannelText, resumePath } from '../logic';
 import { AgentStatusPill, channelLabel } from '../ui';
 import { useAgentActions, type AgentActions } from '../use-agent-actions';
 
@@ -129,7 +129,8 @@ export function AgentShell({ id, children }: { id: string; children: ReactNode }
           </Banner>
         ) : a.channels.length === 0 ? (
           <Banner tone="warning" action={actions.manage ? { label: t('agents.card.noChannel.link'), href: `/${locale}${base}/configuration?section=channels` } : undefined}>
-            {t('error.AGENT_NO_CHANNEL')}
+            {/* full-test 15/11 AGENTS-11: an active agent whose pages were disconnected answers nobody — said as such */}
+            {noChannelText(t, a.status)}
           </Banner>
         ) : null}
         <nav aria-label={t('agents.page.tabs')} className="flex flex-wrap gap-1.5">

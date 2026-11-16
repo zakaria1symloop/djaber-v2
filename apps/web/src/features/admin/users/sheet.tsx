@@ -10,12 +10,31 @@ import { usePlatform } from '../platform';
 import { fullName, useFormats } from '../ui';
 import type { UserAction } from './actions';
 
+/** full-test 15/11 ADMIN-19.4: one line per device + IP (count of its sessions, latest use), the 5 latest, then « n de plus » */
+const SESSION_LINES = 5;
+type SessionRow = AdminUserDetailDto['sessions'][number];
+export function sessionGroups(sessions: readonly SessionRow[]): { device: string; ip: string | null; at: string; count: number }[] {
+  const groups = new Map<string, { device: string; ip: string | null; at: string; count: number }>();
+  for (const s of sessions) {
+    const device = s.device ?? s.platform ?? 'web';
+    const key = `${device}|${s.ip ?? ''}`;
+    const g = groups.get(key);
+    if (!g) groups.set(key, { device, ip: s.ip, at: s.lastUsedAt, count: 1 });
+    else {
+      g.count += 1;
+      if (s.lastUsedAt > g.at) g.at = s.lastUsedAt;
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.at.localeCompare(a.at));
+}
+
 export function UserSheet({ id, onClose, menu, onAction }: { id: string | null; onClose: () => void; menu: (u: AdminUserDetailDto) => MenuAction[]; onAction: (a: UserAction, u: AdminUserDetailDto) => void }) {
   const t = useT();
   const f = useFormats();
   const { can } = usePlatform();
   const q = useAdminGet<AdminUserDetailDto>(id ? `/admin/users/${id}` : null);
   const u = q.data;
+  const groups = u ? sessionGroups(u.sessions) : [];
   const owned = u?.ownedWorkspaceId ? (u.workspaces.find((w) => w.id === u.ownedWorkspaceId)?.name ?? '—') : t('admin.users.detail.ownsNone');
   return (
     <SideSheet
@@ -51,7 +70,8 @@ export function UserSheet({ id, onClose, menu, onAction }: { id: string | null; 
             label={t('admin.users.detail.sessions')}
             lines={[
               ...u.devices.map((d) => [d.deviceName ?? d.platform, d.appVersion, f.ago(d.lastSeenAt)].filter(Boolean).join(' · ')),
-              ...u.sessions.map((s) => [s.device ?? s.platform ?? 'web', s.ip, f.ago(s.lastUsedAt)].filter(Boolean).join(' · ')),
+              ...groups.slice(0, SESSION_LINES).map((g) => [g.device, g.ip, f.ago(g.at), g.count > 1 ? t('admin.users.detail.sessionCount', { count: g.count }) : null].filter(Boolean).join(' · ')),
+              ...(groups.length > SESSION_LINES ? [t('admin.users.detail.moreSessions', { count: groups.length - SESSION_LINES })] : []),
               ...(u.devices.length + u.sessions.length === 0 ? ['—'] : []),
             ]}
             action={

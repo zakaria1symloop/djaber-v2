@@ -35,7 +35,15 @@ export function QueueView() {
   useQueueEvents();
 
   const conversations = useQuery({ queryKey: queueKeys.conversations(ws), queryFn: queueApi.needsHuman, enabled: !!ws && s.can('inbox.read') });
-  const insights = useQuery({ queryKey: queueKeys.insights(ws), queryFn: queueApi.insights, enabled: !!ws && s.can('inbox.read'), staleTime: 60_000, retry: false });
+  const [insightSize, setInsightSize] = useState<25 | 50 | 100>(25);
+  const insights = useQuery({
+    queryKey: insightSize === 25 ? queueKeys.insights(ws) : [...queueKeys.insights(ws), insightSize],
+    queryFn: () => queueApi.insights(insightSize),
+    enabled: !!ws && s.can('inbox.read'),
+    staleTime: 60_000,
+    retry: false,
+    placeholderData: (prev) => prev,
+  });
 
   const act = useMutation({
     mutationFn: async ({ row, action }: { row: ConversationListItemView; action: RowAction }) => {
@@ -62,7 +70,7 @@ export function QueueView() {
   const [ignoring, setIgnoring] = useState<string | null>(null);
   /** the handled row leaves the column at once; the server list follows */
   const dropInsight = (id: string) => {
-    qc.setQueryData<InsightsResult>(queueKeys.insights(ws), (old) => (old ? { ...old, rows: old.rows.filter((r) => r.id !== id), total: Math.max(0, old.total - (old.rows.some((r) => r.id === id) ? 1 : 0)) } : old));
+    qc.setQueriesData<InsightsResult>({ queryKey: queueKeys.insights(ws) }, (old) => (old ? { ...old, rows: old.rows.filter((r) => r.id !== id), total: Math.max(0, old.total - (old.rows.some((r) => r.id === id) ? 1 : 0)) } : old));
     void qc.invalidateQueries({ queryKey: queueKeys.insights(ws) });
     void qc.invalidateQueries({ queryKey: [ws, 'insights'] });
     void qc.invalidateQueries({ queryKey: [ws, 'agents'] });
@@ -97,7 +105,8 @@ export function QueueView() {
       title={t('nav.queue')}
       description={
         <span data-testid="queue-summary">
-          {t('queue.summary', { conversations: rows.length, insights: problemCount })}
+          {/* HOME-01: when the insights cannot be read, the summary never says « aucun problème signalé » */}
+          {insights.isError ? t('queue.summaryInsightsError', { conversations: rows.length }) : t('queue.summary', { conversations: rows.length, insights: problemCount })}
           {' · '}
           {minutes > 0 ? t('queue.reminder', { minutes }) : t('queue.reminderOff')}
         </span>
@@ -121,13 +130,19 @@ export function QueueView() {
         </div>
       ) : conversations.isError ? (
         <QueryError error={conversations.error} onRetry={() => void conversations.refetch()} />
-      ) : rows.length === 0 && problems.length === 0 ? (
+      ) : rows.length === 0 && problems.length === 0 && !insights.isError && !insights.isPending ? (
         <EmptyState icon={<Check className="size-6 text-accent-money" />} title={t('state.queue.empty.title')} description={t('state.queue.empty.description')} />
       ) : (
         <div className="grid items-start gap-6 lg:grid-cols-2">
           <section aria-label={t('queue.conversations.title')} className="flex flex-col gap-3" data-testid="queue-conversations">
             <CountHeading count={rows.length}>{t('queue.conversations.title')}</CountHeading>
             {rows.length === 0 ? <p className="px-5 text-[13px] text-text-muted">{t('queue.conversations.empty')}</p> : null}
+            {/* HOME-07: the column shows the 50 oldest; the rest is in the inbox */}
+            {rows.length >= 50 ? (
+              <Link href="/inbox?tab=needs_human" className="px-5 text-[13px] text-text-secondary hover:underline" data-testid="queue-conversations-more">
+                {t('queue.conversations.more')}
+              </Link>
+            ) : null}
             {rows.map((row) => {
               const reason = queueReason(row.handoffReason);
               const mine = !!row.assignee && row.assignee.id === s.me?.id;
@@ -172,9 +187,22 @@ export function QueueView() {
 
           <section aria-label={t('queue.insights.title')} className="flex flex-col gap-3" data-testid="queue-insights">
             <CountHeading count={problemCount}>{t('queue.insights.title')}</CountHeading>
+            {/* HOME-01: a failed insights call is an error state with « Réessayer », never « Tout est calme » */}
+            {insights.isError ? <QueryError error={insights.error} onRetry={() => void insights.refetch()} /> : null}
             {problems.map((i) => (
               <Insight key={i.id} insight={i} manage={manageInsights} busy={ignoring === i.id} disabledReason={writeReason} onInstruct={() => setResolving(i)} onIgnore={() => void ignore(i)} />
             ))}
+            {problemCount > problems.length ? (
+              insightSize < 100 ? (
+                <Button variant="ghost" onClick={() => setInsightSize(insightSize === 25 ? 50 : 100)} loading={insights.isFetching} className="self-start" data-testid="queue-insights-more">
+                  {t('queue.insights.more', { count: problemCount - problems.length })}
+                </Button>
+              ) : (
+                <Link href="/agents" className="px-5 text-[13px] text-text-secondary hover:underline" data-testid="queue-insights-more">
+                  {t('queue.insights.moreByAgent', { count: problemCount - problems.length })}
+                </Link>
+              )
+            ) : null}
           </section>
         </div>
       )}

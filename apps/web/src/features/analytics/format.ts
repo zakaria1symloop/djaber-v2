@@ -14,7 +14,7 @@ export function decimal(n: number, locale: string, digits = 1): string {
 }
 
 /** Value of a KPI without its unit label (the tile shows the label next to it): `412 300`, `68 %`, `1,9 s`. */
-export function formatValue(value: number | null | undefined, unit: Unit, locale: string, units: { s: string; min: string; d: string }): string {
+export function formatValue(value: number | null | undefined, unit: Unit, locale: string, units: { s: string; min: string; d: string; h?: string }): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '—';
   switch (unit) {
     case 'money':
@@ -26,13 +26,15 @@ export function formatValue(value: number | null | undefined, unit: Unit, locale
     case 'seconds':
       return `${decimal(value, locale)}${NBSP}${units.s}`;
     case 'minutes':
-      return `${decimal(value, locale, 0)}${NBSP}${units.min}`;
+      // ANALYTICS-08: two hours and more read in hours (« 48 h », not « 2 880 min »)
+      return value >= 120 && units.h ? `${decimal(value / 60, locale)}${NBSP}${units.h}` : `${decimal(value, locale, 0)}${NBSP}${units.min}`;
     case 'days':
       return `${decimal(value, locale)}${NBSP}${units.d}`;
     case 'ratio':
       return decimal(value, locale);
     case 'usd':
-      return `$${(Math.round(value * 100) / 100).toFixed(2)}`;
+      // ANALYTICS-09: « 3,77 $ » in French / Arabic, « $3.77 » in English
+      return locale === 'en' ? `$${(Math.round(value * 100) / 100).toFixed(2)}` : `${(Math.round(value * 100) / 100).toFixed(2).replace('.', ',')}${NBSP}$`;
   }
 }
 
@@ -50,6 +52,17 @@ export const INVERTED_KPIS = new Set(['cancelledPct', 'returnedPct', 'errorRate'
 export function dayLabel(day: string, locale: string, withYear = false): string {
   const tag = locale === 'ar' ? 'ar-DZ-u-nu-latn' : locale === 'en' ? 'en-GB' : 'fr-FR';
   return new Intl.DateTimeFormat(tag, { day: '2-digit', month: 'short', ...(withYear ? { year: 'numeric' } : {}), timeZone: 'UTC' }).format(new Date(`${day}T12:00:00Z`));
+}
+
+/**
+ * « 14 nov. 2024 → 15 nov. 2026 »: the start year is written when it differs from the end year (or from this year for a
+ * label without the end year), so a 2-year range never reads like 2 days (full-test 15/11 ANALYTICS-04).
+ */
+export function rangeLabel(from: string, to: string, locale: string, o: { endYear?: boolean; currentYear?: string } = {}): string {
+  const thisYear = o.currentYear ?? new Date().toISOString().slice(0, 4);
+  const startYear = from.slice(0, 4) !== to.slice(0, 4);
+  const endYear = o.endYear || startYear || to.slice(0, 4) !== thisYear;
+  return `${dayLabel(from, locale, startYear)} → ${dayLabel(to, locale, endYear)}`;
 }
 
 /** Largest value of a series point list (best day) — `null` when everything is 0. */

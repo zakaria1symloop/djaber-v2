@@ -186,7 +186,7 @@ describe('public account deletion (PUB-06, FL-22 1b)', () => {
     await ask(user.email, ip()).expect(200);
     const after = await mailsTo(app, user.email, 'auth/account-deletion-request');
     expect(after).toHaveLength(2);
-    const token2 = tokenOf(after[1]);
+    const token2 = tokenOf(after[0]); // the local mailbox lists the newest first
     expect(token2).not.toBe(token);
     await pub(app).get(`/api/v1/account-deletion/confirm/${token}`).expect(410);
     await pub(app).get(`/api/v1/account-deletion/confirm/${token2}`).expect(200);
@@ -201,7 +201,7 @@ describe('public account deletion (PUB-06, FL-22 1b)', () => {
     await ask(user.email, ip()).expect(200);
     const mails = await mailsTo(app, user.email, 'auth/account-deletion-request');
     expect(mails).toHaveLength(2);
-    expect(tokenOf(mails[1])).not.toBe(token);
+    expect(tokenOf(mails[0])).not.toBe(token); // the local mailbox lists the newest first
   });
 });
 

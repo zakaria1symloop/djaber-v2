@@ -45,6 +45,8 @@ export function FeeGridView() {
   const rows = useMemo(() => filterRows(fees.data?.rows ?? [], q), [fees.data, q]);
   const meta = fees.data?.meta;
   const rule = freeRule(workspace?.freeDeliveryThreshold);
+  // switched on, amount not typed yet: the field opens, nothing is saved (full-test DELIVERY-10)
+  const [pendingOn, setPendingOn] = useState(false);
 
   const setRow = (row: FeeRule) => qc.setQueryData<FeeGrid>(deliveryKeys.fees(ws), (old) => (old ? { ...old, rows: old.rows.map((r) => (r.wilayaId === row.wilayaId ? row : r)) } : old));
   const mark = (id: number, s: CellState, error?: string) => {
@@ -123,8 +125,9 @@ export function FeeGridView() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-2">
-        <SearchInput value={q} onChange={setQ} label={t('action.search')} placeholder={t('fees.search')} clearLabel={t('list.clearSearch')} className="max-w-80" />
-        <span className="flex-1" />
+        <SearchInput value={q} onChange={setQ} label={t('action.search')} placeholder={t('fees.search')} clearLabel={t('list.clearSearch')} className="w-full sm:w-80" />
+        {/* full-test DELIVERY-17: on a phone the search takes the whole line, the buttons go to the next one */}
+        <span className="hidden flex-1 sm:block" />
         <Button onClick={() => void seed(false)} loading={seeding === 'fill'} disabledReason={readOnlyReason} disabled={!!seeding} data-testid="fees-fill">
           {t('fees.fillMissing')}
         </Button>
@@ -144,10 +147,15 @@ export function FeeGridView() {
       ) : null}
 
       <FreeDeliveryBar
-        enabled={rule.enabled}
-        onEnabledChange={(v) => void setThreshold(thresholdOnToggle(v, rule.amount))}
+        enabled={rule.enabled || pendingOn}
+        onEnabledChange={(v) => {
+          const next = thresholdOnToggle(v, rule.amount);
+          setPendingOn(next === undefined);
+          if (next === undefined || (next === null && !rule.enabled)) return;
+          void setThreshold(next);
+        }}
         amount={rule.amount}
-        onAmountCommit={(n) => void setThreshold(n)}
+        onAmountCommit={(n) => (setPendingOn(false), void setThreshold(n))}
         label={t('fees.free.label')}
         hint={t('fees.free.hint')}
         switchLabel={t('fees.free.switch')}

@@ -15,6 +15,30 @@ const strip = (md: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+/** Lower case, no accents (« crédits » = « credits »), no Arabic short vowels / tatweel. */
+export const foldText = (s: string): string =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g, '')
+    .toLocaleLowerCase();
+/** The words of a search (2+ letters, or any word with a digit: « 2FA »). */
+export const searchWords = (q: string): string[] => [...new Set(foldText(q).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2 || /\d/.test(w)))];
+/**
+ * full-test 15/11 HELP-01: the search matches word by word without accents — every word first (« connecter Instagram »
+ * finds « Connecter une page Facebook ou Instagram »); when no guide has them all, the guides with the most words.
+ */
+export function rankSearch<T>(items: T[], text: (x: T) => string, q: string): T[] {
+  const words = searchWords(q);
+  if (!words.length) return items;
+  const scored = items.map((x) => {
+    const hay = foldText(text(x));
+    return { x, n: words.filter((w) => hay.includes(w)).length };
+  });
+  const all = scored.filter((s) => s.n === words.length);
+  if (all.length) return all.map((s) => s.x);
+  return scored.filter((s) => s.n > 0).sort((a, b) => b.n - a.n).map((s) => s.x);
+}
+
 @Injectable()
 export class HelpService {
   private present(e: Row, requested: string, withBody: boolean): HelpArticleDto | null {
@@ -47,13 +71,11 @@ export class HelpService {
     const rows = await TenantContext.runSystem(() =>
       prisma.cmsEntry.findMany({ where: { ...this.where(new Date()), ...(q.category ? { category: q.category } : {}) }, include, orderBy: [{ sortOrder: 'asc' }, { key: 'asc' }] }),
     );
-    const needle = q.q?.toLocaleLowerCase();
-    return rows
+    const found = rows
       .map((r) => this.present(r, requested, true))
       .filter((a): a is HelpArticleDto => !!a)
-      .filter((a) => !q.context || a.contexts.includes(q.context))
-      .filter((a) => !needle || `${a.title} ${a.body ?? ''}`.toLocaleLowerCase().includes(needle))
-      .map(({ body: _b, ...a }) => a);
+      .filter((a) => !q.context || a.contexts.includes(q.context));
+    return (q.q?.trim() ? rankSearch(found, (a) => `${a.title} ${a.body ?? ''}`, q.q) : found).map(({ body: _b, ...a }) => a);
   }
 
   async get(key: string, lang: string | undefined, locale: string): Promise<HelpArticleDto> {

@@ -5,14 +5,15 @@
 // field (ÉCHEC, "Corriger et renvoyer") / ignored `DELIVERY_ORDER_ALREADY_SENT` / queued `COURIER_UNAVAILABLE`, with
 // "Imprimer n bordereaux" and "Réessayer les échecs (n)".
 import { formatNumber } from '@djaber/shared';
-import { ActionsMenu, Button, Dialog, FormAlert, Pill, ProgressBar, RadioCards, Skeleton } from '@djaber/ui';
+import { ActionsMenu, Button, buttonClass, Dialog, FormAlert, Pill, ProgressBar, RadioCards, Skeleton } from '@djaber/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { refusal, useOnOpen } from '@/features/orders/dialogs/common';
 import { useOrderActions } from '@/features/orders/use-order-actions';
-import { useRouter } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 import { isJobRunning, useJob } from '@/lib/jobs';
 import { rowErrorText } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
+import { useSession } from '@/lib/session';
 import { uuid } from '@/lib/uuid';
 import { deliveryApi, useCouriers, useDeliveryRefresh } from './api';
 import type { BulkSendResult } from './contracts';
@@ -24,6 +25,7 @@ export type SendTarget = { id: string; number: string; label: string; blocked?: 
 
 export function BulkSendDialog({ open, orders, onClose, onFinished }: { open: boolean; orders: SendTarget[]; onClose: () => void; onFinished?: () => void }) {
   const t = useT();
+  const { can } = useSession();
   const couriers = useCouriers(open);
   const active = useMemo(() => (couriers.data ?? []).filter((c) => c.isActive), [couriers.data]);
   const [courierId, setCourierId] = useState('');
@@ -73,7 +75,7 @@ export function BulkSendDialog({ open, orders, onClose, onFinished }: { open: bo
               {t('action.cancel')}
             </Button>
             <Button variant="primary" onClick={() => void send(valid.map((o) => o.id))} loading={busy} disabled={!valid.length || !courierId} data-testid="bulk-send-submit">
-              {t('send.bulk.submit', { count: valid.length, courier: courier?.displayName ?? '' })}
+              {courier ? t('send.bulk.submit', { count: valid.length, courier: courier.displayName }) : t('send.bulk.submitPlain', { count: valid.length })}
             </Button>
           </>
         }
@@ -84,7 +86,15 @@ export function BulkSendDialog({ open, orders, onClose, onFinished }: { open: bo
           ) : active.length ? (
             <RadioCards label={t('common.courier')} columns={2} value={courierId} onChange={setCourierId} options={active.map((c) => ({ value: c.id, label: c.isDefault ? `${c.displayName} · ${t('couriers.default').toUpperCase()}` : c.displayName, description: t(`couriers.provider.${c.provider}`) }))} />
           ) : (
-            <FormAlert tone="info">{t('error.DELIVERY_NO_COURIER')}</FormAlert>
+            // full-test DELIVERY-04: the way out is offered (configure / activate a courier, or self-delivery)
+            <div className="flex flex-col gap-2" data-testid="bulk-send-no-courier">
+              <FormAlert tone="info">{t('error.DELIVERY_NO_COURIER')}</FormAlert>
+              {can('delivery.manage') ? (
+                <Link href="/delivery/couriers" className={buttonClass({ variant: 'secondary', className: 'self-start' })}>
+                  {t('delivery.noCourier.manage')}
+                </Link>
+              ) : null}
+            </div>
           )}
           <p className="text-[13px] text-text-secondary">{t('send.bulk.valid', { count: valid.length })}</p>
           {invalid.length ? (

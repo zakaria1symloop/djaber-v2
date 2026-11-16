@@ -8,7 +8,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from '@/i18n/navigation';
 import { api } from '@/lib/api';
-import { useT } from '@/lib/i18n';
+import { useT, type TFunction } from '@/lib/i18n';
 import { useStickToBottom } from '@/lib/stick-to-bottom';
 import { AdminQueryError } from '../admin-page';
 import { adminWrite, useAdminGet, useAdminList } from '../api';
@@ -16,7 +16,9 @@ import { AdminDialog, NO_ERRORS, ReasonField, reasonOk, toServerErrors, useOnOpe
 import { usePlatform } from '../platform';
 import { Money, useFormats } from '../ui';
 
-const MOD_TONE: Record<string, 'success' | 'danger' | 'warning' | 'neutral'> = { approved: 'success', rejected: 'danger', pending: 'warning', appealed: 'warning', not_required: 'neutral' };
+const MOD_TONE: Record<string, 'success' | 'danger' | 'warning' | 'neutral'> = { approved: 'success', rejected: 'danger', pending: 'warning', changes_requested: 'warning', appealed: 'warning', not_required: 'neutral' };
+/** validation pill: product status, or the latest moderation decision « MODIFICATION DEMANDÉE » (ADMIN-10) */
+const modLabel = (t: TFunction, s: string) => (t.has(`enum.Product.moderationStatus.${s}`) ? t(`enum.Product.moderationStatus.${s}`) : t.has(`adminMod.status.${s}`) ? t(`adminMod.status.${s}`) : s);
 const AI_TONE: Record<string, 'success' | 'neutral' | 'warning'> = { proposed: 'success', excluded: 'neutral', stale: 'warning' };
 
 export function ConversationList({ workspaceId }: { workspaceId: string }) {
@@ -156,7 +158,7 @@ export function ProductsViewer({ workspaceId, sheet, onOpen }: { workspaceId: st
                 <tr key={p.id} className="cursor-pointer border-b border-line-hairline last:border-0 hover:bg-ink-raised" onClick={() => onOpen(p.id)} data-product={p.id}>
                   <td className="px-3 py-2.5">{p.name}</td>
                   <td className="px-3 py-2.5"><Money value={p.price} /></td>
-                  <td className="px-3 py-2.5"><MonoChip tone={MOD_TONE[p.moderationStatus] ?? 'neutral'}>{t.has(`enum.Product.moderationStatus.${p.moderationStatus}`) ? t(`enum.Product.moderationStatus.${p.moderationStatus}`) : p.moderationStatus}</MonoChip></td>
+                  <td className="px-3 py-2.5"><MonoChip tone={MOD_TONE[p.moderationStatus] ?? 'neutral'}>{modLabel(t, p.moderationStatus)}</MonoChip></td>
                   <td className="px-3 py-2.5">{p.aiStatus ? <MonoChip tone={AI_TONE[p.aiStatus] ?? 'neutral'}>{t(`admin.viewers.ai.${p.aiStatus}`)}</MonoChip> : '—'}</td>
                 </tr>
               ))}

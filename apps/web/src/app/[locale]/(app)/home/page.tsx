@@ -9,6 +9,7 @@ import {
   TIMEZONE,
   type HomePageCard as HomePageCardView,
   type HomeView,
+  type MerchantPermission,
 } from '@djaber/shared';
 import {
   buttonClass,
@@ -70,6 +71,13 @@ const CHECKLIST_HREF: Record<ChecklistKey, string> = {
   product: '/products',
   agent: '/agents',
   sale: '/orders',
+};
+/** The key a member needs to do the step (full-test ROLES-08: no link to a page where nothing can be done). */
+const CHECKLIST_PERMISSION: Record<ChecklistKey, MerchantPermission> = {
+  channel: 'channels.manage',
+  product: 'catalog.write',
+  agent: 'agents.manage',
+  sale: 'orders.write',
 };
 const QUICK_ICON: Record<QuickActionKey, ReactNode> = {
   connect_page: <Share2 className="size-5" aria-hidden />,
@@ -154,6 +162,8 @@ const ageText = (t: TFunction, iso: string) => {
 
 function Queue({ view }: { view: HomeView }) {
   const t = useT();
+  const locale = useLocaleCode();
+  const day = (iso: string) => dayMonth(new Date(iso), locale);
   const items = sortQueue(view.queue.items);
   const more = queueOverflow(view.queue, items);
   return (
@@ -172,7 +182,7 @@ function Queue({ view }: { view: HomeView }) {
       {items.length === 0 ? null : (
         <ul className="flex flex-col gap-3">
           {items.map((i) => {
-            const text = queueText(i, clock);
+            const text = queueText(i, clock, { day });
             return (
               <li key={i.key}>
                 <Link
@@ -279,6 +289,7 @@ function QuickActions({ view }: { view: HomeView }) {
 /** The catalogue is shared by every page of the workspace: the "STOCK" tile shows the workspace product count. */
 function Pages({ pages, products }: { pages: HomePageCardView[]; products: number }) {
   const t = useT();
+  const { can } = useSession();
   return (
     <HomeSection label={t('home.pages.title')} data-testid="home-pages">
       {pages.length === 0 ? (
@@ -286,9 +297,12 @@ function Pages({ pages, products }: { pages: HomePageCardView[]; products: numbe
           title={t('home.pages.empty.title')}
           description={t('home.pages.empty.description')}
           action={
-            <Link href="/channels" className={buttonClass({ variant: 'primary' })}>
-              {t('home.pages.empty.action')}
-            </Link>
+            // full-test ROLES-08: connecting a page is the Owner's / Admin's job (`channels.manage`)
+            can('channels.manage') ? (
+              <Link href="/channels" className={buttonClass({ variant: 'primary' })}>
+                {t('home.pages.empty.action')}
+              </Link>
+            ) : undefined
           }
           data-testid="home-pages-empty"
         />
@@ -382,8 +396,12 @@ function PageCard({ page: p, products }: { page: HomePageCardView; products: num
 
 function GetStarted({ view }: { view: HomeView }) {
   const t = useT();
+  const { can } = useSession();
   const list = checklistOf(view.getStarted);
   const done = CHECKLIST_KEYS.filter((k) => list[k]).length;
+  // full-test ROLES-08: the set-up checklist is the Owner's / Admin's job — a member who can do none of its set-up steps
+  // does not get it; a step the member cannot do is shown without a link
+  if (!can('channels.manage') && !can('catalog.write') && !can('agents.manage')) return null;
   return (
     <section aria-labelledby="get-started" className="w-full">
       <div className="flex items-center justify-between px-5">
@@ -401,20 +419,26 @@ function GetStarted({ view }: { view: HomeView }) {
       <ol className="mt-3 flex flex-col">
         {CHECKLIST_KEYS.map((k, i) => (
           <li key={k} data-step={k}>
-            <Link href={CHECKLIST_HREF[k]} className="block rounded-card px-3 hover:bg-ink-raised">
-              <ChecklistRow
-                done={list[k]}
-                index={i + 1}
-                title={t(`home.getStarted.${k}.title`)}
-                description={t(`home.getStarted.${k}.description`)}
-                action={
-                  <ChevronRight
-                    className="mt-1 size-4 shrink-0 text-text-muted rtl:-scale-x-100"
-                    aria-hidden
-                  />
-                }
-              />
-            </Link>
+            {can(CHECKLIST_PERMISSION[k]) ? (
+              <Link href={CHECKLIST_HREF[k]} className="block rounded-card px-3 hover:bg-ink-raised">
+                <ChecklistRow
+                  done={list[k]}
+                  index={i + 1}
+                  title={t(`home.getStarted.${k}.title`)}
+                  description={t(`home.getStarted.${k}.description`)}
+                  action={
+                    <ChevronRight
+                      className="mt-1 size-4 shrink-0 text-text-muted rtl:-scale-x-100"
+                      aria-hidden
+                    />
+                  }
+                />
+              </Link>
+            ) : (
+              <div className="px-3">
+                <ChecklistRow done={list[k]} index={i + 1} title={t(`home.getStarted.${k}.title`)} description={t(`home.getStarted.${k}.description`)} />
+              </div>
+            )}
           </li>
         ))}
       </ol>

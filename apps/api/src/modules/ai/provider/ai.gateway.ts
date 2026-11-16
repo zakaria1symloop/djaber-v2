@@ -30,6 +30,11 @@ export type AiGenerateRequest = {
   maxTokens?: number;
   /** per model call (`AiRoute.timeoutSec`) */
   timeoutMs: number;
+  /**
+   * full-test 15/11 proposal 13: the stable start of `system` (identity → catalogue, the same from one turn to the next):
+   * the providers that support it cache it (Anthropic prompt caching). Ignored when `system` does not start with it.
+   */
+  systemCachePrefix?: string;
 };
 export type AiUsage = { inputTokens: number; outputTokens: number };
 export type AiGenerateResult = {

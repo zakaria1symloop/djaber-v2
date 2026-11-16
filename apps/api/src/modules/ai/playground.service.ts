@@ -20,9 +20,10 @@ import { JobService } from '../jobs/job.service';
 import { GUARD_EARLIER_TOOL_CALLS, plannedCost, RUN_BUDGET_MS } from './ai.constants';
 import { AiRunService, guardFlags, intentOf, type RunMeta } from './ai-run.service';
 import { CatalogueService } from './catalogue.service';
-import { detectLanguage, systemLocale, type AiLanguage } from './language';
+import { detectLanguage, languageSwitched, systemLocale, type AiLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
-import { orderHistoryOf } from './tools/order-confirmation';
+import { nextChosen, orderHistoryOf, placedThisTurn, type ChosenItem } from './tools/order-confirmation';
+import { canonicalTool } from './tools/tool-registry';
 import { guardFactsOf } from './reply-guard';
 import { SCENARIOS, type ScenarioCheck } from './prompt/scenarios';
 import { AiProviderError } from './provider/ai.gateway';
@@ -61,12 +62,21 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
     await this.events?.close().catch(() => undefined);
   }
 
-  /** 60 turns / h / workspace (or per shared link): `429 PLAYGROUND_RATE_LIMITED`. */
-  async countTurn(subject: string) {
+  /**
+   * 60 turns / h / workspace — the shared test links count in the same budget (full-test 15/11 AI-CHAT-10: each link had
+   * its own 60 / h). Over the limit: `429 PLAYGROUND_RATE_LIMITED { retryAfter }` = the seconds left in the hour
+   * (AI-CHAT-11: the page counted down 1:00 and failed again). Returns the turns used this hour, this one included.
+   */
+  async countTurn(subject: string): Promise<number> {
     const key = `rl:playground:${subject}`;
     const n = await this.redis.client.incr(key);
     if (n === 1) await this.redis.client.expire(key, 3600);
-    if (n > PLAYGROUND_TURNS_PER_HOUR) throw new AppException('PLAYGROUND_RATE_LIMITED');
+    if (n > PLAYGROUND_TURNS_PER_HOUR) {
+      const ttl = await this.redis.client.ttl(key);
+      if (ttl < 0) await this.redis.client.expire(key, 3600);
+      throw new AppException('PLAYGROUND_RATE_LIMITED', { retryAfter: ttl > 0 ? ttl : 3600 });
+    }
+    return n;
   }
 
   /**
@@ -77,7 +87,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
     const t = TenantContext.get();
     const agent = await prisma.agent.findFirst({ where: { id: agentId, deletedAt: null }, select: { id: true } });
     if (!agent) throw notFound();
-    await this.countTurn(o.rateSubject ?? t.workspaceId);
+    const used = await this.countTurn(o.rateSubject ?? t.workspaceId);
     const sessionId = input.sessionId ?? randomUUID();
     const data: PlaygroundJob = { workspaceId: t.workspaceId, agentId, userId: o.userId ?? t.userId ?? null, sessionId, turnId: randomUUID(), messages: input.messages, scenario: input.scenario, kind: 'test' };
     let answer: JobAnswer;
@@ -93,7 +103,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       }
     }
     if (!answer.ok) throw answer.code === 'NOT_FOUND' ? notFound() : new AppException('AI_PROVIDER_ERROR');
-    return answer.turn;
+    return { ...answer.turn, hourlyUsed: used };
   }
 
   /** `ai-reply / playground-turn`. */
@@ -159,7 +169,10 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       const previous = messages.slice(0, -1).reverse().map((m) => (m.role === 'user' ? detectLanguage(m.text) : undefined)).find((l): l is AiLanguage => !!l);
       const lang: AiLanguage = detectLanguage(said, previous) ?? previous ?? 'fr';
       const history: HistoryMessage[] = messages.slice(0, -1).map((m) => ({ author: m.role === 'user' ? 'customer' : 'ai', text: m.text }));
-      const turnCtx = await this.context.load(agent, { text: said, lastProductIds: matched, lang });
+      // full-test 15/11 AI-CHAT-05: what the customer chose in the earlier turns of the session (CURRENT ORDER), as on Messenger
+      const previousRun = await prisma.aiRun.findFirst({ where: { agentId: agent.id, batchKey: d.sessionId, id: { not: run.id }, status: { not: 'running' } }, orderBy: { startedAt: 'desc' }, select: { meta: true } });
+      const chosen = ((previousRun?.meta as { chosen?: ChosenItem[] | null } | null)?.chosen ?? null) as ChosenItem[] | null;
+      const turnCtx = await this.context.load(agent, { text: said, lastProductIds: matched, lang, chosen });
       const prompt = PromptBuilder.build(turnCtx.prompt, history, lines.join('\n') || said, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });
       // §4.3: the same reply guard as the live replies (the earlier turns of the session give their fees / totals)
       const earlier = await prisma.aiToolCall.findMany({ where: { executedAt: { not: null }, aiRun: { agentId: agent.id, batchKey: d.sessionId, id: { not: run.id } } }, orderBy: { executedAt: 'desc' }, take: GUARD_EARLIER_TOOL_CALLS, select: { result: true } });
@@ -169,7 +182,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         runId: run.id,
         prompt,
         // retest 12/11: the same handoff check as the live replies (handoff-judge)
-        toolCtx: { workspaceId: agent.workspaceId, agent, conversationId: null, clientId: null, channelId: null, runId: run.id, dryRun: true, customerText: said, orderHistory: await orderHistoryOf({ agentId: agent.id, batchKey: d.sessionId, id: { not: run.id } }), customerHistory: [...messages.filter((m) => m.role === 'user').map((m) => m.text), said].join('\n') },
+        toolCtx: { workspaceId: agent.workspaceId, agent, conversationId: null, clientId: null, channelId: null, runId: run.id, dryRun: true, customerText: said, orderHistory: await orderHistoryOf({ agentId: agent.id, batchKey: d.sessionId, id: { not: run.id } }), customerHistory: [...messages.filter((m) => m.role === 'user').map((m) => m.text), said].join('\n'), ordering: !!chosen?.length },
         temperature: turnCtx.temperature,
         maxTokens: turnCtx.maxTokens,
         deadline: Date.now() + RUN_BUDGET_MS,
@@ -192,12 +205,17 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         ...(turnCtx.prompt.outOfHours && text('out_of_hours') ? [{ key: 'out_of_hours', text: text('out_of_hours') }] : []),
         ...(handoff && text('handoff') ? [{ key: 'handoff', text: text('handoff') }] : []),
       ];
+      // full-test 15/11 AI-CHAT-12: as on Messenger (04-ai-pipeline §10 « one message, not two »), a customer who only asked
+      // for a human (or wrote a handoff keyword) gets the shop's handoff text alone — the AI's own « je transmets » is dropped
+      const reason = result.forcedHandoff ?? (out.status === 'HANDOFF' ? (out.statusDetail ?? '').trim() : '');
+      const onlyHandoff = result.tools.every((t) => canonicalTool(t.name) === 'handoff_to_human');
+      const reply = handoff && onlyHandoff && (reason === 'customer_request' || reason === 'keyword') && text('handoff') ? '' : out.reply;
       const dto: PlaygroundTurnDto = {
         turnId: run.id,
         sessionId: d.sessionId,
         // full-test 15/11 AGENTS-01 / -03: the scenario's own message, so the thread shows (and resends) what was sent
         ...(scenario && messages.length && messages[messages.length - 1]!.text === scenario.message ? { customerText: scenario.message } : {}),
-        reply: out.reply,
+        reply,
         status,
         statusDetail: result.forcedHandoff ?? out.statusDetail ?? null,
         intent: intentOf(out.intent),
@@ -214,7 +232,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         promptSections: prompt.sections.map((s) => ({ key: s.key, chars: s.text.length })),
         systemMessages,
       };
-      const meta: RunMeta = { language: dto.language, cardsSent: cards.length, handoff, turn: { messages, reply: out.reply, status, statusDetail: dto.statusDetail, cards: cards.map((c) => c.productId), toolCalls: dto.toolCalls.map((t) => ({ name: t.name, args: t.args })) }, ...(result.guard ? { guard: result.guard } : {}) };
+      const meta: RunMeta & { chosen?: ChosenItem[] | null } = { language: dto.language, cardsSent: cards.length, handoff, chosen: nextChosen(chosen, out.cart, placedThisTurn(result.tools.map((t) => ({ name: canonicalTool(t.name), result: t.result })))), turn: { messages, reply, status, statusDetail: dto.statusDetail, cards: cards.map((c) => c.productId), toolCalls: dto.toolCalls.map((t) => ({ name: t.name, args: t.args })) }, ...(result.guard ? { guard: result.guard } : {}) };
       await this.runs.finish(run.id, { status: status === 'OK' ? 'ok' : status === 'UNCLEAR' ? 'unclear' : status === 'UNKNOWN' ? 'unknown' : 'handoff', turn: result, intent: dto.intent, confidence: out.confidence, startedAt: run.startedAt, meta, flags: guardFlags(result.guard) });
       return dto;
     } catch (e) {
@@ -277,10 +295,9 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
 
   static check(key: TestScenarioKey, turn: PlaygroundTurnDto, inScope: Set<string>): { pass: boolean; failed: ScenarioCheck[] } {
     const s = SCENARIOS[key];
-    const replyLang = detectLanguage(turn.reply);
-    // full-test 15/11 AI-CHAT-06: the reply's language must be the customer's (arabizi answered in French used to pass);
-    // a reply too short to tell (undefined) or mixed passes
-    const sameScript = !replyLang || replyLang === 'mixed' || replyLang === s.language || (s.language === 'arabizi' && replyLang === 'ar');
+    // full-test 15/11 AI-CHAT-06 / proposal 12: the reply's language must be the customer's — the reply guard's own check
+    // (`language_switch`: arabizi answered in French fails; a reply too short to tell, or mixed, passes)
+    const sameScript = !languageSwitched(s.language, turn.reply);
     const created = turn.toolCalls.filter((t) => t.name === 'create_order' && (t.result as { ok?: boolean } | null)?.ok === true);
     const results: Record<ScenarioCheck, boolean> = {
       // full-test 15/11 AGENTS-02: a hand-off answers with the shop's hand-off message (the AI's own text is empty)

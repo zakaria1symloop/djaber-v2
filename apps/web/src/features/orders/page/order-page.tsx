@@ -89,7 +89,10 @@ export function OrderPage({ id }: { id: string }) {
   const call = actionState(order.actions, ORDER_ACTION.call, t);
   const cancel = actionState(order.actions, ORDER_ACTION.cancel, t);
   const edit = actionState(order.actions, ORDER_ACTION.edit, t);
-  const editItems = edit.present && edit.enabled && !ro && order.shipments.length === 0;
+  // same rule as the server (PATCH items: new / confirmed / preparing, not sent): a cancelled parcel does not lock the items
+  // any more, and the reason talks about items, not the address (full-test ORDERS-19)
+  const itemsOpen = ['new', 'confirmed', 'preparing'].includes(order.status) && order.deliveryStatus === 'not_sent';
+  const editItems = edit.present && edit.enabled && !ro && itemsOpen;
   const misses = unansweredCalls(order);
   const creator = order.source.source === 'ai' ? t('orders.history.ai', { name: order.agent?.name ?? order.source.agent?.name ?? '' }) : shortName(order.createdBy ?? order.source.user ?? null) || t('orders.history.system');
 
@@ -187,7 +190,7 @@ export function OrderPage({ id }: { id: string }) {
           <ItemsBlock
             order={order}
             canEdit={editItems}
-            editReason={!ro && edit.present && !edit.enabled ? edit.reason : order.shipments.length && !ro ? t('error.COURIER_ADDRESS_LOCKED') : undefined}
+            editReason={!ro && edit.present && !edit.enabled ? edit.reason : !ro && !itemsOpen ? t('orders.page.itemsLocked') : undefined}
             editing={!!items}
             draft={items ?? itemsOf(order)}
             onDraft={setItems}
@@ -235,7 +238,7 @@ export function OrderPage({ id }: { id: string }) {
       <ConflictDialog
         open={!!conflict}
         name={conflict?.c.changedBy || t('orders.conflict.someone')}
-        ago={conflict?.c.changedAt ? relativeTime(conflict.c.changedAt, locale).replace(/^il y a /, '') : '—'}
+        ago={conflict?.c.changedAt ? relativeTime(conflict.c.changedAt, locale) : '—'}
         onReload={() => {
           // the draft stays in the form; only the base (version, other fields) is read again
           setConflict(null);

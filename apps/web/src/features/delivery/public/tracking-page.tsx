@@ -7,6 +7,7 @@ import { formatDate, type AppLocale } from '@djaber/shared';
 import { Card, ErrorState, Ltr, NotFoundState, ParcelSteps, Skeleton, StatusPill, TrackingTimeline, type ParcelStep } from '@djaber/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { PublicFooter } from '@/components/public-footer';
 import { PublicHeader } from '@/components/public-header';
 import { ApiError } from '@/lib/api';
 import { useDocumentTitle } from '@/lib/document-title';
@@ -43,7 +44,7 @@ export function PublicTrackingPage({ code }: { code: string }) {
     <div className="flex min-h-dvh flex-col">
       <PublicHeader />
       <main id="main" className="flex flex-1 justify-center px-4 py-10">
-        <div className="flex w-full max-w-[560px] flex-col gap-5">
+        <div className="flex w-full min-w-0 max-w-[560px] flex-col gap-5">
           {q.isPending ? (
             <Card className="p-6" data-testid="tracking-public" data-state="loading">
               <div role="status" aria-label={t('common.loading')} className="flex flex-col gap-3">
@@ -79,12 +80,13 @@ export function PublicTrackingPage({ code }: { code: string }) {
                   <StatusPill enumKey="Shipment.status" value={d.status} className="!rounded-[4px]">
                     {d.statusLabel || t(`enum.Shipment.status.${d.status}`)}
                   </StatusPill>
-                  <span className="ts-label-micro text-text-muted">
+                  {/* full-test 15/11 PUBLIC-07: long desk names / references wrap inside the card (the page scrolled sideways at 390 px) */}
+                  <span className="min-w-0 max-w-full ts-label-micro text-text-muted [overflow-wrap:anywhere]">
                     {[d.courier, d.wilayaName, d.isStopdesk ? t('common.stopdesk') : null].filter(Boolean).join(' · ')}
                     {d.trackingNumber ? (
                       <>
                         {' · '}
-                        <Ltr className="!inline">{d.trackingNumber}</Ltr>
+                        <Ltr className="!inline [overflow-wrap:anywhere]">{d.trackingNumber}</Ltr>
                       </>
                     ) : null}
                   </span>
@@ -124,6 +126,8 @@ export function PublicTrackingPage({ code }: { code: string }) {
           <ReportMerchantDialog code={code} open={reporting} onClose={() => setReporting(false)} onSent={() => (setReporting(false), setReported(true))} />
         </div>
       </main>
+      {/* PUBLIC-07: the customer who opens the SMS / QR link can switch the language on a phone too (footer FR · AR · EN) */}
+      <PublicFooter />
     </div>
   );
 }

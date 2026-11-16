@@ -34,7 +34,11 @@ export function FromPhotoDialog({
   current,
   onResult,
   onUnavailable,
+  simple = false,
 }: {
+  /** full-test 15/11 ONBOARDING-14: opened outside the product form (onboarding step 3: name, price, stock, photo only) —
+   *  no « Produits › + Nouveau » breadcrumb, no pointer to « Générer des variantes » */
+  simple?: boolean;
   open: boolean;
   onClose: () => void;
   /** pictures already added to the form: offered as the photos to analyse */
@@ -134,7 +138,7 @@ export function FromPhotoDialog({
         onClose();
       }}
       title={t('dialog.fromPhoto.title')}
-      description={t('products.form.photo.context', { credits: AI_FILL_CREDITS })}
+      description={simple ? t('products.form.photo.contextSimple', { credits: AI_FILL_CREDITS }) : t('products.form.photo.context', { credits: AI_FILL_CREDITS })}
       closeLabel={t('action.close')}
       size="md"
       footer={
@@ -243,7 +247,7 @@ export function FromPhotoDialog({
               <span className="text-[13px]">{phase.filled.length ? t('products.form.photo.filled', { fields: phase.filled.map(fieldLabel).join(', ') }) : t('products.form.photo.nothing')}</span>
             </div>
             <p className="ts-label-meta text-text-muted">{t('products.form.photo.priceNote')}</p>
-            {phase.hints.length ? <p className="ts-label-meta text-text-secondary">{t('products.form.photo.attributes', { list: phase.hints.join(' · ') })}</p> : null}
+            {phase.hints.length ? <p className="ts-label-meta text-text-secondary">{t(simple ? 'products.form.photo.attributesSimple' : 'products.form.photo.attributes', { list: phase.hints.join(' · ') })}</p> : null}
           </div>
         ) : null}
         {phase.kind === 'failed' ? (

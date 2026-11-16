@@ -118,7 +118,7 @@ export default function AdminPlansPage() {
                   { label: t('admin.plans.card.credits'), value: t('admin.plans.card.creditsValue', { value: limit(p.limits.monthlyCredits) }) },
                   { label: t('admin.plans.card.limits'), value: t('admin.plans.card.limitsValue', { pages: limit(p.limits.maxPages), agents: limit(p.limits.maxAgents), members: limit(p.limits.maxMembers), products: limit(p.limits.maxProducts) }) },
                   { label: t('admin.plans.card.features'), value: FEATURE_LINE.map((k) => `${t(`admin.plans.feature.${k}`)} ${(p.features ?? p.limits.features).includes(k) ? '✓' : '✗'}`).join(' · ') },
-                  { label: t('admin.plans.card.subscribers'), value: t('admin.plans.card.subscribersValue', { count: f.num(p.subscribers) }) },
+                  { label: t('admin.plans.card.subscribers'), value: t('admin.plans.card.subscribersValue', { count: p.subscribers }) },
                 ]}
                 actions={
                   write ? (

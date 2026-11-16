@@ -62,7 +62,7 @@ export function InboxView() {
     window.setTimeout(() => noteRef.current?.focus(), 50);
   };
 
-  if (!roleCan(role, 'inbox.read')) return <Page403 role={role ? t(`enum.Membership.role.${role}`) : '—'} homeHref={`/${locale}/home`} />;
+  if (!roleCan(role, 'inbox.read')) return <Page403 role={role ? t(`enum.Membership.role.${role}`) : '—'} homeHref={`/${locale}/home`} permissions={['inbox.read']} />;
 
   return (
     // the shell pads its content; the inbox is edge to edge

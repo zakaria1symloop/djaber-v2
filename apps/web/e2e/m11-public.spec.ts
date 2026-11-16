@@ -250,10 +250,10 @@ test.describe('AT-PUB-04 — public account deletion', () => {
       await expect(page.getByTestId('deletion-sent')).toContainText(`Si un compte existe pour ${email}, un e-mail a été envoyé avec un lien de confirmation valable 24 h.`);
       await page.getByRole('button', { name: 'Utiliser une autre adresse' }).click();
     }
-    // expired / unknown link ⇒ LIEN EXPIRÉ + "Refaire une demande"
+    // unknown link ⇒ LIEN INVALIDE (full-test 15/11 PUBLIC-11; « expiré » is for a 410 only) + "Refaire une demande"
     await page.goto(`/fr/account/deletion?token=${'x'.repeat(43)}`);
-    await expect(page.getByTestId('deletion-state')).toHaveAttribute('data-state', 'expired');
-    await expect(page.getByTestId('deletion-state')).toContainText('Ce lien a expiré (24 h).');
+    await expect(page.getByTestId('deletion-state')).toHaveAttribute('data-state', 'invalid');
+    await expect(page.getByTestId('deletion-state')).toContainText('Ce lien n’est pas valide.');
     await page.getByTestId('del-restart').click();
     await expect(page.getByTestId('deletion-form')).toBeVisible();
     await ctx.close();

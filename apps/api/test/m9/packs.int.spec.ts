@@ -228,7 +228,9 @@ describe('promo codes (PRM-01 / PRM-02)', () => {
     await payFake(app, r.checkoutUrl, 'paid');
     expect(await db.creditLedger.count({ where: { workspaceId: referee.workspaceId, reason: `referral:${code.code}`, credits: 300 } })).toBe(1);
     expect(await db.creditLedger.count({ where: { workspaceId: sponsor.workspaceId, reason: `referral:${code.code}`, credits: 300 } })).toBe(1);
-    // a second paid invoice pays nothing more
+    // a second paid invoice pays nothing more — the renewal of the same plan, inside its J−7 window (full-test 15/11
+    // SETTINGS-04: earlier, the same plan + cycle is refused with RENEWAL_NOT_OPEN)
+    await db.subscription.updateMany({ where: { workspaceId: referee.workspaceId, status: 'active' }, data: { currentPeriodEnd: new Date(Date.now() + 3 * DAY) } });
     const r2 = (await referee.post('/billing/checkout', { planId: await planId('starter'), cycle: 'monthly' }).set(idem()).expect(200)).body.data;
     await payFake(app, r2.checkoutUrl, 'paid');
     expect(await db.creditLedger.count({ where: { reason: `referral:${code.code}` } })).toBe(2);

@@ -10,7 +10,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useAnalytics, usePeriod } from '../api';
-import { dayLabel } from '../format';
+import { dayLabel, type Unit } from '../format';
 import { axis, ChartAndTable, DeltaCell, hintNum, Kpi, KpiRow, Num, TabFrame, TabNote, TabTable, toBuckets, useFigure } from '../parts';
 import { useReportRange } from '../shell';
 import { listRange } from './links';
@@ -76,6 +76,8 @@ const n = (v: number | null | undefined) => (v === null || v === undefined ? '�
 function ConversationsTab() {
   const t = useT();
   const fig = useFigure();
+  // p95 of a histogram KPI: « > 50 » when it sits in the open last bucket (ANALYTICS-08)
+  const p95 = (k: AnalyticsKpi | undefined, unit: Unit) => `${hintNum(k, 'p95Above') === 1 ? '> ' : ''}${fig(hintNum(k, 'p95'), unit)}`;
   const { period } = usePeriod();
   const q = useAnalytics('conversations', period);
   useReportRange(q.data?.range);
@@ -90,9 +92,9 @@ function ConversationsTab() {
             <KpiRow>
               <Kpi k={k.conversations} name="conversations" label={t('analytics.unit.conversations')} />
               <Kpi k={k.aiHandledPct} name="aiHandledPct" label={t('analytics.unit.aiHandled')} meta={t('analytics.conversations.handoffs', { count: n(hintNum(k.aiHandledPct, 'handoffs')) })} />
-              <Kpi k={k.messagesPerConversation} name="messagesPerConversation" label={t('analytics.unit.messagesPerConversation')} meta={t('analytics.median')} sub={hintNum(k.messagesPerConversation, 'p95') !== null ? t('analytics.p95', { value: fig(hintNum(k.messagesPerConversation, 'p95'), 'ratio') }) : undefined} />
-              <Kpi k={k.aiResponseTime} name="aiResponseTime" label={t('analytics.unit.aiResponseTime')} meta={t('analytics.p95', { value: fig(hintNum(k.aiResponseTime, 'p95'), 'seconds') })} />
-              <Kpi k={k.humanResponseTime} name="humanResponseTime" label={t('analytics.unit.humanResponseTime')} meta={t('analytics.p95', { value: fig(hintNum(k.humanResponseTime, 'p95'), 'minutes') })} />
+              <Kpi k={k.messagesPerConversation} name="messagesPerConversation" label={t('analytics.unit.messagesPerConversation')} meta={t('analytics.median')} sub={hintNum(k.messagesPerConversation, 'p95') !== null ? t('analytics.p95', { value: p95(k.messagesPerConversation, 'ratio') }) : undefined} />
+              <Kpi k={k.aiResponseTime} name="aiResponseTime" label={t('analytics.unit.aiResponseTime')} meta={t('analytics.p95', { value: p95(k.aiResponseTime, 'seconds') })} />
+              <Kpi k={k.humanResponseTime} name="humanResponseTime" label={t('analytics.unit.humanResponseTime')} meta={t('analytics.p95', { value: p95(k.humanResponseTime, 'minutes') })} />
             </KpiRow>
             <ChartAndTable>
               <StackChart
@@ -198,8 +200,8 @@ function ConsumptionTab() {
                 {p.unlimited
                   ? t('analytics.consumption.unlimited')
                   : p.exhaustsOn
-                    ? t('analytics.consumption.projection', { date: dayLabel(p.exhaustsOn, locale), burn: fig(p.dailyBurn, 'ratio') })
-                    : t('analytics.consumption.noProjection', { burn: fig(p.dailyBurn, 'ratio') })}{' '}
+                    ? t('analytics.consumption.projection', { date: dayLabel(p.exhaustsOn, locale), burn: fig(p.dailyBurn, 'ratio'), burnN: p.dailyBurn })
+                    : t('analytics.consumption.noProjection', { burn: fig(p.dailyBurn, 'ratio'), burnN: p.dailyBurn })}{' '}
                 {/* the credits page of the route map (packs are bought there); `projection.packsPath` is informative */}
                 <Link href="/settings/credits" className="text-accent-inbound hover:underline" data-testid="packs-link">
                   {t('analytics.consumption.packs')}
@@ -534,7 +536,7 @@ function DeliveryTab() {
           <>
             <KpiRow>
               <Kpi k={k.shipped} name="shipped" label={t('analytics.unit.shipped')} meta={couriers || undefined} />
-              <Kpi k={k.avgDays} name="avgDays" label={t('analytics.unit.avgDays')} meta={t('analytics.p95', { value: fig(hintNum(k.avgDays, 'p95'), 'days') })} />
+              <Kpi k={k.avgDays} name="avgDays" label={t('analytics.unit.avgDays')} meta={t('analytics.p95', { value: `${hintNum(k.avgDays, 'p95Above') === 1 ? '> ' : ''}${fig(hintNum(k.avgDays, 'p95'), 'days')}` })} />
               <Kpi k={k.firstAttemptPct} name="firstAttemptPct" label={t('analytics.unit.firstAttempt')} meta={t('analytics.delivery.secondAttempt', { pct: fig(hintNum(k.firstAttemptPct, 'secondAttemptPct'), 'pct') })} />
               <Kpi k={k.openFailures} name="openFailures" label={t('analytics.unit.openFailures')} meta={t('analytics.delivery.over48h', { count: n(hintNum(k.openFailures, 'over48h')) })} onClick={() => router.push('/delivery?tab=failed')} />
               <Kpi k={k.courierFees} name="courierFees" label={t('analytics.unit.courierFees')} meta={t('analytics.delivery.customerFees', { value: n(hintNum(k.courierFees, 'customerFees')) })} />

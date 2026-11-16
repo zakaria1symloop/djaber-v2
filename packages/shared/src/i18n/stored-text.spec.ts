@@ -53,4 +53,18 @@ describe('stored text tokens', () => {
       }
     }
   });
+  it('full-test 15/11 SALES-CASH-14: a value that is a token (a reason picked in a list) is read in the reader language', () => {
+    const v = storedText('stored.cash.saleRefund', { number: 'VNT-1013', reason: storedText('sales.cancel.reason.entry_error') });
+    expect(renderStoredTextIn(v, 'en')).toContain(getMessages('en')['sales.cancel.reason.entry_error']!);
+    expect(renderStoredTextIn(v, 'ar')).toContain(getMessages('ar')['sales.cancel.reason.entry_error']!);
+    expect(renderStoredTextIn(storedText('sales.cancel.reason.entry_error'), 'en')).toBe(getMessages('en')['sales.cancel.reason.entry_error']);
+  });
+});
+
+describe('full-test 15/11 ANALYTICS-10: cash rows written before the stored-text format', () => {
+  it('an exact French sentence of a stored.cash key is read in the reader language; other text stays as typed', () => {
+    expect(renderStoredTextIn('Achat #ACH-1002 (paiement fournisseur)', 'en')).toBe(textIn('stored.cash.purchaseSupplierPayment', 'en', { number: 'ACH-1002' }));
+    expect(renderStoredTextIn('Commande #CMD-1003 livrée (COD)', 'ar')).toBe(textIn('stored.cash.orderCod', 'ar', { number: 'CMD-1003' }));
+    expect(renderStoredTextIn('Loyer de novembre', 'en')).toBe('Loyer de novembre');
+  });
 });

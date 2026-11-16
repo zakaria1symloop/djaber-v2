@@ -89,11 +89,13 @@ export default function InvitationPage() {
         <AuthCard title={t('auth.invitation.alreadyMember')} footer={<AuthLink href="/home">{t('action.backHome')}</AuthLink>} />
       );
     }
-    const expired = e instanceof ApiError && (e.code === 'INVITATION_EXPIRED' || e.status === 404 || e.status === 410);
+    // full-test 15/11 PUBLIC-11: an unknown token (404) is a wrong link, not an expired invitation (410)
+    const invalid = e instanceof ApiError && e.status === 404;
+    const expired = invalid || (e instanceof ApiError && (e.code === 'INVITATION_EXPIRED' || e.status === 410));
     return (
       <AuthCard
-        title={expired ? t('auth.invitation.expired.title') : t('state.list.error.title')}
-        description={expired ? t('auth.invitation.expired.description') : errorMessage(e, t)}
+        title={invalid ? t('auth.invitation.invalid.title') : expired ? t('auth.invitation.expired.title') : t('state.list.error.title')}
+        description={invalid ? t('auth.invitation.invalid.description') : expired ? t('auth.invitation.expired.description') : errorMessage(e, t)}
         footer={<AuthLink href={status === 'authenticated' ? '/home' : '/login'}>{status === 'authenticated' ? t('action.backHome') : t('auth.backToLogin')}</AuthLink>}
       >
         {expired ? null : <Button onClick={() => inv.refetch()}>{t('action.retry')}</Button>}

@@ -39,10 +39,12 @@ import { useMembers } from '@/features/workspace/api';
 import { useRouter } from '@/i18n/navigation';
 import { actionState, toMenuActions } from '@/lib/actions';
 import { useHere, withBack } from '@/lib/back';
+import { iso } from '@/lib/format-message';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
 import { filterList, filterText, type ApiQuery, type ListSpec } from '@/lib/list-state';
+import { signedMoney, signedNumber } from '@/lib/money';
 import { useSession } from '@/lib/session';
 import { useListState } from '@/lib/use-list-state';
 import { gdsApi, useCash, useCashDays, useCashStats, useGdsRefresh } from './api';
@@ -241,9 +243,10 @@ function CashLedger() {
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label={t('cash.kpi.label')} data-testid="cash-kpis">
         {k ? (
           <>
-            <KpiTile value={formatNumber(k.currentBalance)} label={t('cash.kpi.current')} meta={t('cash.kpi.opening', { day: day(k.from), amount: formatMoney(k.openingBalance) })} data-kpi="current" />
-            <KpiTile value={`+${formatNumber(k.income)}`} label={sel.kind === 'day' && sel.day === today ? t('cash.kpi.incomeToday') : t('cash.kpi.income')} meta={t('cash.kpi.incomeMeta', { sales: k.counts.sales, cod: k.counts.cod })} data-kpi="income" />
-            <KpiTile value={`−${formatNumber(k.expense)}`} label={t('cash.kpi.expense')} meta={t('cash.kpi.expenseMeta', { purchases: k.counts.purchases, fees: k.counts.fees })} data-kpi="expense" />
+            {/* full-test 15/11 SALES-CASH-12: a selection that ends before today shows the balance at its end, named so */}
+            <KpiTile value={signedNumber(k.currentBalance)} label={k.to < today ? t('cash.kpi.balanceAt', { day: day(k.to) }) : t('cash.kpi.current')} meta={t('cash.kpi.opening', { day: day(k.from), amount: iso(signedMoney(k.openingBalance)) })} data-kpi="current" />
+            <KpiTile value={`+${formatNumber(k.income)}`} label={sel.kind === 'day' && sel.day === today ? t('cash.kpi.incomeToday') : t('cash.kpi.income')} meta={t('cash.kpi.incomeMeta', { sales: k.counts.sales, cod: k.counts.cod, other: k.counts.otherIncome ?? 0 })} data-kpi="income" />
+            <KpiTile value={`−${formatNumber(k.expense)}`} label={t('cash.kpi.expense')} meta={t('cash.kpi.expenseMeta', { purchases: k.counts.purchases, fees: k.counts.fees, other: k.counts.otherExpense ?? 0 })} data-kpi="expense" />
             <button type="button" className="text-start" disabled={!k.unclosedDays.length} onClick={() => k.unclosedDays[0] && list.set({ filters: { day: k.unclosedDays[0], period: null, from: null, to: null } })}>
               <KpiTile
                 value={formatNumber(k.unclosedDays.length)}
@@ -311,7 +314,7 @@ function CashLedger() {
               {t('cash.filter.oneDay')}
               <DateInput value={sel.kind === 'day' ? sel.day : ''} max={today} onValueChange={(v) => list.setFilters({ day: v || null, period: null, from: null, to: null })} className="!h-9 text-[13px]" aria-label={t('cash.filter.oneDay')} />
             </label>
-            <FilterDateRange from={sel.kind === 'range' ? sel.from : ''} to={sel.kind === 'range' ? sel.to : ''} onChange={(r) => list.setFilters({ from: r.from || null, to: r.to || null, day: null, period: null })} labels={{ from: t('common.from'), to: t('common.to'), presets: t('gds.period.custom') }} />
+            <FilterDateRange from={sel.kind === 'range' ? sel.from : ''} to={sel.kind === 'range' ? sel.to : ''} onChange={(r) => list.setFilters({ from: r.from || null, to: r.to || null, day: null, period: null })} labels={{ from: t('common.from'), to: t('common.to'), presets: t('gds.period.custom'), invalid: t('error.INVALID_DATE_RANGE') }} />
           </div>
         </FilterDropdown>
         {total !== null ? (

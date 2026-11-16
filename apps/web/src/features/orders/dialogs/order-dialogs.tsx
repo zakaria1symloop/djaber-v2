@@ -15,7 +15,7 @@ import { useSession } from '@/lib/session';
 import { deliveryApi } from '@/features/delivery/api';
 import { ordersApi } from '../api';
 import { CANCEL_REASONS, FAILURE_REASONS, ORDER_BACKDATE_MAX_DAYS, PAYMENT_METHODS, type BulkResponse, type CancelReason, type FailureReason, type Order, type OrderStatus, type PaymentMethod } from '../contracts';
-import { effectiveDateError, isoToLocalInput, localInputToIso, paymentError } from '../logic';
+import { algiersTime, effectiveDateError, isoToLocalInput, localInputToIso, paymentError } from '../logic';
 import { DialogFooter, orderContext, RadioList, useDialogSubmit, useOnOpen, type DialogBaseProps } from './common';
 import { CallbackPicker } from './outcome';
 
@@ -30,7 +30,7 @@ function VersionConflict({ s, onReload, onOverwrite }: { s: ReturnType<typeof us
     <ConflictDialog
       open={!!c}
       name={c?.changedBy || t('orders.conflict.someone')}
-      ago={c?.changedAt ? relativeTime(c.changedAt, locale).replace(/^il y a /, '') : '—'}
+      ago={c?.changedAt ? relativeTime(c.changedAt, locale) : '—'}
       onReload={() => {
         s.clearConflict();
         onReload();
@@ -92,7 +92,7 @@ export function CallbackDialog({ order, open, onClose, onDone }: Props) {
               {t('orders.callback.clear')}
             </button>
           ) : null}
-          <DialogFooter onClose={onClose} busy={s.busy || clear.busy} onSubmit={() => void submit()} label={t('orders.callback.submit')} note={t('orders.callback.note')} />
+          <DialogFooter onClose={onClose} busy={s.busy || clear.busy} onSubmit={() => void submit()} label={t('orders.callback.submit')} note={t('orders.callback.noteAt', { time: at && !past ? algiersTime(at) : '…' })} />
         </>
       }
     >
@@ -349,13 +349,15 @@ export function ReturnDialog({ order, open, onClose, onDone }: Props) {
   const t = useT();
   const [reason, setReason] = useState<FailureReason | null>(null);
   const [restock, setRestock] = useState(true);
-  const [fee, setFee] = useState(true);
+  // the courier return fee is ticked only when a courier carried the parcel — never for self-delivery (full-test ORDERS-11)
+  const byCourier = !!order.shipments[0] && order.shipments[0].provider !== 'manual';
+  const [fee, setFee] = useState(byCourier);
   const [note, setNote] = useState('');
   const [touched, setTouched] = useState(false);
   useOnOpen(open, () => {
     setReason(null);
     setRestock(true);
-    setFee(true);
+    setFee(byCourier);
     setNote('');
     setTouched(false);
   });
@@ -398,6 +400,9 @@ export function ReturnDialog({ order, open, onClose, onDone }: Props) {
             <span className="block ts-label-micro !normal-case text-text-muted">{t('orders.return.feeHint')}</span>
           </span>
         </label>
+        {order.amountPaid > 0 ? (
+          <FormAlert tone="info">{t('orders.return.paymentsCleared', { amount: formatMoney(order.amountPaid) })}</FormAlert>
+        ) : null}
         <Field label={t('common.noteOptional')} htmlFor="rt-note">
           <Input id="rt-note" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} />
         </Field>
@@ -413,9 +418,11 @@ export function DeleteOrderDialog({ order, open, onClose, onDone }: Props) {
   const [typed, setTyped] = useState('');
   useOnOpen(open, () => setTyped(''));
   const expected = order.number.replace(/^#/, '');
-  const s = useDialogSubmit(() => ordersApi.remove(order.id, typed.trim()));
+  // the number as displayed (« #CMD-1020 ») is accepted too (full-test ORDERS-12)
+  const entered = typed.trim().replace(/^#\s*/, '');
+  const s = useDialogSubmit(() => ordersApi.remove(order.id, entered));
   const submit = async () => {
-    if (typed.trim() !== expected) return;
+    if (entered !== expected) return;
     const r = await s.submit();
     if (r === undefined) return;
     toast(t('orders.delete.done', { number: order.number }));
@@ -430,15 +437,16 @@ export function DeleteOrderDialog({ order, open, onClose, onDone }: Props) {
       description={t('orders.delete.context')}
       closeLabel={t('action.close')}
       size="md"
-      footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('action.delete')} danger disabled={typed.trim() !== expected} note={t('orders.delete.note')} />}
+      footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('action.delete')} danger disabled={entered !== expected} />}
     >
       <div className="flex flex-col gap-3" data-testid="delete-dialog">
         <Pill tone="danger" className="w-fit !rounded-[4px]">
           {t('common.destructive')}
         </Pill>
-        <Field label={t('common.typeToConfirm')} htmlFor="del-typed" hint={t('common.mustMatch')}>
+        <Field label={t('common.typeToConfirm')} htmlFor="del-typed" hint={t('orders.delete.typeHint', { number: expected })}>
           <CodeInput id="del-typed" value={typed} placeholder={expected} onChange={(e) => setTyped(e.target.value)} />
         </Field>
+        <p className="ts-label-micro !normal-case text-text-muted">{t('orders.delete.note')}</p>
         {s.error ? <FormAlert>{s.error}</FormAlert> : null}
       </div>
     </Dialog>

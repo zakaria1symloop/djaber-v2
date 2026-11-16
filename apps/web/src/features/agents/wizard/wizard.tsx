@@ -26,6 +26,7 @@ import { useSession, useWorkspaceId } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
 import { agentKeys, agentsApi, useAgent, useAgentsRefresh, usePresets } from '../api';
 import type { Agent, WizardStepKey } from '../contracts';
+import { useCredits } from '@/features/credits/api';
 import { WIZARD_STEPS } from '../contracts';
 import { BehaviourFields } from '../fields/behaviour';
 import { ChannelsFields } from '../fields/channels';
@@ -138,6 +139,7 @@ function WizardBody({ step, agent, crumb, inTunnel, exitTo, initialStart }: { st
   const qc = useQueryClient();
   const refresh = useAgentsRefresh();
   const { workspace, can } = useSession();
+  const credits = useCredits();
   const presets = usePresets();
   // "Créer un agent" of a page without agent (`/agents/new?channel=<id>`): the page is linked to the draft at creation
   const channelParam = useSearchParams().get('channel');
@@ -349,7 +351,8 @@ function WizardBody({ step, agent, crumb, inTunnel, exitTo, initialStart }: { st
   });
 
   /* ---------- frame ---------- */
-  const steps: WizardStep[] = WIZARD_STEPS.map((k) => ({
+  // ONBOARDING-03: inside the tunnel only steps 1–3 run here (channels and activation come after tunnel step 5)
+  const steps: WizardStep[] = WIZARD_STEPS.filter((k) => !inTunnel || inTunnelSteps(k)).map((k) => ({
     key: k,
     label: t(`agents.wizard.step.${k}`),
     state: stepState(k, step, savedStep),
@@ -361,6 +364,8 @@ function WizardBody({ step, agent, crumb, inTunnel, exitTo, initialStart }: { st
   const presetName = draft.presetKey ? (presets.data?.find((p) => p.key === draft.presetKey)?.name ?? agent?.preset?.name ?? draft.presetKey) : agent || start === SCRATCH ? t('agents.start.scratch') : '';
   // no conversation this month yet: the monthly estimate is not invented ("—"), only the cost per conversation is shown
   const conversations = workspace?.plan?.usage.conversationsThisMonth ?? 0;
+  // full-test 15/11 ONBOARDING-12: the credits of the running period (a trial has 300, not the plan's 5 000), as the top bar
+  const creditLimit = credits.data && credits.data.plan.limit >= 0 ? credits.data.plan.limit : (workspace?.plan?.limits.monthlyCredits ?? 0);
   const perConv = creditsPerConversation(draft);
   const status = saving ? t('common.saving') : !agent ? t('agents.wizard.status.unsaved') : changed ? t('agents.wizard.status.pending') : savedAt ? t('agents.wizard.status.saved', { ago: relativeTime(new Date(savedAt), locale) }) : t('agents.wizard.status.draft');
 
@@ -386,11 +391,11 @@ function WizardBody({ step, agent, crumb, inTunnel, exitTo, initialStart }: { st
                   perConv: locale === 'en' ? String(perConv) : String(perConv).replace('.', ','),
                   conversations: formatNumber(conversations),
                   credits: formatNumber(monthlyCreditEstimate(draft, conversations)),
-                  limit: formatNumber(workspace?.plan?.limits.monthlyCredits ?? 0),
+                  limit: formatNumber(creditLimit),
                 })
               : t('gaps.agents.rail.estimateNoUsage', {
                   perConv: locale === 'en' ? String(perConv) : String(perConv).replace('.', ','),
-                  limit: formatNumber(workspace?.plan?.limits.monthlyCredits ?? 0),
+                  limit: formatNumber(creditLimit),
                 })}
           </bdi>
         </p>

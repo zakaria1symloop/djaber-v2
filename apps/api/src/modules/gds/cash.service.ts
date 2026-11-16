@@ -268,6 +268,9 @@ export class CashService implements OnModuleInit {
         cod: rows.filter((r) => r.category === 'order' && r.type === 'income').length,
         purchases: rows.filter((r) => r.category === 'purchase').length,
         fees: rows.filter((r) => r.type === 'expense' && (FEE_CATEGORIES as readonly string[]).includes(r.category)).length,
+        // full-test 15/11 SALES-CASH-21: the rest of each tile (apport, refund, correction…), so the caption covers its amount
+        otherIncome: rows.filter((r) => r.type === 'income' && r.category !== 'sale' && r.category !== 'order').length,
+        otherExpense: rows.filter((r) => r.type === 'expense' && r.category !== 'purchase' && !(FEE_CATEGORIES as readonly string[]).includes(r.category)).length,
       },
       unclosedDays: unclosed,
       day: single ? { day: single, closed: (await this.closedDays([single])).has(single), theoreticalCash: await this.theoreticalCash(prisma, single) } : null,

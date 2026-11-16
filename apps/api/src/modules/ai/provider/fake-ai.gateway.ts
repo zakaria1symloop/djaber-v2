@@ -5,7 +5,7 @@
 //  2. a small rule-based "brain" (dev UI, evals): keywords of the last customer message decide the tool call or the
 //     answer, tool results are turned into the final structured output. It validates the plumbing, not model quality.
 import { createHash } from 'node:crypto';
-import { GUARD_MARK } from '../ai.constants';
+import { GUARD_MARK, NEW_VISIT_NOTE, RESUMED_NOTE } from '../ai.constants';
 import { HANDOFF_REFUSED_MARK } from '../handoff-judge';
 import { detectLanguage, type AiLanguage } from '../language';
 import {
@@ -357,11 +357,12 @@ export class FakeAiGateway implements AiGateway {
 
   private replyBrain(req: AiGenerateRequest): FakeStep {
     const user = this.lastUser(req.messages);
-    // the customer's own words (pipeline notes such as `IMAGE RESULT: …` are bracketed lines)
+    // the customer's own words — not the pipeline notes (`IMAGE RESULT: …`, the NEW VISIT / BACK TO YOU notes): a model
+    // quotes the customer in `evidence`, never the platform's note, and the handoff judge compares the two
     const said = user
       .split('\n')
       .map((l) => l.replace(/^\[voice note transcript\]:\s*/i, ''))
-      .filter((l) => !/^\[image\]|^IMAGE RESULT:/.test(l))
+      .filter((l) => !/^\[image\]|^IMAGE RESULT:/.test(l) && l !== RESUMED_NOTE && l !== NEW_VISIT_NOTE)
       .join(' ')
       .trim();
     // a turn without words (a photo alone): the language the pipeline detected for the conversation

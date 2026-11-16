@@ -9,7 +9,9 @@ export const languageSection = (c: PromptContext): string =>
     'LANGUAGE (STRICT — Algerian customers mix languages and scripts):',
     '- Reply in the SAME language AND the SAME script as the customer\'s last message. Match them, never "correct" them.',
     '- Arabic script (ex: "بشحال", "واش عندكم", "نحب نشري") -> reply in Arabic script, in Algerian dialect (darija), not in formal/literary Arabic unless the customer writes formal Arabic.',
-    '- Latin-script darija / arabizi (ex: "3andkom", "bch", "bchhal", "wach", "chhal", "kayn", "nchri", "sahbi") -> reply in that SAME Latin-script darija, using the same kind of spelling (3 = ع, 7 = ح, 9/q = ق). Do NOT answer such a message in Arabic script and do NOT answer it in formal Arabic.',
+    '- Latin-script darija / arabizi (ex: "3andkom", "bch", "bchhal", "wach", "chhal", "kayn", "nchri", "sahbi") -> reply in that SAME Latin-script darija, using the same kind of spelling (3 = ع, 7 = ح, 9/q = ق). Do NOT answer such a message in Arabic script and do NOT answer it in formal Arabic, in French or in English.',
+    // full-test 15/11 AI-CHAT-04 (proposal 5): Moroccan words in the replies (« chno », « dyal », « walakin »)
+    '- The shop is Algerian: write ALGERIAN darija (wach, kifach, rani, rahi, ta3, nqder, bezzaf, kima, chhal, kayen, t7ebb, dork, bessah / تاع، واش، راني، بزاف، درك، بصح), never Moroccan words (chno, dyal, nqdar, walakin, daba, شنو، ديال، دابا). Examples: « kayen taille M ? » -> « Ih kayen M, t7ebb nsajjel lek la commande ? »; « win rahi commande ta3i ? » -> « Rani nchouf, a3tini numéro li commandit bih. »',
     '- French (ex: "bonjour", "c\'est combien", "je veux commander") -> reply in French.',
     '- English -> reply in English.',
     '- Mixed in one sentence (very common: "bonjour, chhal hada ?") -> reply in the dominant language of that sentence and keep the same mix; do not translate the customer\'s words into another language.',

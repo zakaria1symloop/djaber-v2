@@ -13,8 +13,8 @@ import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import type { z } from 'zod';
 import { useRouter } from '@/i18n/navigation';
-import { getLastApiError } from '@/lib/api';
-import { applyServerErrors, errorMessage, fieldError, useLeaveGuard } from '@/lib/forms';
+import { ApiError, getLastApiError } from '@/lib/api';
+import { applyServerErrors, errorCode, errorMessage, fieldError, useLeaveGuard } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 import { helpApi, useHelpArticles, type UploadedFile } from './api';
@@ -26,6 +26,8 @@ type Values = z.input<typeof FormSchema>;
 /** 5 MB per attachment (same ceiling as the other merchant uploads) */
 export const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 const ACCEPT = 'image/png,image/jpeg,image/webp,text/csv,.csv';
+/** full-test 15/11 HELP-12: one rule everywhere — screenshots (PNG / JPG / WEBP) or CSV, checked before the upload. */
+export const attachmentTypeOk = (f: Pick<File, 'name' | 'type'>): boolean => ['image/png', 'image/jpeg', 'image/webp'].includes(f.type) || /\.(csv|png|jpe?g|webp)$/i.test(f.name);
 
 export function ContactForm({ from, compact, className }: { from?: string | null; compact?: boolean; className?: string }) {
   const t = useT();
@@ -62,10 +64,16 @@ export function ContactForm({ from, compact, className }: { from?: string | null
 
   const addFiles = async (list: FileList | null) => {
     setError(null);
+    // full-test 15/11 HELP-03: a running count (the state read before the loop let 6 files through)
+    let count = files.length;
     for (const f of Array.from(list ?? [])) {
-      if (files.length >= TICKET_ATTACHMENTS_MAX) {
+      if (count >= TICKET_ATTACHMENTS_MAX) {
         setError(t('help.contact.attachments.max', { max: TICKET_ATTACHMENTS_MAX }));
         break;
+      }
+      if (!attachmentTypeOk(f)) {
+        setError(t('help.contact.attachments.type'));
+        continue;
       }
       if (f.size > ATTACHMENT_MAX_BYTES) {
         setError(t('error.UPLOAD_TOO_LARGE', { max: t('help.attachments.maxSize') }));
@@ -74,9 +82,11 @@ export function ContactForm({ from, compact, className }: { from?: string | null
       try {
         setUploading(0);
         const up = await helpApi.upload(f, setUploading);
+        count += 1;
         setFiles((prev) => [...prev, up]);
       } catch (e) {
-        setError(errorMessage(e, t));
+        const code = errorCode(e);
+        setError(code === 'IMAGE_TYPE_INVALID' || code === 'UPLOAD_TYPE_INVALID' ? t('help.contact.attachments.type') : errorMessage(e, t));
       } finally {
         setUploading(null);
       }
@@ -101,8 +111,11 @@ export function ContactForm({ from, compact, className }: { from?: string | null
       setFiles([]);
       router.push(`/help/tickets/${r.id}`);
     } catch (e) {
+      // HELP-03: a refused attachment list says so (it fell back to « Vérifiez les champs. »)
+      const attachmentsField = e instanceof ApiError ? e.body.fields?.attachments : undefined;
       const msg = applyServerErrors(form, e, t, { fields: ['category', 'priority', 'message'] });
-      if (msg) setError(msg);
+      if (attachmentsField) setError(attachmentsField === 'validation.length' ? t('help.contact.attachments.max', { max: TICKET_ATTACHMENTS_MAX }) : t('help.contact.attachments.invalid'));
+      else if (msg) setError(msg);
     }
   });
 

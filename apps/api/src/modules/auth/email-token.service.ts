@@ -12,10 +12,14 @@ export const TOKEN_TTL_MS: Record<EmailTokenKind, number> = {
   change_email: 24 * 3600_000,
 };
 
-const CODES: Record<EmailTokenKind, { invalid: ErrorCode; expired: ErrorCode }> = {
-  verify: { invalid: 'AUTH_VERIFY_TOKEN_EXPIRED', expired: 'AUTH_VERIFY_TOKEN_EXPIRED' },
-  reset: { invalid: 'AUTH_RESET_TOKEN_INVALID', expired: 'AUTH_RESET_TOKEN_EXPIRED' },
-  change_email: { invalid: 'AUTH_VERIFY_TOKEN_EXPIRED', expired: 'AUTH_VERIFY_TOKEN_EXPIRED' },
+/**
+ * `invalid` = no such link (mistyped / truncated — full-test 15/11 PUBLIC-11: it was called « expiré »), `used` = a link
+ * already used or replaced by a newer one, `expired` = past its validity.
+ */
+const CODES: Record<EmailTokenKind, { invalid: ErrorCode; used: ErrorCode; expired: ErrorCode }> = {
+  verify: { invalid: 'AUTH_VERIFY_TOKEN_INVALID', used: 'AUTH_VERIFY_TOKEN_EXPIRED', expired: 'AUTH_VERIFY_TOKEN_EXPIRED' },
+  reset: { invalid: 'AUTH_RESET_TOKEN_INVALID', used: 'AUTH_RESET_TOKEN_INVALID', expired: 'AUTH_RESET_TOKEN_EXPIRED' },
+  change_email: { invalid: 'AUTH_VERIFY_TOKEN_INVALID', used: 'AUTH_VERIFY_TOKEN_EXPIRED', expired: 'AUTH_VERIFY_TOKEN_EXPIRED' },
 };
 
 @Injectable()
@@ -40,7 +44,8 @@ export class EmailTokenService {
     const row = await TenantContext.runSystem(() =>
       dbOf(tx).emailToken.findUnique({ where: { tokenHash: this.crypto.sha256(raw) } }),
     );
-    if (!row || row.kind !== kind || row.usedAt) throw new AppException(CODES[kind].invalid);
+    if (!row || row.kind !== kind) throw new AppException(CODES[kind].invalid);
+    if (row.usedAt) throw new AppException(CODES[kind].used);
     if (row.expiresAt <= new Date()) throw new AppException(CODES[kind].expired);
     return row;
   }
@@ -51,7 +56,7 @@ export class EmailTokenService {
     const claimed = await TenantContext.runSystem(() =>
       dbOf(tx).emailToken.updateMany({ where: { id: row.id, usedAt: null }, data: { usedAt: new Date() } }),
     );
-    if (!claimed.count) throw new AppException(CODES[kind].invalid);
+    if (!claimed.count) throw new AppException(CODES[kind].used);
     return row;
   }
 }

@@ -159,6 +159,8 @@ describe('relative time', () => {
   it('counts the days until an instant', () => {
     expect(daysUntil('2026-10-16T12:00:00.000Z', now)).toBe(5);
     expect(daysUntil('2026-10-01T12:00:00.000Z', now)).toBe(0);
+    // SETTINGS-14: a 7-day invitation resent now (server clock a few seconds ahead) reads 7, not 8
+    expect(daysUntil(new Date(now + 7 * 86_400_000 + 30_000).toISOString(), now)).toBe(7);
   });
 });
 

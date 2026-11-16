@@ -13,7 +13,7 @@ import { DialogFooter, RadioList, useDialogSubmit, useOnOpen } from '@/features/
 import { algiersTime } from '@/features/orders/logic';
 import { ApiError } from '@/lib/api';
 import { useT } from '@/lib/i18n';
-import { digitsToInt, moneyDigits } from '@/lib/money';
+import { digitsToInt, moneyDigits, signedMoney } from '@/lib/money';
 import { uploadWithProgress } from '@/lib/upload';
 import { gdsApi, useGdsRefresh } from './api';
 import { CASH_MANUAL_IN, CASH_MANUAL_OUT, PAYMENT_METHODS, type CashCategory, type CashMethod, type CashRow, type CashType } from './contracts';
@@ -60,7 +60,10 @@ export function ManualEntryDialog({ mode, onClose, defaultDay }: { mode: ManualM
   });
   const categories: readonly CashCategory[] = category === 'correction' ? ['correction'] : type === 'income' ? CASH_MANUAL_IN : CASH_MANUAL_OUT;
   const value = digitsToInt(amount);
-  const errs = { amount: !value ? t('validation.required') : undefined, label: label.trim().length < 2 ? t('validation.required') : undefined };
+  const errs = {
+    amount: value === null ? t('validation.required') : value === 0 ? t('validation.amount_positive') : undefined,
+    label: !label.trim() ? t('validation.required') : label.trim().length < 2 ? t('validation.min_length', { min: 2 }) : undefined,
+  };
   const body = {
     type,
     amount: value ?? 0,
@@ -227,9 +230,16 @@ export function CloseDayDialog({ day, theoretical, onClose }: { day: string | nu
         <div className="flex items-baseline justify-between gap-3 text-[14px]">
           <span>{t('cash.close.theoretical')}</span>
           <span data-testid="cash-theoretical">
-            <Ltr className="font-semibold tabular-nums">{formatMoney(theoretical)}</Ltr>
+            <Ltr className="font-semibold tabular-nums">{signedMoney(theoretical)}</Ltr>
           </span>
         </div>
+        {/* full-test 15/11 SALES-CASH-13: cash counted is never negative — a negative theoretical balance means cash went out
+            that never came in on record (opening float, apport): said before a big correction is written */}
+        {theoretical < 0 ? (
+          <p className="ts-label-meta !normal-case text-accent-starred" data-testid="cash-theoretical-negative">
+            {t('cash.close.negativeTheoretical')}
+          </p>
+        ) : null}
         <Field label={t('cash.close.counted')} htmlFor="cc-counted" required error={touched && gap === null ? t('validation.required') : s.fieldError('countedBalance')}>
           <MoneyInput id="cc-counted" value={counted} onValueChange={setCounted} />
         </Field>
@@ -239,7 +249,7 @@ export function CloseDayDialog({ day, theoretical, onClose }: { day: string | nu
             <Ltr className={`font-semibold tabular-nums ${gap ? (gap < 0 ? 'text-accent-alert' : 'text-accent-money') : ''}`}>{gap === null ? '—' : `${gap > 0 ? '+' : gap < 0 ? '−' : ''}${formatMoney(Math.abs(gap))}`}</Ltr>
           </span>
         </div>
-        <Field label={t('cash.close.note')} htmlFor="cc-note" error={touched && noteMissing ? t('validation.required') : s.fieldError('note')}>
+        <Field label={t('cash.close.note')} htmlFor="cc-note" error={touched && noteMissing ? (note.trim() ? t('validation.min_length', { min: 2 }) : t('validation.required')) : s.fieldError('note')}>
           <Input id="cc-note" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder={t('cash.close.notePlaceholder')} />
         </Field>
         {s.error ? <FormAlert>{s.error}</FormAlert> : null}
@@ -280,7 +290,7 @@ export function ReopenDayDialog({ day, onClose }: { day: string | null; onClose:
       footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('cash.reopen.action')} />}
     >
       <div className="flex flex-col gap-4" data-testid="cash-reopen-dialog">
-        <Field label={t('common.reasonRequired')} htmlFor="cr-reason" error={touched && reason.trim().length < 3 ? t('validation.required') : s.fieldError('reason')}>
+        <Field label={t('common.reasonRequired')} htmlFor="cr-reason" error={touched && reason.trim().length < 3 ? (reason.trim() ? t('validation.min_length', { min: 3 }) : t('validation.required')) : s.fieldError('reason')}>
           <Input id="cr-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
         </Field>
         {s.error ? <FormAlert>{s.error}</FormAlert> : null}

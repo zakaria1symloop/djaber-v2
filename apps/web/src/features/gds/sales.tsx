@@ -13,6 +13,7 @@ import {
   buttonClass,
   Card,
   cn,
+  ConfirmDialog,
   DataTable,
   Field,
   FilterChips,
@@ -44,6 +45,7 @@ import { useOffline } from '@/features/orders/offline';
 import { useMembers } from '@/features/workspace/api';
 import { Link, useRouter } from '@/i18n/navigation';
 import { ApiError } from '@/lib/api';
+import { iso } from '@/lib/format-message';
 import { useLeaveGuard } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { filterList, filterText, type ListSpec } from '@/lib/list-state';
@@ -66,7 +68,8 @@ export const SALES_SPEC: ListSpec = {
   sorts: ['soldAt', 'total', 'number'],
   defaultSort: '-soldAt',
 };
-const SALE_METHODS = ['cash', 'ccp', 'card'] as const satisfies readonly CashMethod[];
+// full-test 15/11 SALES-CASH-18: every `CashMethod` (03 GDS-07, 05 Sale.paymentMethod) — Virement and Autre included
+const SALE_METHODS = ['cash', 'ccp', 'card', 'transfer', 'other'] as const satisfies readonly CashMethod[];
 
 export function SalesPage({ creating }: { creating?: boolean }) {
   const t = useT();
@@ -285,9 +288,14 @@ function NewSaleSheet({ draftId, onClose }: { draftId: string | null; onClose: (
   const [ready, setReady] = useState(!draftId);
   const [baseline, setBaseline] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
+  const [confirmValidate, setConfirmValidate] = useState(false);
+  // full-test 15/11 SALES-CASH-16: a validated / cancelled sale is not a draft — its page opens instead of an editable sheet
+  useEffect(() => {
+    if (draft.data && draft.data.status !== 'draft') router.replace(`/sales/${draft.data.id}`);
+  }, [draft.data, router]);
   useEffect(() => {
     const d = draft.data;
-    if (!d || loaded.current === d.id) return;
+    if (!d || d.status !== 'draft' || loaded.current === d.id) return;
     loaded.current = d.id;
     setLines(lineFromSale(d));
     setDiscount(d.discount ? moneyDigits(d.discount) : '');
@@ -314,7 +322,12 @@ function NewSaleSheet({ draftId, onClose }: { draftId: string | null; onClose: (
   const hasClient = !!client || (newClient.open && newClient.name.trim().length >= 2 && isPhoneDz(normalizePhoneDz(newClient.phone.trim())));
   const partialBlocked = live.partial && !hasClient;
   const missingVariant = lines.some((l) => l.hasVariants && !l.variantId);
-  const patch = (i: number, p: Partial<Line>) => setLines((x) => x.map((l, j) => (j === i ? { ...l, ...p } : l)));
+  // full-test 15/11 SALES-CASH-08: an error goes away when its line changes (it used to stay until the next submit)
+  const patch = (i: number, p: Partial<Line>) => {
+    setLines((x) => x.map((l, j) => (j === i ? { ...l, ...p } : l)));
+    setFields((f) => Object.fromEntries(Object.entries(f).filter(([k]) => !k.startsWith(`items.${i}.`))));
+    setError(null);
+  };
   const lineErr = (i: number) => {
     const k = [`items.${i}.quantity`, `items.${i}.variantId`, `items.${i}.productId`].find((x) => fields[x]);
     return k ? (t.has(fields[k]!) ? t(fields[k]!, { max: '', min: '' }) : fields[k]) : null;
@@ -323,6 +336,7 @@ function NewSaleSheet({ draftId, onClose }: { draftId: string | null; onClose: (
   const save = async (status: 'draft' | 'completed') => {
     setError(null);
     setFields({});
+    if (live.discountOver) return;
     if (!lines.length || missingVariant || (status === 'completed' && partialBlocked)) {
       setError(partialBlocked && status === 'completed' ? t('error.SALE_PARTIAL_REQUIRES_CUSTOMER') : missingVariant ? t('error.VARIANT_REQUIRED') : t('sales.form.noLines'));
       return;
@@ -357,7 +371,13 @@ function NewSaleSheet({ draftId, onClose }: { draftId: string | null; onClose: (
       setBusy(null);
     }
   };
-  const blocked = !can('gds.write') ? t('toast.forbidden') : offline ? t('banner.offline') : undefined;
+  const blocked = !can('gds.write') ? t('toast.forbidden') : offline ? t('banner.offline') : live.discountOver ? t('sales.form.discountOver') : undefined;
+  if (draftId && draft.isError)
+    return (
+      <SideSheet open onClose={onClose} title={t('sales.form.title')} closeLabel={t('action.close')} width={460}>
+        <QueryError error={draft.error} onRetry={() => void draft.refetch()} />
+      </SideSheet>
+    );
   return (
     <>
     <SideSheet
@@ -374,13 +394,14 @@ function NewSaleSheet({ draftId, onClose }: { draftId: string | null; onClose: (
           <Button
             variant="primary"
             className="ms-auto"
-            onClick={() => void save('completed')}
+            // SALES-CASH-06: validating a draft is confirmed, as from the row menu (12 §158)
+            onClick={() => (draft.data ? setConfirmValidate(true) : void save('completed'))}
             loading={busy === 'completed'}
             disabled={busy !== null}
             disabledReason={blocked ?? (partialBlocked ? t('error.SALE_PARTIAL_REQUIRES_CUSTOMER') : undefined)}
             data-testid="sale-validate"
           >
-            {t('sales.form.validate', { amount: formatMoney(live.total) })}
+            {t('sales.form.validate', { amount: iso(formatMoney(live.total)) })}
           </Button>
         </div>
       }
@@ -431,8 +452,8 @@ function NewSaleSheet({ draftId, onClose }: { draftId: string | null; onClose: (
         )}
 
         <div className="flex items-end gap-2">
-          <Field label={t('common.discount')} htmlFor="sale-discount" className="flex-1">
-            <MoneyInput id="sale-discount" value={discount} onValueChange={setDiscount} currency={discountMode === 'percent' ? '%' : 'DA'} />
+          <Field label={t('common.discount')} htmlFor="sale-discount" className="flex-1" error={live.discountOver ? t('sales.form.discountOver') : undefined}>
+            <MoneyInput id="sale-discount" value={discount} onValueChange={setDiscount} currency={discountMode === 'percent' ? '%' : 'DA'} aria-invalid={live.discountOver || undefined} />
           </Field>
           <SegmentedControl<DiscountMode>
             label={t('common.discount')}
@@ -477,8 +498,14 @@ function NewSaleSheet({ draftId, onClose }: { draftId: string | null; onClose: (
           </button>
         ) : null}
 
-        <Field label={t('sales.form.payment')}>
-          <SegmentedControl<CashMethod> label={t('sales.form.payment')} value={method} onChange={setMethod} options={SALE_METHODS.map((m) => ({ value: m, label: t(`sales.method.${m}`) }))} className="w-full [&>button]:flex-1" />
+        <Field label={t('sales.form.payment')} htmlFor="sale-method">
+          <Select id="sale-method" value={method} onChange={(e) => setMethod(e.target.value as CashMethod)} data-testid="sale-method">
+            {SALE_METHODS.map((m) => (
+              <option key={m} value={m}>
+                {t(`sales.method.${m}`)}
+              </option>
+            ))}
+          </Select>
         </Field>
         <div className="grid grid-cols-2 gap-2">
           <Field label={t('sales.form.received')} htmlFor="sale-received" hint={live.remaining > 0 ? t('sales.form.remainingHint', { amount: formatMoney(live.remaining) }) : undefined}>
@@ -498,6 +525,20 @@ function NewSaleSheet({ draftId, onClose }: { draftId: string | null; onClose: (
       </div>
     </SideSheet>
     {guard}
+    <ConfirmDialog
+      open={confirmValidate}
+      onOpenChange={(v) => !v && setConfirmValidate(false)}
+      title={t('sales.validateConfirm.title', { number: draft.data?.number ?? '' })}
+      description={t('sales.validateConfirm.description')}
+      confirmLabel={t('sales.action.validate')}
+      cancelLabel={t('action.cancel')}
+      closeLabel={t('action.close')}
+      loading={busy === 'completed'}
+      onConfirm={() => {
+        setConfirmValidate(false);
+        void save('completed');
+      }}
+    />
     <LeaveGuardDialog
       open={confirmClose}
       name={sheetName}

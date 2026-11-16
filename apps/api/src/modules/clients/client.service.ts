@@ -148,11 +148,13 @@ export class ClientService implements OnModuleInit {
   private async listViews(rows: ClientRow[], index: BlockIndex): Promise<ClientListItemView[]> {
     if (!rows.length) return [];
     const ids = rows.map((r) => r.id);
-    const [delivered, withAddressOrders, dupes] = await Promise.all([
+    const [delivered, withAddressOrders, dupes, anyOrders] = await Promise.all([
       prisma.order.groupBy({ by: ['clientId'], where: { clientId: { in: ids }, status: 'delivered' }, _count: { _all: true } }),
       prisma.order.groupBy({ by: ['clientId'], where: { clientId: { in: ids }, wilayaId: { not: null } }, _count: { _all: true } }),
       this.duplicateIds(),
+      prisma.order.groupBy({ by: ['clientId'], where: { clientId: { in: ids } }, _count: { _all: true } }),
     ]);
+    const withOrders = new Set(anyOrders.map((d) => d.clientId));
     const deliveredBy = new Map(delivered.map((d) => [d.clientId, d._count._all]));
     const addressOrders = new Set(withAddressOrders.map((d) => d.clientId));
     const dupeSet = new Set(dupes);
@@ -186,25 +188,28 @@ export class ClientService implements OnModuleInit {
         cancelCount: c.cancelCount,
         archived: !!c.deletedAt,
         createdAt: c.createdAt.toISOString(),
-        actions: this.actions(c, blocked),
+        actions: this.actions(c, blocked, withOrders.has(c.id)),
       };
     });
   }
 
-  private actions(c: Pick<Client, 'deletedAt' | 'orderCount' | 'riskLevel' | 'phone'>, blocked: boolean) {
-    if (c.deletedAt) return [userAction('open', 'clients.read', null, true)];
+  private actions(c: Pick<Client, 'deletedAt' | 'orderCount' | 'riskLevel' | 'phone' | 'mergedIntoId'> & { _count?: { conversations: number } }, blocked: boolean, hasOrders: boolean) {
+    // full-test CLIENTS-03: an archived card can be restored (a merged one cannot: its data lives on the kept card)
+    if (c.deletedAt) return [userAction('open', 'clients.read', null, true), ...(c.mergedIntoId ? [] : [userAction('restore', 'clients.delete')])];
     return [
       userAction('open', 'clients.read', null, true),
       userAction('edit', 'clients.write'),
       userAction('new_order', 'orders.write'),
       userAction('open_orders', 'orders.read'),
-      userAction('open_conversation', 'inbox.read'),
+      // offered when the client has a conversation (full-test CLIENTS-14: the row menu opens it like the sheet)
+      ...(c._count && c._count.conversations === 0 ? [] : [userAction('open_conversation', 'inbox.read')]),
       userAction('tags', 'clients.write'),
       userAction(c.riskLevel === 'high' ? 'unmark_risk' : 'mark_risk', 'clients.write'),
       userAction('merge', 'clients.delete'),
       blocked ? userAction('unblock', 'safety.manage') : userAction('block', 'safety.block', c.phone ? null : null),
-      // a client with orders is archived (soft) only after the explicit confirmation of the dialog
-      userAction(c.orderCount > 0 ? 'archive' : 'delete', 'clients.delete'),
+      // a client with orders (any status — the DELETE rule) is archived (soft) only after the explicit confirmation of the
+      // dialog, which opens in « Archiver » mode (full-test CLIENTS-02)
+      userAction(hasOrders ? 'archive' : 'delete', 'clients.delete'),
     ];
   }
 
@@ -224,6 +229,19 @@ export class ClientService implements OnModuleInit {
   async list(q: ClientsQuery): Promise<Page<ClientListItemView>> {
     const index = await this.safety.index();
     const where = await this.where(q, index);
+    // full-test CLIENTS-09: the name sort ignores case and accents (« achref » next to « Amrani », not after « QA … »);
+    // the database collation sorts upper case first, so the page is cut from the names sorted here
+    const sort = q.sort ?? '-lastOrderAt';
+    if (sort.replace(/^-/, '') === 'name') {
+      const all = await prisma.client.findMany({ where, select: { id: true, name: true } });
+      const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
+      all.sort((a, b) => collator.compare(a.name, b.name) || (a.id < b.id ? 1 : -1));
+      if (sort.startsWith('-')) all.reverse();
+      const ids = all.slice((q.page - 1) * q.pageSize, q.page * q.pageSize).map((c) => c.id);
+      const rows = await prisma.client.findMany({ where: { id: { in: ids } }, include: CLIENT_LIST_INCLUDE });
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      return page(await this.listViews(ids.map((id) => byId.get(id)!).filter(Boolean), index), all.length, q);
+    }
     const [rows, total] = await Promise.all([
       prisma.client.findMany({ where, include: CLIENT_LIST_INCLUDE, orderBy: this.orderBy(q.sort), skip: (q.page - 1) * q.pageSize, take: q.pageSize }),
       prisma.client.count({ where }),
@@ -253,6 +271,11 @@ export class ClientService implements OnModuleInit {
       prisma.order.aggregate({ where: { clientId: id, status: 'delivered' }, _sum: { total: true } }),
       prisma.sale.aggregate({ where: { clientId: id, status: 'completed' }, _sum: { total: true }, _count: { _all: true } }),
     ]);
+    // no saved address yet: the address of the client's last order is the default one (full-test ORDERS-13 — « adresse par
+    // défaut préremplie »; the quality filter already counts order addresses). Saving the card writes it as a real address.
+    const lastOrderAddress = addresses.length
+      ? null
+      : await prisma.order.findFirst({ where: { clientId: id, wilayaId: { not: null } }, include: { wilaya: true, commune: true }, orderBy: [{ orderedAt: 'desc' }, { id: 'desc' }] });
     const n = (s: string) => counts.find((x) => x.status === s)?._count._all ?? 0;
     const delivered = n('delivered');
     const returns = n('returned');
@@ -274,7 +297,23 @@ export class ClientService implements OnModuleInit {
         address: a.address,
         isStopdesk: a.isStopdesk,
         stopdeskId: a.stopdeskId,
-      })),
+      })).concat(
+        lastOrderAddress?.wilaya
+          ? [
+              {
+                id: `order:${lastOrderAddress.id}`,
+                isDefault: true,
+                wilayaId: lastOrderAddress.wilaya.id,
+                wilayaName: locale === 'ar' ? lastOrderAddress.wilaya.nameAr : lastOrderAddress.wilaya.nameFr,
+                communeId: lastOrderAddress.communeId,
+                communeText: lastOrderAddress.communeText ?? (lastOrderAddress.commune ? (locale === 'ar' ? lastOrderAddress.commune.nameAr : lastOrderAddress.commune.nameFr) : null),
+                address: lastOrderAddress.address,
+                isStopdesk: lastOrderAddress.isStopdesk,
+                stopdeskId: lastOrderAddress.stopdeskId,
+              },
+            ]
+          : [],
+      ),
       metrics: { orders: totalOrders, delivered, spent: c.totalSpent, ordersSpent: ordersSum._sum.total ?? 0, sales: salesSum._count._all, salesSpent: salesSum._sum.total ?? 0, returns, returnPct: delivered + returns ? Math.round((returns * 1000) / (delivered + returns)) / 10 : 0, cancels: n('cancelled'), conversations: c._count.conversations, lastOrderAt: c.lastOrderAt?.toISOString() ?? null },
       mergedFrom: mergedFrom.map((m) => ({ id: m.id, name: m.name, at: (m.deletedAt ?? m.updatedAt).toISOString() })),
       recentOrders: recent.map((o) => presentOrderListItem(o, ctx)),
@@ -297,6 +336,33 @@ export class ClientService implements OnModuleInit {
   private async assertPhoneFree(db: Tx | typeof prisma, phone: string, exceptId?: string) {
     const owner = await db.client.findFirst({ where: { phone, deletedAt: null, ...(exceptId ? { id: { not: exceptId } } : {}) }, select: { id: true, name: true } });
     if (owner) throw new AppException('CLIENT_PHONE_EXISTS', { clientName: owner.name }, { phone: 'validation.phone_taken' }, { clientId: owner.id });
+    // full-test CLIENTS-03 (04 §2 phone unique per workspace): an ARCHIVED card keeps its phone — no second card without its
+    // history; « Utiliser ce client » opens the archived card, which offers « Restaurer »
+    const archived = await this.archivedOwner(db, phone, exceptId);
+    if (archived) throw new AppException('CLIENT_PHONE_EXISTS', { clientName: archived.name }, { phone: 'validation.phone_taken' }, { clientId: archived.id, archived: true });
+  }
+
+  /** The archived card (soft-deleted WITH orders, not merged) holding this phone, if any — a card deleted without orders has no history to keep. */
+  private archivedOwner(db: Tx | typeof prisma, phone: string, exceptId?: string) {
+    return db.client.findFirst({ where: { phone, deletedAt: { not: null }, mergedIntoId: null, orders: { some: {} }, ...(exceptId ? { id: { not: exceptId } } : {}) }, select: { id: true, name: true } });
+  }
+
+  /** `POST /clients/:id/restore` (full-test CLIENTS-03): an archived card comes back to the lists; 409 when its phone was reused. */
+  async restore(id: string): Promise<ClientView> {
+    await prisma.$transaction(async (db) => {
+      const tx = db as Tx;
+      const c = await tx.client.findFirst({ where: { id } });
+      if (!c) throw notFound();
+      if (!c.deletedAt || c.mergedIntoId) throw new AppException('CONFLICT');
+      if (c.phone) {
+        const owner = await tx.client.findFirst({ where: { phone: c.phone, deletedAt: null, id: { not: id } }, select: { id: true, name: true } });
+        if (owner) throw new AppException('CLIENT_PHONE_EXISTS', { clientName: owner.name }, { phone: 'validation.phone_taken' }, { clientId: owner.id });
+      }
+      await tx.client.update({ where: { id }, data: { deletedAt: null } });
+    });
+    const t = TenantContext.get();
+    await this.audit.write({ workspaceId: t.workspaceId, actorType: 'user', actorId: t.userId, actorRole: t.role, action: 'client.restore', entity: 'Client', entityId: id });
+    return this.get(id);
   }
 
   private async writeAddress(tx: Tx, clientId: string, a: ClientAddressInput | null | undefined) {
@@ -488,7 +554,12 @@ export class ClientService implements OnModuleInit {
       return { client: await tx.client.update({ where: { id: c.id }, data: { phone: input.phone, isPlaceholder: false } }), created: false };
     }
     const convClient = o.conversationClientId ? await tx.client.findFirst({ where: { id: o.conversationClientId } }) : null;
-    const owner = await tx.client.findFirst({ where: { phone: input.phone, deletedAt: null } });
+    let owner = await tx.client.findFirst({ where: { phone: input.phone, deletedAt: null } });
+    // full-test CLIENTS-03: a returning customer of an archived card gets it back (orders, risk history) — never a 2nd card
+    if (!owner) {
+      const archived = await this.archivedOwner(tx, input.phone);
+      if (archived) owner = await tx.client.update({ where: { id: archived.id }, data: { deletedAt: null } });
+    }
     if (owner) {
       if (convClient && convClient.isPlaceholder && convClient.id !== owner.id && !convClient.deletedAt) {
         const merged = await this.mergeInto(tx, owner, convClient);

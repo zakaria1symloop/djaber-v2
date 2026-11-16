@@ -73,6 +73,11 @@ type ParcelState = Pick<Shipment, 'provider' | 'status' | 'trackingNumber'>;
 type Caps = { cancel: boolean; retry: boolean };
 /** The courier holds the parcel and it has not left the merchant yet (CRÉÉ). */
 const createdAtCourier = (s: ParcelState) => s.status === 'sent' && s.provider !== 'manual' && !!s.trackingNumber;
+/**
+ * A self-delivered parcel still on its way (sent … failed attempt): no courier picked it up and there is no courier space,
+ * so it can be cancelled or handed to a courier at any time (04 §22; full-test DELIVERY-06).
+ */
+export const manualOpen = (s: ParcelState) => s.provider === 'manual' && ['sent', 'picked_up', 'in_transit', 'out_for_delivery', 'failed', 'stale'].includes(s.status);
 /** The parcel left the merchant (picked up … failed attempt, or no news for 30 days): only « Retournée » at reception undoes it. */
 const pastPickup = (s: ParcelState) => ['picked_up', 'in_transit', 'out_for_delivery', 'stale'].includes(s.status) || (s.status === 'failed' && !isSendFailure(s));
 
@@ -84,6 +89,7 @@ const pastPickup = (s: ParcelState) => ['picked_up', 'in_transit', 'out_for_deli
  * déjà ramassé » — the reason now matches the state.
  */
 export const cancelRefusal = (s: ParcelState, caps: Caps): ParcelRefusal | null => {
+  if (manualOpen(s)) return null;
   if (s.status === 'pending' || s.status === 'sent') return createdAtCourier(s) && !caps.cancel ? 'COURIER_CANCEL_UNSUPPORTED' : null;
   return pastPickup(s) ? 'COURIER_CANCEL_NOT_ALLOWED' : NOT_OFFERED;
 };
@@ -95,14 +101,15 @@ export const cancelRefusal = (s: ParcelState, caps: Caps): ParcelRefusal | null 
  * delivered / returned / cancelled has nothing to change (not offered).
  */
 export const changeCourierRefusal = (s: ParcelState, caps: Caps): ParcelRefusal | null => {
-  if (isSendFailure(s) || s.status === 'pending' || (s.status === 'sent' && s.provider === 'manual')) return null;
+  if (isSendFailure(s) || s.status === 'pending' || manualOpen(s)) return null;
   if (createdAtCourier(s)) return caps.cancel ? 'SHIPMENT_CANCEL_FIRST' : 'COURIER_CANCEL_UNSUPPORTED';
   return pastPickup(s) ? 'COURIER_CANCEL_NOT_ALLOWED' : NOT_OFFERED;
 };
 
 /** « Relancer la livraison » (a failed attempt after pickup): the courier's API must offer it (`COURIER_RETRY_UNSUPPORTED`). */
 export const retryDeliveryRefusal = (s: ParcelState, caps: Caps): ParcelRefusal | null => {
-  if (s.status !== 'failed' || isSendFailure(s)) return NOT_OFFERED;
+  // a self-delivered parcel has no courier to ask: the merchant delivers again and marks it delivered (full-test DELIVERY-06)
+  if (s.status !== 'failed' || isSendFailure(s) || s.provider === 'manual') return NOT_OFFERED;
   return caps.retry && !!s.trackingNumber ? null : 'COURIER_RETRY_UNSUPPORTED';
 };
 /** The not-offered marker of the rules above (the service answers 409 CONFLICT: the parcel moved on meanwhile). */

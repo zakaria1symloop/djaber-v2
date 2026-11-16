@@ -18,3 +18,5 @@ export function useT(): TFunction {
 }
 
 export const useLocaleCode = () => useContext(Ctx).locale;
+/** The flat catalogue in use (a provider below can override a few keys, e.g. the impersonation read-only reason). */
+export const useMessages = () => useContext(Ctx).messages;

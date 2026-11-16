@@ -1,17 +1,18 @@
 'use client';
 // Small display pieces shared by the catalogue screens: amounts, thumbnails, the pills of Product / StockMovement
 // (colours from the `StatusPill` map, labels from `enum.*`), list pagination with its copy.
-import { formatMoney, formatNumber } from '@djaber/shared';
+import { formatNumber } from '@djaber/shared';
 import { cn, ColorPill, Ltr, Pagination, StatusPill } from '@djaber/ui';
 import { ImageOff } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import type { PageSize } from '@/lib/list-state';
+import { pctText, signedMoney } from '@/lib/money';
 import { productState, type ModerationStatus, type MovementType, type ProductListItem, type StockState } from './contracts';
 
 /** `12 500 DA`, always left-to-right; `—` when absent. */
 export function Money({ value, className, muted }: { value: number | null | undefined; className?: string; muted?: boolean }) {
   if (value === null || value === undefined) return <span className="text-text-muted">—</span>;
-  return <Ltr className={cn('tabular-nums', muted && 'text-text-secondary', className)}>{formatMoney(value)}</Ltr>;
+  return <Ltr className={cn('tabular-nums', muted && 'text-text-secondary', className)}>{signedMoney(value)}</Ltr>;
 }
 export function Num({ value, className, signed }: { value: number | null | undefined; className?: string; signed?: boolean }) {
   if (value === null || value === undefined) return <span className="text-text-muted">—</span>;
@@ -21,7 +22,7 @@ export function Num({ value, className, signed }: { value: number | null | undef
 /** `47 %` */
 export function Pct({ value, className }: { value: number | null | undefined; className?: string }) {
   if (value === null || value === undefined) return <span className="text-text-muted">—</span>;
-  const text = `${value < 0 ? '−' : ''}${String(Math.abs(Math.round(value * 10) / 10)).replace('.', ',')} %`;
+  const text = pctText(value);
   return <Ltr className={cn('tabular-nums', value < 0 ? 'text-accent-alert' : 'text-accent-money', className)}>{text}</Ltr>;
 }
 

@@ -4,6 +4,7 @@ import { Paperclip, Star } from 'lucide-react';
 import * as React from 'react';
 import { UptimeBars, type UptimeDay } from './admin-ops';
 import { Card, cn, Pill, type Tone } from './primitives';
+import { onRadioKeyDown, radioTabIndex } from './radio-keys';
 
 /* ---------- "Démarrer · 6 guides · Connecter une page · premier agent · premier produit" ---------- */
 export function HelpCategoryCard({ title, count, description, onSelect, active, className }: { title: string; count: string; description: string; onSelect?: () => void; active?: boolean; className?: string }) {
@@ -92,7 +93,10 @@ export function TicketMessage({
       <header className="ts-label-micro text-text-muted">
         {author} · {at}
       </header>
-      <div className="mt-1.5 whitespace-pre-wrap text-[14px] text-text-primary">{body}</div>
+      {/* full-test 15/11 HELP-04: user text in its own direction, line by line (« .Deuxième ligne » in the Arabic UI) */}
+      <div dir="auto" className="mt-1.5 whitespace-pre-wrap text-start text-[14px] text-text-primary [unicode-bidi:plaintext]">
+        {body}
+      </div>
       {attachments.length ? (
         <ul className="mt-2 flex flex-wrap gap-2">
           {attachments.map((a) => (
@@ -123,6 +127,8 @@ export function RatingStars({ value, onChange, label, starLabel, disabled }: { v
           role="radio"
           aria-checked={value === n}
           aria-label={starLabel(n)}
+          tabIndex={radioTabIndex(n - 1, (value ?? 0) - 1)}
+          onKeyDown={(e) => onRadioKeyDown(e, n - 1, 5, (i) => onChange?.(i + 1))}
           disabled={disabled || !onChange}
           onMouseEnter={() => setHover(n)}
           onMouseLeave={() => setHover(null)}
