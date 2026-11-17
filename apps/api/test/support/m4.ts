@@ -72,7 +72,8 @@ export const setCredits = async (app: TestApp, workspaceId: string, credits: num
 export const ledger = (workspaceId: string) => db.creditLedger.findMany({ where: { workspaceId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
 export const outMessages = (conversationId: string) => db.message.findMany({ where: { conversationId, direction: 'out' }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
 export const aiMessages = (conversationId: string) => db.message.findMany({ where: { conversationId, author: 'ai' }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
-export const runsOf = (conversationId: string) => db.aiRun.findMany({ where: { conversationId }, orderBy: { startedAt: 'asc' }, include: { toolCalls: true } });
+/** Runs with their tool calls in call order (`id` is a monotonic uuid v7; an include without orderBy has no order). */
+export const runsOf = (conversationId: string) => db.aiRun.findMany({ where: { conversationId }, orderBy: { startedAt: 'asc' }, include: { toolCalls: { orderBy: { id: 'asc' } } } });
 export const feeRule = (workspaceId: string, wilayaId: number, homePrice = 600, stopdeskPrice = 400, over: Record<string, unknown> = {}) =>
   db.deliveryFeeRule.create({ data: { workspaceId, wilayaId, homePrice, stopdeskPrice, ...over } });
 

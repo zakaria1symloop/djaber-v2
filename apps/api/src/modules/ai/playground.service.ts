@@ -286,14 +286,23 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Primary photos of the agent's catalogue. `ProductImage` has no `workspaceId` (not a tenant model): the tenant extension
+   * never scopes it, and the nested `product` filter is not scoped either — the workspace is written here (rule 1; with an
+   * « all products » agent the bare scope matched the photos of every shop: the photo scenario ran on another shop's photo).
+   */
+  private photoWhere(agent: Agent): Prisma.ProductImageWhereInput {
+    return { isPrimary: true, product: { ...this.catalogue.scopeWhere(agent), workspaceId: TenantContext.workspaceId() } };
+  }
+
   /** Why the photo scenario cannot be run for this agent (null = it can): photos off, or no product photo in its scope. */
   private async photoUntested(agent: Agent): Promise<'image_off' | 'no_photo' | null> {
     if (!agent.imageRecognition) return 'image_off';
-    return (await prisma.productImage.count({ where: { isPrimary: true, product: this.catalogue.scopeWhere(agent) } })) ? null : 'no_photo';
+    return (await prisma.productImage.count({ where: this.photoWhere(agent) })) ? null : 'no_photo';
   }
 
   private async samplePhoto(agent: Agent) {
-    const img = await prisma.productImage.findFirst({ where: { isPrimary: true, product: this.catalogue.scopeWhere(agent) }, orderBy: { createdAt: 'asc' } });
+    const img = await prisma.productImage.findFirst({ where: this.photoWhere(agent), orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
     if (!img) return null;
     return this.storage.get(img.storageKey).then((f) => ({ body: f.body, mime: f.mime || 'image/webp' }), () => null);
   }
@@ -312,7 +321,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
   async export(agentId: string, sessionId: string) {
     const agent = await prisma.agent.findFirst({ where: { id: agentId, deletedAt: null }, select: { id: true, name: true, currentVersion: true } });
     if (!agent) throw notFound();
-    const runs = await prisma.aiRun.findMany({ where: { agentId, batchKey: sessionId, kind: { in: ['test', 'test_scenario'] } }, orderBy: { startedAt: 'asc' }, include: { toolCalls: true } });
+    const runs = await prisma.aiRun.findMany({ where: { agentId, batchKey: sessionId, kind: { in: ['test', 'test_scenario'] } }, orderBy: { startedAt: 'asc' }, include: { toolCalls: { orderBy: { id: 'asc' } } } });
     return {
       agent: { id: agent.id, name: agent.name, version: agent.currentVersion },
       sessionId,

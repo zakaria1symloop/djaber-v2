@@ -26,7 +26,7 @@ export class AiController {
   async runOfMessage(@Param('id', ParseUUIDPipe) id: string): Promise<AiRunDto> {
     const message = await prisma.message.findFirst({ where: { id }, select: { aiRunId: true } });
     if (!message?.aiRunId) throw notFound();
-    const run = await prisma.aiRun.findFirst({ where: { id: message.aiRunId }, include: { model: { include: { provider: true } }, toolCalls: { orderBy: { executedAt: 'asc' } } } });
+    const run = await prisma.aiRun.findFirst({ where: { id: message.aiRunId }, include: { model: { include: { provider: true } }, toolCalls: { orderBy: [{ executedAt: 'asc' }, { id: 'asc' }] } } });
     if (!run) throw notFound();
     return {
       id: run.id,

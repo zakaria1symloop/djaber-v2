@@ -201,6 +201,23 @@ describe('playground (AGT-07)', () => {
     expect((await owner.get(`/agents/${agent.id}/test-scenarios`).expect(200)).body.data[0]).toMatchObject({ scenarioKey: 'darija_price', status: 'fail', summary: 'failed:language_respected' }); // full-test 15/11 AGENTS-02: the codes the wizard translates
   });
 
+  it('rule 1 tenancy: the photo scenario only sees the photos of its own shop (another shop\'s primary photo is never counted nor shown to the vision model)', async () => {
+    // shop B: a product with a primary photo, written first (the oldest photo of the whole table)
+    const other = await asOwner(app);
+    const theirs = await createProduct(other, { name: 'Sac cuir noir', price: 6200, stock: 3 });
+    await db.productImage.create({ data: { productId: theirs.id, storageKey: `ws/${other.workspaceId}/p.webp`, url: 'https://cdn.djaber.test/other.webp', width: 800, height: 800, isPrimary: true } });
+    // shop A: an « all products » agent whose catalogue has no photo
+    const owner = await asOwner(app);
+    const agent = await linkedAgent(owner.workspaceId, []);
+    expect(agent).toMatchObject({ sellAllProducts: true, imageRecognition: true });
+    await createProduct(owner, { name: 'Robe satin bordeaux', price: 4500, stock: 5 });
+    await owner.post(`/agents/${agent.id}/test-scenarios`).expect(202);
+    await work(app, [owner.workspaceId]);
+    const photo = (await owner.get(`/agents/${agent.id}/test-scenarios`).expect(200)).body.data.find((r: any) => r.scenarioKey === 'photo');
+    expect(photo).toMatchObject({ status: 'error', summary: 'not_tested:no_photo' });
+    expect(fakeAi(app).callsOf('vision_describe')).toHaveLength(0);
+  });
+
   it('shared test link: public page for 24 h, only the reply, the cards and the system texts are exposed, the workspace 60 turns / h, expired ⇒ 410 AGENT_TEST_LINK_EXPIRED', async () => {
     const owner = await asOwner(app);
     // full-test 15/11 AGENTS-16 / AI-CHAT-09: the moderated name only

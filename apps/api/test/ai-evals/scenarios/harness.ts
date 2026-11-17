@@ -173,7 +173,7 @@ export class Chat {
     this.conversationId = conversationId;
     const r = await answer(s.app, s.owner.workspaceId, conversationId);
     const out = await db.message.findMany({ where: { conversationId, direction: 'out', createdAt: { gte: first ?? t0 } }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
-    const runs = await db.aiRun.findMany({ where: { conversationId, startedAt: { gte: t0 } }, orderBy: { startedAt: 'asc' }, include: { toolCalls: { orderBy: { executedAt: 'asc' } } } });
+    const runs = await db.aiRun.findMany({ where: { conversationId, startedAt: { gte: t0 } }, orderBy: { startedAt: 'asc' }, include: { toolCalls: { orderBy: [{ executedAt: 'asc' }, { id: 'asc' }] } } });
     const turn: Turn = {
       customer: label,
       outcome: r?.outcome ?? null,
