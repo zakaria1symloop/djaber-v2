@@ -14,11 +14,11 @@ import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { CreditService } from '../credits/credit.service';
 import { GUARD_RETRY_MIN_MS, MAX_STEPS, RUN_REAP_AFTER_MS } from './ai.constants';
 import type { BuiltPrompt } from './prompt/prompt-builder';
-import { AI_GATEWAY, AiProviderError, type AiGateway, type AiMessage, type AiToolCallRequest, type AiUsage } from './provider/ai.gateway';
+import { AI_GATEWAY, AiProviderError, type AiGateway, type AiMessage, type AiToolCallRequest, type AiToolDef, type AiUsage } from './provider/ai.gateway';
 import { RoutingService, type RoutedModel } from './routing.service';
 import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
-import { fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, type HandoffRefusal } from './handoff-judge';
+import { allowedHandoffReasons, fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, type HandoffRefusal } from './handoff-judge';
 import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, quoteFacts, stripMarkdown, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
 import { orderConfirmationText, pendingRecap, recapReply } from './tools/order-confirmation-text';
 
@@ -42,6 +42,15 @@ export const orderClosedBy = (name: string, result: unknown): boolean => {
   if (r?.ok === true) return true;
   const code = r?.error?.code;
   return code === 'CONFIRMATION_REQUIRED' || code === 'ORDER_ALREADY_PLACED' || code === 'CONFIRMATION_REFUSED' || code === 'CUSTOMER_BLOCKED' || (code === 'VALIDATION' && r?.error?.missing === true);
+};
+/**
+ * journey retest R3-3: the `handoff_to_human` definition with only the allowed reasons; without « Shop rules » the description
+ * no longer mentions `other` (the model chose it on « je veux 1 hijab soie », « Nadia Kaci, 0661234568 ou 0770998877 »).
+ */
+export const handoffDefWith = (def: AiToolDef, reasons: string[]): AiToolDef => {
+  const p = def.parameters as { properties?: Record<string, unknown> };
+  const description = reasons.includes('other') ? def.description : def.description.replace(/\s*\(reason = that rule id; reason=other only for a « Shop rules » item\)/, ' (reason = that rule id)');
+  return { ...def, description, parameters: { ...def.parameters, properties: { ...p.properties, reason: { enum: reasons } } } };
 };
 /** journey retest R2-4: the result given back for a call identical to one already answered in this turn (not run again). */
 export const repeatedCall = (result: unknown) => ({ ...(result && typeof result === 'object' && !Array.isArray(result) ? (result as object) : { result }), repeated: true, instruction: 'The same call was already answered in this turn (above): do not send it again — answer the customer now.' });
@@ -169,7 +178,9 @@ export class AiRunService implements OnModuleInit {
     const messages: AiMessage[] = [...req.prompt.messages];
     // full-test 15/11 AI-CHAT-07: no handoff tool on a message that is only an order field (refused every time, 5–10 s each)
     const fieldOnly = fieldOnlyMessage(req.toolCtx.customerText, !!req.toolCtx.ordering);
-    const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !(fieldOnly && d.name === 'handoff_to_human'));
+    // journey retest R3-3: the handoff tool carries only the reasons this agent's rules allow now (no `other` without shop rules)
+    const reasons = allowedHandoffReasons(req.toolCtx.agent, req.toolCtx.unclearStreak ?? 0);
+    const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !(d.name === 'handoff_to_human' && (fieldOnly || !reasons.length))).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
     // journey retest R1-1: the model still called the withheld tool (the prompt describes it) and the SDK refused the whole
     // step — 5 of 59 turns of a shop with handoff rules ended in 503. The note says it is not available for this message
     // (after the cached start of the system prompt, so the cache is kept).

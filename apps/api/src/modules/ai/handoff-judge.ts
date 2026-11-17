@@ -119,6 +119,22 @@ export function reasonFits(reason: string, evidence: string, message: string): b
   return true;
 }
 
+/**
+ * journey retest R3-3 (17/11): the `handoff_to_human` reasons this agent's rules allow right now — `other` only with « Shop
+ * rules », `keyword` only with keywords, `unclear_streak` only on the 3rd unclear message, no built-in rule the shop turned
+ * off. 4 calls `{ reason: "other" }` on an order / name / phone message of two shops without shop rules were refused
+ * (`no_shop_rule`) after a model round each; the tool is no longer offered with that reason (none left ⇒ no tool).
+ */
+export function allowedHandoffReasons(agent: { humanHandoffRules?: string | null; handoffKeywords?: readonly string[] | null; handoffRules?: unknown }, unclearStreak = 0): string[] {
+  const off = new Set((Array.isArray(agent.handoffRules) ? (agent.handoffRules as { kind?: unknown; enabled?: unknown }[]) : []).filter((r) => r && r.enabled === false && typeof r.kind === 'string').map((r) => handoffReason(r.kind as string)));
+  return HANDOFF_REASONS.filter((r) => {
+    if (r === 'other') return !!(agent.humanHandoffRules ?? '').trim();
+    if (r === 'keyword') return (agent.handoffKeywords ?? []).some((k) => k.trim());
+    if (r === 'unclear_streak') return unclearStreak >= UNCLEAR_STREAK_HANDOFF - 1 && !off.has(r);
+    return SERVER_REASONS.has(r) || !off.has(r);
+  });
+}
+
 /** What the model is told when its handoff is refused: it answers the customer in the same turn. */
 export const HANDOFF_REFUSED_MARK = 'HANDOFF REFUSED BY THE PLATFORM';
 export function handoffRefusedInstruction(why: HandoffRefusal): string {

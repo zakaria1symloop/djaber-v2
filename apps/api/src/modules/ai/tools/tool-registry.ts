@@ -112,7 +112,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
       additionalProperties: false,
       required: ['clientName', 'clientPhone', 'wilayaId', 'items', 'customerConfirmed'],
       properties: {
-        clientName: { type: 'string', minLength: 3, maxLength: 80 },
+        clientName: { type: 'string', minLength: 3, maxLength: 80, description: 'the name exactly as the customer wrote it — never « Client », « Customer » or another placeholder' },
         clientPhone: { type: 'string', pattern: '^(\\+213|00213|0)?[5-7][0-9]{8}$' },
         secondPhone: { type: 'string' },
         wilayaId: { type: 'integer', minimum: 1, maximum: WILAYA_COUNT },
@@ -228,6 +228,19 @@ export const wilayaNamed = (all: WilayaRow[], wilayaId: number, history: string,
   const given = commune?.given ? placeFold(commune.given) : '';
   if (given && ` ${placeFold(history)} `.includes(` ${given} `)) return !commune!.ofWilaya.length || commune!.ofWilaya.some((c) => placeFold(c.nameFr) === given || placeFold(c.nameAr) === given);
   return false;
+};
+/**
+ * journey retest R3-3 (17/11): is this `clientName` the customer's? Never a placeholder (« Client », « Client Messenger »,
+ * « زبون »); otherwise one of its words is in their messages or the client record (`sources`). A name in a script the customer
+ * never wrote in (« سمير » sent as « Samir ») cannot be compared and is accepted.
+ */
+export const nameGiven = (name: string, sources: string): boolean => {
+  if (isPlaceholderName(name)) return false;
+  const tokens = placeFold(name).split(' ').filter((t) => t.length >= 2);
+  if (!tokens.length) return false;
+  const hay = ` ${placeFold(sources)} `;
+  if (tokens.some((t) => hay.includes(` ${t} `))) return true;
+  return !(/[؀-ۿ]/.test(name) ? /[؀-ۿ]/ : /[A-Za-z]/).test(sources);
 };
 /** Lower case, accents / Arabic marks removed, hamza / tā' marbūṭa / alif maqṣūra folded, anything else than letters and digits ⇒ space. */
 export const placeFold = (t: string) =>
@@ -502,14 +515,20 @@ export class ToolRegistry {
     const typedDigits = typedPhone ? typedPhone.replace(/\D/g, '').slice(-8) : '';
     if (known && typedPhone && !absent.includes('clientPhone') && !known.has(typedPhone) && !(ctx.customerHistory ?? '').replace(/\D/g, '').includes(typedDigits)) invented.push('clientPhone');
     if (place && ctx.customerHistory !== undefined && !absent.includes('wilayaId') && !(await this.wilayaGiven(ctx, place, typeof args.communeName === 'string' ? args.communeName : null))) invented.push('wilayaId');
+    // journey retest R3-3: a name the customer never wrote (« Client » with nothing else given) is refused with the rest — a
+    // placeholder always, any other name when none of its words is in their messages or in the client record
+    const typedName = typeof args.clientName === 'string' ? args.clientName.trim() : '';
+    if (typedName && !absent.includes('clientName') && (isPlaceholderName(typedName) || (ctx.customerHistory !== undefined && !(await this.nameKnown(ctx, typedName))))) invented.unshift('clientName');
+    // journey retest R3-3: a phone the customer did type but with the wrong length (« 05559876 ») is named in the same answer
+    const badPhone = typedPhone && !invented.includes('clientPhone') && !absent.includes('clientPhone') && !isPhoneDz(typedPhone) ? 'clientPhone' : null;
     if (absent.length || invented.length) {
       const order = ['items', 'clientName', 'clientPhone', 'wilayaId', 'communeName', 'address'];
-      const fields = order.filter((f) => absent.includes(f) || invented.includes(f));
-      const shown = invented.map((f) => (f === 'clientPhone' ? `phone ${String(args.clientPhone)}` : `wilayaId ${wilayaArg}`));
+      const fields = order.filter((f) => absent.includes(f) || invented.includes(f) || f === badPhone);
+      const shown = invented.map((f) => (f === 'clientPhone' ? `phone ${String(args.clientPhone)}` : f === 'clientName' ? `name « ${typedName} »` : `wilayaId ${wilayaArg}`));
       return fail({
         ok: false,
-        error: { code: 'VALIDATION', field: fields[0]!, missing: true, fields, ...(invented.length ? { notGivenByCustomer: invented } : {}), ...(EXAMPLES[fields[0]!] !== undefined ? { example: EXAMPLES[fields[0]!] } : {}) },
-        say: `Not done: the customer has not given ${fields.join(', ')} yet${shown.length ? ` (${shown.join(', ')}: never written by the customer — never a default or a guess)` : ''}. Ask for ${fields[0]} in one short question and do not call create_order again in this turn; call it only once the customer gave every required field.`,
+        error: { code: 'VALIDATION', field: fields[0]!, missing: true, fields, ...(invented.length ? { notGivenByCustomer: invented } : {}), ...(badPhone ? { invalid: [badPhone] } : {}), ...(EXAMPLES[fields[0]!] !== undefined ? { example: EXAMPLES[fields[0]!] } : {}) },
+        say: `Not done: the customer has not given ${fields.filter((f) => f !== badPhone).join(', ')} yet${shown.length ? ` (${shown.join(', ')}: never written by the customer — never a default, a placeholder or a guess)` : ''}${badPhone ? `; the phone ${String(args.clientPhone)} they typed is not a valid number (10 digits, 05 / 06 / 07): ask it again with an example (0555123456)` : ''}. Ask for ${fields[0]} in one short question and do not call create_order again in this turn; call it only once the customer gave every required field.`,
       });
     }
     const a = OrderArgs.safeParse(args);
@@ -661,6 +680,13 @@ export class ToolRegistry {
   }
 
   /** The phones this customer typed in the conversation or has on their client record (a returning customer) — never one the model reported. */
+  /** journey retest R3-3: the name is in the customer's messages or in their client record (a placeholder record never counts). */
+  private async nameKnown(ctx: ToolRunContext, name: string): Promise<boolean> {
+    if (nameGiven(name, ctx.customerHistory ?? '')) return true;
+    const client = ctx.clientId ? await prisma.client.findUnique({ where: { id: ctx.clientId }, select: { name: true } }) : null;
+    return !!client?.name && !isPlaceholderName(client.name) && nameGiven(name, client.name);
+  }
+
   private async knownPhones(ctx: ToolRunContext): Promise<Set<string>> {
     const known = phonesIn(ctx.customerHistory ?? '');
     const client = ctx.clientId ? await prisma.client.findUnique({ where: { id: ctx.clientId }, select: { phone: true, phone2: true } }) : null;

@@ -91,7 +91,10 @@ export const phonesIn = (text: string): Set<string> => {
 };
 
 /** Values a model writes when it has no name: never a customer's name. */
-export const PLACEHOLDER_NAME = /^(client|cliente|customer|test|zboun|zbouna|inconnu|unknown|anonyme|n ?a|x+|nom|name|الزبون|زبون|عميل)$/;
+// journey retest R3-3 (17/11): also with a channel or a number after it (« Client Messenger », « Customer 1 », « زبون فيسبوك »)
+// and the platform's own labels (« Utilisateur Messenger », « Facebook User »)
+export const PLACEHOLDER_NAME =
+  /^(?:(?:client|cliente|customer|test|zboun|zbouna|inconnu|unknown|anonyme|n ?a|x+|nom|name|الزبون|زبون|عميل|العميل)(?: (?:messenger|facebook|fb|instagram|insta|ig|whatsapp|test|inconnu|unknown|anonyme|ai|ia|\d+|ماسنجر|فيسبوك|انستغرام))*|(?:utilisateur|user) (?:messenger|facebook|instagram)|(?:messenger|facebook|instagram) (?:user|utilisateur))$/;
 export const isPlaceholderName = (name: string) => PLACEHOLDER_NAME.test(norm(name));
 
 const YES = [

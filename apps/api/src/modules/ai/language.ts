@@ -6,7 +6,12 @@ export type AiLanguage = 'ar' | 'arabizi' | 'fr' | 'en' | 'mixed';
 
 const ARABIZI_WORDS = ['wach', 'wesh', 'rani', 'bghit', 'kayen', 'kayn', 'chhal', 'ch7al', 'bch7al', 'salam', 'slm', 'sahit', 'sa7it', 'nheb', 'n7eb', 'habit', '7abit', 'khoya', 'kho', 'chwiya', 'bezaf', 'bzaf', 'ndir', 'tawsil', 'win', 'wino', 'kifach', 'kifech', '3andkom', '3andi', 'machi', 'wela', 'wlh', 'saha', 'mlih', 'n3am', 'ih', 'makach', 'kach', 'nchri', 'ncommandi', 'dzair',
   // journey retest R1-3 (17/11): « nheb nechri 2 tapis de prière » read as French (« de », « prière »), the arabizi customer then answered in French
-  'nechri', 'nachri', 'nechriw', 'zoudj', 'zouj', 'jouj', 'wahed', 'wahda', 'tlata', 'tleta', 'smiti', 'smitek', 'goulili', 'goulli', 'gouli', 'rahi', 'raho', 'wla', 'iyeh', 'lkamla', 'dork', 'dorka', 'bessah', 'labas', 'nchallah', 'inchallah', 'khlas', 'sahbi', 'nta', 'nti', 'ghir', 'nchouf', 'bach', 'bech', 'mazal', 'mazel', 'kayna', 'makanch', 'mkach'];
+  'nechri', 'nachri', 'nechriw', 'zoudj', 'zouj', 'jouj', 'wahed', 'wahda', 'tlata', 'tleta', 'smiti', 'smitek', 'goulili', 'goulli', 'gouli', 'rahi', 'raho', 'wla', 'iyeh', 'lkamla', 'dork', 'dorka', 'bessah', 'labas', 'nchallah', 'inchallah', 'khlas', 'sahbi', 'nta', 'nti', 'ghir', 'nchouf', 'bach', 'bech', 'mazal', 'mazel', 'kayna', 'makanch', 'mkach',
+  // journey retest R3-1 (17/11): « khouya twasslou l Constantine ? ana f El Khroub, cité 1000 logements bloc 5 » after two
+  // French messages stayed French (one clue only: the « kh » of « khouya »), so the server recap was French, the confirmation arabizi
+  'khouya', 'khouia', 'khoui', 'khti', 'ana', 'ntouma', 'ntaya', 'ntiya', 'twasslou', 'twaslou', 'twasslo', 'twassli', 'nwasslou', 'nwaslou', 'twasselna', 'ywasel', 'ywasslou', 'twasel', 'n7ebb', 't7ebb', 'theb', 'chwia', 'ya3tik', 'kima'];
+/** journey retest R3-1: the one-letter darija prepositions (« l Constantine », « f El Khroub ») — half a clue each. */
+const ARABIZI_PARTICLES = new Set(['l', 'f', 'fi']);
 // journey 16/11 J04-2: « Bonsoir » (and the short forms « bsr », « bjr », « slt ») had no French word, so it was read as English
 const FRENCH_WORDS = ['le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'je', 'vous', 'nous', 'est', 'et', 'pour', 'avec', 'bonjour', 'bonsoir', 'bsr', 'bjr', 'slt', 'coucou', 'salut', 'merci', 'stp', 'votre', 'vos', 'mes', 'il', 'elle', "c'est", "j'ai", 'aimerais', "d'accord", 'quand', 'comment', 'pourquoi', 'aussi', 'bien', 'bonne', 'madame', 'monsieur', 'livrer', 'peux', 'pouvez', 'voulez', 'prix', 'combien', 'livraison', 'commande', 'commander', 'oui', 'non', 'svp', 'avez', 'voudrais', 'veux', 'quel', 'quelle', 'où', 'ou', 'ma', 'mon', 'ça', 'cette', 'ce', 'en', 'au', 'sur', 'pas', 'que', 'qui', 'dispo', 'disponible', 'taille', 'couleur', 'acheter', 'annuler', 'remboursement'];
 const ENGLISH_WORDS = ['the', 'is', 'are', 'you', 'do', 'have', 'how', 'much', 'price', 'hello', 'hi', 'hey', 'good', 'evening', 'morning', 'please', 'thanks', 'thank', 'order', 'delivery', 'want', 'need', 'what', 'where', 'my', 'your', 'this', 'that', 'and', 'for', 'with', 'to', 'of', 'it', 'i', "i'm", 'am', 'would', 'like', 'can', 'yes', 'no', 'buy', 'size', 'color', 'available', 'refund', 'cancel'];
@@ -14,9 +19,13 @@ const ENGLISH_WORDS = ['the', 'is', 'are', 'you', 'do', 'have', 'how', 'much', '
  * journey 16/11 J04-2: words of an address or a place that say nothing of the language (« cité 1000 logements », « Sétif »,
  * « numéro ») — an English customer typing their address got a French recap.
  */
-const NEUTRAL_WORDS = new Set(['cité', 'cite', 'logements', 'logement', 'lgts', 'bloc', 'villa', 'rue', 'lotissement', 'lot', 'résidence', 'residence', 'bâtiment', 'batiment', 'bt', 'quartier', 'hay', 'numéro', 'numero', 'centre', 'ville', 'wilaya', 'commune', 'daira', 'stop', 'desk', 'stopdesk', 'route', 'avenue', 'bd', 'boulevard', 'el', 'ben', 'bir', 'ain', 'aïn', 'sidi', 'oued', 'bab', 'août', 'aout', 'sétif', 'médéa', 'béjaïa', 'béjaia', 'tébessa', 'saïda', 'béchar', 'témouchent', 'réghaïa', 'chéraga', 'défla']);
+const NEUTRAL_WORDS = new Set([
+  // journey retest R3-1: place names whose « kh » / « ch » read as darija (« El Khroub », « Khenchela », « Ksar El Boukhari »)
+  'khroub', 'khenchela', 'khemis', 'boukhari', 'kherrata', 'mechria', 'cherchell', 'chlef', 'chelghoum', 'bouchegouf', 'ouled',
+  'cité', 'cite', 'logements', 'logement', 'lgts', 'bloc', 'villa', 'rue', 'lotissement', 'lot', 'résidence', 'residence', 'bâtiment', 'batiment', 'bt', 'quartier', 'hay', 'numéro', 'numero', 'centre', 'ville', 'wilaya', 'commune', 'daira', 'stop', 'desk', 'stopdesk', 'route', 'avenue', 'bd', 'boulevard', 'el', 'ben', 'bir', 'ain', 'aïn', 'sidi', 'oued', 'bab', 'août', 'aout', 'sétif', 'médéa', 'béjaïa', 'béjaia', 'tébessa', 'saïda', 'béchar', 'témouchent', 'réghaïa', 'chéraga', 'défla']);
 
-const words = (text: string) => text.toLowerCase().split(/[^a-z0-9à-ÿ']+/i).filter(Boolean);
+// journey retest R3-1: a typographic apostrophe (« l’adresse ») is a straight one — a lone « l » is a darija particle
+const words = (text: string) => text.toLowerCase().replace(/[’‘`]/g, "'").split(/[^a-z0-9à-ÿ']+/i).filter(Boolean);
 
 /**
  * Arabic script ratio > 0.4 ⇒ `ar`; Latin text with ≥ 2 arabizi markers (digits 3/7/9 inside words, `kh`, `ch`, darija
@@ -40,6 +49,7 @@ export const detectLanguage = (text: string | null | undefined, previous?: AiLan
     if (NEUTRAL_WORDS.has(x)) continue;
     if (/[a-z][379]|[379][a-z]/.test(x)) arabizi += 1;
     if (ARABIZI_WORDS.includes(x)) arabizi += 1;
+    else if (ARABIZI_PARTICLES.has(x)) arabizi += 0.5;
     else if (/^(kh|gh)[a-z]{2,}|[a-z]{2,}(kh|ch)$/.test(x) && !FRENCH_WORDS.includes(x) && !ENGLISH_WORDS.includes(x)) arabizi += 0.5;
     if (FRENCH_WORDS.includes(x) || /[àâçéèêëîïôùûü]/.test(x)) fr += 1;
     if (ENGLISH_WORDS.includes(x)) en += 1;
@@ -156,7 +166,7 @@ export const languageSwitched = (customer: AiLanguage, reply: string): boolean =
  * « kayen » are Algerian too: never flagged.
  */
 export const MOROCCAN_WORDS =
-  /(?<![\p{L}\p{N}_])(chno|chnou|chnu|chnowa|chnoua|achno|achnou|achnu|ach|dyal|dyalek|dyali|dyalna|dyalo|dyalha|walakin|nqdar|ndirolek|daba|bghiti|bghit|bghina|tbghi|nbghi|kanbghi|chi|kaynch|makaynch|kaynach|makaynach|kaynash|makaynash|wakha|barcha|barsha|famma|mafamach|mafamech|tawwa|mezyan|mzyan|mezyana|mzyana|mezyanin|mzyanin|n?sifet(?:li|lek|lik|lna)?|[nt]?sift(?:i?li|lek|lik|lna|ilek|ha|o)?|شنو|شنوة|ديال|ديالك|ديالي|دابا|والاكين|بغيت|بغيتي|تبغي|نبغي|كنبغي|ملي|فماش|برشا|واخا|توة|شي حاجة|صيفط|صيفطلي|صيفطلك|نصيفط|نصيفطلك|نصيفطو)(?![\p{L}\p{N}_])/iu;
+  /(?<![\p{L}\p{N}_])(chno|chnou|chnu|chnowa|chnoua|achno|achnou|achnu|ach|dyal|dyalek|dyali|dyalna|dyalo|dyalha|walakin|nqdar|ndirolek|daba|bghiti|bghit|bghina|tbghi|nbghi|kanbghi|chi|kaynch|makaynch|kaynach|makaynach|kaynash|makaynash|wakha|barcha|barsha|famma|mafamach|mafamech|tawwa|tawa|mta3|mte3|mta3ek|mte3ek|mouch|hala2|halla2|ktir|kteer|baddak|biddak|3anjad|ezzayak|izzayak|mezyan|mzyan|mezyana|mzyana|mezyanin|mzyanin|n?sifet(?:li|lek|lik|lna)?|[nt]?sift(?:i?li|lek|lik|lna|ilek|ha|o)?|شنو|شنوة|ديال|ديالك|ديالي|دابا|والاكين|بغيت|بغيتي|تبغي|نبغي|كنبغي|ملي|فماش|برشا|واخا|توة|توا|هلق|هلأ|كتير|بدك|شو|شي حاجة|صيفط|صيفطلي|صيفطلك|نصيفط|نصيفطلك|نصيفطو)(?![\p{L}\p{N}_])/iu;
 /**
  * journey retest R2-1 (17/11): « Issa, sift-li l'adresse » — Moroccan « issa » (« now ») is flagged only at the start of a
  * sentence and before a comma: Issa is also a first name (« Merci Issa », « Saha Issa »).
@@ -171,9 +181,18 @@ const JOINER = /(?<=\p{L})[-‐‑'’](?=\p{L})/gu;
 export const moroccanIn = (text: string): boolean => MOROCCAN_WORDS.test(text) || MOROCCAN_NOW.test(text) || MOROCCAN_WORDS.test(text.replace(JOINER, ''));
 /**
  * journey 16/11 J04-3: « chhal / ch7al / شحال » means « how much / how many » — never « what » (« Ch7al smitek ? » = « how
- * much is your name? », « Ch7al numéro », « Ch7al wilaya »).
+ * much is your name? », « Ch7al numéro », « Ch7al wilaya »). Journey retest R3-2 (17/11): also with « men » (« Ch7al men wilaya
+ * nta ? » = « how many of wilaya are you? »); « ch7al men produit t7ebb ? » (how many products) and « ch7al l Oran ? » (the fee
+ * to Oran) are right and never match.
  */
-export const WRONG_DARIJA = /(?<![\p{L}\p{N}_])(?:b?ch7al|b?chhal|chehal|chahal|شحال|بشحال)\s+(?:smitek|smiytek|smiyetek|esmek|ismek|ism|numéro|numero|num|wilaya|adresse|l'adresse|ladresse|اسمك|رقم|الرقم|الولاية|ولاية|العنوان)(?![\p{L}\p{N}_])/iu;
+export const WRONG_DARIJA = /(?<![\p{L}\p{N}_])(b?ch7al|b?chhal|chehal|chahal|شحال|بشحال)\s+(?:(men|mn|من)\s+)?(smitek|smiytek|smiyetek|esmek|ismek|ism|numéro|numero|num|wilaya|commune|baladiya|adresse|l'adresse|ladresse|اسمك|رقم|الرقم|الولاية|ولاية|البلدية|بلدية|العنوان)(?![\p{L}\p{N}_])/iu;
+/**
+ * journey retest R3-5 (17/11): arabizi the model made up for the address question — « a3tini smiya ta3 nhar » (« the name of
+ * the day »), « tswal l dar » (no such verb) — flagged and replaced like the Moroccan words.
+ */
+const ODD_ARABIZI = /(?<![\p{L}\p{N}_])(?:smiy(?:a|et|at)\s+(?:ta3\s+)?e?nnhar|smiy(?:a|et|at)\s+(?:ta3\s+)?nhar|tswal)(?![\p{L}\p{N}_])/iu;
+/** journey retest R3-2 / R3-5: « ch7al » used for « what / which », or made-up arabizi — the reply guard flags it with the Moroccan words. */
+export const wrongDarijaIn = (text: string): boolean => WRONG_DARIJA.test(text) || ODD_ARABIZI.test(text);
 /**
  * journey retest R1-4 (17/11): the Algerian word for each Moroccan / Tunisian one — the server's last word when the
  * corrective turn of the reply guard kept them (« Wach t7ebb ta3raf 3la chi hadja ? » was sent as is). Longest forms first.
@@ -187,13 +206,17 @@ const ALGERIAN_FOR: [RegExp, string][] = (
     ['walakin', 'bessah'], ['nqdar', 'nqder'], ['ndirolek', 'ndirlek'], ['daba', 'dork'],
     ['kanbghi', 'nheb'], ['nbghi', 'nheb'], ['tbghi', 't7ebb'], ['bghiti', 't7ebb'], ['bghina', 'n7ebbou'], ['bghit', 'nheb'],
     ['wakha', 'mlih'], ['barcha', 'bezzaf'], ['barsha', 'bezzaf'], ['mafamach', 'makach'], ['mafamech', 'makach'], ['famma', 'kayen'], ['tawwa', 'dork'],
+    // journey retest R3-2 (17/11): Tunisian « tawa » (« Rani nab3atlek les photos tawa »), « mta3 », « mouch »; Middle-Eastern « hala2 », « ktir », « baddak »
+    ['tawa', 'dork'], ['mta3ek', 'ta3ek'], ['mte3ek', 'ta3ek'], ['mta3', 'ta3'], ['mte3', 'ta3'], ['mouch', 'machi'], ['halla2', 'dork'], ['hala2', 'dork'], ['kteer', 'bezzaf'], ['ktir', 'bezzaf'], ['baddak', 't7ebb'], ['biddak', 't7ebb'], ['3anjad', 'bessah'], ['ezzayak', 'kirak'], ['izzayak', 'kirak'],
+    // journey retest R3-5: « a3tini smiya ta3 nhar (rue, cité…) », « Wach t7ebb tswal l dar … ? »
+    ['smiya ta3 ennhar', "l'adresse"], ['smiyet ta3 ennhar', "l'adresse"], ['smiya ta3 nhar', "l'adresse"], ['smiyet ta3 nhar', "l'adresse"], ['smiyet ennhar', "l'adresse"], ['smiyet nhar', "l'adresse"], ['smiyat nhar', "l'adresse"], ['smiya nhar', "l'adresse"], ['tswal', 'nwasslouha'],
     ['nsifetlek', 'nab3atlek'], ['sifetli', 'ab3atli'], ['nsifet', 'nab3at'], ['sifet', 'ab3at'],
     // journey retest R2-1 (17/11): « sift-li » (joined first, see fixMoroccan), « Ach numéro ta3ek ? », « Mezyan, Boufarik … »
     ['nsiftlek', 'nab3atlek'], ['nsiftlik', 'nab3atlek'], ['nsift', 'nab3at'], ['tsiftli', 'tab3atli'], ['tsift', 'tab3at'], ['siftili', 'ab3atli'], ['siftli', 'ab3atli'], ['siftilek', 'nab3atlek'], ['siftlek', 'nab3atlek'], ['siftlik', 'nab3atlek'], ['siftlna', 'ab3atelna'], ['siftha', 'ab3atha'], ['sifto', 'ab3atou'], ['sift', 'ab3at'],
     ['achnou', 'wach'], ['achno', 'wach'], ['achnu', 'wach'], ['ach', 'wach'],
     ['mezyanin', 'mlah'], ['mzyanin', 'mlah'], ['mezyana', 'mliha'], ['mzyana', 'mliha'], ['mezyan', 'mlih'], ['mzyan', 'mlih'],
     ['شي حاجة', 'حاجة'], ['شنوة', 'واش'], ['شنو', 'واش'], ['ديالك', 'تاعك'], ['ديالي', 'تاعي'], ['ديال', 'تاع'], ['دابا', 'درك'], ['والاكين', 'بصح'],
-    ['بغيتي', 'تحب'], ['بغيت', 'حبيت'], ['تبغي', 'تحب'], ['كنبغي', 'نحب'], ['نبغي', 'نحب'], ['ملي', 'كي'], ['فماش', 'ماكانش'], ['برشا', 'بزاف'], ['واخا', 'مليح'], ['توة', 'درك'],
+    ['بغيتي', 'تحب'], ['بغيت', 'حبيت'], ['تبغي', 'تحب'], ['كنبغي', 'نحب'], ['نبغي', 'نحب'], ['ملي', 'كي'], ['فماش', 'ماكانش'], ['برشا', 'بزاف'], ['واخا', 'مليح'], ['توة', 'درك'], ['توا', 'درك'], ['هلق', 'درك'], ['هلأ', 'درك'], ['كتير', 'بزاف'], ['بدك', 'تحب'], ['شو', 'واش'],
     ['نصيفطلك', 'نبعثلك'], ['نصيفطو', 'نبعثو'], ['نصيفط', 'نبعث'], ['صيفطلي', 'ابعثلي'], ['صيفطلك', 'نبعثلك'], ['صيفط', 'ابعث'],
   ] as [string, string][]
   // a word with no Algerian equivalent (« chi ») is dropped with the space after it
@@ -208,6 +231,12 @@ export const fixMoroccan = (text: string): string => {
   });
   out = out.replace(new RegExp(MOROCCAN_NOW.source, 'giu'), (m) => caseOf(m, 'dork'));
   for (const [re, to] of ALGERIAN_FOR) out = out.replace(re, (m) => caseOf(m, to));
+  // journey retest R3-2: « Ch7al men wilaya nta ? » → « Wach men wilaya nta ? », « ch7al smitek » → « wach smitek »
+  out = out.replace(new RegExp(WRONG_DARIJA.source, 'giu'), (m: string, head: string, _men: string | undefined, what: string) => {
+    const ar = /[؀-ۿ]/.test(head);
+    const wilaya = /^(?:wilaya|ولاية)$/iu.test(what);
+    return caseOf(m, `${ar ? 'واش' : 'wach'} ${wilaya ? `${ar ? 'من' : 'men'} ` : ''}${what}`);
+  });
   return out;
 };
 /** A Latin letter glued inside an Arabic word (« وnعاونك », rule 16 « one script per sentence »). */
