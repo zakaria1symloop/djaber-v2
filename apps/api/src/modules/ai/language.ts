@@ -156,7 +156,19 @@ export const languageSwitched = (customer: AiLanguage, reply: string): boolean =
  * « kayen » are Algerian too: never flagged.
  */
 export const MOROCCAN_WORDS =
-  /(?<![\p{L}\p{N}_])(chno|chnou|chnu|chnowa|chnoua|dyal|dyalek|dyali|dyalna|dyalo|dyalha|walakin|nqdar|ndirolek|daba|bghiti|bghit|bghina|tbghi|nbghi|kanbghi|chi|kaynch|makaynch|kaynach|makaynach|kaynash|makaynash|wakha|barcha|barsha|famma|mafamach|mafamech|tawwa|sifet|sifetli|nsifet|nsifetlek|شنو|شنوة|ديال|ديالك|ديالي|دابا|والاكين|بغيت|بغيتي|تبغي|نبغي|كنبغي|ملي|فماش|برشا|واخا|توة|شي حاجة|صيفط|صيفطلي|صيفطلك|نصيفط|نصيفطلك|نصيفطو)(?![\p{L}\p{N}_])/iu;
+  /(?<![\p{L}\p{N}_])(chno|chnou|chnu|chnowa|chnoua|achno|achnou|achnu|ach|dyal|dyalek|dyali|dyalna|dyalo|dyalha|walakin|nqdar|ndirolek|daba|bghiti|bghit|bghina|tbghi|nbghi|kanbghi|chi|kaynch|makaynch|kaynach|makaynach|kaynash|makaynash|wakha|barcha|barsha|famma|mafamach|mafamech|tawwa|mezyan|mzyan|mezyana|mzyana|mezyanin|mzyanin|n?sifet(?:li|lek|lik|lna)?|[nt]?sift(?:i?li|lek|lik|lna|ilek|ha|o)?|شنو|شنوة|ديال|ديالك|ديالي|دابا|والاكين|بغيت|بغيتي|تبغي|نبغي|كنبغي|ملي|فماش|برشا|واخا|توة|شي حاجة|صيفط|صيفطلي|صيفطلك|نصيفط|نصيفطلك|نصيفطو)(?![\p{L}\p{N}_])/iu;
+/**
+ * journey retest R2-1 (17/11): « Issa, sift-li l'adresse » — Moroccan « issa » (« now ») is flagged only at the start of a
+ * sentence and before a comma: Issa is also a first name (« Merci Issa », « Saha Issa »).
+ */
+const MOROCCAN_NOW = /(?:^|(?<=[.!?؟…\n]\s*))issa(?=\s*,)/iu;
+/** A hyphen or an apostrophe between two letters (« sift-li », « sift'li »): joined before the Moroccan words are matched. */
+const JOINER = /(?<=\p{L})[-‐‑'’](?=\p{L})/gu;
+/**
+ * journey retest R2-1: a Moroccan / Tunisian word in the text, hyphenated forms included (« sift-li » was not caught). « ach »
+ * (Moroccan « what ») only as a word of its own: « wach », « kifach », « 3lach », « bach » are Algerian and never match.
+ */
+export const moroccanIn = (text: string): boolean => MOROCCAN_WORDS.test(text) || MOROCCAN_NOW.test(text) || MOROCCAN_WORDS.test(text.replace(JOINER, ''));
 /**
  * journey 16/11 J04-3: « chhal / ch7al / شحال » means « how much / how many » — never « what » (« Ch7al smitek ? » = « how
  * much is your name? », « Ch7al numéro », « Ch7al wilaya »).
@@ -176,19 +188,47 @@ const ALGERIAN_FOR: [RegExp, string][] = (
     ['kanbghi', 'nheb'], ['nbghi', 'nheb'], ['tbghi', 't7ebb'], ['bghiti', 't7ebb'], ['bghina', 'n7ebbou'], ['bghit', 'nheb'],
     ['wakha', 'mlih'], ['barcha', 'bezzaf'], ['barsha', 'bezzaf'], ['mafamach', 'makach'], ['mafamech', 'makach'], ['famma', 'kayen'], ['tawwa', 'dork'],
     ['nsifetlek', 'nab3atlek'], ['sifetli', 'ab3atli'], ['nsifet', 'nab3at'], ['sifet', 'ab3at'],
+    // journey retest R2-1 (17/11): « sift-li » (joined first, see fixMoroccan), « Ach numéro ta3ek ? », « Mezyan, Boufarik … »
+    ['nsiftlek', 'nab3atlek'], ['nsiftlik', 'nab3atlek'], ['nsift', 'nab3at'], ['tsiftli', 'tab3atli'], ['tsift', 'tab3at'], ['siftili', 'ab3atli'], ['siftli', 'ab3atli'], ['siftilek', 'nab3atlek'], ['siftlek', 'nab3atlek'], ['siftlik', 'nab3atlek'], ['siftlna', 'ab3atelna'], ['siftha', 'ab3atha'], ['sifto', 'ab3atou'], ['sift', 'ab3at'],
+    ['achnou', 'wach'], ['achno', 'wach'], ['achnu', 'wach'], ['ach', 'wach'],
+    ['mezyanin', 'mlah'], ['mzyanin', 'mlah'], ['mezyana', 'mliha'], ['mzyana', 'mliha'], ['mezyan', 'mlih'], ['mzyan', 'mlih'],
     ['شي حاجة', 'حاجة'], ['شنوة', 'واش'], ['شنو', 'واش'], ['ديالك', 'تاعك'], ['ديالي', 'تاعي'], ['ديال', 'تاع'], ['دابا', 'درك'], ['والاكين', 'بصح'],
     ['بغيتي', 'تحب'], ['بغيت', 'حبيت'], ['تبغي', 'تحب'], ['كنبغي', 'نحب'], ['نبغي', 'نحب'], ['ملي', 'كي'], ['فماش', 'ماكانش'], ['برشا', 'بزاف'], ['واخا', 'مليح'], ['توة', 'درك'],
     ['نصيفطلك', 'نبعثلك'], ['نصيفطو', 'نبعثو'], ['نصيفط', 'نبعث'], ['صيفطلي', 'ابعثلي'], ['صيفطلك', 'نبعثلك'], ['صيفط', 'ابعث'],
   ] as [string, string][]
   // a word with no Algerian equivalent (« chi ») is dropped with the space after it
 ).map(([from, to]) => [new RegExp(`(?<![\\p{L}\\p{N}_])${from}(?![\\p{L}\\p{N}_])${to ? '' : '[ \\t]*'}`, 'giu'), to]);
+const caseOf = (m: string, to: string) => (to && /^\p{Lu}/u.test(m) ? to.charAt(0).toUpperCase() + to.slice(1) : to);
 export const fixMoroccan = (text: string): string => {
-  let out = text;
-  for (const [re, to] of ALGERIAN_FOR) out = out.replace(re, (m) => (to && /^\p{Lu}/u.test(m) ? to.charAt(0).toUpperCase() + to.slice(1) : to));
+  // journey retest R2-1: a hyphenated Moroccan word (« sift-li ») is joined first — only when the joined word is Moroccan
+  // (« c'est », « l'adresse », « stop-desk » stay as written)
+  let out = text.replace(/\p{L}+(?:[-‐‑'’]\p{L}+)+/gu, (tok) => {
+    const joined = tok.replace(JOINER, '');
+    return joined.match(MOROCCAN_WORDS)?.[0].length === joined.length ? joined : tok;
+  });
+  out = out.replace(new RegExp(MOROCCAN_NOW.source, 'giu'), (m) => caseOf(m, 'dork'));
+  for (const [re, to] of ALGERIAN_FOR) out = out.replace(re, (m) => caseOf(m, to));
   return out;
 };
 /** A Latin letter glued inside an Arabic word (« وnعاونك », rule 16 « one script per sentence »). */
 export const SCRIPT_GLUE = /(?<=[؀-ۿ])[A-Za-z]{1,3}(?=[؀-ۿ])/gu;
 
-/** Locale of the workspace system messages: `ar` for Arabic script, `en` for English, French otherwise. */
-export const systemLocale = (lang: string | undefined, fallback: AppLocale = 'fr'): AppLocale => (lang === 'ar' ? 'ar' : lang === 'en' ? 'en' : lang === 'fr' || lang === 'arabizi' || lang === 'mixed' ? 'fr' : fallback);
+/**
+ * Locale of the workspace system messages (welcome, out of hours, handoff, out of stock — fr / ar / en only): `ar` for
+ * Arabic script, `en` for English, French otherwise. Journey retest R2-5 (17/11): arabizi has no text of its own; it takes
+ * the Arabic one when the shop speaks darija — the agent's default language `darija` / `ar` / `arabizi`, or, with no default
+ * (or kabyle), a workspace in Arabic (`fallback = 'ar'`) — and the French one otherwise (a French / English shop).
+ */
+export const systemLocale = (lang: string | undefined, fallback: AppLocale = 'fr', agentDefault?: string | null): AppLocale => {
+  if (lang === 'arabizi') {
+    const d = agentDefault && agentDefault !== 'kabyle' ? agentDefault : null;
+    return (d ? d === 'darija' || d === 'ar' || d === 'arabizi' : fallback === 'ar') ? 'ar' : 'fr';
+  }
+  return lang === 'ar' ? 'ar' : lang === 'en' ? 'en' : lang === 'fr' || lang === 'mixed' ? 'fr' : fallback;
+};
+/**
+ * journey retest R2-5: the language handed to the messaging module for a system text of an AI turn (`sendSystemText({ lang })`
+ * reads only the workspace locale): an arabizi turn becomes the locale `systemLocale` chooses with the agent's default.
+ */
+export const systemLang = (lang: AiLanguage, agentDefault: string | null | undefined, workspaceLocale: string | null | undefined): string =>
+  lang === 'arabizi' ? systemLocale(lang, workspaceLocale === 'ar' || workspaceLocale === 'en' ? workspaceLocale : 'fr', agentDefault) : lang;

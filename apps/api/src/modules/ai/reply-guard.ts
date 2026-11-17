@@ -16,15 +16,20 @@
 //                    commande n'existe pas » while an order of this conversation was placed
 //   fee_missing      journey 16/11 J03-2: quote_delivery answered this turn but the reply gives none of its fees (« Merci
 //                    3la sbr ! … » to « ch7al tawsil l setif ? »): one corrective turn, then the server adds the fee itself
+//   contradicts_customer journey retest R2-3: « rani nestanna numéro ta3ek » right after the number, « ما فهمتش الولاية » after
+//                    a phone — a field said not understood / awaited while the customer's message just gave it (or gave
+//                    another field and nothing else): one corrective turn, then the sentence is dropped
 // Pure: no I/O. Conservative by design — a false positive costs one corrective model turn and, at worst, a dropped sentence.
 import { formatMoney } from '@djaber/shared';
 import { GUARD_MARK } from './ai.constants';
-import { detectLanguage, fixMoroccan, languageSwitched, MOROCCAN_WORDS, replyLanguage, SCRIPT_GLUE, WRONG_DARIJA, type AiLanguage } from './language';
+import { detectLanguage, fixMoroccan, languageSwitched, moroccanIn, replyLanguage, SCRIPT_GLUE, WRONG_DARIJA, type AiLanguage } from './language';
 import type { CatalogueProduct } from './catalogue.service';
 import type { PromptContext } from './prompt/prompt.types';
 import { TOOL_ALIASES, TOOL_DEFS } from './tools/tool-registry';
+import { phonesIn } from './tools/order-confirmation';
+import { fold as foldPlace, WILAYA_ALIASES } from './tools/wilaya-aliases';
 
-export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing';
+export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing' | 'contradicts_customer';
 /** Rules the server fixes itself: no corrective model turn for them alone. */
 export const AUTO_FIX_RULES: readonly GuardRule[] = ['script_mix'];
 export type LeakKind = 'uuid' | 'tool' | 'code' | 'key' | 'json' | 'marker';
@@ -72,7 +77,12 @@ export type GuardFacts = {
   ordersPlaced?: string[];
   /** journey 16/11 J03-2: the successful quote_delivery answers of THIS turn (not set on a handoff answer) */
   quotes?: QuoteFact[];
+  /** journey retest R2-3: the customer's words of the message(s) being answered */
+  customerText?: string;
+  /** journey retest R2-3: the order fields the answer reports as given (its `customer`) — compared with `customerText` */
+  customerFields?: Partial<Record<OrderField, string>>;
 };
+export type OrderField = 'name' | 'phone' | 'wilaya' | 'commune' | 'address';
 /** What a successful quote_delivery answered: the reply must give one of its fees (or say it is free). */
 export type QuoteFact = { wilaya: string; isStopdesk: boolean; fee: number; free: boolean; stopdeskFee: number | null };
 
@@ -345,6 +355,49 @@ export const feeGiven = (reply: string, quotes: QuoteFact[]): boolean => {
   return quotes.some((q) => [q.isStopdesk ? null : q.fee, q.isStopdesk ? q.fee : q.stopdeskFee].some((f) => f !== null && f > 0 && nums.has(f)) || ((q.free || q.fee === 0) && FREE_WORDS.test(folded)));
 };
 
+// --- contradicting the customer (journey retest R2-3) ---------------------------------------------------------------------------
+const FIELD_WORDS: Record<OrderField, string> = {
+  phone: String.raw`num(?:ero)?|tel(?:ephone)?|phone|number|nemra|ra9m|raqm|رقم|رقمك|الرقم|تليفون|تليفونك|التليفون|الهاتف|هاتفك`,
+  wilaya: String.raw`wilaya|ولايه|الولايه|ولايتك`,
+  commune: String.raw`commune|baladiya|baladia|بلديه|البلديه|بلديتك`,
+  address: String.raw`adresse|l'adresse|ladresse|address|عنوان|عنوانك|العنوان`,
+  name: String.raw`nom|name|smitek|smiya|esmek|اسم|اسمك|الاسم`,
+};
+/** « I did not understand X » (folded text: accents and Arabic marks removed, ى → ي, ة → ه). */
+const NOT_UNDERSTOOD = String.raw`n'?ai\s+pas\s+(?:bien\s+|tres\s+bien\s+)?(?:compris|saisi|reconnu)|ne\s+(?:comprends|reconnais)\s+pas|(?:did\s*n'?t|didnt|did\s+not|could\s*n'?t|could\s+not|can'?t|cannot)\s+(?:understand|get|catch|recogni[sz]e)|ma\s*fh[ae]mt(?:ch|ech|ich)|ما\s*فهمتش|ما\s+فهمت|لم\s+افهم|ما\s+عرفتش`;
+/** « I am waiting for X ». */
+const AWAITING = String.raw`j'?attends?|en\s+attente\s+d|waiting\s+for|n[e]?st[ae]nn?a|نستن[اي]|في\s+انتظار|بانتظار|ننتظر`;
+const CLAIM_RES: { kind: 'not_understood' | 'awaiting'; field: OrderField; re: RegExp }[] = (['not_understood', 'awaiting'] as const).flatMap((kind) =>
+  (Object.keys(FIELD_WORDS) as OrderField[]).map((field) => ({ kind, field, re: new RegExp(String.raw`(?:${kind === 'not_understood' ? NOT_UNDERSTOOD : AWAITING})[^.!?؟\n]{0,40}?${B}(?:${FIELD_WORDS[field]})${E}`, 'u') })),
+);
+/** The order fields a sentence says it did not understand / is waiting for. */
+export const fieldClaims = (sentence: string): { kind: 'not_understood' | 'awaiting'; field: OrderField }[] => {
+  const f = foldGuard(sentence);
+  return CLAIM_RES.filter((c) => c.re.test(f)).map(({ kind, field }) => ({ kind, field }));
+};
+/** The wilaya spellings customers type (letters only: « 06 » is no wilaya inside a phone number). */
+const PLACE_ALIASES = Object.keys(WILAYA_ALIASES).filter((a) => /\p{L}/u.test(a));
+const placeWords = (t: string) => ` ${foldGuard(t).replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `;
+/** The order fields the customer's message gives: a valid phone, a wilaya name, the answer's own `customer` values written in it. */
+export const givenFields = (customerText: string, fields: GuardFacts['customerFields'] = {}): Set<OrderField> => {
+  const out = new Set<OrderField>();
+  if (phonesIn(customerText).size) out.add('phone');
+  const w = placeWords(customerText);
+  for (const k of ['name', 'wilaya', 'commune', 'address'] as const) {
+    const v = fields[k]?.trim();
+    if (v && v.length >= 2 && w.includes(placeWords(v))) out.add(k);
+  }
+  const padded = ` ${foldPlace(customerText)} `;
+  if (PLACE_ALIASES.some((a) => padded.includes(` ${a} `))) out.add('wilaya');
+  return out;
+};
+/** How many words the customer's message has once its phone numbers and the given values are taken out (« 0661234567 » ⇒ 0). */
+const restWords = (customerText: string, fields: GuardFacts['customerFields'] = {}) => {
+  let w = placeWords(customerText.replace(/\+?\d[\d\s.\-/]{7,}\d/g, ' '));
+  for (const v of Object.values(fields)) if (v && v.trim().length >= 2) w = w.replace(placeWords(v), ' ');
+  return w.trim().split(/\s+/).filter(Boolean).length;
+};
+
 // --- the check --------------------------------------------------------------------------------------------------------------------
 export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   if (!reply.trim()) return [];
@@ -372,7 +425,7 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   // journey 16/11 J04-3: checked whatever the language verdict (« numéro dyal téléphone » in a French-looking arabizi reply),
   // with the wrong darija « ch7al smitek » (« how much » used for « what »)
   const darijaReply = facts.lang === 'arabizi' || facts.lang === 'ar' || facts.lang === 'mixed' || ['arabizi', 'ar'].includes(replyLanguage(reply) ?? '');
-  if (darijaReply && (MOROCCAN_WORDS.test(reply) || WRONG_DARIJA.test(reply))) out.push({ rule: 'moroccan_darija', sentence: 0 });
+  if (darijaReply && (moroccanIn(reply) || WRONG_DARIJA.test(reply))) out.push({ rule: 'moroccan_darija', sentence: 0 });
   if (new RegExp(SCRIPT_GLUE.source, 'u').test(reply)) out.push({ rule: 'script_mix', sentence: 0 });
   // full-test 15/11 AI-CHAT-02 (proposal 3): a placed order is never « invented », « by mistake » or « nonexistent »
   if (facts.ordersPlaced?.length) parts.forEach((s, i) => {
@@ -380,6 +433,17 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   });
   // journey 16/11 J03-2: the fee the tool returned this turn is the answer — never dropped for a « merci pour ta patience »
   if (facts.quotes?.length && !feeGiven(reply, facts.quotes)) out.push({ rule: 'fee_missing', sentence: 0 });
+  // journey retest R2-3: never « not understood » / « waiting for » a field the customer's message just gave — nor « not
+  // understood » another field when the message only gave one (« ما فهمتش الولاية » after a phone: no wilaya was asked)
+  if (facts.customerText?.trim()) {
+    const given = givenFields(facts.customerText, facts.customerFields);
+    if (given.size) {
+      const onlyFields = restWords(facts.customerText, facts.customerFields) <= 2;
+      parts.forEach((s, i) => {
+        if (fieldClaims(s).some((c) => given.has(c.field) || (c.kind === 'not_understood' && onlyFields))) out.push({ rule: 'contradicts_customer', sentence: i });
+      });
+    }
+  }
   return out;
 }
 
@@ -416,9 +480,13 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
   if (rules.includes('self_name')) lines.push(facts.agentName ? `- YOUR NAME is "${facts.agentName}": never give yourself another name.` : "- YOU HAVE NO PERSONAL NAME: never give yourself one; if asked, you are the shop's assistant.");
   if (rules.includes('language_switch')) lines.push(`- LANGUAGE: the customer writes ${LANGUAGE_NAMES[facts.lang] ?? facts.lang}. Rewrite "reply" in that language and script, as they write it (never switch on your own).`);
   if (rules.includes('moroccan_darija'))
-    lines.push('- ALGERIAN DARIJA: the shop is Algerian. Replace the Moroccan / Tunisian words (chno, dyal, walakin, daba, nqdar, bghit / bghiti, chi / chi hadja, ma kaynch / ma kaynach, wakha, barcha, شنو, ديال, دابا, بغيت, شي حاجة, ملي, فماش, برشا, صيفط / sifet) with Algerian ones (wach, ta3 / تاع, bessah / بصح, dork / درك, nqder, t7ebb / تحب, hadja / حاجة, makach / ماكانش, ki / كي, bezzaf / بزاف, ab3at / ابعث). « chhal / ch7al / شحال » means « how much »: never for « what » — « wach smitek ? », « a3tini numéro ta3ek », « f ayya wilaya ? ».');
+    lines.push('- ALGERIAN DARIJA: the shop is Algerian. Replace the Moroccan / Tunisian words (chno, ach, dyal, walakin, daba, issa, nqdar, bghit / bghiti, chi / chi hadja, ma kaynch / ma kaynach, wakha, mezyan, barcha, شنو, ديال, دابا, بغيت, شي حاجة, ملي, فماش, برشا, صيفط / sifet / sift / sift-li) with Algerian ones (wach, ta3 / تاع, bessah / بصح, dork / درك, nqder, t7ebb / تحب, hadja / حاجة, makach / ماكانش, mlih, ki / كي, bezzaf / بزاف, ab3at / ab3atli / ابعث). « chhal / ch7al / شحال » means « how much »: never for « what » — « wach smitek ? », « a3tini numéro ta3ek », « f ayya wilaya ? ».');
   if (rules.includes('false_confession'))
     lines.push(`- ORDER PLACED: order ${(facts.ordersPlaced ?? []).join(', ')} was placed with the details the customer gave in this conversation. Never say you invented them, that it was a mistake, that it does not exist or that nothing was ordered; never offer to cancel it unless the customer asks.`);
+  if (rules.includes('contradicts_customer')) {
+    const given = [...givenFields(facts.customerText ?? '', facts.customerFields)];
+    lines.push(`- THE CUSTOMER'S MESSAGE GAVE ${given.join(', ') || 'an order field'}: never say you did not understand it or that you are still waiting for it, nor that you did not understand a field they were not asked for. Thank them in a few words and ask the next missing field (nothing more when every field is known).`);
+  }
   if (rules.includes('fee_missing'))
     lines.push(`- DELIVERY FEE: quote_delivery answered ${(facts.quotes ?? []).map(quoteText).join('; ')}. Give that fee in the reply (home and stop-desk when both are known), in the customer's language: it is the answer to their question.`);
   return lines.join('\n');
@@ -449,7 +517,7 @@ const selfSentence = (loc: 'fr' | 'en' | 'ar' | 'arabizi', name: string | null):
   })[loc];
 const safeLocale = (lang: AiLanguage): 'fr' | 'en' | 'ar' | 'arabizi' => (lang === 'ar' ? 'ar' : lang === 'en' ? 'en' : lang === 'arabizi' ? 'arabizi' : 'fr');
 
-const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession'];
+const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession', 'contradicts_customer'];
 /** Rules about the form of the reply: the text is kept when the corrective turn did not fix them (a reply is better than none). */
 const STYLE_RULES: GuardRule[] = ['language_switch', 'moroccan_darija', 'script_mix', 'repeat_greeting'];
 const quoteText = (q: QuoteFact) => `${q.wilaya || 'this wilaya'}: ${q.isStopdesk ? `stop-desk ${q.fee} DA` : q.free || q.fee === 0 ? 'home delivery free' : `home ${q.fee} DA`}${!q.isStopdesk && q.stopdeskFee !== null ? `, stop-desk ${q.stopdeskFee} DA` : ''}`;
@@ -470,6 +538,19 @@ export const feeSentence = (q: QuoteFact, lang: AiLanguage): string => {
   return `${T.lead}${parts.join(loc === 'ar' ? '، ' : ', ')}.`;
 };
 const LANGUAGE_NAMES: Record<string, string> = { ar: 'Arabic script (Algerian darija)', arabizi: 'Latin-script Algerian darija (arabizi)', fr: 'French', en: 'English' };
+/**
+ * journey retest R2-6: Markdown the model wrote (« **Djellaba homme** », « # », « `x` », « [texte](https://…) », « * item »):
+ * Messenger shows it as typed, so it goes out as plain text. A lone « * » (« 2 * 3 ») and a snake_case word stay as written.
+ */
+export const stripMarkdown = (text: string): string =>
+  text
+    .replace(/\*\*(?!\s)([^*\n]+?)(?<!\s)\*\*/g, '$1')
+    .replace(/__(?!\s)([^_\n]+?)(?<!\s)__/g, '$1')
+    .replace(/(?<![\p{L}\p{N}*])\*(?![\s*])([^*\n]+?)(?<![\s*])\*(?![\p{L}\p{N}*])/gu, '$1')
+    .replace(/`([^`\n]+)`/g, '$1')
+    .replace(/^[ \t]*#{1,6}[ \t]+/gm, '')
+    .replace(/^([ \t]*)[*•][ \t]+/gm, '$1- ')
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, '$1 $2');
 /** « وnعاونك » → « وعاونك ». */
 export const fixScriptMix = (text: string): string => text.replace(SCRIPT_GLUE, '');
 const wordCount = (s: string) => (s.match(/[\p{L}\p{N}]+/gu) ?? []).length;
@@ -631,6 +712,7 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
     freshStart: i.freshStart,
     customerGreets: greetingAt(i.customerText) > 0,
     priceList,
+    customerText: i.customerText,
   };
   return i.earlierToolResults?.length ? withToolResults(base, i.earlierToolResults) : base;
 }

@@ -33,7 +33,7 @@ import { AI_ERROR_ALERT_FAILURES, AI_ERROR_ALERT_WINDOW_S, GUARD_EARLIER_TOOL_CA
 import { AiRunService, guardFlags, intentOf, type RunMeta, type TurnResult } from './ai-run.service';
 import { CatalogueService } from './catalogue.service';
 import { InsightService } from './insight.service';
-import { turnLanguage, type AiLanguage } from './language';
+import { systemLang, turnLanguage, type AiLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
 import { guardFactsOf } from './reply-guard';
 import { AiProviderError } from './provider/ai.gateway';
@@ -402,7 +402,9 @@ export class ReplyProcessor implements OnModuleInit {
       // no other tool ran this turn, so the reply carries no order / cancellation news — and the shop's text is about to
       // be sent, that text is the only message.
       const onlyHandoff = turn.tools.every((t) => canonicalTool(t.name) === 'handoff_to_human');
-      if (replyText && status === 'handoff' && onlyHandoff && (reason === 'customer_request' || reason === 'keyword') && !contextOf(fresh).handoffMessageSentAt && (await this.outbound.systemTemplate(tx, conv.id, 'handoff', o.lang))) replyText = '';
+      // journey retest R2-5: an arabizi turn gets the Arabic system texts in a darija shop, the French ones otherwise
+      const sysLang = systemLang(o.lang, agent.defaultLanguage, TenantContext.get().locale);
+      if (replyText && status === 'handoff' && onlyHandoff && (reason === 'customer_request' || reason === 'keyword') && !contextOf(fresh).handoffMessageSentAt && (await this.outbound.systemTemplate(tx, conv.id, 'handoff', sysLang))) replyText = '';
       // the run is closed first: a second execution of the same batch stops here and stores nothing
       const closed = await this.runs.finish(
         run.id,
@@ -414,9 +416,9 @@ export class ReplyProcessor implements OnModuleInit {
       // §5 welcome: before the first AI reply of a conversation nobody answered yet (empty workspace text ⇒ skipped)
       const answeredBefore = await tx.message.count({ where: { conversationId: conv.id, author: { in: ['ai', 'human'] } } });
       // journey 16/11 J04-2: in the language of the turn (a first « Bonsoir » got the workspace text, the reply another language)
-      if (!answeredBefore && !blocked) await this.outbound.sendSystemText(conv.id, 'welcome', {}, { tx, oncePer24h: true, lang: o.lang });
+      if (!answeredBefore && !blocked) await this.outbound.sendSystemText(conv.id, 'welcome', {}, { tx, oncePer24h: true, lang: sysLang });
       // §3.2 out of hours: standalone workspace text before the reply, once per conversation per 24 h
-      if (o.outOfHours && !blocked) await this.outbound.sendSystemText(conv.id, 'out_of_hours', {}, { tx, oncePer24h: true, lang: o.lang });
+      if (o.outOfHours && !blocked) await this.outbound.sendSystemText(conv.id, 'out_of_hours', {}, { tx, oncePer24h: true, lang: sysLang });
 
       let replyId: string | null = null;
       if (replyText) replyId = (await this.outbound.store(tx, conv.id, { author: 'ai', kind: 'ai', text: replyText, aiRunId: run.id })).message.id;

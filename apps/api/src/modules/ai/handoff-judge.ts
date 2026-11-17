@@ -135,6 +135,8 @@ export function handoffRefusedInstruction(why: HandoffRefusal): string {
   return `${HANDOFF_REFUSED_MARK}: ${cause[why]}. Keep the conversation and answer the customer's current message now, in their language (status OK; UNKNOWN when you have no answer — say you will check with the team and call add_faq_candidate; UNCLEAR when you did not understand). Hand off only when the customer's current message itself matches a rule, quoting their words in "evidence". Answer with the JSON object only.`;
 }
 
+/** A message that starts by giving the customer's name. */
+const NAME_INTRO = /^(?:je\s+m['’]?\s*appelle|moi\s+c['’]?est|mon\s+nom\s+(?:est|c['’]?est)|my\s+name\s+is|smiti|esmi|ismi|asmi|اسمي|إسمي|سميتي)\s+\p{L}/iu;
 /** Words that can ask for the team in a short message (« un humain svp », « rembourse », « arnaque »…). */
 const TEAM_WORDS = /human|humain|conseill|responsable|personne|parler|appel|rappel|rembours|refund|arnaq|plainte|voleur|scam|manager|agent|bnadem|nhder|nehder|انسان|مسؤول|شخص|نهدر|سارق|نصاب|ترجع|فلوس|flous/;
 /**
@@ -151,6 +153,9 @@ export function fieldOnlyMessage(text: string | undefined, ordering: boolean): b
   // journey retest R1-5: a bare yes (« oui », « ih », « yes », « ايه », « oui c'est bon ») never asks for the team — handoff
   // was asked on « oui », « yes », « ih » after a recap or an order
   if (words(t).length <= 4 && confirmation(t) === 'yes') return true;
+  // journey retest R2-4: « اسمي سمير بن علي », « smiti Walid Bouzid », « je m'appelle Karim » — the customer's name, ordering or
+  // not (handoff_to_human { reason: unclear_streak } was asked on it)
+  if (words(t).length <= 6 && NAME_INTRO.test(t)) return true;
   if (!ordering || /!/.test(t)) return false;
   return words(t).length <= 6;
 }

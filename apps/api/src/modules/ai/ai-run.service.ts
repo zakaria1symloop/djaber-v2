@@ -19,7 +19,7 @@ import { RoutingService, type RoutedModel } from './routing.service';
 import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
 import { fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, type HandoffRefusal } from './handoff-judge';
-import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, quoteFacts, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
+import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, quoteFacts, stripMarkdown, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
 import { orderConfirmationText, pendingRecap, recapReply } from './tools/order-confirmation-text';
 
 /** journey retest R1-1: told to the model on a message that only gives an order field (handoff_to_human is not offered). */
@@ -29,8 +29,22 @@ export const FIELD_ONLY_NOTE =
 export const unavailableTool = (name: string, fieldOnly: boolean) => ({
   ok: false,
   error: { code: 'TOOL_NOT_AVAILABLE', tool: name },
-  instruction: `${name} cannot be used now${fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : ''}. Answer the customer now with the JSON object.`,
+  instruction: `${name} cannot be used now${fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : canonicalTool(name) === 'create_order' ? ': it already answered in this turn — follow that answer (ask the missing field, or let the recap / confirmation go)' : ''}. Answer the customer now with the JSON object.`,
 });
+/**
+ * journey retest R2-4: a `create_order` answer after which the tool is not offered again in the same turn — the recap was
+ * returned, the order placed (or refused: blocked, already placed, not confirmed), or a field must be asked to the customer
+ * (VALIDATION missing=true). The same call was sent 2–3 times in a turn (10.1 s), and probes followed each other.
+ */
+export const orderClosedBy = (name: string, result: unknown): boolean => {
+  if (canonicalTool(name) !== 'create_order') return false;
+  const r = result as { ok?: unknown; error?: { code?: unknown; missing?: unknown } } | null;
+  if (r?.ok === true) return true;
+  const code = r?.error?.code;
+  return code === 'CONFIRMATION_REQUIRED' || code === 'ORDER_ALREADY_PLACED' || code === 'CONFIRMATION_REFUSED' || code === 'CUSTOMER_BLOCKED' || (code === 'VALIDATION' && r?.error?.missing === true);
+};
+/** journey retest R2-4: the result given back for a call identical to one already answered in this turn (not run again). */
+export const repeatedCall = (result: unknown) => ({ ...(result && typeof result === 'object' && !Array.isArray(result) ? (result as object) : { result }), repeated: true, instruction: 'The same call was already answered in this turn (above): do not send it again — answer the customer now.' });
 
 export type ExecutedTool = { callId: string; name: string; args: Record<string, unknown>; result: unknown; simulated: boolean; replayed: boolean };
 export type TurnRequest = {
@@ -168,6 +182,10 @@ export class AiRunService implements OnModuleInit {
     let toolRounds = 0;
     let handoffAsked = false;
     let handoffRefused: HandoffRefusal | undefined;
+    // journey retest R2-4: create_order is withdrawn for the rest of the turn once it answered for good (orderClosedBy), and a
+    // call identical to one already answered this turn gets that answer back without running again
+    let orderClosed = false;
+    const answered = new Map<string, unknown>();
     // §4.3 reply guard: the answer that broke a rule (its status, cards and fields are kept), and what it broke
     let guardFirst = null as { output: AiReplyOutput; extra: { salvaged?: boolean }; violations: GuardViolation[] } | null;
     // full-test 15/11 proposal 4: once create_order placed an order this turn, the customer gets the server's confirmation
@@ -180,17 +198,22 @@ export class AiRunService implements OnModuleInit {
     const confirmed = (output: AiReplyOutput): AiReplyOutput => {
       const text = confirmationNow();
       if (text) return { ...output, reply: text };
+      // journey retest R2-6: Messenger shows « **Djellaba homme** » as typed — the reply goes out as plain text
+      const plain = { ...output, reply: stripMarkdown(output.reply) };
       const recap = recapNow();
       // a handoff answer (blocked customer…) is not a recap to confirm
-      if (!recap || output.status === 'HANDOFF' || forcedHandoff) return output;
-      return { ...output, reply: recapReply(output.reply, recap, req.guard?.lang ?? 'fr').text };
+      if (!recap || output.status === 'HANDOFF' || forcedHandoff) return plain;
+      return { ...plain, reply: recapReply(plain.reply, recap, req.guard?.lang ?? 'fr').text };
     };
     const ok = (output: AiReplyOutput, extra: { salvaged?: boolean; guard?: GuardOutcome } = {}): TurnResult => ({ ok: true, output: confirmed(output), tools: executed, usage, model: model!, usedFallback, forcedHandoff, repaired, ...(handoffRefused ? { handoffRefused } : {}), ...extra });
     // journey 16/11 J03-2: this turn's quote_delivery answers — the reply must give the fee (not checked on a handoff answer)
-    const factsNow = (answer?: Pick<AiReplyOutput, 'status'>) => {
+    const factsNow = (answer?: Pick<AiReplyOutput, 'status' | 'customer'>) => {
       const f = withToolResults(req.guard!, executed.map((t) => t.result));
       const quotes = answer?.status === 'HANDOFF' || forcedHandoff ? [] : quoteFacts(executed.map((t) => ({ name: canonicalTool(t.name), result: t.result })));
-      return quotes.length ? { ...f, quotes } : f;
+      // journey retest R2-3: the fields the answer reports as given — the guard checks the reply does not deny them
+      const c = answer?.customer;
+      const fields = c ? { ...(c.name ? { name: c.name } : {}), ...(c.phone ? { phone: c.phone } : {}), ...(c.wilaya ? { wilaya: c.wilaya } : {}), ...(c.commune ? { commune: c.commune } : {}), ...(c.address ? { address: c.address } : {}) } : undefined;
+      return { ...f, ...(quotes.length ? { quotes } : {}), ...(fields ? { customerFields: fields } : {}) };
     };
     /** The guard's last word: offending sentences dropped / greeting stripped / the safe sentence (never a handoff). */
     const enforce = (base: AiReplyOutput, text: string, violations: GuardViolation[], first: GuardViolation[], retried: boolean, extra: { salvaged?: boolean }): TurnResult => {
@@ -228,11 +251,12 @@ export class AiRunService implements OnModuleInit {
       // full-test 15/11 AI-CHAT-02: nor the format retry — it only re-writes the answer (it cancelled the order it had just created)
       // full-test 15/11 proposal 13: a message that is only an order field gets 2 tool rounds at most (10–21 s turns)
       const offerTools = toolRounds < (fieldOnly ? 2 : MAX_STEPS - 1) && !forcedHandoff && !guardFirst && !repaired;
+      const stepDefs = orderClosed ? defs.filter((d) => d.name !== 'create_order') : defs;
       let res;
       try {
         res = await this.routing.call(
           'text',
-          (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose: 'reply', system, ...(req.prompt.cachePrefix ? { systemCachePrefix: req.prompt.cachePrefix } : {}), messages, tools: offerTools ? defs : undefined, temperature: req.temperature, maxTokens: req.maxTokens, timeoutMs: Math.max(1000, Math.min(timeoutMs, left)) }),
+          (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose: 'reply', system, ...(req.prompt.cachePrefix ? { systemCachePrefix: req.prompt.cachePrefix } : {}), messages, tools: offerTools ? stepDefs : undefined, temperature: req.temperature, maxTokens: req.maxTokens, timeoutMs: Math.max(1000, Math.min(timeoutMs, left)) }),
           { only: (m) => m.supportsTools, prefer: model?.id },
         );
       } catch (e) {
@@ -245,7 +269,7 @@ export class AiRunService implements OnModuleInit {
       usage.outputTokens += res.value.usage.outputTokens;
 
       // journey retest R1-1: a call to a tool this step did not offer is never run — the model is told and answers
-      const offered = new Set(defs.map((d) => d.name));
+      const offered = new Set(stepDefs.map((d) => d.name));
       const stray = offerTools ? [...(res.value.rejectedToolCalls ?? []), ...res.value.toolCalls.filter((c) => !offered.has(canonicalTool(c.name)))] : [];
       if (stray.length) {
         toolRounds++;
@@ -254,10 +278,16 @@ export class AiRunService implements OnModuleInit {
         else messages.push({ role: 'assistant', content: [res.value.text, ...stray.map((c) => `[tool call ${c.name} ${JSON.stringify(c.args ?? {})}]`)].filter(Boolean).join('\n') });
         for (const call of runnable) {
           const hash = toolCallId(call.name, call.args, 0);
+          if (answered.has(hash)) {
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: repeatedCall(answered.get(hash)) });
+            continue;
+          }
           const ordinal = seen.get(hash) ?? 0;
           seen.set(hash, ordinal + 1);
           const done = await this.toolCall(req, call, ordinal);
           executed.push(done);
+          answered.set(hash, done.result);
+          orderClosed ||= orderClosedBy(call.name, done.result);
           messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: done.result });
           forcedHandoff ??= this.tools.forcedHandoff(call.name, call.args, done.result);
         }
@@ -270,10 +300,16 @@ export class AiRunService implements OnModuleInit {
         messages.push({ role: 'assistant', content: res.value.text ?? '', toolCalls: calls });
         for (const call of calls) {
           const hash = toolCallId(call.name, call.args, 0);
+          if (answered.has(hash)) {
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: repeatedCall(answered.get(hash)) });
+            continue;
+          }
           const ordinal = seen.get(hash) ?? 0;
           seen.set(hash, ordinal + 1);
           const done = await this.toolCall(req, call, ordinal);
           executed.push(done);
+          answered.set(hash, done.result);
+          orderClosed ||= orderClosedBy(call.name, done.result);
           messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: done.result });
           forcedHandoff ??= this.tools.forcedHandoff(call.name, call.args, done.result);
         }

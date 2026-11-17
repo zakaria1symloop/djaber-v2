@@ -72,7 +72,8 @@ export class TurnContextService {
         catalogue,
         lang: o.lang,
         ...(o.lang === 'ar' && formalArabic(o.text) ? { formalArabic: true } : {}),
-        locale: systemLocale(o.lang, ws.locale as AppLocale),
+        // journey retest R2-5: an arabizi customer of a darija shop gets the Arabic system texts
+        locale: systemLocale(o.lang, ws.locale as AppLocale, agent.defaultLanguage),
         now,
         outOfHours: isOutOfHours(a.businessHours, now),
         unclearStreak: o.unclearStreak ?? 0,

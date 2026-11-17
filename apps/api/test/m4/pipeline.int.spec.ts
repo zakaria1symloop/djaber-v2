@@ -272,8 +272,9 @@ describe('FL-01 — reply turn', () => {
       { toolCalls: [{ name: 'search_products', args: { query: 'veste' } }, { name: 'get_product', args: { productId: archived.id } }, { name: 'create_order', args: { clientName: 'Amine Benali', clientPhone: '0555123456', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'Cité des 200 logements, Alger', items: [{ productId: archived.id, quantity: 1 }], customerConfirmed: true } }] },
       { reply: "Cette veste n'est plus disponible.", intent: 'INFO', productCards: [archived.id, inactive.id, s.robe.id] },
     );
-    // journey 16/11 J05-9: the phone is in the customer's message (an unknown phone is asked for before the product check)
-    const t = await turn(s, newSender(), { text: 'je veux la veste, Amine Benali 0555123456' });
+    // journey 16/11 J05-9: the phone is in the customer's message (an unknown phone is asked for before the product check);
+    // journey retest R2-4: so is the commune (a wilaya the customer never named is asked for first too)
+    const t = await turn(s, newSender(), { text: 'je veux la veste, Amine Benali 0555123456, Bab Ezzouar' });
     const system = fakeAi(app).callsOf('reply')[0]!.system;
     expect(system).not.toContain('Veste archivée');
     expect(system).not.toContain('Veste inactive');
@@ -358,9 +359,11 @@ describe('tools', () => {
     expect(r0[0]).toEqual({ ok: false, error: { code: 'VALIDATION', field: 'clientPhone', example: '0555123456' } });
     expect(r0.filter((x) => x.hint === 'order_limit')).toEqual([{ ok: false, hint: 'order_limit', maxQty: 3, maxAmount: null }]);
     expect(r0.filter((x) => x.error?.field === 'address')).toHaveLength(1);
-    // full-test 15/11 AI-CHAT-01: a valid cart is never ordered in the turn that prepares it — the server's recap comes back
-    expect(r0.filter((x) => x.error?.code === 'CONFIRMATION_REQUIRED')).toHaveLength(2);
-    expect(r0.at(-1)).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft: expect.any(String) }, recap: { subtotal: 4500, deliveryFee: 400, total: 4900, clientPhone: '0555123456', wilaya: expect.any(String), items: [{ name: 'Robe satin bordeaux', quantity: 1, unitPrice: 4500 }] } });
+    // full-test 15/11 AI-CHAT-01: a valid cart is never ordered in the turn that prepares it — the server's recap comes back;
+    // journey retest R2-4: once it came back, create_order is not offered again in the turn (the 3rd step's call is not run)
+    expect(r0.filter((x) => x.error?.code === 'CONFIRMATION_REQUIRED')).toHaveLength(1);
+    expect(r0).toHaveLength(4);
+    expect(r0.find((x) => x.error?.code === 'CONFIRMATION_REQUIRED')).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft: expect.any(String) }, recap: { subtotal: 4500, deliveryFee: 400, total: 4900, clientPhone: '0555123456', wilaya: expect.any(String), items: [{ name: 'Robe satin bordeaux', quantity: 1, unitPrice: 4500 }] } });
     expect(create).not.toHaveBeenCalled();
     await resetAi();
     fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args: { ...base, clientPhone: '0555 12 34 56' } }] }, { reply: 'Commande enregistrée.', status: 'OK', intent: 'SALE' });

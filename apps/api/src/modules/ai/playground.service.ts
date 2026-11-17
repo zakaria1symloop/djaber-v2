@@ -241,7 +241,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       const scoped = (await this.catalogue.byIds(agent, out.productCards)).map((p) => p.id);
       const cards: PlaygroundCard[] = (await productCards(prisma, scoped, { ai: true })).map((c) => ({ productId: c.productId, name: c.name, price: c.price, ...(c.priceMax ? { priceMax: c.priceMax } : {}), ...(c.oldPrice ? { oldPrice: c.oldPrice } : {}), imageUrl: c.imageUrl, variantLabel: c.variants ?? null }));
       const texts = turnCtx.prompt.workspace.systemMessages;
-      const locale = systemLocale(lang, turnCtx.prompt.locale);
+      const locale = systemLocale(lang, turnCtx.prompt.locale, agent.defaultLanguage);
       const text = (key: string) => (texts[key]?.[locale] ?? texts[key]?.fr ?? '').replace('{shop}', turnCtx.prompt.workspace.name);
       const oohNow = turnCtx.prompt.outOfHours && !!text('out_of_hours') && (!oohBefore || Date.now() - Date.parse(oohBefore) >= 24 * 3_600_000);
       const systemMessages = [

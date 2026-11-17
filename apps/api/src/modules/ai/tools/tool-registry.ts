@@ -117,7 +117,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
         secondPhone: { type: 'string' },
         wilayaId: { type: 'integer', minimum: 1, maximum: WILAYA_COUNT },
         communeName: { type: 'string', maxLength: 100 },
-        address: { type: 'string', maxLength: 500 },
+        address: { type: 'string', maxLength: 500, description: 'home delivery: the street, cité / building or landmark the customer wrote — never only the commune or wilaya name' },
         isStopdesk: { type: 'boolean', default: false },
         stopdeskId: { type: 'string' },
         items: { type: 'array', minItems: 1, maxItems: 20, items: { type: 'object', required: ['productId', 'quantity'], properties: { productId: { type: 'string' }, variantId: { type: 'string' }, quantity: { type: 'integer', minimum: 1 } } } },
@@ -196,6 +196,59 @@ export const absentFields = (args: Record<string, unknown>, agent: Pick<ToolRunC
   if (!stopdesk && required.has('commune') && !text(args.communeName)) out.push('communeName');
   if (!stopdesk && !text(args.address)) out.push('address');
   return out;
+};
+type WilayaRow = { id: number; code: string; nameFr: string; nameAr: string };
+/**
+ * The wilaya a customer text names — the official name (fr / ar), the code, a known spelling (`WILAYA_ALIASES`), also inside a
+ * longer answer (« pour Oran svp », « wilaya de Sétif »): the longest phrase wins. `quote_delivery` and `create_order` share it.
+ */
+export const matchWilaya = <W extends WilayaRow>(all: W[], text: string): W | null => {
+  const wanted = fold(text);
+  if (!wanted) return null;
+  const exact = all.find((w) => fold(w.nameFr) === wanted || fold(w.nameAr) === wanted || w.code === wanted || String(w.id) === wanted);
+  if (exact) return exact;
+  const alias = WILAYA_ALIASES[wanted];
+  if (alias) return all.find((w) => w.id === alias) ?? null;
+  const padded = ` ${wanted} `;
+  const longest = (pairs: [string, number][]) => pairs.filter(([n]) => n && padded.includes(` ${n} `)).sort((a, b) => b[0].length - a[0].length)[0]?.[1];
+  const id = longest(all.flatMap((w) => [[fold(w.nameFr), w.id], [fold(w.nameAr), w.id]] as [string, number][])) ?? longest(Object.entries(WILAYA_ALIASES).filter(([a]) => /\p{L}/u.test(a)));
+  return id ? (all.find((w) => w.id === id) ?? null) : null;
+};
+/**
+ * journey retest R2-4: did the customer name this wilaya in the conversation (one of their messages, « wilaya 16 »), or a
+ * commune of it (« Bab Ezzouar » ⇒ Alger)? `create_order { wilayaId: 1 }` sent before any wilaya was named (Adrar as a default)
+ * is refused like an absent field.
+ */
+export const wilayaNamed = (all: WilayaRow[], wilayaId: number, history: string, commune?: { given: string | null; ofWilaya: { nameFr: string; nameAr: string }[] }): boolean => {
+  // a bare number (« 1 » as a quantity) never names a wilaya: only « wilaya 16 » below
+  const lines = history.split(/\n+/).map((l) => l.trim()).filter((l) => /\p{L}/u.test(l));
+  if (lines.some((l) => matchWilaya(all, l)?.id === wilayaId)) return true;
+  if (new RegExp(`(?<![\\p{L}\\p{N}])(?:wilaya|ولاية)\\s*(?:n°|no|رقم)?\\s*0?${wilayaId}(?!\\p{N})`, 'iu').test(history)) return true;
+  // a commune the customer wrote, of this wilaya (or of no known spelling: the model's inference is not an invention)
+  const given = commune?.given ? placeFold(commune.given) : '';
+  if (given && ` ${placeFold(history)} `.includes(` ${given} `)) return !commune!.ofWilaya.length || commune!.ofWilaya.some((c) => placeFold(c.nameFr) === given || placeFold(c.nameAr) === given);
+  return false;
+};
+/** Lower case, accents / Arabic marks removed, hamza / tā' marbūṭa / alif maqṣūra folded, anything else than letters and digits ⇒ space. */
+export const placeFold = (t: string) =>
+  t.normalize('NFD').replace(/[̀-ًͯ-ٰٕ]/g, '').toLowerCase().replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+/** Words of an address that name no street, building or landmark. */
+const PLACE_FILLERS = new Set(['wilaya', 'commune', 'daira', 'de', 'du', 'des', 'd', 'la', 'le', 'l', 'a', 'au', 'en', 'w', 'f', 'fi', 'el', 'al', 'centre', 'center', 'ville', 'city', 'algerie', 'algeria', 'dz', 'ولايه', 'بلديه', 'دائره', 'في', 'ب', 'و', 'وسط', 'مدينه', 'المدينه', 'الجزائر']);
+/**
+ * journey retest R2-2: a home-delivery address that is only the commune / wilaya name (« Bab Ezzouar », « Bab Ezzouar, Alger »,
+ * « Boufarik centre ») — no street, cité, building or landmark. `places`: the names of the wilaya and of its communes.
+ */
+export const placeOnlyAddress = (address: string, places: string[], wilayaId?: number): boolean => {
+  let w = ` ${placeFold(address)} `;
+  const names = [...new Set(places.map(placeFold).filter(Boolean).flatMap((p) => [p, p.replace(/^(?:el|al|ال)\s*/, '')]))].filter((p) => p.length >= 2).sort((a, b) => b.length - a.length);
+  for (const n of names) while (w.includes(` ${n} `)) w = w.replace(` ${n} `, ' ');
+  const rest = w.trim().split(/\s+/).filter((x) => x && !PLACE_FILLERS.has(x) && !/^\d{5}$/.test(x) && x !== String(wilayaId ?? '') && x !== `0${wilayaId ?? ''}`);
+  return rest.length === 0;
+};
+/** journey retest R2-7: the Arabic name of the commune of the order, when it is one of the wilaya's list. */
+export const communeAr = (communes: { nameFr: string; nameAr: string }[], name: string | null | undefined): string | null => {
+  const n = name ? placeFold(name) : '';
+  return (n && communes.find((c) => placeFold(c.nameFr) === n || placeFold(c.nameAr) === n)?.nameAr) || null;
 };
 const normQuestion = (q: string) => fold(q).replace(/\s+/g, ' ').slice(0, 200);
 const seqOf = (s: string) => 1000 + ([...s].reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) >>> 0, 7) % 9000);
@@ -344,25 +397,19 @@ export class ToolRegistry {
 
   private async wilaya(a: { wilayaId?: number; wilayaName?: string }) {
     if (a.wilayaId) return prisma.wilaya.findUnique({ where: { id: a.wilayaId } });
-    const wanted = fold(a.wilayaName ?? '');
-    if (!wanted) return null;
-    const all = await prisma.wilaya.findMany();
-    const exact = all.find((w) => fold(w.nameFr) === wanted || fold(w.nameAr) === wanted || w.code === wanted || String(w.id) === wanted);
-    if (exact) return exact;
-    const alias = WILAYA_ALIASES[wanted];
-    if (alias) return all.find((w) => w.id === alias) ?? null;
+    if (!fold(a.wilayaName ?? '')) return null;
     // the name inside a longer answer ("pour Oran svp", "wilaya de Sétif", "livraison à Ksar El Boukhari"): official
     // names first, then the spellings; the longest phrase wins ("Bir El Ater" over a shorter name inside it)
-    const padded = ` ${wanted} `;
-    const longest = (pairs: [string, number][]) => pairs.filter(([n]) => n && padded.includes(` ${n} `)).sort((a, b) => b[0].length - a[0].length)[0]?.[1];
-    const id = longest(all.flatMap((w) => [[fold(w.nameFr), w.id], [fold(w.nameAr), w.id]] as [string, number][])) ?? longest(Object.entries(WILAYA_ALIASES));
-    return id ? (all.find((w) => w.id === id) ?? null) : null;
+    return matchWilaya(await prisma.wilaya.findMany(), a.wilayaName ?? '');
   }
 
   /** Delivery fee of the merchant's grid; `free` when the subtotal reaches the rule's (or the workspace's) threshold. */
   async quote(args: Record<string, unknown>): Promise<ToolResult> {
     const a = QuoteArgs.safeParse(args);
-    if (!a.success || (!a.data.wilayaId && !a.data.wilayaName)) return invalid('wilayaName', 'Alger');
+    // journey retest R2-3: a call with no wilaya (« quote_delivery {} ») is no customer error — the model said « ما فهمتش الولاية »
+    // to a customer who had only sent their phone
+    if (a.success && !a.data.wilayaId && !a.data.wilayaName?.trim()) return { ok: false, error: { code: 'VALIDATION', field: 'wilayaName', missing: true, example: 'Alger' }, say: 'No wilaya given: the customer has not named one yet. Ask which wilaya (one question) — never say you did not understand it.' };
+    if (!a.success) return invalid('wilayaName', 'Alger');
     const wilaya = await this.wilaya(a.data);
     if (!wilaya) return invalid('wilayaName', 'Alger');
     const [rule, ws] = await Promise.all([
@@ -378,7 +425,7 @@ export class ToolRegistry {
     // journey J08-3: the threshold is for home delivery only — said in the result, so the model can explain a stop-desk fee
     // above the threshold (it answered « le seuil est 10 000 DA, mais … 350 DA » without knowing why)
     const note = freeFrom !== null ? (a.data.isStopdesk ? 'freeFrom applies to home delivery only: a stop-desk order always pays the stop-desk fee.' : 'freeFrom applies to home delivery only, never to stop-desk.') : undefined;
-    return { ok: true, wilayaId: wilaya.id, wilayaName: wilaya.nameFr, isStopdesk: a.data.isStopdesk, fee: free ? 0 : a.data.isStopdesk ? rule.stopdeskPrice : rule.homePrice, free, freeFrom, freeFor: freeFrom !== null ? 'home' : null, stopdeskAvailable, stopdeskFee: stopdeskAvailable ? rule.stopdeskPrice : null, etaDays: '2–5', ...(note ? { note } : {}) };
+    return { ok: true, wilayaId: wilaya.id, wilayaName: wilaya.nameFr, wilayaNameAr: wilaya.nameAr, isStopdesk: a.data.isStopdesk, fee: free ? 0 : a.data.isStopdesk ? rule.stopdeskPrice : rule.homePrice, free, freeFrom, freeFor: freeFrom !== null ? 'home' : null, stopdeskAvailable, stopdeskFee: stopdeskAvailable ? rule.stopdeskPrice : null, etaDays: '2–5', ...(note ? { note } : {}) };
   }
 
   /**
@@ -441,13 +488,28 @@ export class ToolRegistry {
   async prepareOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<{ ok: true; request: CreateOrderRequest; draft: string; core?: string; beyondStock?: { name: string; quantity: number }[] } | { ok: false; result: ToolResult }> {
     const fail = (result: ToolResult) => ({ ok: false as const, result });
     // journey retest R1-5 (J04-6): a call made before the customer gave the fields (« create_order {} », no address, no
-    // wilaya) is refused at once, before any read, with every missing field — the model asks for the first one
+    // wilaya) is refused at once, before the catalogue reads, with every missing field — the model asks for the first one
     const absent = absentFields(args, ctx.agent);
-    if (absent.length) {
+    // journey retest R2-4: a value the customer never wrote counts as absent — a phone that is in none of their messages
+    // (« 0000000000 » before any number), a wilaya they never named (wilayaId 1 = Adrar after the phone) — refused at once
+    // with the absent fields, and the model is told not to call create_order again in this turn
+    const known = ctx.customerHistory !== undefined ? await this.knownPhones(ctx) : null;
+    const typedPhone = typeof args.clientPhone === 'string' && args.clientPhone.trim() ? normalizePhoneDz(args.clientPhone) : null;
+    const wilayaArg = Number(args.wilayaId);
+    const place = Number.isInteger(wilayaArg) && wilayaArg >= 1 && wilayaArg <= WILAYA_COUNT ? await prisma.wilaya.findUnique({ where: { id: wilayaArg }, include: { communes: { select: { nameFr: true, nameAr: true } } } }) : null;
+    const invented: string[] = [];
+    // a wrong number the customer did type (« 05559876 ») keeps its own answer (re-asked with an example)
+    const typedDigits = typedPhone ? typedPhone.replace(/\D/g, '').slice(-8) : '';
+    if (known && typedPhone && !absent.includes('clientPhone') && !known.has(typedPhone) && !(ctx.customerHistory ?? '').replace(/\D/g, '').includes(typedDigits)) invented.push('clientPhone');
+    if (place && ctx.customerHistory !== undefined && !absent.includes('wilayaId') && !(await this.wilayaGiven(ctx, place, typeof args.communeName === 'string' ? args.communeName : null))) invented.push('wilayaId');
+    if (absent.length || invented.length) {
+      const order = ['items', 'clientName', 'clientPhone', 'wilayaId', 'communeName', 'address'];
+      const fields = order.filter((f) => absent.includes(f) || invented.includes(f));
+      const shown = invented.map((f) => (f === 'clientPhone' ? `phone ${String(args.clientPhone)}` : `wilayaId ${wilayaArg}`));
       return fail({
         ok: false,
-        error: { code: 'VALIDATION', field: absent[0]!, missing: true, fields: absent, ...(EXAMPLES[absent[0]!] !== undefined ? { example: EXAMPLES[absent[0]!] } : {}) },
-        say: `Not done: the customer has not given ${absent.join(', ')} yet. Ask for ${absent[0]} (one question). Call create_order only once the customer gave every required field — never with a value they did not write (no default wilaya such as 1, no « Client »).`,
+        error: { code: 'VALIDATION', field: fields[0]!, missing: true, fields, ...(invented.length ? { notGivenByCustomer: invented } : {}), ...(EXAMPLES[fields[0]!] !== undefined ? { example: EXAMPLES[fields[0]!] } : {}) },
+        say: `Not done: the customer has not given ${fields.join(', ')} yet${shown.length ? ` (${shown.join(', ')}: never written by the customer — never a default or a guess)` : ''}. Ask for ${fields[0]} in one short question and do not call create_order again in this turn; call it only once the customer gave every required field.`,
       });
     }
     const a = OrderArgs.safeParse(args);
@@ -463,12 +525,14 @@ export class ToolRegistry {
     const phone = normalizePhoneDz(d.clientPhone);
     // journey 16/11 J05-9: a number the customer never wrote (« 0500000000 », « 0000000000 » before any phone was given) is
     // asked for first, before the address and the other checks — the model used to get a format error and guess again
-    const known = ctx.customerHistory !== undefined ? await this.knownPhones(ctx) : null;
     if (!isPhoneDz(phone)) return fail(known && known.size === 0 ? { ok: false, error: { code: 'VALIDATION', field: 'clientPhone', missing: true, example: EXAMPLES.clientPhone }, say: 'ask the customer for this value (one question); never invent it' } : invalid('clientPhone', EXAMPLES.clientPhone));
     if (known && !known.has(phone)) return ask('clientPhone');
     const phone2 = d.secondPhone ? normalizePhoneDz(d.secondPhone) : null;
     if (phone2 && !isPhoneDz(phone2)) return fail(invalid('secondPhone', EXAMPLES.secondPhone));
     if (!d.isStopdesk && (d.address ?? '').length < 10) return fail(invalid('address', EXAMPLES.address));
+    // journey retest R2-2: « Adresse : Bab Ezzouar, Alger » — a home address that is only the commune / wilaya name
+    if (!d.isStopdesk && place && placeOnlyAddress(d.address ?? '', [place.nameFr, place.nameAr, ...place.communes.flatMap((c) => [c.nameFr, c.nameAr]), ...(d.communeName ? [d.communeName] : [])], place.id))
+      return fail({ ok: false, error: { code: 'VALIDATION', field: 'address', missing: true, example: EXAMPLES.address }, say: 'The address is only the commune / wilaya name: ask the customer for the street, the cité or building, or a landmark (one short question), or offer the stop-desk. No recap without it; do not call create_order again in this turn.' });
     const missing = this.missingRequired(d, ctx.agent);
     if (missing) return fail({ ok: false, error: { code: 'VALIDATION', field: missing, missing: true, ...(EXAMPLES[missing] !== undefined ? { example: EXAMPLES[missing] } : {}) }, say: 'ask the customer for this field (one question), then show the recap again' });
 
@@ -553,6 +617,9 @@ export class ToolRegistry {
       // J03-10: the wording of the request (the confirmed recap's, when the call only reworded it)
       subtotal, deliveryFee, total: subtotal + deliveryFee, clientName: request.clientName, clientPhone: phone, ...(request.secondPhone ? { secondPhone: request.secondPhone } : {}),
       wilaya: String(quote.wilayaName ?? ''), communeName: request.communeName, address: request.address, isStopdesk: d.isStopdesk,
+      // journey retest R2-7: the Arabic recap writes the wilaya (and a commune of the list) in Arabic script
+      ...(place?.nameAr ? { wilayaAr: place.nameAr } : {}),
+      ...(communeAr(place?.communes ?? [], request.communeName) ? { communeAr: communeAr(place?.communes ?? [], request.communeName) } : {}),
       ...(replaces ? { replaces: replaces.number } : {}),
       ...(beyondStock.length ? { beyondStock } : {}),
     };
@@ -570,6 +637,20 @@ export class ToolRegistry {
     // 04 §21: `phoneConfirmed` counts only once the tool asked the customer to re-confirm this number
     if (d.phoneConfirmed && phoneCheckAsked(ctx.orderHistory, phone)) request.phoneConfirmed = true;
     return { ok: true, request, draft, core, ...(beyondStock.length ? { beyondStock } : {}) };
+  }
+
+  /** journey retest R2-4: the customer named this wilaya (or a commune of it) in the conversation, or ordered there before. */
+  private async wilayaGiven(ctx: ToolRunContext, place: WilayaRow & { communes: { nameFr: string; nameAr: string }[] }, communeName: string | null): Promise<boolean> {
+    const all = await prisma.wilaya.findMany({ select: { id: true, code: true, nameFr: true, nameAr: true } });
+    if (wilayaNamed(all, place.id, ctx.customerHistory ?? '', { given: communeName, ofWilaya: place.communes })) return true;
+    // the wilaya recorded from an earlier turn of this conversation (A4 `context.customer`)
+    const conv = ctx.conversationId ? await prisma.conversation.findUnique({ where: { id: ctx.conversationId }, select: { context: true } }) : null;
+    const said = conv ? contextOf(conv).customer?.wilaya : undefined;
+    if (said && matchWilaya(all, said)?.id === place.id) return true;
+    // a returning customer: the wilaya of their client record (KNOWN CUSTOMER) or of an earlier order
+    if (!ctx.clientId) return false;
+    const [address, order] = await Promise.all([prisma.clientAddress.findFirst({ where: { clientId: ctx.clientId, wilayaId: place.id }, select: { id: true } }), prisma.order.findFirst({ where: { clientId: ctx.clientId, wilayaId: place.id }, select: { id: true } })]);
+    return !!address || !!order;
   }
 
   /** The number of the order a `create_order` of this very run already placed, else null. */

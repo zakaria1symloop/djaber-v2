@@ -115,7 +115,7 @@ describe('R1-6 / R1-7 — the server recap is the recap', () => {
     );
     const ar = orderRecapText(r, 'ar');
     expect(ar).toContain('- 1 × Djellaba homme : 7 500 دج');
-    expect(ar).toContain('التوصيل للدار (El Khroub, Constantine): 700 دج');
+    expect(ar).toContain('التوصيل للدار (El Khroub، Constantine): 700 دج');
     expect(ar).not.toContain('جلابة');
     const arabizi = orderRecapText(r, 'arabizi');
     expect(arabizi.split('\n')[0]).toBe('Hada récap ta3 la commande:');

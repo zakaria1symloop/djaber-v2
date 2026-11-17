@@ -470,10 +470,12 @@ describe('journey 16/11 J03-2 — the fee quote_delivery returned this turn is i
     const reply = 'Merci 3la sbr ! Ila t7ebb tssa2el 3la 7aja, goulli-li ach ta3ref w n3awnek.';
     const v = checkReply(reply, f);
     expect(guardInstruction(v, f)).toContain('DELIVERY FEE: quote_delivery answered Sétif: home 650 DA, stop-desk 350 DA');
+    // journey retest R2-1: « ach » (Moroccan « what ») is flagged too and replaced by « wach »
+    expect(v.map((x) => x.rule)).toContain('moroccan_darija');
     const out = enforceReply(reply, v, f, { hasCards: false });
-    expect(out.reply.replace(/ | | /g, ' ')).toBe('Tawsil l Sétif: 650 DA l dar, 350 DA f stop-desk. Merci 3la sbr ! Ila t7ebb tssa2el 3la 7aja, goulli-li ach ta3ref w n3awnek.');
+    expect(out.reply.replace(/\u202f|\u2009|\u00a0/g, ' ')).toBe('Tawsil l Sétif: 650 DA l dar, 350 DA f stop-desk. Merci 3la sbr ! Ila t7ebb tssa2el 3la 7aja, goulli-li wach ta3ref w n3awnek.');
     expect(out.action).toBe('stripped');
-    expect(feeSentence(quotes[0]!, 'fr').replace(/ | | /g, ' ')).toBe('Livraison à Sétif : 650 DA à domicile, 350 DA en stop-desk.');
-    expect(feeSentence({ wilaya: 'Oran', isStopdesk: false, fee: 0, free: true, stopdeskFee: 400 }, 'en').replace(/ | | /g, ' ')).toBe('Delivery to Oran: free to your door, 400 DA at a stop-desk.');
+    expect(feeSentence(quotes[0]!, 'fr').replace(/\u202f|\u2009|\u00a0/g, ' ')).toBe('Livraison à Sétif : 650 DA à domicile, 350 DA en stop-desk.');
+    expect(feeSentence({ wilaya: 'Oran', isStopdesk: false, fee: 0, free: true, stopdeskFee: 400 }, 'en').replace(/\u202f|\u2009|\u00a0/g, ' ')).toBe('Delivery to Oran: free to your door, 400 DA at a stop-desk.');
   });
 });
