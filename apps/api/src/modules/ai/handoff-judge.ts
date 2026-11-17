@@ -19,7 +19,7 @@ const SERVER_REASONS = new Set(['order_limits', 'risky_client', 'blocked_word', 
 /** Rule ids of the prompt and older names the model may still write. */
 const ALIASES: Record<string, string> = { human_request: 'customer_request', human: 'customer_request', anger: 'angry', over_limits: 'order_limits', order_limit: 'order_limits', off_topic: 'off_catalogue', '3_unclear': 'unclear_streak' };
 
-export type HandoffRefusal = 'greeting' | 'no_evidence' | 'evidence_not_in_message' | 'no_shop_rule' | 'keyword_absent' | 'not_unclear' | 'reason_mismatch' | 'server_reason';
+export type HandoffRefusal = 'greeting' | 'no_evidence' | 'evidence_not_in_message' | 'no_shop_rule' | 'keyword_absent' | 'not_unclear' | 'reason_mismatch' | 'server_reason' | 'not_sold';
 
 /**
  * journey retest R4-1 (17/11): the server reasons a tool result of THIS turn established — `create_order` above a limit
@@ -95,9 +95,25 @@ export function judgeHandoff(i: HandoffInput): HandoffVerdict {
   const evidence = (i.evidence ?? '').trim();
   if (!evidence) return { ok: false, reason, why: 'no_evidence' };
   if (isGreetingOnly(evidence) || !quotedFrom(evidence, text)) return { ok: false, reason, why: 'evidence_not_in_message' };
+  // journey retest R11-2 (17/11): « vous avez des lunettes de soleil ? » is a product the shop does not sell — answered (« nous ne
+  // vendons pas … » + the catalogue), never a handoff (N7 T1 `off_catalogue` accepted, shop closed, full order details given)
+  if (reason === 'off_catalogue' && productAsk(evidence, text)) return { ok: false, reason, why: 'not_sold' };
   if (!reasonFits(reason, evidence, text)) return { ok: false, reason, why: 'reason_mismatch' };
   return { ok: true, reason };
 }
+
+/**
+ * journey retest R11-2: a message (or its quoted words) that asks whether the shop has / sells a product, or asks for one
+ * (« vous avez des lunettes de soleil ? », « do you sell … », « 3andkom … ? », « عندكم … ؟ », « je cherche … ») — and asks nothing only
+ * the team can quote (wholesale, a custom order, a partnership). Folded text.
+ */
+const PRODUCT_ASK =
+  /(?<![\p{L}])(?:vous\s+avez|avez[- ]vous|vous\s+vendez|vendez[- ]vous|vous\s+faites|faites[- ]vous|est[- ]ce\s+(?:que|qu['’])\s*(?:vous|tu)\s+(?:avez|as|vendez|vends)|il\s+y\s+a|y\s+a[- ]t[- ]il|tu\s+as|t['’]as|as[- ]tu|do\s+you\s+(?:have|sell|carry)|have\s+you\s+got|is\s+there|are\s+there|3and(?:kom|kem|koum|ek)|3ndkom|3endkom|kayen|kayn|kayna|kaynin|tbi3(?:o|ou|ou)|tbi3iw|je\s+cherche|i\s+am\s+looking|looking\s+for|n9alleb|nqalleb|عندكم|عندك|كاين|كاينة|كاينين|تبيعو|تبيعوا)(?![\p{L}])/u;
+export const productAsk = (evidence: string, message: string): boolean => {
+  const m = foldText(message).replace(/[’‘`]/g, "'");
+  if (TEAM_ONLY_REQUEST.test(m)) return false;
+  return PRODUCT_ASK.test(foldText(evidence).replace(/[’‘`]/g, "'")) || PRODUCT_ASK.test(m);
+};
 
 /** Words that ask for the team (a person, the seller, a call) — fr / en / darija / arabizi / Arabic script, folded. */
 const ASKS_TEAM =
@@ -175,6 +191,8 @@ export function handoffRefusedInstruction(why: HandoffRefusal): string {
     reason_mismatch:
       "the customer's words do not match that rule: a discount, a price or free delivery « the owner / the team said » is answered with the catalogue price and the delivery fee (politely, no handoff); a question about you (your name, are you a robot) is answered: you are the shop's virtual assistant; customer_request needs words asking for a person",
     server_reason: 'that reason is set by the platform from a tool result (create_order above a limit, a blocked customer), never by you — no tool of this turn reported it; an order message is taken as usual (ask the next missing field, or call create_order for the recap)',
+    not_sold:
+      "a product the shop does not sell is answered by you, never handed off: say plainly that the shop does not sell it (« nous ne vendons pas de … pour le moment »), then offer what the CATALOGUE lists in stock; when the customer also gave their details, take the order as usual once they choose a product (status OK)",
   };
   return `${HANDOFF_REFUSED_MARK}: ${cause[why]}. Keep the conversation and answer the customer's current message now, in their language (status OK; UNKNOWN when you have no answer — say you will check with the team and call add_faq_candidate; UNCLEAR when you did not understand). Hand off only when the customer's current message itself matches a rule, quoting their words in "evidence". Answer with the JSON object only.`;
 }
@@ -192,11 +210,66 @@ const PROBLEM_WORDS = /jamais\s+(?:recu|arriv)|pas\s+(?:recu|arriv)|retard|cass[
  * `handoff_to_human` tool is not offered then: N5 T2 called it `{ off_catalogue, evidence « none » }` next to the recap,
  * refused after a model round. A real request still goes through `status = HANDOFF` (judged).
  */
-export function orderDetailsMessage(text: string | undefined, validPhone: (t: string) => boolean): boolean {
+export function orderDetailsMessage(text: string | undefined, validPhone: (t: string) => boolean, questionsOk = false): boolean {
   const t = (text ?? '').trim();
-  if (!t || t.length > 300 || /[?؟]/.test(t) || !validPhone(t)) return false;
+  if (!t || t.length > 300 || (!questionsOk && /[?؟]/.test(t)) || !validPhone(t)) return false;
   const f = foldText(t);
   return !TEAM_WORDS.test(f) && !ASKS_TEAM.test(f) && !ORDER_CHANGE.test(f) && !ASKS_REFUND.test(f) && !PROBLEM_WORDS.test(f);
+}
+
+/**
+ * journey retest R11-2 / R11-3 (17/11): of the reasons the agent allows (`allowedHandoffReasons`), those THIS message can carry — the
+ * judge would refuse the others anyway, after a model round each: `customer_request` needs words asking for a person or a change /
+ * cancellation, `refund` words asking for money back; `off_catalogue` is never a question about a product the shop may not sell
+ * (`productAsk`); on a message that gives the order's details with a phone and no team / refund / change / problem word (a product
+ * question allowed) neither `off_catalogue`, `complaint`, `angry` nor a shop rule (`other`) applies. N7 T1 « vous avez des lunettes de
+ * soleil ? Je suis Yacine Mansouri 0555987654, Blida, … » got `off_catalogue` accepted (the R7 rule skipped it for its « ? »). No
+ * reason left ⇒ the tool is not offered; `status = HANDOFF` stays judged.
+ */
+export function messageHandoffReasons(reasons: string[], customerText: string | undefined, validPhone: (t: string) => boolean): string[] {
+  if (customerText === undefined) return reasons;
+  const t = customerText.trim();
+  const f = foldText(t).replace(/[’‘`]/g, "'");
+  const details = orderDetailsMessage(t, validPhone, true);
+  return reasons.filter((r) => {
+    if (r === 'customer_request') return ASKS_TEAM.test(f) || ORDER_CHANGE.test(f);
+    if (r === 'refund') return ASKS_REFUND.test(f);
+    if (r === 'off_catalogue') return !details && !productAsk(t, t);
+    if (r === 'complaint' || r === 'angry' || r === 'other') return !details;
+    return true;
+  });
+}
+
+/** Arabic-script words of a short message that is no name (yes / no, thanks, greetings, order and question words). */
+const NOT_A_NAME_AR = /(?<![؀-ۿ])(?:نعم|ايه|إيه|واه|لا|شكرا|صحيت|السلام|عليكم|سلام|مرحبا|اهلا|أهلا|نحب|حاب|نشري|بغيت|حي|شارع|عمارة|ولاية|بلدية|قداش|شحال|واش|وين|كيفاش|تمام|صافي|الطلبية|طلبية|التوصيل|ماشي|بزاف|خويا|اختي|عندكم|كاين|درك|غدوة|اليوم|وقتاش|كاش|علاش|شكون|منين|فاين|قداه|توصل|وصلت|وصل|جات|خرجت|مازال|راهي|راه|هذا|هاذا|هاذي|هادي|انا|أنا|نتا|نتي|ما|مكانش|ماكانش|بصح|برك|زوج|جوج|واحد|حجاب|جلابة|سعر|الثمن)(?![؀-ۿ])/u;
+/** Latin words of a short message that is no name (greetings, thanks, yes / no, order words). */
+const NOT_A_NAME_LATIN = /^(?:merci|bonjour|bonsoir|salut|salam|slm|cc|ok|okay|oui|non|svp|stp|thanks|thank|hello|hi|yes|no|parfait|super|daccord|d'accord|ih|wah|saha|sahit|bien|tres|livraison|commande|prix|stock)$/i;
+/**
+ * journey retest R11-3 (17/11): a message that is only a name — one to four Arabic-script words (« نادية قاسي ») or two / three
+ * capitalised Latin words (« Nadia Kaci ») and nothing else. N21 T2 `handoff_to_human { unclear_streak, evidence « نادية قاسي » }`.
+ */
+export function nameOnlyMessage(text: string | undefined): boolean {
+  const t = (text ?? '').trim().replace(/[.!،,]+$/u, '');
+  if (!t || t.length > 60) return false;
+  if (/^[؀-ۿ]+(?:\s+[؀-ۿ]+){0,3}$/u.test(t)) return !NOT_A_NAME_AR.test(t);
+  const w = t.split(/\s+/);
+  return w.length >= 2 && w.length <= 3 && w.every((x) => /^\p{Lu}[\p{Ll}'’-]+$/u.test(x) && !NOT_A_NAME_LATIN.test(x));
+}
+
+/** Small words that go with a place name (« ana f Bab Ezzouar », « wilaya de Sétif », « Alger centre »). */
+const PLACE_SMALL_WORDS = new Set(['de', 'du', 'des', 'd', 'la', 'le', 'l', 'a', 'à', 'au', 'en', 'w', 'f', 'fi', 'el', 'al', 'et', 'ana', 'je', 'suis', 'wilaya', 'commune', 'centre', 'ville', 'men', 'mn', 'from', 'in']);
+/**
+ * journey retest R11-3: a short message that may only name a place (« Sétif, El Eulma », « البليدة، بوفاريك ») — capitalised Latin
+ * words (and the small words of a place), or Arabic-script words that are no order / question / greeting word. Only such a message
+ * is looked up in the wilaya / commune lists (`placeOnlyMessage`).
+ */
+export function placeCandidate(text: string | undefined): boolean {
+  const t = (text ?? '').trim().replace(/[.!]+$/u, '');
+  if (!t || t.length > 80 || /[?؟\d]/.test(t)) return false;
+  const w = t.split(/[\s,،]+/u).filter(Boolean);
+  if (!w.length || w.length > 6) return false;
+  if (w.every((x) => /^[؀-ۿ]+$/u.test(x))) return !NOT_A_NAME_AR.test(t);
+  return w.some((x) => /^\p{Lu}/u.test(x)) && w.every((x) => /^\p{Lu}[\p{L}'’-]*$/u.test(x) || PLACE_SMALL_WORDS.has(x.toLowerCase()));
 }
 
 /**
@@ -208,7 +281,8 @@ export function orderDetailsMessage(text: string | undefined, validPhone: (t: st
 export function fieldOnlyMessage(text: string | undefined, ordering: boolean): boolean {
   const t = (text ?? '').trim();
   if (!t || t.length > 120) return false;
-  if (/^[\s+()\d.\-/٠-٩]{9,20}$/.test(t)) return true;
+  // journey retest R11-3: an 8-digit number is a phone typed short (F8 T3 « 05559876 » got a handoff probe): still a field
+  if (/^[\s+()\d.\-/٠-٩]{8,20}$/.test(t)) return true;
   if (/[?؟]/.test(t) || TEAM_WORDS.test(foldText(t))) return false;
   // journey retest R1-5: a bare yes (« oui », « ih », « yes », « ايه », « oui c'est bon ») never asks for the team — handoff
   // was asked on « oui », « yes », « ih » after a recap or an order
@@ -216,6 +290,11 @@ export function fieldOnlyMessage(text: string | undefined, ordering: boolean): b
   // journey retest R2-4: « اسمي سمير بن علي », « smiti Walid Bouzid », « je m'appelle Karim » — the customer's name, ordering or
   // not (handoff_to_human { reason: unclear_streak } was asked on it)
   if (words(t).length <= 6 && NAME_INTRO.test(t)) return true;
+  // journey retest R11-3: a bare name (« نادية قاسي », « Nadia Kaci »), ordering or not
+  if (nameOnlyMessage(t) && !isGreetingOnly(t)) return true;
   if (!ordering || /!/.test(t)) return false;
+  // journey retest R11-3: a change, a cancellation, a refund or a problem is never a field (a phone given earlier now means ordering)
+  const f = foldText(t);
+  if (ORDER_CHANGE.test(f) || ASKS_REFUND.test(f) || PROBLEM_WORDS.test(f)) return false;
   return words(t).length <= 6;
 }

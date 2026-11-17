@@ -116,7 +116,25 @@ const upper = <T extends readonly string[]>(v: unknown, list: T): T[number] | un
  * counts as malformed (it ended the conversation with the team). Only `reply` must be there; what cannot be read takes
  * the neutral value (status OK, intent OTHER, confidence 0.5).
  */
-export const normalizeReplyObject = (o: Record<string, unknown>): Record<string, unknown> => {
+/** journey retest R11-5: a reply written in another shape — an array of lines, an object holding the text. */
+const replyText = (v: unknown): string | undefined => {
+  if (typeof v === 'string') return v.trim() ? v : undefined;
+  if (Array.isArray(v) && v.length && v.every((x) => typeof x === 'string')) return (v as string[]).join('\n').trim() || undefined;
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    const r = v as Record<string, unknown>;
+    return [r.reply, r.text, r.message, r.content].find((x): x is string => typeof x === 'string' && !!x.trim());
+  }
+  return undefined;
+};
+export const normalizeReplyObject = (input: Record<string, unknown>): Record<string, unknown> => {
+  // journey retest R11-5 (17/11): `reply` not a string (`malformed_output:schema:reply`, F8 T1 ⇒ 503) — the text it holds in another
+  // shape, or the message under another key (message / text / answer / response), is the reply
+  let o = input;
+  if (typeof o.reply !== 'string') {
+    const alt = replyText(o.reply) ?? [o.message, o.text, o.answer, o.response].map(replyText).find((x) => !!x);
+    if (!alt) return o;
+    o = { ...o, reply: alt };
+  }
   if (typeof o.reply !== 'string') return o;
   const conf = typeof o.confidence === 'number' ? o.confidence : Number.parseFloat(str(o.confidence) ?? '');
   const ids = (v: unknown) => (Array.isArray(v) ? v.map(str).filter((s): s is string => !!s?.trim()) : []);
@@ -147,7 +165,23 @@ export const normalizeReplyObject = (o: Record<string, unknown>): Record<string,
   };
 };
 
-export const parseReplyOutput = (text: string) => parseJsonObject(text, AiReplyOutputSchema, normalizeReplyObject);
+/**
+ * The reply object of a model answer. Journey retest R11-5: when the first `{…}` of the text is not it (a note, a tool-call-like
+ * object before the answer), the next objects of the text are tried (3 at most).
+ */
+export const parseReplyOutput = (text: string) => {
+  const first = parseJsonObject(text, AiReplyOutputSchema, normalizeReplyObject);
+  if (first.ok) return first;
+  let rest = text;
+  for (let i = 0; i < 3; i++) {
+    const raw = extractJson(rest);
+    if (!raw) break;
+    rest = rest.slice(rest.indexOf(raw) + raw.length);
+    const next = parseJsonObject(rest, AiReplyOutputSchema, normalizeReplyObject);
+    if (next.ok) return next;
+  }
+  return first;
+};
 
 /**
  * Last resort after the format reminder (tester report 26/10): the model's first answer, when it is a plain message to

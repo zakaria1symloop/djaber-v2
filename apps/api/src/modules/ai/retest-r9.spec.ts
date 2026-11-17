@@ -236,8 +236,8 @@ describe('R9-3 — odd wording', () => {
   describe('N11 T3 — the order wording follows lookup_order’s status', () => {
     const N11 = 'طلبيتك رقم TEST-4074 مازالت في الدرب، درك راهي تتحضر ومازالت ما خرجتش. ما عندناش رقم تتبع دروك، وكي تخرج الطلبية نعطيوك المعلومات. التوصيل يكون من 2 إلى 5 أيام.';
     const lookup = (deliveryStatus: string) => [{ orders: [{ number: 'TEST-4074', status: 'new', deliveryStatus, courier: null, trackingNumber: null }] }];
-    it('not sent + « ما خرجتش » already said ⇒ « في الدرب » dropped; one « درك »', () => {
-      expect(withOneNowWord(withOrderStatusWording(N11, lookup('not_sent')))).toBe('طلبيتك رقم TEST-4074 درك راهي تتحضر ومازالت ما خرجتش. ما عندناش رقم تتبع درك، وكي تخرج الطلبية نعطيوك المعلومات. التوصيل يكون من 2 إلى 5 أيام.');
+    it('not sent + « ما خرجتش » already said ⇒ « في الدرب » dropped; one « درك » (R11-6: once in the reply)', () => {
+      expect(withOneNowWord(withOrderStatusWording(N11, lookup('not_sent')))).toBe('طلبيتك رقم TEST-4074 درك راهي تتحضر ومازالت ما خرجتش. ما عندناش رقم تتبع، وكي تخرج الطلبية نعطيوك المعلومات. التوصيل يكون من 2 إلى 5 أيام.');
     });
     it('not sent and nothing else said ⇒ the not-sent wording; a shipped order or no lookup ⇒ unchanged', () => {
       expect(withOrderStatusWording('طلبيتك TEST-4074 مازالت في الدرب، التوصيل من 2 إلى 5 أيام.', lookup('not_sent'))).toBe('طلبيتك TEST-4074 مازالت ما خرجتش، التوصيل من 2 إلى 5 أيام.');

@@ -120,10 +120,20 @@ describe('structured output (§4.1)', () => {
     ['plain text', 'Sure! It costs 4500.', 'no_json'],
     ['broken JSON', '{"reply": "x", ', 'no_json'],
     ['invalid JSON', '{reply: x}', 'invalid_json'],
-    ['no reply', JSON.stringify({ ...valid, reply: undefined, answer: 'x' }), 'schema:reply'],
-    ['reply not a text', JSON.stringify({ ...valid, reply: ['x'] }), 'schema:reply'],
+    ['no reply', JSON.stringify({ ...valid, reply: undefined, note: 'x' }), 'schema:reply'],
+    ['reply not a text', JSON.stringify({ ...valid, reply: 12 }), 'schema:reply'],
+    ['reply an object without text', JSON.stringify({ ...valid, reply: { lang: 'fr' } }), 'schema:reply'],
   ])('malformed: %s', (_name, text, reason) => {
     expect(parseReplyOutput(text)).toEqual({ ok: false, reason });
+  });
+  // journey retest R11-5 (17/11): a reply in another shape (lines, an object holding the text, another key) or after another object
+  it.each([
+    ['the text under « answer »', JSON.stringify({ ...valid, reply: undefined, answer: 'x' })],
+    ['the reply as lines', JSON.stringify({ ...valid, reply: ['x'] })],
+    ['the reply as an object', JSON.stringify({ ...valid, reply: { text: 'x' } })],
+    ['the reply object after another object', `${JSON.stringify({ tool: 'search_products' })}\n${JSON.stringify({ ...valid, reply: 'x' })}`],
+  ])('R11-5 read: %s', (_name, text) => {
+    expect(parseReplyOutput(text)).toEqual({ ok: true, value: { ...valid, reply: 'x' } });
   });
 
   it('tester report 26/10: an object right in substance is read as it is (missing / extra keys, case, numbers as text, too many cards, too long)', () => {

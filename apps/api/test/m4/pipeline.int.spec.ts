@@ -194,9 +194,9 @@ describe('FL-01 — reply turn', () => {
     expect(prose.runs[0]!.flags).toContain('format_salvaged');
     expect(prose.conversation).toMatchObject({ status: 'active', aiPaused: false });
 
-    // nothing that can be sent, twice ⇒ FL-01 F-6
+    // nothing that can be sent, twice, then nothing in the plain-text step either (journey retest R11-5) ⇒ FL-01 F-6
     await resetAi();
-    fakeAi(app).script('reply', { text: '' }, { object: { answer: 'no reply field' } });
+    fakeAi(app).script('reply', { text: '' }, { object: { note: 'no reply field' } }, { text: '' });
     const sender = newSender();
     const ko = await turn(s, sender, { text: 'prix robe ?' });
     expect(ko.outcome).toBe('failed');

@@ -18,7 +18,7 @@ import { FlagsService } from '../../../core/flags/flags.service';
 import { fold, WILAYA_ALIASES } from './wilaya-aliases';
 import { handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
 import { asksCancel, bareYes, cancelWordsIn, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, simulatedOrders, type DraftOrder, type OrderCallHistory } from './order-confirmation';
-import { asksSomething } from './order-confirmation-text';
+import { asksSomething, withoutPlaceSegments } from './order-confirmation-text';
 
 export type ToolName = 'search_products' | 'get_product' | 'check_availability' | 'quote_delivery' | 'create_order' | 'cancel_order' | 'lookup_order' | 'handoff_to_human' | 'add_faq_candidate' | 'create_payment_link';
 export type ToolRunContext = {
@@ -198,6 +198,72 @@ export const absentFields = (args: Record<string, unknown>, agent: Pick<ToolRunC
   if (!stopdesk && !text(args.address)) out.push('address');
   return out;
 };
+/** An order line as read from a malformed `items` value: the product id candidates its `productId` held (one, or several). */
+export type ItemArg = { productId: string; variantId?: string; quantity: number; candidates: string[] };
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+/** One line object (a parsed object, or the text of one `{…}`) ⇒ an `ItemArg`, null when it holds no product nor variant id. */
+const itemOf = (o: unknown): ItemArg | null => {
+  if (o && typeof o === 'object' && !Array.isArray(o)) {
+    const r = o as Record<string, unknown>;
+    const pid = typeof r.productId === 'string' ? r.productId.trim() : '';
+    const vid = typeof r.variantId === 'string' && r.variantId.trim() ? r.variantId.trim() : undefined;
+    const q = Number(r.quantity ?? 1);
+    const ids = [...new Set(pid.match(UUID_RE) ?? [])];
+    const candidates = ids.length ? ids : pid ? [pid] : [];
+    if (!candidates.length && !vid) return null;
+    return { productId: candidates.length === 1 ? candidates[0]! : (candidates[0] ?? ''), ...(vid ? { variantId: vid } : {}), quantity: Number.isInteger(q) && q >= 1 ? q : 1, candidates };
+  }
+  if (typeof o !== 'string') return null;
+  // the text of one object that is no JSON (« "productId": "…".replace("…","…"), "variantId": "…", "quantity": 1 »)
+  const body = o.replace(/^\s*\{|\}\s*$/g, '');
+  const pidText = /["']?productId["']?\s*:\s*([\s\S]*?)\s*(?:,\s*["']?(?:variantId|quantity)["']?\s*:|$)/u.exec(body)?.[1] ?? '';
+  const vid = /["']?variantId["']?\s*:\s*["']([^"']+)["']/u.exec(body)?.[1]?.trim();
+  const qty = /["']?quantity["']?\s*:\s*["']?(\d{1,3})/u.exec(body)?.[1];
+  const ids = [...new Set(pidText.match(UUID_RE) ?? [])];
+  const plain = /^["']([^"']+)["']$/u.exec(pidText.trim())?.[1]?.trim();
+  const candidates = ids.length ? ids : plain ? [plain] : [];
+  if (!candidates.length && !vid) return null;
+  return { productId: candidates[0] ?? '', ...(vid ? { variantId: vid } : {}), quantity: qty ? Math.max(1, Number(qty)) : 1, candidates };
+};
+/**
+ * journey retest R11-1 (17/11): `items` sent as something else than an array of objects — a JSON string, one object, an array of
+ * JSON strings, or code (F1b T3: `"[{\"productId\": \"…\".replace(\"…\",\"…\"), \"variantId\": \"…\", \"quantity\": 1}]"`, refused
+ * « the customer has not given items yet » although the product was named). The lines it can be read into (the product id
+ * candidates of each line are settled against the shop's products by `create_order`), else null. An array of objects is returned
+ * as it is (`normalized: false`).
+ */
+export const itemsFromArg = (raw: unknown): { items: unknown[]; normalized: boolean } | null => {
+  if (Array.isArray(raw) && raw.every((x) => x && typeof x === 'object' && !Array.isArray(x))) return { items: raw, normalized: false };
+  const parse = (t: string): unknown => {
+    try {
+      return JSON.parse(t);
+    } catch {
+      return undefined;
+    }
+  };
+  let value: unknown = raw;
+  if (typeof value === 'string') {
+    const parsed = parse(value.trim());
+    if (parsed !== undefined) value = parsed;
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) value = [value];
+  let lines: ItemArg[] | null = null;
+  if (Array.isArray(value)) {
+    const read = value.map((x) => (typeof x === 'string' ? (parse(x.trim()) !== undefined ? itemOf(parse(x.trim())) : itemOf(x)) : itemOf(x)));
+    lines = read.length && read.every((x): x is ItemArg => !!x) ? read : null;
+  } else if (typeof value === 'string') {
+    const objects = value.match(/\{[^{}]*\}/g) ?? [];
+    const read = objects.map(itemOf);
+    lines = read.length && read.every((x): x is ItemArg => !!x) ? read : null;
+  }
+  return lines ? { items: lines, normalized: true } : null;
+};
+/** journey retest R11-1: the precise answer to an `items` value that cannot be read (never « not given yet »: the product was named). */
+export const malformedItemsResult = (): ToolResult => ({
+  ok: false,
+  error: { code: 'VALIDATION', field: 'items', malformed: true, example: '[{"productId":"<ID>","variantId":"<VID>","quantity":1}]' },
+  say: 'items could not be read: send it as a JSON array of objects { "productId": "<ID of the CATALOGUE>", "variantId": "<VID>" (when the product has variants), "quantity": <number> } — never a string, a code expression or text. Nothing is wrong with the customer\'s details: call create_order again now with the same other values and items as an array. Never ask the customer for the product again and never ask them to confirm.',
+});
 type WilayaRow = { id: number; code: string; nameFr: string; nameAr: string };
 /**
  * The wilaya a customer text names — the official name (fr / ar), the code, a known spelling (`WILAYA_ALIASES`), also inside a
@@ -639,6 +705,17 @@ export class ToolRegistry {
     // `customerConfirmed false` ⇒ « not given yet », no order, and an invented « problème technique »)
     const pending = this.pendingOrder(args, ctx);
     if (pending) args = pending;
+    // journey retest R11-1 (17/11): `items` sent as a JSON string or as code (F1b T3) is read into lines when it names the shop's
+    // products without doubt — else a precise refusal naming the expected shape (never « the customer has not given items yet »)
+    if (!pending && args.items !== undefined && args.items !== null && !(typeof args.items === 'string' && !args.items.trim())) {
+      const read = itemsFromArg(args.items);
+      if (!read) return fail(malformedItemsResult());
+      if (read.normalized) {
+        const items = await this.settledItems(read.items as ItemArg[], ctx);
+        if (!items) return fail(malformedItemsResult());
+        args = { ...args, items };
+      }
+    }
     // journey retest R1-5 (J04-6): a call made before the customer gave the fields (« create_order {} », no address, no
     // wilaya) is refused at once, before the catalogue reads, with every missing field — the model asks for the first one
     const absent = absentFields(args, ctx.agent);
@@ -791,7 +868,11 @@ export class ToolRegistry {
     const deliveryFee = Number(quote.fee ?? 0);
     // no order, no error code: the model must hand off with statusDetail=order_limits
     if ((maxQty !== null && quantity > maxQty) || (maxAmount !== null && subtotal + deliveryFee > maxAmount)) return fail({ ok: false, hint: 'order_limit', maxQty, maxAmount });
-    const request: CreateOrderRequest = { clientName: d.clientName, clientPhone: phone, secondPhone: phone2, wilayaId: d.wilayaId, communeName: d.communeName || null, address: d.address || null, isStopdesk: d.isStopdesk, stopdeskId: d.stopdeskId || null, notes: d.notes || null, items, subtotal, deliveryFee, total: subtotal + deliveryFee, replaces };
+    // journey retest R11-4 (17/11): the address is stored (and shown) without the commune / wilaya it starts or ends with — the recap
+    // adds them back as « street, commune, wilaya » (N21 T4 « البليدة، بوفاريك، حي الورود رقم 12 » was shown and stored wilaya first)
+    const communeRow = place && d.communeName ? place.communes.find((c) => placeFold(c.nameFr) === placeFold(d.communeName!) || placeFold(c.nameAr) === placeFold(d.communeName!)) : undefined;
+    const street = d.address ? withoutPlaceSegments(d.address, [place?.nameFr, place?.nameAr, d.communeName, communeRow?.nameFr, communeRow?.nameAr]) || d.address : null;
+    const request: CreateOrderRequest = { clientName: d.clientName, clientPhone: phone, secondPhone: phone2, wilayaId: d.wilayaId, communeName: d.communeName || null, address: street, isStopdesk: d.isStopdesk, stopdeskId: d.stopdeskId || null, notes: d.notes || null, items, subtotal, deliveryFee, total: subtotal + deliveryFee, replaces };
     // full-test 15/11 AI-CHAT-01 (Blocker): the order exists only after the customer said yes, in a later message, to the
     // recap the server sent — the model's `customerConfirmed` is never enough on its own
     let draft = draftKey(request);
@@ -800,10 +881,15 @@ export class ToolRegistry {
     // differed and the customer's « oui » got the same recap again, in a loop (5 confirmed recaps out of 7 lost). The latest
     // recap of the conversation with the same core is the one being confirmed — whatever the wording of the name / commune /
     // address, unless the customer's own message of this turn brings the new words; the order then keeps the recap's wording.
-    const latest = hasDraft(ctx.orderHistory, draft) ? null : latestRecap(ctx.orderHistory);
+    const latestAny = latestRecap(ctx.orderHistory);
+    const latest = hasDraft(ctx.orderHistory, draft) ? null : latestAny;
     if (latest?.core === core && latest.wording && !wordingChangedNow(latest.wording, request, ctx.customerText)) {
       Object.assign(request, { clientName: latest.wording.clientName, secondPhone: latest.wording.secondPhone, communeName: latest.wording.communeName, address: latest.wording.address });
       draft = latest.draft;
+    } else if (!latest && latestAny?.draft === draft && latestAny.wording) {
+      // journey retest R11-4: the same draft (the call's wording differs only in case / spacing, or by the commune / wilaya the
+      // address started or ended with) keeps the recap's wording, as the customer read it
+      Object.assign(request, { clientName: latestAny.wording.clientName, secondPhone: latestAny.wording.secondPhone, communeName: latestAny.wording.communeName, address: latestAny.wording.address });
     }
     // full-test 15/11 proposal 4: one order per confirmed recap — never a second one in the same turn, never the same
     // content again in a later turn (C06: TEST-2998 then TEST-2283 on « oui c'est bon »)
@@ -870,6 +956,28 @@ export class ToolRegistry {
       customerConfirmed: true,
       ...(args.phoneConfirmed === true ? { phoneConfirmed: true } : {}),
     };
+  }
+
+  /**
+   * journey retest R11-1: the lines of a malformed `items` value with one product id each — a line whose `productId` held several ids
+   * (« "A".replace("A","B") ») keeps the one that is a product of the agent's scope, or the one its variant belongs to; none of them a
+   * product ⇒ the first (the variant / named-product fallbacks of create_order apply); two products left ⇒ null (not read without doubt).
+   */
+  private async settledItems(lines: ItemArg[], ctx: ToolRunContext): Promise<{ productId: string; variantId?: string; quantity: number }[] | null> {
+    const out: { productId: string; variantId?: string; quantity: number }[] = [];
+    for (const l of lines) {
+      let productId = l.productId;
+      if (l.candidates.length > 1) {
+        const found = await this.catalogue.byIds(ctx.agent, l.candidates);
+        const owner = l.variantId ? found.filter((p) => p.variants.some((v) => v.id === l.variantId)) : [];
+        if (found.length === 1) productId = found[0]!.id;
+        else if (owner.length === 1) productId = owner[0]!.id;
+        else if (found.length > 1) return null;
+      }
+      if (!productId && !l.variantId) return null;
+      out.push({ productId: productId || l.variantId!, ...(l.variantId ? { variantId: l.variantId } : {}), quantity: l.quantity });
+    }
+    return out;
   }
 
   /** journey retest R8-3: the variant ids that are no variant of the shop at all (a fake catalogue in tests: all of them). */

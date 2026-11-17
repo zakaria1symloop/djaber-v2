@@ -169,7 +169,7 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     fakeAi(app).script('reply', { toolCalls: [createCall(s, { address: 'Cité des 200 logements, Bt 4, Bab Ezzouar, Alger', clientName: 'Amine BENALI' })] }, { reply: 'Commande enregistrée.', intent: 'SALE' });
     const t = await turn(s, sender, 'oui');
     expect(lastResult(t.runs)).toMatchObject({ ok: true, number: 'CMD-1001', draft: expect.any(String), core: expect.any(String) });
-    expect(await db.order.findFirstOrThrow({ where: { workspaceId: s.owner.workspaceId } })).toMatchObject({ address: 'Cité des 200 logements, Bt 4, Bab Ezzouar', clientName: 'Amine Benali' });
+    expect(await db.order.findFirstOrThrow({ where: { workspaceId: s.owner.workspaceId } })).toMatchObject({ address: 'Cité des 200 logements, Bt 4', clientName: 'Amine Benali' }); // journey retest R11-4: the commune / wilaya are stored apart (communeName), never at the end of the street
     await resetAi();
     fakeAi(app).script('reply', { toolCalls: [createCall(s, { address: 'cité 200 logements bt 4' })] }, { reply: 'Déjà enregistrée', intent: 'SALE' });
     const again = await turn(s, sender, 'oui je confirme');
@@ -183,7 +183,7 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     await recap(s, sender);
     fakeAi(app).script('reply', { toolCalls: [createCall(s, { address: 'Cité des 200 logements, Bt 9, Bab Ezzouar' })] }, { reply: 'Nouveau récapitulatif.', intent: 'SALE' });
     const moved = await turn(s, sender, 'oui mais c’est le Bt 9');
-    expect(lastResult(moved.runs)).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recap: { address: 'Cité des 200 logements, Bt 9, Bab Ezzouar' } });
+    expect(lastResult(moved.runs)).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recap: { address: 'Cité des 200 logements, Bt 9' } }); // R11-4: « street » — the recap adds « , Bab Ezzouar, Alger »
     await resetAi();
     fakeAi(app).script('reply', { toolCalls: [createCall(s, { address: 'Cité des 200 logements, Bt 9, Bab Ezzouar', items: [{ productId: s.robe.id, quantity: 2 }] })] }, { reply: 'Nouveau récapitulatif.', intent: 'SALE' });
     const more = await turn(s, sender, 'oui');

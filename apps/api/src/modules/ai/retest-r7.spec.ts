@@ -87,9 +87,9 @@ describe('R7-2 — a photo request for a product without a photo is answered « 
   it.each([N9_C, 'Envoyez-moi une photo svp', 'vous avez des photos de la djellaba ?', 'عندكم تصاور تاع الجلابة ؟', 'sifetli tsawer ta3 tapis de prière', 'Can I see a picture?'])('« %s » asks for a photo', (t) => expect(photoAsked(t)).toBe(true));
   it.each(['Je veux la robe comme sur la photo', 'Je vous envoie la photo du modèle', 'Bonjour, je veux la robe kabyle', 'kima f tswira'])('« %s » does not', (t) => expect(photoAsked(t)).toBe(false));
   it.each(['Ma 3andnach tsawer ta3ou f had lwaqt.', "Nous n'avons pas encore de photo de ce produit.", "We don't have a photo of it yet.", 'ما عندناش تصاور تاعو درك.', 'Pas de photo pour le moment.'])('« %s » says there is none', (t) => expect(noPhotoSaid(t)).toBe(true));
-  it.each(['Hak tsawer ta3 la robe.', 'Robe kabyle brodée bil yed, b tissu léger.'])('« %s » does not', (t) => expect(noPhotoSaid(t)).toBe(false));
+  it.each(['Hak tsawer ta3 la robe.', 'Robe kabyle brodée bil yed, b qmach khfif.'])('« %s » does not', (t) => expect(noPhotoSaid(t)).toBe(false));
   it('the sentence in the customer’s language, first; the details offered when the reply gives none', () => {
-    expect(noPhotoReply('Robe kabyle brodée bil yed, b tissu léger. Kayen f taille S w M b 4900 DA.', 1, 'arabizi')).toBe('Ma 3andnach tsawer ta3ou f had lwaqt. Robe kabyle brodée bil yed, b tissu léger. Kayen f taille S w M b 4900 DA.');
+    expect(noPhotoReply('Robe kabyle brodée bil yed, b qmach khfif. Kayen f taille S w M b 4900 DA.', 1, 'arabizi')).toBe('Ma 3andnach tsawer ta3ou f had lwaqt. Robe kabyle brodée bil yed, b qmach khfif. Kayen f taille S w M b 4900 DA.');
     expect(noPhotoReply('Wach men taille t7ebb ?', 1, 'arabizi')).toBe('Ma 3andnach tsawer ta3ou f had lwaqt, bessah nqder n9ollek ga3 les détails. Wach men taille t7ebb ?');
     expect(noPhotoReply('', 2, 'fr')).toBe("Nous n'avons pas encore de photo de ces produits, mais je peux vous donner tous les détails.");
     expect(noPhotoReply('Elle est en soie.', 1, 'ar')).toBe('ما عندناش تصاور تاعو درك، بصح نقدر نقولك كامل التفاصيل. Elle est en soie.');
@@ -106,17 +106,17 @@ describe('R7-2 — a photo request for a product without a photo is answered « 
     return { reply: r.ok ? r.output.reply : '', calls: gateway.calls.length };
   };
   it('the turn — N9 T1: the guard rewrote the draft (« nwarrik ») and the rewrite says nothing of the photo ⇒ the server says it first', async () => {
-    const draft = 'Robe kabyle brodée bil yed, b tissu léger. Kayen f taille S w M b 4900 DA. T7ebb nwarrik wach men taille ?';
-    const rewrite = 'Robe kabyle brodée bil yed, b tissu léger. Kayen f taille S w M b 4900 DA. Wach men taille t7ebb ?';
+    const draft = 'Robe kabyle brodée bil yed, b qmach khfif. Kayen f taille S w M b 4900 DA. T7ebb nwarrik wach men taille ?';
+    const rewrite = 'Robe kabyle brodée bil yed, b qmach khfif. Kayen f taille S w M b 4900 DA. Wach men taille t7ebb ?';
     const a = await run(N9_C, ['robe'], draft, rewrite);
     expect(a.calls).toBe(2);
     expect(a.reply).toBe(`Ma 3andnach tsawer ta3ou f had lwaqt. ${rewrite}`);
   });
   it('the turn: the reply says it already, a product with a photo is sent, or no photo was asked ⇒ nothing added', async () => {
-    const said = 'Ma 3andnach tsawer ta3ha f had lwaqt. Robe brodée bil yed, b tissu léger.';
+    const said = 'Ma 3andnach tsawer ta3ha f had lwaqt. Robe brodée bil yed, b qmach khfif.';
     expect((await run(N9_C, ['robe'], said)).reply).toBe(said);
     expect((await run('ab3athli tswira ta3 sac', ['sac'], 'Sac à main cuir, kayen f noir w marron.')).reply).toBe('Sac à main cuir, kayen f noir w marron.');
-    expect((await run('Salam, 9olli 3la la robe kabyle brodée', ['robe'], 'Robe kabyle brodée bil yed, b tissu léger.')).reply).toBe('Robe kabyle brodée bil yed, b tissu léger.');
+    expect((await run('Salam, 9olli 3la la robe kabyle brodée', ['robe'], 'Robe kabyle brodée bil yed, b qmach khfif.')).reply).toBe('Robe kabyle brodée bil yed, b qmach khfif.');
     // no card and no product of a tool: the server cannot tell which product — nothing is added
     expect((await run(N9_C, [], 'Wach men robe t7ebb ?')).reply).toBe('Wach men robe t7ebb ?');
   });

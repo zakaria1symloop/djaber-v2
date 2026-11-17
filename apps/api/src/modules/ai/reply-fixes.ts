@@ -99,10 +99,21 @@ export const withOrderStatusWording = (reply: string, lookups: unknown[]): strin
       if (/^(?:is\s+)?on\s/iu.test(m)) return `${/^is/iu.test(m) ? 'is ' : ''}${NOT_SENT.en}${tail}`;
       return `${/^est/iu.test(m) ? 'est ' : ''}${NOT_SENT.fr}${tail}`;
     });
-  return out === reply ? reply : out.replace(/[ \t]{2,}/g, ' ').replace(/\s+([.,،!?؟])/gu, '$1').trim();
+  // journey retest R11-6 (17/11): « درك عند الشركة » for an order not sent yet (N11 T3) — the shop has it: « عندنا »
+  const shop = out.replace(/(?<![\p{L}])عند\s+الشركة(?![\p{L}])/gu, 'عندنا');
+  return shop === reply ? reply : shop.replace(/[ \t]{2,}/g, ' ').replace(/\s+([.,،!?؟])/gu, '$1').trim();
 };
-/** journey retest R9-3: « درك » and « دروك » in one reply (N11 T3) — one word, the prompt's « درك ». */
-export const withOneNowWord = (reply: string): string => (/(?<![\p{L}])درك(?![\p{L}])/u.test(reply) ? reply.replace(/(?<![\p{L}])دروك(?![\p{L}])/gu, 'درك') : reply);
+/**
+ * journey retest R9-3: « درك » and « دروك » in one reply (N11 T3) — one word, the prompt's « درك ».
+ * Journey retest R11-6 (17/11): and « درك » once — « طلبيتك … درك عند الشركة … ما عندهاش رقم تتبع درك » (two sentences): the later ones
+ * are dropped.
+ */
+export const withOneNowWord = (reply: string): string => {
+  const one = /(?<![\p{L}])درك(?![\p{L}])/u.test(reply) ? reply.replace(/(?<![\p{L}])دروك(?![\p{L}])/gu, 'درك') : reply;
+  let seen = 0;
+  const out = one.replace(/[ \t]*(?<![\p{L}])درك(?![\p{L}])/gu, (m) => (seen++ ? '' : m));
+  return out === one ? one : out.replace(/[ \t]+([.,،!?؟])/gu, '$1');
+};
 /** An opening yes (« Ih, », « Oui, », « Yes, », « إيه، »). */
 const OPENING_YES = /^(?:ih|iyeh|iyyeh|oui|ouais|yes|yeah|ايه|إيه|ايوه|نعم|واه)\s*[,،!]\s*/iu;
 /** Words that make a message a yes / no question without a question mark (« kayen tapis ? », « 3andkom … », « disponible »), or a yes / no itself. */
@@ -132,6 +143,11 @@ export const withoutNameInPriceSlot = (reply: string): string => reply.replace(N
 const ARABIZI_FOR: [RegExp, (m: string, ...g: string[]) => string][] = [
   [/(?<![\p{L}'’])mais(?![\p{L}])/giu, (m) => (m[0] === 'M' ? 'Bessah' : 'bessah')],
   [/(?<![\p{L}])(les\s+(?:tailles|couleurs|pointures|mod[eè]les))\s+disponibles(?![\p{L}])/giu, (_m, what: string) => `${what} li kaynin`],
+  // journey retest R11-6 (17/11): N9 T1 « brodée b la main w b tissu léger, zina l les fêtes »
+  [/(?<![\p{L}])b\s+la\s+main(?![\p{L}])/giu, () => 'b lyedd'],
+  [/(?<![\p{L}])tissu\s+l[ée]ger(?![\p{L}])/giu, () => 'qmach khfif'],
+  [/(?<![\p{L}])l\s+les\s+f[êe]tes(?![\p{L}])/giu, () => 'l l3rass w lmounasabat'],
+  [/(?<![\p{L}])les\s+f[êe]tes(?![\p{L}])/giu, () => 'l3rass w lmounasabat'],
 ];
 export const withArabiziWords = (reply: string, lang: AiLanguage | string | undefined): string =>
   lang === 'arabizi' ? ARABIZI_FOR.reduce((t, [re, to]) => t.replace(re, to as (m: string, ...g: string[]) => string), reply) : reply;

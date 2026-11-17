@@ -18,7 +18,7 @@ import { AI_GATEWAY, AiProviderError, type AiGateway, type AiMessage, type AiToo
 import { RoutingService, type RoutedModel } from './routing.service';
 import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
-import { allowedHandoffReasons, establishedReasons, fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, orderDetailsMessage, type HandoffRefusal } from './handoff-judge';
+import { allowedHandoffReasons, establishedReasons, fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, messageHandoffReasons, orderDetailsMessage, placeCandidate, type HandoffRefusal } from './handoff-judge';
 import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, quoteFacts, stripMarkdown, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
 import { asksDelivery, asksSomething, blockedOrderText, confirmRequest, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, withoutRecapClaims } from './tools/order-confirmation-text';
 import { cancelAsked, confirmation, phonesIn, recapPending } from './tools/order-confirmation';
@@ -29,6 +29,12 @@ import { fillerMessage, noPhotoReply, noPhotoSaid, photoAsked, withArabiziWords,
 import { serverTextLanguage } from './language';
 import { foldGuard, splitSentences } from './reply-guard';
 
+/**
+ * journey retest R11-5 (17/11): asked once when the answer and its format retry both failed the reply schema and nothing could be
+ * salvaged — the message to the customer as plain text, which the server sends like a salvaged answer (status OK).
+ */
+export const PLAIN_TEXT_REMINDER =
+  'Your last two answers could not be read. Write ONLY your message to the customer now, as plain text in their language: no JSON, no braces, no code, no field names, nothing before or after it.';
 /** journey retest R1-1: told to the model on a message that only gives an order field (handoff_to_human is not offered). */
 export const FIELD_ONLY_NOTE =
   'THIS MESSAGE only gives an order field (a name, a phone number, a place, an address) or answers yes: record it and answer — ask the next missing field, or call create_order for the recap when every field is known. handoff_to_human is not available for this message.';
@@ -82,11 +88,13 @@ const REFUSED_ORDER = new Set(['VALIDATION', 'VARIANT_REQUIRED', 'PRODUCT_NOT_AV
  * journey retest R8-1 / R8-2: the last create_order of the turn was refused (no recap, no order) — with the first field it asked
  * for; null when it returned a recap, placed the order, or was not called.
  */
-export const refusedOrder = (executed: Pick<ExecutedTool, 'name' | 'result'>[]): { field: string | null; code: string } | null => {
+export const refusedOrder = (executed: Pick<ExecutedTool, 'name' | 'result'>[]): { field: string | null; code: string; argsOnly: boolean } | null => {
   const last = [...executed].reverse().find((t) => canonicalTool(t.name) === 'create_order');
-  const r = last?.result as { ok?: unknown; error?: { code?: unknown; field?: unknown } } | null | undefined;
+  const r = last?.result as { ok?: unknown; error?: { code?: unknown; field?: unknown; missing?: unknown; malformed?: unknown } } | null | undefined;
   if (!r || r.ok === true || !REFUSED_ORDER.has(String(r.error?.code ?? ''))) return null;
-  return { field: r.error?.code === 'VALIDATION' && typeof r.error.field === 'string' ? r.error.field : null, code: String(r.error?.code) };
+  // journey retest R11-1: a malformed value (`items` sent as a string / code) asks the customer nothing — no field to ask
+  const malformed = r.error?.malformed === true;
+  return { field: r.error?.code === 'VALIDATION' && typeof r.error.field === 'string' && !malformed ? r.error.field : null, code: String(r.error?.code), argsOnly: r.error?.code === 'VALIDATION' && r.error.missing !== true };
 };
 /** journey retest R10-2: refusals of the product itself (nothing of it can be ordered) — « noté » after one is a false claim. */
 const PRODUCT_REFUSALS = new Set(['ORDER_INSUFFICIENT_STOCK', 'PRODUCT_NOT_AVAILABLE']);
@@ -132,6 +140,21 @@ export const searchAnswered = (query: unknown, executed: Pick<ExecutedTool, 'nam
     return words.every((w) => names.has(w));
   });
   return hits.length ? { products: hits, repeated: true, instruction: 'These products were already found in this turn (above): no new search is needed — answer the customer now.' } : null;
+};
+/**
+ * journey retest R11-3 (17/11): on a message that only gives an order field (a name, a phone, a place, a yes), a `search_products`
+ * whose words all name one product the prompt's CATALOGUE lists (with its ids) is not run — N21 T2 / T3 `search_products {«Hijab
+ * soie»}` on « نادية قاسي » and « 0661234568 », F1b2 T2 on « Sétif, El Eulma ». Null when the query asks for something else.
+ */
+export const catalogueAnswered = (query: unknown, catalogueNames: readonly string[] | undefined): Record<string, unknown> | null => {
+  if (typeof query !== 'string' || !catalogueNames?.length) return null;
+  const words = foldGuard(query).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2 && !SEARCH_FILLERS.has(w));
+  if (!words.length) return null;
+  const hits = catalogueNames.filter((n) => {
+    const names = new Set(n.split(/[^\p{L}\p{N}]+/u));
+    return words.every((w) => names.has(w));
+  });
+  return hits.length === 1 ? { products: [], inCatalogue: true, instruction: `« ${query} » is listed in the CATALOGUE above with its [ID] (and [VID] of each variant): no search is needed on a message that only gives an order field — answer the customer now (ask the next missing field, or call create_order with those ids when every field is known).` } : null;
 };
 /** journey retest R1-1: the result given back for a call to a tool this step did not offer (it is not run). */
 export const unavailableTool = (name: string, fieldOnly: boolean, noPhone = false, noPlace = false, noStreet = false) => ({
@@ -301,14 +324,25 @@ export class AiRunService implements OnModuleInit {
     const usage: AiUsage = { inputTokens: 0, outputTokens: 0 };
     const messages: AiMessage[] = [...req.prompt.messages];
     // full-test 15/11 AI-CHAT-07: no handoff tool on a message that is only an order field (refused every time, 5–10 s each)
-    const fieldOnly = fieldOnlyMessage(req.toolCtx.customerText, !!req.toolCtx.ordering);
+    // journey retest R11-3 (17/11): an order is being taken as soon as the customer gave a phone number — `ordering` (a product in
+    // the model's `cart`, or a recap) was empty after a first answer with no tool, so « Sétif, El Eulma » was no field message and
+    // got `handoff_to_human` probes (F1b T2 in 3 runs out of 3); a message that only names the wilaya / commune is a field too
+    const phoneSoFar = req.toolCtx.customerHistory !== undefined && phonesIn(req.toolCtx.customerHistory).size > 0;
+    let fieldOnly = fieldOnlyMessage(req.toolCtx.customerText, !!req.toolCtx.ordering || phoneSoFar);
+    const short = (req.toolCtx.customerText ?? '').trim();
+    if (!fieldOnly && placeCandidate(short)) {
+      const idx = await placeIndex().catch(() => null);
+      fieldOnly = !!idx && placeOnlyMessage(idx, short);
+    }
     // journey retest R7-4: nor on a message that gives the order's details with a phone and asks nothing of the team (N5 T2
     // `handoff_to_human { off_catalogue, evidence « none » }` next to the recap) — `status = HANDOFF` stays judged
     const orderDetails = !fieldOnly && orderDetailsMessage(req.toolCtx.customerText, (t) => phonesIn(t).size > 0);
     const noHandoff = fieldOnly || orderDetails;
     // journey retest R3-3: the handoff tool carries only the reasons this agent's rules allow now (no `other` without shop rules)
     // journey retest R6-5: and `keyword` only when one of the agent's keywords is in the customer's message
-    const reasons = allowedHandoffReasons(req.toolCtx.agent, req.toolCtx.unclearStreak ?? 0, req.toolCtx.customerText);
+    // journey retest R11-2 / R11-3 (17/11): and only the reasons this message can carry (`off_catalogue` was accepted on « vous avez des
+    // lunettes de soleil ? » + full order details; `customer_request` probes on « Sétif, El Eulma », « 05559876 ») — none ⇒ no tool
+    const reasons = messageHandoffReasons(allowedHandoffReasons(req.toolCtx.agent, req.toolCtx.unclearStreak ?? 0, req.toolCtx.customerText), req.toolCtx.customerText, (t) => phonesIn(t).size > 0);
     // journey retest R5-6: no create_order while the customer has given no phone number (every such call is refused) — the
     // probes `create_order {}` / placeholder values came on such turns; a complete order message carries its phone and keeps it
     const noPhone = !(await this.phoneGiven(req.toolCtx));
@@ -332,7 +366,9 @@ export class AiRunService implements OnModuleInit {
     const noCancel = orderDetails || (said !== undefined && !cancelAsked(said, req.toolCtx.customerHistory));
     // journey retest R10-3: no lookup_order on a message that only gives a name / a place, no add_faq_candidate on a message that
     // asks nothing (N4 T2 « سمير بن علي » ⇒ `lookup_order {}` + an internal note as an FAQ candidate; N5 T2 an unasked question)
-    const noLookup = noLookupFor(said, fieldOnly);
+    // journey retest R11-3 (17/11): nor on a message that gives the order's details and says nothing about an earlier order (N3 T1
+    // « Bonjour, je voudrais 2 tapis de prière. Samira Benali, 0661234567 » ⇒ `lookup_order {}`, 0 order)
+    const noLookup = noLookupFor(said, fieldOnly) || (said !== undefined && orderDetailsMessage(said, (t) => phonesIn(t).size > 0, true) && !ORDER_WORD.test(foldGuard(said)));
     const noFaq = said !== undefined && !asksSomething(said);
     const withheld = (name: string) =>
       (name === 'handoff_to_human' && (noHandoff || !reasons.length)) || (name === 'create_order' && (noPhone || noPlace || noStreet)) || (name === 'cancel_order' && noCancel) || (name === 'lookup_order' && noLookup) || (name === 'add_faq_candidate' && noFaq);
@@ -373,6 +409,8 @@ export class AiRunService implements OnModuleInit {
     let toolRounds = 0;
     let handoffAsked = false;
     let confirmAsked = false;
+    // journey retest R11-5: the plain-text step after the format reminder was asked (once)
+    let plainAsked = false;
     let handoffRefused: HandoffRefusal | undefined;
     // journey retest R2-4: create_order is withdrawn for the rest of the turn once it answered for good (orderClosedBy), and a
     // call identical to one already answered this turn gets that answer back without running again
@@ -476,7 +514,8 @@ export class AiRunService implements OnModuleInit {
       }
       return enforce(output, output.reply, violations, violations, false, extra);
     };
-    for (let step = 0; step < MAX_STEPS + 1; step++) {
+    // journey retest R11-5: one more step than the loop's own when the plain-text step is asked
+    for (let step = 0; step < MAX_STEPS + 1 + (plainAsked ? 1 : 0); step++) {
       const left = req.deadline - Date.now();
       if (left <= 0) return guardFallback() ?? { ok: false, kind: 'provider', error: 'timeout', tools: executed, usage, model, usedFallback };
       // the corrective turn of the guard is offered no tool: an order or a cancellation is never done twice
@@ -516,7 +555,8 @@ export class AiRunService implements OnModuleInit {
             continue;
           }
           // journey retest R10-3: a search for a product this turn already returned is answered with it (F1 T1, N12 T1)
-          const known = canonicalTool(call.name) === 'search_products' ? searchAnswered(call.args?.query, executed) : null;
+          // journey retest R11-3: on a field message, nor one for a product the CATALOGUE lists (N21 T2 / T3)
+          const known = canonicalTool(call.name) === 'search_products' ? (searchAnswered(call.args?.query, executed) ?? (fieldOnly ? catalogueAnswered(call.args?.query, req.guard?.catalogueNames) : null)) : null;
           if (known) {
             messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: known });
             continue;
@@ -550,7 +590,8 @@ export class AiRunService implements OnModuleInit {
             continue;
           }
           // journey retest R10-3: a search for a product this turn already returned is answered with it (F1 T1, N12 T1)
-          const known = canonicalTool(call.name) === 'search_products' ? searchAnswered(call.args?.query, executed) : null;
+          // journey retest R11-3: on a field message, nor one for a product the CATALOGUE lists (N21 T2 / T3)
+          const known = canonicalTool(call.name) === 'search_products' ? (searchAnswered(call.args?.query, executed) ?? (fieldOnly ? catalogueAnswered(call.args?.query, req.guard?.catalogueNames) : null)) : null;
           if (known) {
             messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: known });
             continue;
@@ -597,7 +638,9 @@ export class AiRunService implements OnModuleInit {
         // journey retest R10-2 (17/11): an answer that asks the customer to confirm while no server recap waits (N5 T3 « Pour
         // confirmer : vous voulez bien le Coffret … ? ») is sent back once with the tools still offered — create_order gives the
         // recap the customer confirms (or the missing field is asked); a second such answer goes through the reply guard
-        if (!confirmAsked && req.guard && parsed.value.status !== 'HANDOFF' && !forcedHandoff && step < MAX_STEPS && !pendingBefore && !recapNow() && !confirmationNow() && !refusedOrder(executed) && !orderClosed && defs.some((d) => d.name === 'create_order') && toolRounds < (fieldOnly ? 2 : MAX_STEPS - 1) && splitSentences(parsed.value.reply).some(confirmRequest)) {
+        // journey retest R11-1 (17/11): also after a create_order refused for its arguments only (`items` that could not be read,
+        // F1b T3) while create_order is still offered — never after a refusal of the product (stock) or a field to ask
+        if (!confirmAsked && req.guard && parsed.value.status !== 'HANDOFF' && !forcedHandoff && step < MAX_STEPS && !pendingBefore && !recapNow() && !confirmationNow() && (refusedOrder(executed)?.argsOnly ?? true) && !orderClosed && defs.some((d) => d.name === 'create_order') && toolRounds < (fieldOnly ? 2 : MAX_STEPS - 1) && splitSentences(parsed.value.reply).some(confirmRequest)) {
           confirmAsked = true;
           messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: CONFIRM_WITHOUT_RECAP_NOTE });
           continue;
@@ -633,6 +676,13 @@ export class AiRunService implements OnModuleInit {
         const salvaged = salvageReply(firstAnswer) ?? salvageReply(res.value.text);
         // §4.3: no corrective turn after a format retry — the guard's last word applies at once
         if (salvaged) return guarded(salvaged, { salvaged: true }, false) as TurnResult;
+        // journey retest R11-5 (17/11): still nothing to send (F8 T1 `malformed_output:schema:reply` ⇒ 503 « L'IA n'a pas répondu »)
+        // ⇒ one last step asking for the message as plain text (no tool: nothing runs twice), sent like a salvaged answer
+        if (!plainAsked && req.deadline - Date.now() > 1000) {
+          plainAsked = true;
+          messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: PLAIN_TEXT_REMINDER });
+          continue;
+        }
         return { ok: false, kind: 'format', error: `malformed_output:${parsed.reason}`, tools: executed, usage, model, usedFallback };
       }
       firstAnswer = res.value.text;

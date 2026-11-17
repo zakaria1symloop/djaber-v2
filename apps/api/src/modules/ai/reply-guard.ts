@@ -116,6 +116,8 @@ export type GuardFacts = {
   productRefused?: boolean;
   /** journey retest R10-2: no server recap waits for a « oui » (none this turn, none of an earlier turn still open, no order placed now) */
   noRecapPending?: boolean;
+  /** journey retest R11-3: the folded names (with their variant names) of the products the prompt's CATALOGUE lists, ids included */
+  catalogueNames?: string[];
 };
 export type OrderField = 'name' | 'phone' | 'wilaya' | 'commune' | 'address';
 /** What a successful quote_delivery answered: the reply must give one of its fees (or say it is free). */
@@ -483,7 +485,9 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   // journey retest R8-1 / R8-2: create_order was refused this turn — no recap is shown, so no request to confirm, no « recap coming »
   if (facts.orderRefused) parts.forEach((s, i) => {
     // journey retest R10-2: « Je vous ai bien noté » after the product was refused (N5 T2, out of stock) — nothing was noted
-    if (recapClaim(s) || (facts.productRefused && notedClaim(s))) out.push({ rule: 'confirm_without_recap', sentence: i });
+    // journey retest R11-1 (17/11): and the R10-2 request to confirm runs on this turn too (F1b T3 `create_order` refused, then
+    // « Pouvez-vous confirmer pour que je passe la commande ? » — neither list had that wording)
+    if (recapClaim(s) || confirmRequest(s) || (facts.productRefused && notedClaim(s))) out.push({ rule: 'confirm_without_recap', sentence: i });
   });
   // journey retest R10-2 (17/11): no server recap waits at all — a request to confirm the order confirms nothing (N5 T3 « Pour
   // confirmer : vous voulez bien le Coffret … ? », two « oui » spent before the recap)
@@ -643,7 +647,7 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
         ? "- NOTHING IS ORDERED OR NOTED: create_order refused the product (out of stock / not available). Never say « noté », « enregistré », « c'est pris » or ask to confirm: say plainly in one sentence that this product cannot be ordered now, then ask in one question whether they want an in-stock product instead (name it)."
         : !facts.orderRefused && facts.noRecapPending
           ? '- NO RECAP HAS BEEN SHOWN for this order: never ask the customer to confirm it yourself (« pour confirmer … ? », « tu confirmes ? », « répondez oui ») — they confirm the recap create_order shows. Ask the one missing field, or ask whether they want the product (« Voulez-vous le … ? »).'
-          : `- NO RECAP WAS SHOWN in this turn (create_order did not return one): never ask the customer to confirm the order or to answer « oui » again, and never say a recap is coming. ${facts.missingField ? `Ask for ${FIELD_NAMES[facts.missingField] ?? facts.missingField} in one short question, in the customer's language.` : 'Say in one short sentence what create_order answered.'}`,
+          : `- NO RECAP WAS SHOWN in this turn (create_order did not return one): never ask the customer to confirm the order or to answer « oui » again, and never say a recap is coming. ${facts.missingField ? `Ask for ${FIELD_NAMES[facts.missingField] ?? facts.missingField} in one short question, in the customer's language.` : "Answer the customer's message in one short sentence and ask what is still missing, if anything — never a request to confirm, never a word about a technical refusal."}`,
     );
   if (rules.includes('fee_missing'))
     lines.push(`- DELIVERY FEE: quote_delivery answered ${(facts.quotes ?? []).map(quoteText).join('; ')}. Give that fee in the reply (home and stop-desk when both are known), in the customer's language: it is the answer to their question.`);
@@ -904,6 +908,7 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
     ...(unavailable.length ? { unavailable, unavailableNames: out.map((p) => p.name), available } : {}),
     ...(noPhoto.length ? { noPhoto } : {}),
     ...(i.galleries?.length ? { galleries: i.galleries } : {}),
+    ...(i.products.length ? { catalogueNames: i.products.map((p) => foldGuard([p.name, ...p.variants.map((v) => v.name)].join(' '))) } : {}),
   };
   return i.earlierToolResults?.length ? withToolResults(base, i.earlierToolResults) : base;
 }
