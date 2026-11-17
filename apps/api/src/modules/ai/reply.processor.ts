@@ -46,6 +46,12 @@ export type ReplyOutcome = 'sent' | 'noop' | 'empty' | 'exhausted' | 'failed' | 
 type JobInfo = Pick<Job, 'attemptsMade' | 'opts'>;
 type Batch = { messages: Message[]; text: string; plain: string; hasAudio: boolean; images: { messageId: string; index: number; storageKey: string | null; mime: string }[] };
 
+/** PV 09/11: the products whose « Plus de photos » the customer tapped in this batch (their gallery is sent). */
+const photosTapped = (b: Pick<Batch, 'messages'>): string[] =>
+  b.messages.flatMap((m) => {
+    const hit = CARD_POSTBACK.exec((m.payload as { postback?: string } | null)?.postback ?? '');
+    return hit && hit[1]!.toUpperCase() === 'PHOTOS' ? [hit[2]!] : [];
+  });
 /** A photo of the batch the `media` job has not stored yet (neither stored nor failed). */
 const mediaPending = (b: Batch) => b.messages.some((m) => attachmentsOf(m).some((a) => a.type === 'image' && a.pending && !a.error));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -285,7 +291,7 @@ export class ReplyProcessor implements OnModuleInit {
     // §4.3 reply guard: the facts of this turn — the prompt's catalogue and shop texts, the fees / totals the tools gave in the
     // earlier turns of the conversation, whether the AI already answered this visit (the NEW_VISIT / RESUMED notes of the history)
     const earlier = await prisma.aiToolCall.findMany({ where: { executedAt: { not: null }, aiRun: { conversationId: conv.id, id: { not: run.id } } }, orderBy: { executedAt: 'desc' }, take: GUARD_EARLIER_TOOL_CALLS, select: { result: true } });
-    const guard = guardFactsOf(turnCtx.prompt, { customerText: batch.plain, answeredBefore: history.messages.some((m) => m.author === 'ai' || m.author === 'human'), freshStart: history.newVisit || history.resumed, earlierToolResults: earlier.map((c) => c.result) });
+    const guard = guardFactsOf(turnCtx.prompt, { customerText: batch.plain, answeredBefore: history.messages.some((m) => m.author === 'ai' || m.author === 'human'), freshStart: history.newVisit || history.resumed, earlierToolResults: earlier.map((c) => c.result), galleries: photosTapped(batch) });
 
     // full-test 15/11 AI-CHAT-01: create_order needs a recap of an earlier turn and a phone the customer typed
     const [orderHistory, customerRows] = await Promise.all([
@@ -366,10 +372,7 @@ export class ReplyProcessor implements OnModuleInit {
     const cards = blocked ? [] : (await this.catalogue.byIds(agent, out.productCards)).map((p) => p.id);
     // PV 09/11 « l'agent répond avec seulement l'image principale »: every picture of a product (a gallery) when the customer
     // tapped « Plus de photos » on a card or asked for more photos (`productPhotos`) — products the agent may sell only
-    const askedPhotos = batch.messages.flatMap((m) => {
-      const hit = CARD_POSTBACK.exec((m.payload as { postback?: string } | null)?.postback ?? '');
-      return hit && hit[1]!.toUpperCase() === 'PHOTOS' ? [hit[2]!] : [];
-    });
+    const askedPhotos = photosTapped(batch);
     const galleries = blocked ? [] : (await this.catalogue.byIds(agent, [...new Set([...askedPhotos, ...(out.productPhotos ?? [])])])).map((p) => p.id).slice(0, 2);
     const toolProducts = turn.tools.flatMap((t) => ((t.result as { products?: { id: string }[] } | null)?.products ?? []).map((p) => p.id).slice(0, 3));
     const last = batch.messages[batch.messages.length - 1]!;

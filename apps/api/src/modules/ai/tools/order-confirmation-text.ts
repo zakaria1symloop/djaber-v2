@@ -86,7 +86,7 @@ const T: Record<Loc, { head: (n: string) => string; again: (n: string) => string
 const locOf = (lang: AiLanguage | string | undefined): Loc => (lang === 'ar' ? 'ar' : lang === 'arabizi' ? 'arabizi' : lang === 'en' ? 'en' : 'fr');
 
 // --- the recap (journey retest R1-6 / R1-7, 17/11) ---------------------------------------------------------------------------
-type Recap = { items: Line[]; deliveryFee: number; total: number; clientName: string; clientPhone: string; secondPhone: string | null; wilaya: string; communeName: string | null; address: string | null; isStopdesk: boolean; replaces: string | null; /** journey retest R2-7 */ wilayaAr?: string | null; communeAr?: string | null };
+type Recap = { items: Line[]; deliveryFee: number; total: number; clientName: string; clientPhone: string; secondPhone: string | null; wilaya: string; communeName: string | null; address: string | null; isStopdesk: boolean; replaces: string | null; /** journey retest R2-7 */ wilayaAr?: string | null; communeAr?: string | null; /** journey retest R6-3: part of it is sold beyond the stock */ beyondStock?: boolean };
 const s = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 /**
  * The recap a `create_order` of this turn returned for the customer to confirm (`CONFIRMATION_REQUIRED` of a first recap,
@@ -113,16 +113,17 @@ export const pendingRecap = (calls: { name: string; result: unknown }[]): Recap 
       replaces: s(p.replaces) || null,
       wilayaAr: s(p.wilayaAr) || null,
       communeAr: s(p.communeAr) || null,
+      beyondStock: Array.isArray(p.beyondStock) && p.beyondStock.length > 0,
     };
   }
   return null;
 };
 
-const R: Record<Loc, { comma: string; head: string; home: (place: string) => string; stop: (place: string) => string; free: string; total: (v: string) => string; name: string; phone: string; phone2: string; address: string; replaces: (n: string) => string; ask: string; cur: string; sep: string }> = {
-  fr: { comma: ', ', head: 'Voici le récapitulatif de votre commande :', home: (p) => `Livraison à domicile${p ? ` (${p})` : ''}`, stop: (p) => `Livraison en stop-desk${p ? ` (${p})` : ''}`, free: 'gratuite', total: (v) => `Total : ${v}, à payer à la livraison.`, name: 'Nom', phone: 'Téléphone', phone2: 'Deuxième téléphone', address: 'Adresse', replaces: (n) => `Elle remplacera la commande ${n}.`, ask: 'Répondez « oui » pour confirmer la commande, ou dites-moi ce qu’il faut changer.', cur: 'DA', sep: ' : ' },
-  ar: { comma: '، ', head: 'هذا ملخص الطلبية:', home: (p) => `التوصيل للدار${p ? ` (${p})` : ''}`, stop: (p) => `التوصيل لنقطة الاستلام${p ? ` (${p})` : ''}`, free: 'مجاني', total: (v) => `المجموع: ${v}، الدفع عند الاستلام.`, name: 'الاسم', phone: 'الهاتف', phone2: 'الهاتف الثاني', address: 'العنوان', replaces: (n) => `هذي الطلبية تعوض الطلبية ${n}.`, ask: 'جاوبني بـ « إيه » باش نأكدو الطلبية، ولا قولي واش نبدلو.', cur: 'دج', sep: ': ' },
-  arabizi: { comma: ', ', head: 'Hada récap ta3 la commande:', home: (p) => `Tawsil l dar${p ? ` (${p})` : ''}`, stop: (p) => `Tawsil l stop-desk${p ? ` (${p})` : ''}`, free: 'batel', total: (v) => `Total: ${v}, tkhalles ki tewsel.`, name: 'Smitek', phone: 'Numéro', phone2: 'Numéro lokhra', address: 'Adresse', replaces: (n) => `Hadi t3awed la commande ${n}.`, ask: 'Ktebli « ih » bach nconfirmi la commande, wela goulli wach nbeddlou.', cur: 'DA', sep: ': ' },
-  en: { comma: ', ', head: 'Here is your order summary:', home: (p) => `Home delivery${p ? ` (${p})` : ''}`, stop: (p) => `Stop-desk delivery${p ? ` (${p})` : ''}`, free: 'free', total: (v) => `Total: ${v}, cash on delivery.`, name: 'Name', phone: 'Phone', phone2: 'Second phone', address: 'Address', replaces: (n) => `It will replace order ${n}.`, ask: 'Reply « yes » to confirm the order, or tell me what to change.', cur: 'DA', sep: ': ' },
+const R: Record<Loc, { comma: string; head: string; home: (place: string) => string; stop: (place: string) => string; free: string; total: (v: string) => string; name: string; phone: string; phone2: string; address: string; replaces: (n: string) => string; beyond: string; ask: string; cur: string; sep: string }> = {
+  fr: { comma: ', ', head: 'Voici le récapitulatif de votre commande :', home: (p) => `Livraison à domicile${p ? ` (${p})` : ''}`, stop: (p) => `Livraison en stop-desk${p ? ` (${p})` : ''}`, free: 'gratuite', total: (v) => `Total : ${v}, à payer à la livraison.`, name: 'Nom', phone: 'Téléphone', phone2: 'Deuxième téléphone', address: 'Adresse', replaces: (n) => `Elle remplacera la commande ${n}.`, beyond: T.fr.beyond, ask: 'Répondez « oui » pour confirmer la commande, ou dites-moi ce qu’il faut changer.', cur: 'DA', sep: ' : ' },
+  ar: { comma: '، ', head: 'هذا ملخص الطلبية:', home: (p) => `التوصيل للدار${p ? ` (${p})` : ''}`, stop: (p) => `التوصيل لنقطة الاستلام${p ? ` (${p})` : ''}`, free: 'مجاني', total: (v) => `المجموع: ${v}، الدفع عند الاستلام.`, name: 'الاسم', phone: 'الهاتف', phone2: 'الهاتف الثاني', address: 'العنوان', replaces: (n) => `هذي الطلبية تعوض الطلبية ${n}.`, beyond: T.ar.beyond, ask: 'جاوبني بـ « إيه » باش نأكدو الطلبية، ولا قولي واش نبدلو.', cur: 'دج', sep: ': ' },
+  arabizi: { comma: ', ', head: 'Hada récap ta3 la commande:', home: (p) => `Tawsil l dar${p ? ` (${p})` : ''}`, stop: (p) => `Tawsil l stop-desk${p ? ` (${p})` : ''}`, free: 'batel', total: (v) => `Total: ${v}, tkhalles ki tewsel.`, name: 'Smitek', phone: 'Numéro', phone2: 'Numéro lokhra', address: 'Adresse', replaces: (n) => `Hadi t3awed la commande ${n}.`, beyond: T.arabizi.beyond, ask: 'Ktebli « ih » bach nconfirmi la commande, wela goulli wach nbeddlou.', cur: 'DA', sep: ': ' },
+  en: { comma: ', ', head: 'Here is your order summary:', home: (p) => `Home delivery${p ? ` (${p})` : ''}`, stop: (p) => `Stop-desk delivery${p ? ` (${p})` : ''}`, free: 'free', total: (v) => `Total: ${v}, cash on delivery.`, name: 'Name', phone: 'Phone', phone2: 'Second phone', address: 'Address', replaces: (n) => `It will replace order ${n}.`, beyond: T.en.beyond, ask: 'Reply « yes » to confirm the order, or tell me what to change.', cur: 'DA', sep: ': ' },
 };
 const folded = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 /** « Cité 20 Août, villa 3 » + « Boufarik » + « Blida »: the commune / wilaya are added when the address does not name them. */
@@ -134,6 +135,23 @@ const placeOf = (comma: string, base: string | null, ...more: (string | null | u
     if (m && !parts.some((p) => names.some((n) => !!n && folded(p).includes(folded(n))))) parts.push(m);
   }
   return parts.join(comma);
+};
+/**
+ * journey retest R6-4 (17/11): the commune / wilaya the address ends with, after a comma, are taken off so that they come back
+ * in the recap's order (« Cité 20 août villa 3, Blida » + Boufarik ⇒ « …, Boufarik, Blida », not « …, Blida, Boufarik »). A
+ * name not after a comma (« Rue de Boufarik ») and the first segment are never taken off.
+ */
+export const withoutTrailingPlaces = (address: string, names: (string | null | undefined)[]): string => {
+  const keys = names.filter((n): n is string => !!n && n.trim().length >= 2).map((n) => folded(n).replace(/[^\p{L}\p{N}]+/gu, ' ').trim());
+  let out = address.trim();
+  for (let guard = 0; guard < 4; guard++) {
+    const cut = Math.max(out.lastIndexOf(','), out.lastIndexOf('،'));
+    if (cut <= 0) break;
+    const tail = folded(out.slice(cut + 1)).replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    if (!tail || !keys.includes(tail) || !out.slice(0, cut).trim()) break;
+    out = out.slice(0, cut).trim();
+  }
+  return out;
 };
 const itemLine = (i: Line, amount: (n: number) => string) => {
   const qty = Number(i.quantity ?? 1) || 1;
@@ -164,8 +182,10 @@ export const orderRecapText = (recap: Recap, lang: AiLanguage | string | undefin
     ...(recap.clientName ? [`${t.name}${t.sep}${recap.clientName}`] : []),
     ...(recap.clientPhone ? [`${t.phone}${t.sep}${recap.clientPhone}`] : []),
     ...(recap.secondPhone ? [`${t.phone2}${t.sep}${recap.secondPhone}`] : []),
-    ...(!recap.isStopdesk && recap.address ? [`${t.address}${t.sep}${placeOf(t.comma, recap.address, commune, wilaya)}`] : []),
+    ...(!recap.isStopdesk && recap.address ? [`${t.address}${t.sep}${placeOf(t.comma, withoutTrailingPlaces(recap.address, [...commune, ...wilaya]), commune, wilaya)}`] : []),
     ...(recap.replaces ? [t.replaces(recap.replaces)] : []),
+    // journey retest R6-3: the model said it as « commandée au-delà du stock » (the internal idea); the server says it plainly
+    ...(recap.beyondStock ? [t.beyond] : []),
     t.ask,
   ].join('\n');
 };
@@ -173,40 +193,105 @@ export const orderRecapText = (recap: Recap, lang: AiLanguage | string | undefin
 /** Latin digits, thousands separators dropped: the numbers a text writes. */
 const numbersOf = (text: string) => new Set([...text.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/(?<=\d)[ .,\u00a0\u202f](?=\d{3}(?!\d))/g, '').matchAll(/\d+/g)].map((m) => m[0]));
 const wordsOf = (t: string) => ` ${folded(t).replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `;
+
+// --- journey retest R6-1 (17/11): what of the model's reply may stay before the server recap — an allow-list -----------------
+// R2-6 / R3-4 / R4-4 / R4-3 each added the new wording of a request to confirm to a deny-list (CONFIRM_ASK, RECAP_TALK), and R6
+// found four more (« Pouvez-vous confirmer la commande en répondant oui ? », « … ci-dessus en répondant oui ? », « Ktb "oui" bach
+// nkammlou la commande. », « la commande t7adret »). A sentence now stays only when it is (a) a thank-you / greeting lead-in that
+// says nothing else (« Merci Karim ! », « Thanks John! », « Saha Walid ! ») or (b) the answer to a question of the customer's
+// message (a fee, a delay, a product detail: « Ih, nwasslou l Constantine. », « Tawsil l dar: 700 DA. ») — and never when it
+// mentions the order, the recap, a confirmation, a « oui / ih / yes », writing or answering, in any language.
+
+/** Words of a thank-you / greeting lead-in (folded). */
+const LEAD_WORDS = new Set(
+  [
+    'merci', 'beaucoup', 'parfait', 'super', 'tres', 'bien', 'bon', 'excellent', 'choix', 'top', 'genial', 'avec', 'plaisir', 'bonjour', 'bonsoir', 'salut', 'bienvenue', 'madame', 'monsieur',
+    'thanks', 'thank', 'you', 'great', 'perfect', 'nice', 'choice', 'good', 'hello', 'hi', 'welcome', 'very', 'much', 'so',
+    'saha', 'sahit', 'sahitek', 'sahitou', 'sa7a', 'sa7it', 'yaatik', 'ya3tik', 'chokran', 'choukran', 'shukran', 'mlih', 'mli7', 'momtaz', 'khouya', 'khoya', 'khti', 'okhti', 'sahbi', 'salam', 'slm', 'marhba', 'ahla', 'ahlan', 'bik', 'baraka', 'allah', 'fik', 'tbarkallah',
+    'شكرا', 'بزاف', 'صحيت', 'صحيتو', 'صحا', 'يعطيك', 'الصحة', 'بارك', 'الله', 'فيك', 'مرحبا', 'أهلا', 'اهلا', 'السلام', 'عليكم', 'تمام', 'ممتاز', 'مليح', 'خويا', 'اختي', 'اختيار', 'زين',
+  ].map((w) => folded(w)),
+);
+/** A word of a request / talk about the order, the recap, a confirmation, writing or answering (folded; any language). */
+const ORDER_TALK =
+  /command|order|طلبي|الطلب|كوموند|komand|recap|r[eé]sum|summary|ملخص|confirm|ta2?kk?id|n?2?akk?[ei]?d(?:ou|o|i)?(?![\p{L}])|تأكيد|تاكيد|نأكد|ناكد|نكد|أكد|اكد|valid|enregistr|tsajl|msajl|sajjel|تسجيل|تسجل|نسجل|ecri|(?<![\p{L}])(?:writ|tape[zr]?|kt[e]?b(?:li)?|ktob|aktob)(?![\p{L}])|اكتب|كتب|r[eé]?pon[ds]|repl[yi]|answer|respond|جاوب|jaw[e]?b|ci[- ]dess|above|below|لتحت|الفوق|lta7t|fou9|(?<![\p{L}])(?:pr[eê]te?|ready|wajd[ae]?)(?![\p{L}])|t7adr|7adr[ea]t|جاهز|واجد|حاضر|(?<![\p{L}])not[ée]e?s?(?![\p{L}])|noted/u;
+/** « oui / ih / yes » anywhere but as the first word of an answer (« Oui, on livre à Blida. », « Ih, nwasslou l Constantine. »). */
+const YES_WORD = /(?<![\p{L}\p{N}])(?:oui|ouais|ih|iyeh|iyyeh|ey?h|wah|yes|yeah|ايه|إيه|ايوه|نعم|واه)(?![\p{L}\p{N}])/u;
+const YES_OPENER = /^[\s\p{P}]*(?:oui|ouais|non|ih|iyeh|iyyeh|ey?h|wah|lala|yes|yeah|no|ايه|إيه|ايوه|نعم|واه|لا)(?![\p{L}\p{N}])[\s,،!.]*/u;
+/** The customer's message asks something (a question mark, a question word, « dites-moi / 9olli »). Folded text. */
+const ASKS =
+  /[?؟]|(?<![\p{L}\p{N}])(?:combien|quand|comment|pourquoi|est[- ]ce|quel(?:le)?s?|how|when|what|which|where|why|do you|can you|is it|are they|ch7al|chhal|chal|9adach|qadach|kadach|wach|wa9tach|w9tach|wqtach|imta|kifach|kifech|3lach|win|wayn|9olli|goulli|gouli|dites[- ]moi|tell me|كم|شحال|قداش|وقتاش|واش|علاش|كيفاش|وين|هل|قولي|قوللي)(?![\p{L}\p{N}])/u;
+/** What an answer gives: a number, delivery, a delay, a price, a size, a colour, a fabric, the stock, the payment (folded). */
+const ANSWER_CONTENT =
+  /\d|livr|deliver|twass?l|nwass?l|ywass?l|tawsil|توص|نوص|يوص|stop.?desk|jour|day|ayam|ayyam|يوم|ايام|prix|price|taman|thaman|soum|سعر|ثمن|سومة|taille|size|ma9as|مقاس|couleur|colou?r|لون|tissu|fabric|matiere|qmach|9mach|khfif|قماش|coton|cotton|laine|soie|silk|cuir|leather|stock|disponible|available|kayen|kayna|kaynin|makach|متوفر|موجود|كاين|ماكانش|garantie|warranty|paiement|payment|cash|khlas|الدفع|خلاص|gratuit|free|batel|مجان|frais|fee|tarif/u;
+
+/** Folded, and as written in lower case (a folded hamza is decomposed: « إيه » would no longer match). */
+const bothForms = (x: string) => [folded(x), x.toLowerCase()];
+/** journey retest R6-1: a sentence that is only a thank-you / greeting (and the customer's name, or one capitalised name). */
+const leadOnly = (x: string, names: Set<string>): boolean => {
+  const raw = x.match(/[\p{L}\p{N}]+/gu) ?? [];
+  if (!raw.length || raw.length > 7) return false;
+  let lead = 0;
+  let other = 0;
+  for (const w of raw) {
+    const f = folded(w);
+    if (LEAD_WORDS.has(f)) lead++;
+    else if (names.has(f)) continue;
+    // « Merci Samir ! » for « سمير بن علي »: one other capitalised (or Arabic-script) word is the name as the model wrote it
+    else if (other === 0 && (/^\p{Lu}/u.test(w) || /[؀-ۿ]/u.test(w))) other++;
+    else return false;
+  }
+  return lead > 0;
+};
 /**
- * What the customer gets when a recap is pending: the server's recap, after the model's sentence when that sentence answers
- * something else (no amount, phone or product of the recap in it, at most 2 sentences) — any recap of the model is dropped.
+ * journey retest R6-1: the sentences of the model's reply that may go before the server recap — a thank-you lead-in, or (when
+ * the customer's message asks something) an answer that carries content and repeats none of the recap (no total, phone,
+ * address, item line). Every other sentence is dropped, whatever its wording.
+ */
+export const recapLeadIn = (reply: string, recap: Recap, customerText?: string): string[] => {
+  const all = reply.trim().split(/(?<=[.!?؟])\s+|\n+/).filter((x) => x.trim());
+  const names = new Set(wordsOf(recap.clientName).trim().split(' ').filter((w) => w.length >= 2));
+  const asked = bothForms(customerText ?? '').some((v) => ASKS.test(v));
+  const address = recap.isStopdesk ? '' : s(recap.address);
+  const itemAmounts = recap.items.map((i) => (Number(i.unitPrice ?? 0) || 0) * (Number(i.quantity ?? 1) || 1)).filter((n) => n > 0).map(String);
+  return all.filter((x) => {
+    if (aboutRecap(x) || bothForms(x).some((v) => ORDER_TALK.test(v))) return false;
+    // a « oui » the sentence asks for (not the « Oui, … » that answers a question)
+    if (bothForms(x).some((v) => YES_WORD.test(v.replace(YES_OPENER, '')))) return false;
+    if (leadOnly(x, names)) return true;
+    if (!asked || !bothForms(x).some((v) => ANSWER_CONTENT.test(v))) return false;
+    // a line of the model's own recap (« - 1 × Djellaba homme : 7 500 DA », « Total : 8 200 DA », the phone, the address)
+    const nums = numbersOf(x);
+    if (/^\s*[-•*]|×/u.test(x) || nums.has(String(recap.total)) || itemAmounts.some((n) => nums.has(n))) return false;
+    if (recap.clientPhone && nums.has(recap.clientPhone.replace(/\D/g, ''))) return false;
+    return !(address.length >= 6 && wordsOf(x).includes(wordsOf(address)));
+  });
+};
+/**
+ * What the customer gets when a recap is pending: the server's recap, after the model's sentences that may stay
+ * (`recapLeadIn`: a thank-you lead-in or the answer to a question of the customer's message, at most 2 sentences, 280
+ * characters) — any recap or request to confirm of the model is dropped.
  * Journey retest R4-3 (17/11): the model's reply is never kept as the recap, even « complete » (`recapComplete`, R1-6): a
  * product suggestion that repeated the customer's details and the price (free delivery: total = price) passed for one, with
  * no delivery line and no request to confirm.
  */
-export const recapReply = (reply: string, recap: Recap, lang: AiLanguage | string | undefined): { text: string; kept: 'prefix' | 'server' } => {
-  const full = reply.trim();
+export const recapReply = (reply: string, recap: Recap, lang: AiLanguage | string | undefined, customerText?: string): { text: string; kept: 'prefix' | 'server' } => {
   const server = orderRecapText(recap, lang);
-  // journey retest R2-6: the model's own « Répondez oui pour confirmer » is dropped — the server recap ends with the request
-  const all = full.split(/(?<=[.!?؟])\s+|\n+/).filter((x) => x.trim());
-  // journey retest R3-4: nor a sentence about the recap itself (« le récapitulatif va vous être envoyé », « Recap ydhher dork »,
-  // « I have everything for your order », « بدلنا الطلبية لـ 2 … ») — what is kept is a short lead-in or an answer to another question
-  const kept = all.filter((x) => !aboutRecap(x));
+  const kept = recapLeadIn(reply, recap, customerText);
   const text = kept.join(' ').trim();
-  const nums = numbersOf(text);
-  const w = wordsOf(text);
-  // journey retest R2-6: the address said again before the recap (« j'ai bien noté l'adresse : rue des frères Bouadou n 5 ») is part of it
-  const address = recap.isStopdesk ? '' : s(recap.address);
-  const partial = nums.has(String(recap.total)) || (!!recap.clientPhone && nums.has(recap.clientPhone.replace(/\D/g, ''))) || recap.items.some((i) => s(i.name) && w.includes(wordsOf(s(i.name)))) || (address.length >= 6 && w.includes(wordsOf(address)));
-  if (text && !partial && kept.length <= 2 && text.length <= 280) return { text: `${text}\n\n${server}`, kept: 'prefix' };
+  if (text && kept.length <= 2 && text.length <= 280) return { text: `${text}\n\n${server}`, kept: 'prefix' };
   return { text: server, kept: 'server' };
 };
 /** A request to confirm the order (folded): the server recap already ends with one. */
 // journey retest R3-4: also « استني تأكيدك بـ « إيه » », « t7ebb nkamlouh b confirmation ? », « prête à être confirmée »
 // journey retest R4-4: the darija verb « nakked / n2akked / nakkdou / ta2kid » and a bracketed « (yes / le) », « (oui / non) »
-const CONFIRM_ASK = /(?<![\p{L}\p{N}])(?:[nty](?:2|')?akk?[ei]?d(?:ou|o|i|ha|lek)?|ta2?kk?id|t2akk?id)(?![\p{L}\p{N}])|\(\s*(?:yes|oui|ih|iyeh|ey?h|wah)\s*\/\s*(?:no|non|le|la|lala|lla)\s*\)|r[e]?pond(?:ez|s)?\s+(?:par\s+)?\W{0,3}oui|(?:pour|de)\s+confirmer|confirmez|je\s+confirme\s+(?:la|votre)\s+commande|confirmation|(?:a|à)\s+[eê]tre\s+confirm|attend(?:s|ons)?\s+votre|en\s+attente\s+de\s+votre|repl(?:y|ies)\s+\W{0,3}yes|(?:say|answer)\s+\W{0,3}yes|to\s+confirm|confirm\s+(?:the|your)\s+order|(?:waiting|wait)\s+for\s+your|ktebli\s+\W{0,3}(?:ih|iyeh|oui)|goulli\s+\W{0,3}(?:ih|iyeh)|bach\s+n?confirm|n?confirmi|nestanna|جاوبني|باش\s+نأكد|باش\s+نكد|لتأكيد|للتأكيد|أكد\s+لي|تأكيد|نستنى|استنى|استني|نستنا/u;
+const CONFIRM_ASK = /(?<![\p{L}\p{N}])(?:[nty](?:2|')?akk?[ei]?d(?:ou|o|i|ha|lek)?|ta2?kk?id|t2akk?id)(?![\p{L}\p{N}])|\(\s*(?:yes|oui|ih|iyeh|ey?h|wah)\s*\/\s*(?:no|non|le|la|lala|lla)\s*\)|r[e]?pond(?:ez|s)?\s+(?:par\s+)?\W{0,3}oui|(?:pour|de)\s+confirmer|confirmez|je\s+confirme\s+(?:la|votre)\s+commande|confirmer\s+(?:la|votre|ma)\s+commande|en\s+r[eé]?pondant|(?<![\p{L}])ktb\s+\W{0,3}(?:oui|ih|iyeh)|confirmation|(?:a|à)\s+[eê]tre\s+confirm|attend(?:s|ons)?\s+votre|en\s+attente\s+de\s+votre|repl(?:y|ies)\s+\W{0,3}yes|(?:say|answer)\s+\W{0,3}yes|to\s+confirm|confirm\s+(?:the|your)\s+order|(?:waiting|wait)\s+for\s+your|ktebli\s+\W{0,3}(?:ih|iyeh|oui)|goulli\s+\W{0,3}(?:ih|iyeh)|bach\s+n?confirm|n?confirmi|nestanna|جاوبني|باش\s+نأكد|باش\s+نكد|لتأكيد|للتأكيد|أكد\s+لي|تأكيد|نستنى|استنى|استني|نستنا/u;
 /**
  * journey retest R3-4: a sentence about the recap or the order being ready — the recap that follows says it all. Words of
  * the recap (récap, summary, ملخص), its sending (« va vous être envoyé », « ydhher »), « I have everything », « commande prête »,
  * and a change described (« بدلنا الطلبية », « j'ai modifié la commande », « I've updated your order »).
  */
-const RECAP_TALK = /r[eé]?cap|r[ée]sum[ée]|summary|ملخص|voici\s+(?:votre|la)\s+commande|here(?:'s|\s+is)\s+(?:your|the)\s+order|va\s+vous\s+[eê]tre\s+envoy|vous\s+sera\s+envoy|ydh+er|yban|(?:i|we)\s+(?:have|got)\s+everything|(?:j['’]ai|on\s+a|nous\s+avons)\s+(?:bien\s+)?tout|all\s+set|(?:commande|order)\s+(?:est\s+)?(?:pr[eê]te|ready)|(?:modifi|mis\s+a\s+jour|mise\s+a\s+jour|updated|changed|bdelna|beddelna|beddelt|bedelt)\S*\s+(?:\S+\s+)?(?:la\s+|votre\s+|your\s+|the\s+)?(?:commande|order)|(?:بدلنا|بدلت|بدّلنا|عدلنا|عدلت)\s+(?:لك\s+)?(?:الطلبية|الطلب|الكوموند)|(?:commande|order)\S*\s+(?:\S+\s+){0,3}?(?:enregistr|confirm[eé]e|valid[eé]e|pass[eé]e|placed|registered|confirmed|tsajl|msajl)|تم\s+تسجيل|تسجلت\s+(?:ال)?طلبي/u;
+const RECAP_TALK = /r[eé]?cap|r[ée]sum[ée]|summary|ملخص|voici\s+(?:votre|la)\s+commande|here(?:'s|\s+is)\s+(?:your|the)\s+order|va\s+vous\s+[eê]tre\s+envoy|vous\s+sera\s+envoy|ydh+er|yban|(?:i|we)\s+(?:have|got)\s+everything|(?:j['’]ai|on\s+a|nous\s+avons)\s+(?:bien\s+)?tout|all\s+set|(?:commande|order)\s+(?:est\s+)?(?:pr[eê]te|ready)|(?:modifi|mis\s+a\s+jour|mise\s+a\s+jour|updated|changed|bdelna|beddelna|beddelt|bedelt)\S*\s+(?:\S+\s+)?(?:la\s+|votre\s+|your\s+|the\s+)?(?:commande|order)|(?:بدلنا|بدلت|بدّلنا|عدلنا|عدلت)\s+(?:لك\s+)?(?:الطلبية|الطلب|الكوموند)|(?:commande|order)\S*\s+(?:\S+\s+){0,3}?(?:enregistr|confirm[eé]e|valid[eé]e|pass[eé]e|placed|registered|confirmed|tsajl|msajl)|تم\s+تسجيل|تسجلت\s+(?:ال)?طلبي|(?:commande|order)\S*\s+(?:\S+\s+)?t7adr|ci[- ]dessus/u;
+// journey retest R6-1: also « confirmer la commande … en répondant oui », « Ktb "oui" », « la commande t7adret », « ci-dessus »
 // journey retest R4-3: also an order said to be placed (« Votre commande est enregistrée ✓ ») on a turn that only shows the
 // recap — nothing is ordered yet, the sentence is never kept before the server recap (nor in a handoff answer)
 

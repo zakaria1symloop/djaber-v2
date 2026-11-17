@@ -33,6 +33,19 @@ export const FIELD_ONLY_NOTE =
  */
 export const NO_PHONE_NOTE =
   'NO PHONE NUMBER YET: the customer has not given a phone number in this conversation, so create_order is not available in this turn. Answer the customer and ask the next missing order field (the phone once the product and the name are known) — never a recap.';
+/**
+ * journey retest R6-5 (17/11): told to the model when the customer's messages name no street address and no stop-desk yet (and
+ * no recap was shown): create_order stays offered — an address without any of these words still goes through — but it was
+ * called on « Sétif, El Eulma » with no address, as a probe (refused, VALIDATION address).
+ */
+export const NO_ADDRESS_NOTE =
+  "NO ADDRESS YET: the customer's messages give no street address (rue, cité, bloc, building, landmark) and no stop-desk choice so far. Unless THIS message or KNOWN CUSTOMER gives it, do not call create_order: ask for the address in one short question (or offer the stop-desk).";
+/** Words of a street address or of a stop-desk choice (accents removed, lower case), in any language. */
+const ADDRESS_HINT =
+  /(?<![\p{L}])(?:rue|cite|bloc|blk|bt|bat|batiment|villa|logements?|lgts?|logts?|n°|quartier|qrt|hay|hai|residence|lotissement|lot|route|rte|avenue|av|boulevard|bd|impasse|allee|douar|village|cooperative|coop|immeuble|imm|appartement|appt|apt|etage|pres|cote|derriere|face|mairie|poste|mosquee|jami3|djama3|ecole|lycee|marche|souk|9rib|qrib|janb|street|st|road|building|near|apartment|flat|floor|stop|stopdesk|desk|bureau|agence|relais|zan9a|zenqa|derb|حي|شارع|نهج|عمارة|عماره|بلوك|فيلا|مسكن|سكن|طريق|قرب|قريب|جنب|مقابل|حذا|بجانب|المسجد|الجامع|البلدية|البريد|المدرسة|السوق|زنقة|درب|دوار|قرية|اقامة|إقامة|الطابق|ستوب|مكتب|وكالة)(?![\p{L}])/u;
+/** journey retest R6-5: no street address / stop-desk word in the customer's messages, and no create_order answer before. */
+export const noAddressYet = (ctx: Pick<ToolRunContext, 'customerHistory' | 'orderHistory'>): boolean =>
+  ctx.customerHistory !== undefined && !(ctx.orderHistory ?? []).length && !ADDRESS_HINT.test(ctx.customerHistory.normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC').toLowerCase());
 /** journey retest R1-1: the result given back for a call to a tool this step did not offer (it is not run). */
 export const unavailableTool = (name: string, fieldOnly: boolean, noPhone = false) => ({
   ok: false,
@@ -189,7 +202,8 @@ export class AiRunService implements OnModuleInit {
     // full-test 15/11 AI-CHAT-07: no handoff tool on a message that is only an order field (refused every time, 5–10 s each)
     const fieldOnly = fieldOnlyMessage(req.toolCtx.customerText, !!req.toolCtx.ordering);
     // journey retest R3-3: the handoff tool carries only the reasons this agent's rules allow now (no `other` without shop rules)
-    const reasons = allowedHandoffReasons(req.toolCtx.agent, req.toolCtx.unclearStreak ?? 0);
+    // journey retest R6-5: and `keyword` only when one of the agent's keywords is in the customer's message
+    const reasons = allowedHandoffReasons(req.toolCtx.agent, req.toolCtx.unclearStreak ?? 0, req.toolCtx.customerText);
     // journey retest R5-6: no create_order while the customer has given no phone number (every such call is refused) — the
     // probes `create_order {}` / placeholder values came on such turns; a complete order message carries its phone and keeps it
     const noPhone = !(await this.phoneGiven(req.toolCtx));
@@ -198,7 +212,11 @@ export class AiRunService implements OnModuleInit {
     // step — 5 of 59 turns of a shop with handoff rules ended in 503. The note says it is not available for this message
     // (after the cached start of the system prompt, so the cache is kept).
     // journey retest R5-6: and, without a phone, that create_order is not available (same place: the cache prefix is kept)
-    const system = [req.prompt.system, ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : [])].join('\n\n');
+    // journey retest R6-5: with a phone create_order stays offered, but with no street address / stop-desk word in the
+    // customer's messages (and no recap yet) the model is told to ask for the address rather than call it (F1b: « Sétif, El
+    // Eulma » ⇒ `create_order` without an address, refused)
+    const noAddress = !noPhone && noAddressYet(req.toolCtx);
+    const system = [req.prompt.system, ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(noAddress ? [NO_ADDRESS_NOTE] : [])].join('\n\n');
     let model = null as RoutedModel | null;
     let usedFallback = false;
     let repaired = false;
@@ -233,20 +251,23 @@ export class AiRunService implements OnModuleInit {
       if (output.status === 'HANDOFF' || forcedHandoff) return { ...plain, reply: withoutRecapClaims(plain.reply) };
       const recap = recapNow();
       if (!recap) return plain;
-      const r = recapReply(plain.reply, recap, req.guard?.lang ?? 'fr');
+      const r = recapReply(plain.reply, recap, req.guard?.lang ?? 'fr', req.toolCtx.customerText);
       // journey retest R5-5: « twasslou l Constantine ? » is answered in words when no sentence of the model goes before the recap
       const answer = r.kept === 'server' ? deliveryAnswer(calls, req.toolCtx.customerText ?? '', req.guard?.lang ?? 'fr') : null;
       return { ...plain, reply: answer ? `${answer}\n\n${r.text}` : r.text };
     };
     const ok = (output: AiReplyOutput, extra: { salvaged?: boolean; guard?: GuardOutcome } = {}): TurnResult => ({ ok: true, output: confirmed(output), tools: executed, usage, model: model!, usedFallback, forcedHandoff, repaired, ...(handoffRefused ? { handoffRefused } : {}), ...extra });
     // journey 16/11 J03-2: this turn's quote_delivery answers — the reply must give the fee (not checked on a handoff answer)
-    const factsNow = (answer?: Pick<AiReplyOutput, 'status' | 'customer'>) => {
+    const factsNow = (answer?: Pick<AiReplyOutput, 'status' | 'customer'> & Partial<Pick<AiReplyOutput, 'productCards' | 'productPhotos'>>) => {
       const f = withToolResults(req.guard!, executed.map((t) => t.result));
       const quotes = answer?.status === 'HANDOFF' || forcedHandoff ? [] : quoteFacts(executed.map((t) => ({ name: canonicalTool(t.name), result: t.result })));
       // journey retest R2-3: the fields the answer reports as given — the guard checks the reply does not deny them
       const c = answer?.customer;
       const fields = c ? { ...(c.name ? { name: c.name } : {}), ...(c.phone ? { phone: c.phone } : {}), ...(c.wilaya ? { wilaya: c.wilaya } : {}), ...(c.commune ? { commune: c.commune } : {}), ...(c.address ? { address: c.address } : {}) } : undefined;
-      return { ...f, ...(quotes.length ? { quotes } : {}), ...(fields ? { customerFields: fields } : {}) };
+      // journey retest R6-2: whether this answer sends a photo — a card or a gallery of a product not known to have none
+      const sent = answer ? [...(answer.productCards ?? []), ...(answer.productPhotos ?? []), ...(f.galleries ?? [])] : null;
+      const photoSent = sent ? sent.some((id) => !(f.noPhoto ?? []).includes(id)) : undefined;
+      return { ...f, ...(quotes.length ? { quotes } : {}), ...(fields ? { customerFields: fields } : {}), ...(photoSent !== undefined ? { photoSent } : {}) };
     };
     /** The guard's last word: offending sentences dropped / greeting stripped / the safe sentence (never a handoff). */
     const enforce = (base: AiReplyOutput, text: string, violations: GuardViolation[], first: GuardViolation[], retried: boolean, extra: { salvaged?: boolean }): TurnResult => {
@@ -263,7 +284,7 @@ export class AiRunService implements OnModuleInit {
       // model's sentence kept before it is checked, and dropped (no corrective turn) when it breaks a rule
       const recap = output.status !== 'HANDOFF' && !forcedHandoff ? recapNow() : null;
       if (recap) {
-        const r = recapReply(output.reply, recap, req.guard.lang);
+        const r = recapReply(output.reply, recap, req.guard.lang, req.toolCtx.customerText);
         const own = r.kept === 'server' ? '' : output.reply;
         if (!own || !checkReply(own, factsNow(output)).length) return ok(output, extra);
         return ok({ ...output, reply: '' }, extra);

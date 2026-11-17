@@ -233,6 +233,14 @@ const ODD_FIXES: [RegExp, string][] = [
   [/(?<![\p{L}\p{N}_])ydjiw\s+disponibles?(?![\p{L}\p{N}_])/giu, 'kaynin'],
   // « Wach men produit t7ebb nchouf ? » (« that I see ») for « that I show you »
   [/(?<![\p{L}\p{N}_])t7ebb\s+nchouf(?=\s*(?:[?؟.!]|$))/giu, 't7ebb nwarrik'],
+  // journey retest R6-3: « Wach t7ebb nchouf wahed mennhom ? » — the same with the product after it (« nchouflek » = « I check for
+  // you » stays)
+  [/(?<![\p{L}\p{N}_])t7ebb\s+nchouf(?=\s+(?:wa[h7]e?d|wa[h7]da|chi|ay|hada|hadi|hadou|l?produit|l?model|l?modèle|men|mennhom|menhom))(?![\p{L}\p{N}_])/giu, 't7ebb nwarrik'],
+  // « wach men wilaya t7ebb nwasslouk l'commande ? » (« deliver you the order ») for « nwassloulek la commande »
+  [/(?<![\p{L}\p{N}_])nwasslouk\s+l['’]?\s*commande(?![\p{L}\p{N}_])/giu, 'nwassloulek la commande'],
+  // « Djellaba homme فالصوف الفاين » (« laine fine » in Arabic letters) for « الصوف الرقيق »
+  [/(?<=(?:ال)?(?:صوف|قطن|حرير|قماش)\s+)الفاين(?![\p{L}\p{N}_])/gu, 'الرقيق'],
+  [/(?<=(?:ال)?(?:صوف|قطن|حرير|قماش)\s+)فاين(?![\p{L}\p{N}_])/gu, 'رقيق'],
   // « Wach wahda men les wilayat li nwasslou ? » (a question with no meaning, after « not served »)
   [/(?<![\p{L}\p{N}_])wach\s+wa[h7]da\s+men\s+(?:les\s+)?wilayat\s+li\s+nwasslou(?:lha|lhom)?\s*[?؟]/giu, 'T7ebb nwasslouha l wilaya okhra ?'],
   // « حجاب سوي » (« soie » in Arabic letters) for « حرير »; « 700 دج لين الدار » (« until », not Algerian) for « للدار »

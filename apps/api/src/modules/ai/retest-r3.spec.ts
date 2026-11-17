@@ -142,7 +142,7 @@ describe('R3-4 — the model’s sentence before the server recap', () => {
     ['wait', 'J’attends votre confirmation pour valider.', 'fr'],
   ])('%s: only the server recap', (_id, reply, lang) => expect(recapReply(reply, recapOf(), lang)).toEqual({ text: orderRecapText(recapOf(), lang), kept: 'server' }));
   it('N3p T2 / F11 T3: the answer to another question (the fee) or a short lead-in is kept, the talk about the recap dropped', () => {
-    const n3p = recapReply('Tawsil l Constantine (El Khroub) l dar: 700 DA, wela 450 DA f stop-desk, ywasel f 2 l 5 ayam. Recap ydhher dork, t7ebb nkamlouh b confirmation ?', recapOf(), 'arabizi');
+    const n3p = recapReply('Tawsil l Constantine (El Khroub) l dar: 700 DA, wela 450 DA f stop-desk, ywasel f 2 l 5 ayam. Recap ydhher dork, t7ebb nkamlouh b confirmation ?', recapOf(), 'arabizi', 'ana f Constantine El Khroub, cité 1000 logements bloc 5, ch7al tawsil khouya ?');
     expect(n3p.kept).toBe('prefix');
     expect(n3p.text).toBe(`Tawsil l Constantine (El Khroub) l dar: 700 DA, wela 450 DA f stop-desk, ywasel f 2 l 5 ayam.\n\n${orderRecapText(recapOf(), 'arabizi')}`);
     const f11 = recapReply('Merci Lamia ! Votre commande est prête à être confirmée, le récapitulatif va vous être envoyé.', recapOf(), 'fr');
@@ -151,7 +151,7 @@ describe('R3-4 — the model’s sentence before the server recap', () => {
     expect(f11.text.match(/confirmer/g)).toHaveLength(1);
   });
   it('an answer to another question is still kept (« Oui, on livre à Constantine. »)', () => {
-    expect(recapReply('Oui, on livre à Constantine 😊', recapOf(), 'fr').kept).toBe('prefix');
+    expect(recapReply('Oui, on livre à Constantine 😊', recapOf(), 'fr', 'Vous livrez à Constantine ?').kept).toBe('prefix');
   });
 });
 

@@ -22,6 +22,8 @@
 //   unavailable_offer journey retest R5-1: a sentence names a catalogue product that is out of stock (not orderable beyond
 //                    stock) without saying so, and the customer's message did not ask about it (« Je peux vous proposer … notre
 //                    parfum Oud 50 ml »): one corrective turn, then the sentence is dropped
+//   photo_claim      journey retest R6-2: « Hak tsawer ta3 … », « voici les photos » while this answer sends no photo (no card
+//                    nor gallery of a product that has one): one corrective turn, then the sentence is dropped
 // Pure: no I/O. Conservative by design — a false positive costs one corrective model turn and, at worst, a dropped sentence.
 import { formatMoney } from '@djaber/shared';
 import { GUARD_MARK } from './ai.constants';
@@ -32,7 +34,7 @@ import { TOOL_ALIASES, TOOL_DEFS } from './tools/tool-registry';
 import { phonesIn } from './tools/order-confirmation';
 import { fold as foldPlace, WILAYA_ALIASES } from './tools/wilaya-aliases';
 
-export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing' | 'contradicts_customer' | 'unavailable_offer';
+export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing' | 'contradicts_customer' | 'unavailable_offer' | 'photo_claim';
 /** Rules the server fixes itself: no corrective model turn for them alone. */
 export const AUTO_FIX_RULES: readonly GuardRule[] = ['script_mix'];
 export type LeakKind = 'uuid' | 'tool' | 'code' | 'key' | 'json' | 'marker';
@@ -90,6 +92,12 @@ export type GuardFacts = {
   unavailableNames?: string[];
   /** journey retest R5-1: the folded names of the other catalogue products (an in-stock « Montre connectée » hides « montre ») */
   available?: string[];
+  /** journey retest R6-2: ids of the products known to have no photo (catalogue / tool imageUrl null) */
+  noPhoto?: string[];
+  /** journey retest R6-2: this answer sends a photo (a card or a gallery of a product not known to have none); unset ⇒ not checked */
+  photoSent?: boolean;
+  /** journey retest R6-2: products whose gallery is sent whatever the answer (the customer tapped « Plus de photos ») */
+  galleries?: string[];
 };
 export type OrderField = 'name' | 'phone' | 'wilaya' | 'commune' | 'address';
 /** What a successful quote_delivery answered: the reply must give one of its fees (or say it is free). */
@@ -444,6 +452,10 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   if (facts.quotes?.length && !feeGiven(reply, facts.quotes)) out.push({ rule: 'fee_missing', sentence: 0 });
   // journey retest R5-1: an out-of-stock product is never offered (N7: « … ou notre parfum Oud 50 ml » to « lunettes de soleil ? »)
   if (facts.unavailable?.length) for (const i of unavailableOffers(parts, facts)) out.push({ rule: 'unavailable_offer', sentence: i });
+  // journey retest R6-2: photos announced while none is sent (N9 « Hak tsawer ta3 la robe kabyle brodée », the product has none)
+  if (facts.photoSent === false) parts.forEach((s, i) => {
+    if (photoClaim(s)) out.push({ rule: 'photo_claim', sentence: i });
+  });
   // journey retest R2-3: never « not understood » / « waiting for » a field the customer's message just gave — nor « not
   // understood » another field when the message only gave one (« ما فهمتش الولاية » after a phone: no wilaya was asked)
   if (facts.customerText?.trim()) {
@@ -496,6 +508,25 @@ export const unavailableOffers = (parts: string[], facts: Pick<GuardFacts, 'unav
   return out;
 };
 
+/**
+ * journey retest R6-2 (17/11): a sentence that announces photos / pictures as sent or shown (fr / en / arabizi / Arabic script):
+ * « voici les photos », « je vous envoie la photo », « here are the pictures », « Hak tsawer ta3 … », « هاهي التصاور ». Not « ma
+ * 3andnach tsawer », « pas de photo », « envoyez-moi la photo » (the customer's photo).
+ */
+const PHOTO_WORD = String.raw`(?:les\s+|la\s+|des\s+|une\s+|the\s+|a\s+|some\s+|l\s*|el\s*|ال)?(?:photos?|images?|pictures?|pics?|tsawe?r|tswira|tsawra|taswira|sora|swar|صور|صورة|تصاور|تصويرة|تصويره|صوره)`;
+const PHOTO_CLAIM = new RegExp(
+  [
+    String.raw`(?:voici|voila|ci[- ]dessous|ci[- ]joint)\s+${PHOTO_WORD}`,
+    String.raw`(?:je\s+vous|je\s+te|on\s+vous)\s+(?:envoie|envoi|envoye|transmets|partage|montre|mets)\s+${PHOTO_WORD}`,
+    String.raw`${PHOTO_WORD}\s+(?:(?:sont|est|are|is)\s+)?(?:ci[- ]dessous|ci[- ]jointes?|arrivent|suivent|sont\s+envoyees|est\s+envoyee|en\s+dessous|below|attached|are\s+coming|lta7t|ta7t|لتحت|تحت)`,
+    String.raw`here\s+(?:is|are)\s+${PHOTO_WORD}`, String.raw`(?:i'?m|i\s+am|i'?ll|i\s+will)\s+send(?:ing)?\s+(?:you\s+)?${PHOTO_WORD}`,
+    String.raw`(?<![\p{L}])(?:hak|hakom|hahom|hahi|haha|hadou|hadi|ha\s+hiya)\s+${PHOTO_WORD}`, String.raw`(?:rani\s+)?nab3a?t(?:lek|lak|lik|elkom)\s+${PHOTO_WORD}`,
+    String.raw`(?:هاك|هاكي|هاهي|هاهم|ها\s+هي|ها\s+هم|هاذو|هادو|هاذي|هادي)\s+${PHOTO_WORD}`, String.raw`(?:راني\s+)?(?:نبعثلك|نبعتلك|نرسلك|نبعثلكم)\s+${PHOTO_WORD}`,
+  ].join('|'),
+  'u',
+);
+export const photoClaim = (sentence: string): boolean => PHOTO_CLAIM.test(foldGuard(sentence)) || PHOTO_CLAIM.test(sentence.toLowerCase());
+
 /** Folded phrases of a false confession about an order the tools did place (fr / en / arabizi / Arabic script). */
 const FALSE_CONFESSION = new RegExp(
   [
@@ -540,6 +571,8 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
     const names = uniq(facts.unavailableNames ?? []);
     lines.push(`- OUT OF STOCK: ${names.join(', ') || 'a product you named'} ${names.length > 1 ? 'are' : 'is'} out of stock: never offer, suggest or list it — offer only products that are in stock. Name it only when the customer asks about it, and then say it is out of stock.`);
   }
+  if (rules.includes('photo_claim'))
+    lines.push('- NO PHOTO IS SENT with this answer: never say « voici les photos », « here are the pictures », « hak tsawer », « هاهي التصاور ». When the product has no photo (PHOTO:none, imageUrl null), say the shop has no photo of it for now (« ma 3andnach tsawer ta3ou f had lwaqt », « ما عندناش تصاور تاعو درك », « nous n\'avons pas encore de photo de ce produit ») and describe it in words.');
   if (rules.includes('fee_missing'))
     lines.push(`- DELIVERY FEE: quote_delivery answered ${(facts.quotes ?? []).map(quoteText).join('; ')}. Give that fee in the reply (home and stop-desk when both are known), in the customer's language: it is the answer to their question.`);
   return lines.join('\n');
@@ -570,7 +603,7 @@ const selfSentence = (loc: 'fr' | 'en' | 'ar' | 'arabizi', name: string | null):
   })[loc];
 const safeLocale = (lang: AiLanguage): 'fr' | 'en' | 'ar' | 'arabizi' => (lang === 'ar' ? 'ar' : lang === 'en' ? 'en' : lang === 'arabizi' ? 'arabizi' : 'fr');
 
-const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession', 'contradicts_customer', 'unavailable_offer'];
+const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession', 'contradicts_customer', 'unavailable_offer', 'photo_claim'];
 /** Rules about the form of the reply: the text is kept when the corrective turn did not fix them (a reply is better than none). */
 const STYLE_RULES: GuardRule[] = ['language_switch', 'moroccan_darija', 'script_mix', 'repeat_greeting'];
 const quoteText = (q: QuoteFact) => `${q.wilaya || 'this wilaya'}: ${q.isStopdesk ? `stop-desk ${q.fee} DA` : q.free || q.fee === 0 ? 'home delivery free' : `home ${q.fee} DA`}${!q.isStopdesk && q.stopdeskFee !== null ? `, stop-desk ${q.stopdeskFee} DA` : ''}`;
@@ -695,6 +728,8 @@ export function withToolResults(facts: GuardFacts, results: unknown[]): GuardFac
       if (typeof o.name === 'string' && typeof o.price === 'number') f.priceList.push(`${o.name} ${o.price} DA`);
       // a create_order that placed an order (dry run included): its number
       if (depth === 0 && o.ok === true && typeof o.number === 'string' && Array.isArray(o.items)) f.ordersPlaced!.push(o.number);
+      // journey retest R6-2: a product of a tool (search_products / get_product) with or without a photo
+      if (typeof o.id === 'string' && 'imageUrl' in o) f.noPhoto = o.imageUrl ? (f.noPhoto ?? []).filter((x) => x !== o.id) : [...new Set([...(f.noPhoto ?? []), o.id])];
       for (const [k, x] of Object.entries(o)) walk(x, k, depth + 1);
     }
   };
@@ -702,7 +737,7 @@ export function withToolResults(facts: GuardFacts, results: unknown[]): GuardFac
   return f;
 }
 
-type FactsProduct = Pick<CatalogueProduct, 'name' | 'sku' | 'price' | 'oldPrice' | 'hasVariants' | 'variants' | 'also' | 'description'> & Partial<Pick<CatalogueProduct, 'stock' | 'sellOutOfStock'>>;
+type FactsProduct = Pick<CatalogueProduct, 'name' | 'sku' | 'price' | 'oldPrice' | 'hasVariants' | 'variants' | 'also' | 'description'> & Partial<Pick<CatalogueProduct, 'stock' | 'sellOutOfStock' | 'id' | 'imageUrl'>>;
 export type GuardFactsInput = {
   lang: AiLanguage;
   products: FactsProduct[];
@@ -717,6 +752,8 @@ export type GuardFactsInput = {
   freshStart: boolean;
   /** results of the tool calls of earlier turns of the conversation (fees, totals already given) */
   earlierToolResults?: unknown[];
+  /** journey retest R6-2: products whose gallery the platform sends this turn anyway (« Plus de photos » tapped) */
+  galleries?: string[];
 };
 
 export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
@@ -755,6 +792,8 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
   const available = [...new Set(i.products.filter((p) => !out.includes(p)).map((p) => nameKeys(p.name)[0]).filter((k): k is string => !!k))];
   // journey retest R4-2: a name typed in Arabic script (« سمير بن علي ») is no Arabic message — an Arabic reply to a French customer is a switch
   const messageLang = detectLanguage(withoutArabicValues(i.customerText), undefined, { neutral: 'previous' });
+  // journey retest R6-2: the catalogue products known to have no photo
+  const noPhoto = i.products.filter((p) => p.id && p.imageUrl === null).map((p) => p.id!);
   const base: GuardFacts = {
     lang: i.lang,
     ...(messageLang ? { messageLang } : {}),
@@ -772,6 +811,8 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
     priceList,
     customerText: i.customerText,
     ...(unavailable.length ? { unavailable, unavailableNames: out.map((p) => p.name), available } : {}),
+    ...(noPhoto.length ? { noPhoto } : {}),
+    ...(i.galleries?.length ? { galleries: i.galleries } : {}),
   };
   return i.earlierToolResults?.length ? withToolResults(base, i.earlierToolResults) : base;
 }

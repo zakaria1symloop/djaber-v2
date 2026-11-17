@@ -233,6 +233,52 @@ describe('playground (AGT-07)', () => {
     expect(String((fakeAi(app).callsOf('reply')[1]!.messages.at(-1) as { content: unknown }).content)).toContain('Parfum Oud 50 ml is out of stock');
   });
 
+  it('journey retest R6-1 / R6-2 / R6-4: no model request to confirm before the server recap; no photo announced for a product without one; the recap address « commune, wilaya »', async () => {
+    const owner = await asOwner(app);
+    const agent = await linkedAgent(owner.workspaceId, []);
+    const robe = await createProduct(owner, { name: 'Robe kabyle brodée', price: 4900, stock: 5 });
+    await feeRule(owner.workspaceId, 16, 400, 300);
+    await feeRule(owner.workspaceId, 9, 450, 300);
+    await app.app.get(RedisService).client.del(`rl:playground:${owner.workspaceId}`);
+    // R6-1 (F5 T3): « Pouvez-vous confirmer la commande en répondant oui ? » before the recap ⇒ the server recap alone
+    const f5 = [
+      { role: 'user', text: 'Salam, je veux la robe kabyle brodée' },
+      { role: 'assistant', text: 'Très bon choix ! Pour la commande, à quel nom je l\'enregistre ?' },
+      { role: 'user', text: 'Amina Saadi 0698765432, wilaya Alger, Bab Ezzouar' },
+      { role: 'assistant', text: 'Merci Amina ! Quelle est votre adresse exacte à Bab Ezzouar ?' },
+      { role: 'user', text: 'rue des frères Bouadou n 5' },
+    ];
+    const args = { clientName: 'Amina Saadi', clientPhone: '0698765432', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'rue des frères Bouadou n 5', items: [{ productId: robe.id, quantity: 1 }], isStopdesk: false, customerConfirmed: true };
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args }] }, { reply: 'Merci Amina, j\'ai bien noté votre adresse. Pouvez-vous confirmer la commande en répondant oui ?', intent: 'SALE' });
+    const t3 = (await test(owner, agent.id, { sessionId: 'r6-f5', messages: f5 }).expect(200)).body.data;
+    expect(t3.toolCalls[0]).toMatchObject({ result: { ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recapToShow: true, recap: { total: 5300 } } });
+    expect(t3.reply).toMatch(/^Voici le récapitulatif de votre commande :/);
+    expect(t3.reply.match(/confirmer/g)).toHaveLength(1);
+    // R6-4 (N4 T3): the wilaya written in the address comes after the commune in the recap
+    fakeAi(app).reset();
+    const n4 = [
+      { role: 'user', text: 'Bonjour, je veux la robe kabyle brodée' },
+      { role: 'assistant', text: 'Excellent choix ! Pour commander, quel est votre nom ?' },
+      { role: 'user', text: 'Samir Ben Ali' },
+      { role: 'assistant', text: 'Merci Samir ! Quel est votre numéro de téléphone ?' },
+      { role: 'user', text: '0661234567, Blida, Boufarik, cité 20 août villa 3' },
+    ];
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args: { ...args, clientName: 'Samir Ben Ali', clientPhone: '0661234567', wilayaId: 9, communeName: 'Boufarik', address: 'Cité 20 août villa 3, Blida' } }] }, { reply: 'Merci Samir !', intent: 'SALE' });
+    const n4t3 = (await test(owner, agent.id, { sessionId: 'r6-n4', messages: n4 }).expect(200)).body.data;
+    expect(n4t3.reply).toMatch(/^Merci Samir !\n\nVoici le récapitulatif/);
+    expect(n4t3.reply).toContain('Adresse : Cité 20 août villa 3, Boufarik, Blida');
+    // R6-2 (N9 T1): « Voici la photo » with the card of a product that has none ⇒ the corrective turn's text is sent
+    fakeAi(app).reset();
+    fakeAi(app).script(
+      'reply',
+      { reply: 'Voici la photo de la robe kabyle brodée. Elle est brodée à la main, en tissu léger.', intent: 'INFO', productCards: [robe.id] },
+      { reply: 'Nous n\'avons pas encore de photo de ce produit. Elle est brodée à la main, en tissu léger.', intent: 'INFO', productCards: [robe.id] },
+    );
+    const n9 = (await test(owner, agent.id, { sessionId: 'r6-n9', ...say('Bonjour, envoyez-moi une photo de la robe kabyle brodée, c\'est quel tissu ?') }).expect(200)).body.data;
+    expect(n9.reply).toBe('Nous n\'avons pas encore de photo de ce produit. Elle est brodée à la main, en tissu léger.');
+    expect(String((fakeAi(app).callsOf('reply')[1]!.messages.at(-1) as { content: unknown }).content)).toContain('NO PHOTO IS SENT with this answer');
+  });
+
   it('playground with attachments: a photo goes through the 2-pass vision (would cost 5), flag for evals, export of the session', async () => {
     const owner = await asOwner(app);
     const agent = await linkedAgent(owner.workspaceId, []);

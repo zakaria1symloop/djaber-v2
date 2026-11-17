@@ -152,8 +152,9 @@ describe('R2-6 / R2-7 — the text before the server recap, Markdown, the Arabic
     pendingRecap([{ name: 'create_order', result: { ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recapToShow: true, recap: { items: [{ name: 'Djellaba homme', variant: null, quantity: 1, unitPrice: 7500 }], deliveryFee: 450, total: 7950, clientName: 'Yacine Mansouri', clientPhone: '0555987654', wilaya: 'Blida', communeName: 'Boufarik', address: 'cité 20 août villa 3', isStopdesk: false, ...p } } }])!;
   it('F8 T7: the model’s « Répondez oui » is dropped, one call to action is left', () => {
     const r = recapReply('Merci Yacine, votre adresse est bien notée. Répondez oui pour confirmer la commande.', recapOf({}), 'fr');
-    expect(r.kept).toBe('prefix');
-    expect(r.text.startsWith('Merci Yacine, votre adresse est bien notée.\n\nVoici le récapitulatif')).toBe(true);
+    // journey retest R6-1: « votre adresse est bien notée » is neither a thank-you lead-in nor an answer — the allow-list drops it
+    expect(r.kept).toBe('server');
+    expect(r.text.startsWith('Voici le récapitulatif')).toBe(true);
     expect(r.text.match(/Répondez/g)).toHaveLength(1);
   });
   it('F5 T6: the address said again before the recap ⇒ the server recap alone', () => {
@@ -178,8 +179,10 @@ describe('R2-6 / R2-7 — the text before the server recap, Markdown, the Arabic
     expect(f7).toContain('العنوان: حي الورود رقم 12، بوفاريك، البليدة');
     // the other languages keep the Latin names
     expect(orderRecapText(recapOf({ wilayaAr: 'البليدة', communeAr: 'بوفاريك' }), 'fr')).toContain('Livraison à domicile (Boufarik, Blida) : 450 DA');
-    // a name already written (in either script) is not added again
-    expect(orderRecapText(recapOf({ wilayaAr: 'البليدة', communeAr: 'بوفاريك', address: 'حي الورود، Boufarik' }), 'ar')).toContain('العنوان: حي الورود، Boufarik، البليدة');
+    // a name already written (in either script) is not added again — journey retest R6-4: a trailing one after a comma comes
+    // back in the recap's order and script
+    expect(orderRecapText(recapOf({ wilayaAr: 'البليدة', communeAr: 'بوفاريك', address: 'حي الورود، Boufarik' }), 'ar')).toContain('العنوان: حي الورود، بوفاريك، البليدة');
+    expect(orderRecapText(recapOf({ wilayaAr: 'البليدة', communeAr: 'بوفاريك', address: 'حي الورود Boufarik' }), 'ar')).toContain('العنوان: حي الورود Boufarik، البليدة');
     expect(communeAr([{ nameFr: 'Boufarik', nameAr: 'بوفاريك' }], 'boufarik')).toBe('بوفاريك');
     expect(communeAr([{ nameFr: 'Boufarik', nameAr: 'بوفاريك' }], 'Blida')).toBeNull();
   });

@@ -133,7 +133,7 @@ describe('R1-6 / R1-7 — the server recap is the recap', () => {
     expect(recapReply('Votre commande de 1 djellaba (total 8200 DA) attend votre confirmation.', r, 'fr')).toEqual({ text: orderRecapText(r, 'fr'), kept: 'server' });
     expect(recapReply('', r, 'arabizi')).toEqual({ text: orderRecapText(r, 'arabizi'), kept: 'server' });
     // another answer of the same message is kept before the recap
-    expect(recapReply('Oui, on livre aussi le vendredi.', r, 'fr')).toEqual({ text: `Oui, on livre aussi le vendredi.\n\n${orderRecapText(r, 'fr')}`, kept: 'prefix' });
+    expect(recapReply('Oui, on livre aussi le vendredi.', r, 'fr', 'Vous livrez aussi le vendredi ?')).toEqual({ text: `Oui, on livre aussi le vendredi.\n\n${orderRecapText(r, 'fr')}`, kept: 'prefix' });
   });
 });
 

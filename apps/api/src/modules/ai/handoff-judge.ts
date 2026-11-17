@@ -147,11 +147,16 @@ export function reasonFits(reason: string, evidence: string, message: string): b
  * off. 4 calls `{ reason: "other" }` on an order / name / phone message of two shops without shop rules were refused
  * (`no_shop_rule`) after a model round each; the tool is no longer offered with that reason (none left ⇒ no tool).
  */
-export function allowedHandoffReasons(agent: { humanHandoffRules?: string | null; handoffKeywords?: readonly string[] | null; handoffRules?: unknown }, unclearStreak = 0): string[] {
+export function allowedHandoffReasons(agent: { humanHandoffRules?: string | null; handoffKeywords?: readonly string[] | null; handoffRules?: unknown }, unclearStreak = 0, customerText?: string): string[] {
   const off = new Set((Array.isArray(agent.handoffRules) ? (agent.handoffRules as { kind?: unknown; enabled?: unknown }[]) : []).filter((r) => r && r.enabled === false && typeof r.kind === 'string').map((r) => handoffReason(r.kind as string)));
   return HANDOFF_REASONS.filter((r) => {
     if (r === 'other') return !!(agent.humanHandoffRules ?? '').trim();
-    if (r === 'keyword') return (agent.handoffKeywords ?? []).some((k) => k.trim());
+    // journey retest R6-5 (17/11): `keyword` only when a keyword is in the customer's message (N3: `handoff_to_human { keyword }`
+    // on « khouya twasslou l Constantine ? », refused keyword_absent after a model round) — the judge's own test
+    if (r === 'keyword') {
+      const keywords = (agent.handoffKeywords ?? []).map((k) => k.trim()).filter(Boolean);
+      return !!keywords.length && (customerText === undefined || (!!customerText.trim() && containsWord(foldText(customerText), keywords)));
+    }
     if (r === 'unclear_streak') return unclearStreak >= UNCLEAR_STREAK_HANDOFF - 1 && !off.has(r);
     return !SERVER_REASONS.has(r) && !off.has(r);
   });

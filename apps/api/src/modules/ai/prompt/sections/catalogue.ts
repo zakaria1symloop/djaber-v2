@@ -17,7 +17,8 @@ export const productBlock = (p: CatalogueProduct, n: number, descriptionMax: num
   const prices = p.variants.map((v) => v.price);
   const [min, max] = [Math.min(...prices), Math.max(...prices)];
   const price = !p.hasVariants ? `${p.price} DA${p.oldPrice && p.oldPrice > p.price ? ` (was ${p.oldPrice} DA)` : ''}` : !prices.length ? 'no variant available' : min === max ? `${min} DA` : `${min}-${max} DA by variant`;
-  const lines = [`#${n} ${p.name} [ID:${p.id}] SKU:${p.sku} PRICE:${price} STOCK:${stockWord(p.stock, p.sellOutOfStock)}`];
+  // journey retest R6-2 (17/11): « Hak tsawer ta3 la robe kabyle brodée » for a product with no photo — the line says it has none
+  const lines = [`#${n} ${p.name} [ID:${p.id}] SKU:${p.sku} PRICE:${price} STOCK:${stockWord(p.stock, p.sellOutOfStock)}${p.imageUrl ? '' : ' PHOTO:none'}`];
   const description = (p.description ?? '').replace(/\s+/g, ' ').trim().slice(0, descriptionMax);
   if (description) lines.push(description);
   if (p.variants.length) lines.push(`VARIANTS: ${p.variants.map((v) => `${v.name} [VID:${v.id}] ${v.price} DA ${stockWord(v.stock, p.sellOutOfStock)}`).join('; ')}`);
@@ -26,7 +27,7 @@ export const productBlock = (p: CatalogueProduct, n: number, descriptionMax: num
   // PV 22/10: the merchant takes orders for it at zero stock
   // PV 09/11 « il valide la commande seulement quand le produit est à 0 stock »: the line only came at STOCK 0, so with
   // STOCK 2 and 5 asked the model refused on its own although the shop takes such orders
-  if (p.sellOutOfStock && p.stock !== null) lines.push('ORDERABLE BEYOND STOCK: take the order whatever the quantity, even out of stock (do not use OUT_OF_STOCK); when create_order says part of it is beyond the stock (beyondStock), say that part may take a little longer to deliver.');
+  if (p.sellOutOfStock && p.stock !== null) lines.push('ORDERABLE BEYOND STOCK: take the order whatever the quantity, even out of stock (do not use OUT_OF_STOCK); when create_order says part of it is beyond the stock (beyondStock), say that part may take a little longer to deliver (in plain words: never « au-delà du stock », « beyond stock » or « commandée en plus du stock »).');
   for (const a of p.also) lines.push(`ALSO: ${a.name} [ID:${a.id}] ${a.price} DA — ${a.reason?.trim() || 'often bought together'}`);
   return lines.join('\n');
 };
@@ -52,6 +53,7 @@ export const catalogueSection = (c: PromptContext): string => {
   // full-test 15/11 AI-CHAT-13 (C19): a photo described in words is not a photo the AI saw
   // journey retest R5-1 (17/11): « Je peux vous proposer notre sac …, notre montre … ou notre parfum Oud 50 ml » (out of stock)
   rules.push('ALTERNATIVES_IN_STOCK: every product you offer, suggest or list (an alternative, « je peux vous proposer … », what the shop sells) has STOCK in stock, orderable or service — never one that is out of stock. An out-of-stock product is named only when the customer asks about it, and then as out of stock.');
+  rules.push('PHOTOS: a product has photos only when its line has no PHOTO:none (search_products / get_product: imageUrl is not null). Announce photos (« voici les photos », « hak tsawer », « هاهي التصاور ») only when you send them in this answer (productCards or productPhotos of that product); a product with PHOTO:none has no photo: say the shop has none of it for now (« ma 3andnach tsawer ta3ou f had lwaqt », « nous n\'avons pas encore de photo de ce produit ») and describe it in words — never promise a photo.');
   rules.push('PHOTO_NOT_SEEN: a photo the customer only describes in words (« comme sur la photo », « celle de votre page », « like in your post ») is one you have not seen: never confirm it is a given product; name the closest listed product as a question and ask them to send the photo.');
   if (sentence) rules.push(`OUT_OF_STOCK_SENTENCE: "${sentence}"`);
   // tester notes 25/10: the shop's sentence word for word (it was paraphrased, so an edit seemed not applied)
