@@ -74,7 +74,8 @@ export type HomeView = {
     aiOrders30d: number;
     ordersToConfirm: number;
     /** GDS-01 stock value at retail (tracked products + active variants); at cost in advanced mode */
-    stockValue: { retail: number; cost: number | null };
+    /** `unknownCostUnits`: units without a cost price, left out of `cost` (journeys 16/11 J11-3) */
+    stockValue: { retail: number; cost: number | null; unknownCostUnits?: number | null };
     conversations30d: number;
   };
   quickActions: { key: 'new_order' | 'add_product' | 'connect_page' | 'create_agent' | 'open_inbox' | 'import_products'; enabled: boolean; reasonCode?: string }[];

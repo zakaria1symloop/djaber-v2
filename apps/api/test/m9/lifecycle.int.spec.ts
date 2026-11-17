@@ -29,7 +29,12 @@ describe('02 §5 single rule', () => {
     const [trial] = await subsOf(owner.workspaceId);
     expect(trial).toMatchObject({ status: 'trial', billingCycle: 'none', provider: 'none', plan: { slug: 'pro' } });
     expect(Math.round((trial!.trialEndsAt!.getTime() - Date.now()) / DAY)).toBe(14);
-    expect((await owner.get('/credits').expect(200)).body.data.plan.limit).toBe(300);
+    const credits = (await owner.get('/credits').expect(200)).body.data;
+    expect(credits.plan.limit).toBe(300);
+    // journey 16/11 J12-1: the trial credits last until the trial ends (« renouvelés le » +1 month was shown)
+    expect(credits.plan).toMatchObject({ trial: true, periodEnd: trial!.trialEndsAt!.toISOString() });
+    // J12-4: the plan's own price per credit (Pro 4 900 / 5 000), the mean of the packs on sale
+    expect(credits.planPricePerCreditDzd).toBe(0.98);
     await runExpiry(app, new Date(Date.now() + 8 * DAY));
     await runExpiry(app, new Date(Date.now() + 9 * DAY));
     expect(await outboxNotifications(owner.workspaceId, 'subscription_expiring')).toHaveLength(1);

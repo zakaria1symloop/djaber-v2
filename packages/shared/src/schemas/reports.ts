@@ -64,7 +64,8 @@ export type ReportColumnDef = {
   /** enum cells: i18n prefix (`enum.Order.status`) */
   enumKey?: string;
 };
-export type ReportKpiDef = { key: string; unit: AnalyticsUnit; figure?: MoneyFigureName; advanced?: boolean };
+/** `snapshot`: a state of now (stock lines) — never compared with the previous period (J11-7 e: a « 0 % » pill on « 6 articles ») */
+export type ReportKpiDef = { key: string; unit: AnalyticsUnit; figure?: MoneyFigureName; advanced?: boolean; snapshot?: boolean };
 /**
  * M11 (Figma ANA-04 "Ventes par produit"): `source` = sold lines of counter sales, of delivered orders or both (default);
  * `channelId` = delivered orders of one page only (counter sales have no channel, so they drop out); `groupBy` = one row per
@@ -145,7 +146,8 @@ export const REPORT_DEFINITIONS: Record<ReportKey, ReportDefinition> = {
     group: 'sales',
     simple: true,
     period: 'range',
-    columns: [c('rank', 'int'), product, sku, category, c('quantity', 'int', { sum: true }), c('orders', 'int', { sum: true }), c('grossSales', 'money', { sum: true })],
+    // J11-7 (h): `documents` = delivered orders + counter sales holding the product (it was titled « Commandes »)
+    columns: [c('rank', 'int'), product, sku, category, c('quantity', 'int', { sum: true }), c('documents', 'int', { sum: true }), c('grossSales', 'money', { sum: true })],
     kpis: [k('quantity', 'count'), k('grossSales', 'money'), k('products', 'count')],
     chart: { type: 'bar', x: 'product', y: ['quantity'] },
     filters: ['categoryId', 'source', 'channelId', 'q'],
@@ -202,7 +204,9 @@ export const REPORT_DEFINITIONS: Record<ReportKey, ReportDefinition> = {
     period: 'range',
     columns: [c('date', 'datetime'), c('documentType', 'enum', { enumKey: 'report.documentType' }), c('number', 'text', { link: 'order' }), c('party', 'text'), c('method', 'enum', { enumKey: 'report.paymentMethod' }), c('direction', 'enum', { enumKey: 'report.direction' }), c('amount', 'money', { sum: true }), c('reference', 'text')],
     kpis: [k('received', 'money'), k('paid', 'money'), k('count', 'count')],
-    chart: { type: 'donut', x: 'method', y: ['amount'] },
+    // journeys 16/11 J11-1: the donut splits the money collected (rows « in ») by mode — the payments to suppliers are not
+    // added to it (« Espèces 24 000 » mixed 16 000 collected and 8 000 paid out)
+    chart: { type: 'donut', x: 'method', y: ['received'] },
     filters: ['q'],
     defaultSort: '-date',
   },
@@ -211,8 +215,10 @@ export const REPORT_DEFINITIONS: Record<ReportKey, ReportDefinition> = {
     group: 'stock',
     simple: false,
     period: 'snapshot',
+    // journeys 16/11 J11-3: a line without a cost price has cost / value at cost null (« — »), left out of « Valeur au coût »;
+    // `unknownCostUnits` = its units in stock (the value at cost says what it does not count)
     columns: [product, variant, sku, category, c('stock', 'int', { sum: true }), c('costPrice', 'money'), c('valueAtCost', 'money', { sum: true }), c('price', 'money'), c('valueAtRetail', 'money', { sum: true })],
-    kpis: [k('valueAtCost', 'money'), k('valueAtRetail', 'money'), k('units', 'count'), k('lines', 'count')],
+    kpis: [k('valueAtCost', 'money'), k('valueAtRetail', 'money'), k('units', 'count'), k('lines', 'count'), k('unknownCostUnits', 'count')],
     chart: null,
     filters: ['categoryId', 'q'],
     defaultSort: '-valueAtCost',
@@ -246,7 +252,7 @@ export const REPORT_DEFINITIONS: Record<ReportKey, ReportDefinition> = {
     simple: false,
     period: 'range',
     columns: [product, variant, sku, c('stock', 'int', { sum: true }), c('soldQty', 'int', { sum: true }), c('avgDailySales', 'int'), c('coverDays', 'days'), c('lastReceivedAt', 'date'), c('ageDays', 'days')],
-    kpis: [k('items', 'count'), k('avgCoverDays', 'days')],
+    kpis: [k('items', 'count', { snapshot: true }), k('avgCoverDays', 'days')],
     chart: null,
     filters: ['categoryId', 'q'],
     defaultSort: '-coverDays',
@@ -344,8 +350,10 @@ export const REPORT_DEFINITIONS: Record<ReportKey, ReportDefinition> = {
     group: 'clients',
     simple: true,
     period: 'range',
-    columns: [c('rank', 'int'), c('client', 'text', { link: 'client' }), c('phone', 'text', { sortable: false }), c('orders', 'int', { sum: true }), c('sales', 'int', { sum: true }), c('ordersRevenue', 'money', { sum: true }), c('salesRevenue', 'money', { sum: true }), c('revenue', 'money', { sum: true }), c('lastOrderAt', 'date')],
-    kpis: [k('clients', 'count'), k('revenue', 'money', { figure: 'revenue' })],
+    // journeys 16/11 J11-2 / J11-4: the KPI is the Revenue of the identified clients only (walk-in sales have no client) —
+    // not the named « Revenus »; the count column is the delivered orders of the period; the date is the last order or sale
+    columns: [c('rank', 'int'), c('client', 'text', { link: 'client' }), c('phone', 'text', { sortable: false }), c('deliveredOrders', 'int', { sum: true }), c('sales', 'int', { sum: true }), c('ordersRevenue', 'money', { sum: true }), c('salesRevenue', 'money', { sum: true }), c('revenue', 'money', { sum: true }), c('lastPurchaseAt', 'date')],
+    kpis: [k('clients', 'count'), k('identifiedRevenue', 'money')],
     chart: { type: 'bar', x: 'client', y: ['revenue'] },
     filters: ['q'],
     defaultSort: '-revenue',

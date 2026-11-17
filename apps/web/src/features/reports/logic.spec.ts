@@ -30,6 +30,15 @@ describe('Exports récents rows (12 §24, AT-RPT-01)', () => {
     // snapshot report: no period
     expect(jobView(job({ result: { ...result, from: null, to: null } }), t, 'fr', NOW).title).toContain('reports.jobs.snapshot');
   });
+  it('journeys 16/11 J11-7 (d): a Caisse / Ventes export is named by its kind with its rows; same-minute files say the same days', () => {
+    const tk = Object.assign((key: string, p?: Record<string, string | number>) => t(key, p), { has: (k: string) => k.startsWith('notification.value.exportKind.') || k.startsWith('report.') });
+    const v = jobView(job({ status: 'done', total: null, result: { kind: 'cash', rows: 22, format: 'xlsx' }, expiresAt: '2026-10-12T09:59:58Z', resultUrl: 'u' }), tk, 'fr', NOW);
+    expect(v.title).toMatch(/^notification\.value\.exportKind\.cash · .+ · XLSX$/);
+    expect(v.meta).toBe('reports.jobs.rows(count=22)');
+    // 7 days minus a few seconds of clock difference: 7, never 8
+    expect(daysLeft('2026-10-12T10:00:03Z', NOW)).toBe(7);
+    expect(daysLeft('2026-10-12T09:59:57Z', NOW)).toBe(7);
+  });
 });
 
 describe('report template cells', () => {

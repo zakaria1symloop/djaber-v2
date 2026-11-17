@@ -15,7 +15,7 @@ import { usePlatform } from '@/features/admin/platform';
 import { AUDIT_LIST } from '@/features/admin/specs';
 import { fullName, useFormats } from '@/features/admin/ui';
 import { useT } from '@/lib/i18n';
-import { filterText } from '@/lib/list-state';
+import { filterList, filterText } from '@/lib/list-state';
 import { useListState } from '@/lib/use-list-state';
 
 /** offered while `GET /admin/audit-logs/actions` (every slug present in the log — full-test 15/11 ADMIN-14) loads */
@@ -43,6 +43,8 @@ export default function AdminAuditPage() {
   const [wsName, setWsName] = useState<string | undefined>(undefined);
   const period = filterText(s, 'period') || (hasRange ? '' : '7d');
   const wsId = filterText(s, 'workspaceId');
+  // J13-6: a filter loaded from the URL (?workspaceId=) is named after the shop of its rows, not « 01A1E51E »
+  const wsLabel = wsName ?? query.data?.rows.find((r) => r.target.workspace?.id === wsId)?.target.workspace?.name;
   const quick: AdminFilter[] = useMemo(
     () => [
       { kind: 'single', key: 'actorId', label: t('admin.audit.filter.actor'), options: (team.data?.members ?? []).map((m) => ({ value: m.userId, label: fullName(m) })) },
@@ -53,15 +55,15 @@ export default function AdminAuditPage() {
         key: 'workspaceId',
         label: t('admin.audit.filter.workspace'),
         active: wsId ? 1 : 0,
-        chip: wsName ?? wsId.slice(0, 8),
+        chip: wsLabel ?? wsId.slice(0, 8),
         clear: () => list.setFilter('workspaceId', null),
-        render: () => <WorkspacePicker value={wsId || null} initialLabel={wsName} onChange={(id, w) => { setWsName(w?.name); list.setFilter('workspaceId', id); }} />,
+        render: () => <WorkspacePicker value={wsId || null} initialLabel={wsLabel} onChange={(id, w) => { setWsName(w?.name); list.setFilter('workspaceId', id); }} />,
       },
-      { kind: 'single', key: 'period', label: t('admin.audit.filter.period', { period: period ? t(`admin.audit.period.${period}`) : '…' }), options: Object.keys(PERIOD_DAYS).map((p) => ({ value: p, label: t(`admin.audit.period.${p}`) })) },
+      { kind: 'single', key: 'period', label: t('admin.audit.filter.period', { period: period ? t(`admin.audit.period.${period}`) : '…' }), chipLabel: t('admin.subs.filter.period'), options: Object.keys(PERIOD_DAYS).map((p) => ({ value: p, label: t(`admin.audit.period.${p}`) })) },
       { kind: 'single', key: 'impersonation', label: t('admin.audit.filter.impersonation'), options: (['only', 'exclude'] as const).map((v) => ({ value: v, label: t(`admin.audit.impersonation.${v}`) })) },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [t, team.data, wsId, wsName, period, actionOptions],
+    [t, team.data, wsId, wsLabel, period, actionOptions],
   );
   const context = (r: AuditLogDto) => [r.context.ip, r.context.userAgent ? (/mobile|android|iphone/i.test(r.context.userAgent) ? 'mobile' : 'web') : r.actor.type === 'system' ? 'auto' : null].filter(Boolean).join(' · ') || '—';
   const columns: Column<AuditLogDto>[] = [
@@ -110,12 +112,12 @@ export default function AdminAuditPage() {
           )}
         </Card>
       ) : null}
-      <ExportDialog open={exporting} onClose={() => setExporting(false)} filters={{ period, from: filterText(s, 'from'), to: filterText(s, 'to'), workspaceId: wsId, actorId: filterText(s, 'actorId'), impersonation: filterText(s, 'impersonation') }} total={query.data?.total ?? 0} />
+      <ExportDialog open={exporting} onClose={() => setExporting(false)} filters={{ period, from: filterText(s, 'from'), to: filterText(s, 'to'), workspaceId: wsId, actorId: filterText(s, 'actorId'), impersonation: filterText(s, 'impersonation'), impersonationSessionId: filterText(s, 'impersonationSessionId'), q: s.q.trim() }} action={filterList(s, 'action')} entity={filterList(s, 'entity')} total={query.data?.total ?? 0} />
     </AdminPage>
   );
 }
 
-function ExportDialog({ open, onClose, filters, total }: { open: boolean; onClose: () => void; filters: Record<string, string>; total: number }) {
+function ExportDialog({ open, onClose, filters, action, entity, total }: { open: boolean; onClose: () => void; filters: Record<string, string>; action: string[]; entity: string[]; total: number }) {
   const t = useT();
   const f = useFormats();
   const track = useAdminJobToast();
@@ -136,7 +138,7 @@ function ExportDialog({ open, onClose, filters, total }: { open: boolean; onClos
       submitLabel={t('admin.common.export')}
       onSubmit={() => {
         onClose();
-        void track(() => adminWrite<{ jobId: string }>('/admin/audit-logs/export', 'POST', { format, from, to, ...(filters.workspaceId ? { workspaceId: filters.workspaceId } : {}), ...(filters.actorId ? { actorId: filters.actorId } : {}), ...(filters.impersonation ? { impersonation: filters.impersonation } : {}) }, true), { running: t('admin.audit.export.running'), done: t('admin.audit.export.done') });
+        void track(() => adminWrite<{ jobId: string }>('/admin/audit-logs/export', 'POST', { format, from, to, ...(filters.workspaceId ? { workspaceId: filters.workspaceId } : {}), ...(filters.actorId ? { actorId: filters.actorId } : {}), ...(filters.impersonation ? { impersonation: filters.impersonation } : {}), ...(filters.impersonationSessionId ? { impersonationSessionId: filters.impersonationSessionId } : {}), ...(action.length ? { action } : {}), ...(entity.length ? { entity } : {}), ...(filters.q ? { q: filters.q } : {}) }, true), { running: t('admin.audit.export.running'), done: t('admin.audit.export.done') });
       }}
     >
       <div role="radiogroup" aria-label={t('admin.audit.export.title')} className="flex flex-col gap-2.5">

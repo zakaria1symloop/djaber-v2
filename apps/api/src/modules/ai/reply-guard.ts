@@ -14,14 +14,17 @@
 //   script_mix       a Latin letter glued inside an Arabic word (« وnعاونك »): fixed by the server, no model turn
 //   false_confession full-test 15/11 AI-CHAT-02: « coordonnées inventées », « commande enregistrée par erreur », « la
 //                    commande n'existe pas » while an order of this conversation was placed
+//   fee_missing      journey 16/11 J03-2: quote_delivery answered this turn but the reply gives none of its fees (« Merci
+//                    3la sbr ! … » to « ch7al tawsil l setif ? »): one corrective turn, then the server adds the fee itself
 // Pure: no I/O. Conservative by design — a false positive costs one corrective model turn and, at worst, a dropped sentence.
+import { formatMoney } from '@djaber/shared';
 import { GUARD_MARK } from './ai.constants';
 import { detectLanguage, languageSwitched, MOROCCAN_WORDS, replyLanguage, SCRIPT_GLUE, WRONG_DARIJA, type AiLanguage } from './language';
 import type { CatalogueProduct } from './catalogue.service';
 import type { PromptContext } from './prompt/prompt.types';
 import { TOOL_ALIASES, TOOL_DEFS } from './tools/tool-registry';
 
-export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession';
+export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing';
 /** Rules the server fixes itself: no corrective model turn for them alone. */
 export const AUTO_FIX_RULES: readonly GuardRule[] = ['script_mix'];
 export type LeakKind = 'uuid' | 'tool' | 'code' | 'key' | 'json' | 'marker';
@@ -67,7 +70,11 @@ export type GuardFacts = {
   priceList: string[];
   /** numbers of the orders a tool placed in this conversation (this turn or earlier turns) */
   ordersPlaced?: string[];
+  /** journey 16/11 J03-2: the successful quote_delivery answers of THIS turn (not set on a handoff answer) */
+  quotes?: QuoteFact[];
 };
+/** What a successful quote_delivery answered: the reply must give one of its fees (or say it is free). */
+export type QuoteFact = { wilaya: string; isStopdesk: boolean; fee: number; free: boolean; stopdeskFee: number | null };
 
 // --- text helpers -------------------------------------------------------------------------------------------------------------
 /** Lower case, Latin accents and Arabic vowel marks removed, hamza / tā' marbūṭa folded, Arabic-Indic digits → Latin. */
@@ -324,6 +331,20 @@ export const selfNames = (sentence: string, facts: Pick<GuardFacts, 'agentName' 
   return out;
 };
 
+/** journey 16/11 J03-2: the quote_delivery answers of this turn (`tools` with their canonical names). */
+export const quoteFacts = (tools: { name: string; result: unknown }[]): QuoteFact[] =>
+  tools.flatMap((t) => {
+    const r = t.result as { ok?: unknown; fee?: unknown; free?: unknown; wilayaName?: unknown; isStopdesk?: unknown; stopdeskFee?: unknown; stopdeskAvailable?: unknown } | null;
+    if (t.name !== 'quote_delivery' || r?.ok !== true || typeof r.fee !== 'number') return [];
+    return [{ wilaya: typeof r.wilayaName === 'string' ? r.wilayaName : '', isStopdesk: r.isStopdesk === true, fee: r.fee, free: r.free === true, stopdeskFee: typeof r.stopdeskFee === 'number' && r.stopdeskAvailable !== false ? r.stopdeskFee : null }];
+  });
+/** The reply gives a fee of one of the quotes (the number with or without « DA », Arabic digits too) or says the delivery is free. */
+export const feeGiven = (reply: string, quotes: QuoteFact[]): boolean => {
+  const folded = foldGuard(reply);
+  const nums = new Set(numbersIn(folded));
+  return quotes.some((q) => [q.isStopdesk ? null : q.fee, q.isStopdesk ? q.fee : q.stopdeskFee].some((f) => f !== null && f > 0 && nums.has(f)) || ((q.free || q.fee === 0) && FREE_WORDS.test(folded)));
+};
+
 // --- the check --------------------------------------------------------------------------------------------------------------------
 export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   if (!reply.trim()) return [];
@@ -357,6 +378,8 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   if (facts.ordersPlaced?.length) parts.forEach((s, i) => {
     if (FALSE_CONFESSION.test(foldGuard(s))) out.push({ rule: 'false_confession', sentence: i });
   });
+  // journey 16/11 J03-2: the fee the tool returned this turn is the answer — never dropped for a « merci pour ta patience »
+  if (facts.quotes?.length && !feeGiven(reply, facts.quotes)) out.push({ rule: 'fee_missing', sentence: 0 });
   return out;
 }
 
@@ -393,9 +416,11 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
   if (rules.includes('self_name')) lines.push(facts.agentName ? `- YOUR NAME is "${facts.agentName}": never give yourself another name.` : "- YOU HAVE NO PERSONAL NAME: never give yourself one; if asked, you are the shop's assistant.");
   if (rules.includes('language_switch')) lines.push(`- LANGUAGE: the customer writes ${LANGUAGE_NAMES[facts.lang] ?? facts.lang}. Rewrite "reply" in that language and script, as they write it (never switch on your own).`);
   if (rules.includes('moroccan_darija'))
-    lines.push('- ALGERIAN DARIJA: the shop is Algerian. Replace the Moroccan / Tunisian words (chno, dyal, walakin, daba, nqdar, bghit / bghiti, chi, ma kaynch, wakha, barcha, شنو, ديال, دابا, بغيت, شي حاجة, ملي, فماش, برشا) with Algerian ones (wach, ta3 / تاع, bessah / بصح, dork / درك, nqder, t7ebb / تحب, hadja / حاجة, makach / ماكانش, ki / كي, bezzaf / بزاف). « chhal / ch7al / شحال » means « how much »: never for « what » — « wach smitek ? », « a3tini numéro ta3ek », « f ayya wilaya ? ».');
+    lines.push('- ALGERIAN DARIJA: the shop is Algerian. Replace the Moroccan / Tunisian words (chno, dyal, walakin, daba, nqdar, bghit / bghiti, chi, ma kaynch, wakha, barcha, شنو, ديال, دابا, بغيت, شي حاجة, ملي, فماش, برشا, صيفط / sifet) with Algerian ones (wach, ta3 / تاع, bessah / بصح, dork / درك, nqder, t7ebb / تحب, hadja / حاجة, makach / ماكانش, ki / كي, bezzaf / بزاف, ab3at / ابعث). « chhal / ch7al / شحال » means « how much »: never for « what » — « wach smitek ? », « a3tini numéro ta3ek », « f ayya wilaya ? ».');
   if (rules.includes('false_confession'))
     lines.push(`- ORDER PLACED: order ${(facts.ordersPlaced ?? []).join(', ')} was placed with the details the customer gave in this conversation. Never say you invented them, that it was a mistake, that it does not exist or that nothing was ordered; never offer to cancel it unless the customer asks.`);
+  if (rules.includes('fee_missing'))
+    lines.push(`- DELIVERY FEE: quote_delivery answered ${(facts.quotes ?? []).map(quoteText).join('; ')}. Give that fee in the reply (home and stop-desk when both are known), in the customer's language: it is the answer to their question.`);
   return lines.join('\n');
 }
 
@@ -427,6 +452,23 @@ const safeLocale = (lang: AiLanguage): 'fr' | 'en' | 'ar' | 'arabizi' => (lang =
 const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession'];
 /** Rules about the form of the reply: the text is kept when the corrective turn did not fix them (a reply is better than none). */
 const STYLE_RULES: GuardRule[] = ['language_switch', 'moroccan_darija', 'script_mix', 'repeat_greeting'];
+const quoteText = (q: QuoteFact) => `${q.wilaya || 'this wilaya'}: ${q.isStopdesk ? `stop-desk ${q.fee} DA` : q.free || q.fee === 0 ? 'home delivery free' : `home ${q.fee} DA`}${!q.isStopdesk && q.stopdeskFee !== null ? `, stop-desk ${q.stopdeskFee} DA` : ''}`;
+/** journey 16/11 J03-2: the fee sentence the server adds when the corrective turn still gave none (the tool's figures only). */
+export const feeSentence = (q: QuoteFact, lang: AiLanguage): string => {
+  const loc = safeLocale(lang);
+  const w = q.wilaya;
+  const home = q.isStopdesk ? null : q.free || q.fee === 0 ? 0 : q.fee;
+  const stop = q.isStopdesk ? q.fee : q.stopdeskFee;
+  const da = (n: number) => (loc === 'ar' ? formatMoney(n).replace(/DA$/, 'دج') : formatMoney(n));
+  const T = {
+    fr: { home: (n: number) => (n ? `${da(n)} à domicile` : 'gratuite à domicile'), stop: (n: number) => `${da(n)} en stop-desk`, lead: `Livraison${w ? ` à ${w}` : ''} : ` },
+    en: { home: (n: number) => (n ? `${da(n)} to your door` : 'free to your door'), stop: (n: number) => `${da(n)} at a stop-desk`, lead: `Delivery${w ? ` to ${w}` : ''}: ` },
+    arabizi: { home: (n: number) => (n ? `${da(n)} l dar` : 'batel l dar'), stop: (n: number) => `${da(n)} f stop-desk`, lead: `Tawsil${w ? ` l ${w}` : ''}: ` },
+    ar: { home: (n: number) => (n ? `${da(n)} للدار` : 'مجاني للدار'), stop: (n: number) => `${da(n)} في نقطة الاستلام`, lead: `التوصيل${w ? ` لـ${w}` : ''}: ` },
+  }[loc];
+  const parts = [...(home !== null ? [T.home(home)] : []), ...(stop !== null ? [T.stop(stop)] : [])];
+  return `${T.lead}${parts.join(loc === 'ar' ? '، ' : ', ')}.`;
+};
 const LANGUAGE_NAMES: Record<string, string> = { ar: 'Arabic script (Algerian darija)', arabizi: 'Latin-script Algerian darija (arabizi)', fr: 'French', en: 'English' };
 /** « وnعاونك » → « وعاونك ». */
 export const fixScriptMix = (text: string): string => text.replace(SCRIPT_GLUE, '');
@@ -464,6 +506,9 @@ export function enforceReply(reply: string, violations: GuardViolation[], facts:
   let text = parts.filter((_, i) => !drop.has(i)).join('').trim();
   if (violations.some((v) => v.rule === 'repeat_greeting')) text = stripGreeting(text, facts.agentName).trim();
   if (violations.some((v) => v.rule === 'script_mix')) text = fixScriptMix(text);
+  // journey 16/11 J03-2: the fee the corrective turn still left out is added from the tool's answer
+  const quote = violations.some((v) => v.rule === 'fee_missing') ? facts.quotes?.[0] : undefined;
+  if (quote) text = `${feeSentence(quote, facts.lang)}${text ? ` ${text}` : ''}`;
   text = text.replace(/\n{3,}/g, '\n\n');
   // a language / dialect slip the corrective turn did not fix: the reply is sent as it is
   if (wordCount(text) >= 2) return { reply: text, action: text === reply.trim() && violations.every((v) => STYLE_RULES.includes(v.rule)) ? 'kept' : 'stripped' };

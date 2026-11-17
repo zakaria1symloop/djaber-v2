@@ -510,11 +510,13 @@ function ReportChart({ view }: { view: ReportDataView }) {
   const c = view.chart;
   if (!form || !c || !c.points.length || !view.definition.chart) return null;
   const ys = view.definition.chart.y;
-  const title = t('reports.chart', { measure: ys.map((y) => t(`report.col.${y}`)).join(' / ') });
-  const isMoney = (y: string) => view.definition.columns.find((col) => col.key === y)?.type === 'money';
+  // a chart measure that is not a table column (Paiements « Encaissé », J11-1) is named and formatted by its KPI
+  const yLabel = (y: string) => (t.has(`report.col.${y}`) ? t(`report.col.${y}`) : t(`report.kpi.${y}`));
+  const title = t('reports.chart', { measure: ys.map(yLabel).join(' / ') });
+  const isMoney = (y: string) => view.definition.columns.find((col) => col.key === y)?.type === 'money' || view.definition.kpis.find((k) => k.key === y)?.unit === 'money';
   const fmt = (n: number) => (isMoney(ys[0]!) ? `${formatNumber(n)} DA` : formatNumber(n));
   if (form === 'time') {
-    const series = ys.map((y, i) => ({ key: y, label: t(`report.col.${y}`), tone: TONES[i % TONES.length]! }));
+    const series = ys.map((y, i) => ({ key: y, label: yLabel(y), tone: TONES[i % TONES.length]! }));
     const buckets = c.points.map((p) => ({ key: p.x, label: /^\d{4}-\d{2}-\d{2}$/.test(p.x) ? dayLabel(p.x, locale) : p.label, values: ys.map((y) => p.values[y] ?? 0) }));
     return (
       <ChartPanel title={title} data-testid="report-chart">
@@ -636,7 +638,7 @@ function ReportTable({
             <tr className="bg-ink-raised font-medium" data-testid="report-totals">
               {cols.map((c, i) => (
                 <Td key={c.key} className={cn('!border-b-0', numeric(c) && 'text-end')}>
-                  {i === Math.max(0, firstText) ? t('reports.totalRow', { count: formatNumber(view.totalRows) }) : c.sum ? <Ltr className="whitespace-nowrap tabular-nums">{cellText(c, view.totals[c.key] ?? null, t, locale)}</Ltr> : null}
+                  {i === Math.max(0, firstText) ? t('reports.totalRow', { count: view.totalRows, n: formatNumber(view.totalRows) }) : c.sum ? <Ltr className="whitespace-nowrap tabular-nums">{cellText(c, view.totals[c.key] ?? null, t, locale)}</Ltr> : null}
                 </Td>
               ))}
             </tr>
@@ -644,7 +646,7 @@ function ReportTable({
         ) : null}
       </Table>
       <div className="border-t border-line-hairline">
-        <ListPagination page={page} pageSize={pageSize} total={total} onChange={onPage} note={t('reports.rowNote')} />
+        <ListPagination page={page} pageSize={pageSize} total={total} onChange={onPage} note={view.rows.some((r) => rowHref(r)) ? t('reports.rowNote') : undefined} />
       </div>
     </Card>
   );

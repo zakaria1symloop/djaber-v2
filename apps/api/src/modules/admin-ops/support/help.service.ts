@@ -21,22 +21,44 @@ export const foldText = (s: string): string =>
     .normalize('NFD')
     .replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g, '')
     .toLocaleLowerCase();
-/** The words of a search (2+ letters, or any word with a digit: « 2FA »). */
-export const searchWords = (q: string): string[] => [...new Set(foldText(q).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2 || /\d/.test(w)))];
+/**
+ * Small words that are never search words (journey 16/11 J12-6: « mot de passe » matched every guide holding « de »):
+ * articles, prepositions, pronouns and question words — fr / en / ar (folded).
+ */
+const STOP_WORDS = new Set([
+  ...'le la les l un une des de du d au aux a et ou en dans par pour sur avec sans ce cet cette ces se sa son ses mon ma mes ton ta tes je tu il elle on nous vous ils elles me te y ne pas plus que qui quoi dont est sont etre faire comment pourquoi quand quel quelle quels quelles ou est-ce'.split(' '),
+  ...'the a an of to in on at by for with and or is are be do does how what why when which my your i it'.split(' '),
+  ...'في من على الى إلى عن مع و او أو كيف ماذا لماذا متى هل ما ان أن هذا هذه'.split(' ').map((w) => foldText(w)),
+]);
+/** The words of a search (2+ letters, or any word with a digit: « 2FA »), small words left out unless they are all there is. */
+export const searchWords = (q: string): string[] => {
+  const words = [...new Set(foldText(q).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2 || /\d/.test(w)))];
+  const meaningful = words.filter((w) => !STOP_WORDS.has(w));
+  return meaningful.length ? meaningful : words;
+};
+const ARABIC = /[\u0600-\u06ff]/;
+/**
+ * A search word is found at the start of a word of the text (« credit » finds « crédits », « passe » does not find
+ * « dépasser »); an Arabic word anywhere in a word (its article / prefixes: « طلب » finds « الطلبات »).
+ */
+const hasWord = (words: string[], hay: string, w: string) => (ARABIC.test(w) ? hay.includes(w) : words.some((x) => x.startsWith(w)));
 /**
  * full-test 15/11 HELP-01: the search matches word by word without accents — every word first (« connecter Instagram »
- * finds « Connecter une page Facebook ou Instagram »); when no guide has them all, the guides with the most words.
+ * finds « Connecter une page Facebook ou Instagram »); when no guide has them all, the guides holding most of them (more
+ * than half the words, journey J12-6 — one common word alone no longer brings every guide).
  */
 export function rankSearch<T>(items: T[], text: (x: T) => string, q: string): T[] {
   const words = searchWords(q);
   if (!words.length) return items;
   const scored = items.map((x) => {
     const hay = foldText(text(x));
-    return { x, n: words.filter((w) => hay.includes(w)).length };
+    const hayWords = hay.split(/[^\p{L}\p{N}]+/u);
+    return { x, n: words.filter((w) => hasWord(hayWords, hay, w)).length };
   });
   const all = scored.filter((s) => s.n === words.length);
   if (all.length) return all.map((s) => s.x);
-  return scored.filter((s) => s.n > 0).sort((a, b) => b.n - a.n).map((s) => s.x);
+  const min = Math.floor(words.length / 2) + 1;
+  return scored.filter((s) => s.n > 0 && s.n >= min && s.n < words.length).sort((a, b) => b.n - a.n).map((s) => s.x);
 }
 
 @Injectable()

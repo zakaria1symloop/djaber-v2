@@ -34,7 +34,7 @@
  "channels.analysis.service.toProduct": "C'est un produit avec stock ? Cliquez pour saisir la quantité.",
  "clients.sheet.allSales": "Voir les {count}",
  "clients.sheet.salesTitle": "VENTES COMPTOIR",
- "clients.sheet.countSplit": "{orders} commande(s) + {sales} vente(s) au comptoir",
+ "clients.sheet.countSplit": "{orders, plural, one {# commande} other {# commandes}} + {sales, plural, one {# vente au comptoir} other {# ventes au comptoir}}",
  "clients.sheet.spentSplit": "Commandes livrées {orders} + ventes comptoir {sales}",
  "credits.pill.labelPacks": "Crédits : {used} / {limit}, packs {packUsed} / {packTotal}",
  "credits.pill.packs": "Crédits du mois : {used} / {limit} · Packs : {packUsed} / {packTotal} utilisés ({pack} restants), utilisés quand ceux du mois sont épuisés",

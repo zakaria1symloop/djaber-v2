@@ -27,6 +27,7 @@ export const CLIENTS_LIST: ListSpec = {
     createdFrom: 'date',
     createdTo: 'date',
     blocked: 'bool',
+    archived: 'bool',
   },
   sorts: CLIENT_SORTS,
   defaultSort: '-lastOrderAt',
@@ -90,6 +91,7 @@ export type ChipLabels = {
   wilayaName: (id: string) => string;
   created: (range: string) => string;
   blocked: string;
+  archived: string;
   date: (day: string) => string;
   money: (n: number) => string;
   number: (n: number) => string;
@@ -129,6 +131,7 @@ export function activeChips(s: ListState, l: ChipLabels): Chip[] {
   const b = filterText(s, 'createdTo');
   if (a || b) chips.push({ key: 'createdFrom', label: l.created([a ? l.date(a) : '…', b ? l.date(b) : '…'].join(' → ')), clear: { createdFrom: null, createdTo: null } });
   if (filterBool(s, 'blocked')) chips.push({ key: 'blocked', label: l.blocked, clear: { blocked: null } });
+  if (filterBool(s, 'archived')) chips.push({ key: 'archived', label: l.archived, clear: { archived: null } });
   return chips;
 }
 

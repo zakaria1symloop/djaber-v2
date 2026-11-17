@@ -19,14 +19,18 @@ export function flagText(t: TFunction, f: ModerationAiFlagView): string {
   return f.message && f.message !== f.code ? `${label} (${f.message})` : label;
 }
 /** "IA : Marque protégée dans le titre · prix 1 800 DA (−80 % vs référence)"; failed pre-screen ⇒ "pré-filtrage indisponible". */
-export function aiReason(t: TFunction, item: Pick<ModerationItemDto, 'aiFlags' | 'aiScore'>): string | null {
+// journeys 16/11 J13-11: agent names are never pre-screened by the AI (human decision only) — no « pré-filtrage indisponible »
+export function aiReason(t: TFunction, item: Pick<ModerationItemDto, 'aiFlags' | 'aiScore'> & { type?: ModerationItemDto['type'] }): string | null {
   const flags = item.aiFlags.map((f) => flagText(t, f));
-  if (item.aiScore === null && !item.aiFlags.some((f) => f.code === 'prescreen_unavailable')) flags.unshift(t('adminMod.flag.prescreen_unavailable'));
+  if (item.aiScore === null && item.type !== 'agent_name' && !item.aiFlags.some((f) => f.code === 'prescreen_unavailable')) flags.unshift(t('adminMod.flag.prescreen_unavailable'));
   return flags.length ? t('adminMod.row.ai', { reasons: flags.join(' · ') }) : null;
 }
 export const itemTitle = (t: TFunction, item: Pick<ModerationItemDto, 'product' | 'agent' | 'category' | 'type'>) =>
   item.product?.name ?? item.agent?.name ?? item.category?.name ?? t(`adminMod.type.${item.type}`);
-export const decisionLabel = (t: TFunction, d: string | null | undefined) => (d && t.has(`adminMod.decision.${d}`) ? t(`adminMod.decision.${d}`) : (d ?? '—'));
+/** J13-11: an agent-name decision reads with the name motifs (« Nom offensant ou interdit »…), not the product ones. */
+export const waitUnits = (t: TFunction) => ({ min: t('adminMod.unit.min'), h: t('adminMod.unit.h') });
+export const decisionLabel = (t: TFunction, d: string | null | undefined, type?: string) =>
+  d && type === 'agent_name' && t.has(`adminMod.reasonName.${d}`) ? t(`adminMod.reasonName.${d}`) : d && t.has(`adminMod.decision.${d}`) ? t(`adminMod.decision.${d}`) : (d ?? '—');
 
 /** Row of the queue (À vérifier, Urgents, Rejetés, Auto-approuvés, Agents IA): ✓ approve · ✕ reject · ⋯ menu. */
 export function ItemRow({
@@ -71,7 +75,7 @@ export function ItemRow({
       reason={aiReason(t, item)}
       score={formatScore(item.aiScore, locale)}
       scoreTone={scoreTone(item.aiScore)}
-      scoreMeta={t('adminMod.row.scoreMeta', { time: formatWaiting(item.waitingMinutes) })}
+      scoreMeta={t('adminMod.row.scoreMeta', { time: formatWaiting(item.waitingMinutes, waitUnits(t)) })}
       onOpen={onOpen}
       actions={
         <>

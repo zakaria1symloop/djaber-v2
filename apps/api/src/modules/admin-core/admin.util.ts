@@ -45,6 +45,8 @@ export const userRef = (u: { id: string; firstName: string; lastName: string; em
   u ? { id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email, avatarUrl: u.avatarUrl ?? null } : null;
 export const userSelect = { id: true, firstName: true, lastName: true, email: true, avatarUrl: true } as const;
 
+/** `agent_preset` ⇒ `AgentPreset` (AuditLog.entity holds the model name — the audit « Type de cible » filter, J13-1). */
+export const entityName = (slug: string) => slug.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('');
 export const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 export const DAY = 86_400_000;
 

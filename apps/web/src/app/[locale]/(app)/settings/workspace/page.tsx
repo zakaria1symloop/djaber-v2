@@ -162,16 +162,24 @@ function WorkspaceForm() {
               <Input id="address" disabled={locked} aria-invalid={!!errors.address} {...form.register('address')} />
             </Field>
             <Field label={t('settings.workspace.senderWilaya')} htmlFor="senderWilayaId" hint={t('settings.workspace.senderWilayaHint')} error={fieldError(t, errors.senderWilayaId?.message)}>
-              <Select id="senderWilayaId" disabled={locked || wilayas.isPending} {...form.register('senderWilayaId')}>
-                <option value="">{t('common.none')}</option>
-                {/* keeps the saved value selectable while the list loads */}
-                {!wilayas.data && workspace.senderWilayaId ? <option value={workspace.senderWilayaId}>{workspace.senderWilayaId}</option> : null}
-                {(wilayas.data ?? []).map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.code} · {locale === 'ar' ? w.nameAr : w.nameFr}
-                  </option>
-                ))}
-              </Select>
+              {/* journey J12-7: a controlled select — registered (uncontrolled), it fell back to « Aucun » when the wilaya list
+                  arrived after the form value (the option it pointed at was replaced), while the form still held 19 */}
+              <Controller
+                control={form.control}
+                name="senderWilayaId"
+                render={({ field }) => (
+                  <Select id="senderWilayaId" disabled={locked || wilayas.isPending} ref={field.ref} name={field.name} value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)} onBlur={field.onBlur}>
+                    <option value="">{t('common.none')}</option>
+                    {/* keeps the saved value selectable while the list loads */}
+                    {!wilayas.data && field.value ? <option value={field.value}>{field.value}</option> : null}
+                    {(wilayas.data ?? []).map((w) => (
+                      <option key={w.id} value={String(w.id)}>
+                        {w.code} · {locale === 'ar' ? w.nameAr : w.nameFr}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              />
             </Field>
           </div>
         </form>

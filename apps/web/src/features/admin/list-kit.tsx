@@ -17,7 +17,8 @@ import { AdminQueryError } from './admin-page';
 import type { AdminList } from './api';
 
 export type AdminFilter =
-  | { kind: 'multi' | 'single'; key: string; label: string; options: FilterOption[] }
+  /** `chipLabel`: name used on the active chip when `label` already shows the value (« Période : 7 j » — J13-9) */
+  | { kind: 'multi' | 'single'; key: string; label: string; chipLabel?: string; options: FilterOption[] }
   | { kind: 'range'; key: string; label: string; min: string; max: string; unit?: string }
   | { kind: 'date'; key: string; label: string; from: string; to: string }
   | { kind: 'toggle'; key: string; label: string }
@@ -135,7 +136,7 @@ function activeChips(list: ListController, filters: AdminFilter[]): { key: strin
     } else if (f.kind === 'multi' || f.kind === 'single') {
       for (const v of filterList(s, f.key)) {
         const o = f.options.find((x) => x.value === v);
-        items.push({ key: `${f.key}:${v}`, label: `${f.label} : ${o?.label ?? v}`, onRemove: () => list.setFilter(f.key, f.kind === 'multi' ? filterList(s, f.key).filter((x) => x !== v) : null) });
+        items.push({ key: `${f.key}:${v}`, label: `${f.chipLabel ?? f.label} : ${o?.label ?? v}`, onRemove: () => list.setFilter(f.key, f.kind === 'multi' ? filterList(s, f.key).filter((x) => x !== v) : null) });
       }
     } else if (f.kind === 'range') {
       const a = filterText(s, f.min);

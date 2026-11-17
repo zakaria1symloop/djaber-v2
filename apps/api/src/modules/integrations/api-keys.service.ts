@@ -29,7 +29,8 @@ export class ApiKeysService {
       revokedAt: iso(k.revokedAt),
       createdBy: k.createdBy ? { id: k.createdBy.id, firstName: k.createdBy.firstName, lastName: k.createdBy.lastName } : null,
       createdAt: k.createdAt.toISOString(),
-      actions: [act('revoke', !k.revokedAt, 'CONFLICT')],
+      // journey J12-5: the greyed « Révoquer » says why (« Clé API révoquée. »), never the generic CONFLICT
+      actions: [act('revoke', !k.revokedAt, 'API_KEY_REVOKED')],
     };
   }
 

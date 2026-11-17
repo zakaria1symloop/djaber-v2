@@ -97,7 +97,7 @@ export function StockDashboard() {
               tone={o.outOfStockCount ? 'alert' : o.lowStockCount ? 'starred' : undefined}
               hint={o.outOfStockCount ? t('stock.dashboard.tile.out', { count: o.outOfStockCount }) : undefined}
             />
-            {advanced ? <AmountTile testId="tile-cost" label={t('stock.dashboard.tile.cost')} amount={o.valueAtCost} locale={locale} hint={t('stock.dashboard.tile.variants')} /> : null}
+            {advanced ? <AmountTile testId="tile-cost" label={t('stock.dashboard.tile.cost')} amount={o.valueAtCost} locale={locale} hint={o.unknownCostUnits ? t('stock.dashboard.tile.unknownCost', { count: o.unknownCostUnits }) : t('stock.dashboard.tile.variants')} /> : null}
             <AmountTile testId="tile-retail" label={t('stock.dashboard.tile.retail')} amount={o.valueAtRetail} locale={locale} />
             {advanced ? <Tile testId="tile-items" label={t('stock.dashboard.tile.items')} value={<Num value={o.totalItems ?? 0} />} /> : null}
           </div>

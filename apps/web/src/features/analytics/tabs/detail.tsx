@@ -16,6 +16,16 @@ import { useReportRange } from '../shell';
 import { listRange } from './links';
 
 const TONES: ChartTone[] = ['inbound', 'orders', 'money', 'clients', 'starred'];
+
+/**
+ * Line under « Marge moyenne » (journeys 16/11 J11-2 / J11-3): the formula of the figure — gross sales with a known cost
+ * price, like the report Ventes par produit — and the amount sold without a cost price that it leaves out.
+ */
+function marginMeta(k: AnalyticsKpi, t: ReturnType<typeof useT>): string {
+  if (hintNum(k, 'advanced') === 0) return t('analytics.products.advancedOnly');
+  const unknown = hintNum(k, 'unknownCost') ?? 0;
+  return unknown > 0 ? t('analytics.products.marginUnknown', { value: formatNumber(unknown) }) : t('analytics.products.marginHelp');
+}
 const tr = (t: ReturnType<typeof useT>, key: string, raw: string) => (t.has(key) ? t(key) : raw);
 
 /** Generic stacked chart of one unit. */
@@ -76,8 +86,9 @@ const n = (v: number | null | undefined) => (v === null || v === undefined ? '�
 function ConversationsTab() {
   const t = useT();
   const fig = useFigure();
-  // p95 of a histogram KPI: « > 50 » when it sits in the open last bucket (ANALYTICS-08)
-  const p95 = (k: AnalyticsKpi | undefined, unit: Unit) => `${hintNum(k, 'p95Above') === 1 ? '> ' : ''}${fig(hintNum(k, 'p95'), unit)}`;
+  // p95 of a histogram KPI: « > 50 » when it sits in the open last bucket (ANALYTICS-08); otherwise it is the upper edge of
+  // its bucket, an upper bound — « ≤ 1 j » (J11-7 c: « p95 1 j » next to « 0 j » for parcels delivered within a minute)
+  const p95 = (k: AnalyticsKpi | undefined, unit: Unit) => `${hintNum(k, 'p95Above') === 1 ? '> ' : '≤ '}${fig(hintNum(k, 'p95'), unit)}`;
   const { period } = usePeriod();
   const q = useAnalytics('conversations', period);
   useReportRange(q.data?.range);
@@ -368,7 +379,7 @@ function ProductsTab() {
               <Kpi k={k.activeProducts} name="activeProducts" label={t('analytics.unit.activeProducts')} meta={t('analytics.products.lowStock', { count: n(hintNum(k.activeProducts, 'lowStock')) })} />
               <Kpi k={k.unitsSold} name="unitsSold" label={t('analytics.unit.unitsSold')} meta={t('analytics.products.distinct', { count: n(hintNum(k.unitsSold, 'distinct')) })} />
               <Kpi k={k.topProduct} name="topProduct" label={t('analytics.unit.topProduct')} meta={typeof top === 'string' ? top : undefined} />
-              <Kpi k={k.avgMarginPct} name="avgMarginPct" label={t('analytics.unit.avgMargin')} meta={k.avgMarginPct.value === null ? t('analytics.products.advancedOnly') : t('analytics.products.marginHelp')} />
+              <Kpi k={k.avgMarginPct} name="avgMarginPct" label={t('analytics.unit.avgMargin')} meta={marginMeta(k.avgMarginPct, t)} />
               <Kpi k={k.deadStock} name="deadStock" label={t('analytics.unit.deadStock', { days: hintNum(k.deadStock, 'days') ?? 60 })} meta={t('analytics.products.immobilised', { value: n(hintNum(k.deadStock, 'valueAtCost')) })} />
             </KpiRow>
             <ChartAndTable>
@@ -536,7 +547,7 @@ function DeliveryTab() {
           <>
             <KpiRow>
               <Kpi k={k.shipped} name="shipped" label={t('analytics.unit.shipped')} meta={couriers || undefined} />
-              <Kpi k={k.avgDays} name="avgDays" label={t('analytics.unit.avgDays')} meta={t('analytics.p95', { value: `${hintNum(k.avgDays, 'p95Above') === 1 ? '> ' : ''}${fig(hintNum(k.avgDays, 'p95'), 'days')}` })} />
+              <Kpi k={k.avgDays} name="avgDays" label={t('analytics.unit.avgDays')} meta={hintNum(k.avgDays, 'p95') === null ? undefined : t('analytics.p95', { value: `${hintNum(k.avgDays, 'p95Above') === 1 ? '> ' : '≤ '}${fig(hintNum(k.avgDays, 'p95'), 'days')}` })} />
               <Kpi k={k.firstAttemptPct} name="firstAttemptPct" label={t('analytics.unit.firstAttempt')} meta={t('analytics.delivery.secondAttempt', { pct: fig(hintNum(k.firstAttemptPct, 'secondAttemptPct'), 'pct') })} />
               <Kpi k={k.openFailures} name="openFailures" label={t('analytics.unit.openFailures')} meta={t('analytics.delivery.over48h', { count: n(hintNum(k.openFailures, 'over48h')) })} onClick={() => router.push('/delivery?tab=failed')} />
               <Kpi k={k.courierFees} name="courierFees" label={t('analytics.unit.courierFees')} meta={t('analytics.delivery.customerFees', { value: n(hintNum(k.courierFees, 'customerFees')) })} />

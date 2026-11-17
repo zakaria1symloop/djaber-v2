@@ -24,7 +24,7 @@ import { needsOnboarding, onboardingPath, onboardingWrite, stepNumber, TUNNEL_WI
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession, useWorkspaceId } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
-import { agentKeys, agentsApi, useAgent, useAgentsRefresh, usePresets } from '../api';
+import { agentKeys, agentsApi, useAgent, useAgentFaq, useAgentsRefresh, usePresets } from '../api';
 import type { Agent, WizardStepKey } from '../contracts';
 import { useCredits } from '@/features/credits/api';
 import { WIZARD_STEPS } from '../contracts';
@@ -132,6 +132,9 @@ export function AgentWizard({ step }: { step: WizardStepKey }) {
 }
 
 function WizardBody({ step, agent, crumb, inTunnel, exitTo, initialStart }: { step: WizardStepKey; agent: Agent | null; crumb: React.ReactNode; inTunnel: boolean; exitTo: string; initialStart: string | null }) {
+  // journey 16/11 J03-3: the rail counts the FAQ list the step edits (same query, refetched after each add / delete / import)
+  // — `wizard.faqCount` of the page load said « 0 FAQ » next to « 4 / 50 »
+  const faqRows = useAgentFaq(agent?.id);
   const t = useT();
   const locale = useLocaleCode();
   const router = useRouter();
@@ -378,7 +381,7 @@ function WizardBody({ step, agent, crumb, inTunnel, exitTo, initialStart }: { st
         { label: t('agents.rail.preset'), value: presetName },
         { label: t('agents.rail.name'), value: draft.name.trim() },
         { label: t('agents.rail.languages'), value: draft.languages.map((l) => t(`agents.language.short.${l}`)).join(' · ') },
-        { label: t('agents.rail.knowledge'), value: shown(2, 'knowledge') ? [draft.catalogScope === 'all' ? t('agents.rail.catalogAll') : t('agents.summary.catalogCategories', { count: draft.scopeCategoryIds.length }), t('agents.summary.rules', { count: policyCount(draft) }), t('agents.summary.faq', { count: agent?.wizard?.faqCount ?? 0 })].join(' · ') : '' },
+        { label: t('agents.rail.knowledge'), value: shown(2, 'knowledge') ? [draft.catalogScope === 'all' ? t('agents.rail.catalogAll') : t('agents.summary.catalogCategories', { count: draft.scopeCategoryIds.length }), t('agents.summary.rules', { count: policyCount(draft) }), t('agents.summary.faq', { count: faqRows.data?.length ?? agent?.wizard?.faqCount ?? 0 })].join(' · ') : '' },
         { label: t('agents.rail.capabilities'), value: shown(3, 'behaviour') ? enabledCapabilities(draft).map((c) => t(`agents.capability.short.${c}`)).join(' · ') : '' },
         { label: t('agents.rail.handoff'), value: shown(3, 'behaviour') ? t('agents.rail.handoffValue', { rules: enabledRuleCount(draft), keywords: draft.handoffKeywords.length }) : '' },
         { label: t('agents.rail.channels'), value: (agent?.channels ?? []).map(channelLabel).join(' · ') },

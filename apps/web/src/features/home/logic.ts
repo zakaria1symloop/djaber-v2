@@ -106,7 +106,7 @@ export function shortAge(iso: string, now = Date.now()): { key: string; count: n
 export type HomeTile = { key: 'pages' | 'products' | 'revenue' | 'stock'; value: number; money: boolean; sub: { key: string; count: number }[] };
 /**
  * The four tiles of the frame, from the named figures of 04 §4 (AT-ANA-01): PAGES CONNECTÉES = active channels,
- * PRODUITS = catalogue size (+ low stock), CHIFFRE D'AFFAIRES (30 J) = Revenue 30 d, VALEUR DU STOCK = stock value
+ * PRODUITS = catalogue size (+ low stock), REVENUS (30 J) = Revenue 30 d (J11-2: the named figure keeps its name), VALEUR DU STOCK = stock value
  * (at cost when the server gives it — advanced mode —, otherwise at retail).
  */
 /** `advanced` = the stock mode: the simple mode has no cost price, its stock value is the sale value like /stock (J07-9). */
@@ -116,12 +116,13 @@ export function homeTiles(k: HomeView['kpis'], advanced = true): HomeTile[] {
     { key: 'pages', value: k.channels.active, money: false, sub: k.channels.needsReconnect > 0 ? [{ key: 'home.kpi.pages.reconnect', count: k.channels.needsReconnect }] : [] },
     { key: 'products', value: k.products.total, money: false, sub: low > 0 ? [{ key: 'home.kpi.products.low', count: low }] : [] },
     { key: 'revenue', value: k.revenue30d.value, money: true, sub: revenueSources(k.revenueSources30d) },
-    { key: 'stock', value: advanced ? (k.stockValue.cost ?? k.stockValue.retail) : k.stockValue.retail, money: true, sub: [] },
+    // journeys 16/11 J11-3: the value at cost names the units it leaves out (no cost price — never counted at 0 DA)
+    { key: 'stock', value: advanced ? (k.stockValue.cost ?? k.stockValue.retail) : k.stockValue.retail, money: true, sub: advanced && k.stockValue.cost !== null && (k.stockValue.unknownCostUnits ?? 0) > 0 ? [{ key: 'home.kpi.stock.unknownCost', count: k.stockValue.unknownCostUnits! }] : [] },
   ];
 }
 
 /**
- * UX-063 — line under CHIFFRE D'AFFAIRES (30 J): what the amount is made of, from the server counts (same rows as the
+ * UX-063 — line under REVENUS (30 J): what the amount is made of, from the server counts (same rows as the
  * amount, 04 §4 Revenue): "1 commande livrée · 1 vente"; only the non-zero parts; nothing when both are 0.
  */
 export function revenueSources(s: HomeView['kpis']['revenueSources30d'] | undefined): { key: string; count: number }[] {

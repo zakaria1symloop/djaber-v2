@@ -17,7 +17,7 @@ import { sharedTestApi } from '../api';
 import type { TurnView } from '../logic';
 import { PlaygroundComposer, PlaygroundThread, usePlayground, type ChatTransport } from './chat';
 
-const replyView = (r: { reply: string; cards: { productId: string; name: string; price: number; imageUrl: string | null; variantLabel?: string | null }[]; systemMessages?: { key: string; text: string }[] }): TurnView => ({
+const replyView = (r: { reply: string; cards: { productId: string; name: string; price: number; priceMax?: number; oldPrice?: number; imageUrl: string | null; variantLabel?: string | null }[]; systemMessages?: { key: string; text: string }[] }): TurnView => ({
   reply: r.reply,
   status: 'OK',
   intent: '',
@@ -27,7 +27,7 @@ const replyView = (r: { reply: string; cards: { productId: string; name: string;
   latencyMs: 0,
   tools: [],
   simulatedTools: 0,
-  cards: (r.cards ?? []).map((c) => ({ id: c.productId, name: c.name, price: c.price, imageUrl: c.imageUrl, variants: c.variantLabel ?? null })),
+  cards: (r.cards ?? []).map((c) => ({ id: c.productId, name: c.name, price: c.price, ...(c.priceMax ? { priceMax: c.priceMax } : {}), ...(c.oldPrice ? { oldPrice: c.oldPrice } : {}), imageUrl: c.imageUrl, variants: c.variantLabel ?? null })),
   creditsInProd: 0,
   language: '',
   prompt: [],

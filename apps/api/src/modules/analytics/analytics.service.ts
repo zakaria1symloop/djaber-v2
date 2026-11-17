@@ -452,7 +452,10 @@ export class AnalyticsService {
     const sold = (m: DayMetrics) => Object.values(m.products).reduce((s, p) => s + p.sold, 0);
     const rev = (m: DayMetrics) => Object.values(m.products).reduce((s, p) => s + p.revenue, 0);
     const cogs = (m: DayMetrics) => Object.values(m.products).reduce((s, p) => s + p.cogs, 0);
-    const margin = (m: DayMetrics | null) => (m && t.stockMode === 'advanced' ? pct(rev(m) - cogs(m), rev(m)) : null);
+    // journeys 16/11 J11-2 / J11-3 — one « Marge moyenne » everywhere (= Ventes par produit, 04 §4): gross line amounts with a
+    // known cost price only; a line sold without a cost price has no margin (it counted as « 100 % » here)
+    const known = (m: DayMetrics) => rev(m) - Object.values(m.products).reduce((s, p) => s + (p.unknownCost ?? 0), 0);
+    const margin = (m: DayMetrics | null) => (m && t.stockMode === 'advanced' && known(m) > 0 ? pct(known(m) - cogs(m), known(m)) : null);
     const best = Object.entries(cur.products).sort((a, b) => b[1].revenue - a[1].revenue)[0];
     const bestName = best && best[1].revenue > 0 ? (products.find((p) => p.productId === best[0])?.name ?? null) : null;
     // categories: the 3 best by revenue + "other"
@@ -471,8 +474,8 @@ export class AnalyticsService {
         activeProducts: snap('count', active, { hint: { lowStock: overview.lowStockCount + overview.outOfStockCount } }),
         unitsSold: kpi(ctx, 'count', sold(cur), prev ? sold(prev) : null, { hint: { distinct: Object.values(cur.products).filter((p) => p.sold > 0).length } }),
         topProduct: kpi(ctx, 'money', best && best[1].revenue > 0 ? best[1].revenue : null, best ? (prev?.products[best[0]]?.revenue ?? 0) : null, { hint: { productId: best && best[1].revenue > 0 ? best[0] : null, name: bestName } }),
-        avgMarginPct: kpi(ctx, 'pct', margin(cur), margin(prev)),
-        deadStock: snap('count', dead.length, { hint: { valueAtCost: dead.reduce((s, l) => s + l.valueAtCost, 0), days: DEAD_STOCK_DAYS } }),
+        avgMarginPct: kpi(ctx, 'pct', margin(cur), margin(prev), { hint: { advanced: t.stockMode === 'advanced' ? 1 : 0, unknownCost: rev(cur) - known(cur) } }),
+        deadStock: snap('count', dead.length, { hint: { valueAtCost: dead.reduce((s, l) => s + (l.valueAtCost ?? 0), 0), days: DEAD_STOCK_DAYS } }),
       },
       series: this.series(ctx, keys, (m, key) =>
         Object.entries(m.products).reduce((s, [id, p]) => {

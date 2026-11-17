@@ -81,6 +81,9 @@ test('ADM-04 editor: impact preview while editing, "Enregistrer la version 2", l
   await page.getByRole('link').filter({ has: page.getByText('Utilisateurs', { exact: true }) }).click();
   await expect(page.getByRole('dialog', { name: 'Quitter sans enregistrer ?' })).toBeVisible();
   await page.getByRole('button', { name: 'Rester' }).click();
+  // journeys 16/11 J13-4: a new version asks its reason
+  await expect(page.getByTestId('plan-save')).toBeDisabled();
+  await editor.getByLabel('Raison').fill('Ajustement de la grille Business');
   await page.getByTestId('plan-save').click();
   await expect(page.getByText('Version 2 enregistrée.')).toBeVisible();
   await expect(page).not.toHaveURL(/edit=/);

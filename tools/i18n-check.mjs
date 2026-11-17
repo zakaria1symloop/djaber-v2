@@ -3,7 +3,36 @@
 //  2. a translation is empty, still marked ⟦TODO⟧, or its {placeholders} differ from the French ones,
 //  3. the web app uses a literal key (t('…'), key: '…', labelKey: '…', titleKey: '…') that does not exist.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { join, resolve } from 'node:path';
+
+// the ICU parser of the web app (next-intl): placeholders are the message's arguments, never the text of a plural /
+// select branch (« one {impression} », « text {Texte} »)
+const icu = (() => {
+  try {
+    return createRequire(resolve('apps/web/package.json'))('@formatjs/icu-messageformat-parser');
+  } catch {
+    // a dependency of next-intl, not of the web app: found in the pnpm store
+    try {
+      const d = readdirSync('node_modules/.pnpm').filter((x) => x.startsWith('@formatjs+icu-messageformat-parser@')).sort().pop();
+      return d ? createRequire(resolve('package.json'))(resolve(`node_modules/.pnpm/${d}/node_modules/@formatjs/icu-messageformat-parser`)) : null;
+    } catch {
+      return null;
+    }
+  }
+})();
+const argNames = (s) => {
+  const out = new Set();
+  const walk = (nodes) => {
+    for (const n of nodes) {
+      if (n.value && typeof n.value === 'string' && n.type !== 0) out.add(n.value);
+      if (n.options) for (const o of Object.values(n.options)) walk(o.value);
+      if (n.children) walk(n.children);
+    }
+  };
+  walk(icu.parse(String(s), { ignoreTag: true }));
+  return [...out].sort().join(',');
+};
 
 const dir = 'packages/shared/src/i18n/messages';
 const load = (f) => JSON.parse(readFileSync(f, 'utf8'));
@@ -16,7 +45,15 @@ for (const l of ['fr', 'ar', 'en']) {
 const problems = [];
 // the set of placeholder names (a language with more plural forms repeats them: Arabic two / few / many)
 // (a plural branch « one {impression} » is text, not a placeholder)
-const ph = (s) => [...new Set([...String(s).matchAll(/(?<!(?:zero|one|two|few|many|other|=\d+)\s*)\{(\w+)[,}]/g)].map((m) => m[1]))].sort().join(',');
+const phRegex = (s) => [...new Set([...String(s).matchAll(/(?<!(?:zero|one|two|few|many|other|=\d+)\s*)\{(\w+)[,}]/g)].map((m) => m[1]))].sort().join(',');
+const ph = (s) => {
+  if (!icu) return phRegex(s);
+  try {
+    return argNames(s);
+  } catch {
+    return phRegex(s);
+  }
+};
 for (const key of Object.keys(cat.fr)) {
   for (const l of ['ar', 'en']) {
     const v = cat[l][key];

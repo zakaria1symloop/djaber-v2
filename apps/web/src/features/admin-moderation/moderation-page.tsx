@@ -45,7 +45,7 @@ import { AssignDialog, BulkRejectDialog } from './dialogs';
 import { decisionState, formatDelay, MOD_SPEC, queueQuery, SCORE_BUCKETS, scoreBucketOf, tabCount, tabOf, tabQuery, typeOptions, WAITING_PRESETS, type ModTab } from './logic';
 import { ReviewPanel } from './review-panel';
 import { RulesSheet } from './rules-sheet';
-import { ItemRow, itemTitle, trustLabel } from './ui';
+import { ItemRow, itemTitle, trustLabel, waitUnits } from './ui';
 
 export function ModerationPage() {
   const t = useT();
@@ -106,7 +106,7 @@ function Kpis({ stats, t, locale }: { stats: ModerationStatsDto | undefined; t: 
       <OpsKpiTile data-kpi="auto" context={t('adminMod.kpi.autoContext')} value={formatNumber(stats.autoApproved7d)} unit={t('adminMod.kpi.auto')} />
       <OpsKpiTile data-kpi="rejected" context={reasons || undefined} value={formatNumber(stats.rejected7d)} unit={t('adminMod.kpi.rejected')} />
       <OpsKpiTile data-kpi="rate" value={`${locale === 'en' ? stats.rejectionRatePct : String(stats.rejectionRatePct).replace('.', ',')} %`} unit={t('adminMod.kpi.rate')} />
-      <OpsKpiTile data-kpi="delay" context={t('adminMod.kpi.delayContext')} value={formatDelay(stats.medianDelayMinutes)} unit={t('adminMod.kpi.delay')} />
+      <OpsKpiTile data-kpi="delay" context={t('adminMod.kpi.delayContext')} value={formatDelay(stats.medianDelayMinutes, waitUnits(t))} unit={t('adminMod.kpi.delay')} />
     </OpsKpiStrip>
   );
 }
@@ -192,7 +192,7 @@ function Queue({ canWrite }: { canWrite: boolean }) {
     ...(bucket ? [{ key: 'score', label: `${t('adminMod.filter.score')} : ${t(`adminMod.filter.score.${bucket}`)}`, onRemove: () => list.setFilters({ scoreMin: null, scoreMax: null }) }] : []),
     ...(trust.length ? [{ key: 'trustLevel', label: `${t('adminMod.filter.trust')} : ${trust.map((v) => trustLabel(t, v)).join(', ')}`, onRemove: () => list.setFilter('trustLevel', null) }] : []),
     ...(categoryId ? [{ key: 'categoryId', label: `${t('adminMod.filter.category')} : ${categories.data?.find((c) => c.id === categoryId)?.name ?? '…'}`, onRemove: () => list.setFilter('categoryId', null) }] : []),
-    ...(waiting ? [{ key: 'waitingOver', label: `${t('adminMod.filter.waiting')} : ${t('adminMod.filter.waitingOver', { time: formatDelay(waiting) })}`, onRemove: () => list.setFilter('waitingOver', null) }] : []),
+    ...(waiting ? [{ key: 'waitingOver', label: `${t('adminMod.filter.waiting')} : ${t('adminMod.filter.waitingOver', { time: formatDelay(waiting, waitUnits(t)) })}`, onRemove: () => list.setFilter('waitingOver', null) }] : []),
   ];
   const filtersDisabled = tab === 'appeals' || tab === 'sample';
   const selectable = canWrite && tab !== 'appeals' && tab !== 'rejected';
@@ -247,7 +247,7 @@ function Queue({ canWrite }: { canWrite: boolean }) {
             <FilterDropdown label={t('adminMod.filter.waiting')} count={waiting ? 1 : 0}>
               <FilterChips
                 label={t('adminMod.filter.waiting')}
-                options={WAITING_PRESETS.map((m) => ({ value: String(m), label: t('adminMod.filter.waitingOver', { time: formatDelay(m) }) }))}
+                options={WAITING_PRESETS.map((m) => ({ value: String(m), label: t('adminMod.filter.waitingOver', { time: formatDelay(m, waitUnits(t)) }) }))}
                 value={waiting ? [String(waiting)] : []}
                 onChange={(v) => list.setFilter('waitingOver', v[0] ? Number(v[0]) : null)}
               />

@@ -28,6 +28,7 @@ import { AI_GATEWAY, AiProviderError, type AiGateway } from '../ai/provider/ai.g
 import { RoutingService } from '../ai/routing.service';
 import { AdminBillingCatalogService } from './billing-admin.service';
 import { DAY, assertUuid, iso, userSelect, type AdminActor } from './admin.util';
+import { routeHealth } from './ai-route-health';
 
 const ENV_KEYS: Record<AiProviderKey, string> = { openai: 'OPENAI_API_KEY', anthropic: 'ANTHROPIC_API_KEY', google: 'GOOGLE_AI_API_KEY', groq: 'GROQ_API_KEY' };
 const CAPS: AiCapability[] = ['text', 'vision', 'transcription', 'embeddings'];
@@ -218,6 +219,12 @@ export class AiAdminService {
     const m = await prisma.aiModel.findUnique({ where: { id }, include: { provider: true } });
     if (!m) throw notFound();
     const { reason, ...data } = input;
+    // journeys 16/11 J13-7: a model keeps the capability of every route that uses it (the Groq Whisper of the voice route had
+    // become a « texte » model — offered for text replies, missing from the voice route's own list)
+    if (data.capabilities) {
+      const used = await prisma.aiRoute.findMany({ where: { OR: [{ primaryModelId: id }, { fallbackModelId: id }] }, select: { capability: true } });
+      if (used.some((r) => !data.capabilities!.includes(r.capability))) throw new AppException('VALIDATION_ERROR', {}, { capabilities: 'validation.invalid' });
+    }
     const row = await prisma.aiModel.update({ where: { id }, data, include: { provider: true } });
     for (const r of await prisma.aiRoute.findMany({ where: { OR: [{ primaryModelId: id }, { fallbackModelId: id }] } })) await this.routing.resetBreaker(r.primaryModelId);
     await this.log(actor, 'ai_model.update', 'AiModel', id, Object.fromEntries(Object.keys(data).map((k) => [k, (m as Record<string, unknown>)[k]])), data, reason?.trim() || null);
@@ -272,9 +279,9 @@ export class AiAdminService {
       realCostUsdPer1k: Math.round(cost * 100000) / 100000,
       credits: r.creditCost,
       marginPct: revenueDzd > 0 ? Math.round(((revenueDzd - costDzd) / revenueDzd) * 100) : null,
-      // full-test 15/11 ADMIN-01: a model whose PROVIDER is switched off does not answer either — « OK » was shown for a voice
-      // route with both providers off
-      state: r.failoverActive ? 'failover' : open || !(r.primaryModel.isActive && r.primaryModel.provider.isActive) ? 'degraded' : 'ok',
+      // full-test 15/11 ADMIN-01 (retest 16/11): a model whose PROVIDER is switched off does not answer either — « OK » was shown
+      // for a voice route with both providers off, and for a text route whose only fallback is off
+      state: routeHealth(r, open).state,
       failoverSince: iso(r.failoverSince),
       timeoutSec: r.timeoutSec,
       errorThresholdPct: r.errorThresholdPct,

@@ -416,7 +416,8 @@ export type AgentVersionDiffDto = { version: number; against: number; changes: {
 export type AgentReadinessCheck = { key: string; ok: boolean; label: string; count?: number; total?: number; link?: string; blocking?: boolean };
 export type AgentReadinessDto = { ready: boolean; checks: AgentReadinessCheck[] };
 export type AgentFaqDto = { id: string; question: string; answer: string; source: 'manual' | 'page_extraction' | 'ai_suggested' | 'file_import'; askedCount: number | null; sortOrder: number; isActive: boolean; createdAt: string };
-export type PlaygroundCard = { productId: string; name: string; price: number; imageUrl: string | null; variantLabel?: string | null };
+/** journey 16/11 J03-11: the card the customer gets (messaging `productCards`): lowest variant price, `priceMax` of the range, promotion `oldPrice`. */
+export type PlaygroundCard = { productId: string; name: string; price: number; priceMax?: number; oldPrice?: number; imageUrl: string | null; variantLabel?: string | null };
 export type PlaygroundToolCall = { name: string; args: unknown; result: unknown; simulated: boolean };
 export type PlaygroundTurnDto = {
   turnId: string;
@@ -513,7 +514,8 @@ export type AnalysisDto = {
 export type AnalysisImportResult = { created: { key: string; productId: string; sku: string }[]; failed: { index: number; code: string; message: string }[] };
 
 export type CreditsDto = {
-  plan: { used: number; limit: number; remaining: number; periodStart: string; periodEnd: string };
+  /** `trial`: the period is the trial's — it ends with the trial, then the free plan's months start (J12-1) */
+  plan: { used: number; limit: number; remaining: number; periodStart: string; periodEnd: string; trial?: boolean };
   /** remaining = pack credits left; total = pack credits bought / granted, minus store refunds and take-backs (recette 11/11: « used / total » counts up like the plan) */
   packs: { remaining: number; total?: number };
   total: number;
@@ -522,8 +524,12 @@ export type CreditsDto = {
   exhausted: boolean;
   burnRatePerDay: number;
   exhaustedEta: string | null;
+  /** platform price of one credit (`CreditPricing.creditPriceDzd`) */
   pricePerCreditDzd: number;
+  /** mean DA / credit of the packs on sale (J12-4) */
   packPricePerCreditDzd: number | null;
+  /** the current plan's list price per credit (Pro 4 900 / 5 000 = 0,98), null on a free / unlimited plan (J12-4) */
+  planPricePerCreditDzd?: number | null;
 };
 export type CreditLedgerRowDto = { id: string; at: string; action: (typeof CreditActionValues)[number]; kind: 'reserved' | 'debit' | 'release' | 'credit'; bucket: 'plan' | 'pack'; credits: number; balanceAfter: number; detail: string; agent: AgentRefView | null; conversationId: string | null; aiRunId: string | null };
 export type CreditsCalculatorDto = {

@@ -10,16 +10,30 @@ type T = ((key: string, params?: Record<string, string | number>) => string) & {
 
 const isReportResult = (r: unknown): r is ReportJobResult => !!r && typeof r === 'object' && (r as { kind?: unknown }).kind === 'report';
 
-/** Days left before an export file expires (rounded up, ≥ 0). */
-export const daysLeft = (iso: string, now = Date.now()) => Math.max(0, Math.ceil((Date.parse(iso) - now) / 86_400_000));
+/**
+ * Days left before an export file expires (nearest day, at least 1 while not expired). J11-7 (d): rounded up, a few
+ * seconds of difference between the browser clock and the server made « 8 j » next to « 7 j » for files of the same minute.
+ */
+export const daysLeft = (iso: string, now = Date.now()) => {
+  const ms = Date.parse(iso) - now;
+  return ms <= 0 ? 0 : Math.max(1, Math.round(ms / 86_400_000));
+};
+/** Result of a non-report export (Caisse, Ventes, Commandes…): its kind, rows and format (`ExportService.process`). */
+type ExportResult = { kind: string; rows?: number; format?: string };
+const isExportResult = (r: unknown): r is ExportResult => !!r && typeof r === 'object' && typeof (r as { kind?: unknown }).kind === 'string';
 
 export function jobView(job: JobDto, t: T, locale: string, now = Date.now()): { title: string; meta: string | null; state: ExportJobState; pill: string } {
   const r = isReportResult(job.result) ? job.result : null;
+  // J11-7 (d): the Caisse / Ventes exports were « Export · 16 nov. · — » — their kind names them, their result has the rows
+  const other = !r && isExportResult(job.result) ? job.result : null;
   const created = dayLabel(new Date(job.createdAt).toISOString().slice(0, 10), locale);
+  const kindKey = other ? `notification.value.exportKind.${other.kind}` : null;
   const title = r
     ? [t(`report.${r.reportKey}.title`), r.from && r.to ? `${dayLabel(r.from, locale)} → ${dayLabel(r.to, locale)}` : t('reports.jobs.snapshot', { date: created }), r.format.toUpperCase()].join(' · ')
-    : t('reports.jobs.generic', { date: created });
-  const rows = r?.rows ?? job.total ?? null;
+    : kindKey && t.has(kindKey)
+      ? [t(kindKey), created, ...(other?.format ? [other.format.toUpperCase()] : [])].join(' · ')
+      : t('reports.jobs.generic', { date: created });
+  const rows = r?.rows ?? other?.rows ?? job.total ?? null;
   const meta = rows !== null && rows !== undefined ? t('reports.jobs.rows', { count: rows }) : null;
   let state: ExportJobState;
   let pill: string;

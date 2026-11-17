@@ -73,7 +73,8 @@ export class ClientService implements OnModuleInit {
   }
 
   private async where(q: ClientsQuery, index: BlockIndex): Promise<Prisma.ClientWhereInput> {
-    const and: Prisma.ClientWhereInput[] = [{ deletedAt: null }];
+    // journey J09-8: `archived` lists the cards archived with their history (orders or sales), never a merged one
+    const and: Prisma.ClientWhereInput[] = [q.archived ? { deletedAt: { not: null }, mergedIntoId: null, OR: [{ orders: { some: {} } }, { sales: { some: {} } }] } : { deletedAt: null }];
     const now = Date.now();
     if (q.source?.length) and.push({ source: { in: q.source } });
     for (const quality of q.quality ?? []) {
@@ -544,7 +545,12 @@ export class ClientService implements OnModuleInit {
    */
   async resolveForOrder(tx: Tx, input: { id: string; phone?: string } | { name: string; phone: string; phone2?: string | null; email?: string | null }, o: { source: 'manual' | 'ai' | 'api' | 'import'; conversationClientId?: string | null }): Promise<{ client: Client; created: boolean }> {
     if ('id' in input) {
-      const c = await tx.client.findFirst({ where: { id: input.id, deletedAt: null } });
+      // journey J09-10: « Utiliser ce client » on an archived card (not a merged one) restores it, like its phone does
+      let c = await tx.client.findFirst({ where: { id: input.id, mergedIntoId: null } });
+      if (c?.deletedAt) {
+        const taken = c.phone ? await tx.client.findFirst({ where: { phone: c.phone, deletedAt: null, id: { not: c.id } }, select: { id: true } }) : null;
+        c = taken ? null : await tx.client.update({ where: { id: c.id }, data: { deletedAt: null } });
+      }
       if (!c) throw new AppException('VALIDATION_ERROR', {}, { 'client.id': 'validation.invalid' });
       if (c.phone) return { client: c, created: false };
       // no order without a phone to call / deliver (tester report 2026-10-20): the order form gives it, the client is completed
@@ -602,7 +608,7 @@ export class ClientService implements OnModuleInit {
 }
 
 const HEADERS = {
-  fr: { sheet: 'Clients', name: 'Nom', phone: 'Téléphone', email: 'E-mail', source: 'Source', orders: 'Commandes', spent: 'Dépensé (DA)', lastOrder: 'Dernière commande', tags: 'Tags' },
-  en: { sheet: 'Clients', name: 'Name', phone: 'Phone', email: 'E-mail', source: 'Source', orders: 'Orders', spent: 'Spent (DA)', lastOrder: 'Last order', tags: 'Tags' },
-  ar: { sheet: 'العملاء', name: 'الاسم', phone: 'الهاتف', email: 'البريد الإلكتروني', source: 'المصدر', orders: 'الطلبات', spent: 'المصروف (DA)', lastOrder: 'آخر طلب', tags: 'الوسوم' },
+  fr: { sheet: 'Clients', name: 'Nom', phone: 'Téléphone', email: 'E-mail', source: 'Source', orders: 'Commandes + ventes', spent: 'Dépensé (DA)', lastOrder: 'Dernière commande', tags: 'Étiquettes' },
+  en: { sheet: 'Clients', name: 'Name', phone: 'Phone', email: 'E-mail', source: 'Source', orders: 'Orders + sales', spent: 'Spent (DA)', lastOrder: 'Last order', tags: 'Tags' },
+  ar: { sheet: 'العملاء', name: 'الاسم', phone: 'الهاتف', email: 'البريد الإلكتروني', source: 'المصدر', orders: 'الطلبات + المبيعات', spent: 'المصروف (DA)', lastOrder: 'آخر طلب', tags: 'الوسوم' },
 } as const;

@@ -128,6 +128,11 @@ describe('home KPI tiles (AT-ANA-01 named figures)', () => {
   it('uses the stock value at cost when the server gives it (advanced mode)', () => {
     expect(homeTiles(kpis({ stockValue: { retail: 10, cost: 7 } }))[3]!.value).toBe(7);
   });
+  it('journeys 16/11 J11-3: the value at cost names the units without a cost price it leaves out', () => {
+    expect(homeTiles(kpis({ stockValue: { retail: 246_550, cost: 111_400, unknownCostUnits: 35 } }))[3]!.sub).toEqual([{ key: 'home.kpi.stock.unknownCost', count: 35 }]);
+    expect(homeTiles(kpis({ stockValue: { retail: 10, cost: 7, unknownCostUnits: 0 } }))[3]!.sub).toEqual([]);
+    expect(homeTiles(kpis({ stockValue: { retail: 10, cost: 7, unknownCostUnits: 4 } }), false)[3]!.sub).toEqual([]); // simple mode: sale value
+  });
   it('journeys 16/11 J07-9: the simple mode shows the sale value, the same figure as the stock dashboard', () => {
     expect(homeTiles(kpis({ stockValue: { retail: 196_100, cost: 36_462 } }), false)[3]!.value).toBe(196_100);
   });

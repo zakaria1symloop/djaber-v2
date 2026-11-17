@@ -227,6 +227,7 @@ Every platform role requires `User.totpEnabled` (`TWO_FA_REQUIRED_FOR_ROLE`); ev
 - `@Audited({ entity: 'Order', action: 'status_change', idFrom: 'params.id', diff: true })`.
 - Writes `AuditLog{ workspaceId, actorType(user|api_key|admin|system|courier|ai), actorId, action, entity, entityId, diff(before/after of whitelisted fields), ip, userAgent, reason(body.reason) }` after a 2xx, via outbox (non-blocking).
 - Sensitive actions that MUST be audited: every `/admin/*` mutation (with `reason`), member role changes, invitations, workspace deletion, API key create/revoke, webhook create/update, courier account changes, AI provider keys, plan/subscription changes, credit grants, order delete, fee override, client merge, block/unblock, impersonation start/stop, force-release channel, 2FA disable, password/e-mail change.
+- Request context (journeys 16/11 J13-2): `RequestContextMiddleware` opens `RequestMeta` (core/http/request-meta.ts, its own AsyncLocalStorage, survives `TenantContext.runSystem/runAs`); `AuditService.write` fills `ip`, `userAgent`, `sessionId` (JWT `sid`) and `impersonationSessionId` from it whenever the caller passes none and the actor is a person or a key (`user | admin | api_key | api`) — so services never have to thread them; inbound provider calls (`system | courier | ai`) keep only what they pass.
 - Retention 2 years (07-non-functional §6).
 
 ### 3.5 `VersionInterceptor`

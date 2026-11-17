@@ -598,7 +598,8 @@ export function NewOrderForm() {
         open={!!blocked}
         onOpenChange={(o) => !o && setBlocked(null)}
         title={t('orderForm.blocked.title')}
-        description={t('error.CUSTOMER_BLOCKED', { clientName: blocked?.name ?? '' })}
+        // journey J09-4 (04 §13 « warning + confirmation »): one sentence that says what « Créer quand même » does
+        description={t('orderForm.blocked.text', { name: blocked?.name ?? '' })}
         confirmLabel={t('orderForm.blocked.confirm')}
         cancelLabel={t('action.cancel')}
         closeLabel={t('action.close')}
@@ -608,9 +609,7 @@ export function NewOrderForm() {
           setBlocked(null);
           void save(s, { confirm: true });
         }}
-      >
-        <p className="text-[13px] text-text-secondary">{t('orderForm.blocked.text', { name: blocked?.name ?? '' })}</p>
-      </ConfirmDialog>
+      />
       {guard}
     </AppPage>
   );

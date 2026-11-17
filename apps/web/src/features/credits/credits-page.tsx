@@ -131,7 +131,8 @@ function Balance({ credits: c }: { credits: Credits }) {
           data-testid="tile-plan"
           value={formatNumber(c.plan.remaining)}
           label={t('credits.tile.plan')}
-          meta={t('credits.tile.plan.meta', { limit: formatNumber(c.plan.limit), date: formatDate(c.plan.periodEnd, locale) })}
+          // journey J12-1: trial credits are not « renewed » — they last until the trial ends, then the free plan applies
+          meta={t(c.plan.trial ? 'credits.tile.plan.metaTrial' : 'credits.tile.plan.meta', { limit: formatNumber(c.plan.limit), date: formatDate(c.plan.periodEnd, locale) })}
           tone={level === 'exhausted' ? 'danger' : level === 'warning' ? 'warning' : undefined}
         />
         {/* a store refund can leave the balance below zero (AT-PCK-03): the API keeps `packs.remaining` at 0 and the debt in `total` */}
@@ -139,8 +140,9 @@ function Balance({ credits: c }: { credits: Credits }) {
         <KpiTile data-testid="tile-used" value={formatNumber(c.plan.used)} label={t('credits.tile.used')} meta={usedMeta} />
         <KpiTile
           data-testid="tile-price"
-          value={pricePerCredit(c.pricePerCreditDzd, locale)}
-          label={workspace?.plan?.name ? t('credits.tile.price.plan', { plan: workspace.plan.name }) : t('credits.tile.price')}
+          // journey J12-4: « (plan Pro) » only on the plan's own price per credit; a free / unlimited plan shows the platform price
+          value={pricePerCredit(c.planPricePerCreditDzd ?? c.pricePerCreditDzd, locale)}
+          label={c.planPricePerCreditDzd != null && workspace?.plan?.name ? t('credits.tile.price.plan', { plan: workspace.plan.name }) : t('credits.tile.price')}
           meta={c.packPricePerCreditDzd !== null ? t('credits.tile.price.meta', { price: pricePerCredit(c.packPricePerCreditDzd, locale) }) : undefined}
         />
       </div>

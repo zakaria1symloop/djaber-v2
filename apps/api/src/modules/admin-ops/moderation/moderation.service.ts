@@ -30,6 +30,12 @@ import { AdminNotifier } from '../../notifications/admin-notifier.service';
 
 export type DecisionKind = 'approve' | 'reject' | 'request_changes';
 const OPEN: ModerationItem['status'][] = ['pending'];
+/**
+ * AuditLog.reason of a decision (journeys 16/11 J13-5): the moderator's message to the merchant, else the motif of a refusal /
+ * change request; an approval without a message has none (« — ») — never the action slug « approve ».
+ */
+export const decisionReason = (item: Pick<ModerationItem, 'merchantMessage' | 'reasonTemplateKey'>, kind: DecisionKind): string | null =>
+  item.merchantMessage?.trim() || (kind === 'approve' ? null : item.reasonTemplateKey) || null;
 
 const include = {
   workspace: { select: { id: true, name: true, trustLevel: true } },
@@ -224,7 +230,7 @@ export class ModerationService {
       await this.hook.emitQueue(tx);
       return updated;
     });
-    await auditAdmin(this.audit, actor, { action: `moderation.${kind}`, entity: 'ModerationItem', entityId: id, workspaceId: item.workspaceId, after: { status: item.status, decision: item.decision, rejectedFields: item.rejectedFields }, reason: item.merchantMessage ?? kind });
+    await auditAdmin(this.audit, actor, { action: `moderation.${kind}`, entity: 'ModerationItem', entityId: id, workspaceId: item.workspaceId, after: { status: item.status, decision: item.decision, rejectedFields: item.rejectedFields }, reason: decisionReason(item, kind) });
     // R-L: approval may promote new → standard; a counterfeit rejection may demote to watch
     if (kind === 'approve') await this.trust.evaluatePromotion(item.workspaceId);
     if (kind === 'reject') await this.trust.evaluateWatch(item.workspaceId);

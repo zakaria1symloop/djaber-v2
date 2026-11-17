@@ -24,7 +24,9 @@ export const languageAlternates = (path: string): Record<string, string> => {
 
 /** "Tarifs · Djaber.ai" — a page title, the description, canonical + hreflang; `noindex` for previews and 404s. */
 export function pageMetadata(o: { locale: AppLocale; path: string; title: string; description: string; noindex?: boolean }): Metadata {
-  const title = o.title === SITE_NAME ? SITE_NAME : `${o.title} · ${SITE_NAME}`;
+  // journey J12-10.3: a title that already names the brand (the landing « Djaber.ai — votre vendeur IA… ») is not
+  // suffixed a second time
+  const title = o.title.includes(SITE_NAME) ? o.title : `${o.title} · ${SITE_NAME}`;
   return {
     metadataBase: new URL(SITE_URL),
     title,

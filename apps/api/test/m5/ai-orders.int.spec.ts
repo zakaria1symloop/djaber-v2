@@ -162,6 +162,35 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     expect(await held(s)).toBe(1);
   });
 
+  it('journey 16/11 J03-10 (Blocker): « oui » while the confirming call rewords the address (« …, Bab Ezzouar, Alger ») creates the order with the recap’s wording; another wording later is no second order', async () => {
+    const s = await shop();
+    const sender = newSender();
+    await recap(s, sender); // address « Cité des 200 logements, Bt 4, Bab Ezzouar »
+    fakeAi(app).script('reply', { toolCalls: [createCall(s, { address: 'Cité des 200 logements, Bt 4, Bab Ezzouar, Alger', clientName: 'Amine BENALI' })] }, { reply: 'Commande enregistrée.', intent: 'SALE' });
+    const t = await turn(s, sender, 'oui');
+    expect(lastResult(t.runs)).toMatchObject({ ok: true, number: 'CMD-1001', draft: expect.any(String), core: expect.any(String) });
+    expect(await db.order.findFirstOrThrow({ where: { workspaceId: s.owner.workspaceId } })).toMatchObject({ address: 'Cité des 200 logements, Bt 4, Bab Ezzouar', clientName: 'Amine Benali' });
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [createCall(s, { address: 'cité 200 logements bt 4' })] }, { reply: 'Déjà enregistrée', intent: 'SALE' });
+    const again = await turn(s, sender, 'oui je confirme');
+    expect(lastResult(again.runs)).toMatchObject({ ok: false, error: { code: 'ORDER_ALREADY_PLACED', number: 'CMD-1001' } });
+    expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(1);
+  });
+
+  it('journey 16/11 J03-10: a new address word in the customer’s own « oui » message, or another quantity, is a change ⇒ a new recap, no order', async () => {
+    const s = await shop();
+    const sender = newSender();
+    await recap(s, sender);
+    fakeAi(app).script('reply', { toolCalls: [createCall(s, { address: 'Cité des 200 logements, Bt 9, Bab Ezzouar' })] }, { reply: 'Nouveau récapitulatif.', intent: 'SALE' });
+    const moved = await turn(s, sender, 'oui mais c’est le Bt 9');
+    expect(lastResult(moved.runs)).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recap: { address: 'Cité des 200 logements, Bt 9, Bab Ezzouar' } });
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [createCall(s, { address: 'Cité des 200 logements, Bt 9, Bab Ezzouar', items: [{ productId: s.robe.id, quantity: 2 }] })] }, { reply: 'Nouveau récapitulatif.', intent: 'SALE' });
+    const more = await turn(s, sender, 'oui');
+    expect(lastResult(more.runs)).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recap: { subtotal: 9000 } });
+    expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(0);
+  });
+
   it('AT-AI-07 "annuler ma commande": a new order ⇒ cancelled through OrderEffects (its hold released); a shipped order ⇒ handoff', async () => {
     const s = await shop();
     const sender = newSender();

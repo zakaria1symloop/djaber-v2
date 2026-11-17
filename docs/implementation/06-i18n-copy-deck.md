@@ -798,7 +798,7 @@ Not extracted here. For each route, copy the FR strings from the Figma frame nam
 | `REFUS` | `confirmationStatus='rejected'` |
 | `COD` / `CIB` | `paymentMethod='cash'` / `'card'` (+ `OrderPayment.provider` when online) |
 | `INCONNU` (risk) | `Client.riskLevel='normal'` and `orderCount=0` (display only) |
-| `FIABLE` | `riskLevel='normal'` and `orderCount>0` |
+| `FIABLE` | `riskLevel='normal'`, ≥ 1 delivered order and no return (05 Client pills; also on the order screens, journey J09-9) |
 | `BLOQUÉ` | `CustomerBlock` exists |
 | `À ENVOYER` | `deliveryStatus='pending'` or (`status ∈ confirmed|preparing` and no shipment) |
 | `CRÉÉE` | `Shipment.status='sent'` (the Figma word "created" reads `sent`) |

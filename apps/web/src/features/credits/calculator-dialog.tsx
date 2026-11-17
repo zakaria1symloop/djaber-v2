@@ -39,8 +39,11 @@ export function CalculatorDialog({ open, onClose, onSeePacks }: { open: boolean;
   const shown = r ? { textTurns: r.textTurns, imageTurns: r.imageTurns, voiceTurns: r.voiceTurns, credits: r.credits } : local;
   const s = r?.suggestion ?? null;
 
+  // journey J12-2: a typed « -5 » is kept by the NumberInput as an invalid value — the field says its range (the estimate
+  // counts it as the minimum)
+  const RANGE: Record<keyof CalculatorInput, [number, number]> = { conversations: [0, 1_000_000], photoPct: [0, 100], voicePct: [0, 100], msgsPerConv: [1, 200] };
   const field = (k: keyof CalculatorInput, label: string, suffix?: string, max = 9) => (
-    <Field label={label} htmlFor={`calc-${k}`}>
+    <Field label={label} htmlFor={`calc-${k}`} error={draft[k].startsWith('-') ? t('validation.range', { min: formatNumber(RANGE[k][0]), max: formatNumber(RANGE[k][1]) }) : undefined}>
       <NumberInput id={`calc-${k}`} value={draft[k]} onValueChange={(v) => setDraft((d) => ({ ...d, [k]: v }))} suffix={suffix} maxDigits={max} data-testid={`calc-${k}`} />
     </Field>
   );

@@ -141,6 +141,16 @@ export function FilterRange({
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') commit();
   };
+  // journey J09-7: a typed bound is applied after a short pause too (the panel's count follows a single « Min »), not
+  // only on blur / Enter; an unfinished value (« - ») waits
+  const latest = React.useRef(onChange);
+  latest.current = onChange;
+  React.useEffect(() => {
+    const ready = (v: string) => v === '' || Number.isFinite(Number(v));
+    if (bad || (draft.min === min && draft.max === max) || !ready(draft.min) || !ready(draft.max)) return;
+    const id = window.setTimeout(() => latest.current(draft), 700);
+    return () => window.clearTimeout(id);
+  }, [draft, min, max, bad]);
   return (
     <div className="flex flex-col gap-1.5">
     <div className="flex items-center gap-2" dir="ltr">
@@ -182,11 +192,19 @@ export function FilterDateRange({
   // full-test 15/11 SETTINGS-07: a « du » after « au » was dropped without a word — the typed pair is kept here, refused
   // inline, and applied only once it is in order
   const [draft, setDraft] = React.useState({ from, to });
-  React.useEffect(() => setDraft({ from, to }), [from, to]);
+  // journey J12-3: the URL catching up with our own last change (it lands after the next keystroke) must not wipe the
+  // date typed since — « du 20/11 » then « au 01/11 » lost the « au » date and its message when `from` arrived
+  const sent = React.useRef<{ from: string; to: string } | null>(null);
+  React.useEffect(() => {
+    if (sent.current && sent.current.from === from && sent.current.to === to) return;
+    sent.current = null;
+    setDraft({ from, to });
+  }, [from, to]);
   const bad = !!labels.invalid && !!draft.from && !!draft.to && draft.from > draft.to;
   const commit = (next: { from: string; to: string }) => {
     setDraft(next);
     if (labels.invalid && next.from && next.to && next.from > next.to) return;
+    sent.current = next;
     onChange(next);
   };
   return (

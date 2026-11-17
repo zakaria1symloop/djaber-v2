@@ -564,7 +564,7 @@ function DeliveryFilterPanel({ open, onClose, list, total }: { open: boolean; on
       onClose={onClose}
       title={t('action.filters')}
       // full-test DELIVERY-08: the delivery tiles are the shop's indicators (GET /delivery/overview) — the panel does not claim they follow it
-      summary={total === null ? t('delivery.filter.summaryLoading', { count }) : t('delivery.filter.summary', { count, results: formatNumber(total) })}
+      summary={total === null ? t('delivery.filter.summaryLoading', { count }) : t('delivery.filter.summary', { count, n: total, results: formatNumber(total) })}
       resetLabel={t('products.filter.reset')}
       onReset={() => clearPanel(list)}
       applyLabel={total === null ? t('action.apply') : t('orders.filter.show', { count: total })}

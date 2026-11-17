@@ -14,8 +14,8 @@ import { reasonText } from '@/lib/actions';
 import { errorMessage, useLeaveGuard } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { modApi, useModerationItem, useModerationRefresh, type DecisionKind } from './api';
-import { decisionState, flaggedFields, formatScore, formatWaiting, normaliseField, priceGapPct, refusableFields } from './logic';
-import { decisionLabel, flagText, itemTitle, trustLabel } from './ui';
+import { AGENT_NAME_REASONS, decisionState, flaggedFields, formatScore, formatWaiting, normaliseField, priceGapPct, refusableFields } from './logic';
+import { decisionLabel, flagText, itemTitle, trustLabel, waitUnits } from './ui';
 
 export function ReviewPanel({ id, fallback, canWrite, onDecided }: { id: string; fallback?: ModerationItemDto; canWrite: boolean; onDecided: (id: string) => void }) {
   const t = useT();
@@ -140,7 +140,7 @@ function PanelBody({
   const reject = decisionState(item, 'reject', canWrite);
   const changes = decisionState(item, 'request-changes', canWrite);
   const statusLabel = t(`adminMod.status.${item.status}`);
-  const head = open ? `${statusLabel} · ${formatWaiting(item.waitingMinutes)}` : statusLabel;
+  const head = open ? `${statusLabel} · ${formatWaiting(item.waitingMinutes, waitUnits(t))}` : statusLabel;
   const unflaggedImages = (p?.images ?? []).length;
   // PV1: keyword-list hits in the variant names / search keywords (no field row of their own)
   const otherFlags = [...flagsOf('variants'), ...flagsOf('keywords')];
@@ -222,7 +222,9 @@ function PanelBody({
               {item.category.name}
             </FlaggedField>
           ) : null}
-          {item.aiScore === null ? <FormAlert tone="warning">{t('adminMod.flag.prescreen_unavailable')}</FormAlert> : (
+          {item.type === 'agent_name' && item.aiScore === null ? (
+            <p className="ts-label-micro text-text-muted">{t('adminMod.panel.noPrescreenName')}</p>
+          ) : item.aiScore === null ? <FormAlert tone="warning">{t('adminMod.flag.prescreen_unavailable')}</FormAlert> : (
             <p className="ts-label-micro text-text-muted">{t('adminMod.panel.score', { score: formatScore(item.aiScore, locale) })}</p>
           )}
           {item.history?.length ? (
@@ -230,7 +232,7 @@ function PanelBody({
               <ul className="flex flex-col gap-0.5 text-[13px] text-accent-starred" data-testid="mod-history">
                 {item.history.map((h) => (
                   <li key={h.id}>
-                    {[t(`adminMod.status.${h.status}`), h.decision ? decisionLabel(t, h.decision) : null, formatDateTime(h.decidedAt ?? h.submittedAt, locale), h.reviewer ? `${h.reviewer.firstName} ${h.reviewer.lastName}`.trim() : null].filter(Boolean).join(' · ')}
+                    {[t(`adminMod.status.${h.status}`), h.decision ? decisionLabel(t, h.decision, item.type) : null, formatDateTime(h.decidedAt ?? h.submittedAt, locale), h.reviewer ? `${h.reviewer.firstName} ${h.reviewer.lastName}`.trim() : null].filter(Boolean).join(' · ')}
                   </li>
                 ))}
               </ul>
@@ -254,9 +256,9 @@ function PanelBody({
           <div className="mt-5">
             <div className="ts-label-micro uppercase text-text-muted">{t('adminMod.panel.decision')}</div>
             <div role="radiogroup" aria-label={t('adminMod.panel.decision')} className="mt-2 flex flex-wrap gap-2" data-testid="mod-decision">
-              {MODERATION_REASON_TEMPLATES.map((r) => (
+              {(item.type === 'agent_name' ? AGENT_NAME_REASONS : MODERATION_REASON_TEMPLATES).map((r) => (
                 <DecisionChip key={r} name={`decision-${item.id}`} value={r} checked={decision === r} onChange={() => setDecision(r)} disabled={!canWrite}>
-                  {t(`adminMod.reason.${r}`)}
+                  {t(item.type === 'agent_name' ? `adminMod.reasonName.${r}` : `adminMod.reason.${r}`)}
                 </DecisionChip>
               ))}
             </div>
@@ -299,13 +301,13 @@ function PanelBody({
                 {t('adminMod.panel.readOnly')}
               </p>
             )}
-            <p className="mt-5 ts-label-micro text-text-muted">{t('adminMod.panel.rule')}</p>
+            <p className="mt-5 ts-label-micro text-text-muted">{t(item.type === 'agent_name' ? 'adminMod.panel.ruleAgentName' : 'adminMod.panel.rule')}</p>
           </div>
         ) : (
           <div className="mt-5 rounded-card border border-line-hairline px-3 py-2.5 text-[13px]" data-testid="mod-decided">
             <div className="ts-label-micro uppercase text-text-muted">{t('adminMod.panel.decided')}</div>
             <p className="mt-1">
-              {[statusLabel, item.decision ? decisionLabel(t, item.decision) : null, item.decidedAt ? formatDateTime(item.decidedAt, locale) : null, item.reviewer ? `${item.reviewer.firstName} ${item.reviewer.lastName}`.trim() : null]
+              {[statusLabel, item.decision ? decisionLabel(t, item.decision, item.type) : null, item.decidedAt ? formatDateTime(item.decidedAt, locale) : null, item.reviewer ? `${item.reviewer.firstName} ${item.reviewer.lastName}`.trim() : null]
                 .filter(Boolean)
                 .join(' · ')}
             </p>

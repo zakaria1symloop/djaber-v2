@@ -113,7 +113,8 @@ describe('report definitions (GDS-10, D62)', () => {
       expect(fr[`report.group.${d.group}`]).toBeTruthy();
       for (const c of cols) expect(fr[`report.col.${c}`]).toBeTruthy();
       for (const k of d.kpis) expect(fr[`report.kpi.${k.key}`]).toBeTruthy();
-      if (d.chart) for (const y of [d.chart.x, ...d.chart.y]) expect(cols).toContain(y);
+      // a chart measure is a column, or a KPI of the report (Paiements « Encaissé », journeys 16/11 J11-1)
+      if (d.chart) for (const y of [d.chart.x, ...d.chart.y]) expect([...cols, ...(y === d.chart.x ? [] : d.kpis.map((k) => k.key))]).toContain(y);
       // simple mode never lists margins, purchases, cash or inventory reports
       if (d.simple) expect(['purchases_cash']).not.toContain(d.group);
     }

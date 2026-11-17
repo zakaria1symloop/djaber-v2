@@ -1,6 +1,6 @@
 // 04-ai-pipeline §4.3 — the reply guard (weak-points audit 12/11, pattern 1). Positive AND negative examples in French,
 // Arabic script (darija), arabizi and English: a false positive costs a corrective model turn, so the negatives matter.
-import { amountAllowed, buildGuardFacts, checkReply, enforceReply, fixScriptMix, foldGuard, greetingAt, guardInstruction, moneyAmounts, SAFE_SENTENCES, splitSentences, stockCounts, stripGreeting, withToolResults, type GuardFacts, type GuardFactsInput } from './reply-guard';
+import { amountAllowed, buildGuardFacts, checkReply, enforceReply, feeSentence, fixScriptMix, quoteFacts, foldGuard, greetingAt, guardInstruction, moneyAmounts, SAFE_SENTENCES, splitSentences, stockCounts, stripGreeting, withToolResults, type GuardFacts, type GuardFactsInput } from './reply-guard';
 
 const product = (name: string, sku: string, price: number, o: { oldPrice?: number; variants?: { name: string; price: number }[]; also?: { name: string; price: number }[]; description?: string } = {}) => ({
   name,
@@ -434,5 +434,46 @@ describe('journey 16/11 J04-2 / J04-3 — language and darija of the J04 transcr
   it('Algerian replies and French replies are not flagged', () => {
     expect(rules('Ih kayen M, t7ebb nsajjel lek la commande ? Makach walou problème.', facts({ lang: 'arabizi', customerText: 'x' }, []))).not.toContain('moroccan_darija');
     expect(rules('Le chiffre est correct, merci pour votre message.', facts({ lang: 'fr', customerText: 'x' }, []))).not.toContain('moroccan_darija');
+  });
+});
+
+describe('journey 16/11 J03-2 — the fee quote_delivery returned this turn is in the reply (fee_missing)', () => {
+  // P03 T2 « ch7al tawsil l setif ? »: quote_delivery Sétif 650 / 350, then a reply with no fee
+  const SETIF = { ok: true, wilayaId: 19, wilayaName: 'Sétif', isStopdesk: false, fee: 650, free: false, freeFrom: null, stopdeskAvailable: true, stopdeskFee: 350, etaDays: '2–5' };
+  const quotes = quoteFacts([{ name: 'quote_delivery', result: SETIF }, { name: 'search_products', result: { products: [] } }]);
+  const withQuote = (lang: 'arabizi' | 'fr' | 'ar' | 'en' = 'arabizi') => ({ ...facts({ lang, customerText: 'ch7al tawsil l setif ?' }, [SETIF]), quotes });
+  it('AI-CHAT-04 retest: French sentences inside an arabizi greeting / tail are a language switch; an arabizi reply with French nouns is not', () => {
+    const f = facts({ lang: 'arabizi', customerText: 'w stop desk ?' }, [SETIF]);
+    // P03 T3 and the « Arabizi : livraison » chip of the J03 run
+    expect(rules('Livraison à Sétif : 650 DA à domicile, et 350 DA en stop-desk. Le délai est de 2 à 5 jours. Ila t7ebb tchouf produit, goulli-li wach t7ebb nchouf.', f)).toContain('language_switch');
+    expect(rules('Wa 3likoum salam 😊 Livraison à domicile vers Oran : 600 DA, et en stop-desk : 400 DA. Délai : 2 à 5 jours.', facts({ lang: 'arabizi', customerText: 'salam, chhal tawsil l Oran ?' }, []))).toContain('language_switch');
+    expect(rules('Wa 3likoum salam 😊 Tawsil l Oran b 600 DA l dar w 400 DA f stop-desk. Délai 2 l 5 ayyam.', facts({ lang: 'arabizi', customerText: 'salam, chhal tawsil l Oran ?' }, []))).not.toContain('language_switch');
+    expect(rules('Ih kayen la robe en taille M, t7ebb nsajjel lek la commande ? Tawsil l Sétif b 650 DA.', f)).not.toContain('language_switch');
+  });
+  it('quoteFacts keeps the successful quote_delivery answers only', () => {
+    expect(quotes).toEqual([{ wilaya: 'Sétif', isStopdesk: false, fee: 650, free: false, stopdeskFee: 350 }]);
+    expect(quoteFacts([{ name: 'quote_delivery', result: { ok: false, error: { code: 'WILAYA_NOT_SERVED' } } }])).toEqual([]);
+  });
+  it('P03 T2 « Merci 3la sbr ! … » is flagged; a reply with the home or the stop-desk fee is not', () => {
+    expect(rules('Merci 3la sbr ! Ila t7ebb tssa2el 3la 7aja, goulli-li ach ta3ref w n3awnek.', withQuote())).toContain('fee_missing');
+    expect(rules('Tawsil l Sétif 650 DA l dar, 350 DA f stop-desk, 2 l 5 ayyam.', withQuote())).not.toContain('fee_missing');
+    expect(rules('التوصيل لسطيف بـ ٦٥٠ دج للدار.', withQuote('ar'))).not.toContain('fee_missing');
+    expect(rules('Livraison à Sétif : 350 DA en stop-desk.', withQuote('fr'))).not.toContain('fee_missing');
+  });
+  it('a free delivery said in words counts; no quote this turn ⇒ nothing is checked', () => {
+    const free = { ...withQuote('fr'), quotes: quoteFacts([{ name: 'quote_delivery', result: { ...SETIF, wilayaName: 'Oran', fee: 0, free: true } }]) };
+    expect(rules('La livraison à domicile vers Oran est gratuite pour cette commande.', free)).not.toContain('fee_missing');
+    expect(rules('Merci pour votre message, que cherchez-vous ?', facts({ lang: 'fr' }, [SETIF]))).not.toContain('fee_missing');
+  });
+  it('the corrective instruction names the fees; still missing after it ⇒ the server adds the fee sentence in the customer language', () => {
+    const f = withQuote();
+    const reply = 'Merci 3la sbr ! Ila t7ebb tssa2el 3la 7aja, goulli-li ach ta3ref w n3awnek.';
+    const v = checkReply(reply, f);
+    expect(guardInstruction(v, f)).toContain('DELIVERY FEE: quote_delivery answered Sétif: home 650 DA, stop-desk 350 DA');
+    const out = enforceReply(reply, v, f, { hasCards: false });
+    expect(out.reply.replace(/ | | /g, ' ')).toBe('Tawsil l Sétif: 650 DA l dar, 350 DA f stop-desk. Merci 3la sbr ! Ila t7ebb tssa2el 3la 7aja, goulli-li ach ta3ref w n3awnek.');
+    expect(out.action).toBe('stripped');
+    expect(feeSentence(quotes[0]!, 'fr').replace(/ | | /g, ' ')).toBe('Livraison à Sétif : 650 DA à domicile, 350 DA en stop-desk.');
+    expect(feeSentence({ wilaya: 'Oran', isStopdesk: false, fee: 0, free: true, stopdeskFee: 400 }, 'en').replace(/ | | /g, ' ')).toBe('Delivery to Oran: free to your door, 400 DA at a stop-desk.');
   });
 });

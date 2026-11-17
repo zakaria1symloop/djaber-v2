@@ -200,7 +200,11 @@ test('AT-CLI-06 · merge: preview (409 CUSTOMER_MERGE_IRREVERSIBLE) then confirm
   await dialog.getByRole('combobox').click();
   await page.getByRole('textbox', { name: 'Nom ou téléphone (ex. 0555…)' }).fill('Amina Bel');
   await page.getByRole('option', { name: /Amina Belkacem/ }).click();
+  // journey J09-3: the card the merge started from is kept by default; a click on the other card swaps
+  await expect(dialog.getByRole('radio', { checked: true })).toContainText('Amina B.');
+  await dialog.getByRole('radio').filter({ hasText: 'Amina Belkacem' }).click();
   await expect(dialog.getByRole('radio', { checked: true })).toContainText('CONSERVÉ');
+  await expect(dialog.getByRole('radio', { checked: true })).toContainText('Amina Belkacem');
   await dialog.getByTestId('merge-submit').click();
   await expect(dialog).toContainText(errText('CUSTOMER_MERGE_IRREVERSIBLE'));
   await expect(dialog.getByTestId('merge-submit')).toHaveText('Confirmer la fusion');
@@ -235,14 +239,14 @@ test('AT-CLI-03 · delete a client with orders ⇒ CUSTOMER_HAS_ORDERS → Archi
   await expect(row(page, 'Amina Belkacem')).toHaveCount(0);
 });
 
-test('row menu: risk toggle, "Commandes · n" deep link, disabled reasons in the footer', async ({ page }) => {
+test('row menu: risk toggle, "Voir ses commandes" deep link, disabled reasons in the footer', async ({ page }) => {
   await loginHome(page, owner);
   await page.goto('/fr/clients?q=Karim');
   await row(page, 'Karim Djaballah').getByRole('button', { name: 'Actions' }).click();
   await page.getByRole('menuitem', { name: 'Marquer « risque »' }).click();
   await expect(row(page, 'Karim Djaballah')).toContainText('RISQUE');
   await row(page, 'Karim Djaballah').getByRole('button', { name: 'Actions' }).click();
-  await page.getByRole('menuitem', { name: /^Commandes · / }).click();
+  await page.getByRole('menuitem', { name: /^Voir ses commandes/ }).click();
   await expectUrl(page, new RegExp(`/orders\\?clientId=${karim.id}`));
 });
 

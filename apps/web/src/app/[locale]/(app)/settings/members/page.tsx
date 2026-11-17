@@ -103,7 +103,7 @@ export default function MembersPage() {
       title={t('settings.members.title')}
       description={
         members.data
-          ? t('settings.members.summary', { count, max: max === -1 ? '∞' : max, plan: plan?.name ?? '—', pending })
+          ? t('settings.members.summary', { used: count + pending, count, max: max === -1 ? '∞' : max, plan: plan?.name ?? '—', pending })
           : undefined
       }
       permission="members.read"
@@ -141,9 +141,13 @@ export default function MembersPage() {
               <li key={m.id} className="flex flex-wrap items-center gap-3 px-4 py-3" data-member={m.user.email}>
                 <Avatar name={fullName(m)} src={m.user.avatarUrl} size={32} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[14px] font-medium">
-                    {fullName(m)}
-                    {m.user.id === me?.id ? ` ${t('settings.members.you')}` : ''}
+                  {/* journey J12-9: the name in its own direction, cut at its end; « (vous) » always visible (in Arabic a Latin
+                      name lost « QA » and « (أنت) » at its start) */}
+                  <div className="flex min-w-0 gap-1 text-[14px] font-medium">
+                    <span dir="auto" className="min-w-0 truncate">
+                      {fullName(m)}
+                    </span>
+                    {m.user.id === me?.id ? <span className="shrink-0">{t('settings.members.you')}</span> : null}
                   </div>
                   {/* full-test 15/11 SETTINGS-16: the e-mail is its own LTR box, cut at its end (in Arabic the start was cut) */}
                   <div className="ts-label-meta flex min-w-0 gap-1 text-text-muted">

@@ -179,6 +179,8 @@ export default function ProductsPage() {
         list.filtered ? t('products.list.results', { count: total }) : t('products.list.count', { count: st.total }),
         t('products.list.lowCount', { count: st.lowStock + st.outOfStock }),
         advanced && st.valueAtCost !== null ? t('products.list.valueAtCost', { amount: st.valueAtCost < 1_000_000 ? formatMoney(st.valueAtCost) : `${compactAmount(st.valueAtCost, locale)} ${t('common.currency')}` }) : null,
+        // J11-3: the value at cost says which units it leaves out (no cost price)
+        advanced && st.unknownCostUnits ? t('products.list.unknownCost', { count: st.unknownCostUnits }) : null,
       ]
         .filter(Boolean)
         .join(' · ')
@@ -191,6 +193,7 @@ export default function ProductsPage() {
           t('products.list.count', { count: o.totalProducts }),
           t('products.list.lowCount', { count: o.lowStockCount + o.outOfStockCount }),
           advanced && o.valueAtCost !== null ? t('products.list.valueAtCost', { amount: o.valueAtCost < 1_000_000 ? formatMoney(o.valueAtCost) : `${compactAmount(o.valueAtCost, locale)} ${t('common.currency')}` }) : null,
+          advanced && o.unknownCostUnits ? t('products.list.unknownCost', { count: o.unknownCostUnits }) : null,
         ]
           .filter(Boolean)
           .join(' · ')

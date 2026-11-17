@@ -442,7 +442,10 @@ function SessionsSection() {
               {shown.map((s) => (
                 <li key={s.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5" data-current={s.current}>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px]">{describeUserAgent(s.userAgent) ?? t('settings.sessions.unknownDevice')}</div>
+                    {/* journey J12-9 (same family): a Latin device name is cut at its end in Arabic too */}
+                    <div dir="auto" className="truncate text-[13px] rtl:text-right">
+                      {describeUserAgent(s.userAgent) ?? t('settings.sessions.unknownDevice')}
+                    </div>
                     {s.ip ? (
                       <bdi dir="ltr" className="ts-label-meta text-text-muted">
                         {s.ip}

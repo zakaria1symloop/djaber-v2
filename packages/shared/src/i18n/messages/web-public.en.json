@@ -154,5 +154,6 @@
   "public.contact.subjectDeletion": "Account deletion",
   "public.deletion.invalid.title": "This link is not valid.",
   "public.deletion.invalid.text": "The link is incomplete or was copied wrong. Ask again to receive a new link (valid 24 h).",
-  "public.pricing.cta.member": "Choose this plan"
+  "public.pricing.cta.member": "Choose this plan",
+  "public.meta.status.description": "Real-time availability of the Djaber.ai services and incident history."
 }

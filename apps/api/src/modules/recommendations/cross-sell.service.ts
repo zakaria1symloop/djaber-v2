@@ -5,7 +5,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { RECO_ATTRIBUTION_DAYS, RECO_MAX_PER_TURN, RECO_REGENERATE_COOLDOWN_S, RECOMMENDATION_SORTS, type CreateRecommendationInput, type RecommendationsJobResult, type RecommendationsQuery, type RecommendationStatsView, type RecommendationView, type UpdateRecommendationInput } from '@djaber/shared';
 import { prisma, Prisma, TenantContext, type Job, type Tx } from '@djaber/db';
-import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
+import { AppException, notFound, validationError } from '../../core/errors/app.exception';
 import { page, type Page } from '../../core/http/pagination';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { RedisService } from '../../core/redis/redis.provider';
@@ -109,18 +109,29 @@ export class CrossSellService implements OnModuleInit {
       const r = await prisma.recommendation.create({ data: { workspaceId: TenantContext.workspaceId(), productId: input.productId, recommendedId: input.recommendedId, type: input.type, score: input.score, reason: input.reason ?? null, isActive: input.isActive, source: 'manual' } as Prisma.RecommendationUncheckedCreateInput });
       return this.get(r.id);
     } catch (e) {
-      if (isUnique(e)) throw conflict({ reason: 'RECOMMENDATION_EXISTS' });
+      if (isUnique(e)) throw await this.duplicate(input.productId, input.recommendedId, input.type);
       throw e;
     }
   }
 
+  /**
+   * journeys 16/11 J11-5: the pair already has a rule of this type — `RECOMMENDATION_ALREADY_EXISTS` with the existing rule
+   * (`details.recommendation`) so the dialog says it and offers « Modifier la règle existante » (it was the generic CONFLICT
+   * « Modifié entre-temps, rechargez. », which the dialog showed as nothing).
+   */
+  private async duplicate(productId: string, recommendedId: string, type: CreateRecommendationInput['type']) {
+    const r = await prisma.recommendation.findFirst({ where: { productId, recommendedId, type }, select: { id: true } });
+    const view = r ? await this.get(r.id) : null;
+    return new AppException('RECOMMENDATION_ALREADY_EXISTS', { product: view?.product.name ?? '', recommended: view?.recommended.name ?? '' }, {}, { recommendation: view });
+  }
+
   /** A rule-generated pair edited by a person becomes `manual` (the next run keeps it). */
   async update(id: string, input: UpdateRecommendationInput): Promise<RecommendationView> {
-    await this.get(id);
+    const current = await this.get(id);
     try {
       await prisma.recommendation.update({ where: { id }, data: { ...input, source: 'manual' } });
     } catch (e) {
-      if (isUnique(e)) throw conflict({ reason: 'RECOMMENDATION_EXISTS' });
+      if (isUnique(e)) throw await this.duplicate(current.product.id, current.recommended.id, input.type ?? current.type);
       throw e;
     }
     return this.get(id);

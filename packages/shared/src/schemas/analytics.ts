@@ -257,9 +257,13 @@ export type AnalyticsProductsView = Base & {
     unitsSold: AnalyticsKpi;
     /** revenue of the best product; hint: productId, name */
     topProduct: AnalyticsKpi;
-    /** (revenue − COGS) ÷ revenue of the sold lines (pct); value null in simple stock mode */
+    /**
+     * (gross sales − COGS) ÷ gross sales of the sold lines with a known cost price (pct) — the « Marge moyenne » of the report
+     * Ventes par produit (journeys 16/11 J11-2 / J11-3); value null in simple stock mode or without such a line;
+     * hint: advanced (1 / 0), unknownCost (line amounts sold without a cost price, left out)
+     */
     avgMarginPct: AnalyticsKpi;
-    /** tracked products with stock and no sale for 60 days (snapshot); hint: valueAtCost, days */
+    /** tracked products with stock and no sale for 60 days (snapshot); hint: valueAtCost (lines with a known cost price), days */
     deadStock: AnalyticsKpi;
   };
   /** revenue per day per category: the 3 best category ids + `other` */

@@ -14,7 +14,7 @@ import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { agentsApi } from '../api';
 import type { PlaygroundMessage } from '../contracts';
-import { confidenceLabel, SYSTEM_BEFORE_REPLY, type TurnView } from '../logic';
+import { cardPriceText, confidenceLabel, SYSTEM_BEFORE_REPLY, type TurnView } from '../logic';
 import { uuid } from '@/lib/uuid';
 
 export type Attachment = { kind: 'image' | 'audio'; uploadId: string; name: string; url?: string };
@@ -28,13 +28,23 @@ export type ChatTransport = (history: PlaygroundMessage[], input: ChatInput, ses
 
 const newSession = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? uuid() : String(Date.now()));
 
+/**
+ * AI-CHAT-11 retest (journey J03): the workspace's turns this hour as the server last counted them in this tab — a dialog
+ * opened again started at « 0 tour cette heure » while 14 turns were used (the count is the workspace's, not the dialog's).
+ */
+let lastHourly: { used: number; at: number } | null = null;
+const knownHourly = (): number | null => (lastHourly && Date.now() - lastHourly.at < 3_600_000 ? lastHourly.used : null);
+const rememberHourly = (used: number) => {
+  lastHourly = { used, at: Date.now() };
+};
+
 export function usePlayground(transport: ChatTransport) {
   const t = useT();
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [typing, setTyping] = useState(false);
   const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
   /** playground turns of the workspace this hour, as the server counted them (null until the first answer) */
-  const [hourly, setHourly] = useState<number | null>(null);
+  const [hourly, setHourly] = useState<number | null>(knownHourly);
   const [sessionId, setSessionId] = useState(newSession);
   const seq = useRef(0);
   const sending = useRef(false);
@@ -62,7 +72,10 @@ export function usePlayground(transport: ChatTransport) {
       setTyping(true);
       try {
         const turn = await transportRef.current(history, input, sessionId);
-        if (typeof turn.hourlyUsed === 'number') setHourly(turn.hourlyUsed);
+        if (typeof turn.hourlyUsed === 'number') {
+          setHourly(turn.hourlyUsed);
+          rememberHourly(turn.hourlyUsed);
+        }
         // a scenario chip: the customer bubble takes the message the server sent (shown, and part of the next turns' history)
         const said = (turn as { customerText?: string }).customerText;
         setEntries((old) => [...old.map((e) => (said && e.role === 'user' && e.at === now && !e.text ? { ...e, text: said } : e)), { id: ++seq.current, role: 'ai', at: Date.now(), turn }]);
@@ -72,6 +85,7 @@ export function usePlayground(transport: ChatTransport) {
         if (code === 'PLAYGROUND_RATE_LIMITED' || (e instanceof ApiError && e.status === 429)) {
           setBlockedUntil(Date.now() + retryAfterSeconds(e, 3600) * 1000);
           setHourly(PLAYGROUND_TURNS_PER_HOUR);
+          rememberHourly(PLAYGROUND_TURNS_PER_HOUR);
         }
         // AI-CHAT-14 / AGENTS-03: nothing is queued in a simulation — the playground says so in its own words
         const message = code === 'AI_PROVIDER_ERROR' ? t('agents.playground.providerError') : errorMessage(e, t);
@@ -145,8 +159,8 @@ export function PlaygroundThread({ pg, agentName, empty, showTools = true, class
           return (
             <div key={e.id} className="mt-3" data-testid="playground-error" data-code={e.code ?? ''}>
               <FormAlert tone={e.code === 'PLAYGROUND_RATE_LIMITED' ? 'warning' : 'danger'}>
-                {/* the wait itself is shown once, above the composer (AI-CHAT-11: it was printed twice) */}
-                {e.message}
+                {/* the limit and its wait are shown once, above the composer (AI-CHAT-11: the limit text was printed twice) */}
+                {e.code === 'PLAYGROUND_RATE_LIMITED' ? t('agents.playground.notSent') : e.message}
               </FormAlert>
               {pg.retry && pg.wait === 0 ? (
                 <Button size="sm" className="mt-2" onClick={pg.retry} data-testid="playground-retry">
@@ -187,7 +201,7 @@ export function PlaygroundThread({ pg, agentName, empty, showTools = true, class
             ) : null}
             {turn.cards.length ? (
               <div className="mt-2">
-                <ProductCards label={t('agents.playground.cards')} cards={turn.cards.map((c) => ({ id: c.id, name: c.name, price: formatMoney(c.price), imageUrl: c.imageUrl, variants: [c.variants, showTools ? t('agents.playground.realCard') : null].filter(Boolean).join(' · ') || null }))} />
+                <ProductCards label={t('agents.playground.cards')} cards={turn.cards.map((c) => ({ id: c.id, name: c.name, price: cardPriceText(c, formatMoney), imageUrl: c.imageUrl, variants: [c.variants, showTools ? t('agents.playground.realCard') : null].filter(Boolean).join(' · ') || null }))} />
               </div>
             ) : null}
             {system(false)}
@@ -203,13 +217,24 @@ export function PlaygroundThread({ pg, agentName, empty, showTools = true, class
 export function PlaygroundComposer({ pg, placeholder, shortPlaceholder, media, disabledReason }: { pg: Playground; placeholder: string; /** journey 16/11 J04-8: below 640 px (the long hint wrapped and only « français) » showed) */ shortPlaceholder?: string; media?: boolean; disabledReason?: string }) {
   const t = useT();
   const [narrow, setNarrow] = useState(false);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  // journey 16/11 J03 (AI-CHAT-15 retest): the field's own width decides — in the step-5 dialog at 1440 px the long hint was
+  // cut too (« … (darija, arabizi, »); the short one is used when the long one does not fit on one line
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 639.98px)');
-    const sync = () => setNarrow(mq.matches);
+    const el = fieldRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const canvas = document.createElement('canvas').getContext('2d');
+    const sync = () => {
+      const style = window.getComputedStyle(el);
+      if (canvas) canvas.font = `${style.fontSize} ${style.fontFamily}`;
+      const needed = canvas ? canvas.measureText(placeholder).width : placeholder.length * 7.5;
+      setNarrow(el.clientWidth - 8 < needed);
+    };
     sync();
-    mq.addEventListener('change', sync);
-    return () => mq.removeEventListener('change', sync);
-  }, []);
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [placeholder]);
   const hint = narrow && shortPlaceholder ? shortPlaceholder : placeholder;
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<Attachment | null>(null);
@@ -278,6 +303,7 @@ export function PlaygroundComposer({ pg, placeholder, shortPlaceholder, media, d
           </>
         ) : null}
         <textarea
+          ref={fieldRef}
           dir="auto"
           rows={1}
           aria-label={placeholder}

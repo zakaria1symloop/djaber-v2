@@ -164,7 +164,7 @@ export class OrderWorkflowService implements OnModuleInit {
       const base = { workspaceId: o.workspaceId, exceptUserId: actorUserId };
       if (to === 'shipped' && shipment) await this.effects.notify(tx, 'shipment_created', { ...base, key: `shipment_created:${shipment.id}`, data: { orderId: o.id, shipmentId: shipment.id, trackingNumber: shipment.trackingNumber, number: o.number, tracking: shipment.trackingNumber ?? '—' } });
       if (to === 'delivered') await this.effects.notify(tx, 'shipment_delivered', { ...base, key: `shipment_delivered:${o.id}:${updated.version}`, data: { orderId: o.id, shipmentId: shipment?.id ?? null, number: o.number } });
-      if (to === 'returned') await this.effects.notify(tx, 'shipment_returned', { ...base, key: `shipment_returned:${o.id}:${updated.version}`, data: { orderId: o.id, shipmentId: shipment?.id ?? null, failureReason: shipment?.failureReason ?? null, number: o.number } });
+      if (to === 'returned') await this.effects.notify(tx, 'shipment_returned', { ...base, key: `shipment_returned:${o.id}:${updated.version}`, data: { orderId: o.id, shipmentId: shipment?.id ?? null, failureReason: shipment?.failureReason ?? null, number: o.number, returned: true } });
     }
     // customer transactional texts (03 §15 "Customer message"); a manual parcel without tracking number sends nothing
     if (plan.customerText && opt.notifyCustomer !== false) {

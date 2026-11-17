@@ -142,7 +142,7 @@ export function OrdersList() {
 
   const st = stats.data;
   const split = st ? sourceSplit(st) : null;
-  const summary = st ? t('orders.list.summary', { count: formatNumber(st.total), ai: formatNumber(st.sourceMix.ai), toConfirm: formatNumber(st.toConfirm) }) : orders.data ? t('orders.list.count', { count: total }) : undefined;
+  const summary = st ? t('orders.list.summary', { n: st.total, count: formatNumber(st.total), aiN: st.sourceMix.ai, ai: formatNumber(st.sourceMix.ai), toConfirm: formatNumber(st.toConfirm) }) : orders.data ? t('orders.list.count', { count: total }) : undefined;
   const counts = tabStats.data?.byStatus;
   const tabCount = (k: string | null) => (counts ? (k ? (counts as Record<string, number>)[k] : tabStats.data!.total) : undefined);
   const empty = orders.data && rows.length === 0;

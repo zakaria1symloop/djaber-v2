@@ -177,7 +177,7 @@
  "common.note": "NOTE",
  "common.noteOptional": "NOTE (FACULTATIF)",
  "common.optional": "facultatif",
- "common.ordersCount": "{count} cmd",
+ "common.ordersCount": "{count, plural, one {# cmd. ou vente} other {# cmd. et ventes}}",
  "common.pageOf": "{page} / {pages}",
  "common.paid": "Payé",
  "common.password": "MOT DE PASSE",
@@ -212,7 +212,7 @@
  "common.status": "STATUT",
  "common.stopdesk": "Stop-desk",
  "common.subtotal": "Sous-total",
- "common.tags": "TAGS",
+ "common.tags": "ÉTIQUETTES",
  "common.to": "Au",
  "common.today": "Aujourd'hui",
  "common.total": "TOTAL",
@@ -467,7 +467,7 @@
  "enum.Workspace.status.suspended": "SUSPENDU",
  "enum.Workspace.trustLevel.new": "NOUVEAU",
  "enum.Workspace.trustLevel.standard": "STANDARD",
- "enum.Workspace.trustLevel.trusted": "TRUSTED",
+ "enum.Workspace.trustLevel.trusted": "DE CONFIANCE",
  "enum.Workspace.trustLevel.watch": "SURVEILLANCE",
  "nav.admin.ai": "Fournisseurs IA",
  "nav.admin.audit": "Journal d'audit",
@@ -719,5 +719,7 @@
  "shortcuts.esc": "Échap",
  "validation.price_max": "Montant trop élevé (100 000 000 DA maximum)",
  "validation.quantity_max": "Quantité trop élevée (10 000 000 maximum)",
- "dialog.archiveProduct.title": "Archiver « {name} » ?"
+ "dialog.archiveProduct.title": "Archiver « {name} » ?",
+ "validation.unknownVariable": "Variable inconnue : {names} — utilisez {allowed}.",
+ "notification.shipment.returned.done.title": "Commande retournée #{number}"
 }

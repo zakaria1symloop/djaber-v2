@@ -15,7 +15,7 @@ import { RoutingService } from '../ai/routing.service';
 import { NotificationProducer } from '../notifications/notification.producer';
 import { announcementTargetWhere } from '../public-site/announcements.service';
 import { AdminJobsService } from './admin-jobs.service';
-import { STATE_REFUSED, assertUuid, iso, offered, userRef, userSelect, type AdminActor } from './admin.util';
+import { STATE_REFUSED, assertUuid, iso, offered, requireReason, userRef, userSelect, type AdminActor } from './admin.util';
 
 /** Types with a public page (`/legal/:key`, `/help/:key`, `/preview/cms/:key` ⇒ page): only they get a signed preview link. */
 const PREVIEWABLE: readonly string[] = ['legal', 'help', 'page'];
@@ -235,14 +235,16 @@ export class CmsAdminService implements OnModuleInit {
     return this.get(id, actor);
   }
 
-  async unpublish(id: string, actor: AdminActor) {
+  /** journeys 16/11 J13-4: the reason (≥ 10 chars) is asked by the dialog and logged — the endpoint dropped the body it was sent. */
+  async unpublish(id: string, reasonIn: string | undefined, actor: AdminActor) {
+    const reason = requireReason(reasonIn);
     const e = await this.full(id);
     if (e.status !== 'published' && e.status !== 'scheduled') throw new AppException('CONFLICT', {}, {}, { status: e.status });
     await prisma.$transaction(async (db) => {
       await db.cmsEntry.update({ where: { id }, data: { status: 'draft' } });
       await db.cmsEntryLocale.updateMany({ where: { entryId: id, status: 'published' }, data: { status: 'draft' } });
     });
-    await this.log(actor, 'cms.unpublish', id, { status: e.status }, { status: 'draft' });
+    await this.log(actor, 'cms.unpublish', id, { status: e.status }, { status: 'draft' }, reason);
     return this.get(id, actor);
   }
 

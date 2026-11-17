@@ -177,7 +177,8 @@ describe('AUTH-02 / AUTH-04 refresh, logout, sessions', () => {
     expect(r1.body.data.refreshToken).toBeUndefined();
     await withToken(app, r1.body.data.accessToken).get('/me').expect(200);
     await refresh(c1).expect(200);
-    expect((await api(app).post('/api/v1/auth/refresh').send({}).expect(401)).body.error.code).toBe('UNAUTHORIZED');
+    // J12 PUBLIC-12: no session at all ⇒ 204 (not an error), a refused token ⇒ 401
+    await api(app).post('/api/v1/auth/refresh').send({}).expect(204);
     expect((await refresh('unknown-token-unknown-token').expect(401)).body.error.code).toBe('UNAUTHORIZED');
   });
 

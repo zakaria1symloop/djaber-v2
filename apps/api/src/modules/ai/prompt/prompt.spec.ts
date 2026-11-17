@@ -107,13 +107,15 @@ describe('prompt sections (04-ai-pipeline §3)', () => {
 
   it('§3.6 delivery and §3.7 order-taking rules', () => {
     expect(deliverySection(ctx())).toMatchSnapshot();
-    expect(deliverySection(ctx({ workspace: { ...ctx().workspace, freeDeliveryThreshold: null, senderWilaya: null } }))).toBe('DELIVERY FEES: use quote_delivery.\nNever state a delivery fee that did not come from the tool.');
+    expect(deliverySection(ctx({ workspace: { ...ctx().workspace, freeDeliveryThreshold: null, senderWilaya: null } }))).toBe("DELIVERY FEES: use quote_delivery.\nNever state a delivery fee that did not come from the tool.\nWhen quote_delivery answers, your reply gives its fee for that wilaya (home, and stop-desk when known) in the customer's language — that is the answer.");
     expect(orderRulesSection(ctx())).toMatchSnapshot();
     const custom = orderRulesSection(ctx({}, { maxQtyPerOrder: 3, maxAmountPerOrder: 20000, riskyClientBehavior: 'handoff', recapMode: 'when_unsure', orderFields: [{ key: 'product', required: true, locked: true }, { key: 'quantity', required: true, locked: true }, { key: 'name', required: true, locked: true }, { key: 'phone', required: true, locked: true }, { key: 'wilaya', required: true, locked: true }, { key: 'commune', required: false, locked: false }, { key: 'address', required: true, locked: false }, { key: 'note', required: false, locked: false }] }));
     expect(custom).toContain('Required fields, in this order: product+variant → quantity → name → phone (10 digits, 05/06/07) → wilaya → address or stop-desk');
     expect(custom).toContain('Optional fields: commune, note');
     expect(custom).toContain('MAX_QTY_PER_ORDER=3\nMAX_AMOUNT=20000 DA');
-    expect(custom).toContain('RISKY_CLIENT_POLICY=handoff\nRECAP=when_unsure');
+    // journey 16/11 J03-12: 04 §5 — the recap is always asked, an old `when_unsure` setting is not passed to the model
+    expect(custom).toContain('RISKY_CLIENT_POLICY=handoff\nRECAP=always');
+    expect(custom).not.toContain('when_unsure');
   });
 
   it('full-test 15/11 AI-CHAT-05: the chosen product stays in the prompt (CURRENT ORDER); an id out of the slice is skipped', () => {

@@ -93,6 +93,8 @@ describe('ADM-06 AI providers, models, routes, pricing', () => {
     expect(badge).toMatchObject({ failover: true, model: { id: m.id } });
     // routed ⇒ refused with the route count (UX-032)
     expect((await sa.delete(`/admin/ai-models/${m.id}`).expect(409)).body.error).toMatchObject({ code: 'AI_MODEL_IN_ROUTE', params: { count: 1 } });
+    // journeys 16/11 J13-7: a routed model keeps the capability of its route
+    expect((await sa.patch(`/admin/ai-models/${m.id}`, { capabilities: ['vision'] }).expect(422)).body.error.fields).toMatchObject({ capabilities: 'validation.invalid' });
     // deactivate the primary ⇒ routing serves the fallback
     await sa.put('/admin/ai-routes/text', { primaryModelId: text.primary.modelId, fallbackModelId: m.id, creditCost: text.credits, failoverActive: false }).expect(200);
     const { RoutingService } = await import('../../src/modules/ai/routing.service');
@@ -180,7 +182,8 @@ describe('ADM-07 presets', () => {
     expect(detail.versions.map((v: any) => [v.version, v.status])).toEqual([[2, 'published'], [1, 'archived']]);
     expect(detail.agents).toBe(1);
     // archive ⇒ hidden from merchants, existing agents intact
-    expect((await sa.post(`/admin/agent-presets/${p.id}/archive`, {}).expect(200)).body.data.status).toBe('archived');
+    expect((await sa.post(`/admin/agent-presets/${p.id}/archive`, { reason: REASON }).expect(200)).body.data.status).toBe('archived');
+    expect((await lastAudit('preset.archive', p.id))!.reason).toBe(REASON); // J13-4: the reason sent is kept
     expect((await owner.get('/agents/presets').expect(200)).body.data.map((x: any) => x.key)).not.toContain(key);
     expect((await sa.post(`/admin/agent-presets/${p.id}/archive`, {}).expect(409)).body.error.code).toBe('PRESET_ARCHIVED');
     expect((await sa.patch(`/admin/agent-presets/${p.id}`, { sortOrder: 2 }).expect(409)).body.error.code).toBe('PRESET_ARCHIVED');
@@ -231,7 +234,7 @@ describe('ADM-08 CMS — announcements reach the merchant app and the public sit
     expect(site).not.toContain(elsewhere);
 
     // withdrawn ⇒ out of the banner and the site; the notification still opens it with the reason
-    await sa.post(`/admin/cms/${forAll}/unpublish`, {}).expect(200);
+    await sa.post(`/admin/cms/${forAll}/unpublish`, { reason: REASON }).expect(200);
     expect((await pub(app).get('/api/v1/cms/announcements').expect(200)).body.data.map((a: any) => a.id)).not.toContain(forAll);
     expect((await owner.get(`/announcements/${forAll}`).expect(200)).body.data.state).toBe('withdrawn');
   });
@@ -256,7 +259,10 @@ describe('ADM-08 CMS', () => {
     await drainAll(app, ['notification']);
     expect(await db.notification.count({ where: { workspaceId: owner.workspaceId, type: 'platform_announcement' } })).toBe(1);
     expect((await sa.get(`/admin/cms/${e.id}/versions`).expect(200)).body.data[0]).toMatchObject({ version: 1 });
-    expect((await sa.post(`/admin/cms/${e.id}/unpublish`, {}).expect(200)).body.data.status).toBe('draft');
+    // journeys 16/11 J13-4: the unpublish asks a reason (≥ 10 chars) and logs it — the body was dropped
+    expect((await sa.post(`/admin/cms/${e.id}/unpublish`, {}).expect(422)).body.error).toMatchObject({ code: 'ADMIN_REASON_REQUIRED', fields: { reason: 'validation.length' } });
+    expect((await sa.post(`/admin/cms/${e.id}/unpublish`, { reason: REASON }).expect(200)).body.data.status).toBe('draft');
+    expect((await lastAudit('cms.unpublish', e.id))!.reason).toBe(REASON);
     await sa.post(`/admin/cms/${e.id}/schedule`, { startsAt: new Date(Date.now() - 1000).toISOString() }).expect(422);
     const sch = (await sa.post(`/admin/cms/${e.id}/schedule`, { startsAt: new Date(Date.now() + 3600_000).toISOString() }).expect(200)).body.data;
     expect(sch.status).toBe('scheduled');
@@ -346,6 +352,21 @@ describe('ADM-09 audit · ADM-17 viewers · ADM-01 overview', () => {
     expect(first).toBe(`# sha256=${hash}`);
     expect(done.result.sha256).toBe(hash);
     expect(rest.join('\n')).toContain('viewer.open');
+
+    // journeys 16/11 J13-1: the export holds the list's filters (action, target type, search) — not the whole period
+    const range = 'from=2026-01-01&to=2030-12-31';
+    const listed = (await sa.get(`/admin/audit-logs?workspaceId=${owner.workspaceId}&action=viewer.open&entity=product&q=viewer&${range}&pageSize=100`).expect(200)).body;
+    expect(listed.meta.total).toBeGreaterThan(0);
+    // the « Type de cible » slug (product) matches the stored model name (Product); J13-6: a readable target with its shop
+    expect(listed.data.every((r: any) => r.action === 'viewer.open' && r.target.entity === 'Product')).toBe(true);
+    expect(listed.data.find((r: any) => r.target.id === prod.id).target.label).toMatch(/^Product · Parfum Oud — /);
+    const filtered = (await fin.post('/admin/audit-logs/export', { format: 'json', from: '2026-01-01', to: '2030-12-31', workspaceId: owner.workspaceId, action: ['viewer.open'], entity: ['product'], q: 'viewer' }).expect(202)).body.data;
+    await drainAll(app, ['job']);
+    const fj = await db.job.findUniqueOrThrow({ where: { id: filtered.jobId }, include: { resultUpload: true } });
+    const json = JSON.parse((await app.app.get(StorageService).get(fj.resultUpload!.storageKey)).body.toString('utf8'));
+    expect(json.count).toBe(listed.meta.total);
+    expect(json.entries.every((e: any) => e.action === 'viewer.open' && e.target.entity === 'Product')).toBe(true);
+    await fin.post('/admin/audit-logs/export', { format: 'json', from: '2026-01-01', to: '2030-12-31', entity: ['x'.repeat(61)] }).expect(422);
   });
 
   it('ADM-01 overview KPIs + series + platform totals rollup (sched-daily-stats step) + alerts (forced failover ⇒ ai_error_rate)', async () => {

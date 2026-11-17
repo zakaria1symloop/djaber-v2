@@ -237,7 +237,7 @@ export class HomeService {
         orders30d: kpi(orders, ordersPrev),
         aiOrders30d: aiOrders,
         ordersToConfirm: toConfirm,
-        stockValue: { retail: overview.valueAtRetail, cost: overview.valueAtCost },
+        stockValue: { retail: overview.valueAtRetail, cost: overview.valueAtCost, unknownCostUnits: overview.unknownCostUnits },
         conversations30d: conversations,
       },
       quickActions: [

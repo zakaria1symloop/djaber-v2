@@ -58,9 +58,10 @@ export function ClientDetailBody({ client: c }: { client: Client }) {
       ) : null}
       {c.metrics.sales > 0 ? (
         <p className="-mt-3 ts-label-meta text-text-muted" data-testid="client-spent-split">
-          {t('clients.sheet.spentSplit', { orders: formatMoney(c.metrics.ordersSpent), sales: formatMoney(c.metrics.salesSpent) })}
+          {/* journey J09-13: amounts isolated (« 4 500 DA » keeps its order in Arabic); J09-2: real plurals */}
+          {t('clients.sheet.spentSplit', { orders: iso(formatMoney(c.metrics.ordersSpent)), sales: iso(formatMoney(c.metrics.salesSpent)) })}
           {' · '}
-          {t('clients.sheet.countSplit', { orders: formatNumber(Math.max(0, c.orderCount - c.metrics.sales)), sales: formatNumber(c.metrics.sales) })}
+          {t('clients.sheet.countSplit', { orders: Math.max(0, c.orderCount - c.metrics.sales), sales: c.metrics.sales })}
         </p>
       ) : null}
       {/* journeys 16/11 J06-5: a partial counter sale needs the client so that the rest is collected — the card says what is due */}

@@ -19,7 +19,7 @@ import { RoutingService, type RoutedModel } from './routing.service';
 import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
 import { fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, type HandoffRefusal } from './handoff-judge';
-import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
+import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, quoteFacts, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
 import { orderConfirmationText } from './tools/order-confirmation-text';
 
 export type ExecutedTool = { callId: string; name: string; args: Record<string, unknown>; result: unknown; simulated: boolean; replayed: boolean };
@@ -165,10 +165,15 @@ export class AiRunService implements OnModuleInit {
       return text ? { ...output, reply: text } : output;
     };
     const ok = (output: AiReplyOutput, extra: { salvaged?: boolean; guard?: GuardOutcome } = {}): TurnResult => ({ ok: true, output: confirmed(output), tools: executed, usage, model: model!, usedFallback, forcedHandoff, repaired, ...(handoffRefused ? { handoffRefused } : {}), ...extra });
-    const factsNow = () => withToolResults(req.guard!, executed.map((t) => t.result));
+    // journey 16/11 J03-2: this turn's quote_delivery answers — the reply must give the fee (not checked on a handoff answer)
+    const factsNow = (answer?: Pick<AiReplyOutput, 'status'>) => {
+      const f = withToolResults(req.guard!, executed.map((t) => t.result));
+      const quotes = answer?.status === 'HANDOFF' || forcedHandoff ? [] : quoteFacts(executed.map((t) => ({ name: canonicalTool(t.name), result: t.result })));
+      return quotes.length ? { ...f, quotes } : f;
+    };
     /** The guard's last word: offending sentences dropped / greeting stripped / the safe sentence (never a handoff). */
     const enforce = (base: AiReplyOutput, text: string, violations: GuardViolation[], first: GuardViolation[], retried: boolean, extra: { salvaged?: boolean }): TurnResult => {
-      const e = enforceReply(text, violations, factsNow(), { hasCards: base.productCards.length > 0 });
+      const e = enforceReply(text, violations, factsNow(base), { hasCards: base.productCards.length > 0 });
       return ok({ ...base, reply: e.reply }, { ...extra, guard: { violations: slim(first), retried, remaining: slim(violations), action: e.action } });
     };
     /** The corrective turn could not run (provider failure, time): the first answer is enforced rather than lost. */
@@ -177,7 +182,7 @@ export class AiRunService implements OnModuleInit {
     const guarded = (output: AiReplyOutput, extra: { salvaged?: boolean }, canRetry: boolean): TurnResult | 'retry' => {
       // the server's order confirmation replaces the text: nothing of the model's to check
       if (!req.guard || !output.reply.trim() || confirmationNow()) return ok(output, extra);
-      const violations = checkReply(output.reply, factsNow());
+      const violations = checkReply(output.reply, factsNow(output));
       if (!violations.length) return ok(output, extra);
       // a slip the server fixes itself (a Latin letter inside an Arabic word) costs no model turn
       if (canRetry && violations.some((v) => !AUTO_FIX_RULES.includes(v.rule)) && req.deadline - Date.now() > GUARD_RETRY_MIN_MS) {
@@ -230,13 +235,13 @@ export class AiRunService implements OnModuleInit {
         const { output: first, extra, violations } = guardFirst;
         const rewritten = (parsed.ok ? parsed.value.reply : (salvageReply(res.value.text)?.reply ?? '')).trim();
         if (!rewritten) return enforce(first, first.reply, violations, violations, true, extra);
-        const again = checkReply(rewritten, factsNow());
+        const again = checkReply(rewritten, factsNow(first));
         if (!again.length) return ok({ ...first, reply: rewritten }, { ...extra, guard: { violations: slim(violations), retried: true, remaining: [], action: 'rewritten' } });
         return enforce(first, rewritten, again, violations, true, extra);
       }
       const retryOrDone = (r: TurnResult | 'retry'): TurnResult | null => {
         if (r !== 'retry') return r;
-        messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: guardInstruction(guardFirst!.violations, factsNow()) });
+        messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: guardInstruction(guardFirst!.violations, factsNow(guardFirst!.output)) });
         return null;
       };
       if (parsed.ok) {

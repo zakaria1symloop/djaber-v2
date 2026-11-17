@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Agent, AgentPreset, PlaygroundTurn } from './contracts';
 import {
+  cardPriceText,
   issueSummary,
   pendingCatalogue,
   insertToken,
@@ -375,5 +376,15 @@ describe('pendingCatalogue (journey 16/11 J04-1)', () => {
     expect(pendingCatalogue([{ key: 'catalog', count: 3 }, { key: 'pendingModeration', count: 9 }])).toBeNull();
     expect(pendingCatalogue([{ key: 'catalog', count: 0 }, { key: 'pendingModeration', count: 0 }])).toBeNull();
     expect(pendingCatalogue(undefined)).toBeNull();
+  });
+});
+
+describe('journey 16/11 J03-11 — the playground card price is the price of the customer card', () => {
+  const money = (n: number) => `${n} DA`;
+  it('range of the variants, promotion price, plain price', () => {
+    expect(cardPriceText({ price: 4900, priceMax: 5200 }, money)).toBe('4900 DA – 5200 DA');
+    expect(cardPriceText({ price: 7500, oldPrice: 9000 }, money)).toBe('7500 DA (9000 DA)');
+    expect(cardPriceText({ price: 2800 }, money)).toBe('2800 DA');
+    expect(cardPriceText({ price: 2800, priceMax: 2800, oldPrice: 2000 }, money)).toBe('2800 DA');
   });
 });

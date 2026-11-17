@@ -57,9 +57,9 @@ export function CallResultPill({ result }: { result: CallResult }) {
   );
 }
 
-/** RISQUE for a high-risk client, FIABLE for a returning client (≥ 2 orders), nothing otherwise. */
+/** RISQUE for a high-risk client, FIABLE by the client list's rule (≥ 1 delivered order, no return — journey J09-9), nothing otherwise. */
 /** `risk` = the order's snapshot (`Order.riskLevel` at creation); the client's current level wins when it is high (e.g. a later "faux numéro"). */
-export function RiskPill({ client, risk }: { client: Pick<ClientRef, 'orderCount' | 'blocked' | 'riskLevel'>; risk: 'normal' | 'high' }) {
+export function RiskPill({ client, risk }: { client: Pick<ClientRef, 'orderCount' | 'blocked' | 'riskLevel' | 'reliable'>; risk: 'normal' | 'high' }) {
   const t = useT();
   if (client.blocked)
     return (
@@ -73,7 +73,7 @@ export function RiskPill({ client, risk }: { client: Pick<ClientRef, 'orderCount
         {t('enum.Client.riskLevel.high')}
       </StatusPill>
     );
-  if (client.orderCount >= 2)
+  if (client.reliable)
     return (
       <StatusPill enumKey="Client.riskLevel" value="normal" className={PILL}>
         {t('enum.Client.riskLevel.normal')}

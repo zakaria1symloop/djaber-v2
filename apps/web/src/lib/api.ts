@@ -97,7 +97,8 @@ export const refreshSession = (): Promise<boolean> => {
   )
     .then(async (r) => {
       lastRefreshStatus = r.status;
-      if (!r.ok) return false;
+      // 204: this browser holds no session (journey J12 PUBLIC-12 — it was a 401 in a visitor's console)
+      if (!r.ok || r.status === 204) return false;
       const json = (await r.json()) as Envelope<{ accessToken: string }>;
       if (!json?.data?.accessToken) return false;
       session.accessToken = json.data.accessToken;
@@ -114,7 +115,7 @@ export const refreshSession = (): Promise<boolean> => {
 };
 /** HTTP status of the last refresh (0 = network failure): only a refusal (401) means « no session in this browser ». */
 let lastRefreshStatus = 0;
-export const refreshRefused = () => lastRefreshStatus === 401 || lastRefreshStatus === 403;
+export const refreshRefused = () => lastRefreshStatus === 204 || lastRefreshStatus === 401 || lastRefreshStatus === 403;
 
 export type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';

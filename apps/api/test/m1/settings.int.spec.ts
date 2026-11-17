@@ -30,6 +30,8 @@ describe('quick replies', () => {
     expect(defaults.body.data.map((r: any) => r.sortOrder)).toEqual([0, 1, 2, 3]);
     expect(defaults.body.data[0]).toMatchObject({ title: 'Salutation', shortcut: '/bonjour', locale: 'fr' });
 
+    // journey J09-12: an unknown variable is refused (it would reach the customer raw)
+    expect((await owner.post('/workspace/quick-replies', { title: 'Relance', body: 'Bonjour {prénom} {inconnu} {PRODUCT}' }).expect(422)).body.error.fields).toMatchObject({ body: 'validation.unknownVariable' });
     const created = await owner.post('/workspace/quick-replies', { title: 'Livraison Sétif', body: 'Bonjour {prénom}, livraison 500 DA', shortcut: '/livr' }).expect(201);
     expect(created.body.data).toMatchObject({ title: 'Livraison Sétif', shortcut: '/livr', sortOrder: 4, locale: 'fr', createdAt: expect.any(String) });
     expect(created.body.data.workspaceId).toBeUndefined();

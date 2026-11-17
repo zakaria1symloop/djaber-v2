@@ -1,7 +1,7 @@
 'use client';
 // /settings/system-messages — Figma "SET — Settings — … System messages" + DLG "Message système — réinitialiser" (AT-SET-01, 11 §9):
 // 4 editable keys × 3 locales, preview, reset to default, and the 3 fixed platform texts shown read-only.
-import { getMessages, SYSTEM_MESSAGE_KEYS, type AppLocale, type SystemMessageKey } from '@djaber/shared';
+import { getMessages, SYSTEM_MESSAGE_KEYS, SYSTEM_MESSAGE_VARIABLES, unknownVariables, variablesLabel, type AppLocale, type SystemMessageKey } from '@djaber/shared';
 import { Button, Card, ConfirmDialog, FormAlert, SegmentedControl, Skeleton, Textarea, toast } from '@djaber/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
@@ -50,10 +50,15 @@ export default function SystemMessagesPage() {
   const dirty = useMemo(() => !!draft && !!base && JSON.stringify(draft) !== JSON.stringify(base), [draft, base]);
   const { guard } = useLeaveGuard(dirty, t('nav.settings.systemMessages'));
   const tooLong = !!draft && SYSTEM_MESSAGE_KEYS.some((k) => routing.locales.some((l) => (draft[k][l] ?? '').length > MAX));
+  // journey J09-11: an unknown variable is pointed out in its field (the server refuses it with 422 too)
+  const unknownOf = (k: SystemMessageKey, l: AppLocale) => (draft ? unknownVariables(draft[k][l] ?? '', SYSTEM_MESSAGE_VARIABLES[k]) : []);
+  const badTabs = draft ? routing.locales.filter((l) => l !== locale && SYSTEM_MESSAGE_KEYS.some((k) => unknownOf(k, l).length)) : [];
+  const hasUnknown = !!draft && routing.locales.some((l) => SYSTEM_MESSAGE_KEYS.some((k) => unknownOf(k, l).length));
 
   // full-test 15/11 SETTINGS-13: the sample product is in the tab's language (« عذرًا، La Robe satin … » in the Arabic tab)
+  // a variable in any case is filled, as the server stores it in lower case (J09-11: « {PRODUCT} » stayed raw in the preview)
   const preview = (text: string, lang: AppLocale = locale) =>
-    text.replaceAll('{shop}', workspace?.name ?? '').replaceAll('{product}', getMessages(lang)['settings.systemMessages.sampleProduct'] ?? t('settings.systemMessages.sampleProduct'));
+    text.replace(/\{\s*shop\s*\}/gi, workspace?.name ?? '').replace(/\{\s*product\s*\}/gi, getMessages(lang)['settings.systemMessages.sampleProduct'] ?? t('settings.systemMessages.sampleProduct'));
   const onSave = async () => {
     if (!draft) return;
     setError(null);
@@ -100,13 +105,22 @@ export default function SystemMessagesPage() {
           ) : (
             SYSTEM_MESSAGE_KEYS.map((k) => {
               const value = draft[k][locale] ?? '';
+              const unknown = unknownOf(k, locale);
               return (
                 <Card key={k} className="bg-ink-raised p-3.5" data-message={k}>
                   <div className="flex flex-wrap items-center gap-3">
                     <label htmlFor={`sm-${k}`} className="ts-label-meta uppercase text-text-primary">
                       {t(`settings.systemMessages.${k}.label`)}
                     </label>
-                    <span className="ts-label-micro me-auto text-text-muted">{t(`settings.systemMessages.${k}.when`)}</span>
+                    <span className="ts-label-micro me-auto text-text-muted">
+                      {t(`settings.systemMessages.${k}.when`)}
+                      {/* SETTINGS-02 / J09-11: the variables as they must be typed (never upper-cased by the label style) */}
+                      {' · '}
+                      {t('settings.systemMessages.variables')}{' '}
+                      <code className="normal-case font-mono" dir="ltr" data-variables={k}>
+                        {variablesLabel(SYSTEM_MESSAGE_VARIABLES[k])}
+                      </code>
+                    </span>
                     {canEdit ? (
                       <Button variant="ghost" size="sm" onClick={() => (setResetError(null), setResetKey(k))}>
                         {t('settings.systemMessages.reset')}
@@ -121,10 +135,16 @@ export default function SystemMessagesPage() {
                     value={value}
                     maxLength={MAX}
                     disabled={!canEdit || save.isPending}
-                    aria-invalid={value.length > MAX}
+                    aria-invalid={value.length > MAX || unknown.length > 0}
+                    aria-describedby={unknown.length ? `sm-${k}-unknown` : undefined}
                     placeholder={k === 'welcome' ? t('settings.systemMessages.welcomeEmpty') : undefined}
                     onChange={(e) => setDraft({ ...draft, [k]: { ...draft[k], [locale]: e.target.value } })}
                   />
+                  {unknown.length ? (
+                    <p id={`sm-${k}-unknown`} role="alert" className="mt-1.5 ts-label-meta text-accent-alert" data-unknown={k}>
+                      {t('validation.unknownVariable', { names: unknown.join(', '), allowed: variablesLabel(SYSTEM_MESSAGE_VARIABLES[k]) })}
+                    </p>
+                  ) : null}
                   <div className="mt-2 flex flex-wrap items-start gap-2">
                     <span className="ts-label-micro mt-1 text-text-muted">{t('settings.systemMessages.preview')}</span>
                     {value ? (
@@ -140,10 +160,11 @@ export default function SystemMessagesPage() {
             })
           )}
         </div>
+        {badTabs.length ? <FormAlert className="mt-3">{t('settings.systemMessages.unknownInTabs', { tabs: badTabs.map((l) => LOCALE_NAMES[l]).join(', ') })}</FormAlert> : null}
         {error ? <FormAlert className="mt-3">{error}</FormAlert> : null}
         {canEdit ? (
           <div className="mt-4 flex justify-end">
-            <Button variant="primary" onClick={onSave} loading={save.isPending} disabled={!dirty || tooLong}>
+            <Button variant="primary" onClick={onSave} loading={save.isPending} disabled={!dirty || tooLong || hasUnknown}>
               {save.isPending ? t('common.saving') : t('action.save')}
             </Button>
           </div>

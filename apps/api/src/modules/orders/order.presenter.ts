@@ -14,7 +14,8 @@ export const ACTIVE_SHIPMENT = ['pending', 'sent', 'picked_up', 'in_transit', 'o
 const DAY = 86_400_000;
 
 export const ORDER_LIST_INCLUDE = {
-  client: { select: { id: true, name: true, phone: true, riskLevel: true, isPlaceholder: true, orderCount: true } },
+  // journey J09-9: the FIABLE pill of the order screens is the client list's rule (≥ 1 delivered, no return)
+  client: { select: { id: true, name: true, phone: true, riskLevel: true, isPlaceholder: true, orderCount: true, returnCount: true, _count: { select: { orders: { where: { status: 'delivered' } } } } } },
   channel: { select: { id: true, platform: true, name: true, avatarUrl: true, status: true } },
   agent: { select: { id: true, name: true, status: true } },
   createdBy: userRef,
@@ -69,7 +70,7 @@ export type PresentCtx = {
 
 const wilayaName = (w: { nameFr: string; nameAr: string } | null | undefined, locale: string) => (w ? (locale === 'ar' ? w.nameAr : w.nameFr) : '');
 
-export const clientRefOf = (c: { id: string; name: string; phone: string | null; riskLevel: 'normal' | 'high'; isPlaceholder: boolean; orderCount: number }, blocked: boolean): ClientRefView => ({
+export const clientRefOf = (c: { id: string; name: string; phone: string | null; riskLevel: 'normal' | 'high'; isPlaceholder: boolean; orderCount: number; returnCount?: number; _count?: { orders: number } }, blocked: boolean): ClientRefView => ({
   id: c.id,
   name: c.name,
   phone: c.phone,
@@ -77,6 +78,7 @@ export const clientRefOf = (c: { id: string; name: string; phone: string | null;
   isPlaceholder: c.isPlaceholder,
   blocked,
   orderCount: c.orderCount,
+  ...(c._count && c.returnCount !== undefined ? { reliable: c._count.orders >= 1 && c.returnCount === 0 } : {}),
 });
 
 const sourceOf = (o: OrderListRow): SourceBadge => {

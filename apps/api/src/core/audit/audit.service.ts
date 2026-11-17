@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { prisma, TenantContext, type Prisma } from '@djaber/db';
+import { RequestMeta } from '../http/request-meta';
 
 export type AuditEntry = {
   workspaceId?: string | null;
@@ -15,7 +16,12 @@ export type AuditEntry = {
   ip?: string | null;
   userAgent?: string | null;
   impersonationSessionId?: string | null;
+  /** auth session (JWT `sid`) of the acting person — filled from the request when omitted */
+  sessionId?: string | null;
 };
+
+/** Actors whose request context (ip, device, session) is theirs: a person or a key of the shop, never an inbound provider call. */
+const PERSON_ACTORS = new Set<AuditEntry['actorType']>(['user', 'admin', 'api_key', 'api']);
 
 const SECRET_KEYS = /password|secret|token|hash|credentials|recoveryCodes|totp/i;
 
@@ -38,6 +44,10 @@ export const redact = (v: unknown, depth = 0): unknown => {
 export class AuditService {
   /** Sensitive actions listed in 01-nest-module-map §3.4 must call this (or use `@Audited`). */
   async write(e: AuditEntry) {
+    // J13-2 (journeys 16/11): every row written while serving a person's request carries its ip / device / session, even when
+    // the caller passed none (API keys, webhooks, safety, clients wrote « CONTEXTE — »). Values a caller passes win.
+    const req = PERSON_ACTORS.has(e.actorType) ? RequestMeta.current() : null;
+    const impersonationSessionId = e.impersonationSessionId ?? TenantContext.maybe()?.impersonation?.sessionId ?? null;
     await TenantContext.runSystem(() =>
       prisma.auditLog.create({
         data: {
@@ -51,9 +61,10 @@ export class AuditService {
           before: (redact(e.before) ?? undefined) as Prisma.InputJsonValue | undefined,
           after: (redact(e.after) ?? undefined) as Prisma.InputJsonValue | undefined,
           reason: e.reason ?? null,
-          ip: e.ip ?? null,
-          userAgent: e.userAgent ?? null,
-          impersonationSessionId: e.impersonationSessionId ?? null,
+          ip: e.ip ?? req?.ip ?? null,
+          userAgent: e.userAgent ?? req?.userAgent ?? null,
+          sessionId: e.sessionId ?? req?.sessionId ?? null,
+          impersonationSessionId,
         },
       }),
     );

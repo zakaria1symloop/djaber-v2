@@ -133,8 +133,10 @@ export const productStats = async (q: Partial<ProductsQuery>, advanced: boolean)
   const where = productWhere(q);
   const qty = Prisma.sql`CASE WHEN p."hasVariants" THEN COALESCE((SELECT sum(GREATEST(v."stock", 0)) FROM "ProductVariant" v WHERE v."productId" = p."id" AND v."deletedAt" IS NULL AND v."isActive"), 0) ELSE GREATEST(COALESCE(p."stock", 0), 0) END`;
   const cost = Prisma.sql`CASE WHEN p."hasVariants" THEN COALESCE((SELECT sum(GREATEST(v."stock", 0)::bigint * COALESCE(v."costPrice", p."costPrice", 0)) FROM "ProductVariant" v WHERE v."productId" = p."id" AND v."deletedAt" IS NULL AND v."isActive"), 0) ELSE GREATEST(COALESCE(p."stock", 0), 0)::bigint * COALESCE(p."costPrice", 0) END`;
+  // J11-3: units in stock whose cost price is unknown (counted at nothing in `cost`, named by the header)
+  const unknown = Prisma.sql`CASE WHEN p."hasVariants" THEN COALESCE((SELECT sum(GREATEST(v."stock", 0)) FROM "ProductVariant" v WHERE v."productId" = p."id" AND v."deletedAt" IS NULL AND v."isActive" AND COALESCE(v."costPrice", p."costPrice") IS NULL), 0) WHEN p."costPrice" IS NULL THEN GREATEST(COALESCE(p."stock", 0), 0) ELSE 0 END`;
   const retail = Prisma.sql`CASE WHEN p."hasVariants" THEN COALESCE((SELECT sum(GREATEST(v."stock", 0)::bigint * v."price") FROM "ProductVariant" v WHERE v."productId" = p."id" AND v."deletedAt" IS NULL AND v."isActive"), 0) ELSE GREATEST(COALESCE(p."stock", 0), 0)::bigint * p."price" END`;
-  const [r] = await prisma.$queryRaw<{ total: number; active: number; inactive: number; archived: number; services: number; low: number; out: number; items: number; cost: number; retail: number }[]>`
+  const [r] = await prisma.$queryRaw<{ total: number; active: number; inactive: number; archived: number; services: number; low: number; out: number; items: number; cost: number; retail: number; unknown: number }[]>`
     SELECT count(*)::int AS total,
       (count(*) FILTER (WHERE p."deletedAt" IS NULL AND p."isActive"))::int AS active,
       (count(*) FILTER (WHERE p."deletedAt" IS NULL AND NOT p."isActive"))::int AS inactive,
@@ -144,7 +146,8 @@ export const productStats = async (q: Partial<ProductsQuery>, advanced: boolean)
       (count(*) FILTER (WHERE ${OUT}))::int AS out,
       COALESCE(sum(${qty}) FILTER (WHERE p."trackStock"), 0)::int AS items,
       COALESCE(sum(${cost}) FILTER (WHERE p."trackStock"), 0)::float8 AS cost,
-      COALESCE(sum(${retail}) FILTER (WHERE p."trackStock"), 0)::float8 AS retail
+      COALESCE(sum(${retail}) FILTER (WHERE p."trackStock"), 0)::float8 AS retail,
+      COALESCE(sum(${unknown}) FILTER (WHERE p."trackStock"), 0)::int AS unknown
     FROM "Product" p WHERE ${where}`;
   return {
     total: r?.total ?? 0,
@@ -157,6 +160,7 @@ export const productStats = async (q: Partial<ProductsQuery>, advanced: boolean)
     totalItems: r?.items ?? 0,
     // simple mode has no cost price (ONB-03)
     valueAtCost: advanced ? Math.round(r?.cost ?? 0) : null,
+    unknownCostUnits: advanced ? (r?.unknown ?? 0) : null,
     valueAtRetail: Math.round(r?.retail ?? 0),
   };
 };

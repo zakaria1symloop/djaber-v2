@@ -318,6 +318,9 @@ export function ActivationRail({ agent, activation, onSaveDraft }: { agent: Agen
 export function scenarioSummary(summary: string | null | undefined, t: ReturnType<typeof useT>): string | null {
   if (!summary) return null;
   if (summary === 'handoff') return t('agents.activate.scenarios.handedOff');
+  // journey 16/11 J03-8: the photo scenario could not run (no product photo in the scope, photos off): said, never a ✓
+  const untested = /^not_tested:(no_photo|image_off)$/.exec(summary);
+  if (untested) return t(`agents.activate.scenarios.notTested.${untested[1]}`);
   const failed = /^failed:\s*(.+)$/.exec(summary);
   if (failed) return t('agents.activate.scenarios.failedChecks', { checks: failed[1]!.split(/,\s*/).map((c) => (t.has(`agents.scenario.check.${c}`) ? t(`agents.scenario.check.${c}`) : c)).join(' · ') });
   if (/^[A-Z][A-Z_]+$/.test(summary)) return t.has(`error.${summary}`) ? t(`error.${summary}`) : t('agents.activate.scenarios.status.error');

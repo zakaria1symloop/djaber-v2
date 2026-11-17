@@ -34,7 +34,7 @@
  "channels.analysis.service.toProduct": "A product with stock? Click to enter the quantity.",
  "clients.sheet.allSales": "See all {count}",
  "clients.sheet.salesTitle": "COUNTER SALES",
- "clients.sheet.countSplit": "{orders} order(s) + {sales} counter sale(s)",
+ "clients.sheet.countSplit": "{orders, plural, one {# order} other {# orders}} + {sales, plural, one {# counter sale} other {# counter sales}}",
  "clients.sheet.spentSplit": "Delivered orders {orders} + counter sales {sales}",
  "credits.pill.labelPacks": "Credits: {used} / {limit}, packs {packUsed} / {packTotal}",
  "credits.pill.packs": "This month: {used} / {limit} plan credits · Packs: {packUsed} / {packTotal} used ({pack} left), used once the month's credits run out",

@@ -17,6 +17,7 @@ import { ReleaseDialog } from './dialogs';
 import type { WsDialog } from './actions';
 import type { MenuAction } from '@djaber/ui';
 import { creditsText, WorkspaceStatusPill } from './status';
+import { rowLabelKey } from '@/features/credits/logic';
 
 const TABS = ['summary', 'members', 'subscription', 'credits', 'channels', 'agents', 'audit'] as const;
 type Tab = (typeof TABS)[number];
@@ -226,6 +227,12 @@ function Subscription({ ws }: { ws: AdminWorkspaceDetailDto }) {
   );
 }
 
+/** journeys 16/11 J13-12: a grant says its source (ESSAI, PROMO…) as on the merchant's credits page — the trial grant read « GESTE ». */
+const ledgerLabel = (t: ReturnType<typeof useT>, r: AdminCreditRowDto) => {
+  const key = rowLabelKey({ action: r.action as Parameters<typeof rowLabelKey>[0]['action'], detail: r.reason ?? '' });
+  return key && t.has(key) ? t(key) : r.action;
+};
+
 function Credits({ id }: { id: string }) {
   const t = useT();
   const f = useFormats();
@@ -238,7 +245,7 @@ function Credits({ id }: { id: string }) {
           {rows.map((r) => (
             <li key={r.id} className={itemCls}>
               <span className="ts-label-micro w-24 shrink-0 text-text-muted">{f.shortTime(r.at)}</span>
-              <span className="min-w-0 flex-1 truncate">{[t.has(`enum.CreditLedger.action.${r.action}`) ? t(`enum.CreditLedger.action.${r.action}`) : r.action, ledgerReason(t, r.action, r.reason, r.credits)].filter(Boolean).join(' · ')}</span>
+              <span className="min-w-0 flex-1 truncate">{[ledgerLabel(t, r), ledgerReason(t, r.action, r.reason, r.credits)].filter(Boolean).join(' · ')}</span>
               <span dir="ltr" className={r.credits >= 0 ? 'tabular-nums text-accent-money' : 'tabular-nums'}>
                 {r.credits >= 0 ? '+' : ''}
                 {f.num(r.credits)}

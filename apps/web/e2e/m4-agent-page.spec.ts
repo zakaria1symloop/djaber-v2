@@ -839,7 +839,7 @@ test.describe('AGT-07 playground', () => {
     expect(turn.cards.map((c) => c.name)).toContain('Robe satin');
     const thread = page.getByTestId('playground-thread');
     await expect(thread.locator('[data-message="customer"]')).toContainText('chhal le prix de la robe satin ?');
-    await expect(thread.locator('[data-message="customer"]')).toContainText('VOUS (CLIENTE SIMULÉE)');
+    await expect(thread.locator('[data-message="customer"]')).toContainText('VOUS (CLIENT SIMULÉ)');
     const chip = thread.locator('[data-tool="search_products"]');
     await expect(chip).toBeVisible();
     await expect(chip).not.toHaveAttribute('data-simulated', 'true');
@@ -1101,9 +1101,9 @@ test.describe('AGT-07 playground', () => {
     }
     const error = page.getByTestId('playground-error');
     await expect(error).toHaveAttribute('data-code', 'PLAYGROUND_RATE_LIMITED');
-    await expect(error).toContainText('Limite de test atteinte (60/h).');
-    // the API sends no Retry-After for this code: the screen counts down the default minute
-    await expect(error).toContainText(/réessayez dans (1:00|0:5\d)/);
+    // AI-CHAT-11 retest (journey J03): the limit and its countdown are printed once, above the composer
+    await expect(error).toContainText("Message non envoyé à l'agent.");
+    await expect(error).not.toContainText('Limite de test atteinte');
     await expect(page.getByTestId('playground-rate-limited')).toContainText('Limite de test atteinte (60/h).');
     await expect(page.getByTestId('playground-rate-limited')).toContainText(/réessayez dans (1:00|0:5\d)/);
     await expect(composer(page)).toBeDisabled();

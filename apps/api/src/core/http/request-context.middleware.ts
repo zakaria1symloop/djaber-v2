@@ -2,6 +2,7 @@ import { Injectable, NestMiddleware } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { TenantContext, NO_LIMITS, type TenantInfo } from '@djaber/db';
 import { requestedLocale } from '../i18n/i18n.service';
+import { RequestMeta } from './request-meta';
 
 /**
  * First middleware of every request:
@@ -29,6 +30,7 @@ export class RequestContextMiddleware implements NestMiddleware {
       bypass: true, // until a guard resolves a workspace, only non-tenant models are meaningful
     };
     req.tenant = placeholder;
-    TenantContext.run(placeholder, next);
+    // ip / user agent / session of the request for the audit trail (J13-2), readable after any tenant switch
+    RequestMeta.run(req, () => TenantContext.run(placeholder, next));
   }
 }

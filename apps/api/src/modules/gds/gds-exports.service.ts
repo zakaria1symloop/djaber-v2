@@ -2,6 +2,7 @@
 // export job (kind `export`, CSV / XLSX, kept 7 days) with the list filters.
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import type { PurchaseListItemView, PurchasesQuery, SaleListItemView, SalesQuery } from '@djaber/shared';
+import { prisma } from '@djaber/db';
 import { algiersDay } from '../../core/time/algiers';
 import { exportDate, exportDateTime, exportLabel } from '../jobs/export-cells';
 import { ExportService } from '../jobs/export.service';
@@ -50,6 +51,16 @@ export class GdsExportsService implements OnModuleInit {
     const rows = (await this.sales.list({ ...q, page: 1, pageSize: MAX_ROWS } as unknown as SalesQuery)).data;
     const h = HEADERS[locale] ?? HEADERS.fr;
     type R = SaleListItemView;
+    // journeys 16/11 J11-7 (g): every mode a sale was paid with, in payment order (« Espèces + CCP ») — the first one only
+    // was exported for a sale paid 2 000 espèces then 1 400 CCP
+    const entries = rows.length ? await prisma.paymentEntry.findMany({ where: { sourceType: 'sale', sourceId: { in: rows.map((r) => r.id) } }, orderBy: [{ paidAt: 'asc' }, { id: 'asc' }], select: { sourceId: true, method: true } }) : [];
+    const modes = new Map<string, string[]>();
+    for (const e of entries) {
+      const list = modes.get(e.sourceId) ?? [];
+      if (!list.includes(e.method)) list.push(e.method);
+      modes.set(e.sourceId, list);
+    }
+    const method = (r: R) => (modes.get(r.id) ?? [r.paymentMethod]).filter(Boolean).map((m) => exportLabel(locale, ['sales.method', 'orders.payment.method'], m)).join(' + ');
     return {
       sheetName: h.sales,
       fileName: `ventes-${algiersDay()}`,
@@ -65,7 +76,7 @@ export class GdsExportsService implements OnModuleInit {
         { header: h.paid, value: (r: R) => r.amountPaid },
         { header: h.remaining, value: (r: R) => r.remaining },
         { header: h.payment, value: (r: R) => exportLabel(locale, 'enum.Sale.paymentStatus', r.paymentStatus) },
-        { header: h.method, value: (r: R) => exportLabel(locale, ['sales.method', 'orders.payment.method'], r.paymentMethod) },
+        { header: h.method, value: method },
         { header: h.seller, value: (r: R) => (r.seller ? `${r.seller.firstName} ${r.seller.lastName}`.trim() : '') },
       ],
     };

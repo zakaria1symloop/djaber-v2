@@ -90,3 +90,20 @@ describe('journey 16/11 J04-7 — add_faq_candidate is never a note about one cu
   });
   it.each(['Quelle est l’adresse de la boutique ?', 'Le client demande si vous livrez à Illizi', 'Quand les produits seront-ils de nouveau disponibles ?', 'واش عندكم محل؟'])('a general question: « %s »', (q) => expect(personalNote(q)).toBe(false));
 });
+
+describe('journey 16/11 J09-14 — the dry run (playground, shared test link) refuses a blocked phone like live', () => {
+  const request = { clientName: 'Nadia', clientPhone: '0661000909', secondPhone: null, wilayaId: 9, communeName: 'Blida', address: 'rue 14', isStopdesk: false, stopdeskId: null, notes: null, items: [], subtotal: 1200, deliveryFee: 450, total: 1650 };
+  const reg = (blocked: boolean) =>
+    Object.assign(Object.create(ToolRegistry.prototype) as object, {
+      prepareOrder: async () => ({ ok: true, request, draft: 'd' }),
+      orders: { isBlocked: async (_ctx: unknown, phone: string) => blocked && phone === '0661000909' },
+    }) as unknown as ToolRegistry;
+  const ctx = { workspaceId: 'w', agent: { id: 'a' } as never, conversationId: null, clientId: null, channelId: null, runId: 'r', callId: 'c', dryRun: true };
+  it('blocked ⇒ CUSTOMER_BLOCKED + handoff, no TEST-n order', async () => {
+    const r = await reg(true).execute('create_order', {}, ctx);
+    expect(r).toEqual({ ok: false, error: { code: 'CUSTOMER_BLOCKED' }, hint: 'handoff' });
+  });
+  it('not blocked ⇒ the simulated TEST-n order', async () => {
+    expect(await reg(false).execute('create_order', {}, ctx)).toMatchObject({ ok: true, simulated: true, total: 1650 });
+  });
+});

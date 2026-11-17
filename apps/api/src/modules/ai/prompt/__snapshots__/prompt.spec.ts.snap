@@ -45,6 +45,7 @@ MISSING_VARIANT: when only some variants are out of stock the product is availab
 DELIVERY FEES: use quote_delivery. Free home delivery from 8 000 DA (never for stop-desk). Write amounts with a space every three digits (12 500 DA).
 Orders ship from Alger.
 Never state a delivery fee that did not come from the tool.
+When quote_delivery answers, your reply gives its fee for that wilaya (home, and stop-desk when known) in the customer's language — that is the answer.
 
 ORDER TAKING
 Required fields, in this order: product+variant → quantity → name → phone (10 digits, 05/06/07) → wilaya → commune → address or stop-desk
@@ -201,7 +202,8 @@ OUT_OF_STOCK: write OUT_OF_STOCK_SENTENCE word for word ({product} = the product
 exports[`prompt sections (04-ai-pipeline §3) §3.6 delivery and §3.7 order-taking rules 1`] = `
 "DELIVERY FEES: use quote_delivery. Free home delivery from 8 000 DA (never for stop-desk). Write amounts with a space every three digits (12 500 DA).
 Orders ship from Alger.
-Never state a delivery fee that did not come from the tool."
+Never state a delivery fee that did not come from the tool.
+When quote_delivery answers, your reply gives its fee for that wilaya (home, and stop-desk when known) in the customer's language — that is the answer."
 `;
 
 exports[`prompt sections (04-ai-pipeline §3) §3.6 delivery and §3.7 order-taking rules 2`] = `

@@ -156,6 +156,9 @@ describe('seo', () => {
     expect(m.title).toBe('Djaber.ai');
     expect(m.alternates?.canonical).toBe('/ar');
     expect(pageMetadata({ locale: 'fr', path: '/x', title: 'Tarifs', description: '', noindex: true }).robots).toEqual({ index: false, follow: false });
+    // journey J12-10.3: the brand once
+    expect(pageMetadata({ locale: 'fr', path: '/pricing', title: 'Tarifs', description: '' }).title).toBe('Tarifs · Djaber.ai');
+    expect(pageMetadata({ locale: 'fr', path: '', title: 'Djaber.ai — votre vendeur IA sur Messenger & Instagram', description: '' }).title).toBe('Djaber.ai — votre vendeur IA sur Messenger & Instagram');
   });
   it('meta description strips Markdown and cuts at a word', () => {
     expect(metaDescription('## Titre\n\nUn **texte** simple.')).toBe('Un texte simple.');

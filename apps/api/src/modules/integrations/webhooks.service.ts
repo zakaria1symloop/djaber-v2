@@ -64,7 +64,8 @@ export class WebhooksService {
         act('test', e.isActive, 'WEBHOOK_ENDPOINT_DISABLED'),
         act('edit', true),
         act('rotate_secret', true),
-        act('enable', disabled, 'CONFLICT', disabled),
+        // journey J12-5: greyed reasons in words (they were the generic CONFLICT « Modifié entre-temps, rechargez. »)
+        act('enable', disabled, 'WEBHOOK_ENDPOINT_ACTIVE', disabled),
         act('deliveries', true),
         act('delete', true),
       ],
@@ -89,7 +90,7 @@ export class WebhooksService {
       replayOfId: d.replayOfId,
       createdAt: d.createdAt.toISOString(),
       payload: d.payload,
-      actions: [act('replay', d.endpoint.isActive && d.status !== 'pending', d.endpoint.isActive ? 'CONFLICT' : 'WEBHOOK_ENDPOINT_DISABLED')],
+      actions: [act('replay', d.endpoint.isActive && d.status !== 'pending', d.endpoint.isActive ? 'WEBHOOK_DELIVERY_PENDING' : 'WEBHOOK_ENDPOINT_DISABLED')],
     };
   }
 

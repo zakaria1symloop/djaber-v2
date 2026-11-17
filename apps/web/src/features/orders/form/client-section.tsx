@@ -9,7 +9,7 @@ import type { ClientListItem } from '@/features/clients/contracts';
 import { fieldError } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { formatPhoneOnBlur, looksLikePhone, phonePreview, phonePreviewLine } from '@/lib/phone';
-import { useClientSearch } from './api';
+import { useArchivedOwnerSearch, useClientSearch } from './api';
 import { validPhone, type FormClient, type FormErrors } from './model';
 
 /** The client of the list whose phone is exactly the typed one (normalised). */
@@ -47,7 +47,11 @@ export function ClientSection({
   // a phone typed in the "new client" fields: is it already someone's?
   const typed = !client.id && validPhone(client.phone) ? normalizePhoneDz(client.phone.trim()) : '';
   const typedSearch = useClientSearch(typed);
-  const owner = typed ? exactPhoneMatch(typedSearch.data, typed) : null;
+  const activeOwner = typed ? exactPhoneMatch(typedSearch.data, typed) : null;
+  // journey J09-10: an archived card holding the phone gets the same notice (the order restores it)
+  const archivedSearch = useArchivedOwnerSearch(typed && typedSearch.isSuccess && !activeOwner ? typed : '');
+  const archivedOwner = typed && !activeOwner ? exactPhoneMatch(archivedSearch.data, typed) : null;
+  const owner = activeOwner ?? archivedOwner;
   const matchInResults = exactPhoneMatch(rows, q);
 
   const meta = (r: ClientListItem) =>
@@ -190,7 +194,7 @@ export function ClientSection({
             onClick: () => (owner ? onPick(owner) : onUseConflict()),
           }}
         >
-          <span data-testid="phone-conflict">{t('orderForm.client.conflict', { name: conflictName ?? '' })}</span>
+          <span data-testid="phone-conflict">{t(archivedOwner && !conflict ? 'orderForm.client.conflictArchived' : 'orderForm.client.conflict', { name: conflictName ?? '' })}</span>
         </Banner>
       ) : null}
 

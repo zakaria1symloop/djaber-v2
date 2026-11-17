@@ -82,6 +82,8 @@ describe('ADM-04 plans', () => {
     const dry = (await sa.patch(`/admin/plans/${plan.id}`, { maxPages: 2, dryRun: true }).expect(200)).body.data;
     expect(dry).toEqual({ plan: null, impact: { subscribers: 1, overLimit: [{ limit: 'pages', count: 1 }], priceChangeAt: null, emailDueBy: null } });
     expect((await db.plan.findUniqueOrThrow({ where: { id: plan.id } })).version).toBe(1);
+    // journeys 16/11 J13-4: a saved version needs a reason (the dry run above does not)
+    expect((await sa.patch(`/admin/plans/${plan.id}`, { maxPages: 2, priceMonthly: 3200 }).expect(422)).body.error.code).toBe('ADMIN_REASON_REQUIRED');
     const res = (await sa.patch(`/admin/plans/${plan.id}`, { maxPages: 2, priceMonthly: 3200, reason: 'Ajustement grille' }).expect(200)).body.data;
     expect(res.plan).toMatchObject({ version: 2, limits: { maxPages: 2 }, priceMonthly: 3200 });
     expect(res.impact.priceChangeAt).not.toBeNull();

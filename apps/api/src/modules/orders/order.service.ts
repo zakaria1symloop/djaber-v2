@@ -14,7 +14,7 @@ import { AppException, conflict, forbidden, notFound } from '../../core/errors/a
 import { page, type Page } from '../../core/http/pagination';
 import { can } from '../../core/rbac/permission-matrix';
 import { algiersDay, algiersTime } from '../../core/time/algiers';
-import type { CreateOrderRequest, OrderToolContext, ToolResult } from '../ai/tools/order-tools';
+import { customerBlockedResult, type CreateOrderRequest, type OrderToolContext, type ToolResult } from '../ai/tools/order-tools';
 import { fold } from '../ai/tools/wilaya-aliases';
 import { ClientService } from '../clients/client.service';
 import { feeExplanation, FeeService, quoteFee } from '../delivery/fee.service';
@@ -338,18 +338,27 @@ export class OrderService implements OnModuleInit {
    * items within 10 min ⇒ the existing order), CLI-02 client merge, `CMD-n`, conditional stock decrement (failure rolls
    * everything back), cart closed, `order.ai_created`. Idempotent on `runId:callId` (api-contract §1.7). 0 credits.
    */
+  /**
+   * 04 §13 block check of an AI order (phone, the phone's client, the conversation's sender / client). Also run by the dry
+   * run of the playground and the shared test link (journey J09-14), so a blocked number is refused there like live.
+   */
+  async aiBlockCheck(ctx: Pick<OrderToolContext, 'conversationId'>, phone: string) {
+    const conversation = ctx.conversationId ? await prisma.conversation.findFirst({ where: { id: ctx.conversationId }, include: { channel: { select: { name: true } } } }) : null;
+    const owner = await prisma.client.findFirst({ where: { phone, deletedAt: null } });
+    const convClient = conversation?.clientId ? await prisma.client.findFirst({ where: { id: conversation.clientId } }) : null;
+    const index = await this.safety.index();
+    const blocked = !!(index.phones.has(phone) || (owner && index.clientIds.has(owner.id)) || (conversation && index.has(conversation, convClient?.phone)));
+    return { blocked, conversation, owner, convClient };
+  }
+
   async createFromAi(ctx: OrderToolContext, req: CreateOrderRequest): Promise<ToolResult> {
     const key = `ai:${ctx.runId}:${ctx.callId}`;
     const stored = await prisma.idempotencyKey.findFirst({ where: { key } });
     if (stored) return stored.responseBody as ToolResult;
     const agent = await prisma.agent.findFirst({ where: { id: ctx.agentId }, select: { id: true, name: true, riskyClientBehavior: true } });
-    const conversation = ctx.conversationId ? await prisma.conversation.findFirst({ where: { id: ctx.conversationId }, include: { channel: { select: { name: true } } } }) : null;
-    const owner = await prisma.client.findFirst({ where: { phone: req.clientPhone, deletedAt: null } });
-    const convClient = conversation?.clientId ? await prisma.client.findFirst({ where: { id: conversation.clientId } }) : null;
-    const index = await this.safety.index();
-    const blocked = index.phones.has(req.clientPhone) || (owner && index.clientIds.has(owner.id)) || (conversation && index.has(conversation, convClient?.phone));
+    const { blocked, conversation, owner, convClient } = await this.aiBlockCheck(ctx, req.clientPhone);
     // 04 §13: the AI says the shop cannot take the order and hands off — never "you are blocked"
-    if (blocked) return { ok: false, error: { code: 'CUSTOMER_BLOCKED' }, hint: 'handoff' };
+    if (blocked) return customerBlockedResult();
     // 04 §21: after a "faux numéro" the AI confirms the number with the customer before ordering again
     if (owner && !req.phoneConfirmed && (await prisma.order.count({ where: { clientId: owner.id, cancelReason: 'fake' } })) > 0) {
       return { ok: false, error: { code: 'PHONE_CONFIRMATION_REQUIRED', phone: req.clientPhone, message: 'read the phone number back to the customer, ask them to confirm it, then call create_order again with phoneConfirmed=true' } };

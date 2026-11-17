@@ -290,8 +290,9 @@ export function MergeClientsDialog({ client, onClose, onDone }: { client: Pick<C
     setOther(o);
     setPreview(null);
     setError(null);
-    // default: the complete record is kept (a placeholder "FB User …" is merged into the real client)
-    if (o && client) setKeepId(client.isPlaceholder && !o.isPlaceholder ? o.id : !client.isPlaceholder && o.isPlaceholder ? client.id : o.orderCount > client.orderCount ? o.id : client.id);
+    // default: the card the merchant started from is kept (journey J09-3: « fusionner avec « X » » keeps X), except a
+    // placeholder "FB User …", which is merged into the real client
+    if (o && client) setKeepId(client.isPlaceholder && !o.isPlaceholder ? o.id : client.id);
   };
   const m = useMutation({ mutationFn: (confirm: boolean) => clientsApi.merge({ keepId: keepId!, mergeId: keepId === client!.id ? other!.id : client!.id, confirm }) });
   const run = async () => {
@@ -327,7 +328,7 @@ export function MergeClientsDialog({ client, onClose, onDone }: { client: Pick<C
       open={!!client}
       onOpenChange={(o) => !o && !m.isPending && onClose()}
       title={t('dialog.mergeClients.title')}
-      description={client ? (other ? t('clients.dialog.merge.context', { a: client.name, b: other.name }) : t('clients.dialog.merge.pick', { name: client.name })) : undefined}
+      description={client ? (other ? t('clients.dialog.merge.context', { kept: keepId === other.id ? other.name : client.name, merged: keepId === other.id ? client.name : other.name }) : t('clients.dialog.merge.pick', { name: client.name })) : undefined}
       closeLabel={t('action.close')}
       size="md"
       footer={
@@ -354,6 +355,7 @@ export function MergeClientsDialog({ client, onClose, onDone }: { client: Pick<C
               {card(other, convOf(other.id))}
             </div>
           ) : null}
+          {other && !preview ? <p className="ts-label-meta text-text-muted">{t('clients.dialog.merge.swapHint')}</p> : null}
           <p className="ts-label-meta text-text-muted">{t('clients.dialog.merge.note')}</p>
           {preview ? (
             <FormAlert tone="warning">

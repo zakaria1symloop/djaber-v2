@@ -1,7 +1,7 @@
 // Pure rules of the AI pipeline (04-ai-pipeline): language detection, structured output, tool-call ids, credit periods,
 // the adapter factory guard and the scriptable fake adapter.
 import { parseFaqText } from '../agents/knowledge.service';
-import { creditPeriod, exhaustionEta } from '../credits/credit.service';
+import { averagePackPrice, creditPeriod, exhaustionEta, planCreditPrice, trialPeriod } from '../credits/credit.service';
 import { canonicalJson, costUsd, toolCallId } from './ai-run.service';
 import { plannedCost } from './ai.constants';
 import { conversationLanguage, detectLanguage, formalArabic, languageSwitched, MOROCCAN_WORDS, systemLocale, turnLanguage, WRONG_DARIJA } from './language';
@@ -98,7 +98,7 @@ describe('journey 16/11 J04-3 — formal Arabic and non-Algerian darija', () => 
     expect(formalArabic('السلام عليكم')).toBe(false);
     expect(formalArabic('hello')).toBe(false);
   });
-  it.each(['Ma nqderch nconfirmi daba', 'Ila bghiti chi 7aja, ana hna', 'ma kaynch paiement 9bal', 'numéro dyal téléphone', 'بالفلوس ملي يوصلك الطرد', 'ما فماش استرجاع نقدي', 'واخا نسجلها'])('Moroccan / Tunisian: « %s »', (t) => expect(MOROCCAN_WORDS.test(t)).toBe(true));
+  it.each(['Ma nqderch nconfirmi daba', 'Ila bghiti chi 7aja, ana hna', 'ma kaynch paiement 9bal', 'numéro dyal téléphone', 'بالفلوس ملي يوصلك الطرد', 'ما فماش استرجاع نقدي', 'واخا نسجلها', 'صيفطلي العنوان تاعك', 'nsifetlek la photo'])('Moroccan / Tunisian: « %s »', (t) => expect(MOROCCAN_WORDS.test(t)).toBe(true));
   it.each(['Ih kayen M, t7ebb nsajjel lek ?', 'Makach walou f stock', 'واش تحب حاجة أخرى؟', 'Chhal livraison l Oran : 600 DA', 'machine à laver'])('Algerian: « %s »', (t) => expect(MOROCCAN_WORDS.test(t) || WRONG_DARIJA.test(t)).toBe(false));
   it.each(['Ch7al smitek (ism) l\'commande ?', 'Ch7al numéro dyal téléphone ?', 'Ch7al wilaya t7ebb ?', 'شحال اسمك؟'])('« how much » used for « what »: « %s »', (t) => expect(WRONG_DARIJA.test(t)).toBe(true));
   it('the English answer of the J05-8 report breaks the language rule of a French customer', () => {
@@ -203,6 +203,30 @@ describe('credit period (02 §6)', () => {
     expect(exhaustionEta({ total: 300, burnPerDay: 0, periodEnd }, now)).toBeNull();
     expect(exhaustionEta({ total: 0, burnPerDay: 10, periodEnd }, now)).toBeNull();
     expect(exhaustionEta({ total: 300, burnPerDay: 100, periodEnd, unlimited: true }, now)).toBeNull();
+  });
+
+  it('a trial period ends with the trial, not one month after its start (journey 16/11 J12-1)', () => {
+    const start = new Date('2026-11-16T19:05:15.000Z');
+    const trialEnd = new Date('2026-11-30T19:05:15.000Z');
+    const month = creditPeriod(start, new Date('2026-11-20T00:00:00Z'));
+    expect(trialPeriod(month, trialEnd)).toEqual({ start, end: trialEnd });
+    expect(trialPeriod(month, null)).toEqual(month);
+    // a trial end outside the period (already past, or later than a month) leaves it alone
+    expect(trialPeriod(month, new Date('2026-11-10T00:00:00Z'))).toEqual(month);
+    expect(trialPeriod(month, new Date('2027-01-10T00:00:00Z'))).toEqual(month);
+  });
+
+  it('credit prices: plan price per credit and the mean of the packs (journey 16/11 J12-4)', () => {
+    const pro = { priceMonthly: 4900, priceYearly: 49000, monthlyCredits: 5000 };
+    expect(planCreditPrice({ billingCycle: 'monthly', plan: pro })).toBe(0.98);
+    expect(planCreditPrice({ billingCycle: 'none', plan: pro })).toBe(0.98); // trial: the monthly list price
+    expect(planCreditPrice({ billingCycle: 'yearly', plan: pro })).toBe(0.82); // 49 000 / 12 / 5 000
+    expect(planCreditPrice({ billingCycle: 'none', plan: { priceMonthly: 0, priceYearly: 0, monthlyCredits: 100 } })).toBeNull();
+    expect(planCreditPrice({ billingCycle: 'monthly', plan: { ...pro, monthlyCredits: -1 } })).toBeNull();
+    expect(planCreditPrice(null)).toBeNull();
+    const packs = [{ credits: 500, priceWebDzd: 450 }, { credits: 2000, priceWebDzd: 1500 }, { credits: 6000, priceWebDzd: 3900 }];
+    expect(averagePackPrice(packs)).toBe(0.77);
+    expect(averagePackPrice([])).toBeNull();
   });
 });
 

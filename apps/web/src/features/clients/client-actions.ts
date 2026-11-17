@@ -43,7 +43,7 @@ export function clientMenuActions(c: Pick<ClientListItem, 'actions' | 'riskLevel
       [K.merge]: { label: t('clients.action.merge'), onSelect: h.merge, hint: t('clients.hint.merge'), hidden: !p.remove, local: true },
       [K.openConversation]: { label: t('clients.action.openConversation'), onSelect: h.openConversation ?? (() => undefined), hint: t('clients.hint.inbox'), hidden: !p.inbox || !h.openConversation, separated: true, local: true },
       [K.newOrder]: { label: t('clients.action.newOrder'), onSelect: h.newOrder, hint: t('clients.hint.newOrder'), hidden: !p.ordersWrite, local: true },
-      [K.orders]: { label: t('clients.action.orders', { count: c.orderCount }), onSelect: h.orders, hint: t('clients.hint.orders'), hidden: !p.orders, local: true },
+      [K.orders]: { label: t('clients.action.orders'), onSelect: h.orders, hint: t('clients.hint.orders'), hidden: !p.orders, local: true },
       [K.tags]: { label: t('clients.action.tags'), onSelect: h.tags, hint: t('clients.hint.dialog'), hidden: !p.write, separated: true, local: true },
       [K.export]: { label: t('clients.action.export'), onSelect: h.export, hint: t('clients.hint.export'), hidden: !p.remove, local: true },
       [c.riskLevel === 'high' ? K.unmarkRisk : K.markRisk]: { label: c.riskLevel === 'high' ? t('clients.action.markReliable') : t('clients.action.markRisk'), onSelect: h.risk, hidden: !p.write, local: true },

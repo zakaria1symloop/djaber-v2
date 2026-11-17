@@ -128,7 +128,8 @@ const applyWizard = (d: AgentDraft, w: Partial<AgentWizardFields> | null | undef
     maxQtyPerOrder: w.maxQtyPerOrder === undefined ? d.maxQtyPerOrder : w.maxQtyPerOrder,
     maxAmountPerOrder: w.maxAmountPerOrder === undefined ? d.maxAmountPerOrder : w.maxAmountPerOrder,
     riskyClientBehavior: w.riskyClientBehavior ?? d.riskyClientBehavior,
-    recapMode: w.recapMode ?? d.recapMode,
+    // journey 16/11 J03-12: always (04 §5) — an old `when_unsure` is saved back as `always` with the step
+    recapMode: 'always',
     // the server default switches every rule on; a keyword rule without any keyword does nothing: it is shown off
     handoffRules: d.handoffRules.map((r) => ({ kind: r.kind, enabled: r.kind === 'keyword' && !(w.handoffKeywords ?? d.handoffKeywords).length ? false : (rules.get(r.kind) ?? r.enabled) })),
     handoffKeywords: w.handoffKeywords ? [...w.handoffKeywords] : d.handoffKeywords,
@@ -441,7 +442,7 @@ export type TurnView = {
   latencyMs: number;
   tools: ToolCallView[];
   simulatedTools: number;
-  cards: { id: string; name: string; price: number; imageUrl: string | null; variants: string | null }[];
+  cards: { id: string; name: string; price: number; priceMax?: number; oldPrice?: number; imageUrl: string | null; variants: string | null }[];
   creditsInProd: number;
   language: string;
   prompt: string[];
@@ -452,7 +453,11 @@ export type TurnView = {
   /** playground turns of the workspace this hour (full-test 15/11 AI-CHAT-11) */
   hourlyUsed?: number;
 };
-const cardView = (c: TurnCard, i: number) => ({ id: c.productId ?? String(i), name: c.name, price: c.price, imageUrl: c.imageUrl ?? null, variants: c.variantLabel ?? null });
+// journey 16/11 J03-11: the price range and the promotion price of the customer's card
+const cardView = (c: TurnCard, i: number) => ({ id: c.productId ?? String(i), name: c.name, price: c.price, ...(c.priceMax ? { priceMax: c.priceMax } : {}), ...(c.oldPrice ? { oldPrice: c.oldPrice } : {}), imageUrl: c.imageUrl ?? null, variants: c.variantLabel ?? null });
+/** The price line of a product card, as the customer reads it on Messenger: « 4 900 – 5 200 DA », « 7 500 DA (9 000 DA) ». */
+export const cardPriceText = (c: { price: number; priceMax?: number; oldPrice?: number }, money: (n: number) => string): string =>
+  `${money(c.price)}${c.priceMax && c.priceMax !== c.price ? ` – ${money(c.priceMax)}` : ''}${c.oldPrice && c.oldPrice > c.price ? ` (${money(c.oldPrice)})` : ''}`;
 /** One shape for the screen whatever the spelling of the server (api-contract §3.4 `PlaygroundTurnDto` / 04 §8). */
 export const turnView = (t: PlaygroundTurn): TurnView => {
   const tools = (t.toolCalls ?? []).map(toolCallView);

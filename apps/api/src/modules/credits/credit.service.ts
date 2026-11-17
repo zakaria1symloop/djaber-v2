@@ -17,7 +17,7 @@ import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { algiersDay, algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
 import { NotificationProducer } from '../notifications/notification.producer';
 
-export type Balance = { periodStart: Date; periodEnd: Date; planLimit: number; planUsed: number; plan: number; pack: number; total: number; reserved: number; unlimited: boolean; exhausted: boolean };
+export type Balance = { periodStart: Date; periodEnd: Date; /** the period is the trial's (J12-1) */ trial: boolean; planLimit: number; planUsed: number; plan: number; pack: number; total: number; reserved: number; unlimited: boolean; exhausted: boolean };
 export type SettleAction = Extract<CreditAction, 'text_reply' | 'image_recognition' | 'voice_transcription'>;
 type RunRef = { id: string; workspaceId: string; agentId?: string | null; conversationId?: string | null; channelId?: string | null };
 
@@ -35,6 +35,27 @@ export const creditPeriod = (anchor: Date, now = new Date()): { start: Date; end
   let n = (now.getUTCFullYear() - anchor.getUTCFullYear()) * 12 + (now.getUTCMonth() - anchor.getUTCMonth());
   while (n > 0 && addMonths(anchor, n) > now) n--;
   return { start: addMonths(anchor, n), end: addMonths(anchor, n + 1) };
+};
+
+/**
+ * Journey J12-1 (04 §Trial D60: `currentPeriodEnd = trialEndsAt = +14 d`): the trial credits last until the trial ends — the
+ * period shown (« renouvelés le … », « période du … au … ») is capped there; on that day the shop falls to the free plan
+ * (02 §5) and its own months start. The period start (and so the ledger rows it groups) is unchanged.
+ */
+export const trialPeriod = (period: { start: Date; end: Date }, trialEnd: Date | null): { start: Date; end: Date } =>
+  trialEnd && trialEnd > period.start && trialEnd < period.end ? { start: period.start, end: trialEnd } : period;
+
+const cents = (n: number) => Math.round(n * 100) / 100;
+/** Mean DA / credit of the packs on sale (unweighted: 0,90 · 0,75 · 0,65 ⇒ 0,77), null without packs (J12-4). */
+export const averagePackPrice = (packs: { credits: number; priceWebDzd: number }[]): number | null => {
+  const per = packs.filter((p) => p.credits > 0).map((p) => p.priceWebDzd / p.credits);
+  return per.length ? cents(per.reduce((a, b) => a + b, 0) / per.length) : null;
+};
+/** The plan's list price per credit (yearly cycle: the yearly price over 12 months), null for a free or unlimited plan (J12-4). */
+export const planCreditPrice = (sub: { billingCycle: string; plan: { priceMonthly: number; priceYearly: number; monthlyCredits: number } } | null): number | null => {
+  if (!sub || sub.plan.monthlyCredits <= 0) return null;
+  const monthly = sub.billingCycle === 'yearly' ? sub.plan.priceYearly / 12 : sub.plan.priceMonthly;
+  return monthly > 0 ? cents(monthly / sub.plan.monthlyCredits) : null;
 };
 
 /**
@@ -72,11 +93,11 @@ export class CreditService implements OnModuleInit {
   }
 
   private async anchor(tx: Tx, workspaceId: string) {
-    const sub = await tx.subscription.findFirst({ where: { workspaceId, status: { in: ['trial', 'active', 'dunning'] } }, orderBy: { createdAt: 'desc' }, select: { id: true, status: true, currentPeriodStart: true } });
-    if (sub) return { key: sub.id, trial: sub.status === 'trial', at: sub.currentPeriodStart };
+    const sub = await tx.subscription.findFirst({ where: { workspaceId, status: { in: ['trial', 'active', 'dunning'] } }, orderBy: { createdAt: 'desc' }, select: { id: true, status: true, currentPeriodStart: true, currentPeriodEnd: true, trialEndsAt: true } });
+    if (sub) return { key: sub.id, trial: sub.status === 'trial', at: sub.currentPeriodStart, trialEnd: sub.status === 'trial' ? (sub.trialEndsAt ?? sub.currentPeriodEnd) : null };
     // expired / none ⇒ free plan: months anchored on the workspace creation day
     const ws = await tx.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { createdAt: true } });
-    return { key: `ws-${workspaceId}`, trial: false, at: ws.createdAt };
+    return { key: `ws-${workspaceId}`, trial: false, at: ws.createdAt, trialEnd: null };
   }
 
   /**
@@ -85,7 +106,7 @@ export class CreditService implements OnModuleInit {
    */
   async ensurePeriod(tx: Tx, workspaceId: string, monthlyCredits = TenantContext.get().limits.monthlyCredits, now = new Date()) {
     const a = await this.anchor(tx, workspaceId);
-    const period = creditPeriod(a.at, now);
+    const period = trialPeriod(creditPeriod(a.at, now), a.trialEnd);
     let opened = false;
     if (monthlyCredits >= 0) {
       const first = period.start.getTime() === a.at.getTime();
@@ -99,7 +120,7 @@ export class CreditService implements OnModuleInit {
         opened = r.count > 0;
       }
     }
-    return { ...period, opened };
+    return { ...period, trial: !!(a.trialEnd && period.end.getTime() === a.trialEnd.getTime()), opened };
   }
 
   private async sum(tx: Tx, workspaceId: string, where: Prisma.CreditLedgerWhereInput) {
@@ -124,7 +145,7 @@ export class CreditService implements OnModuleInit {
     const unlimited = monthlyCredits < 0;
     const plan = unlimited ? Number.MAX_SAFE_INTEGER : planNet;
     const total = unlimited ? Number.MAX_SAFE_INTEGER : planNet + pack;
-    return { periodStart: period.start, periodEnd: period.end, planLimit: unlimited ? -1 : planLimit, planUsed: 0 - planDebits, plan, pack, total, reserved: Math.max(0, -(reservedRows + unreserved)), unlimited, exhausted: !unlimited && total <= 0 };
+    return { periodStart: period.start, periodEnd: period.end, trial: period.trial, planLimit: unlimited ? -1 : planLimit, planUsed: 0 - planDebits, plan, pack, total, reserved: Math.max(0, -(reservedRows + unreserved)), unlimited, exhausted: !unlimited && total <= 0 };
   }
 
   balance(workspaceId: string = TenantContext.workspaceId()): Promise<Balance> {
@@ -305,10 +326,13 @@ export class CreditService implements OnModuleInit {
     const week = await prisma.creditLedger.aggregate({ where: { workspaceId, kind: 'debit', createdAt: { gte: since } }, _sum: { credits: true } });
     const burn = Math.round((-(week._sum.credits ?? 0) / 7) * 10) / 10;
     const pricing = await TenantContext.runSystem(() => prisma.creditPricing.findFirst({ where: { effectiveAt: { lte: new Date() } }, orderBy: { version: 'desc' } }));
-    const pack = await TenantContext.runSystem(() => prisma.creditPack.findFirst({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }).catch(() => null));
+    // journey J12-4: « pack moyen » is the average DA / credit of the packs on sale (it was the first pack's price), and the
+    // plan tile is the plan's own price per credit (Pro 4 900 DA / 5 000 = 0,98 — it was the platform `creditPriceDzd`)
+    const packs = await TenantContext.runSystem(() => prisma.creditPack.findMany({ where: { isActive: true, visibleWeb: true, credits: { gt: 0 } }, select: { credits: true, priceWebDzd: true } }).catch(() => []));
+    const sub = await prisma.subscription.findFirst({ where: { workspaceId, status: { in: ['trial', 'active', 'dunning'] } }, orderBy: { createdAt: 'desc' }, select: { billingCycle: true, plan: { select: { priceMonthly: true, priceYearly: true, monthlyCredits: true } } } });
     const packTotal = await this.packTotal(workspaceId);
     return {
-      plan: { used: b.planUsed, limit: b.planLimit, remaining: b.unlimited ? -1 : Math.max(0, b.plan), periodStart: b.periodStart.toISOString(), periodEnd: b.periodEnd.toISOString() },
+      plan: { used: b.planUsed, limit: b.planLimit, remaining: b.unlimited ? -1 : Math.max(0, b.plan), periodStart: b.periodStart.toISOString(), periodEnd: b.periodEnd.toISOString(), trial: b.trial },
       packs: { remaining: Math.max(0, b.pack), total: Math.max(0, packTotal, b.pack) },
       total: b.unlimited ? -1 : b.total,
       reserved: b.reserved,
@@ -317,7 +341,8 @@ export class CreditService implements OnModuleInit {
       burnRatePerDay: burn,
       exhaustedEta: exhaustionEta({ total: b.total, burnPerDay: burn, periodEnd: b.periodEnd, unlimited: b.unlimited }),
       pricePerCreditDzd: pricing ? Number(pricing.creditPriceDzd) : 0,
-      packPricePerCreditDzd: pack && pack.credits > 0 ? Math.round((pack.priceWebDzd / pack.credits) * 100) / 100 : null,
+      packPricePerCreditDzd: averagePackPrice(packs),
+      planPricePerCreditDzd: planCreditPrice(sub),
     };
   }
 

@@ -155,7 +155,7 @@ export default function AdminOverviewPage() {
             <RankPanel
               title={t('admin.overview.ai.title')}
               link={<Link href="/admin/ai" className={linkCls}>{t('admin.overview.ai.link')}</Link>}
-              rows={(d?.aiCostByModel ?? []).map((m) => ({ key: `${m.provider}:${m.model}:${m.capability}`, label: `${m.provider} · ${m.model}`, value: `${f.num(Math.round(m.costUsd))} $`, delta: <span className="whitespace-nowrap ts-label-micro text-text-muted">{t(`admin.overview.ai.unit.${m.unit}`, { count: compactAmount(m.units, f.locale) })}</span> }))}
+              rows={(d?.aiCostByModel ?? []).map((m) => ({ key: `${m.provider}:${m.model}:${m.capability}`, label: `${m.provider} · ${m.model}`, value: `${f.num(Math.round(m.costUsd))} $`, delta: <span className="whitespace-nowrap ts-label-micro text-text-muted">{t(`admin.overview.ai.unit.${m.unit}`, { count: m.units, n: compactAmount(m.units, f.locale) })}</span> }))}
               empty={d ? t('admin.overview.ai.empty') : t('common.loading')}
             />
             <Card className="flex min-w-0 flex-col p-0" data-testid="trials-expiring">

@@ -130,7 +130,7 @@ export function VarianceValue({ expected, counted, pct, flagged, className }: { 
         <bdi dir="ltr" className={cn('tabular-nums font-medium', diff > 0 ? 'text-accent-money' : 'text-accent-alert')}>
           {`${sign}${Math.abs(diff)}`}
           {/* journeys 16/11 J07-6: 2 / 19 = 10,5 % is flagged but its whole percent reads « 10 % » — say « > 10 % » then */}
-          {flagged ? (Math.round(Math.abs(pct ?? 0)) <= 10 ? ' ⚠ > 10 %' : ` ⚠ ${Math.round(Math.abs(pct ?? 0))} %`) : ''}
+          {flagged ? (Math.round(Math.abs(pct ?? 0)) <= 10 ? ' ⚠ > 10\u00a0%' : ` ⚠ ${Math.round(Math.abs(pct ?? 0))}\u00a0%`) : ''}
         </bdi>
       )}
     </span>

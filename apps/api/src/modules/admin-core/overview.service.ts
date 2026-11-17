@@ -8,6 +8,7 @@ import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { algiersDay, algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
 import { CURRENT_STATUSES } from '../billing/billing.util';
 import { DAY, freePlanName, pickLocal } from './admin.util';
+import { routeHealth } from './ai-route-health';
 
 export type PlatformMetrics = {
   signups: number;
@@ -187,17 +188,25 @@ export class AdminOverviewService implements OnModuleInit {
   async alerts(now = new Date()): Promise<AdminAlertDto[]> {
     const out: AdminAlertDto[] = [];
     const [routes, igPending, slaItems, slaTickets, dunning] = await Promise.all([
-      prisma.aiRoute.findMany({ where: { failoverActive: true }, include: { primaryModel: { include: { provider: true } }, fallbackModel: { include: { provider: true } } } }),
+      prisma.aiRoute.findMany({ include: { primaryModel: { include: { provider: true } }, fallbackModel: { include: { provider: true } } } }),
       prisma.channel.findMany({ where: { status: 'pending_review' }, select: { createdAt: true }, orderBy: { createdAt: 'asc' } }),
       prisma.moderationItem.count({ where: { status: 'pending', slaDueAt: { lt: now } } }),
       prisma.supportTicket.count({ where: { slaDueAt: { lt: now }, status: 'open' } }),
       prisma.subscription.count({ where: { status: 'dunning', dunningStage: 'd_plus_3' } }),
     ]);
-    for (const r of routes) {
+    for (const r of routes.filter((x) => x.failoverActive)) {
       const since = await prisma.aiRun.groupBy({ by: ['status'], where: { modelId: r.primaryModelId, startedAt: { gte: new Date(now.getTime() - DAY) } }, _count: { _all: true } });
       const total = since.reduce((s, x) => s + x._count._all, 0);
       const err = since.find((x) => x.status === 'error')?._count._all ?? 0;
       out.push({ code: 'ai_error_rate', severity: 'critical', params: { provider: r.primaryModel.provider.displayName, rate: total ? Math.round((err / total) * 100) : 0, threshold: r.errorThresholdPct, fallback: r.fallbackModel?.provider.displayName ?? '—', capability: r.capability }, link: '/admin/ai', since: r.failoverSince?.toISOString() ?? null });
+    }
+    // ADMIN-01 retest (journeys 16/11 J13): a route left without a usable model, or whose primary / fallback is switched off,
+    // is an alert too (the overview showed none while voice notes had no active provider)
+    for (const r of routes) {
+      if (r.failoverActive) continue;
+      const h = routeHealth(r);
+      if (!h.issue) continue;
+      out.push({ code: 'ai_route_degraded', severity: h.issue === 'no_model' ? 'critical' : 'warning', params: { capability: r.capability, issue: h.issue, provider: r.primaryModel.provider.displayName, fallback: r.fallbackModel?.provider.displayName ?? '—' }, link: '/admin/ai', since: null });
     }
     if (igPending.length) out.push({ code: 'ig_review_backlog', severity: 'warning', params: { count: igPending.length, oldestDays: Math.floor((now.getTime() - igPending[0]!.createdAt.getTime()) / DAY) }, link: '/admin/settings#meta', since: igPending[0]!.createdAt.toISOString() });
     const figs = await prisma.$queryRaw<{ n: bigint }[]>`

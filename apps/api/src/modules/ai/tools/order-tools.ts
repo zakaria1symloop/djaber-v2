@@ -35,6 +35,8 @@ export type CreateOrderRequest = {
 /** `orderedAt`: Algiers wall clock for the model (`aiDateTime`), never UTC ISO. */
 export type CancellableOrder = { id: string; number: string; total: number; status: string; orderedAt: string };
 export type ToolResult = Record<string, unknown>;
+/** 04 §13: the answer to an order for a blocked customer — the AI says the shop cannot take it and hands off (live and dry run). */
+export const customerBlockedResult = (): ToolResult => ({ ok: false, error: { code: 'CUSTOMER_BLOCKED' }, hint: 'handoff' });
 
 export interface OrderTools {
   /** false ⇒ the registry answers for the tool itself (dry run / unavailable) */
@@ -42,6 +44,8 @@ export interface OrderTools {
   /** Idempotent on `runId:callId` (api-contract §1.7). */
   createOrder(ctx: OrderToolContext, req: CreateOrderRequest): Promise<ToolResult>;
   cancelOrder(ctx: OrderToolContext, order: CancellableOrder, reason: string | null): Promise<ToolResult>;
+  /** 04 §13 block check, the same one `createOrder` runs — the dry run (playground, shared test link) asks it too (J09-14). */
+  isBlocked?(ctx: Pick<OrderToolContext, 'conversationId'>, phone: string): Promise<boolean>;
 }
 
 /**

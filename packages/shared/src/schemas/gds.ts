@@ -31,7 +31,14 @@ export type CashMethodName = (typeof CashMethodValues)[number];
  */
 export type CashDisplayMethod = CashMethodName | 'cod';
 export const CASH_DISPLAY_METHODS = ['cash', 'cod', 'ccp', 'card', 'transfer', 'other'] as const satisfies readonly CashDisplayMethod[];
-export const cashDisplayMethod = (category: string, method: CashMethodName): CashDisplayMethod => (method === 'cash' && category === 'order' ? 'cod' : method);
+/**
+ * Journeys 16/11 J05-6 / J10: « COD » is the cash collected AT DELIVERY (the row the delivered status writes, label
+ * `stored.cash.orderCod*`; rows written before the labels became keys say « (COD) »). A deposit paid in cash before
+ * delivery stays « Espèces », as on the order page.
+ */
+export const isCodCashDescription = (description: string | null | undefined): boolean => !!description && (description.startsWith('§stored.cash.orderCod') || description.includes('(COD)'));
+/** `description`: the STORED description of the row (the key, before it is rendered in the reader's language). */
+export const cashDisplayMethod = (category: string, method: CashMethodName, description: string | null | undefined): CashDisplayMethod => (method === 'cash' && category === 'order' && isCodCashDescription(description) ? 'cod' : method);
 export type InventoryScopeName = (typeof InventoryScopeValues)[number];
 export type InventoryStatusName = (typeof InventoryStatusValues)[number];
 
@@ -629,6 +636,8 @@ export type CashTransactionView = {
   amount: number;
   category: CashCategoryName;
   method: CashMethodName;
+  /** journey J05-6: the mode the screens and exports show (`cod` = cash collected at delivery, never a deposit) */
+  displayMethod: CashDisplayMethod;
   description: string | null;
   /** the source document (order / sale / purchase) or the closing; click opens it */
   reference: { type: 'order' | 'sale' | 'purchase' | 'closing' | 'cash'; id: string; label: string } | null;
@@ -783,6 +792,8 @@ export type ProductStatsView = {
   outOfStock: number;
   totalItems: number;
   valueAtCost: number | null;
+  /** units in stock whose cost price is unknown — left out of `valueAtCost` (J11-3); null in simple mode */
+  unknownCostUnits?: number | null;
   valueAtRetail: number;
 };
 

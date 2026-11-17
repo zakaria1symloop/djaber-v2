@@ -1,7 +1,7 @@
 // GDS-10 — the 23 reports (00-build-order M8 Risks: one template + a per-report column map). Column / KPI / chart metadata
 // lives in `@djaber/shared` (`REPORT_DEFINITIONS`); this file holds the query of each report. Figures reuse the analytics
 // rollups (sales by period, P&L revenue) and `money-figures.ts` (P&L), so Revenue is the same number everywhere (AT-ORD-10).
-import { renderStoredTextIn, textIn, type ReportFilterKey, type ReportKey, type ReportRow } from '@djaber/shared';
+import { isCodCashDescription, renderStoredTextIn, textIn, type ReportFilterKey, type ReportKey, type ReportRow } from '@djaber/shared';
 import { Prisma, prisma } from '@djaber/db';
 import { algiersDay } from '../../../core/time/algiers';
 import type { DailyStatsService } from '../../analytics/daily-stats.service';
@@ -14,9 +14,11 @@ import { deadStock, stockLines } from './stock-queries';
 
 /**
  * UX-052 (10/11): « COD » (paid on delivery) only for cash collected on an order; cash at the counter (sale), on a
- * purchase or in the till is « Espèces » (`report.paymentMethod.*`).
+ * purchase or in the till is « Espèces » (`report.paymentMethod.*`). Journey J05-6: only the cash collected AT DELIVERY
+ * (the row's stored label, `isCodCashDescription`) — a cash deposit before delivery is « Espèces », as on the order page;
+ * J11-7 (f): an expense (return fee, refund) is never « COD » — callers pass the description of income rows only.
  */
-export const reportMethod = (method: string, documentType: string | null | undefined): string => (method === 'cash' && documentType === 'order' ? 'cod' : method);
+export const reportMethod = (method: string, documentType: string | null | undefined, description: string | null | undefined): string => (method === 'cash' && documentType === 'order' && isCodCashDescription(description) ? 'cod' : method);
 
 export type ReportCtx = {
   workspaceId: string;
@@ -224,7 +226,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
       by.set(l.pid, e);
     }
     const sorted = [...by.values()].sort((a, b) => b.qty - a.qty || b.revenue - a.revenue);
-    const rows: ReportRow[] = sorted.map((e, i) => ({ rank: i + 1, product: e.product, sku: e.sku, category: e.category, quantity: e.qty, orders: e.docs, grossSales: e.revenue, _ref: productRef(e.pid) }));
+    const rows: ReportRow[] = sorted.map((e, i) => ({ rank: i + 1, product: e.product, sku: e.sku, category: e.category, quantity: e.qty, documents: e.docs, grossSales: e.revenue, _ref: productRef(e.pid) }));
     return { rows, kpis: { quantity: sumOf(rows, 'quantity'), grossSales: sumOf(rows, 'grossSales'), products: rows.length } };
   },
 
@@ -313,7 +315,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
 
   async payments(ctx) {
     const { gte, lt } = r(ctx);
-    const entries = await prisma.paymentEntry.findMany({ where: { paidAt: { gte, lt } }, orderBy: [{ paidAt: 'asc' }, { id: 'asc' }] });
+    const entries = await prisma.paymentEntry.findMany({ where: { paidAt: { gte, lt } }, orderBy: [{ paidAt: 'asc' }, { id: 'asc' }], include: { cashTransaction: { select: { description: true } } } });
     const ids = (t: string) => entries.filter((e) => e.sourceType === t).map((e) => e.sourceId);
     const [orders, sales, purchases] = await Promise.all([
       prisma.order.findMany({ where: { id: { in: ids('order') } }, select: { id: true, number: true, clientName: true } }),
@@ -334,7 +336,9 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
       .filter((e) => !cancelled.has(e.sourceId))
       .map((e) => {
         const d = doc.get(e.sourceId);
-        return { date: iso(e.paidAt), documentType: e.sourceType, number: d?.number ?? null, party: d?.party ?? null, method: reportMethod(e.method, e.sourceType), direction: e.sourceType === 'purchase' ? 'out' : 'in', amount: e.amount, reference: e.reference, _ref: { type: e.sourceType as 'order' | 'sale' | 'purchase', id: e.sourceId } };
+        const direction = e.sourceType === 'purchase' ? 'out' : 'in';
+        // `received`: the chart measure (J11-1 — money collected by mode; a payment to a supplier is 0 there)
+        return { date: iso(e.paidAt), documentType: e.sourceType, number: d?.number ?? null, party: d?.party ?? null, method: reportMethod(e.method, e.sourceType, e.amount > 0 ? e.cashTransaction?.description : null), direction, amount: e.amount, received: direction === 'in' ? e.amount : 0, reference: e.reference, _ref: { type: e.sourceType as 'order' | 'sale' | 'purchase', id: e.sourceId } };
       })
       .filter((row) => !q || [row.number, row.party, row.reference].some((v) => v?.toLowerCase().includes(q)));
     const received = rows.filter((x) => x.direction === 'in').reduce((s, x) => s + n(x.amount), 0);
@@ -349,9 +353,11 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
       .filter((l) => !q || [l.product, l.variant, l.sku].some((v) => v?.toLowerCase().includes(q)))
       .map((l) => {
         const stock = Math.max(0, l.stock);
-        return { product: l.product, variant: l.variant, sku: l.sku, category: l.category, stock, costPrice: l.costPrice, valueAtCost: stock * l.costPrice, price: l.price, valueAtRetail: stock * l.price, _ref: productRef(l.productId) };
+        // J11-3: an unknown cost price is « — », not 0 DA — the line stays out of the value at cost
+        return { product: l.product, variant: l.variant, sku: l.sku, category: l.category, stock, costPrice: l.costPrice, valueAtCost: l.costPrice === null ? null : stock * l.costPrice, price: l.price, valueAtRetail: stock * l.price, _ref: productRef(l.productId) };
       });
-    return { rows, kpis: { valueAtCost: sumOf(rows, 'valueAtCost'), valueAtRetail: sumOf(rows, 'valueAtRetail'), units: sumOf(rows, 'stock'), lines: rows.length } };
+    const unknownCostUnits = rows.filter((x) => x.costPrice === null).reduce((s, x) => s + n(x.stock), 0);
+    return { rows, kpis: { valueAtCost: sumOf(rows, 'valueAtCost'), valueAtRetail: sumOf(rows, 'valueAtRetail'), units: sumOf(rows, 'stock'), lines: rows.length, unknownCostUnits } };
   },
 
   async stock_alerts(ctx) {
@@ -425,7 +431,8 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     const q = str(ctx, 'q')?.toLowerCase();
     const rows: ReportRow[] = moves
       .map((m) => {
-        const cost = m.variant?.costPrice ?? m.product.costPrice ?? 0;
+        // J11-3: an unknown cost price gives no value (« — »), never 0 DA
+        const cost = m.variant?.costPrice ?? m.product.costPrice ?? null;
         return {
           date: iso(m.createdAt),
           product: m.product.name,
@@ -435,7 +442,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
           quantity: m.quantity,
           before: m.quantityBefore,
           after: m.quantityAfter,
-          valueAtCost: m.quantity * cost,
+          valueAtCost: cost === null ? null : m.quantity * cost,
           reference: m.refType === 'inventory' && m.refId ? `#${invNo.get(m.refId) ?? ''}` : renderStoredTextIn(m.note, ctx.locale),
           actor: m.actor ? `${m.actor.firstName} ${m.actor.lastName}`.trim() : null,
           _ref: productRef(m.productId),
@@ -519,7 +526,7 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
     const all: ReportRow[] = txs.map((t) => {
       balance += t.type === 'income' ? t.amount : -t.amount;
       const doc = docOf(t);
-      return { date: iso(t.date), description: renderStoredTextIn(t.description, ctx.locale), reference: doc?.number ?? (t.sourceType === 'closing' ? closingReference(algiersDay(t.date), ctx.locale) : t.reference), category: t.category, method: reportMethod(t.method, doc?.type), income: t.type === 'income' ? t.amount : 0, expense: t.type === 'expense' ? t.amount : 0, balance, proof: t.proof?.storageKey ?? null, _ref: doc ? { type: doc.type, id: doc.id } : null };
+      return { date: iso(t.date), description: renderStoredTextIn(t.description, ctx.locale), reference: doc?.number ?? (t.sourceType === 'closing' ? closingReference(algiersDay(t.date), ctx.locale) : t.reference), category: t.category, method: reportMethod(t.method, doc?.type, t.type === 'income' ? t.description : null), income: t.type === 'income' ? t.amount : 0, expense: t.type === 'expense' ? t.amount : 0, balance, proof: t.proof?.storageKey ?? null, _ref: doc ? { type: doc.type, id: doc.id } : null };
     });
     const rows = q ? all.filter((x) => [x.description, x.reference].some((v) => typeof v === 'string' && v.toLowerCase().includes(q))) : all;
     const income = sumOf(all, 'income');
@@ -589,8 +596,9 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
       GROUP BY 1,2,3,4`;
     const rows: ReportRow[] = rows0
       .sort((a, b) => n(b.rev) - n(a.rev))
-      .map((x, i) => ({ rank: i + 1, client: x.name, phone: x.phone, orders: x.orders, sales: x.sales, ordersRevenue: n(x.orev), salesRevenue: n(x.srev), revenue: n(x.rev), lastOrderAt: day(x.last), _ref: { type: 'client', id: x.cid } }));
-    return { rows, kpis: { clients: rows.length, revenue: sumOf(rows, 'revenue') } };
+      .map((x, i) => ({ rank: i + 1, client: x.name, phone: x.phone, deliveredOrders: x.orders, sales: x.sales, ordersRevenue: n(x.orev), salesRevenue: n(x.srev), revenue: n(x.rev), lastPurchaseAt: day(x.last), _ref: { type: 'client', id: x.cid } }));
+    // J11-2: Revenue of the identified clients (walk-in sales left out) — its own name, not the named « Revenus »
+    return { rows, kpis: { clients: rows.length, identifiedRevenue: sumOf(rows, 'revenue') } };
   },
 
   async inactive_customers(ctx) {

@@ -68,7 +68,10 @@ export type StockOverview = {
   outOfStockCount: number;
   totalItems: number;
   valueAtCost: number | null;
+  /** units in stock without a cost price, left out of `valueAtCost` (J11-3); null in simple mode */
+  unknownCostUnits?: number | null;
   valueAtRetail: number;
+  /** retail − cost of the lines with a known cost price */
   potentialMargin: number | null;
   recentMovements: StockMovement[];
   /** M7: "ACHATS & FOURNISSEURS" block — advanced mode + `gds.read`, else null (shared `StockPurchasingView`) */

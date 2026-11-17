@@ -4,7 +4,7 @@
 // Client)". Every value lives in the URL (`useListState`).
 import { formatDate, formatMoney, formatNumber, type AppLocale } from '@djaber/shared';
 import { ActiveFilters, Button, FilterCheckList, InlineAdd, FilterChips, FilterDateRange, FilterDropdown, FilterGroup, FilterPanel, FilterRange, SearchInput, type FilterOption } from '@djaber/ui';
-import { CalendarDays, PhoneCall, SlidersHorizontal } from 'lucide-react';
+import { Archive, CalendarDays, PhoneCall, SlidersHorizontal } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useChannels } from '@/features/channels/api';
 import { useGeoWilayas } from '@/features/delivery/api';
@@ -72,6 +72,7 @@ export function ClientsFilterBar({ list, tags, onOpenPanel }: { list: ListContro
   const picked = filterList(s, 'tags');
   const dates = filterText(s, 'createdFrom') || filterText(s, 'createdTo') ? 1 : 0;
   const unconfirmed = filterBool(s, 'unconfirmed');
+  const archived = filterBool(s, 'archived');
   return (
     <div className="flex flex-wrap items-center gap-2">
       <SearchInput value={s.q} onChange={(q) => list.set({ q })} label={t('action.search')} placeholder={t('clients.list.search')} clearLabel={t('list.clearSearch')} className="min-w-52" />
@@ -92,6 +93,11 @@ export function ClientsFilterBar({ list, tags, onOpenPanel }: { list: ListContro
       <Button variant={unconfirmed ? 'primary' : 'secondary'} aria-pressed={unconfirmed} title={t('clients.filter.unconfirmedHint')} onClick={() => list.setFilters({ unconfirmed: unconfirmed ? null : true })} data-testid="filter-unconfirmed">
         <PhoneCall className="size-4" aria-hidden />
         {t('clients.filter.unconfirmed')}
+      </Button>
+      {/* journey J09-8: the archived cards (« Vous pourrez le restaurer depuis sa fiche ») can be found */}
+      <Button variant={archived ? 'primary' : 'secondary'} aria-pressed={archived} title={t('clients.filter.archivedHint')} onClick={() => list.setFilters({ archived: archived ? null : true })} data-testid="filter-archived">
+        <Archive className="size-4" aria-hidden />
+        {t('clients.filter.archived')}
       </Button>
       <Button onClick={onOpenPanel} data-testid="open-filters">
         <SlidersHorizontal className="size-4" aria-hidden />
@@ -129,6 +135,7 @@ export function ClientsActiveFilters({ list }: { list: ListController }) {
     },
     created: (range) => t('clients.chip.created', { range }),
     blocked: t('enum.Client.blocked'),
+    archived: t('clients.filter.archived'),
     date: (day) => formatDate(`${day}T12:00:00Z`, locale),
     money: formatMoney,
     number: formatNumber,
@@ -177,7 +184,7 @@ export function ClientsFilterPanel({ open, onClose, list, tags, total }: { open:
       open={open}
       onClose={onClose}
       title={t('action.filters')}
-      summary={total === null ? t('clients.filter.summaryLoading', { count: list.activeCount }) : t('clients.filter.summary', { count: list.activeCount, results: formatNumber(total) })}
+      summary={total === null ? t('clients.filter.summaryLoading', { count: list.activeCount }) : t('clients.filter.summary', { count: list.activeCount, n: total, results: formatNumber(total) })}
       resetLabel={t('clients.filter.reset')}
       onReset={list.clear}
       applyLabel={total === null ? t('action.apply') : t('clients.filter.show', { count: total })}

@@ -101,7 +101,10 @@ describe('cross-sell rules (REC-01…03)', () => {
     const gants = await product(owner, { name: 'Gants', price: 900, stock: 50 });
     const rule = await owner.post('/recommendations', { productId: robe.id, recommendedId: gants.id, type: 'cross_sell', score: 80, reason: 'Assortis' }).expect(201);
     expect(rule.body.data).toMatchObject({ source: 'manual', score: 80, reason: 'Assortis', impressions: 0, conversions: 0, conversionRatePct: null });
-    expect((await owner.post('/recommendations', { productId: robe.id, recommendedId: gants.id }).expect(409)).body.error.code).toBe('CONFLICT');
+    // journeys 16/11 J11-5: the duplicate says what it is and hands the existing rule to the dialog
+    const dup = (await owner.post('/recommendations', { productId: robe.id, recommendedId: gants.id }).expect(409)).body.error;
+    expect(dup).toMatchObject({ code: 'RECOMMENDATION_ALREADY_EXISTS', params: { product: 'Robe', recommended: 'Gants' }, details: { recommendation: { id: rule.body.data.id } } });
+    expect((await owner.post('/recommendations', { productId: robe.id, recommendedId: gants.id, score: -1 }).expect(422)).body.error.fields).toMatchObject({ score: 'validation.range' });
     expect((await owner.post('/recommendations', { productId: robe.id, recommendedId: robe.id }).expect(422)).body.error.fields).toEqual({ recommendedId: 'validation.invalid' });
     for (let i = 0; i < 2; i++) await postOrder(owner, orderBody(robe.id, { items: [{ productId: robe.id, quantity: 1 }, { productId: sac.id, quantity: 1 }] })).expect(201);
     const job = await owner.post('/recommendations/generate').expect(202);

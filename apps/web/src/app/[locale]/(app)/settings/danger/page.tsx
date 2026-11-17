@@ -58,7 +58,8 @@ export default function DangerZonePage() {
           <div className="flex flex-wrap items-center gap-3">
             <p className="min-w-0 flex-1 text-[13px] text-text-secondary">
               {t('settings.danger.description', { name: workspace.name })}{' '}
-              {plan && plan.slug !== 'free' ? t('settings.danger.planNote', { plan: plan.name, date: formatDate(plan.periodEnd, locale) }) : null}
+              {/* journey J10-5: a trial is not a paid subscription (nothing to refund) */}
+              {plan && plan.slug !== 'free' ? (plan.status === 'trial' ? t('settings.danger.trialNote', { plan: plan.name, date: formatDate(plan.trialEndsAt ?? plan.periodEnd, locale) }) : t('settings.danger.planNote', { plan: plan.name, date: formatDate(plan.periodEnd, locale) })) : null}
             </p>
             <Button variant="danger" onClick={() => setOpen(true)} disabledReason={allowed ? undefined : t('error.READ_ONLY_MEMBER')}>
               {t('settings.danger.open')}

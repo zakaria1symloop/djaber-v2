@@ -184,6 +184,8 @@ Usage rule: `STOCK_INSUFFICIENT` is returned by stock adjustments and **sale** l
 | 401 | `API_KEY_REVOKED` | Clé API révoquée. | مفتاح API ملغى. | API key revoked. | — (API) | new key |
 | 403 | `API_SCOPE_FORBIDDEN` {scope} | Portée requise : {scope}. | النطاق المطلوب: {scope}. | Required scope: {scope}. | — (API) | add scope |
 | 422 | `WEBHOOK_ENDPOINT_DISABLED` | Webhook désactivé après 50 échecs. | عُطّل الويبهوك بعد 50 فشلًا. | Webhook disabled after 50 failures. | banner | fix endpoint, re-enable |
+| 409 | `WEBHOOK_ENDPOINT_ACTIVE` | Webhook actif : rien à réactiver. | الويبهوك نشط: لا حاجة لإعادة تفعيله. | Webhook active: nothing to re-enable. | greyed « Réactiver » reason (journeys 16/11 J12-5) | — |
+| 409 | `WEBHOOK_DELIVERY_PENDING` | Envoi en cours : attendez son résultat pour le renvoyer. | الإرسال جارٍ: انتظر نتيجته لإعادة إرساله. | Delivery in progress: wait for its result to replay it. | greyed « Renvoyer » reason (journeys 16/11 J12-5) | wait |
 | 401 | `AI_PROVIDER_KEY_REJECTED` | Clé refusée par {provider}. | رفض {provider} المفتاح. | Key rejected by {provider}. | inline (admin test) | replace key |
 | 503 | `AI_PROVIDER_UNREACHABLE` | {provider} injoignable. | تعذّر الوصول إلى {provider}. | {provider} unreachable. | inline (admin test) | retry |
 | 422 | `AI_PROVIDER_NO_KEY` | Aucune clé configurée. | لا يوجد مفتاح مُعدّ. | No key configured. | inline | add key |
@@ -311,6 +313,7 @@ Every code drawn in a Figma frame (dialog footers, greyed menu items, grey "ÉTA
 | 404 | `INVENTORY_NOT_FOUND` | Inventaire introuvable. | الجرد غير موجود. | Inventory not found. | state | back |
 | 409 | `SALE_BLOCKED_BY_INVENTORY` | Ventes comptoir bloquées pendant l'inventaire. | مبيعات المحل متوقفة أثناء الجرد. | Counter sales blocked during the inventory. | dialog state | finish the count |
 | 429 | `RECO_RATE_LIMITED` {retryAfter} | Régénération possible dans {retryAfter} (1 fois / 10 min). | إعادة التوليد ممكنة بعد {retryAfter} (مرة كل 10 د). | Regeneration possible in {retryAfter} (1 per 10 min). | tooltip (disabled) | wait |
+| 409 | `RECOMMENDATION_ALREADY_EXISTS` {product} {recommended} | Cette règle existe déjà ({product} et {recommended}) : modifiez-la. | هذه القاعدة موجودة مسبقًا ({product} و{recommended}): عدّلوها. | This rule already exists ({product} and {recommended}): edit it. | inline (rule dialog), `details.recommendation` = the existing rule (journeys 16/11 J11-5) | « Modifier la règle existante » |
 | 409 | `PURCHASE_ALREADY_RECEIVED` | Achat reçu : annulation impossible, corrigez le stock. | تم استلام الشراء: لا يمكن الإلغاء، صحّح المخزون. | Purchase received: cannot cancel, adjust stock instead. | greyed action + tooltip | adjust stock |
 | 409 | `SUPPLIER_HAS_PURCHASES` {count} | {count} achats liés : désactivez le fournisseur. | {count} مشتريات مرتبطة: عطّل المورّد. | {count} linked purchases: deactivate the supplier. | dialog | deactivate |
 | 409 | `SUPPLIER_ALREADY_EXISTS` {name} | Ce fournisseur existe déjà : {name} (même téléphone ou e-mail). | هذا المورّد موجود مسبقًا: {name} (نفس الهاتف أو البريد). | This supplier already exists: {name} (same phone or e-mail). | inline (phone / e-mail field) | open the existing supplier |

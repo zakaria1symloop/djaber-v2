@@ -118,7 +118,12 @@ test('AT-DLG-74 Créer un espace pour un client: the new workspace opens in the 
   const name = `Bijoux ${Date.now().toString(36)}`;
   await dlg.getByLabel("Nom de l'espace").fill(name);
   await dlg.getByLabel('E-mail du propriétaire').fill(uniqueEmail('m10wa-client'));
+  // journeys 16/11 J13-8: negative credits refused before submit; the reason is typed by the admin
+  await dlg.getByLabel('Crédits initiaux').fill('-50');
+  await expect(dlg).toContainText('Doit être supérieur à 0.');
+  await expect(page.getByTestId('dlg-create-ws-submit')).toBeDisabled();
   await dlg.getByLabel('Crédits initiaux').fill('500');
+  await dlg.getByLabel('Raison').fill('Création assistée salon Expo Alger');
   await page.getByTestId('dlg-create-ws-submit').click();
   await expect(page.getByText(`Espace « ${name} » créé.`)).toBeVisible();
   await expect(page).toHaveURL(/sheet=/);

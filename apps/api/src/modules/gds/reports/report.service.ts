@@ -3,6 +3,7 @@
 // 7 days); PDF = current page + totals with the shop logo. Same period rules as the analytics tabs (11 §7).
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import {
+  formatDate,
   REPORT_CSV_IMMEDIATE_MAX_ROWS,
   REPORT_DEFINITIONS,
   REPORT_GROUPS,
@@ -190,7 +191,8 @@ export class ReportService implements OnModuleInit {
       for (const y of ch.y) v[y] = (v[y] ?? 0) + (Number(r[y]) || 0);
       by.set(x, v);
     }
-    const sorted = [...by.entries()].sort((a, b) => (b[1][ch.y[0]!] ?? 0) - (a[1][ch.y[0]!] ?? 0));
+    // a donut slice of 0 says nothing (Paiements: a mode used only to pay suppliers is not a part of the money collected, J11-1)
+    const sorted = [...by.entries()].filter(([, v]) => ch.type !== 'donut' || (v[ch.y[0]!] ?? 0) !== 0).sort((a, b) => (b[1][ch.y[0]!] ?? 0) - (a[1][ch.y[0]!] ?? 0));
     return { type: ch.type, points: sorted.slice(0, 10).map(([x, values]) => ({ x, label: this.label(locale, xCol, x === '—' ? null : x) || '—', values })) };
   }
 
@@ -212,7 +214,7 @@ export class ReportService implements OnModuleInit {
           value,
           unit: k.unit,
           ...(k.figure ? { figure: k.figure } : {}),
-          ...(run.previousKpis ? { previous: run.previousKpis[k.key] ?? null, deltaPct: deltaPct(value, run.previousKpis[k.key] ?? null) } : {}),
+          ...(run.previousKpis && !k.snapshot ? { previous: run.previousKpis[k.key] ?? null, deltaPct: deltaPct(value, run.previousKpis[k.key] ?? null) } : {}),
         };
       }),
       chart: this.chart(run, locale),
@@ -259,7 +261,9 @@ export class ReportService implements OnModuleInit {
       width: c.type === 'text' ? 3 : c.type === 'datetime' ? 2.4 : 2,
     }));
     const totals = this.totals(run.def, run.rows);
-    const period = run.range ? `${run.range.from} → ${run.range.to}` : this.i18n.t(locale, 'report.snapshot', { date: algiersDay() });
+    // J11-6: dates in words of the reader (« 16 nov. 2026 »); « – » because the PDF fonts have no « → » (it printed « ? »)
+    const day = (d: string) => formatDate(`${d}T12:00:00Z`, locale);
+    const period = run.range ? (run.range.from === run.range.to ? day(run.range.from) : `${day(run.range.from)} – ${day(run.range.to)}`) : this.i18n.t(locale, 'report.snapshot', { date: day(algiersDay()) });
     return {
       sheetName: title.slice(0, 31),
       fileName: `${run.def.key.replace(/_/g, '-')}-${run.range ? `${run.range.from}_${run.range.to}` : algiersDay()}`,
@@ -269,6 +273,8 @@ export class ReportService implements OnModuleInit {
         title,
         subtitle: '',
         meta: [{ label: this.i18n.t(locale, 'report.period'), value: period }],
+        // D62 / the export menu: « A4 paysage » for every report PDF (it was portrait up to 7 columns, J11-6)
+        landscape: true,
         totals: cols
           .filter((c) => c.sum)
           .map((c) => ({ label: this.i18n.t(locale, `report.col.${c.key}`), value: c.type === 'money' ? money(totals[c.key] ?? 0) : String(totals[c.key] ?? 0) })),

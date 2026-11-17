@@ -62,13 +62,15 @@ export class CashService implements OnModuleInit {
   }
 
   private filterWhere(q: Partial<CashStatsQuery>): Prisma.CashTransactionWhereInput[] {
+    // journey J05-6: « COD » = the cash collected at delivery (`isCodCashDescription`), a cash deposit is « Espèces »
+    const COD_ROW: Prisma.CashTransactionWhereInput = { OR: [{ description: { startsWith: '§stored.cash.orderCod' } }, { description: { contains: '(COD)' } }] };
     const and: Prisma.CashTransactionWhereInput[] = [];
     if (q.direction) and.push({ type: q.direction });
     if (q.category?.length) and.push({ category: { in: q.category } });
     // retest 11/11 UX-055: « COD » = cash collected on an order, « Espèces » = the other cash rows (counter, till, purchases)
     if (q.method?.length)
       and.push({
-        OR: q.method.map((m): Prisma.CashTransactionWhereInput => (m === 'cod' ? { method: 'cash', category: 'order' } : m === 'cash' ? { method: 'cash', category: { not: 'order' } } : { method: m })),
+        OR: q.method.map((m): Prisma.CashTransactionWhereInput => (m === 'cod' ? { AND: [{ method: 'cash', category: 'order' }, COD_ROW] } : m === 'cash' ? { method: 'cash', OR: [{ category: { not: 'order' } }, { description: null }, { NOT: { description: { startsWith: '§stored.cash.orderCod' } }, AND: { NOT: { description: { contains: '(COD)' } } } }] } : { method: m })),
       });
     if (q.createdById?.length) and.push({ createdById: { in: q.createdById } });
     if (q.source === 'auto') and.push({ isAutomatic: true });
@@ -169,6 +171,7 @@ export class CashService implements OnModuleInit {
         amount: r.amount,
         category: r.category,
         method: r.method,
+        displayMethod: cashDisplayMethod(r.category, r.method, r.description),
         description: renderStoredTextIn(r.description, locale),
         reference: ref(r),
         date: r.date.toISOString(),
@@ -498,7 +501,7 @@ export class CashService implements OnModuleInit {
         { header: h.description, value: (r: R) => r.description ?? '' },
         { header: h.reference, value: (r: R) => (r.reference?.type === 'closing' ? closingReference(r.reference.label, locale) : (r.reference?.label ?? '')) },
         { header: h.category, value: (r: R) => exportLabel(locale, 'enum.Cash.category', r.category) },
-        { header: h.method, value: (r: R) => exportLabel(locale, 'orders.payment.method', cashDisplayMethod(r.category, r.method)) },
+        { header: h.method, value: (r: R) => exportLabel(locale, 'orders.payment.method', r.displayMethod) },
         { header: h.amount, value: (r: R) => (r.type === 'income' ? r.amount : -r.amount) },
         { header: h.balance, value: (r: R) => r.balanceAfter },
         { header: h.auto, value: (r: R) => (r.isAutomatic ? 'AUTO' : '') },

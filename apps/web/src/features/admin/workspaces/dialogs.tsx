@@ -480,6 +480,8 @@ export function CreateWorkspaceDialog({ open, onClose, onCreated }: { open: bool
   const [credits, setCredits] = useState('');
   const [invite, setInvite] = useState(true);
   const [assisted, setAssisted] = useState(false);
+  // journeys 16/11 J13-8: the admin types the reason (it was a fixed sentence) and the initial credits are > 0
+  const [reason, setReason] = useState('');
   const [errors, setErrors] = useState<ServerErrors>(NO_ERRORS);
   const m = useMutation({ mutationFn: (body: unknown) => adminWrite<CreateWorkspaceResult>('/admin/workspaces', 'POST', body, true) });
   useOnOpen(open, () => {
@@ -490,9 +492,11 @@ export function CreateWorkspaceDialog({ open, onClose, onCreated }: { open: bool
     setCredits('');
     setInvite(true);
     setAssisted(false);
+    setReason('');
     setErrors(NO_ERRORS);
   });
   const options = (plans.data ?? []).filter((p) => !p.archivedAt);
+  const creditsError = credits !== '' && !(Number(credits) > 0) ? t('admin.validation.positive') : undefined;
   const submit = async () => {
     setErrors(NO_ERRORS);
     try {
@@ -504,14 +508,14 @@ export function CreateWorkspaceDialog({ open, onClose, onCreated }: { open: bool
         ...(credits ? { initialCredits: Number(credits) } : {}),
         sendInvite: invite,
         assistedOnboarding: assisted,
-        reason: t('admin.ws.create.auditReason'),
+        reason: reason.trim(),
       });
       void invalidate('/admin/workspaces', '/admin/users', '/admin/analytics');
       toast(t('admin.ws.create.done', { name: ws.name }));
       onClose();
       onCreated(ws);
     } catch (e) {
-      setErrors(toServerErrors(e, t, ['name', 'ownerEmail', 'planSlug', 'trialMonths', 'initialCredits']));
+      setErrors(toServerErrors(e, t, ['name', 'ownerEmail', 'planSlug', 'trialMonths', 'initialCredits', 'reason'], { ADMIN_REASON_REQUIRED: 'reason' }));
     }
   };
   return (
@@ -522,7 +526,7 @@ export function CreateWorkspaceDialog({ open, onClose, onCreated }: { open: bool
       title={t('admin.ws.create.title')}
       context={t('admin.ws.create.context')}
       submitLabel={t('admin.ws.create.submit')}
-      disabled={!name.trim() || !email.trim()}
+      disabled={!name.trim() || !email.trim() || !!creditsError || !reasonOk(reason)}
       pending={m.isPending}
       error={errors.form}
       note={t('admin.ws.create.note')}
@@ -556,7 +560,7 @@ export function CreateWorkspaceDialog({ open, onClose, onCreated }: { open: bool
             ))}
           </Select>
         </Field>
-        <Field label={t('admin.ws.create.credits')} htmlFor="f-wscredits" error={errors.fields.initialCredits}>
+        <Field label={t('admin.ws.create.credits')} htmlFor="f-wscredits" error={creditsError ?? errors.fields.initialCredits}>
           <NumberInput id="f-wscredits" value={credits} onValueChange={setCredits} />
         </Field>
       </div>
@@ -568,6 +572,7 @@ export function CreateWorkspaceDialog({ open, onClose, onCreated }: { open: bool
         <Checkbox checked={assisted} onChange={(e) => setAssisted(e.target.checked)} />
         {t('admin.ws.create.assisted')}
       </label>
+      <ReasonField value={reason} onChange={setReason} error={errors.fields.reason} />
     </AdminDialog>
   );
 }

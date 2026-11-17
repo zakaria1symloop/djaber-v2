@@ -31,6 +31,10 @@ export class OrderToolsService implements OrderTools {
     return { ...r, replaced: cancelled.ok === true ? { number: old.number } : null, ...(cancelled.ok === true ? {} : { hint: 'handoff' }) };
   }
 
+  async isBlocked(ctx: Pick<OrderToolContext, 'conversationId'>, phone: string): Promise<boolean> {
+    return (await this.orders.aiBlockCheck(ctx, phone)).blocked;
+  }
+
   cancelOrder(ctx: OrderToolContext, order: CancellableOrder, reason: string | null): Promise<ToolResult> {
     return this.workflow.cancelFromAi(ctx, order, reason);
   }

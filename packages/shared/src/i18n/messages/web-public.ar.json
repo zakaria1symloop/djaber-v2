@@ -154,5 +154,6 @@
   "public.contact.subjectDeletion": "حذف الحساب",
   "public.deletion.invalid.title": "هذا الرابط غير صالح.",
   "public.deletion.invalid.text": "الرابط غير مكتمل أو نُسخ بشكل خاطئ. أعد الطلب لتتلقى رابطًا جديدًا (صالحًا لمدة 24 ساعة).",
-  "public.pricing.cta.member": "اختيار هذه الخطة"
+  "public.pricing.cta.member": "اختيار هذه الخطة",
+  "public.meta.status.description": "توفّر خدمات Djaber.ai في الوقت الفعلي وسجل الحوادث."
 }

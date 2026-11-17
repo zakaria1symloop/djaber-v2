@@ -10,14 +10,14 @@ import { FAQ_CANDIDATE_INSIGHT_AT } from '../ai.constants';
 import { CatalogueService, type CatalogueProduct } from '../catalogue.service';
 import { stockWord } from '../prompt/sections/catalogue';
 import type { AiToolDef } from '../provider/ai.gateway';
-import { ORDER_TOOLS, PAYMENT_LINK_TOOL, type CancellableOrder, type CreateOrderRequest, type OrderTools, type PaymentLinkTool, type ToolResult } from './order-tools';
+import { customerBlockedResult, ORDER_TOOLS, PAYMENT_LINK_TOOL, type CancellableOrder, type CreateOrderRequest, type OrderTools, type PaymentLinkTool, type ToolResult } from './order-tools';
 import { ConfigService } from '../../../core/config/config.service';
 import { aiDateTime } from '../../../core/time/algiers';
 import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
 import { fold, WILAYA_ALIASES } from './wilaya-aliases';
 import { handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
-import { asksCancel, confirmation, draftKey, wantsCancel, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, recapShown, simulatedOrders, type OrderCallHistory } from './order-confirmation';
+import { asksCancel, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, recapShown, simulatedOrders, type OrderCallHistory } from './order-confirmation';
 
 export type ToolName = 'search_products' | 'get_product' | 'check_availability' | 'quote_delivery' | 'create_order' | 'cancel_order' | 'lookup_order' | 'handoff_to_human' | 'add_faq_candidate' | 'create_payment_link';
 export type ToolRunContext = {
@@ -420,7 +420,7 @@ export class ToolRegistry {
   }
 
   /** Validation, catalogue check and limits of `create_order` (04 §5, FL-02); the write itself is the `OrderTools` port. */
-  async prepareOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<{ ok: true; request: CreateOrderRequest; draft: string; beyondStock?: { name: string; quantity: number }[] } | { ok: false; result: ToolResult }> {
+  async prepareOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<{ ok: true; request: CreateOrderRequest; draft: string; core?: string; beyondStock?: { name: string; quantity: number }[] } | { ok: false; result: ToolResult }> {
     const fail = (result: ToolResult) => ({ ok: false as const, result });
     const a = OrderArgs.safeParse(args);
     if (!a.success) {
@@ -503,31 +503,42 @@ export class ToolRegistry {
     const request: CreateOrderRequest = { clientName: d.clientName, clientPhone: phone, secondPhone: phone2, wilayaId: d.wilayaId, communeName: d.communeName || null, address: d.address || null, isStopdesk: d.isStopdesk, stopdeskId: d.stopdeskId || null, notes: d.notes || null, items, subtotal, deliveryFee, total: subtotal + deliveryFee, replaces };
     // full-test 15/11 AI-CHAT-01 (Blocker): the order exists only after the customer said yes, in a later message, to the
     // recap the server sent — the model's `customerConfirmed` is never enough on its own
-    const draft = draftKey(request);
+    let draft = draftKey(request);
+    const core = coreKey(request);
+    // journey 16/11 J03-10 (Blocker): the confirming call rewrote the address (« …, El Eulma, Sétif »), so the content key
+    // differed and the customer's « oui » got the same recap again, in a loop (5 confirmed recaps out of 7 lost). The latest
+    // recap of the conversation with the same core is the one being confirmed — whatever the wording of the name / commune /
+    // address, unless the customer's own message of this turn brings the new words; the order then keeps the recap's wording.
+    const latest = hasDraft(ctx.orderHistory, draft) ? null : latestRecap(ctx.orderHistory);
+    if (latest?.core === core && latest.wording && !wordingChangedNow(latest.wording, request, ctx.customerText)) {
+      Object.assign(request, { clientName: latest.wording.clientName, secondPhone: latest.wording.secondPhone, communeName: latest.wording.communeName, address: latest.wording.address });
+      draft = latest.draft;
+    }
     // full-test 15/11 proposal 4: one order per confirmed recap — never a second one in the same turn, never the same
     // content again in a later turn (C06: TEST-2998 then TEST-2283 on « oui c'est bon »)
     const placedNow = await this.placedThisRun(ctx);
     if (placedNow) return fail({ ok: false, error: { code: 'ORDER_ALREADY_PLACED', number: placedNow }, say: 'An order was already placed in this turn: confirm that one to the customer, never create another one now.' });
-    const before = orderedBefore(ctx.orderHistory, draft);
-    if (before) return fail({ ok: false, error: { code: 'ORDER_ALREADY_PLACED', number: before }, say: 'This exact order was already placed: confirm it to the customer. Create another order only when the customer clearly asks for an additional one.' });
+    const before = orderedBefore(ctx.orderHistory, draft, Date.now(), core);
+    if (before) return fail({ ok: false, error: { code: 'ORDER_ALREADY_PLACED', number: before }, say: `This order (same phone, wilaya and items) was already placed as ${before}: confirm it to the customer. To change its name or address, call create_order with replacesOrder=${before}. Create another order only when the customer clearly asks for an additional one.` });
     const recap = {
       items: items.map((i) => ({ name: i.name, variant: i.variant, quantity: i.quantity, unitPrice: i.unitPrice })),
-      subtotal, deliveryFee, total: subtotal + deliveryFee, clientName: d.clientName, clientPhone: phone, ...(phone2 ? { secondPhone: phone2 } : {}),
-      wilaya: String(quote.wilayaName ?? ''), communeName: d.communeName || null, address: d.address || null, isStopdesk: d.isStopdesk,
+      // J03-10: the wording of the request (the confirmed recap's, when the call only reworded it)
+      subtotal, deliveryFee, total: subtotal + deliveryFee, clientName: request.clientName, clientPhone: phone, ...(request.secondPhone ? { secondPhone: request.secondPhone } : {}),
+      wilaya: String(quote.wilayaName ?? ''), communeName: request.communeName, address: request.address, isStopdesk: d.isStopdesk,
       ...(beyondStock.length ? { beyondStock } : {}),
     };
     // journey 16/11 J04-4: a recap the AI wrote itself in its previous message (a change after an order) counts as shown
     // when it carries this phone, total, products (and replaced order) — and the customer's message of the turn says yes
     const confirmsOwnRecap = () => confirmation(ctx.customerText ?? '') === 'yes' && recapShown(ctx.lastAiText, { clientPhone: phone, total: request.total, items, replaces });
     if (!hasDraft(ctx.orderHistory, draft) && !confirmsOwnRecap()) {
-      return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft }, recap, say: 'Nothing is ordered yet. Show this recap to the customer (items, quantities, prices, delivery fee, total, name, phone, address) and ask them to confirm. Do not call create_order again in this turn: call it with the same values when the customer answers yes in their next message.' });
+      return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft, core }, recap, say: 'Nothing is ordered yet. Show this recap to the customer (items, quantities, prices, delivery fee, total, name, phone, address) and ask them to confirm. Do not call create_order again in this turn: call it with the same values when the customer answers yes in their next message.' });
     }
     const said = confirmation(ctx.customerText ?? '');
-    if (said === 'no') return fail({ ok: false, error: { code: 'CONFIRMATION_REFUSED', draft }, say: 'The customer did not confirm this recap: nothing is ordered. Ask what they want to change (or whether they still want to order).' });
-    if (said === 'unclear') return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft }, recap, say: 'The customer has not clearly confirmed this recap yet: nothing is ordered. Answer their message, then ask them to reply « oui » to confirm the order (or say what to change).' });
+    if (said === 'no') return fail({ ok: false, error: { code: 'CONFIRMATION_REFUSED', draft, core }, say: 'The customer did not confirm this recap: nothing is ordered. Ask what they want to change (or whether they still want to order).' });
+    if (said === 'unclear') return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft, core }, recap, say: 'The customer has not clearly confirmed this recap yet: nothing is ordered. Answer their message, then ask them to reply « oui » to confirm the order (or say what to change).' });
     // 04 §21: `phoneConfirmed` counts only once the tool asked the customer to re-confirm this number
     if (d.phoneConfirmed && phoneCheckAsked(ctx.orderHistory, phone)) request.phoneConfirmed = true;
-    return { ok: true, request, draft, ...(beyondStock.length ? { beyondStock } : {}) };
+    return { ok: true, request, draft, core, ...(beyondStock.length ? { beyondStock } : {}) };
   }
 
   /** The number of the order a `create_order` of this very run already placed, else null. */
@@ -564,8 +575,9 @@ export class ToolRegistry {
     if (!prepared.ok) return prepared.result;
     const r = prepared.request;
     // `draft`: the content key (a later turn never places the same order again); `etaDays`: the server's confirmation text
-    const beyond = { ...(prepared.beyondStock ? { beyondStock: prepared.beyondStock } : {}), draft: prepared.draft, etaDays: '2–5' };
-    // §8 dry run: everything validated, nothing written
+    const beyond = { ...(prepared.beyondStock ? { beyondStock: prepared.beyondStock } : {}), draft: prepared.draft, ...(prepared.core ? { core: prepared.core } : {}), etaDays: '2–5' };
+    // §8 dry run: everything validated, nothing written; a blocked phone is refused like live (journey J09-14, 04 §13)
+    if (ctx.dryRun && (await this.orders.isBlocked?.({ conversationId: ctx.conversationId }, r.clientPhone))) return customerBlockedResult();
     if (ctx.dryRun) return { ok: true, orderId: null, number: `TEST-${seqOf(ctx.callId)}`, simulated: true, subtotal: r.subtotal, deliveryFee: r.deliveryFee, total: r.total, items: r.items.map((i) => ({ name: i.name, variant: i.variant, quantity: i.quantity, unitPrice: i.unitPrice })), duplicateOf: null, paymentOptions: ['cod'], ...(r.replaces ? { replaced: { number: r.replaces.number } } : {}), ...beyond };
     const created = await this.orders.createOrder({ workspaceId: ctx.workspaceId, agentId: ctx.agent.id, conversationId: ctx.conversationId, clientId: ctx.clientId, channelId: ctx.channelId, runId: ctx.runId, callId: ctx.callId }, r);
     return created && typeof created === 'object' && (created as { ok?: unknown }).ok !== false ? { ...(created as object), ...beyond } : created;

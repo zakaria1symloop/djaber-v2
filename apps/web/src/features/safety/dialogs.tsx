@@ -259,7 +259,8 @@ export function BlockNumberDialog({ open, onClose }: { open: boolean; onClose: (
     setError(null);
     setPhoneError(undefined);
     const parsed = CreateBlockSchema.safeParse({ phone: phone.trim() || undefined, reason: reason || undefined, note: note.trim() || undefined });
-    if (!parsed.success) return setPhoneError('validation.required');
+    // journey J09-5: one message under the field — « Champ requis » only when it is empty, else the invalid number
+    if (!parsed.success) return setPhoneError(phone.trim() ? 'validation.phone' : 'validation.required');
     try {
       await create.mutateAsync(parsed.data);
       await qc.invalidateQueries({ queryKey: safetyKeys.blocks(ws) });
@@ -308,8 +309,11 @@ export function BlockNumberDialog({ open, onClose }: { open: boolean; onClose: (
             format={formatPhoneOnBlur}
             disabled={busy}
             aria-invalid={!!phoneError}
-            onChange={(e) => setPhone(e.target.value)}
-            preview={phonePreviewLine(t, phone)}
+            onChange={(e) => {
+              setPhone(e.target.value);
+              setPhoneError(undefined);
+            }}
+            preview={phoneError ? null : phonePreviewLine(t, phone)}
           />
         </Field>
         <Field label={t('safety.field.reasonOptional')} htmlFor="block-number-reason">

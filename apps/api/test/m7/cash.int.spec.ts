@@ -176,8 +176,8 @@ describe('09 §4 regression: period selection ↔ table ↔ KPIs', () => {
     const d0 = algiersDay(new Date(Date.now() - 3 * DAY));
     const d1 = algiersDay(new Date(Date.now() - 2 * DAY));
     const d2 = yesterday();
-    const mk = (day: string, hour: number, type: 'income' | 'expense', amount: number, category: string, method = 'cash') =>
-      db.cashTransaction.create({ data: { workspaceId: owner.workspaceId, type, amount, category: category as never, method: method as never, date: new Date(at(day, hour)), createdById: owner.userId } });
+    const mk = (day: string, hour: number, type: 'income' | 'expense', amount: number, category: string, method = 'cash', description: string | null = null) =>
+      db.cashTransaction.create({ data: { workspaceId: owner.workspaceId, type, amount, category: category as never, method: method as never, description, date: new Date(at(day, hour)), createdById: owner.userId } });
     await mk(d0, 9, 'income', 10000, 'deposit');
     await mk(d1, 9, 'income', 2000, 'other');
     await mk(d1, 18, 'expense', 500, 'rent');
@@ -200,11 +200,13 @@ describe('09 §4 regression: period selection ↔ table ↔ KPIs', () => {
     expect((await owner.get('/cash').expect(200)).body.meta).toMatchObject({ from: algiersDay(), to: algiersDay(), total: 0 });
     expect(algiersDayEnd(d2).getTime()).toBeGreaterThan(new Date(at(d2, 23.9)).getTime());
     // retest 11/11 UX-055: « COD » = cash collected on a delivered order; « Espèces » = the other cash rows
-    await mk(d1, 12, 'income', 4500, 'order');
+    await mk(d1, 12, 'income', 4500, 'order', 'cash', '§stored.cash.orderCod|number=CMD-1001');
+    // journey J05-6: a cash deposit before delivery is « Espèces », not COD
+    await mk(d1, 11, 'income', 1000, 'order', 'cash', '§stored.cash.orderPayment|number=CMD-1002');
     const cod = (await owner.get(`/cash?${q}&method=cod`).expect(200)).body.data;
-    expect(cod.map((r: any) => [r.category, r.method, r.amount])).toEqual([['order', 'cash', 4500]]);
+    expect(cod.map((r: any) => [r.category, r.method, r.displayMethod, r.amount])).toEqual([['order', 'cash', 'cod', 4500]]);
     const cashOnly = (await owner.get(`/cash?${q}&method=cash`).expect(200)).body.data;
-    expect(cashOnly.map((r: any) => r.category).sort()).toEqual(['other', 'rent']);
+    expect(cashOnly.map((r: any) => [r.category, r.displayMethod]).sort()).toEqual([['order', 'cash'], ['other', 'cash'], ['rent', 'cash']]);
     await owner.get('/cash?sort=amount').expect(400);
   });
 

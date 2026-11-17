@@ -83,7 +83,12 @@ export class AuthController {
   async refresh(@Body() dto: RefreshDto, @Req() req: any, @Res({ passthrough: true }) res: any) {
     const fromBody = dto.refreshToken;
     const raw = fromBody ?? this.sessions.readCookie(req);
-    if (!raw) throw new AppException('UNAUTHORIZED');
+    // journeys 16/11 J12 PUBLIC-12: a browser without any session (a visitor's first page) is not an error — 204, no body,
+    // so the visitor's console shows no « 401 » (a presented token that is refused stays 401)
+    if (!raw) {
+      res.status(204);
+      return undefined;
+    }
     try {
       const { tokens } = await this.auth.refresh(raw, clientOf(req));
       const body: Record<string, unknown> = { accessToken: tokens.accessToken, expiresIn: tokens.expiresIn };

@@ -109,10 +109,11 @@ export function BehaviourFields({ draft: d, set, errors, readOnly, badge, inTunn
               <option value="handoff">{t('agents.order.risky.handoff')}</option>
             </Select>
           </Field>
-          <Field label={t('agents.order.recap')} htmlFor="agent-recap">
-            <Select id="agent-recap" value={d.recapMode} disabled={readOnly} onChange={(e) => set({ recapMode: e.target.value as typeof d.recapMode })}>
+          {/* journey 16/11 J03-12 (AGV-02, 04 §5): the recap and the customer's « oui » are always required by the server —
+              « Seulement en cas de doute » had no effect, so the wizard no longer offers it and says so */}
+          <Field label={t('agents.order.recap')} htmlFor="agent-recap" hint={t('agents.order.recap.alwaysHint')}>
+            <Select id="agent-recap" value="always" disabled aria-readonly="true" data-testid="agent-recap">
               <option value="always">{t('agents.order.recap.always')}</option>
-              <option value="when_unsure">{t('agents.order.recap.when_unsure')}</option>
             </Select>
           </Field>
         </div>

@@ -15,6 +15,13 @@ export type ModType = (typeof MOD_TYPES)[number];
 const AGENT_TYPES: readonly ModType[] = ['agent_name', 'agent_prompt'];
 export const typeOptions = (tab: ModTab): readonly ModType[] => (tab === 'prompts' ? AGENT_TYPES : MOD_TYPES);
 
+/**
+ * journeys 16/11 J13-11: motifs of an agent-name review, mapped onto the stored `ModerationDecision` values (no schema change):
+ * prohibited = offensive / forbidden name, misleading = impersonation (a person, another shop, Djaber), counterfeit = protected
+ * brand, other = free text. Labels `adminMod.reasonName.<key>`.
+ */
+export const AGENT_NAME_REASONS = ['prohibited', 'misleading', 'counterfeit', 'other'] as const;
+
 /** URL state: tab, search, filters with the API names (AdminModerationQuery), the reviewed item in `sheet`. */
 export const MOD_SPEC: ListSpec = {
   filters: { type: 'list', aiFlag: 'list', scoreMin: 'text', scoreMax: 'text', trustLevel: 'list', categoryId: 'text', waitingOver: 'int' },
@@ -98,14 +105,17 @@ export function formatScore(score: number | null, locale: string): string {
 export const scoreTone = (score: number | null): 'danger' | 'success' | undefined => (score === null ? undefined : score >= MODERATION_AUTO_APPROVE_SCORE ? 'success' : 'danger');
 
 /** "2 h 40" — waiting time in hours and minutes (Latin digits, no day unit: the SLA is counted in hours). */
-export function formatWaiting(minutes: number): string {
+/** Units of the viewer's language (journeys 16/11 J13-12: « 32 min » stayed Latin in Arabic) — `waitUnits(t)` in ui.tsx. */
+export type WaitUnits = { min: string; h: string };
+const LATIN_UNITS: WaitUnits = { min: 'min', h: 'h' };
+export function formatWaiting(minutes: number, u: WaitUnits = LATIN_UNITS): string {
   const m = Math.max(0, Math.round(minutes));
-  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
+  return `${Math.floor(m / 60)} ${u.h} ${String(m % 60).padStart(2, '0')}`;
 }
 /** "38 min" under one hour, "1 h 05" above; null ⇒ "—". */
-export function formatDelay(minutes: number | null): string {
+export function formatDelay(minutes: number | null, u: WaitUnits = LATIN_UNITS): string {
   if (minutes === null || minutes === undefined) return '—';
-  return minutes < 60 ? `${Math.round(minutes)} min` : formatWaiting(minutes);
+  return minutes < 60 ? `${Math.round(minutes)} ${u.min}` : formatWaiting(minutes, u);
 }
 
 /** State of a decision for this row: the server descriptor when present, otherwise the role + status. */

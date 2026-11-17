@@ -73,7 +73,7 @@ export type WorkspaceDto = {
   suspendReason: 'fraud' | 'unpaid' | 'content' | 'owner_request' | 'other' | null;
   deletionScheduledAt: string | null;
   trustLevel: 'new' | 'standard' | 'trusted' | 'watch';
-  plan: { slug: string; name: string; limits: PlanLimits; usage: PlanUsage; periodEnd: string; status: string } | null;
+  plan: { slug: string; name: string; limits: PlanLimits; usage: PlanUsage; periodEnd: string; status: string; trialEndsAt?: string | null } | null;
   version: number;
 };
 

@@ -130,6 +130,8 @@ export const ClientsQuerySchema = z
     /** « À relancer » (PV 22/10): buying intent (an order still new or cancelled, or a conversation) but no confirmed order and no completed sale; blocked clients left out */
     unconfirmed: flag.optional(),
     returned: flag.optional(),
+    /** journey J09-8: the archived cards (archived with their history — never a merged one), to find and restore them */
+    archived: flag.optional(),
     minSpent: int.optional(),
     maxSpent: int.optional(),
     lastOrder: z.enum(CLIENT_LAST_ORDER_FILTERS).optional(),
@@ -155,7 +157,8 @@ export type ClientTagsQuery = z.infer<typeof ClientTagsQuerySchema>;
 export type ClientTagCount = { tag: string; count: number };
 
 // --- read models (api-contract §2 ClientRef, §3.6) ----------------------------------------------------------------------
-export type ClientRefView = { id: string; name: string; phone: string | null; riskLevel: 'normal' | 'high'; isPlaceholder: boolean; blocked: boolean; orderCount: number };
+/** `reliable` (order screens, journey J09-9): the FIABLE rule of the client list — ≥ 1 delivered order and no return. */
+export type ClientRefView = { id: string; name: string; phone: string | null; riskLevel: 'normal' | 'high'; isPlaceholder: boolean; blocked: boolean; orderCount: number; reliable?: boolean };
 export type ClientQuality = 'placeholder' | 'no_phone' | 'no_address' | 'duplicate';
 export type ClientListItemView = ClientRefView & {
   phone2: string | null;

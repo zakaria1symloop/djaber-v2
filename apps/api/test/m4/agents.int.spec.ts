@@ -291,11 +291,12 @@ describe('knowledge: FAQ and insights', () => {
     await answer(app, owner.workspaceId, conversation.id);
     expect(fakeAi(app).callsOf('reply')[0]!.system).toContain('FAQ\nQ: Vous livrez à Tamanrasset ?\nA: Oui, sous 5 jours.');
     // import of a text file
-    const file = Buffer.from('Q: Quels sont vos horaires ?\nR: De 9h à 18h, du samedi au jeudi.\n\nPeut-on payer par CCP ?\nOui, avant expédition.\n\nQ: Vous livrez à Tamanrasset ?\nA: doublon ignoré', 'utf8');
+    const file = Buffer.from('Q: Quels sont vos horaires ?\nR: De 9h à 18h, du samedi au jeudi.\n\nPeut-on payer par CCP ?\nOui, avant expédition.\n\nQ: Vous livrez à Tamanrasset ?\nA: doublon ignoré\n\nQ: quels sont vos horaires\nR: doublon du même fichier (journey J03-4)', 'utf8');
     const { upload } = await import('../support/m2');
     const imported = (await upload(owner, app, `/agents/${agent.id}/faq/import`, 'file', [{ buffer: file, name: 'faq.txt', type: 'text/plain' }]).expect(201)).body.data;
     expect(imported.created.map((x: any) => [x.question, x.source])).toEqual([['Quels sont vos horaires ?', 'file_import'], ['Peut-on payer par CCP ?', 'file_import']]);
-    expect(imported.skipped).toBe(1);
+    // journey 16/11 J03-4: the same question twice in the file is imported once
+    expect(imported.skipped).toBe(2);
     expect((await upload(owner, app, `/agents/${agent.id}/faq/import`, 'file', [{ buffer: Buffer.from('%PDF-1.4'), name: 'faq.pdf', type: 'application/pdf' }]).expect(415)).body.error.code).toBe('UPLOAD_TYPE_INVALID');
     // limits
     await db.agentFaq.createMany({ data: Array.from({ length: 47 }, (_, i) => ({ workspaceId: owner.workspaceId, agentId: agent.id, question: `Q${i} ?`, answer: 'R', sortOrder: 10 + i })) });

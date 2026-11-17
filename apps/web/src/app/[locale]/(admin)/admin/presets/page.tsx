@@ -13,6 +13,7 @@ import { AdminPage, AdminQueryError } from '@/features/admin/admin-page';
 import { adminWrite, useAdminGet, useAdminInvalidate } from '@/features/admin/api';
 import { AdminDialog, NO_ERRORS, toServerErrors, useOnOpen, type ServerErrors } from '@/features/admin/dialog-kit';
 import { usePlatform } from '@/features/admin/platform';
+import { ReasonConfirmDialog, type ReasonConfirm } from '@/features/admin/reason-confirm';
 import { PresetEditor } from '@/features/admin/presets/editor';
 import { toMenuActions } from '@/lib/actions';
 import { errorMessage } from '@/lib/forms';
@@ -37,6 +38,12 @@ export default function AdminPresetsPage() {
   const [create, setCreate] = useState<{ copyFrom: AgentPresetAdminDto | null } | null>(null);
   const m = useMutation({ mutationFn: (fn: () => Promise<unknown>) => fn() });
   const confirm = useConfirmAction();
+  // J13-4: archive / restore ask the reason that is logged (they were one click, logged « RAISON — »)
+  const [reasoned, setReasoned] = useState<ReasonConfirm | null>(null);
+  const archiveReq = (p: AgentPresetAdminDto, archive: boolean): ReasonConfirm => {
+    const k = archive ? 'archive' : 'restore';
+    return { title: t(`admin.presets.${k}Confirm.title`, { name: p.key }), context: t(`admin.presets.${k}Confirm.description`), submitLabel: t(`admin.presets.action.${k}`), destructive: archive, path: `/admin/agent-presets/${p.id}/${k}`, done: t(archive ? 'admin.presets.archived' : 'admin.presets.restored'), invalidate: '/admin/agent-presets' };
+  };
   const setParam = (patch: Record<string, string | null>) => {
     const p = new URLSearchParams(params.toString());
     for (const [k, v] of Object.entries(patch)) if (v) p.set(k, v); else p.delete(k);
@@ -64,8 +71,8 @@ export default function AdminPresetsPage() {
         edit: { label: t('admin.presets.action.edit'), onSelect: () => setParam({ preset: p.id }) },
         duplicate: { label: t('admin.presets.action.duplicate'), onSelect: () => setCreate({ copyFrom: p }), hidden: !write },
         preview: { label: t('admin.presets.action.preview'), onSelect: () => window.open(`/${locale}/agents/new`, '_blank', 'noopener') },
-        archive: { label: t('admin.presets.action.archive'), onSelect: () => void act(() => adminWrite(`/admin/agent-presets/${p.id}/archive`, 'POST', {}), t('admin.presets.archived')), hidden: !write, separated: true },
-        restore: { label: t('admin.presets.action.restore'), onSelect: () => void act(() => adminWrite(`/admin/agent-presets/${p.id}/restore`, 'POST', {}), t('admin.presets.restored')), hidden: !write, separated: true },
+        archive: { label: t('admin.presets.action.archive'), onSelect: () => setReasoned(archiveReq(p, true)), hidden: !write, separated: true },
+        restore: { label: t('admin.presets.action.restore'), onSelect: () => setReasoned(archiveReq(p, false)), hidden: !write, separated: true },
         delete: { label: t('admin.presets.action.delete'), destructive: true, onSelect: () => confirm.ask({ title: t('admin.presets.deleteConfirm.title', { name: p.key }), description: t('admin.presets.deleteConfirm.description'), confirmLabel: t('admin.presets.action.delete'), destructive: true, run: () => act(() => adminWrite(`/admin/agent-presets/${p.id}`, 'DELETE'), t('admin.presets.deleted')) }), hidden: !write },
       },
       t,
@@ -122,6 +129,7 @@ export default function AdminPresetsPage() {
       <FrameNote>{t('admin.presets.menuNote')}</FrameNote>
       <NewPresetDialog open={!!create} copyFrom={create?.copyFrom ?? null} presets={rows} onClose={() => setCreate(null)} onCreated={(id) => setParam({ preset: id })} />
       {confirm.element}
+      <ReasonConfirmDialog req={reasoned} onClose={() => setReasoned(null)} testId="dlg-preset-archive" />
     </AdminPage>
   );
 }

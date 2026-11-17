@@ -58,6 +58,8 @@ describe('clients', () => {
     expect((await owner.get(`/orders/${order.id}`).expect(200)).body.data).toMatchObject({ clientName: 'Karim Ziani', client: { id } });
     expect((await owner.get('/clients').expect(200)).body.data.map((c: any) => c.id)).not.toContain(id);
     expect((await owner.get(`/clients/${id}`).expect(200)).body.data).toMatchObject({ archived: true });
+    // journey J09-8: the archived cards are listed by `?archived=1` (the default list hides them)
+    expect((await owner.get('/clients?archived=1').expect(200)).body.data.map((c: any) => c.id)).toEqual([id]);
     expect(await db.auditLog.count({ where: { action: 'client.delete', entityId: id } })).toBe(1);
     // full-test CLIENTS-03: the archived card keeps its phone (no 2nd card without its history) and can be restored
     const archivedPhone = order.clientPhone;
@@ -68,10 +70,16 @@ describe('clients', () => {
     expect((await owner.get('/clients').expect(200)).body.data.map((c: any) => c.id)).toContain(id);
     await owner.post(`/clients/${id}/restore`).expect(409);
     await owner.delete(`/clients/${id}?archive=true`).expect(200);
+    // journey J09-10: « Utiliser ce client » on the archived card (order with its id) restores it
+    await newOrder(owner, { client: { id } });
+    expect((await owner.get(`/clients/${id}`).expect(200)).body.data).toMatchObject({ archived: false });
+    await owner.delete(`/clients/${id}?archive=true`).expect(200);
     // without orders: soft delete straight away
     const lone = await owner.post('/clients', { name: 'Sans commande', phone: phone() }).expect(201);
     await owner.delete(`/clients/${lone.body.data.id}`).expect(200);
     expect((await db.client.findUniqueOrThrow({ where: { id: lone.body.data.id } })).deletedAt).not.toBeNull();
+    // a card deleted without history is not an archived one
+    expect((await owner.get('/clients?archived=1').expect(200)).body.data.map((c: any) => c.id)).toEqual([id]);
   });
 
   it('AT-CLI-04 list paginated, filters (source, tags, dates, ranges) and search by phone fragment', async () => {

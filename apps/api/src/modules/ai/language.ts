@@ -116,10 +116,29 @@ export const replyLanguage = (text: string): AiLanguage | undefined => {
  * arabizi / Arabic script answered in French or English, Arabic script answered in Latin letters, French answered in
  * English or Arabic, English answered in French. Mixed customers and unclear replies always pass.
  */
+/**
+ * journey 16/11 J03-2 / AI-CHAT-04 retest: an arabizi greeting or tail around French sentences (« Wa 3likoum salam 😊
+ * Livraison à domicile vers Oran : 600 DA … Délai : 2 à 5 jours. ») read as arabizi as a whole. The reply's sentences (an
+ * emoji ends one too) are read one by one: 2 French ones or more, and more French than arabizi ones, is a French reply.
+ */
+const GREETING_WORDS = new Set(['wa', 'w', 'salam', 'slm', '3likoum', '3likom', 'alikoum', 'alaykoum', 'marhba', 'mar7ba', 'ahlan', 'bik', 'bikom', 'sahit', 'sa7it', 'khouya', 'khoya', 'khti', 'ukhti']);
+const frenchBody = (reply: string): boolean => {
+  let fr = 0;
+  let arabizi = 0;
+  for (const s of reply.split(/[.!?؟…\n]+|\p{Extended_Pictographic}/u)) {
+    const w = words(s).filter((x) => /[a-zà-ÿ0-9]{2,}/i.test(x) && !/^\d+$/.test(x));
+    // a greeting alone (« Wa 3likoum salam ») says nothing of the language of the answer
+    if (w.length < 3 || w.every((x) => GREETING_WORDS.has(x))) continue;
+    const l = detectLanguage(s, undefined, { neutral: 'previous' });
+    if (l === 'fr') fr++;
+    else if (l === 'arabizi') arabizi++;
+  }
+  return fr > arabizi && (fr >= 2 || arabizi === 0);
+};
 export const languageSwitched = (customer: AiLanguage, reply: string): boolean => {
   const r = replyLanguage(reply);
   if (!r || r === 'mixed' || customer === 'mixed') return false;
-  if (customer === 'arabizi') return r === 'fr' || r === 'en';
+  if (customer === 'arabizi') return r === 'fr' || r === 'en' || frenchBody(reply);
   if (customer === 'ar') return r === 'fr' || r === 'en' || r === 'arabizi';
   if (customer === 'fr') return r === 'en' || r === 'ar';
   return r === 'fr';
@@ -127,11 +146,12 @@ export const languageSwitched = (customer: AiLanguage, reply: string): boolean =
 
 /**
  * Moroccan (and Tunisian) darija words an Algerian shop never writes (« chno », « dyal », « walakin », « daba »…; journey
- * 16/11 J04-3: « bghiti », « chi 7aja », « ma kaynch », « ملي », « فماش », « برشا » from the J04 transcripts). « walou » and
+ * 16/11 J04-3: « bghiti », « chi 7aja », « ma kaynch », « ملي », « فماش », « برشا » from the J04 transcripts; J03 AI-CHAT-04
+ * retest: « صيفطلي » / « sifetli », « send me »). « walou » and
  * « kayen » are Algerian too: never flagged.
  */
 export const MOROCCAN_WORDS =
-  /(?<![\p{L}\p{N}_])(chno|chnou|chnu|chnowa|chnoua|dyal|dyalek|dyali|dyalna|dyalo|dyalha|walakin|nqdar|ndirolek|daba|bghiti|bghit|bghina|tbghi|nbghi|kanbghi|chi|kaynch|makaynch|wakha|barcha|barsha|famma|mafamach|mafamech|tawwa|شنو|شنوة|ديال|ديالك|ديالي|دابا|والاكين|بغيت|بغيتي|تبغي|نبغي|كنبغي|ملي|فماش|برشا|واخا|توة|شي حاجة)(?![\p{L}\p{N}_])/iu;
+  /(?<![\p{L}\p{N}_])(chno|chnou|chnu|chnowa|chnoua|dyal|dyalek|dyali|dyalna|dyalo|dyalha|walakin|nqdar|ndirolek|daba|bghiti|bghit|bghina|tbghi|nbghi|kanbghi|chi|kaynch|makaynch|wakha|barcha|barsha|famma|mafamach|mafamech|tawwa|sifet|sifetli|nsifet|nsifetlek|شنو|شنوة|ديال|ديالك|ديالي|دابا|والاكين|بغيت|بغيتي|تبغي|نبغي|كنبغي|ملي|فماش|برشا|واخا|توة|شي حاجة|صيفط|صيفطلي|صيفطلك|نصيفط|نصيفطلك|نصيفطو)(?![\p{L}\p{N}_])/iu;
 /**
  * journey 16/11 J04-3: « chhal / ch7al / شحال » means « how much / how many » — never « what » (« Ch7al smitek ? » = « how
  * much is your name? », « Ch7al numéro », « Ch7al wilaya »).

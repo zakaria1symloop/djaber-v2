@@ -25,6 +25,16 @@ export const useReportRange = (range: AnalyticsRange | null | undefined) => {
     if (range) setRange(range);
   }, [range, setRange]);
 };
+/**
+ * J11-7 (a): a tab without an answer for the asked period (end before start, too long, incomplete custom range) clears the
+ * chip — it kept the range of the previous period above the error (« 01 JANV. → 16 NOV. 2026 » over « La date de fin… »).
+ */
+export const useClearReportRange = (clear: boolean) => {
+  const { setRange } = useContext(RangeCtx);
+  useEffect(() => {
+    if (clear) setRange(null);
+  }, [clear, setRange]);
+};
 
 export const tabHref = (tab: AnalyticsTab) => (tab === 'overview' ? '/analytics' : `/analytics/${tab}`);
 

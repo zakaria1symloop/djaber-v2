@@ -7,13 +7,15 @@ import { Prisma, prisma } from '@djaber/db';
 /** Bump when the shape or a formula changes: older rollup rows are then ignored (recomputed live, rewritten at night). */
 // 2: `revenue.salesPaid` (UX-052, 10/11) — cached days of version 1 are computed again
 // 3: handoffs = conversations of the day handed to a human (full-test 15/11 ANALYTICS-01)
-export const METRICS_VERSION = 3;
+// 4: `products.*.unknownCost` = line amounts sold without a cost price (journeys 16/11 J11-3, out of the average margin)
+export const METRICS_VERSION = 4;
 
 type Num = Record<string, number>;
 export type ChannelDay = { conv: number; handoffs: number; in: number; out: number; orders: number; aiOrders: number; aiRevenue: number; aiReplies: number };
 export type AgentDay = { conv: number; handoffs: number; orders: number; confirmed: number; revenue: number; credits: number; runs: number };
 export type WilayaDay = { orders: number; delivered: number; returned: number; revenue: number };
-export type ProductDay = { sold: number; revenue: number; cogs: number; requested: number };
+/** `revenue` = line amounts (gross sales, before document discounts); `unknownCost` = the part of them sold without a cost price */
+export type ProductDay = { sold: number; revenue: number; cogs: number; unknownCost: number; requested: number };
 export type CourierDay = { parcels: number; delivered: number; returned: number; failed: number; daysSum: number; daysCount: number; cod: number; fees: number };
 export type ModelDay = { runs: number; inputTokens: number; outputTokens: number; costMicro: number };
 
@@ -145,7 +147,7 @@ const entry = <T>(o: Record<string, T>, k: string, make: () => T): T => (o[k] ??
 const ch0 = (): ChannelDay => ({ conv: 0, handoffs: 0, in: 0, out: 0, orders: 0, aiOrders: 0, aiRevenue: 0, aiReplies: 0 });
 const ag0 = (): AgentDay => ({ conv: 0, handoffs: 0, orders: 0, confirmed: 0, revenue: 0, credits: 0, runs: 0 });
 const wi0 = (): WilayaDay => ({ orders: 0, delivered: 0, returned: 0, revenue: 0 });
-const pr0 = (): ProductDay => ({ sold: 0, revenue: 0, cogs: 0, requested: 0 });
+const pr0 = (): ProductDay => ({ sold: 0, revenue: 0, cogs: 0, unknownCost: 0, requested: 0 });
 const co0 = (): CourierDay => ({ parcels: 0, delivered: 0, returned: 0, failed: 0, daysSum: 0, daysCount: 0, cod: 0, fees: 0 });
 const mo0 = (): ModelDay => ({ runs: 0, inputTokens: 0, outputTokens: 0, costMicro: 0 });
 export const courierKey = (provider: string, accountId: string | null) => `${provider}:${accountId ?? 'none'}`;
@@ -198,14 +200,15 @@ export async function computeDays(s: ComputeScope): Promise<Map<string, DayMetri
       : q<{ d: string; c: number; total: bigint; disc: bigint; tax: bigint; paid: bigint }>(Prisma.sql`
       SELECT ${D('s."soldAt"')} d, count(*)::int c, coalesce(sum(s."total"),0)::bigint total, coalesce(sum(s."discount"),0)::bigint disc, coalesce(sum(s."tax"),0)::bigint tax, coalesce(sum(s."amountPaid"),0)::bigint paid
       FROM "Sale" s WHERE s."workspaceId" = ${ws} AND s."status" = 'completed' AND s."soldAt" >= ${gte} AND s."soldAt" < ${lt} GROUP BY 1`),
-    q<{ d: string; pid: string; qty: bigint; rev: bigint; cogs: bigint }>(Prisma.sql`
-      SELECT d, pid, sum(qty)::bigint qty, sum(rev)::bigint rev, sum(cogs)::bigint cogs FROM (
-        SELECT ${D('o."deliveredAt"')} d, i."productId" pid, i."quantity" qty, i."total" rev, i."quantity" * coalesce(i."costPrice",0) cogs
+    // J06-4 / J11-3: a line without a cost price has no margin — its amount is kept apart (`unk`) and left out of the margin
+    q<{ d: string; pid: string; qty: bigint; rev: bigint; cogs: bigint; unk: bigint }>(Prisma.sql`
+      SELECT d, pid, sum(qty)::bigint qty, sum(rev)::bigint rev, sum(cogs)::bigint cogs, sum(unk)::bigint unk FROM (
+        SELECT ${D('o."deliveredAt"')} d, i."productId" pid, i."quantity" qty, i."total" rev, i."quantity" * coalesce(i."costPrice",0) cogs, CASE WHEN i."costPrice" IS NULL THEN i."total" ELSE 0 END unk
         FROM "OrderItem" i JOIN "Order" o ON o."id" = i."orderId"
         WHERE o."workspaceId" = ${ws} AND o."status" = 'delivered' AND o."deliveredAt" >= ${gte} AND o."deliveredAt" < ${lt} ${chO}
         ${s.channelId ? Prisma.empty : Prisma.sql`
         UNION ALL
-        SELECT ${D('s."soldAt"')} d, i."productId" pid, i."quantity" qty, i."total" rev, i."quantity" * coalesce(i."costPrice",0) cogs
+        SELECT ${D('s."soldAt"')} d, i."productId" pid, i."quantity" qty, i."total" rev, i."quantity" * coalesce(i."costPrice",0) cogs, CASE WHEN i."costPrice" IS NULL THEN i."total" ELSE 0 END unk
         FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
         WHERE s."workspaceId" = ${ws} AND s."status" = 'completed' AND s."soldAt" >= ${gte} AND s."soldAt" < ${lt}`}
       ) x GROUP BY 1,2`),
@@ -368,6 +371,7 @@ export async function computeDays(s: ComputeScope): Promise<Map<string, DayMetri
     p.sold += n(r.qty);
     p.revenue += n(r.rev);
     p.cogs += n(r.cogs);
+    p.unknownCost += n(r.unk);
   }
   for (const r of requested) if (r.pid && /^[0-9a-f-]{36}$/i.test(r.pid)) entry(day(r.d).products, r.pid, pr0).requested += r.c;
   for (const r of convs) {

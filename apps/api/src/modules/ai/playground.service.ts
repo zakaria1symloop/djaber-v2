@@ -25,6 +25,7 @@ import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
 import { lastAiText, nextChosen, orderHistoryOf, placedThisTurn, type ChosenItem } from './tools/order-confirmation';
 import { canonicalTool } from './tools/tool-registry';
 import { guardFactsOf } from './reply-guard';
+import { productCards } from '../messaging/product-card';
 import { SCENARIOS, type ScenarioCheck } from './prompt/scenarios';
 import { AiProviderError } from './provider/ai.gateway';
 import { TranscriptionService } from './transcription.service';
@@ -176,6 +177,8 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       // full-test 15/11 AI-CHAT-05: what the customer chose in the earlier turns of the session (CURRENT ORDER), as on Messenger
       const previousRun = await prisma.aiRun.findFirst({ where: { agentId: agent.id, batchKey: d.sessionId, id: { not: run.id }, status: { not: 'running' } }, orderBy: { startedAt: 'desc' }, select: { meta: true } });
       const chosen = ((previousRun?.meta as { chosen?: ChosenItem[] | null } | null)?.chosen ?? null) as ChosenItem[] | null;
+      // journey 16/11 J03-13: as live (reply.processor `oncePer24h`), the out-of-hours text once per session per 24 h
+      const oohBefore = (previousRun?.meta as { outOfHoursAt?: string } | null)?.outOfHoursAt ?? null;
       const turnCtx = await this.context.load(agent, { text: said, lastProductIds: matched, lang, chosen });
       const prompt = PromptBuilder.build(turnCtx.prompt, history, lines.join('\n') || said, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });
       // §4.3: the same reply guard as the live replies (the earlier turns of the session give their fees / totals)
@@ -199,14 +202,17 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       const out = result.output;
       const handoff = !!result.forcedHandoff || out.status === 'HANDOFF';
       const status = handoff ? 'HANDOFF' : out.status;
-      const cards: PlaygroundCard[] = (await this.catalogue.byIds(agent, out.productCards)).map((p) => ({ productId: p.id, name: p.name, // full-test 15/11 AGENTS-04: a product with variants is shown at its variants' lowest price (as the AI quotes it), never the base price
-        price: p.hasVariants && p.variants.length ? Math.min(...p.variants.map((v) => v.price)) : p.price, imageUrl: p.imageUrl, variantLabel: p.variants.length ? p.variants.map((v) => v.name).join(' · ') : null }));
+      // journey 16/11 J03-11 (« CARTE RÉELLE »): the card the customer gets on Messenger (messaging `productCards`: price range,
+      // promotion price, approved content), for the products of the agent's scope
+      const scoped = (await this.catalogue.byIds(agent, out.productCards)).map((p) => p.id);
+      const cards: PlaygroundCard[] = (await productCards(prisma, scoped, { ai: true })).map((c) => ({ productId: c.productId, name: c.name, price: c.price, ...(c.priceMax ? { priceMax: c.priceMax } : {}), ...(c.oldPrice ? { oldPrice: c.oldPrice } : {}), imageUrl: c.imageUrl, variantLabel: c.variants ?? null }));
       const texts = turnCtx.prompt.workspace.systemMessages;
       const locale = systemLocale(lang, turnCtx.prompt.locale);
       const text = (key: string) => (texts[key]?.[locale] ?? texts[key]?.fr ?? '').replace('{shop}', turnCtx.prompt.workspace.name);
+      const oohNow = turnCtx.prompt.outOfHours && !!text('out_of_hours') && (!oohBefore || Date.now() - Date.parse(oohBefore) >= 24 * 3_600_000);
       const systemMessages = [
         ...(history.length === 0 && text('welcome') ? [{ key: 'welcome', text: text('welcome') }] : []),
-        ...(turnCtx.prompt.outOfHours && text('out_of_hours') ? [{ key: 'out_of_hours', text: text('out_of_hours') }] : []),
+        ...(oohNow ? [{ key: 'out_of_hours', text: text('out_of_hours') }] : []),
         ...(handoff && text('handoff') ? [{ key: 'handoff', text: text('handoff') }] : []),
       ];
       // full-test 15/11 AI-CHAT-12: as on Messenger (04-ai-pipeline §10 « one message, not two »), a customer who only asked
@@ -236,7 +242,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         promptSections: prompt.sections.map((s) => ({ key: s.key, chars: s.text.length })),
         systemMessages,
       };
-      const meta: RunMeta & { chosen?: ChosenItem[] | null } = { language: dto.language, cardsSent: cards.length, handoff, chosen: nextChosen(chosen, out.cart, placedThisTurn(result.tools.map((t) => ({ name: canonicalTool(t.name), result: t.result })))), turn: { messages, reply, status, statusDetail: dto.statusDetail, cards: cards.map((c) => c.productId), toolCalls: dto.toolCalls.map((t) => ({ name: t.name, args: t.args })) }, ...(result.guard ? { guard: result.guard } : {}) };
+      const meta: RunMeta & { chosen?: ChosenItem[] | null; outOfHoursAt?: string } = { ...(oohNow ? { outOfHoursAt: new Date().toISOString() } : oohBefore ? { outOfHoursAt: oohBefore } : {}), language: dto.language, cardsSent: cards.length, handoff, chosen: nextChosen(chosen, out.cart, placedThisTurn(result.tools.map((t) => ({ name: canonicalTool(t.name), result: t.result })))), turn: { messages, reply, status, statusDetail: dto.statusDetail, cards: cards.map((c) => c.productId), toolCalls: dto.toolCalls.map((t) => ({ name: t.name, args: t.args })) }, ...(result.guard ? { guard: result.guard } : {}) };
       await this.runs.finish(run.id, { status: status === 'OK' ? 'ok' : status === 'UNCLEAR' ? 'unclear' : status === 'UNKNOWN' ? 'unknown' : 'handoff', turn: result, intent: dto.intent, confidence: out.confidence, startedAt: run.startedAt, meta, flags: guardFlags(result.guard) });
       return dto;
     } catch (e) {
@@ -244,6 +250,12 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       await this.runs.finish(run.id, { status: 'error', error: e instanceof AiProviderError ? e.kind : e instanceof AppException ? e.code : 'internal_error', startedAt: run.startedAt }).catch(() => undefined);
       throw e;
     }
+  }
+
+  /** Why the photo scenario cannot be run for this agent (null = it can): photos off, or no product photo in its scope. */
+  private async photoUntested(agent: Agent): Promise<'image_off' | 'no_photo' | null> {
+    if (!agent.imageRecognition) return 'image_off';
+    return (await prisma.productImage.count({ where: { isPrimary: true, product: this.catalogue.scopeWhere(agent) } })) ? null : 'no_photo';
   }
 
   private async samplePhoto(agent: Agent) {
@@ -328,16 +340,21 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         let status: 'pass' | 'fail' | 'error' = 'error';
         let summary: string | null = null;
         let aiRunId: string | null = null;
-        try {
-          const turn = await this.turn(agent, { workspaceId: agent.workspaceId, agentId, userId: job.createdById, sessionId: `scenario:${jobId}:${key}`, turnId: randomUUID(), messages: [], scenario: key, kind: 'test_scenario' });
-          aiRunId = turn.turnId;
-          const c = PlaygroundService.check(key, turn, inScope);
-          status = c.pass ? 'pass' : 'fail';
-          // full-test 15/11 AGENTS-02: codes the wizard translates (« failed:replied » was printed as is)
-          summary = c.pass ? (turn.reply.trim() ? turn.reply.slice(0, 200) : turn.status === 'HANDOFF' ? 'handoff' : null) : `failed:${c.failed.join(',')}`;
-        } catch (e) {
-          summary = e instanceof AppException ? e.code : 'INTERNAL';
-        }
+        // journey 16/11 J03-8: the photo scenario with no product photo in the agent's scope (or photos switched off) sent
+        // no image and passed on any answer (« Je n'arrive pas à voir la photo ») — it is now « not tested » (⚠), no AI turn
+        const untested = SCENARIOS[key].attachment === 'image' ? await this.photoUntested(agent) : null;
+        if (untested) summary = `not_tested:${untested}`;
+        else
+          try {
+            const turn = await this.turn(agent, { workspaceId: agent.workspaceId, agentId, userId: job.createdById, sessionId: `scenario:${jobId}:${key}`, turnId: randomUUID(), messages: [], scenario: key, kind: 'test_scenario' });
+            aiRunId = turn.turnId;
+            const c = PlaygroundService.check(key, turn, inScope);
+            status = c.pass ? 'pass' : 'fail';
+            // full-test 15/11 AGENTS-02: codes the wizard translates (« failed:replied » was printed as is)
+            summary = c.pass ? (turn.reply.trim() ? turn.reply.slice(0, 200) : turn.status === 'HANDOFF' ? 'handoff' : null) : `failed:${c.failed.join(',')}`;
+          } catch (e) {
+            summary = e instanceof AppException ? e.code : 'INTERNAL';
+          }
         await prisma.agentTestRun.create({ data: { workspaceId: agent.workspaceId, agentId, agentVersion: agent.currentVersion, scenarioKey: key, status, summary, aiRunId } });
         results.push({ scenarioKey: key, status, summary });
         await this.jobs.progress(jobId, ((i + 1) / SCENARIO_KEYS.length) * 100);

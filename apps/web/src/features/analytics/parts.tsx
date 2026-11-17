@@ -16,6 +16,7 @@ import { useSession } from '@/lib/session';
 import { isRangeError, usePeriod } from './api';
 import { dayLabel, formatValue, INVERTED_KPIS, kpiDelta, type Unit } from './format';
 import { DEFAULT_PRESET } from './period';
+import { useClearReportRange } from './shell';
 
 export function useFigure() {
   const t = useT();
@@ -109,6 +110,7 @@ export function TabFrame<T extends { empty: boolean; hasChannels: boolean }>({ q
   const offline = useOffline();
   const locale = useLocaleCode();
   const incomplete = period.period === 'custom' && (!period.from || !period.to);
+  useClearReportRange(incomplete || (q.isError && !q.data));
   if (incomplete) {
     return <EmptyState icon={<BarChart3 className="size-5" />} title={t('analytics.range.REPORT_CUSTOM_RANGE_REQUIRED')} description={t('analytics.range.pickBoth')} action={{ label: t('analytics.range.reset'), onClick: () => setPeriod({ ...period, period: DEFAULT_PRESET, from: '', to: '' }) }} />;
   }

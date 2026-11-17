@@ -196,7 +196,7 @@ export function OrdersFilterPanel({ open, onClose, list, total }: { open: boolea
       open={open}
       onClose={onClose}
       title={t('action.filters')}
-      summary={total === null ? t('orders.filter.summaryLoading', { count: list.activeCount }) : t('orders.filter.summary', { count: list.activeCount, results: formatNumber(total) })}
+      summary={total === null ? t('orders.filter.summaryLoading', { count: list.activeCount }) : t('orders.filter.summary', { count: list.activeCount, n: total, results: formatNumber(total) })}
       resetLabel={t('products.filter.reset')}
       onReset={list.clear}
       applyLabel={total === null ? t('action.apply') : t('orders.filter.show', { count: total })}

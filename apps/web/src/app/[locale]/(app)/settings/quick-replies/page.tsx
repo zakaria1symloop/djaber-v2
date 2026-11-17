@@ -2,7 +2,7 @@
 // /settings/quick-replies — Figma "SET — Settings — Quick replies …" + DLG "Réponse rapide" (AT-SET-01):
 // list · empty · add / edit dialog (title unique, text ≤ 1 000, shortcut) · delete confirm · drag reorder.
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CreateQuickReplySchema, type CreateQuickReply } from '@djaber/shared';
+import { CreateQuickReplySchema, QUICK_REPLY_ACCEPTED, QUICK_REPLY_VARIABLES, unknownVariables, variablesLabel, type CreateQuickReply } from '@djaber/shared';
 import { ActionsMenu, Button, Card, cn, CodeInput, ConfirmDialog, Dialog, Field, FormAlert, Input, Pill, Select, Textarea, toast, type MenuAction } from '@djaber/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { GripVertical } from 'lucide-react';
@@ -228,7 +228,7 @@ function QuickReplyDialog({ target, onClose, onSaved }: { target: QuickReplyView
           label={t('settings.quickReplies.field.body')}
           htmlFor="qr-body"
           required
-          error={fieldError(t, errors.body?.message, { max: '1 000' })}
+          error={fieldError(t, errors.body?.message, { max: '1 000', names: unknownVariables(body, QUICK_REPLY_ACCEPTED).join(', '), allowed: variablesLabel(QUICK_REPLY_VARIABLES) })}
           hint={t('settings.quickReplies.field.bodyHint', { count: body.length })}
         >
           <Textarea id="qr-body" rows={4} maxLength={1000} dir="auto" disabled={busy} aria-invalid={!!errors.body} {...form.register('body')} />

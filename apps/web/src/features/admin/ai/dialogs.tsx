@@ -280,7 +280,9 @@ export function RouteDialog({ route, models, open, onClose }: { route: AiRouteDt
   const [failover, setFailover] = useState(false);
   const [errors, setErrors] = useState<ServerErrors>(NO_ERRORS);
   const m = useMutation({ mutationFn: (b: { cap: string; body: unknown }) => adminWrite(`/admin/ai-routes/${b.cap}`, 'PUT', b.body) });
-  const idOf = (modelId: string | undefined) => models.find((x) => x.modelId === modelId)?.id ?? '';
+  // journeys 16/11 J13-7: the route carries the model's row id (AiRouteDto.primary.modelId = AiModel.id) — it was compared with
+  // the provider's model name, so the current primary never showed and the form could not be saved without changing it
+  const idOf = (ref: string | undefined) => (ref ? (models.find((x) => x.id === ref) ?? models.find((x) => x.modelId === ref))?.id ?? '' : '');
   useOnOpen(open, () => {
     setPrimary(idOf(route?.primary.modelId));
     setFallback(idOf(route?.fallback?.modelId));
@@ -291,7 +293,9 @@ export function RouteDialog({ route, models, open, onClose }: { route: AiRouteDt
     setErrors(NO_ERRORS);
   });
   if (!route) return null;
-  const eligible = models.filter((x) => x.isActive && x.capabilities.includes(route.capability));
+  // the models of the route's capability, plus the ones in use (shown even when switched off, so the admin sees what runs)
+  const inUse = [idOf(route.primary.modelId), idOf(route.fallback?.modelId)];
+  const eligible = models.filter((x) => (x.isActive && x.capabilities.includes(route.capability)) || inUse.includes(x.id));
   const submit = async () => {
     setErrors(NO_ERRORS);
     try {

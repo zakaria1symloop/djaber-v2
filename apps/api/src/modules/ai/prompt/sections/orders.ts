@@ -8,6 +8,8 @@ export const deliverySection = (c: PromptContext): string =>
     `DELIVERY FEES: use quote_delivery.${c.workspace.freeDeliveryThreshold ? ` Free home delivery from ${formatMoney(c.workspace.freeDeliveryThreshold)} (never for stop-desk). Write amounts with a space every three digits (12 500 DA).` : ''}`,
     ...(c.workspace.senderWilaya ? [`Orders ship from ${c.workspace.senderWilaya}.`] : []),
     'Never state a delivery fee that did not come from the tool.',
+    // journey 16/11 J03-2: « ch7al tawsil l setif ? » got quote_delivery 650 / 350 DA and a reply without any fee
+    'When quote_delivery answers, your reply gives its fee for that wilaya (home, and stop-desk when known) in the customer\'s language — that is the answer.',
   ].join('\n');
 
 const FIELD_TEXT: Record<string, string> = {
@@ -62,7 +64,9 @@ export const orderRulesSection = (c: PromptContext): string => {
       ? `An order above ${c.agent.maxQtyPerOrder && c.agent.maxAmountPerOrder ? 'one of these limits' : 'this limit'} is never created: hand off (status=HANDOFF, statusDetail=order_limits).${c.agent.maxQtyPerOrder ? '' : ' There is no quantity limit.'}${c.agent.maxAmountPerOrder ? '' : ' There is no amount limit.'}`
       : 'There is no quantity or amount limit: never refuse or hand off an order because of its size (the stock still applies).',
     `RISKY_CLIENT_POLICY=${c.agent.riskyClientBehavior ?? 'take_and_flag'}`,
-    `RECAP=${c.agent.recapMode ?? 'always'}`,
+    // journey 16/11 J03-12 (04 §5, assumptions-log 16/11 AI-CHAT-01): every order needs the recap and the customer's yes —
+    // an old `when_unsure` setting no longer reaches the model
+    'RECAP=always',
     ...knownCustomerLines(c),
     ...currentOrderLines(c),
     'Ask one field at a time; never invent a value; re-ask an invalid value with an example (0555123456). Never ask again for a value the customer already gave (KNOWN CUSTOMER or earlier messages): reuse it in the recap.',

@@ -90,8 +90,9 @@ export function TicketMessage({
         className,
       )}
     >
+      {/* journey J12-9: author and date isolated — in Arabic the day of the date stuck to a Latin name (« KARIM P. · 16 ») */}
       <header className="ts-label-micro text-text-muted">
-        {author} · {at}
+        <bdi>{author}</bdi> · <bdi>{at}</bdi>
       </header>
       {/* full-test 15/11 HELP-04: user text in its own direction, line by line (« .Deuxième ligne » in the Arabic UI) */}
       <div dir="auto" className="mt-1.5 whitespace-pre-wrap text-start text-[14px] text-text-primary [unicode-bidi:plaintext]">

@@ -177,7 +177,7 @@
  "common.note": "ملاحظة",
  "common.noteOptional": "ملاحظة (اختياري)",
  "common.optional": "اختياري",
- "common.ordersCount": "{count} طلب",
+ "common.ordersCount": "الطلبات والمبيعات: {count}",
  "common.pageOf": "{page} / {pages}",
  "common.paid": "مدفوع",
  "common.password": "كلمة المرور",
@@ -719,5 +719,7 @@
  "shortcuts.esc": "Esc",
  "validation.price_max": "المبلغ مرتفع جدًا (100 000 000 DA كحد أقصى)",
  "validation.quantity_max": "الكمية مرتفعة جدًا (10 000 000 كحد أقصى)",
- "dialog.archiveProduct.title": "أرشفة « {name} »؟"
+ "dialog.archiveProduct.title": "أرشفة « {name} »؟",
+ "validation.unknownVariable": "متغير غير معروف: {names} — استعمل {allowed}.",
+ "notification.shipment.returned.done.title": "طلب مُرجَع #{number}"
 }

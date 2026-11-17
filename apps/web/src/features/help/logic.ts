@@ -92,14 +92,17 @@ export const CONTEXT_KEYS: readonly (keyof AutoContext)[] = ['workspace', 'plan'
 
 /**
  * full-test 15/11 HELP-07: the auto-context system message is stored as `key: value` lines; the merchant reads the form's
- * labels (« Espace : … », « Navigateur : … »), never the raw keys. Other lines are kept as they are.
+ * labels (« Espace : … », « Navigateur : … »), never the raw keys. Other lines are kept as they are. Journey J12-9: the value
+ * is a bidi isolate (FSI … PDI), so « /orders » stays « /orders » in an Arabic line (it read « orders/ : الصفحة »).
  */
+const FSI = String.fromCharCode(0x2068);
+const PDI = String.fromCharCode(0x2069);
 export const labelContextLines = (body: string, label: (key: keyof AutoContext) => string): string =>
   body
     .split('\n')
     .map((line) => {
       const m = /^(\w+): (.*)$/.exec(line);
-      return m && (CONTEXT_KEYS as readonly string[]).includes(m[1]!) ? `${label(m[1] as keyof AutoContext)} : ${m[2]}` : line;
+      return m && (CONTEXT_KEYS as readonly string[]).includes(m[1]!) ? `${label(m[1] as keyof AutoContext)} : ${FSI}${m[2]}${PDI}` : line;
     })
     .join('\n');
 

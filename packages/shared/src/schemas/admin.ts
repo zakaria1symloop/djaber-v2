@@ -92,7 +92,7 @@ export type AdminOverviewDto = {
   trialsExpiring: { id: string; name: string; trialEndsAt: string; orders: number; pagesConnected: number; conversations: number }[];
 };
 /** `GET /admin/alerts` — the ADM-01 "Alertes plateforme" list. `code` = i18n key suffix `admin.alert.<code>` (params interpolated). */
-export type AdminAlertCode = 'ai_error_rate' | 'ig_review_backlog' | 'credits_exhausted' | 'queue_delay' | 'courier_key_expired' | 'moderation_sla' | 'ticket_sla' | 'dunning_overdue';
+export type AdminAlertCode = 'ai_error_rate' | 'ai_route_degraded' | 'ig_review_backlog' | 'credits_exhausted' | 'queue_delay' | 'courier_key_expired' | 'moderation_sla' | 'ticket_sla' | 'dunning_overdue';
 export type AdminAlertDto = { code: AdminAlertCode; severity: 'critical' | 'warning'; params: Record<string, string | number>; link: string; since: string | null };
 
 // =============================================================================================================================
@@ -749,7 +749,8 @@ export type AuditLogDto = {
 };
 /** `POST /admin/audit-logs/export` (`admin.audit.export`) → 202 `{ jobId }`; the CSV starts with `# sha256=<hex of the rest>`; the export is itself audited (`audit.export`). */
 export const AdminAuditExportSchema = z
-  .object({ format: z.enum(['csv_signed', 'json']).default('csv_signed'), from: day, to: day, workspaceId: id.optional(), actorId: id.optional(), action: z.array(z.string().max(80)).max(20).optional(), impersonation: z.enum(['only', 'exclude']).optional() })
+  // journeys 16/11 J13-1: every filter of the list (action, target type, search, impersonation session) — the export holds what the dialog counts
+  .object({ format: z.enum(['csv_signed', 'json']).default('csv_signed'), from: day, to: day, workspaceId: id.optional(), actorId: id.optional(), action: z.array(z.string().max(80)).max(20).optional(), entity: z.array(z.string().max(60)).max(20).optional(), impersonation: z.enum(['only', 'exclude']).optional(), impersonationSessionId: id.optional(), q })
   .strict();
 export type AdminAuditExportInput = z.infer<typeof AdminAuditExportSchema>;
 /** `GET /admin/jobs/:id` — admin export jobs (audit, invoices, CMS translation) of the caller. */

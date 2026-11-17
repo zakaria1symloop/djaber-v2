@@ -1,7 +1,14 @@
 // 09-code-conventions §3.2 — quick replies (Settings › Réponses rapides).
 import { z } from 'zod';
+import { QUICK_REPLY_ACCEPTED, unknownVariables } from './template-variables';
 
-export const QuickReplyBody = z.string().trim().min(1, 'validation.required').max(1000, 'validation.length');
+/** journey J09-12: an unknown `{…}` (« {inconnu} », « {PRODUCT} ») is refused like in the system messages. */
+export const QuickReplyBody = z
+  .string()
+  .trim()
+  .min(1, 'validation.required')
+  .max(1000, 'validation.length')
+  .refine((v) => !unknownVariables(v, QUICK_REPLY_ACCEPTED).length, 'validation.unknownVariable');
 export const CreateQuickReplySchema = z
   .object({
     title: z.string().trim().min(1, 'validation.required').max(80, 'validation.length'),

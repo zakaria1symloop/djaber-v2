@@ -154,8 +154,16 @@ export class KnowledgeService {
     else throw new AppException('UPLOAD_TYPE_INVALID');
     const pairs = parseFaqText(text);
     if (!pairs.length) throw validationError({ file: 'validation.invalid' });
-    const existing = new Set((await prisma.agentFaq.findMany({ where: { agentId }, select: { question: true } })).map((f) => f.question.trim().toLowerCase()));
-    const fresh = pairs.filter((p) => !existing.has(p.question.trim().toLowerCase()));
+    // journey 16/11 J03-4: a question twice in the same file (with two answers) is imported once — the first pair wins, the
+    // others count as skipped like a question the FAQ already has (case, spaces and end punctuation ignored)
+    const key = (q: string) => q.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[\s?？؟!.:…]+$/u, '');
+    const seen = new Set((await prisma.agentFaq.findMany({ where: { agentId }, select: { question: true } })).map((f) => key(f.question)));
+    const fresh = pairs.filter((p) => {
+      const k = key(p.question);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
     const rows = await prisma.$transaction((db) => this.addFaqs(db as Tx, agentId, a.workspaceId, fresh, 'file_import'));
     return { created: rows.map(faqDto), skipped: pairs.length - fresh.length };
   }

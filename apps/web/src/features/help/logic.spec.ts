@@ -87,6 +87,8 @@ describe('auto-context labels (full-test 15/11 HELP-07)', () => {
     const NL = String.fromCharCode(10);
     const label = (k: string) => ({ workspace: 'Espace', client: 'Navigateur', page: 'Page' } as Record<string, string>)[k] ?? k;
     const body = ['workspace: Boutique', 'client: web Chrome 156', 'page: /orders', 'note: x'].join(NL);
-    expect(labelContextLines(body, label).split(NL)).toEqual(['Espace : Boutique', 'Navigateur : web Chrome 156', 'Page : /orders', 'note: x']);
+    // journey J12-9: each value is a bidi isolate (FSI … PDI)
+    const iso = (v: string) => String.fromCharCode(0x2068) + v + String.fromCharCode(0x2069);
+    expect(labelContextLines(body, label).split(NL)).toEqual([`Espace : ${iso('Boutique')}`, `Navigateur : ${iso('web Chrome 156')}`, `Page : ${iso('/orders')}`, 'note: x']);
   });
 });

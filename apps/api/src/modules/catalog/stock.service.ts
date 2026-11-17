@@ -497,15 +497,16 @@ export class StockService implements OnModuleInit {
     const t = TenantContext.get();
     const ws = t.workspaceId;
     const [totals] = await prisma.$queryRaw<
-      { total: number; active: number; tracked: number; services: number; low: number; out: number; items: number; cost: number; retail: number }[]
+      { total: number; active: number; tracked: number; services: number; low: number; out: number; items: number; cost: number; retail: number; knownRetail: number; unknownUnits: number }[]
     >`
       WITH lines AS (
         -- one line per stock holder: a tracked product without variants, or an active variant of a tracked product
-        SELECT p."id" AS pid, COALESCE(p."stock", 0) AS qty, p."minStock" AS min, COALESCE(p."costPrice", 0) AS cost, p."price" AS price
+        -- J11-3: cost NULL = unknown cost price (left out of the value at cost, counted in unknownUnits)
+        SELECT p."id" AS pid, COALESCE(p."stock", 0) AS qty, p."minStock" AS min, p."costPrice" AS cost, p."price" AS price
         FROM "Product" p
         WHERE p."workspaceId" = ${ws}::uuid AND p."deletedAt" IS NULL AND p."trackStock" AND NOT p."hasVariants"
         UNION ALL
-        SELECT p."id", v."stock", v."minStock", COALESCE(v."costPrice", p."costPrice", 0), v."price"
+        SELECT p."id", v."stock", v."minStock", COALESCE(v."costPrice", p."costPrice"), v."price"
         FROM "ProductVariant" v JOIN "Product" p ON p."id" = v."productId"
         WHERE p."workspaceId" = ${ws}::uuid AND p."deletedAt" IS NULL AND p."trackStock" AND p."hasVariants" AND v."deletedAt" IS NULL AND v."isActive"
       ), alerts AS (
@@ -519,8 +520,10 @@ export class StockService implements OnModuleInit {
         (SELECT count(*) FROM alerts WHERE NOT all_out AND (any_low OR any_out))::int AS low,
         (SELECT count(*) FROM alerts WHERE all_out)::int AS out,
         COALESCE((SELECT sum(GREATEST(qty, 0)) FROM lines), 0)::int AS items,
-        COALESCE((SELECT sum(GREATEST(qty, 0)::bigint * cost) FROM lines), 0)::float8 AS cost,
-        COALESCE((SELECT sum(GREATEST(qty, 0)::bigint * price) FROM lines), 0)::float8 AS retail`;
+        COALESCE((SELECT sum(GREATEST(qty, 0)::bigint * cost) FROM lines WHERE cost IS NOT NULL), 0)::float8 AS cost,
+        COALESCE((SELECT sum(GREATEST(qty, 0)::bigint * price) FROM lines), 0)::float8 AS retail,
+        COALESCE((SELECT sum(GREATEST(qty, 0)::bigint * price) FROM lines WHERE cost IS NOT NULL), 0)::float8 AS "knownRetail",
+        COALESCE((SELECT sum(GREATEST(qty, 0)) FROM lines WHERE cost IS NULL), 0)::int AS "unknownUnits"`;
     const x = totals!;
     const advanced = t.stockMode === 'advanced';
     const recent = await this.listMovements({ page: 1, pageSize: 25, limit: 10 } as MovementsQuery);
@@ -536,7 +539,10 @@ export class StockService implements OnModuleInit {
       // simple mode has no cost price (ONB-03): the value at cost is an advanced figure
       valueAtCost: advanced ? Math.round(x.cost) : null,
       valueAtRetail: Math.round(x.retail),
-      potentialMargin: advanced ? Math.round(x.retail - x.cost) : null,
+      // J11-3: units whose cost price is unknown — not in `valueAtCost` (the tiles say « hors N articles sans prix de revient »)
+      unknownCostUnits: advanced ? x.unknownUnits : null,
+      // the margin compares the same lines: retail and cost of the lines with a known cost price
+      potentialMargin: advanced ? Math.round(x.knownRetail - x.cost) : null,
       recentMovements: recent.data,
       purchasing: advanced && can(t.role, 'gds.read') ? await this.purchasing() : null,
     };

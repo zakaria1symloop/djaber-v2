@@ -18,8 +18,8 @@ type VersionRow = AgentPresetVersion & { publishedBy: { id: string; firstName: s
 export class PresetAdminService {
   constructor(private readonly audit: AuditService) {}
 
-  private async log(actor: AdminActor, action: string, entityId: string, before: unknown, after: unknown) {
-    await this.audit.write({ actorType: 'admin', actorId: actor.userId, actorRole: actor.platformRole, action, entity: 'AgentPreset', entityId, before, after, ip: actor.ip, userAgent: actor.userAgent });
+  private async log(actor: AdminActor, action: string, entityId: string, before: unknown, after: unknown, reason: string | null = null) {
+    await this.audit.write({ actorType: 'admin', actorId: actor.userId, actorRole: actor.platformRole, action, entity: 'AgentPreset', entityId, before, after, reason, ip: actor.ip, userAgent: actor.userAgent });
   }
 
   private locales(v: unknown): Locales {
@@ -206,11 +206,12 @@ export class PresetAdminService {
     return this.get(id, actor);
   }
 
-  async archive(id: string, archive: boolean, actor: AdminActor) {
+  /** journeys 16/11 J13-4: the reason the admin gives is kept (AuditLog.reason); merchants keep their agents, so it stays optional. */
+  async archive(id: string, archive: boolean, actor: AdminActor, reason?: string) {
     const p = await this.row(id);
     if (archive === !!p.archivedAt) throw new AppException(archive ? 'PRESET_ARCHIVED' : 'CONFLICT');
     await prisma.agentPreset.update({ where: { id }, data: archive ? { archivedAt: new Date() } : { archivedAt: null } });
-    await this.log(actor, archive ? 'preset.archive' : 'preset.restore', id, { archivedAt: iso(p.archivedAt) }, { archived: archive });
+    await this.log(actor, archive ? 'preset.archive' : 'preset.restore', id, { archivedAt: iso(p.archivedAt) }, { archived: archive }, reason?.trim() || null);
     return this.get(id, actor);
   }
 

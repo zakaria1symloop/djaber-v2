@@ -11,7 +11,7 @@ import { api, ApiError } from '@/lib/api';
 import { useLeaveGuard } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { adminWrite, useAdminGet, useAdminInvalidate } from '../api';
-import { NO_ERRORS, toServerErrors, type ServerErrors } from '../dialog-kit';
+import { NO_ERRORS, ReasonField, reasonOk, toServerErrors, type ServerErrors } from '../dialog-kit';
 import { useFormats } from '../ui';
 import { draftOf, FeatureChips, MoneyField, SignedField, toPlanInput, yearlyDiscount, type PlanDraft } from './form';
 
@@ -30,7 +30,12 @@ export function PlanEditor({ plan, onClose, onArchive, canWrite }: { plan: PlanA
   const [errors, setErrors] = useState<ServerErrors>(NO_ERRORS);
   const [conflict, setConflict] = useState(false);
   const [versions, setVersions] = useState(false);
-  useEffect(() => setD(base), [base]);
+  // journeys 16/11 J13-4: a new plan version is a platform write — its reason is asked and logged (AuditLog.reason)
+  const [reason, setReason] = useState('');
+  useEffect(() => {
+    setD(base);
+    setReason('');
+  }, [base]);
   const set = <K extends keyof PlanDraft>(k: K, v: PlanDraft[K]) => setD((x) => ({ ...x, [k]: v }));
   const dirty = JSON.stringify(d) !== JSON.stringify(base);
   const { guard } = useLeaveGuard(dirty, plan.name);
@@ -56,13 +61,13 @@ export function PlanEditor({ plan, onClose, onArchive, canWrite }: { plan: PlanA
   const onSave = async () => {
     setErrors(NO_ERRORS);
     try {
-      await save.mutateAsync(body);
+      await save.mutateAsync({ ...body, reason: reason.trim() });
       void invalidate('/admin/plans');
       toast(t('admin.plans.edit.saved', { version: plan.version + 1 }));
       onClose();
     } catch (e) {
       if (e instanceof ApiError && e.status === 409 && e.code === 'CONFLICT') setConflict(true);
-      else setErrors(toServerErrors(e, t, ['name', 'description', 'priceMonthly', 'priceYearly', 'trialDays', 'sortOrder', ...GRID, ...MORE]));
+      else setErrors(toServerErrors(e, t, ['name', 'description', 'priceMonthly', 'priceYearly', 'trialDays', 'sortOrder', 'reason', ...GRID, ...MORE], { ADMIN_REASON_REQUIRED: 'reason' }));
     }
   };
   const disc = yearlyDiscount(d);
@@ -136,6 +141,7 @@ export function PlanEditor({ plan, onClose, onArchive, canWrite }: { plan: PlanA
           ) : null}
         </div>
       ) : null}
+      {dirty && canWrite ? <ReasonField value={reason} onChange={setReason} error={errors.fields.reason} /> : null}
       {errors.form ? <FormAlert>{errors.form}</FormAlert> : null}
       <div className="flex flex-wrap items-center gap-2">
         {canWrite && !plan.archivedAt && plan.actions.some((a) => a.key === 'archive') ? (
@@ -148,7 +154,7 @@ export function PlanEditor({ plan, onClose, onArchive, canWrite }: { plan: PlanA
           {t('action.cancel')}
         </Button>
         {canWrite ? (
-          <Button variant="primary" onClick={() => void onSave()} loading={save.isPending} disabled={!dirty} data-testid="plan-save">
+          <Button variant="primary" onClick={() => void onSave()} loading={save.isPending} disabled={!dirty || !reasonOk(reason)} data-testid="plan-save">
             {t('admin.plans.edit.save', { version: plan.version + 1 })}
           </Button>
         ) : null}

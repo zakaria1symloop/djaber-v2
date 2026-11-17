@@ -6,7 +6,6 @@ import { isAnnouncementLink, type CmsEntryAdminDto, type CmsPreviewLinkDto, type
 import { Button, Card, Checkbox, Combobox, Dialog, Field, FormAlert, FrameNote, Input, Select, Textarea, toast } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { useConfirmAction } from '@/components/confirm-action';
 import { ApiError, api } from '@/lib/api';
 import { errorMessage, useLeaveGuard } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
@@ -14,6 +13,7 @@ import { adminWrite, useAdminGet, useAdminInvalidate, useAdminJobToast } from '.
 import { AdminPill, useFormats } from '../ui';
 import { AnnouncementPreviewDialog, announcementTextOf } from './announcement-preview';
 import { announcementLinkOptions, EXTERNAL_LINK } from './link-options';
+import { UnpublishCmsDialog } from '../reason-confirm';
 
 type Loc = 'fr' | 'ar' | 'en';
 const LOCALES: Loc[] = ['fr', 'ar', 'en'];
@@ -36,7 +36,6 @@ const draftOf = (e: CmsEntryAdminDto): Draft => ({
 });
 
 export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDto; canWrite: boolean; onClose: () => void }) {
-  const confirm = useConfirmAction();
   const t = useT();
   const f = useFormats();
   const invalidate = useAdminInvalidate();
@@ -48,6 +47,7 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
   const [error, setError] = useState<string | null>(null);
   const [versions, setVersions] = useState(false);
   const [preview, setPreview] = useState(false);
+  const [unpublishing, setUnpublishing] = useState(false);
   // tester log 26/10 UX-036: « Lien » = a page picked by name, or « Adresse externe » for an https:// address
   const linkOptions = useMemo(() => [...announcementLinkOptions(t), { value: EXTERNAL_LINK, label: t('admin.cms.link.external'), hint: 'https://…' }], [t]);
   const [external, setExternal] = useState(() => !!base.link && !linkOptions.some((o) => o.value === base.link));
@@ -218,7 +218,7 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
             {entry.status === 'published' ? (
               <Button
                 variant="danger"
-                onClick={() => confirm.ask({ title: t('admin.cms.unpublishConfirm.title', { key: entry.key }), description: t('admin.cms.unpublishConfirm.description'), confirmLabel: t('admin.cms.action.unpublish'), destructive: true, run: () => act(() => adminWrite(`/admin/cms/${entry.id}/unpublish`, 'POST', {}), t('admin.cms.unpublished')) })}
+                onClick={() => setUnpublishing(true)}
                 loading={m.isPending}
               >
                 {t('admin.cms.action.unpublish')}
@@ -231,7 +231,7 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
         ) : null}
       </div>
       {guard}
-      {confirm.element}
+      <UnpublishCmsDialog entry={unpublishing ? entry : null} onClose={() => setUnpublishing(false)} />
       <VersionsDialog id={entry.id} open={versions} onClose={() => setVersions(false)} />
       {/* UX-035: the draft as the clients will see it (banner, notification, public site) */}
       {preview ? <AnnouncementPreviewDialog open onClose={() => setPreview(false)} text={announcementTextOf(d.locales, fallback)} channels={d.channels} link={d.link.trim() || null} /> : null}

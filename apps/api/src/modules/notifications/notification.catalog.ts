@@ -221,6 +221,8 @@ export const NOTIFICATION_VARIANTS: Partial<Record<NotificationType, { suffix: s
     { suffix: 'resolved', params: ['status'], when: (d) => d.status === 'resolved', example: { status: 'resolved' } },
     { suffix: 'pending', params: ['status'], when: (d) => d.status === 'pending_customer', example: { status: 'pending_customer' } },
   ],
+  // journey J10-2: the order itself was marked returned (the return is done) — not a parcel on its way back
+  shipment_returned: [{ suffix: 'done', params: ['number'], when: (d) => d.returned === true, example: { returned: true, number: 'CMD-1027' } }],
 };
 
 /** Keys older rows used for the same value (rows written before the parameter names were aligned with the templates). */

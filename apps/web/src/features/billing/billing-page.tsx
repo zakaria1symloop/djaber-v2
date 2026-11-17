@@ -236,9 +236,14 @@ function PlanCardFor({ plan, sub, cycle, owner, onChange, onCancel }: { plan: Pl
   const free = isFreePlan(plan);
   const badge = current ? (sub.status === 'trial' ? t('billing.plan.badge.trial') : t('billing.plan.badge.current')) : plan.isFeatured ? t('billing.plan.badge.featured') : undefined;
   const unit = free ? t('billing.plan.unit.monthly') : cycle === 'yearly' ? t('billing.plan.unit.yearly') : t('billing.plan.unit.monthly');
+  const trialEnd = formatDate(sub.trialEndsAt ?? sub.currentPeriodEnd, locale);
+  // journey J10-4: the greyed button of the free card says why (12 rule 7)
+  const currentReason = cta.kind !== 'current' ? undefined : sub.status === 'trial' && free ? t('billing.plan.freeAfterTrial', { date: trialEnd }) : sub.cancelAtPeriodEnd && free ? t('billing.plan.note.cancelling', { date: formatDate(sub.currentPeriodEnd, locale) }) : t('billing.plan.isCurrent');
   const note =
-    current && sub.status === 'trial'
-      ? t('billing.plan.note.trial', { date: formatDate(sub.trialEndsAt ?? sub.currentPeriodEnd, locale) })
+    free && !current && sub.status === 'trial'
+      ? t('billing.plan.freeAfterTrial', { date: trialEnd })
+      : current && sub.status === 'trial'
+      ? t('billing.plan.note.trial', { date: trialEnd })
       : current && sub.cancelAtPeriodEnd
         ? t('billing.plan.note.cancelling', { date: formatDate(sub.currentPeriodEnd, locale) })
         : sub.nextPlan && sub.nextPlan.id === plan.id
@@ -258,12 +263,12 @@ function PlanCardFor({ plan, sub, cycle, owner, onChange, onCancel }: { plan: Pl
       badge={badge}
       current={current}
       note={note}
-      action={<PlanAction cta={cta} plan={plan} owner={owner} onChange={onChange} onCancel={onCancel} switchCycle={current && isPaidSubscription(sub) && sub.billingCycle !== cycle ? cycle : null} />}
+      action={<PlanAction cta={cta} plan={plan} owner={owner} onChange={onChange} onCancel={onCancel} currentReason={currentReason} switchCycle={current && isPaidSubscription(sub) && sub.billingCycle !== cycle ? cycle : null} />}
     />
   );
 }
 
-function PlanAction({ cta, plan, owner, onChange, onCancel, switchCycle }: { cta: PlanCta; plan: Plan; owner: boolean; onChange: () => void; onCancel: () => void; switchCycle?: Cycle | null }) {
+function PlanAction({ cta, plan, owner, onChange, onCancel, switchCycle, currentReason }: { cta: PlanCta; plan: Plan; owner: boolean; onChange: () => void; onCancel: () => void; switchCycle?: Cycle | null; currentReason?: string }) {
   const t = useT();
   const locale = useLocaleCode() as AppLocale;
   const ownerReason = owner ? undefined : t('billing.ownerOnly');
@@ -271,7 +276,7 @@ function PlanAction({ cta, plan, owner, onChange, onCancel, switchCycle }: { cta
   switch (cta.kind) {
     case 'current':
       return (
-        <Button className="w-full" disabled data-testid={testid} data-cta="current">
+        <Button className="w-full" disabled disabledReason={currentReason} data-testid={testid} data-cta="current">
           {isFreePlan(plan) ? t('billing.plan.cta.free') : t('billing.plan.cta.current')}
         </Button>
       );

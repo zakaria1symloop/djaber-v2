@@ -154,5 +154,6 @@
   "public.contact.subjectDeletion": "Suppression de compte",
   "public.deletion.invalid.title": "Ce lien n’est pas valide.",
   "public.deletion.invalid.text": "Le lien est incomplet ou mal copié. Refaites une demande pour recevoir un nouveau lien (valable 24 h).",
-  "public.pricing.cta.member": "Choisir ce plan"
+  "public.pricing.cta.member": "Choisir ce plan",
+  "public.meta.status.description": "Disponibilité des services Djaber.ai en temps réel et historique des incidents."
 }

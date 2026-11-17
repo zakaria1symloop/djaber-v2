@@ -77,7 +77,8 @@ export function useClientsRefresh() {
   return useCallback(
     (o: { clientId?: string } = {}) => {
       const jobs = [qc.invalidateQueries({ queryKey: clientKeys.clients(ws) }), qc.invalidateQueries({ queryKey: [ws, 'orders'] }), qc.invalidateQueries({ queryKey: [ws, 'dashboard'] })];
-      if (o.clientId) jobs.push(qc.invalidateQueries({ queryKey: clientKeys.client(ws, o.clientId) }));
+      // journey J09-1: a bulk action (tags, delete…) names no client — every open card (full page, sheet) is refreshed too
+      jobs.push(qc.invalidateQueries({ queryKey: o.clientId ? clientKeys.client(ws, o.clientId) : [ws, 'client'] }));
       return Promise.all(jobs);
     },
     [ws, qc],

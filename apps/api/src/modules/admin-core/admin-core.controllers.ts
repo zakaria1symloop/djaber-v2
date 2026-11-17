@@ -743,9 +743,9 @@ export class AdminPresetsController {
   @Post(':id/:action')
   @HttpCode(200)
   @RequirePlatformRole('admin.presets.write')
-  archive(@Param('id') id: string, @Param('action') action: string, @Admin() a: AdminActor) {
+  archive(@Param('id') id: string, @Param('action') action: string, @Body() dto: OptionalReasonDto, @Admin() a: AdminActor) {
     if (action !== 'archive' && action !== 'restore') throw notFound();
-    return this.presets.archive(id, action === 'archive', a);
+    return this.presets.archive(id, action === 'archive', a, dto.reason);
   }}
 
 // --- ADM-08 CMS ------------------------------------------------------------------------------------------------------------
@@ -802,8 +802,8 @@ export class AdminCmsController {
   @Post(':id/unpublish')
   @HttpCode(200)
   @RequirePlatformRole('admin.cms.write')
-  unpublish(@Param('id') id: string, @Admin() a: AdminActor) {
-    return this.cms.unpublish(id, a);
+  unpublish(@Param('id') id: string, @Body() dto: OptionalReasonDto, @Admin() a: AdminActor) {
+    return this.cms.unpublish(id, dto.reason, a);
   }
 
   @Post(':id/translate')

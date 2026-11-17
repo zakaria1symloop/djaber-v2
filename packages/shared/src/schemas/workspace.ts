@@ -26,7 +26,16 @@ export const WorkspaceProfileSchema = z.object({
   senderWilayaId: wilayaSelect,
   locale: z.enum(['fr', 'ar', 'en']),
   autoPauseOnManualReply: z.boolean(),
-  handoffReminderMin: z.string().refine((v) => /^\d{1,4}$/.test(v) && Number(v) <= 1440, 'validation.range'),
+  // journey J12-10.2: an emptied field says « Champ requis » (it said « Valeur hors limites (0–1440) » under an empty field);
+  // « -5 » (kept by the NumberInput as an invalid value, J12-2) is out of range
+  handoffReminderMin: z
+    .string()
+    .superRefine((v, ctx) => {
+      if (v === '') ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'validation.required' });
+      else if (!/^\d{1,4}$/.test(v) || Number(v) > 1440) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'validation.range' });
+    }),
+  // journey J12-2: « -5 » is refused with the field error (an emptied field = no free delivery, the hint says so); it was
+  // turned into an empty field and saved as « no threshold »
   freeDeliveryThreshold: z.string().refine((v) => v === '' || /^\d{1,9}$/.test(v), 'validation.price'),
 });
 export type WorkspaceProfileInput = z.infer<typeof WorkspaceProfileSchema>;

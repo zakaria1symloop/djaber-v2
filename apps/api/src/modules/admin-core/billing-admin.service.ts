@@ -212,6 +212,8 @@ export class AdminBillingCatalogService {
     if (!LIMIT_KEYS.some((k) => merged[k] !== 0)) throw new AppException('VALIDATION_ERROR', {}, { maxPages: 'validation.range' });
     const impact = await this.impact(p, next);
     if (dryRun) return { plan: null, impact };
+    // journeys 16/11 J13-4: a new version changes what subscribers pay / may use — reason ≥ 10 chars, logged (06 §9)
+    const why = requireReason(reason);
     const updated = await prisma.$transaction(async (db) => {
       const row = await db.plan.update({ where: { id }, data: { ...(next as Prisma.PlanUpdateInput), version: { increment: 1 } } });
       await db.planVersion.create({ data: { planId: id, version: row.version, snapshot: this.snapshot(row) as Prisma.InputJsonValue, changedById: actor.userId, impactCount: impact.subscribers } });
@@ -230,7 +232,7 @@ export class AdminBillingCatalogService {
     const before = this.snapshot(p);
     const after = this.snapshot(updated);
     const changed = Object.keys(after).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
-    await this.log(actor, 'plan.update', 'Plan', id, { version: p.version, ...Object.fromEntries(changed.map((k) => [k, before[k]])) }, { version: updated.version, ...Object.fromEntries(changed.map((k) => [k, after[k]])), impact: impact.subscribers }, reason?.trim() || null);
+    await this.log(actor, 'plan.update', 'Plan', id, { version: p.version, ...Object.fromEntries(changed.map((k) => [k, before[k]])) }, { version: updated.version, ...Object.fromEntries(changed.map((k) => [k, after[k]])), impact: impact.subscribers }, why);
     return { plan: this.planDto(updated, impact.subscribers, actor), impact };
   }
 
@@ -567,7 +569,8 @@ export class AdminBillingCatalogService {
   private packDto(p: CreditPack, sales30d: number, purchases: number): CreditPackAdminDto {
     // a pack that was ever bought keeps its history (CreditPackPurchase ON DELETE RESTRICT): deactivate it instead
     const actions = [{ key: 'edit', enabled: true }, purchases > 0 ? { key: 'delete', enabled: false, reasonCode: 'CREDIT_PACK_HAS_PURCHASES' } : { key: 'delete', enabled: true }];
-    return { ...this.packs.toDto(p, 'fr'), nameI18n: fromLocalized(p.name), storeTier: p.storeTier, isActive: p.isActive, visibleWeb: p.visibleWeb, visibleMobile: p.visibleMobile, sales30d, sortOrder: p.sortOrder, purchases, actions };
+    // journeys 16/11 J13-12: the pack name in the admin's language (ar / en read the French names), French when that one is empty
+    return { ...this.packs.toDto(p, adminLocale()), nameI18n: fromLocalized(p.name), storeTier: p.storeTier, isActive: p.isActive, visibleWeb: p.visibleWeb, visibleMobile: p.visibleMobile, sales30d, sortOrder: p.sortOrder, purchases, actions };
   }
 
   async packsList() {

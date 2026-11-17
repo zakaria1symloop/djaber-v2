@@ -22,6 +22,7 @@ const labels: ChipLabels = {
   wilayaName: (id) => `W${id}`,
   created: (r) => `créé ${r}`,
   blocked: 'bloqué',
+  archived: 'archivés',
   date: (d) => d,
   money: (n) => `${n} DA`,
   number: (n) => String(n),

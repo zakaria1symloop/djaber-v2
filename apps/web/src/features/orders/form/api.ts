@@ -18,6 +18,13 @@ export const orderFormApi = {
         query: { q: searchTerm(q), pageSize: 25, sort: '-lastOrderAt' },
       })
     ).data,
+  /** journey J09-10: the archived card holding this exact phone (the order restores it), else null */
+  archivedOwner: async (phone: string) =>
+    (
+      await apiRaw<ClientListItem[]>('/clients', {
+        query: { q: searchTerm(phone), archived: 1, pageSize: 25 },
+      })
+    ).data,
   client: (id: string) => api<Client>(`/clients/${id}`),
   searchProducts: (q: string) => catalogApi.products({ q: q.trim(), pageSize: 25, status: ['active'] }),
   product: (id: string) => catalogApi.product(id),
@@ -40,6 +47,15 @@ export const useClientSearch = (q: string) => {
     queryKey: orderFormKeys.clientSearch(ws, searchTerm(term)),
     queryFn: () => orderFormApi.searchClients(term),
     enabled: !!ws && term.length >= 2,
+    staleTime: 10_000,
+  });
+};
+export const useArchivedOwnerSearch = (phone: string) => {
+  const ws = useWorkspaceId();
+  return useQuery({
+    queryKey: [...orderFormKeys.clientSearch(ws, searchTerm(phone)), 'archived'] as const,
+    queryFn: () => orderFormApi.archivedOwner(phone),
+    enabled: !!ws && phone.length >= 9,
     staleTime: 10_000,
   });
 };

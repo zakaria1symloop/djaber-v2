@@ -1,7 +1,7 @@
 // Request DTOs of the workspace module (zod → nestjs-zod). Shapes follow api-contract §3.2 and 06-api "Workspace & team".
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
-import { email, localeSchema, phoneDz, WILAYA_COUNT, MEMBER_SECTIONS } from '@djaber/shared';
+import { email, localeSchema, phoneDz, QuickReplyBody, WILAYA_COUNT, MEMBER_SECTIONS } from '@djaber/shared';
 
 const name = z.string().trim().min(1, 'validation.required').max(120, 'validation.length');
 const currentPassword = z.string().min(1, 'validation.required').max(128, 'validation.length');
@@ -95,7 +95,7 @@ export class ChangeRoleDto extends createZodDto(ChangeRoleSchema) {}
 export const CreateQuickReplySchema = z
   .object({
     title: z.string().trim().min(1, 'validation.required').max(80, 'validation.length'),
-    body: z.string().trim().min(1, 'validation.required').max(1000, 'validation.length'),
+    body: QuickReplyBody,
     /** '' and null both mean "no shortcut" (forms send the empty input as is) */
     shortcut: z
       .union([z.literal(''), z.string().trim().regex(/^\/[a-z0-9-]{1,29}$/, 'validation.invalid')])

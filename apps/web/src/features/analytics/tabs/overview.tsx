@@ -43,7 +43,8 @@ function Overview({ d }: { d: AnalyticsOverviewView }) {
           k={k.revenue}
           name="revenue"
           label={t('analytics.figure.revenue')}
-          meta={k.revenue.deltaPct !== undefined ? t('analytics.vsPrevious') : undefined}
+          // J11-7 (e): an empty previous period has no change to show — the line says so (it read « vs période précédente » alone)
+          meta={k.revenue.deltaPct === undefined ? undefined : k.revenue.deltaPct === null ? t('analytics.vsPreviousEmpty') : t('analytics.vsPrevious')}
           sub={t('analytics.overview.revenueSub', { sales: formatNumber(hintNum(k.revenue, 'salesCount') ?? 0), salesN: hintNum(k.revenue, 'salesCount') ?? 0, orders: formatNumber(hintNum(k.revenue, 'deliveredOrders') ?? 0), ordersN: hintNum(k.revenue, 'deliveredOrders') ?? 0 })}
           title={t('analytics.revenueDefinition')}
         />
@@ -190,9 +191,11 @@ function MoneyFigures({ d }: { d: AnalyticsOverviewView }) {
 }
 
 export function SeeAll({ href, label }: { href: string; label: string }) {
+  // J11-7 (i): the arrow points the reading way — « ← » in Arabic like « تقارير مفصلة ← » (the mirrored « → » was not)
+  const rtl = useLocaleCode() === 'ar';
   return (
     <Link href={href} className="ts-label-micro !normal-case text-accent-inbound hover:underline">
-      {label} <span className="inline-block rtl:-scale-x-100">→</span>
+      {label} <span aria-hidden>{rtl ? '←' : '→'}</span>
     </Link>
   );
 }

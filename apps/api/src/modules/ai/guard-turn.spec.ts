@@ -87,6 +87,19 @@ describe('AiRunService.turn — reply guard', () => {
     expect((t as { guard?: unknown }).guard).toBeUndefined();
   });
 
+  it('journey 16/11 J03-2: quote_delivery answered but the reply gives no fee ⇒ one corrective turn; a handoff answer is not checked', async () => {
+    const setif = { ok: true, wilayaName: 'Sétif', isStopdesk: false, fee: 650, free: false, stopdeskAvailable: true, stopdeskFee: 350, freeFrom: null };
+    const { gateway, svc, req } = setup(setif);
+    gateway.script('reply', { toolCalls: [{ name: 'quote_delivery', args: { wilayaName: 'Sétif' } }] }, { reply: 'Merci 3la sbr ! Goulli-li wach t7ebb.', intent: 'INFO' }, { reply: 'Tawsil l Sétif 650 DA l dar, 350 DA f stop-desk.', intent: 'INFO' });
+    const t = await svc.turn(req(facts({ lang: 'arabizi', customerText: 'ch7al tawsil l setif ?' }), 'ch7al tawsil l setif ?'));
+    expect(t).toMatchObject({ ok: true, output: { reply: 'Tawsil l Sétif 650 DA l dar, 350 DA f stop-desk.' }, guard: { violations: [{ rule: 'fee_missing' }], retried: true, action: 'rewritten' } });
+    expect(String((gateway.calls[2]!.messages.at(-1) as { content?: unknown }).content)).toContain('DELIVERY FEE: quote_delivery answered Sétif: home 650 DA, stop-desk 350 DA');
+    const h = setup(setif);
+    h.gateway.script('reply', { toolCalls: [{ name: 'quote_delivery', args: { wilayaName: 'Sétif' } }] }, { reply: 'Je transmets à un collègue.', status: 'HANDOFF', statusDetail: 'customer_request', evidence: 'parler à un humain', intent: 'OTHER' });
+    const handed = await h.svc.turn(req(facts(), 'je veux parler à un humain'));
+    expect((handed as { guard?: unknown }).guard).toBeUndefined();
+  });
+
   it('no corrective turn when less than GUARD_RETRY_MIN_MS of the run budget is left: enforced at once', async () => {
     const { gateway, svc, req } = setup();
     const call = { toolCalls: [{ name: 'quote_delivery', args: { wilayaName: 'Alger' } }] };

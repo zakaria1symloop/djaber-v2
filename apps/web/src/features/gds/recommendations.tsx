@@ -621,7 +621,10 @@ type Pick1 = { id: string; name: string } | null;
 export function RuleDialog({ rule, onClose }: { rule: CrossSellRule | 'new' | null; onClose: () => void }) {
   const t = useT();
   const refresh = useGdsRefresh();
-  const editing = rule && rule !== 'new' ? rule : null;
+  // journeys 16/11 J11-5: a duplicate pair is refused with the existing rule — « Modifier la règle existante » edits it here
+  const [existing, setExisting] = useState<CrossSellRule | null>(null);
+  const [switched, setSwitched] = useState<CrossSellRule | null>(null);
+  const editing = switched ?? (rule && rule !== 'new' ? rule : null);
   const typed = useTypedFlag(!!rule);
   const [product, setProduct] = useState<Pick1>(null);
   const [recommended, setRecommended] = useState<Pick1>(null);
@@ -630,22 +633,40 @@ export function RuleDialog({ rule, onClose }: { rule: CrossSellRule | 'new' | nu
   const [active, setActive] = useState('1');
   const [reason, setReason] = useState('');
   const [touched, setTouched] = useState(false);
+  const load = (r: CrossSellRule | null) => {
+    setProduct(r ? { id: r.product.id, name: r.product.name } : null);
+    setRecommended(r ? { id: r.recommended.id, name: r.recommended.name } : null);
+    setType(r?.type ?? 'cross_sell');
+    setScore(String(r?.score ?? 80));
+    setActive(r && !r.isActive ? '0' : '1');
+    setReason(r?.reason ?? '');
+  };
   useOnOpen(!!rule, () => {
-    setProduct(editing ? { id: editing.product.id, name: editing.product.name } : null);
-    setRecommended(editing ? { id: editing.recommended.id, name: editing.recommended.name } : null);
-    setType(editing?.type ?? 'cross_sell');
-    setScore(String(editing?.score ?? 80));
-    setActive(editing && !editing.isActive ? '0' : '1');
-    setReason(editing?.reason ?? '');
+    setExisting(null);
+    setSwitched(null);
+    load(rule && rule !== 'new' ? rule : null);
     setTouched(false);
   });
   const same = !!product && !!recommended && product.id === recommended.id;
-  const scoreBad = score !== '' && Number(score) > 100;
-  const s = useDialogSubmit(() =>
-    editing
-      ? gdsApi.updateCrossSell(editing.id, { type, score: Number(score) || 0, reason: reason.trim() || null, isActive: active === '1' })
-      : gdsApi.createCrossSell({ productId: product!.id, recommendedId: recommended!.id, type, score: Number(score) || 0, reason: reason.trim() || null, isActive: active === '1' }),
-  );
+  // full-test 15/11 ANALYTICS-13 / J11: the score is 0–100 — « -1 » stays in the field as invalid and is never saved
+  const scoreBad = score !== '' && (score.startsWith('-') || Number(score) < 0 || Number(score) > 100);
+  const s = useDialogSubmit(async () => {
+    try {
+      return await (editing
+        ? gdsApi.updateCrossSell(editing.id, { type, score: Number(score) || 0, reason: reason.trim() || null, isActive: active === '1' })
+        : gdsApi.createCrossSell({ productId: product!.id, recommendedId: recommended!.id, type, score: Number(score) || 0, reason: reason.trim() || null, isActive: active === '1' }));
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'RECOMMENDATION_ALREADY_EXISTS') setExisting(((e.body.details ?? {}) as { recommendation?: CrossSellRule | null }).recommendation ?? null);
+      throw e;
+    }
+  });
+  const editExisting = () => {
+    if (!existing) return;
+    setSwitched(existing);
+    load(existing);
+    setExisting(null);
+    s.setError(null);
+  };
   const submit = async () => {
     setTouched(true);
     if (!product || !recommended || same || scoreBad) return;
@@ -713,7 +734,18 @@ export function RuleDialog({ rule, onClose }: { rule: CrossSellRule | 'new' | nu
         <Field label={t('recos.rule.reason')} htmlFor="rule-reason" error={s.fieldError('reason')}>
           <Input id="rule-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder={t('recos.rule.reasonPlaceholder')} />
         </Field>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            <div className="flex flex-wrap items-center justify-between gap-2" data-testid="rule-error">
+              <span>{s.error}</span>
+              {existing && existing.id !== editing?.id ? (
+                <Button size="sm" variant="secondary" onClick={editExisting} data-testid="rule-edit-existing">
+                  {t('recos.rule.editExisting')}
+                </Button>
+              ) : null}
+            </div>
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
     {guard.element}

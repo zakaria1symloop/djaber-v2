@@ -52,6 +52,9 @@ describe('ADM-10 formatting', () => {
     expect(formatDelay(38)).toBe('38 min');
     expect(formatDelay(65)).toBe('1 h 05');
     expect(formatDelay(null)).toBe('—');
+    // journeys 16/11 J13-12: the units of the viewer's language
+    expect(formatDelay(32, { min: 'د', h: 'سا' })).toBe('32 د');
+    expect(formatWaiting(65, { min: 'د', h: 'سا' })).toBe('1 سا 05');
   });
   it('computes the gap with the market reference', () => {
     expect(priceGapPct(1800, 14000)).toBe(-87);

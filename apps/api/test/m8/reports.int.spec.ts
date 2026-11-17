@@ -90,8 +90,12 @@ describe('report template (ANA-04)', () => {
     const p = await product(owner, { price: 3000, stock: 5 });
     await sale(owner, { clientId: c.id, items: [{ productId: p.id, quantity: 1 }], amountPaid: 3000 });
     const top = (await get(owner, '/reports/top_customers?period=30d')).data;
-    expect(top.rows[0]).toMatchObject({ client: 'Lina Haddad', orders: 1, sales: 1, ordersRevenue: 4000, salesRevenue: 3000, revenue: 7000, _ref: { type: 'client', id: c.id } });
-    expect(top.totals).toMatchObject({ ordersRevenue: 4000, salesRevenue: 3000, revenue: 7000 });
+    // journeys 16/11 J11-4: the count column is named for what it counts (delivered orders of the period)
+    expect(top.rows[0]).toMatchObject({ client: 'Lina Haddad', deliveredOrders: 1, sales: 1, ordersRevenue: 4000, salesRevenue: 3000, revenue: 7000, lastPurchaseAt: expect.any(String), _ref: { type: 'client', id: c.id } });
+    expect(top.totals).toMatchObject({ deliveredOrders: 1, ordersRevenue: 4000, salesRevenue: 3000, revenue: 7000 });
+    // J11-2: the KPI is the revenue of the identified clients — its own name, not the named figure « Revenus »
+    expect(top.kpis.find((k: any) => k.key === 'identifiedRevenue')).toMatchObject({ value: 7000 });
+    expect(top.kpis.find((k: any) => k.key === 'identifiedRevenue').figure).toBeUndefined();
   });
 
   it('AT-ORD-11 on the P&L report: purchases paid 800 are listed, COGS 600 is subtracted, never both', async () => {
@@ -124,6 +128,29 @@ describe('report template (ANA-04)', () => {
     const pl = (await get(owner, '/reports/profit_loss?period=30d')).data;
     expect(pl.rows.find((r: any) => r.line === 'unknownCostSales').amount).toBe(900);
     expect(pl.rows.find((r: any) => r.line === 'cogs').amount).toBe(1000);
+    // J11-3: the same rule on Statistiques, the valuation, the stock dashboard and the products header
+    const ana = (await get(owner, '/analytics/products?period=30d')).data;
+    expect(ana.kpis.avgMarginPct).toMatchObject({ value: 50, hint: { advanced: 1, unknownCost: 900 } });
+    const val = (await get(owner, '/reports/inventory_valuation')).data;
+    expect(val.rows.find((r: any) => r.product === 'Savon olive')).toMatchObject({ stock: 8, costPrice: null, valueAtCost: null, valueAtRetail: 8 * 450 });
+    expect(val.kpis.find((k: any) => k.key === 'valueAtCost').value).toBe(9 * 1000);
+    expect(val.kpis.find((k: any) => k.key === 'unknownCostUnits').value).toBe(8);
+    const overview = (await get(owner, '/stock/overview')).data;
+    expect(overview).toMatchObject({ valueAtCost: 9000, unknownCostUnits: 8, valueAtRetail: 9 * 2000 + 8 * 450, potentialMargin: 9 * 2000 - 9000 });
+    expect((await get(owner, '/products/stats')).data).toMatchObject({ valueAtCost: 9000, unknownCostUnits: 8 });
+    expect((await get(owner, '/dashboard/home')).data.kpis.stockValue).toMatchObject({ cost: 9000, unknownCostUnits: 8 });
+  });
+
+  it('journeys 16/11 J11-1: the Paiements donut splits the money collected by mode, never the payments to suppliers', async () => {
+    const owner = await advancedShop(app);
+    const p = await product(owner, { price: 3000, costPrice: 1000, stock: 10 });
+    await sale(owner, { items: [{ productId: p.id, quantity: 1 }], amountPaid: 3000 });
+    const s = await supplier(owner);
+    await purchase(owner, { supplierId: s.id, status: 'pending', items: [{ productId: p.id, quantity: 2, unitCost: 1000 }], amountPaid: 2000 });
+    const pay = (await get(owner, '/reports/payments?period=30d')).data;
+    expect(pay.kpis.find((k: any) => k.key === 'received').value).toBe(3000);
+    expect(pay.chart.points.reduce((sum: number, x: any) => sum + x.values.received, 0)).toBe(3000);
+    expect(pay.chart.points.every((x: any) => x.values.received > 0)).toBe(true);
   });
 
   it('AT-INV-02 (report side): "Écarts d’inventaire" lists the inventory movement with its #INV reference', async () => {
@@ -220,6 +247,9 @@ describe('exports (D62, AT-RPT-01)', () => {
   it('carry-over exports: orders PDF, /delivery CSV, /purchases and /sales (202 + job), roles', async () => {
     const owner = await advancedShop(app);
     await order(owner.workspaceId, { total: 2500, orderedAt: new Date() });
+    // J11-7 (g): a sale in the export runs the « every payment mode » column
+    const sp = await product(owner, { price: 1000, stock: 2 });
+    await sale(owner, { items: [{ productId: sp.id, quantity: 1 }], amountPaid: 1000 });
     const o = await owner.get('/orders/export?format=pdf').expect(202);
     const d = await owner.get('/delivery/export?format=csv').expect(202);
     const pu = await owner.get('/purchases/export?format=xlsx').expect(202);
@@ -228,7 +258,7 @@ describe('exports (D62, AT-RPT-01)', () => {
     expect(await jobOf(owner, o.body.data.jobId)).toMatchObject({ status: 'done', result: { kind: 'orders', format: 'pdf', rows: 1 } });
     expect(await jobOf(owner, d.body.data.jobId)).toMatchObject({ status: 'done', result: { kind: 'shipments', format: 'csv' } });
     expect(await jobOf(owner, pu.body.data.jobId)).toMatchObject({ status: 'done', result: { kind: 'purchases', format: 'xlsx' } });
-    expect(await jobOf(owner, sa.body.data.jobId)).toMatchObject({ status: 'done', result: { kind: 'sales', format: 'csv' } });
+    expect(await jobOf(owner, sa.body.data.jobId)).toMatchObject({ status: 'done', result: { kind: 'sales', format: 'csv', rows: 1 } });
     const op = await asOperator(app, owner.workspaceId);
     await op.get('/purchases/export').expect(403);
     await op.get('/sales/export').expect(403);

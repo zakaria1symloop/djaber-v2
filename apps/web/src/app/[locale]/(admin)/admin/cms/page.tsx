@@ -6,11 +6,11 @@ import type { AdminCmsCounts, CmsEntryAdminDto, CmsPreviewLinkDto } from '@djabe
 import { ActionsMenu, Button, Checkbox, Field, Input, PillTabs, Select, toast, type Column } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { useConfirmAction } from '@/components/confirm-action';
 import { AdminPage } from '@/features/admin/admin-page';
 import { adminWrite, useAdminGet, useAdminInvalidate, useAdminJobToast, useAdminList } from '@/features/admin/api';
 import { AnnouncementPreviewDialog, entryText } from '@/features/admin/cms/announcement-preview';
 import { CmsEditor } from '@/features/admin/cms/editor';
+import { UnpublishCmsDialog } from '@/features/admin/reason-confirm';
 import { AdminDialog, NO_ERRORS, toServerErrors, useOnOpen, type ServerErrors } from '@/features/admin/dialog-kit';
 import { AdminFilterBar, AdminListBody, type AdminFilter } from '@/features/admin/list-kit';
 import { usePlatform } from '@/features/admin/platform';
@@ -41,6 +41,7 @@ export default function AdminCmsPage() {
   const track = useAdminJobToast();
   const [create, setCreate] = useState(false);
   const [previewed, setPreviewed] = useState<CmsEntryAdminDto | null>(null);
+  const [unpublishing, setUnpublishing] = useState<CmsEntryAdminDto | null>(null);
   const m = useMutation({ mutationFn: (fn: () => Promise<unknown>) => fn() });
   const act = async (fn: () => Promise<unknown>, done: string) => {
     try {
@@ -75,7 +76,6 @@ export default function AdminCmsPage() {
       toast({ tone: 'danger', message: errorMessage(err, t) });
     }
   };
-  const confirm = useConfirmAction();
   const menu = (e: CmsEntryAdminDto) => (
     <ActionsMenu
       label={t('action.actions')}
@@ -86,7 +86,7 @@ export default function AdminCmsPage() {
           edit: { label: t('admin.cms.action.edit'), onSelect: () => list.openSheet(e.id) },
           publish: { label: t('admin.cms.action.publish'), onSelect: () => void act(() => adminWrite(`/admin/cms/${e.id}/publish`, 'POST', {}), t('admin.cms.publishedToast')), hidden: !write },
           schedule: { label: t('admin.cms.action.schedule'), onSelect: () => list.openSheet(e.id), hidden: !write },
-          unpublish: { label: t('admin.cms.action.unpublish'), onSelect: () => confirm.ask({ title: t('admin.cms.unpublishConfirm.title', { key: e.key }), description: t('admin.cms.unpublishConfirm.description'), confirmLabel: t('admin.cms.action.unpublish'), destructive: true, run: () => act(() => adminWrite(`/admin/cms/${e.id}/unpublish`, 'POST', {}), t('admin.cms.unpublished')) }), destructive: true, hidden: !write },
+          unpublish: { label: t('admin.cms.action.unpublish'), onSelect: () => setUnpublishing(e), destructive: true, hidden: !write },
           translate: { label: t('admin.cms.action.translate'), onSelect: () => void track(() => adminWrite<{ jobId: string }>(`/admin/cms/${e.id}/translate`, 'POST', {}), { running: t('admin.cms.translating'), done: t('admin.cms.translated') }), hidden: !write },
           preview: { label: t(e.type === 'announcement' ? 'admin.cms.action.previewAnnouncement' : 'admin.cms.action.preview'), onSelect: () => void preview(e) },
           versions: { label: t('admin.cms.action.versions'), onSelect: () => list.openSheet(e.id) },
@@ -128,7 +128,7 @@ export default function AdminCmsPage() {
       {list.state.sheet && open.data ? <CmsEditor key={`${open.data.id}:${open.data.updatedAt}`} entry={open.data} canWrite={write} onClose={() => list.openSheet(null)} /> : null}
       <NewCmsDialog open={create} type={type} onClose={() => setCreate(false)} onCreated={(id, ty) => list.set({ tab: ty === 'announcement' ? null : ty, sheet: id })} />
       {previewed ? <AnnouncementPreviewDialog open onClose={() => setPreviewed(null)} text={entryText(previewed)} channels={previewed.channels} link={previewed.link} /> : null}
-      {confirm.element}
+      <UnpublishCmsDialog entry={unpublishing} onClose={() => setUnpublishing(null)} />
     </AdminPage>
   );
 }

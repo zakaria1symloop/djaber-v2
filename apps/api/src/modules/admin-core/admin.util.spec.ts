@@ -1,5 +1,5 @@
 // Unit rules of the admin core helpers: PII masking of the viewers (07-non-functional) and the reason rule (06 §9).
-import { STATE_REFUSED, maskEmail, maskName, maskPhone, maskText, offered, requireReason } from './admin.util';
+import { STATE_REFUSED, entityName, maskEmail, maskName, maskPhone, maskText, offered, requireReason } from './admin.util';
 
 describe('admin PII masking', () => {
   it('phones keep the first 2 and last 2 digits', () => {
@@ -40,5 +40,13 @@ describe('admin action descriptors (12 §16 UX-060, full-test 15/11 ADMIN-05)', 
       { key: 'schedule_deletion', enabled: false, reasonCode: 'ACCOUNT_OWNS_WORKSPACE' },
     ];
     expect(offered(list).map((d) => d.key)).toEqual(['open', 'reset_password', 'schedule_deletion']);
+  });
+});
+
+describe('audit entity slug (journeys 16/11 J13-1)', () => {
+  it('the « Type de cible » slugs map onto the stored model names', () => {
+    expect(entityName('agent_preset')).toBe('AgentPreset');
+    expect(entityName('cms_entry')).toBe('CmsEntry');
+    expect(entityName('plan')).toBe('Plan');
   });
 });

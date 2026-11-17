@@ -106,6 +106,24 @@ describe('playground (AGT-07)', () => {
     expect(await db.aiRun.findFirstOrThrow({ where: { batchKey: 'down' } })).toMatchObject({ kind: 'test', status: 'error', creditsCharged: 0 });
   });
 
+  it('journey 16/11 J03-10 (Blocker): the playground « oui » with the address reworded in the confirming call (PR2 « …, El Eulma, Sétif ») gives the TEST-n order, not the recap again', async () => {
+    const owner = await asOwner(app);
+    const agent = await linkedAgent(owner.workspaceId, []);
+    const sac = await createProduct(owner, { name: 'Sac à main cuir', price: 6900, stock: 5 });
+    await feeRule(owner.workspaceId, 19, 650, 350);
+    const args = { clientName: 'Karim Haddad', clientPhone: '0770112233', wilayaId: 19, communeName: 'El Eulma', address: 'Cité 500 logements bloc 12', items: [{ productId: sac.id, quantity: 1 }], isStopdesk: false, customerConfirmed: true };
+    const details = 'Karim Haddad, 0770112233, Sétif, El Eulma, Cité 500 logements bloc 12';
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args }] }, { reply: 'Récapitulatif : Sac à main cuir, 7550 DA. Vous confirmez ?', intent: 'SALE' });
+    const first = (await test(owner, agent.id, { sessionId: 'j03-10', ...say(details) }).expect(200)).body.data;
+    expect(first.toolCalls[0]).toMatchObject({ result: { ok: false, error: { code: 'CONFIRMATION_REQUIRED', core: expect.any(String) }, recap: { total: 7550, address: 'Cité 500 logements bloc 12' } } });
+    fakeAi(app).reset();
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args: { ...args, address: 'Cité 500 logements bloc 12, El Eulma, Sétif' } }] }, { reply: 'Commande test enregistrée.', intent: 'SALE' });
+    const turn = (await test(owner, agent.id, { sessionId: 'j03-10', messages: [{ role: 'user', text: details }, { role: 'assistant', text: first.reply }, { role: 'user', text: 'oui' }] }).expect(200)).body.data;
+    expect(turn.toolCalls[0]).toMatchObject({ simulated: true, result: { ok: true, simulated: true, total: 7550 } });
+    expect(turn.toolCalls[0].result.number).toMatch(/^TEST-\d{4}$/);
+    expect(await db.order.count({ where: { workspaceId: owner.workspaceId } })).toBe(0);
+  });
+
   it('playground with attachments: a photo goes through the 2-pass vision (would cost 5), flag for evals, export of the session', async () => {
     const owner = await asOwner(app);
     const agent = await linkedAgent(owner.workspaceId, []);
@@ -139,9 +157,11 @@ describe('playground (AGT-07)', () => {
     expect(job.result.total).toBe(8);
     const results = (await owner.get(`/agents/${agent.id}/test-scenarios`).expect(200)).body.data;
     expect(results.map((r: any) => r.scenarioKey)).toEqual(['darija_price', 'arabizi_delivery', 'photo', 'voice', 'off_catalog', 'anger', 'qty_limit', 'refund']);
-    expect(Object.fromEntries(results.map((r: any) => [r.scenarioKey, r.status]))).toEqual({ darija_price: 'pass', arabizi_delivery: 'pass', photo: 'pass', voice: 'pass', off_catalog: 'pass', anger: 'pass', qty_limit: 'pass', refund: 'pass' });
-    expect(await db.aiRun.count({ where: { agentId: agent.id, kind: 'test_scenario' } })).toBe(8);
-    expect(await db.agentTestRun.count({ where: { agentId: agent.id, aiRunId: { not: null } } })).toBe(8);
+    // journey 16/11 J03-8: no product photo in the agent's scope ⇒ the photo scenario is « not tested » (⚠), no AI turn — it passed on any answer
+    expect(Object.fromEntries(results.map((r: any) => [r.scenarioKey, r.status]))).toEqual({ darija_price: 'pass', arabizi_delivery: 'pass', photo: 'error', voice: 'pass', off_catalog: 'pass', anger: 'pass', qty_limit: 'pass', refund: 'pass' });
+    expect(results.find((r: any) => r.scenarioKey === 'photo')).toMatchObject({ summary: 'not_tested:no_photo' });
+    expect(await db.aiRun.count({ where: { agentId: agent.id, kind: 'test_scenario' } })).toBe(7);
+    expect(await db.agentTestRun.count({ where: { agentId: agent.id, aiRunId: { not: null } } })).toBe(7);
     expect((await balanceOf(app, owner.workspaceId)).planUsed).toBe(0);
     // an agent that answers in the wrong script fails the language check
     fakeAi(app).script('reply', { reply: 'Bonjour, voici le prix.', intent: 'INFO' });
