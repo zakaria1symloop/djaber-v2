@@ -2,7 +2,7 @@
 // `create_order` result — number, items, delivery fee, total, delay, cash on delivery — in the customer's language, so
 // the model can no longer confirm with wrong figures, « correct » itself (« commande enregistrée par erreur »,
 // « coordonnées inventées ») or deny the order it just placed (AI-CHAT-02). Pure.
-import type { AiLanguage } from '../language';
+import { serverTextLanguage, type AiLanguage } from '../language';
 
 type Line = { name?: unknown; variant?: unknown; quantity?: unknown; unitPrice?: unknown };
 type Placed = { number: string; items: Line[]; deliveryFee: number; total: number; duplicate: boolean; replaced: string | null; beyondStock: boolean; eta: string };
@@ -83,7 +83,8 @@ const T: Record<Loc, { head: (n: string) => string; again: (n: string) => string
     cur: 'DA',
   },
 };
-const locOf = (lang: AiLanguage | string | undefined): Loc => (lang === 'ar' ? 'ar' : lang === 'arabizi' ? 'arabizi' : lang === 'en' ? 'en' : 'fr');
+// journey retest R9-1: the one language decision of the server texts (`serverTextLanguage`: a `mixed` turn is resolved by the caller)
+const locOf = (lang: AiLanguage | string | undefined): Loc => serverTextLanguage(lang);
 
 // --- the recap (journey retest R1-6 / R1-7, 17/11) ---------------------------------------------------------------------------
 type Recap = { items: Line[]; deliveryFee: number; total: number; clientName: string; clientPhone: string; secondPhone: string | null; wilaya: string; communeName: string | null; address: string | null; isStopdesk: boolean; replaces: string | null; /** journey retest R2-7 */ wilayaAr?: string | null; communeAr?: string | null; /** journey retest R6-3: part of it is sold beyond the stock */ beyondStock?: boolean };
@@ -223,6 +224,8 @@ const YES_OPENER = /^[\s\p{P}]*(?:oui|ouais|non|ih|iyeh|iyyeh|ey?h|wah|lala|yes|
  */
 const ASKS =
   /[?؟]|(?<![\p{L}\p{N}])(?:combien|quand(?![\s-]+(?:bien\s+)?m[eê]me)|comment|pourquoi|est[- ]ce|quel(?:le)?s?|how|when|what|which|where|why|do you|can you|is it|are they|ch7al|chhal|chal|9adach|qadach|kadach|wach|wa9tach|w9tach|wqtach|imta|kifach|kifech|3lach|win|wayn|9olli|goulli|gouli|dites[- ]moi|tell me|كم|شحال|قداش|وقتاش|واش|علاش|كيفاش|وين|هل|قولي|قوللي)(?![\p{L}\p{N}])/u;
+/** journey retest R9-3: the customer's message asks something (a question mark or a question word, both scripts). */
+export const asksSomething = (text: string | undefined): boolean => bothForms(text ?? '').some((v) => ASKS.test(v));
 /** What an answer gives: a number, delivery, a delay, a price, a size, a colour, a fabric, the stock, the payment (folded). */
 const ANSWER_CONTENT =
   /\d|livr|deliver|twass?l|nwass?l|ywass?l|tawsil|توص|نوص|يوص|stop.?desk|jour|day|ayam|ayyam|يوم|ايام|prix|price|taman|thaman|soum|سعر|ثمن|سومة|taille|size|ma9as|مقاس|couleur|colou?r|لون|tissu|fabric|matiere|qmach|9mach|khfif|قماش|coton|cotton|laine|soie|silk|cuir|leather|stock|disponible|available|kayen|kayna|kaynin|makach|متوفر|موجود|كاين|ماكانش|garantie|warranty|paiement|payment|cash|khlas|الدفع|خلاص|gratuit|free|batel|مجان|frais|fee|tarif/u;

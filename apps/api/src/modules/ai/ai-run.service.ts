@@ -20,12 +20,14 @@ import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } f
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
 import { allowedHandoffReasons, establishedReasons, fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, orderDetailsMessage, type HandoffRefusal } from './handoff-judge';
 import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, quoteFacts, stripMarkdown, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
-import { asksDelivery, blockedOrderText, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, withoutRecapClaims } from './tools/order-confirmation-text';
+import { asksDelivery, asksSomething, blockedOrderText, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, withoutRecapClaims } from './tools/order-confirmation-text';
 import { phonesIn } from './tools/order-confirmation';
 import { matchWilaya } from './tools/tool-registry';
 import { placeIndex, placeNamedIn, placeOnlyMessage, type PlaceIndex } from './tools/place-index';
 import { contextOf } from '../messaging/messaging.presenter';
-import { fillerMessage, noPhotoReply, noPhotoSaid, photoAsked, withoutPresenceTalk } from './reply-fixes';
+import { fillerMessage, noPhotoReply, noPhotoSaid, photoAsked, withOneNowWord, withOrderStatusWording, withoutPresenceTalk, withoutStrayYes } from './reply-fixes';
+import { serverTextLanguage } from './language';
+import { foldGuard } from './reply-guard';
 
 /** journey retest R1-1: told to the model on a message that only gives an order field (handoff_to_human is not offered). */
 export const FIELD_ONLY_NOTE =
@@ -115,6 +117,22 @@ export const handoffDefWith = (def: AiToolDef, reasons: string[]): AiToolDef => 
 };
 /** journey retest R2-4: the result given back for a call identical to one already answered in this turn (not run again). */
 export const repeatedCall = (result: unknown) => ({ ...(result && typeof result === 'object' && !Array.isArray(result) ? (result as object) : { result }), repeated: true, instruction: 'The same call was already answered in this turn (above): do not send it again — answer the customer now.' });
+
+/**
+ * journey retest R9-2 (17/11): the key two calls of one turn share when they ask the same thing — `search_products` with the same
+ * query whatever its `limit` / case / accents (N8 T1: « Coffret cadeau Aïd » with `limit 1`, then without), else the call itself.
+ * The second gets the first one's answer (`repeatedCall`) and does not run.
+ */
+export const sameCallKey = (name: string, args: unknown): string => {
+  if (canonicalTool(name) !== 'search_products' || !args || typeof args !== 'object' || Array.isArray(args)) return toolCallId(name, args, 0);
+  const { limit: _limit, query, ...rest } = args as Record<string, unknown>;
+  return toolCallId('search_products', { ...rest, query: typeof query === 'string' ? foldGuard(query).replace(/\s+/g, ' ').trim() : query }, 0);
+};
+/**
+ * journey retest R9-2: the answer to a `search_products` whose query is only a wilaya / commune name (N16 T1 « Illizi » after
+ * quote_delivery said WILAYA_NOT_SERVED) — no product search is run.
+ */
+export const placeSearchResult = (query: string) => ({ products: [], notAProduct: true, instruction: `« ${query} » is a wilaya / commune, not a product: no product search is needed. A delivery question is answered with quote_delivery — answer the customer now.` });
 
 export type ExecutedTool = { callId: string; name: string; args: Record<string, unknown>; result: unknown; simulated: boolean; replayed: boolean };
 export type TurnRequest = {
@@ -270,6 +288,22 @@ export class AiRunService implements OnModuleInit {
     // (after the cached start of the system prompt, so the cache is kept).
     // journey retest R5-6: and, without a phone, that create_order is not available (same place: the cache prefix is kept)
     const executed: ExecutedTool[] = [];
+    // journey retest R9-1 (17/11): the one language of every server-written text of this turn (recap, confirmation, blocked
+    // sentence, delivery answer, « no photo » sentence) — the turn's, a `mixed` turn taking the shop's locale, never French by default
+    const textLang = serverTextLanguage(req.guard?.lang, req.guard?.shopLocale);
+    /**
+     * journey retest R9-2 (17/11): a search_products whose query is only a wilaya / commune name (and no word of a catalogue
+     * name) is not run — its query is returned (N16 T1 `search_products {«Illizi»}` after quote_delivery). Lists unreadable ⇒ run.
+     */
+    let searchPlaces: PlaceIndex | null | undefined;
+    const placeSearch = async (call: AiToolCallRequest): Promise<string | null> => {
+      const query = canonicalTool(call.name) === 'search_products' && typeof call.args?.query === 'string' ? call.args.query.trim() : '';
+      if (!query || !/\p{L}/u.test(query)) return null;
+      const q = foldGuard(query);
+      if ((req.guard?.tokens ?? []).some((t) => t.includes(q) || q.split(/\s+/).some((w) => w.length >= 3 && t.split(/\s+/).includes(w)))) return null;
+      searchPlaces ??= places ?? (await placeIndex().catch(() => null));
+      return searchPlaces && placeOnlyMessage(searchPlaces, query) ? query : null;
+    };
     const seen = new Map<string, number>();
     const answered = new Map<string, unknown>();
     const system = [req.prompt.system, ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noStreet ? [NO_STREET_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : [])].join('\n\n');
@@ -291,7 +325,7 @@ export class AiRunService implements OnModuleInit {
     // full-test 15/11 proposal 4: once create_order placed an order this turn, the customer gets the server's confirmation
     // (number, items, total, delay, payment) in their language — never the model's own wording of it (it « corrected »
     // itself, said the details were invented or that nothing was ordered: AI-CHAT-02)
-    const confirmationNow = () => orderConfirmationText(executed.map((t) => ({ name: canonicalTool(t.name), result: t.result })), req.guard?.lang ?? 'fr');
+    const confirmationNow = () => orderConfirmationText(executed.map((t) => ({ name: canonicalTool(t.name), result: t.result })), textLang);
     // journey retest R1-6 / R1-7: a recap create_order returned this turn is sent as the server wrote it (catalogue names,
     // delivery mode, name, phone, address) — the model's own recap was cut short or translated the product names
     const recapNow = () => pendingRecap(executed.map((t) => ({ name: canonicalTool(t.name), result: t.result })));
@@ -302,19 +336,22 @@ export class AiRunService implements OnModuleInit {
       const plain = { ...output, reply: stripMarkdown(output.reply) };
       const calls = executed.map((t) => ({ name: canonicalTool(t.name), result: t.result }));
       // journey retest R4-8: a blocked customer's order gets the server's sentence, in line with the shop's handoff text
-      const blockedText = blockedOrderText(calls, req.guard?.lang ?? 'fr');
+      const blockedText = blockedOrderText(calls, textLang);
       if (blockedText) return { ...plain, reply: blockedText };
       // a handoff answer is not a recap to confirm — journey retest R4-1: and it never claims one (« récapitulée ci-dessus »)
       if (output.status === 'HANDOFF' || forcedHandoff) return { ...plain, reply: withoutRecapClaims(plain.reply) };
       const recap = recapNow();
       if (!recap) {
         // journey retest R7-3: « ? » / « ... » gets the pending question, not « Oui, je suis là ! » / « Vous êtes toujours là ? »
-        const text = fillerMessage(req.toolCtx.customerText) ? withoutPresenceTalk(plain.reply) : plain.reply;
+        let text = fillerMessage(req.toolCtx.customerText) ? withoutPresenceTalk(plain.reply) : plain.reply;
+        // journey retest R9-3: the order wording follows lookup_order's status (« في الدرب » for an order not sent), one « درك »,
+        // no opening « Ih, » that answers nothing
+        text = withoutStrayYes(withOneNowWord(withOrderStatusWording(text, calls.filter((c) => c.name === 'lookup_order').map((c) => c.result))), req.toolCtx.customerText, asksSomething);
         return { ...plain, reply: withPhotoAnswer(output, text) };
       }
-      const r = recapReply(plain.reply, recap, req.guard?.lang ?? 'fr', req.toolCtx.customerText);
+      const r = recapReply(plain.reply, recap, textLang, req.toolCtx.customerText);
       // journey retest R5-5: « twasslou l Constantine ? » is answered in words when no sentence of the model goes before the recap
-      const answer = r.kept === 'server' ? deliveryAnswer(calls, req.toolCtx.customerText ?? '', req.guard?.lang ?? 'fr') : null;
+      const answer = r.kept === 'server' ? deliveryAnswer(calls, req.toolCtx.customerText ?? '', textLang) : null;
       return { ...plain, reply: withPhotoAnswer(output, answer ? `${answer}\n\n${r.text}` : r.text) };
     };
     /**
@@ -330,7 +367,7 @@ export class AiRunService implements OnModuleInit {
       const found = executed.flatMap((t) => (['search_products', 'get_product'].includes(canonicalTool(t.name)) ? productIdsOf(t.result) : []));
       const concerned = shown.length ? shown : [...new Set(found)];
       if (!concerned.length || !concerned.every((id) => (f.noPhoto ?? []).includes(id))) return text;
-      return noPhotoReply(text, concerned.length, req.guard.lang);
+      return noPhotoReply(text, concerned.length, textLang);
     };
     const ok = (output: AiReplyOutput, extra: { salvaged?: boolean; guard?: GuardOutcome } = {}): TurnResult => ({ ok: true, output: confirmed(output), tools: executed, usage, model: model!, usedFallback, forcedHandoff, repaired, ...(handoffRefused ? { handoffRefused } : {}), ...extra });
     // journey 16/11 J03-2: this turn's quote_delivery answers — the reply must give the fee (not checked on a handoff answer)
@@ -363,7 +400,7 @@ export class AiRunService implements OnModuleInit {
       // model's sentence kept before it is checked, and dropped (no corrective turn) when it breaks a rule
       const recap = output.status !== 'HANDOFF' && !forcedHandoff ? recapNow() : null;
       if (recap) {
-        const r = recapReply(output.reply, recap, req.guard.lang, req.toolCtx.customerText);
+        const r = recapReply(output.reply, recap, textLang, req.toolCtx.customerText);
         const own = r.kept === 'server' ? '' : output.reply;
         if (!own || !checkReply(own, factsNow(output)).length) return ok(output, extra);
         return ok({ ...output, reply: '' }, extra);
@@ -411,15 +448,21 @@ export class AiRunService implements OnModuleInit {
         else messages.push({ role: 'assistant', content: [res.value.text, ...stray.map((c) => `[tool call ${c.name} ${JSON.stringify(c.args ?? {})}]`)].filter(Boolean).join('\n') });
         for (const call of runnable) {
           const hash = toolCallId(call.name, call.args, 0);
-          if (answered.has(hash)) {
-            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: repeatedCall(answered.get(hash)) });
+          const key = sameCallKey(call.name, call.args);
+          if (answered.has(key)) {
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: repeatedCall(answered.get(key)) });
+            continue;
+          }
+          const place = await placeSearch(call);
+          if (place) {
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: placeSearchResult(place) });
             continue;
           }
           const ordinal = seen.get(hash) ?? 0;
           seen.set(hash, ordinal + 1);
           const done = await this.toolCall(req, call, ordinal, executed);
           executed.push(done);
-          answered.set(hash, done.result);
+          answered.set(key, done.result);
           orderClosed ||= orderClosedBy(call.name, done.result);
           messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: done.result });
           forcedHandoff ??= this.tools.forcedHandoff(call.name, call.args, done.result);
@@ -433,15 +476,21 @@ export class AiRunService implements OnModuleInit {
         messages.push({ role: 'assistant', content: res.value.text ?? '', toolCalls: calls });
         for (const call of calls) {
           const hash = toolCallId(call.name, call.args, 0);
-          if (answered.has(hash)) {
-            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: repeatedCall(answered.get(hash)) });
+          const key = sameCallKey(call.name, call.args);
+          if (answered.has(key)) {
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: repeatedCall(answered.get(key)) });
+            continue;
+          }
+          const place = await placeSearch(call);
+          if (place) {
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: placeSearchResult(place) });
             continue;
           }
           const ordinal = seen.get(hash) ?? 0;
           seen.set(hash, ordinal + 1);
           const done = await this.toolCall(req, call, ordinal, executed);
           executed.push(done);
-          answered.set(hash, done.result);
+          answered.set(key, done.result);
           orderClosed ||= orderClosedBy(call.name, done.result);
           messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: done.result });
           forcedHandoff ??= this.tools.forcedHandoff(call.name, call.args, done.result);
@@ -560,7 +609,7 @@ export class AiRunService implements OnModuleInit {
     seen.set(hash, ordinal + 1);
     const done = await this.toolCall(req, call, ordinal, executed);
     executed.push(done);
-    answered.set(hash, done.result);
+    answered.set(sameCallKey(call.name, call.args), done.result);
   }
 
   /**

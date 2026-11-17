@@ -37,6 +37,9 @@ export const detectLanguage = (text: string | null | undefined, previous?: AiLan
   // journey retest R4-2: inside a conversation, Arabic-script words that are only a value (« سمير بن علي », « smiti وليد بوزيد »)
   // say nothing of the language — the Latin rest (or nothing) decides
   if (previous && previous !== 'ar' && previous !== 'mixed') text = withoutArabicValues(text);
+  // journey retest R9-1: and Latin words that are only a value (« Samir Benali 0661234567، قسنطينة، الخروب … », a product name)
+  // next to Arabic-script words say nothing of it either — the Arabic rest decides
+  if (previous) text = withoutLatinValues(text);
   const arabic = (text.match(/[؀-ۿ]/g) ?? []).length;
   const latin = (text.match(/[A-Za-zÀ-ÿ]/g) ?? []).length;
   if (arabic + latin === 0) return previous;
@@ -94,14 +97,45 @@ export const arabicValuesOnly = (text: string): boolean => {
 /** The text without its Arabic-script value words (unchanged when they say something of the language). */
 export const withoutArabicValues = (text: string): string => (arabicValuesOnly(text) ? text.replace(/[؀-ۿ]+/g, ' ') : text);
 
+/** A Latin word that says the customer writes a Latin language: a French / English / arabizi word, a darija digit, an accent. */
+const latinClue = (w: string): boolean =>
+  FRENCH_WORDS.includes(w) || ENGLISH_WORDS.includes(w) || ARABIZI_WORDS.includes(w) || ARABIZI_PARTICLES.has(w) || /[a-z][379]|[379][a-z]/.test(w) || (/[àâçéèêëîïôùûü]/.test(w) && !NEUTRAL_WORDS.has(w));
+/**
+ * journey retest R9-1 (17/11): the twin of `arabicValuesOnly` — a message with Arabic-script words whose Latin words are only a
+ * value: a name (« Samir Benali »), a product name (« Djellaba homme »), a place (« Bab Ezzouar »): at most 4 such words besides
+ * address words, none a word of a Latin language. N18: « Samir Benali 0661234567، قسنطينة، الخروب، حي 1000 مسكن عمارة 5 » in an
+ * Arabic-script conversation read as `mixed`, and the server recap came out in French.
+ */
+export const latinValuesOnly = (text: string): boolean => {
+  if (!/[؀-ۿ]/.test(text)) return false;
+  const tokens = words(text.replace(/[؀-ۿ]+/g, ' ')).filter((w) => /[a-zà-ÿ]/.test(w));
+  if (!tokens.length || tokens.some(latinClue)) return false;
+  return tokens.filter((w) => !NEUTRAL_WORDS.has(w)).length <= 4;
+};
+/** The text without its Latin value words (unchanged when they say something of the language, or with no Arabic script). */
+export const withoutLatinValues = (text: string): string => (latinValuesOnly(text) ? text.replace(/[A-Za-zÀ-ÿ]+/g, ' ') : text);
+
 /**
  * journey 16/11 J05-8: the language of a customer turn. A text with no clue (a phone number, a name, « ok ») keeps the
  * conversation's language whatever it is — also Arabic script (the old fallback gave English to an Arabic-script customer
  * typing their name, then every phone-only turn after it stayed English). A first message with no clue takes the shop's
  * language (`shopLanguage`, journey 16/11 J04-2).
  */
-export const turnLanguage = (text: string | null | undefined, previous: AiLanguage | undefined, fallback?: ShopLanguage): AiLanguage =>
-  previous ? (detectLanguage(text, previous, { neutral: 'previous' }) ?? previous) : (detectLanguage(text, undefined, { neutral: 'previous' }) ?? shopLanguage(text, fallback));
+export const turnLanguage = (text: string | null | undefined, previous: AiLanguage | undefined, fallback?: ShopLanguage): AiLanguage => {
+  if (previous) {
+    const lang = detectLanguage(text, previous, { neutral: 'previous' }) ?? previous;
+    // journey retest R9-1 (17/11): a message of both scripts keeps the conversation's language — `mixed` gave every server text
+    // (recap, confirmation, fee sentence, questions) in French in the middle of an Arabic-script conversation
+    return lang === 'mixed' && previous !== 'mixed' ? previous : lang;
+  }
+  const first = detectLanguage(text, undefined, { neutral: 'previous' });
+  if (first !== 'mixed' || !text) return first ?? shopLanguage(text, fallback);
+  // R9-1: a first message whose words of one script are only values (a name, a phone, a place, a product) takes the other script's language
+  const arabic = detectLanguage(withoutLatinValues(text));
+  if (arabic === 'ar') return 'ar';
+  const latin = detectLanguage(withoutArabicValues(text), undefined, { neutral: 'previous' });
+  return latin && latin !== 'mixed' ? latin : 'mixed';
+};
 
 /** The conversation's language after these customer texts (oldest first), each turn read with the one before (J05-8). */
 export const conversationLanguage = (texts: ReadonlyArray<string | null | undefined>, fallback?: ShopLanguage): AiLanguage | undefined =>
@@ -172,6 +206,26 @@ const frenchBody = (reply: string): boolean => {
     else if (l === 'arabizi') arabizi++;
   }
   return fr > arabizi && (fr >= 2 || arabizi === 0);
+};
+/**
+ * journey retest R9-3 (17/11): a whole French sentence inside an arabizi reply (N9: « … zina bezzaf l les fêtes. Les tailles
+ * disponibles : S et M à 4900 DA, et XL à 5200 DA. Taille L ma 3andnach … ») — 4 French clues or more, no darija clue, 5 words or
+ * more. The words of the product / variant names (`names`, folded) are no clue: « Robe kabyle brodée à la main » stays.
+ */
+export const frenchSentenceIn = (reply: string, names: readonly string[] = []): boolean => {
+  const fold = (w: string) => w.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const own = new Set(names.flatMap((n) => fold(n.toLowerCase()).split(/[^\p{L}\p{N}]+/u)).filter(Boolean));
+  return reply.split(/[.!?؟…\n]+|\p{Extended_Pictographic}/u).some((s) => {
+    const w = words(s).filter((x) => /[a-zà-ÿ]/.test(x) && !own.has(fold(x)));
+    if (w.length < 5) return false;
+    let fr = 0;
+    for (const x of w) {
+      if (NEUTRAL_WORDS.has(x)) continue;
+      if (ARABIZI_WORDS.includes(x) || ARABIZI_PARTICLES.has(x) || /[a-z][379]|[379][a-z]/.test(x)) return false;
+      if (FRENCH_WORDS.includes(x) || /[àâçéèêëîïôùûü]/.test(x)) fr++;
+    }
+    return fr >= 4;
+  });
 };
 export const languageSwitched = (customer: AiLanguage, reply: string): boolean => {
   const r = replyLanguage(reply);
@@ -259,6 +313,13 @@ const ODD_FIXES: [RegExp, string | ((m: string, ...groups: string[]) => string)]
   [/(?<![\p{L}\p{N}_])nchouf\s+ash\s+nqder(\s+ndir\s*(?:lik|lek|lak))?(?![\p{L}\p{N}_])/giu, (_m, dir?: string) => `nchouflek wach nqder${dir ? ' ndirlek' : ''}`],
   [/(?<![\p{L}\p{N}_])3andna(?:ch){2,}(?![\p{L}\p{N}_])/giu, '3andnach'],
   [/(?<=ما\s*)تخرجتش(?![\p{L}\p{N}_])/gu, 'خرجتش'],
+  // journey retest R9-3 (17/11): « Lmoute, ma nwasslouch l Illizi » (« lmout » = « the death ») — an apology at the start of a
+  // sentence (« Smahli, »), else the watch (« la montre »); « Wach wilaya okhra t7ebb tswayyab fiha? » (no such verb) → « t7ebb
+  // nwasslou liha »
+  [/(?:^|(?<=[.!?؟…\n]\s*))lmoute?(?=\s*,)/giu, 'Smahli'],
+  [/(?<![\p{L}\p{N}_])lmoute?(?![\p{L}\p{N}_])/giu, 'la montre'],
+  [/(?<![\p{L}\p{N}_])(?:t7ebb\s+)?tswa?yy?ab\s+fiha(?![\p{L}\p{N}_])/giu, 't7ebb nwasslou liha'],
+  [/(?<![\p{L}\p{N}_])tswa?yy?ab(?![\p{L}\p{N}_])/giu, 'nwasslou'],
 ];
 const oddIn = (text: string) => ODD_FIXES.some(([re]) => new RegExp(re.source, re.flags.replace('g', '')).test(text));
 /** journey retest R3-2 / R3-5 / R5-3: « ch7al » used for « what / which », or made-up arabizi / darija — the reply guard flags it with the Moroccan words. */
@@ -337,7 +398,23 @@ export const systemLocale = (lang: string | undefined, fallback: AppLocale = 'fr
     const d = agentDefault && agentDefault !== 'kabyle' ? agentDefault : null;
     return (d ? d === 'darija' || d === 'ar' || d === 'arabizi' : fallback === 'ar') ? 'ar' : 'fr';
   }
-  return lang === 'ar' ? 'ar' : lang === 'en' ? 'en' : lang === 'fr' || lang === 'mixed' ? 'fr' : fallback;
+  // journey retest R9-1 (17/11): a `mixed` turn (only a first message of both scripts, with no language established yet) takes the
+  // shop's language — the agent's default (darija / ar / arabizi ⇒ Arabic: the message has Arabic script), else the workspace's
+  if (lang === 'mixed') {
+    const d = agentDefault && agentDefault !== 'kabyle' ? agentDefault : null;
+    return d ? (d === 'darija' || d === 'ar' || d === 'arabizi' ? 'ar' : d === 'en' ? 'en' : 'fr') : fallback;
+  }
+  return lang === 'ar' ? 'ar' : lang === 'en' ? 'en' : lang === 'fr' ? 'fr' : fallback;
+};
+/**
+ * journey retest R9-1 (17/11): the one language decision of every server-written text of a turn — the recap, the order
+ * confirmation, the blocked-customer sentence, the delivery answer, the fee sentence, the « no photo » sentence, the field
+ * questions and safe sentences of the reply guard: the turn's language (`turnLanguage`), and for a `mixed` turn the shop's
+ * locale (`systemLocale`), never French by default.
+ */
+export const serverTextLanguage = (lang: AiLanguage | string | undefined, shopLocale?: AppLocale | string | null): 'fr' | 'ar' | 'arabizi' | 'en' => {
+  if (lang === 'ar' || lang === 'arabizi' || lang === 'en' || lang === 'fr') return lang;
+  return shopLocale === 'ar' || shopLocale === 'en' ? shopLocale : 'fr';
 };
 /**
  * journey retest R2-5: the language handed to the messaging module for a system text of an AI turn (`sendSystemText({ lang })`

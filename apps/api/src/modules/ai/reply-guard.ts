@@ -32,7 +32,7 @@
 // Pure: no I/O. Conservative by design — a false positive costs one corrective model turn and, at worst, a dropped sentence.
 import { formatMoney } from '@djaber/shared';
 import { GUARD_MARK } from './ai.constants';
-import { detectLanguage, fixMoroccan, languageSwitched, moroccanIn, replyLanguage, SCRIPT_GLUE, withoutArabicValues, wrongDarijaIn, type AiLanguage } from './language';
+import { detectLanguage, fixMoroccan, frenchSentenceIn, languageSwitched, moroccanIn, replyLanguage, SCRIPT_GLUE, serverTextLanguage, withoutArabicValues, withoutLatinValues, wrongDarijaIn, type AiLanguage } from './language';
 import type { CatalogueProduct } from './catalogue.service';
 import type { PromptContext } from './prompt/prompt.types';
 import { TOOL_ALIASES, TOOL_DEFS } from './tools/tool-registry';
@@ -59,6 +59,8 @@ export type GuardOutcome = {
 
 export type GuardFacts = {
   lang: AiLanguage;
+  /** journey retest R9-1: the shop's locale (`PromptContext.locale`) — the server texts of a `mixed` turn (`serverTextLanguage`) */
+  shopLocale?: 'fr' | 'ar' | 'en';
   /** journey 16/11 J04-2: the language of the customer's current message read alone, when it has a clue (none ⇒ undefined) */
   messageLang?: AiLanguage;
   /** unit prices (catalogue products without variants, variants, ALSO lines, tool prices) — multiplied by a quantity 1–50 */
@@ -451,6 +453,8 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   // journey 16/11 J04-2: the conversation's language is kept on a message with one clue only (« Price? »): a reply in the
   // language of that message itself is not a switch
   if (languageSwitched(facts.lang, reply) && !(facts.messageLang && facts.messageLang !== facts.lang && !languageSwitched(facts.messageLang, reply))) out.push({ rule: 'language_switch', sentence: 0 });
+  // journey retest R9-3 (17/11): a whole French sentence inside an arabizi reply (« Les tailles disponibles : S et M à 4900 DA … »)
+  else if (facts.lang === 'arabizi' && (!facts.messageLang || facts.messageLang === 'arabizi') && frenchSentenceIn(reply, facts.tokens)) out.push({ rule: 'language_switch', sentence: 0 });
   // journey 16/11 J04-3: checked whatever the language verdict (« numéro dyal téléphone » in a French-looking arabizi reply),
   // with the wrong darija « ch7al smitek » (« how much » used for « what »)
   const darijaReply = facts.lang === 'arabizi' || facts.lang === 'ar' || facts.lang === 'mixed' || ['arabizi', 'ar'].includes(replyLanguage(reply) ?? '');
@@ -606,7 +610,7 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
   if (rules.includes('technical_leak')) lines.push('- NO TECHNICAL TEXT: no internal id, code in capitals, tool name, field name, JSON or bracket note in "reply": plain words for the customer.');
   if (rules.includes('repeat_greeting')) lines.push('- NO NEW GREETING: you already answered this customer in this conversation; do not greet or introduce yourself again — start with the answer.');
   if (rules.includes('self_name')) lines.push(facts.agentName ? `- YOUR NAME is "${facts.agentName}": never give yourself another name.` : "- YOU HAVE NO PERSONAL NAME: never give yourself one; if asked, you are the shop's assistant.");
-  if (rules.includes('language_switch')) lines.push(`- LANGUAGE: the customer writes ${LANGUAGE_NAMES[facts.lang] ?? facts.lang}. Rewrite "reply" in that language and script, as they write it (never switch on your own).`);
+  if (rules.includes('language_switch')) lines.push(`- LANGUAGE: the customer writes ${LANGUAGE_NAMES[facts.lang] ?? facts.lang}. Rewrite "reply" in that language and script, as they write it (never switch on your own)${facts.lang === 'arabizi' ? ' — every sentence, a list of sizes or prices too (product names stay as written)' : ''}.`);
   if (rules.includes('moroccan_darija'))
     lines.push('- ALGERIAN DARIJA: the shop is Algerian. Replace the Moroccan / Tunisian words (chno, ach, dyal, walakin, daba, issa, nqdar / tanqdar / kanqdar / tandir, bghit / bghiti, chi / chi hadja, ma kaynch / ma kaynach, wakha, mezyan, barcha, taw / tawa, mta3 / mta3ek, شنو, ديال, دابا, بغيت, شي حاجة, ملي, فماش, برشا, تو / توا, متاع / متاعك, موش, صيفط / sifet / sift / sift-li) with Algerian ones (wach, ta3 / ta3ek / تاع / تاعك, bessah / بصح, dork / درك, nqder, t7ebb / تحب, hadja / حاجة, makach / ماكانش, mlih, ki / كي, bezzaf / بزاف, ab3at / ab3atli / ابعث); the street is « الشارع » / « rue » (never « نهار » / « nhar », « day »), show a product « nwarrik » (never « nchouf »). « chhal / ch7al / شحال » means « how much »: never for « what » or « which » (never « ch7al men wilaya ? ») — « wach smitek ? », « a3tini numéro ta3ek », « wach men wilaya ? », « a3tini l\'adresse (rue, cité…) », « t7ebb nwasslouha l dar wela f stop-desk ? ».');
   if (rules.includes('false_confession'))
@@ -653,15 +657,16 @@ const selfSentence = (loc: 'fr' | 'en' | 'ar' | 'arabizi', name: string | null):
     ar: name ? `أنا ${name}، المساعد الافتراضي تاع المحل.` : 'أنا المساعد الافتراضي تاع المحل.',
     arabizi: name ? `Ana ${name}, l'assistant virtuel ta3 lboutique.` : "Ana l'assistant virtuel ta3 lboutique.",
   })[loc];
-const safeLocale = (lang: AiLanguage): 'fr' | 'en' | 'ar' | 'arabizi' => (lang === 'ar' ? 'ar' : lang === 'en' ? 'en' : lang === 'arabizi' ? 'arabizi' : 'fr');
+// journey retest R9-1: the one language decision of the server texts (a `mixed` turn takes the shop's locale)
+const safeLocale = (lang: AiLanguage, shopLocale?: GuardFacts['shopLocale']): 'fr' | 'en' | 'ar' | 'arabizi' => serverTextLanguage(lang, shopLocale);
 
 const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession', 'contradicts_customer', 'unavailable_offer', 'photo_claim', 'invented_problem', 'confirm_without_recap'];
 /** Rules about the form of the reply: the text is kept when the corrective turn did not fix them (a reply is better than none). */
 const STYLE_RULES: GuardRule[] = ['language_switch', 'moroccan_darija', 'script_mix', 'repeat_greeting'];
 const quoteText = (q: QuoteFact) => `${q.wilaya || 'this wilaya'}: ${q.isStopdesk ? `stop-desk ${q.fee} DA` : q.free || q.fee === 0 ? 'home delivery free' : `home ${q.fee} DA`}${!q.isStopdesk && q.stopdeskFee !== null ? `, stop-desk ${q.stopdeskFee} DA` : ''}`;
 /** journey 16/11 J03-2: the fee sentence the server adds when the corrective turn still gave none (the tool's figures only). */
-export const feeSentence = (q: QuoteFact, lang: AiLanguage): string => {
-  const loc = safeLocale(lang);
+export const feeSentence = (q: QuoteFact, lang: AiLanguage, shopLocale?: GuardFacts['shopLocale']): string => {
+  const loc = safeLocale(lang, shopLocale);
   const w = q.wilaya;
   const home = q.isStopdesk ? null : q.free || q.fee === 0 ? 0 : q.fee;
   const stop = q.isStopdesk ? q.fee : q.stopdeskFee;
@@ -731,19 +736,19 @@ export function enforceReply(reply: string, violations: GuardViolation[], facts:
   const quote = violations.some((v) => v.rule === 'fee_missing') ? facts.quotes?.[0] : undefined;
   if (quote) {
     // journey retest R7-5: after an opening « Bonsoir ! », not before it
-    const fee = feeSentence(quote, facts.lang);
+    const fee = feeSentence(quote, facts.lang, facts.shopLocale);
     const lead = splitSentences(text);
     text = lead.length > 1 && !stripGreeting(lead[0]!, facts.agentName).trim() ? `${lead[0]!.trim()} ${fee} ${lead.slice(1).join('').trim()}` : `${fee}${text ? ` ${text}` : ''}`;
   }
   // journey retest R8-2: the refusal's field is asked when what is left asks nothing (« Saha Walid, tsajjel: zoudj tapis … »)
-  const refusalQuestion = (rules0: Set<GuardRule>) => (rules0.has('invented_problem') || rules0.has('confirm_without_recap')) && facts.missingField ? FIELD_QUESTIONS[facts.missingField]?.[safeLocale(facts.lang)] : undefined;
+  const refusalQuestion = (rules0: Set<GuardRule>) => (rules0.has('invented_problem') || rules0.has('confirm_without_recap')) && facts.missingField ? FIELD_QUESTIONS[facts.missingField]?.[safeLocale(facts.lang, facts.shopLocale)] : undefined;
   const ask = refusalQuestion(new Set(violations.map((v) => v.rule)));
   if (ask && wordCount(text) >= 2 && !/[?؟]/.test(text)) text = `${text} ${ask}`;
   text = text.replace(/\n{3,}/g, '\n\n');
   // a language / dialect slip the corrective turn did not fix: the reply is sent as it is
   if (wordCount(text) >= 2) return { reply: text, action: text === reply.trim() && violations.every((v) => STYLE_RULES.includes(v.rule)) ? 'kept' : 'stripped' };
   const rules = new Set(violations.map((v) => v.rule));
-  const loc = safeLocale(facts.lang);
+  const loc = safeLocale(facts.lang, facts.shopLocale);
   // journey retest R8-1 / R8-2: only an invented problem or a request to confirm was there — the question for the missing field
   if (rules.has('invented_problem') || rules.has('confirm_without_recap')) {
     const q = facts.missingField ? FIELD_QUESTIONS[facts.missingField] : undefined;
@@ -806,6 +811,8 @@ export function withToolResults(facts: GuardFacts, results: unknown[]): GuardFac
 type FactsProduct = Pick<CatalogueProduct, 'name' | 'sku' | 'price' | 'oldPrice' | 'hasVariants' | 'variants' | 'also' | 'description'> & Partial<Pick<CatalogueProduct, 'stock' | 'sellOutOfStock' | 'id' | 'imageUrl'>>;
 export type GuardFactsInput = {
   lang: AiLanguage;
+  /** journey retest R9-1: the shop's locale, for the server texts of a `mixed` turn */
+  shopLocale?: GuardFacts['shopLocale'];
   products: FactsProduct[];
   /** texts the shop wrote (policies, FAQ, instructions, card template, system messages): their numbers are allowed */
   shopTexts: string[];
@@ -857,11 +864,13 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
   const unavailable = [...new Set(out.flatMap((p) => nameKeys(p.name)))];
   const available = [...new Set(i.products.filter((p) => !out.includes(p)).map((p) => nameKeys(p.name)[0]).filter((k): k is string => !!k))];
   // journey retest R4-2: a name typed in Arabic script (« سمير بن علي ») is no Arabic message — an Arabic reply to a French customer is a switch
-  const messageLang = detectLanguage(withoutArabicValues(i.customerText), undefined, { neutral: 'previous' });
+  // journey retest R9-1: nor a Latin name next to Arabic-script words (« Samir Benali 0661234567، قسنطينة … ») a Latin message
+  const messageLang = detectLanguage(withoutLatinValues(withoutArabicValues(i.customerText)), undefined, { neutral: 'previous' });
   // journey retest R6-2: the catalogue products known to have no photo
   const noPhoto = i.products.filter((p) => p.id && p.imageUrl === null).map((p) => p.id!);
   const base: GuardFacts = {
     lang: i.lang,
+    ...(i.shopLocale ? { shopLocale: i.shopLocale } : {}),
     ...(messageLang ? { messageLang } : {}),
     prices,
     amounts: [...prices, ...amounts, ...shopNumbers, ...customerNumbers, ...thresholds],
@@ -884,7 +893,7 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
 }
 
 /** The facts of a turn from its prompt context (reply job and playground build the same ones). */
-export function guardFactsOf(p: Omit<PromptContext, 'descriptionMax'>, o: Omit<GuardFactsInput, 'lang' | 'products' | 'shopTexts' | 'freeDeliveryThreshold' | 'agentName' | 'shopName'>): GuardFacts {
+export function guardFactsOf(p: Omit<PromptContext, 'descriptionMax'>, o: Omit<GuardFactsInput, 'lang' | 'shopLocale' | 'products' | 'shopTexts' | 'freeDeliveryThreshold' | 'agentName' | 'shopName'>): GuardFacts {
   const a = p.agent;
   const shopTexts = [
     ...Object.values(a.policies ?? {}).filter((v): v is string => typeof v === 'string'),
@@ -898,6 +907,7 @@ export function guardFactsOf(p: Omit<PromptContext, 'descriptionMax'>, o: Omit<G
   return buildGuardFacts({
     ...o,
     lang: p.lang,
+    ...(p.locale === 'fr' || p.locale === 'ar' || p.locale === 'en' ? { shopLocale: p.locale } : {}),
     products: p.catalogue.products,
     shopTexts,
     freeDeliveryThreshold: p.workspace.freeDeliveryThreshold,

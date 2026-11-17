@@ -727,6 +727,14 @@ export class ToolRegistry {
     // journey retest R7-4: a mistyped id (one or two characters off) stands for its product — the server recap names it
     const fixed = await this.fixedIds(ctx.agent, notFound.filter((i) => !(i.variantId && owners.has(i.variantId))).map((i) => i.productId));
     for (const i of notFound) if (i.variantId && owners.has(i.variantId)) fixed.set(i.productId, owners.get(i.variantId)!);
+    // journey retest R9-2 (17/11): one invented id left (no product of the shop, not one or two characters off a real one) stands for
+    // the one in-scope product the customer named (N17 T1 « je veux 1 hijab soie » + an invented id ⇒ PRODUCT_NOT_AVAILABLE, then
+    // the same call with the right id) — the server recap names it before anything is ordered
+    const left = notFound.filter((i) => !fixed.has(i.productId));
+    if (left.length === 1 && ctx.customerHistory !== undefined && typeof this.catalogue.namedInScope === 'function') {
+      const named = await this.catalogue.namedInScope(ctx.agent, left[0]!.productId, ctx.customerHistory, products.map((p) => p.id));
+      if (named) fixed.set(left[0]!.productId, named);
+    }
     if (fixed.size) products.push(...(await this.catalogue.byIds(ctx.agent, [...new Set(fixed.values())].filter((id) => !products.some((p) => p.id === id)))));
     const by = new Map(products.map((p) => [p.id, p]));
     const items: CreateOrderRequest['items'] = [];

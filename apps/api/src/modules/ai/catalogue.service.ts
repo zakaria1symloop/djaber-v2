@@ -159,6 +159,23 @@ export class CatalogueService {
     return out;
   }
 
+  /**
+   * journey retest R9-2 (17/11): an invented product id (« 01a1e51f-450e-7c2d-8103-6bb5b0d8f0f2 » for the Hijab soie
+   * « …-4737-…-25ba3e09450a », N17 T1: PRODUCT_NOT_AVAILABLE, then the same call with the right id) stands for the one in-scope
+   * product the customer's messages name (its name as whole words; a name inside a longer named one does not count) — only an id
+   * that is no product of the shop at all, and never a product in `exclude`. The server recap names it before anything is ordered.
+   */
+  async namedInScope(agent: AgentScope, id: string, customerText: string, exclude: string[] = []): Promise<string | null> {
+    if (!/^[0-9a-f-]{28,40}$/i.test(id.trim()) || !customerText.trim()) return null;
+    if (/^[0-9a-f-]{36}$/i.test(id) && (await prisma.product.findFirst({ where: { id }, select: { id: true } }))) return null;
+    const rows = await prisma.product.findMany({ where: this.scopeWhere(agent), select: { id: true, name: true, description: true, price: true, moderationStatus: true, approvedSnapshot: true }, take: 2000 });
+    const fold = (t: string) => ` ${t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `;
+    const said = fold(customerText);
+    const named = rows.map((r) => ({ id: r.id, key: fold(approvedFields(r).name) })).filter((r) => r.key.trim().length >= 3 && said.includes(r.key));
+    const own = named.filter((r) => !named.some((o) => o !== r && o.key.length > r.key.length && o.key.includes(r.key)));
+    return own.length === 1 && !exclude.includes(own[0]!.id) ? own[0]!.id : null;
+  }
+
   /** journey retest R8-3: the ids among these that are variants of the shop (any product): never read as a mistyped id. */
   async knownVariantIds(ids: string[]): Promise<Set<string>> {
     const valid = [...new Set(ids)].filter((id) => /^[0-9a-f-]{36}$/i.test(id));
