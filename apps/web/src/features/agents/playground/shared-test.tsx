@@ -43,7 +43,7 @@ export function SharedTest({ token }: { token: string }) {
   useDocumentTitle(t('agents.shared.title'));
   const q = useQuery({ queryKey: ['public', 'agent-test', token], queryFn: () => sharedTestApi.get(token, locale), retry: (n, e) => !(e instanceof ApiError && e.status < 500) && n < 1 });
   // full-test 15/11 AI-CHAT-10: one server session per open page (two colleagues never share one)
-  const transport = useCallback<ChatTransport>(async (history, input, sessionId) => replyView(await sharedTestApi.send(token, locale, { text: input.text, history: history.map((h) => ({ role: h.role, text: h.text })), sessionId })), [token, locale]);
+  const transport = useCallback<ChatTransport>(async (history, input, sessionId, { turnKey, signal }) => replyView(await sharedTestApi.send(token, locale, { text: input.text, history: history.map((h) => ({ role: h.role, text: h.text })), sessionId, turnKey }, signal)), [token, locale]);
   const pg = usePlayground(transport);
   // the link may expire while the page is open: the next message answers 410
   const expiredLater = pg.entries.some((e) => e.role === 'error' && e.code === 'AGENT_TEST_LINK_EXPIRED');

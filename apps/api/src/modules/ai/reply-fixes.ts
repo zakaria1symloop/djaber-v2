@@ -117,3 +117,21 @@ export const withoutStrayYes = (reply: string, customerText: string | undefined,
   const rest = reply.trim().slice(m[0].length);
   return rest ? rest.charAt(0).toLocaleUpperCase() + rest.slice(1) : reply;
 };
+
+// --- journey retest R10-4 (17/11): narrow wording fixes of the server, on every answer that is no recap / confirmation -------
+/**
+ * « بسعر Hijab soie — 1500 دج » (N21 T1): the catalogue name pasted where the price goes — the Latin words between « بسعر » and a
+ * dash before the amount are dropped (« بسعر 1500 دج »).
+ */
+const NAME_IN_PRICE_SLOT = /(?<![\p{L}])(بسعر|بثمن|بسومة|ب\s+سومة|سومتو|سومتها|ثمنو|ثمنها)\s+[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ'’ .]{0,40}?\s*[—–-]\s*(?=\d)/gu;
+export const withoutNameInPriceSlot = (reply: string): string => reply.replace(NAME_IN_PRICE_SLOT, '$1 ');
+/**
+ * French words left in an arabizi reply (N9 T1 « … mais hiya robe kabyle brodée …, Les tailles disponibles: S, M w XL ») — the
+ * Algerian words (« bessah », « li kaynin »). Arabizi answers only; product and variant names are no such words.
+ */
+const ARABIZI_FOR: [RegExp, (m: string, ...g: string[]) => string][] = [
+  [/(?<![\p{L}'’])mais(?![\p{L}])/giu, (m) => (m[0] === 'M' ? 'Bessah' : 'bessah')],
+  [/(?<![\p{L}])(les\s+(?:tailles|couleurs|pointures|mod[eè]les))\s+disponibles(?![\p{L}])/giu, (_m, what: string) => `${what} li kaynin`],
+];
+export const withArabiziWords = (reply: string, lang: AiLanguage | string | undefined): string =>
+  lang === 'arabizi' ? ARABIZI_FOR.reduce((t, [re, to]) => t.replace(re, to as (m: string, ...g: string[]) => string), reply) : reply;

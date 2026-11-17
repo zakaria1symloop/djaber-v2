@@ -273,8 +273,11 @@ type UpdateAgentDto = Partial<Omit<AgentDto, 'id'|'metrics30d'|'actions'|'channe
 type AgentVersionDto = { version: number; createdAt: string; createdBy: UserRef; note: string | null; source: string; isCurrent: boolean };
 type AgentReadinessDto = { ready: boolean; checks: { key: string; ok: boolean; label: string; count?: number; link?: string }[] };
 // full-test 15/11: + `hourlyUsed` (turns of the workspace this hour), `systemMessages`; 429 PLAYGROUND_RATE_LIMITED carries `params.retryAfter`
-// (seconds left in the hour). Shared link: `POST /agent-test/:token/messages { text, history?, sessionId? }` → `{ reply, cards,
+// (seconds left in the hour). Shared link: `POST /agent-test/:token/messages { text, history?, sessionId?, turnKey? }` → `{ reply, cards,
 // systemMessages }`, the turns count in the workspace's 60 / h; `GET /agent-test/:token` → `agentName` = the moderated name or ''.
+// Journey retest R10-1: `POST /agents/:id/test` and `POST /agent-test/:token/messages` take an optional `turnKey` ([A-Za-z0-9-]{8,64}):
+// the same key sent again (the page re-asks when no answer came) returns the same turn — never a second run, counted once — and every
+// answer carries the header `Server-Timing: queue;dur=<ms>, total;dur=<ms>[, replay]`.
 // `AgentReadinessCheck` + `total?` (policies n / 4); `POST /agents/bulk/pause|resume` per-item message for « not active / not paused ».
 type PlaygroundTurnDto = { reply: string; status: 'OK'|'UNCLEAR'|'UNKNOWN'|'HANDOFF'; intent: AiIntent; confidence: number; model: string; tokens: { input: number; output: number }; latencyMs: number; toolCalls: { name: string; args: unknown; result: unknown; simulated: boolean }[]; cards: ProductRef[]; creditsInProd: number; language: string; promptPreview: string[] };
 type AgentInsightDto = { id: string; type: 'unclear'|'unknown_topic'|'handoff'|'error'; customerMessage: string; aiResponse: string | null; detail: string | null; conversationId: string; messageId: string | null; status: 'pending'|'resolved'|'dismissed'; topicKey: string | null; occurrences: number; channel: ChannelRef; createdAt: string };

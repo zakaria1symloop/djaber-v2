@@ -295,6 +295,10 @@ const ODD_FIXES: [RegExp, string | ((m: string, ...groups: string[]) => string)]
   // « Djellaba homme فالصوف الفاين » (« laine fine » in Arabic letters) for « الصوف الرقيق »
   [/(?<=(?:ال)?(?:صوف|قطن|حرير|قماش)\s+)الفاين(?![\p{L}\p{N}_])/gu, 'الرقيق'],
   [/(?<=(?:ال)?(?:صوف|قطن|حرير|قماش)\s+)فاين(?![\p{L}\p{N}_])/gu, 'رقيق'],
+  // journey retest R10-4 (17/11): « جلابة رجالي في لاين فين، من الصوف الرقيق » (« laine fine » in Arabic letters next to its
+  // translation) — dropped before « من الصوف », else « الصوف الرقيق »
+  [/(?:(?<![\p{L}])(?:في|ف|ب|من)\s*)?(?<![\p{L}])(?:ال)?لاين\s+(?:ال)?فين\s*[،,]?\s*(?=(?:و\s*)?من\s+(?:ال)?صوف)/gu, ''],
+  [/(?<![\p{L}\p{N}_])(?:ال)?لاين\s+(?:ال)?فين(?![\p{L}\p{N}_])/gu, 'الصوف الرقيق'],
   // « Wach wahda men les wilayat li nwasslou ? » (a question with no meaning, after « not served »)
   [/(?<![\p{L}\p{N}_])wach\s+wa[h7]da\s+men\s+(?:les\s+)?wilayat\s+li\s+nwasslou(?:lha|lhom)?\s*[?؟]/giu, 'T7ebb nwasslouha l wilaya okhra ?'],
   // « حجاب سوي » (« soie » in Arabic letters) for « حرير »; « 700 دج لين الدار » (« until », not Algerian) for « للدار »

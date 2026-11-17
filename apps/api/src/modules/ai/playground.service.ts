@@ -45,6 +45,14 @@ export const unansweredFrom = (messages: readonly { role: string }[]): number =>
   return Math.max(0, i);
 };
 const SCENARIO_KEYS = Object.keys(SCENARIOS) as TestScenarioKey[];
+/** journey retest R10-1: how long the answer of a turn can be asked again with its `turnKey` (the job's own lifetime after it completed). */
+export const REPLAY_TTL_S = 300;
+/**
+ * journey retest R10-1: the `Server-Timing` header of a playground / shared-link answer — `queue` = from the job's add to its
+ * answer, `total` = the whole request in the API, `replay` when the page asked again with the same key.
+ */
+export const serverTiming = (r: { replayed: boolean; timing: { waitMs: number; totalMs: number } }): string =>
+  [`queue;dur=${Math.round(r.timing.waitMs)}`, `total;dur=${Math.round(r.timing.totalMs)}`, ...(r.replayed ? ['replay'] : [])].join(', ');
 
 @Injectable()
 export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
@@ -102,32 +110,82 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
    * (Integration tests have no worker process: the same job handler is then called in-process.)
    */
   async request(agentId: string, input: PlaygroundTurnInput, o: { rateSubject?: string; userId?: string | null } = {}): Promise<PlaygroundTurnDto> {
+    return (await this.requestTurn(agentId, input, o)).turn;
+  }
+
+  /**
+   * `request`, with what the controller adds to the response: whether the turn was a replay of the same `turnKey` (journey
+   * retest R10-1) and the server's timing (`Server-Timing`).
+   *
+   * Journey retest R10-1 (17/11): three answers reached the page 65–213 s after the worker had finished them — the job's
+   * `completed` event and nginx's log of the full response are within the same second as the end of the AI run, so the time
+   * was lost between the server and the browser, on that one connection (the page's other requests went through meanwhile).
+   * The page now sends the same request again on a new connection when no answer came (`turnKey`, web `resendWhileStalled`):
+   * the same key joins the same job (`pg:<workspace>:<session>:<turnKey>`) — the turn is neither run nor counted twice.
+   */
+  async requestTurn(agentId: string, input: PlaygroundTurnInput, o: { rateSubject?: string; userId?: string | null } = {}): Promise<{ turn: PlaygroundTurnDto; replayed: boolean; timing: { waitMs: number; totalMs: number } }> {
+    const started = Date.now();
     const t = TenantContext.get();
     const agent = await prisma.agent.findFirst({ where: { id: agentId, deletedAt: null }, select: { id: true } });
     if (!agent) throw notFound();
     const subject = o.rateSubject ?? t.workspaceId;
-    const used = await this.countTurn(subject);
     const sessionId = input.sessionId ?? randomUUID();
-    const data: PlaygroundJob = { workspaceId: t.workspaceId, agentId, userId: o.userId ?? t.userId ?? null, sessionId, turnId: randomUUID(), messages: input.messages, scenario: input.scenario, kind: 'test' };
+    const turnId = input.turnKey ?? randomUUID();
+    // the workspace and the agent are part of the job id: a key is never shared across shops or agents
+    const jobKey = `pg:${t.workspaceId}:${agentId}:${sessionId}:${turnId}`;
+    // journey retest R10-1: the first request of a key counts the turn; the same key again (the page re-asking) does not
+    const marker = `pgturn:${jobKey}`;
+    const replayed = !!input.turnKey && !(await this.redis.client.set(marker, '1', 'EX', REPLAY_TTL_S, 'NX'));
+    const used = replayed
+      ? await this.turnsUsed(subject)
+      : await this.countTurn(subject).catch(async (e) => {
+          // over the hour's limit: nothing runs, the key is free again
+          if (input.turnKey) await this.redis.client.del(marker).catch(() => undefined);
+          throw e;
+        });
+    const data: PlaygroundJob = { workspaceId: t.workspaceId, agentId, userId: o.userId ?? t.userId ?? null, sessionId, turnId, messages: input.messages, scenario: input.scenario, kind: 'test' };
     let answer: JobAnswer;
-    // journey retest R1-1: « the failed turn still counts in the 60 / h » — a turn without an answer is not counted
+    // journey retest R1-1: « the failed turn still counts in the 60 / h » — a turn without an answer is not counted (once: only
+    // by the request that counted it)
     const failed = async <E>(e: E): Promise<E> => {
-      await this.uncountTurn(subject).catch(() => undefined);
+      if (!replayed) await this.uncountTurn(subject).catch(() => undefined);
       return e;
     };
-    if (this.config.isTest) answer = await this.process(data).catch(async (e) => Promise.reject(await failed(e)));
+    const queuedAt = Date.now();
+    if (this.config.isTest) answer = await this.inProcess(jobKey, data).catch(async (e) => Promise.reject(await failed(e)));
     else {
       this.events ??= new QueueEvents('ai-reply', { connection: bullConnection(this.config.get('REDIS_URL')) });
-      const job = await this.queue.add('ai-reply', 'playground-turn', data as unknown as Record<string, unknown>, `pg:${sessionId}:${data.turnId}`, { attempts: 1, removeOnComplete: { age: 300 }, removeOnFail: { age: 3600 } });
+      // a second add with the same id is a no-op while the job exists: a replay waits for (or reads) the same job's answer
+      const job = await this.queue.add('ai-reply', 'playground-turn', data as unknown as Record<string, unknown>, jobKey, { attempts: 1, removeOnComplete: { age: REPLAY_TTL_S }, removeOnFail: { age: 3600 } });
       try {
         answer = (await job.waitUntilFinished(this.events, RUN_BUDGET_MS)) as JobAnswer;
       } catch (e) {
-        this.log.warn({ agentId, err: e instanceof Error ? e.message.slice(0, 120) : 'error' }, 'playground turn did not finish');
+        this.log.warn({ agentId, job: turnId.slice(0, 8), replayed, waitMs: Date.now() - queuedAt, err: e instanceof Error ? e.message.slice(0, 120) : 'error' }, 'playground turn did not finish');
         throw await failed(new AppException('AI_PROVIDER_ERROR'));
       }
     }
     if (!answer.ok) throw await failed(answer.code === 'NOT_FOUND' ? notFound() : new AppException('AI_PROVIDER_ERROR'));
-    return { ...answer.turn, hourlyUsed: used };
+    const timing = { waitMs: Date.now() - queuedAt, totalMs: Date.now() - started };
+    // journey retest R10-1: the server's side of every turn (no message text, no customer data) — a slow answer in the page with a
+    // short `totalMs` here was lost on the way to the browser
+    this.log.log({ agentId, job: turnId.slice(0, 8), replayed, runMs: answer.turn.latencyMs, ...timing }, 'playground turn answered');
+    return { turn: { ...answer.turn, hourlyUsed: used }, replayed, timing };
+  }
+
+  /** The turns of the hour already counted for this subject (a replay shows the same count). */
+  private async turnsUsed(subject: string): Promise<number> {
+    return Math.max(0, Number(await this.redis.client.get(`rl:playground:${subject}`)) || 0);
+  }
+
+  /** Integration tests (no worker process): the job handler in-process, one run per key as with the queue's job id. */
+  private readonly running = new Map<string, Promise<JobAnswer>>();
+  private inProcess(key: string, data: PlaygroundJob): Promise<JobAnswer> {
+    const known = this.running.get(key);
+    if (known) return known;
+    const p = this.process(data);
+    this.running.set(key, p);
+    p.catch(() => undefined).finally(() => setTimeout(() => this.running.delete(key), REPLAY_TTL_S * 1000).unref?.());
+    return p;
   }
 
   /** `ai-reply / playground-turn`. */
@@ -271,7 +329,9 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         toolCalls: result.tools.map((t) => ({ name: t.name, args: t.args, result: t.result, simulated: t.simulated })),
         cards,
         creditsInProd: plannedCost({ hasAudio, hasImage }),
-        language: out.language ?? lang,
+        // journey retest R10-4 (17/11): the turn's language as the server decided it (it chose the recap's language) — the model's own
+        // tag read `arabizi` for « 0661234567، قسنطينة، الخروب، حي 1000 مسكن عمارة 5 » (N18b T3) while the recap was Arabic
+        language: lang,
         promptPreview: prompt.sections.map((s) => s.text),
         promptSections: prompt.sections.map((s) => ({ key: s.key, chars: s.text.length })),
         systemMessages,

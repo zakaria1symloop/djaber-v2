@@ -2,11 +2,11 @@
 // (wizard, activation, pause / resume, delete, versions, FAQ, test links, generation, bulk); `agents.test` — every member
 // (playground, scenarios); `insights.manage` — every member; `channels.manage` — Admin+ (agent of a page, analysis).
 // Literal sub-paths (`presets`, `generate`, `bulk/*`) are declared before `:id`.
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, ParseUUIDPipe, Patch, Post, Put, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, ParseUUIDPipe, Patch, Post, Put, Query, Req, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { AgentsQuery, AnalysisImportInput, CreateAgentInput, InsightsQuery, PlaygroundTurnInput, ResolveInsightInput, SetChannelAgentInput, UpdateAgentInput } from '@djaber/shared';
 import { Audited, Public, RateLimit, RequirePermission, RequireVerifiedEmail } from '../../core/auth/decorators';
-import { PlaygroundService } from '../ai/playground.service';
+import { PlaygroundService, serverTiming } from '../ai/playground.service';
 import type { UploadedFile as Incoming } from '../uploads/image-upload.service';
 import { AgentService } from './agent.service';
 import {
@@ -260,8 +260,11 @@ export class AgentsController {
   @Post(':id/test')
   @HttpCode(200)
   @RequirePermission('agents.test')
-  test(@Id() id: string, @Body() dto: PlaygroundTurnDto) {
-    return this.playground.request(id, dto as PlaygroundTurnInput);
+  async test(@Id() id: string, @Body() dto: PlaygroundTurnDto, @Res({ passthrough: true }) res: { setHeader(name: string, value: string): void }) {
+    // journey retest R10-1: the server's time of the turn, so a slow answer in the page can be told from a slow server
+    const r = await this.playground.requestTurn(id, dto as PlaygroundTurnInput);
+    res.setHeader('Server-Timing', serverTiming(r));
+    return r.turn;
   }
   @Post(':id/test/flag')
   @HttpCode(200)
@@ -376,7 +379,9 @@ export class SharedTestController {
   @Post(':token/messages')
   @HttpCode(200)
   @RateLimit({ name: 'agent-test-message', max: 240, windowSeconds: 3600, by: 'ip' })
-  message(@Param('token') token: string, @Body() dto: SharedTestMessageDto) {
-    return this.links.message(token, dto);
+  async message(@Param('token') token: string, @Body() dto: SharedTestMessageDto, @Res({ passthrough: true }) res: { setHeader(name: string, value: string): void }) {
+    const r = await this.links.messageTurn(token, dto);
+    res.setHeader('Server-Timing', serverTiming(r));
+    return r.reply;
   }
 }

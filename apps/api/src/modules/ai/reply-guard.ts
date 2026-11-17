@@ -37,7 +37,7 @@ import type { CatalogueProduct } from './catalogue.service';
 import type { PromptContext } from './prompt/prompt.types';
 import { TOOL_ALIASES, TOOL_DEFS } from './tools/tool-registry';
 import { phonesIn } from './tools/order-confirmation';
-import { recapClaim } from './tools/order-confirmation-text';
+import { confirmRequest, notedClaim, recapClaim } from './tools/order-confirmation-text';
 import { fold as foldPlace, WILAYA_ALIASES } from './tools/wilaya-aliases';
 
 export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing' | 'contradicts_customer' | 'unavailable_offer' | 'photo_claim' | 'invented_problem' | 'confirm_without_recap';
@@ -112,6 +112,10 @@ export type GuardFacts = {
   orderRefused?: boolean;
   /** journey retest R8-2: the first field that refusal asked for (clientName, clientPhone, wilayaId, communeName, address, items) */
   missingField?: string;
+  /** journey retest R10-2: that refusal was of the product itself (out of stock, not available): nothing is noted */
+  productRefused?: boolean;
+  /** journey retest R10-2: no server recap waits for a « oui » (none this turn, none of an earlier turn still open, no order placed now) */
+  noRecapPending?: boolean;
 };
 export type OrderField = 'name' | 'phone' | 'wilaya' | 'commune' | 'address';
 /** What a successful quote_delivery answered: the reply must give one of its fees (or say it is free). */
@@ -478,7 +482,13 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   });
   // journey retest R8-1 / R8-2: create_order was refused this turn — no recap is shown, so no request to confirm, no « recap coming »
   if (facts.orderRefused) parts.forEach((s, i) => {
-    if (recapClaim(s)) out.push({ rule: 'confirm_without_recap', sentence: i });
+    // journey retest R10-2: « Je vous ai bien noté » after the product was refused (N5 T2, out of stock) — nothing was noted
+    if (recapClaim(s) || (facts.productRefused && notedClaim(s))) out.push({ rule: 'confirm_without_recap', sentence: i });
+  });
+  // journey retest R10-2 (17/11): no server recap waits at all — a request to confirm the order confirms nothing (N5 T3 « Pour
+  // confirmer : vous voulez bien le Coffret … ? », two « oui » spent before the recap)
+  else if (facts.noRecapPending) parts.forEach((s, i) => {
+    if (confirmRequest(s)) out.push({ rule: 'confirm_without_recap', sentence: i });
   });
   // journey retest R2-3: never « not understood » / « waiting for » a field the customer's message just gave — nor « not
   // understood » another field when the message only gave one (« ما فهمتش الولاية » after a phone: no wilaya was asked)
@@ -628,7 +638,13 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
   if (rules.includes('invented_problem'))
     lines.push("- NO TECHNICAL PROBLEM: nothing failed on the shop's side — never say there is a technical problem, an error or a bug. A tool that refused a call or asked for a field is no problem: ask the customer for what is missing in one short question.");
   if (rules.includes('confirm_without_recap'))
-    lines.push(`- NO RECAP WAS SHOWN in this turn (create_order did not return one): never ask the customer to confirm the order or to answer « oui » again, and never say a recap is coming. ${facts.missingField ? `Ask for ${FIELD_NAMES[facts.missingField] ?? facts.missingField} in one short question, in the customer's language.` : 'Say in one short sentence what create_order answered.'}`);
+    lines.push(
+      facts.productRefused
+        ? "- NOTHING IS ORDERED OR NOTED: create_order refused the product (out of stock / not available). Never say « noté », « enregistré », « c'est pris » or ask to confirm: say plainly in one sentence that this product cannot be ordered now, then ask in one question whether they want an in-stock product instead (name it)."
+        : !facts.orderRefused && facts.noRecapPending
+          ? '- NO RECAP HAS BEEN SHOWN for this order: never ask the customer to confirm it yourself (« pour confirmer … ? », « tu confirmes ? », « répondez oui ») — they confirm the recap create_order shows. Ask the one missing field, or ask whether they want the product (« Voulez-vous le … ? »).'
+          : `- NO RECAP WAS SHOWN in this turn (create_order did not return one): never ask the customer to confirm the order or to answer « oui » again, and never say a recap is coming. ${facts.missingField ? `Ask for ${FIELD_NAMES[facts.missingField] ?? facts.missingField} in one short question, in the customer's language.` : 'Say in one short sentence what create_order answered.'}`,
+    );
   if (rules.includes('fee_missing'))
     lines.push(`- DELIVERY FEE: quote_delivery answered ${(facts.quotes ?? []).map(quoteText).join('; ')}. Give that fee in the reply (home and stop-desk when both are known), in the customer's language: it is the answer to their question.`);
   return lines.join('\n');

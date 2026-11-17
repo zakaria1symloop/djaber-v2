@@ -242,7 +242,13 @@ export const PlaygroundMessageSchema = z
   .object({ role: z.enum(['user', 'assistant']), text: z.string().max(2000, 'validation.length').default(''), imageUploadId: id.optional(), audioUploadId: id.optional() })
   .strict();
 export const PlaygroundTurnSchema = z
-  .object({ sessionId: z.string().trim().min(1).max(80).optional(), messages: z.array(PlaygroundMessageSchema).max(PLAYGROUND_MAX_MESSAGES).default([]), scenario: z.enum(TestScenarioKeyValues).optional() })
+  .object({
+    sessionId: z.string().trim().min(1).max(80).optional(),
+    messages: z.array(PlaygroundMessageSchema).max(PLAYGROUND_MAX_MESSAGES).default([]),
+    scenario: z.enum(TestScenarioKeyValues).optional(),
+    /** journey retest R10-1: the page's key of this turn — the same key sent again (an answer stuck on the way) joins the same run, never a second one */
+    turnKey: z.string().trim().regex(/^[A-Za-z0-9-]{8,64}$/, 'validation.invalid').optional(),
+  })
   .strict()
   .refine((v) => !!v.scenario || (v.messages.length > 0 && v.messages[v.messages.length - 1]!.role === 'user'), { message: 'validation.required', path: ['messages'] });
 export type PlaygroundTurnInput = z.infer<typeof PlaygroundTurnSchema>;
@@ -256,6 +262,8 @@ export const SharedTestMessageSchema = z
     history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(2000) }).strict()).max(PLAYGROUND_MAX_MESSAGES).optional(),
     /** full-test 15/11 AI-CHAT-10: the visitor's own session (one per open page), so two colleagues never share one */
     sessionId: z.string().trim().regex(/^[A-Za-z0-9-]{8,64}$/, 'validation.invalid').optional(),
+    /** journey retest R10-1: as `PlaygroundTurnSchema.turnKey` */
+    turnKey: z.string().trim().regex(/^[A-Za-z0-9-]{8,64}$/, 'validation.invalid').optional(),
   })
   .strict();
 

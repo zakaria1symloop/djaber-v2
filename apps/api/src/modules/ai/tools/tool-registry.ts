@@ -17,7 +17,8 @@ import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
 import { fold, WILAYA_ALIASES } from './wilaya-aliases';
 import { handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
-import { asksCancel, bareYes, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, simulatedOrders, type DraftOrder, type OrderCallHistory } from './order-confirmation';
+import { asksCancel, bareYes, cancelWordsIn, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, simulatedOrders, type DraftOrder, type OrderCallHistory } from './order-confirmation';
+import { asksSomething } from './order-confirmation-text';
 
 export type ToolName = 'search_products' | 'get_product' | 'check_availability' | 'quote_delivery' | 'create_order' | 'cancel_order' | 'lookup_order' | 'handoff_to_human' | 'add_faq_candidate' | 'create_payment_link';
 export type ToolRunContext = {
@@ -771,7 +772,9 @@ export class ToolRegistry {
             available: free,
             ...(v ? { otherVariants: others, availableAllVariants: free + others.reduce((n, x) => n + x.available, 0) } : {}),
             // journey retest R7-4: `available` 0 is « out of stock », not a quantity to offer (N5c: create_order on the Parfum Oud)
-            say: free <= 0 && !others.length ? 'Out of stock: nothing is ordered. Say it is out of stock and offer an in-stock product (or variant) instead — never order this one.' : v ? 'offer `available` of this variant; when the customer wants more, offer to complete with otherVariants (their available quantities), never more than availableAllVariants in total' : 'offer `available`',
+            // journey retest R10-2 (17/11): « Je vous ai bien noté … le Coffret est disponible si vous voulez autre chose » (no
+            // refusal said, no question) — the « oui » that followed had nothing to answer
+            say: free <= 0 && !others.length ? `Out of stock: nothing is ordered and nothing is noted. Say plainly in one sentence that ${p.name} cannot be ordered now (out of stock) — never « noté », « enregistré » or a request to confirm — then ask in one question whether they want an in-stock product (or variant) instead, naming it. Never order this one.` : v ? 'offer `available` of this variant; when the customer wants more, offer to complete with otherVariants (their available quantities), never more than availableAllVariants in total' : 'offer `available`',
           },
         });
       }
@@ -943,6 +946,9 @@ export class ToolRegistry {
   /** FL-02 F-5: this client's open orders only; one confirmed ⇒ cancel, several ⇒ ask which, none ⇒ hand off. */
   private async cancelOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<ToolResult> {
     const number = typeof args.orderNumber === 'string' && args.orderNumber.trim() ? args.orderNumber.trim().toLowerCase() : null;
+    // journey retest R10-3 (17/11): a call without an order number while the customer asked no cancellation is a probe (N11 T3
+    // `cancel_order {}` on a tracking question ⇒ « ok, candidates ») — refused precisely, nothing is looked up
+    if (!number && ctx.customerText !== undefined && !cancelWordsIn(ctx.customerText, ctx.customerHistory)) return { ok: false, error: { code: 'CANCEL_NOT_ASKED' }, say: 'Nothing is cancelled: the customer did not ask to cancel an order. cancel_order is only for a cancellation they ask for — an order status question is answered with lookup_order. Answer their message now.' };
     // full-test 15/11 AI-CHAT-16: the playground cancels its own TEST-n orders (nothing is written)
     if (ctx.dryRun) {
       const mine = simulatedOrders(ctx.orderHistory);
@@ -988,6 +994,10 @@ export class ToolRegistry {
     // journey 16/11 J04-7: a customer's name / phone / address written as an FAQ « question » (a call-back note) is refused,
     // in the playground too — it would store personal data as an FAQ suggestion and nothing calls the customer back
     if (personalNote(question)) return { ok: false, error: { code: 'VALIDATION', field: 'question' }, say: "Write only the general question (no name, phone or address of the customer). This records nothing for the customer: never say you noted their details or that someone will get back to them." };
+    // journey retest R10-3 (17/11): only a question the customer asked — never a note about the order (N4 T2 « Le client a commandé
+    // le tapis de prière (quantité 1) ; prochaine étape : numéro de téléphone. » on a name message) nor a question nobody asked (N5
+    // T2 « Quand le Parfum Oud sera-t-il de nouveau disponible ? » on « je le prends + details »)
+    if (!asksSomething(question) || (ctx.customerText !== undefined && !asksSomething(ctx.customerText))) return { ok: false, error: { code: 'VALIDATION', field: 'question' }, say: 'Nothing was recorded: add_faq_candidate is only for a question the customer asked in this message that you could not answer — never a note about the order or a question they did not ask. Answer the customer now.' };
     if (ctx.dryRun) return { ok: true, simulated: true };
     const key = normQuestion(question);
     const existing = (await prisma.agentFaq.findMany({ where: { agentId: ctx.agent.id, source: 'ai_suggested' }, select: { id: true, question: true, askedCount: true } })).find((f) => normQuestion(f.question) === key);

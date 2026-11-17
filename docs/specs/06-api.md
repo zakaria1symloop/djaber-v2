@@ -343,7 +343,7 @@ POST /agents/:id/apply-preset-update { presetVersion } → new version · GET /a
 POST /agents/:id/test-links { expiresInHours: 24 } → { url } (public playground `GET /agent-test/:token`, §12)
 GET|POST /agents/:id/faq · PATCH|DELETE /agents/:id/faq/:fid · POST /agents/:id/faq/extract { channelId } → 202 (free, 3/day/workspace) · POST /agents/:id/faq/import (multipart PDF/DOCX/TXT ≤ 5 MB, UPLOAD_TOO_LARGE) → 202
 GET /agent-insights?agentId&status&type&channelId&from&to&groupByTopic · POST /agent-insights/:id/resolve { action: instruction|faq|product|ignored_30d (InsightResolution), instruction?, question?, answer? } (the only insight-resolution endpoint) · POST /agent-insights/bulk/dismiss { ids[] }   `[FIG DLG Résoudre l'insight]`
-POST /agents/:id/test { messages[], attachments? } → { reply, status, intent, confidence, model, tokens, latencyMs, toolCalls[], cards[], creditsInProd, promptPreview } · POST /agents/:id/test/flag { turnId, note } (eval) · GET /agents/:id/test/export
+POST /agents/:id/test { messages[], attachments?, turnKey? } → { reply, status, intent, confidence, model, tokens, latencyMs, toolCalls[], cards[], creditsInProd, promptPreview } (journey retest R10-1: the same `turnKey` sent again returns the same turn — one run, counted once; header `Server-Timing`) · POST /agents/:id/test/flag { turnId, note } (eval) · GET /agents/:id/test/export
 POST /channels/:id/sync-info (name, avatar, followers; 1/10 min) · POST /channels/:id/{disable|enable} · PUT /channels/:id/agent { agentId|null } (AGENT_CHANNEL_SWITCH_NEXT_THREAD) · PUT /channels/:id/icebreaker { text }
 GET /channels/:id/events?kind&from&to · POST /channels/:id/sync { days: 7|30|90 } → 202 · GET /channels/:id/approval-status
 GET /ai/routes (public read of capability → model label for the read-only model badge of the agent form)
@@ -543,5 +543,5 @@ POST /account-deletion/request { email } → always 200 ("si un compte existe…
 GET /data-deletion/:code → { status: pending|done|not_found, requestedAt, completedAt? } (DataDeletionRequest; the Meta data-deletion status URL returned by POST /webhooks/meta/data-deletion, MSG-08)
 GET /track/:publicToken (public, no auth) → parcel status page { orderNumber, status, events[], courierName, workspaceName } (web route `/s/[code]`)   `[FIG DLV-06 QR]`
 POST /track/:publicToken/report (public "Signaler ce vendeur" on the tracking page: { reason: ReportReason, details?, email? } → Report { reporterKind=end_customer, type=merchant, targetWorkspaceId }; ABUSE_REPORT_RATE_LIMITED 3/h/IP; `POST /safety/reports` stays the authenticated merchant route of §8.3)
-GET /agent-test/:token (shared playground; AGENT_TEST_LINK_EXPIRED after 24 h) → { agentName, avatarUrl, expiresAt } + POST /agent-test/:token/messages { text } → { reply, cards[] } (web route `/agent-test/[token]`, rate limit 60/h per token)
+GET /agent-test/:token (shared playground; AGENT_TEST_LINK_EXPIRED after 24 h) → { agentName, avatarUrl, expiresAt } + POST /agent-test/:token/messages { text, turnKey? } → { reply, cards[] } (same `turnKey` ⇒ same turn, R10-1; web route `/agent-test/[token]`, rate limit 60/h per token)
 ```

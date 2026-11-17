@@ -83,7 +83,9 @@ describe('playground (AGT-07)', () => {
     expect(turn.toolCalls[0]).toMatchObject({ name: 'create_order', simulated: true, result: { ok: true, simulated: true, orderId: null, subtotal: 9000, deliveryFee: 400, total: 9400, items: [{ name: 'Robe satin bordeaux', quantity: 2, unitPrice: 4500 }], paymentOptions: ['cod'] } });
     expect(turn.toolCalls[0].result.number).toMatch(/^TEST-\d{4}$/);
     expect(turn.toolCalls[1]).toMatchObject({ simulated: false, result: { ok: false, error: { code: 'VALIDATION', field: 'clientPhone' } } });
-    expect(turn.toolCalls[2]).toMatchObject({ result: { ok: true, simulated: true } });
+    // journey retest R10-3: add_faq_candidate is offered only on a message that asks something — on « oui je confirme » the call is not run
+    expect(turn.toolCalls).toHaveLength(2);
+    expect(JSON.stringify(fakeAi(app).callsOf('reply')[1]!.messages)).toContain('TOOL_NOT_AVAILABLE');
     expect(turn.status).toBe('OK'); // a simulated order does not hand the test over to a human
     expect(await db.order.count({ where: { workspaceId: owner.workspaceId } })).toBe(0);
     expect((await db.product.findUniqueOrThrow({ where: { id: robe.id } })).stock).toBe(stock);

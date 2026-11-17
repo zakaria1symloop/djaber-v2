@@ -16,6 +16,7 @@ import { agentsApi } from '../api';
 import type { PlaygroundMessage } from '../contracts';
 import { cardPriceText, confidenceLabel, SYSTEM_BEFORE_REPLY, type TurnView } from '../logic';
 import { uuid } from '@/lib/uuid';
+import { resendWhileStalled, TurnStalledError } from './resend';
 
 export type Attachment = { kind: 'image' | 'audio'; uploadId: string; name: string; url?: string };
 export type ChatInput = { text: string; attachment?: Attachment | null; scenario?: TestScenarioKey };
@@ -23,8 +24,11 @@ export type ChatEntry =
   | { id: number; role: 'user'; text: string; at: number; attachment?: Attachment | null; scenario?: TestScenarioKey }
   | { id: number; role: 'ai'; at: number; turn: TurnView }
   | { id: number; role: 'error'; at: number; message: string; code: string | null; input: ChatInput };
-/** `history` = the earlier user / assistant texts; `input` = the new customer message (or a scenario key). */
-export type ChatTransport = (history: PlaygroundMessage[], input: ChatInput, sessionId: string) => Promise<TurnView>;
+/**
+ * `history` = the earlier user / assistant texts; `input` = the new customer message (or a scenario key); `turn` = the key of this
+ * turn (the same on a resend, journey retest R10-1) and the signal that aborts a stalled attempt.
+ */
+export type ChatTransport = (history: PlaygroundMessage[], input: ChatInput, sessionId: string, turn: { turnKey: string; signal: AbortSignal }) => Promise<TurnView>;
 
 const newSession = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? uuid() : String(Date.now()));
 
@@ -71,7 +75,9 @@ export function usePlayground(transport: ChatTransport) {
       setEntries([...kept, { id: ++seq.current, role: 'user' as const, text: input.text, at: now, attachment: input.attachment, scenario: input.scenario }]);
       setTyping(true);
       try {
-        const turn = await transportRef.current(history, input, sessionId);
+        // journey retest R10-1: an answer stuck on its way is asked again with the same key (the same turn on the server)
+        const turnKey = uuid();
+        const turn = await resendWhileStalled((signal) => transportRef.current(history, input, sessionId, { turnKey, signal }));
         if (typeof turn.hourlyUsed === 'number') {
           setHourly(turn.hourlyUsed);
           rememberHourly(turn.hourlyUsed);
@@ -88,7 +94,7 @@ export function usePlayground(transport: ChatTransport) {
           rememberHourly(PLAYGROUND_TURNS_PER_HOUR);
         }
         // AI-CHAT-14 / AGENTS-03: nothing is queued in a simulation — the playground says so in its own words
-        const message = code === 'AI_PROVIDER_ERROR' ? t('agents.playground.providerError') : errorMessage(e, t);
+        const message = code === 'AI_PROVIDER_ERROR' || e instanceof TurnStalledError ? t('agents.playground.providerError') : errorMessage(e, t);
         setEntries((old) => [...old, { id: ++seq.current, role: 'error', at: Date.now(), message, code, input }]);
       } finally {
         sending.current = false;

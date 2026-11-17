@@ -76,6 +76,14 @@ export const latestRecap = (history: OrderCallHistory | undefined, now = Date.no
   }
   return best;
 };
+/**
+ * journey retest R10-2 (17/11): a server recap of an earlier turn is still waiting for the customer's « oui » — the latest fresh
+ * recap, with no order placed since. Then a request to confirm points at that recap (N19 T5, N20 T4); without one it confirms nothing.
+ */
+export const recapPending = (history: OrderCallHistory | undefined, now = Date.now()): boolean => {
+  const recap = latestRecap(history, now);
+  return !!recap && !(history ?? []).some((h) => isCreate(h) && h.at.getTime() >= recap.at.getTime() && (h.result as { ok?: unknown } | null)?.ok === true);
+};
 /** Words of a bare confirmation (folded): a « oui » with them adds nothing to the recap. */
 const CONFIRM_FILLERS = new Set(
   [
@@ -191,6 +199,20 @@ export const simulatedOrders = (history: OrderCallHistory | undefined): { number
 const CANCEL_WORDS = /annul|cancel|batel|btel|ألغ|الغ|بطل|باطل|نلغ/;
 /** The customer's own words ask for a cancellation (« annule », « cancel », « batel », « ألغي »). */
 export const asksCancel = (text: string): boolean => CANCEL_WORDS.test(fold(text)) || CANCEL_WORDS.test(text.toLowerCase());
+/** An order number of the shop or of the playground (« CMD-1001 », « TEST-4074 », « commande n° 1042 »). */
+const ORDER_REF = /(?<![\p{L}\p{N}])[A-Za-z]{2,8}-\d{3,}(?![\p{N}])|(?:commande|order|طلبية|الطلبية|طلب)\s*(?:n[°o]\.?|num[eé]ro|number|#|رقم)\s*\d{3,}/iu;
+/**
+ * journey retest R10-3 (17/11): the customer asked to cancel in their last messages (the current one and the two before — a « oui »
+ * to « voulez-vous l'annuler ? » follows their own cancel words), or names an order in the current one. Otherwise `cancel_order` is
+ * neither offered nor run (N11 T3 `cancel_order {}` on « وين راهي الطلبية تاعي؟ … », a tracking question).
+ */
+export const cancelAsked = (customerText: string, customerHistory?: string): boolean => {
+  const recent = [customerText, ...(customerHistory ?? '').split('\n').filter((l) => l.trim()).slice(-3)];
+  return recent.some((t) => asksCancel(t)) || ORDER_REF.test(customerText);
+};
+/** journey retest R10-3: only the customer's own cancel words (the order reference alone does not make a cancel call runnable). */
+export const cancelWordsIn = (customerText: string, customerHistory?: string): boolean =>
+  [customerText, ...(customerHistory ?? '').split('\n').filter((l) => l.trim()).slice(-3)].some((t) => asksCancel(t));
 /** The customer's message of this turn asks for the cancellation (or confirms the one the AI asked about). */
 export const wantsCancel = (text: string): boolean => confirmation(text) === 'yes' || asksCancel(text);
 

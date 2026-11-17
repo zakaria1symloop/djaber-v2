@@ -12,6 +12,8 @@ import { AppException, notFound } from '../../core/errors/app.exception';
 import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { PlaygroundService } from '../ai/playground.service';
 
+type SharedTestMessage = { text: string; history?: { role: 'user' | 'assistant'; text: string }[]; sessionId?: string; turnKey?: string };
+
 @Injectable()
 export class TestLinkService {
   constructor(
@@ -51,15 +53,21 @@ export class TestLinkService {
     });
   }
 
-  message(token: string, input: { text: string; history?: { role: 'user' | 'assistant'; text: string }[]; sessionId?: string }): Promise<SharedTestReplyDto> {
+  async message(token: string, input: SharedTestMessage): Promise<SharedTestReplyDto> {
+    return (await this.messageTurn(token, input)).reply;
+  }
+
+  /** `message`, with the server's timing (`Server-Timing`, journey retest R10-1). */
+  messageTurn(token: string, input: SharedTestMessage): Promise<{ reply: SharedTestReplyDto; replayed: boolean; timing: { waitMs: number; totalMs: number } }> {
     return this.withLink(token, async (link) => {
       const messages: PlaygroundTurnInput['messages'] = [...(input.history ?? []), { role: 'user' as const, text: input.text }];
       // one session per visitor page (the reply guard and the simulated orders read the session's earlier turns)
       const sessionId = `link:${link.id.slice(0, 8)}:${input.sessionId ?? 'shared'}`.slice(0, 80);
-      const turn = await this.playground.request(link.agentId, { sessionId, messages }, { userId: null });
-      await prisma.agentTestLink.update({ where: { id: link.id }, data: { usedCount: { increment: 1 } } });
+      // journey retest R10-1: the page sends a turn again with the same key when its answer did not arrive — the same turn
+      const r = await this.playground.requestTurn(link.agentId, { sessionId, messages, ...(input.turnKey ? { turnKey: input.turnKey } : {}) }, { userId: null });
+      if (!r.replayed) await prisma.agentTestLink.update({ where: { id: link.id }, data: { usedCount: { increment: 1 } } });
       // the visitor sees what a customer would see: the text, the cards and the shop's system texts — nothing about the model or the tools
-      return { reply: turn.reply, cards: turn.cards, systemMessages: turn.systemMessages };
+      return { reply: { reply: r.turn.reply, cards: r.turn.cards, systemMessages: r.turn.systemMessages }, replayed: r.replayed, timing: r.timing };
     });
   }
 }

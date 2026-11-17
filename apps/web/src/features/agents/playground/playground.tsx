@@ -23,11 +23,11 @@ import { PlaygroundComposer, PlaygroundThread, usePlayground, type ChatTransport
 /** Transport of the merchant playground: the whole conversation is sent at every turn (the API is stateless). */
 export const agentTransport =
   (agentId: string): ChatTransport =>
-  async (history, input, sessionId) => {
+  async (history, input, sessionId, { turnKey, signal }) => {
     // full-test 15/11 AGENTS-03: a chip clicked later in the thread sends the history + the scenario (the server adds its message)
-    if (input.scenario && !input.text) return turnView(await agentsApi.test(agentId, { sessionId, messages: history, scenario: input.scenario }));
+    if (input.scenario && !input.text) return turnView(await agentsApi.test(agentId, { sessionId, turnKey, messages: history, scenario: input.scenario }, { signal }));
     const message = { role: 'user' as const, text: input.text, ...(input.attachment?.kind === 'image' ? { imageUploadId: input.attachment.uploadId } : {}), ...(input.attachment?.kind === 'audio' ? { audioUploadId: input.attachment.uploadId } : {}) };
-    return turnView(await agentsApi.test(agentId, { sessionId, messages: [...history, message] }));
+    return turnView(await agentsApi.test(agentId, { sessionId, turnKey, messages: [...history, message] }, { signal }));
   };
 
 export function inspectorRows(t: ReturnType<typeof useT>, locale: string, turn: TurnView): InspectorRow[] {

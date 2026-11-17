@@ -88,7 +88,7 @@ export const agentsApi = {
     fd.append('file', file);
     return api<{ created: AgentFaq[]; skipped: number }>(`/agents/${id}/faq/import`, { method: 'POST', formData: fd });
   },
-  test: (id: string, b: PlaygroundBody) => api<PlaygroundTurn>(`/agents/${id}/test`, { method: 'POST', body: b }),
+  test: (id: string, b: PlaygroundBody, o: { signal?: AbortSignal } = {}) => api<PlaygroundTurn>(`/agents/${id}/test`, { method: 'POST', body: b, signal: o.signal }),
   flagTurn: (id: string, b: { turnId: string; note?: string }) => api<null>(`/agents/${id}/test/flag`, { method: 'POST', body: b }),
   exportTest: (id: string, sessionId: string) => api<Record<string, unknown>>(`/agents/${id}/test/export`, { query: { sessionId } }),
   testLink: (id: string) => api<TestLink>(`/agents/${id}/test-links`, { method: 'POST', body: { expiresInHours: 24 } }),
@@ -116,11 +116,12 @@ export const agentsApi = {
 };
 
 /* ---------- public shared playground (`/agent-test/[token]`): no session, the token of the link is the credential ---------- */
-async function publicCall<T>(path: string, locale: string, init: { method?: 'GET' | 'POST'; body?: unknown } = {}): Promise<T> {
+async function publicCall<T>(path: string, locale: string, init: { method?: 'GET' | 'POST'; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
   const res = await fetch(`${API_URL}/api/v1${path}`, {
     method: init.method ?? 'GET',
     headers: { 'Accept-Language': locale, ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    signal: init.signal,
   });
   const json = (await res.json().catch(() => null)) as (Envelope<T> & { error?: ApiError['body'] }) | null;
   if (!res.ok || !json || json.error) {
@@ -133,7 +134,7 @@ async function publicCall<T>(path: string, locale: string, init: { method?: 'GET
 }
 export const sharedTestApi = {
   get: (token: string, locale: string) => publicCall<SharedTest>(`/agent-test/${encodeURIComponent(token)}`, locale),
-  send: (token: string, locale: string, b: { text: string; history?: { role: 'user' | 'assistant'; text: string }[]; sessionId?: string }) => publicCall<SharedReply>(`/agent-test/${encodeURIComponent(token)}/messages`, locale, { method: 'POST', body: b }),
+  send: (token: string, locale: string, b: { text: string; history?: { role: 'user' | 'assistant'; text: string }[]; sessionId?: string; turnKey?: string }, signal?: AbortSignal) => publicCall<SharedReply>(`/agent-test/${encodeURIComponent(token)}/messages`, locale, { method: 'POST', body: b, signal }),
 };
 
 /* ---------- cache keys: every key starts with the workspace id ---------- */

@@ -20,14 +20,14 @@ import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } f
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
 import { allowedHandoffReasons, establishedReasons, fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, orderDetailsMessage, type HandoffRefusal } from './handoff-judge';
 import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, quoteFacts, stripMarkdown, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
-import { asksDelivery, asksSomething, blockedOrderText, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, withoutRecapClaims } from './tools/order-confirmation-text';
-import { phonesIn } from './tools/order-confirmation';
+import { asksDelivery, asksSomething, blockedOrderText, confirmRequest, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, withoutRecapClaims } from './tools/order-confirmation-text';
+import { cancelAsked, confirmation, phonesIn, recapPending } from './tools/order-confirmation';
 import { matchWilaya } from './tools/tool-registry';
 import { placeIndex, placeNamedIn, placeOnlyMessage, type PlaceIndex } from './tools/place-index';
 import { contextOf } from '../messaging/messaging.presenter';
-import { fillerMessage, noPhotoReply, noPhotoSaid, photoAsked, withOneNowWord, withOrderStatusWording, withoutPresenceTalk, withoutStrayYes } from './reply-fixes';
+import { fillerMessage, noPhotoReply, noPhotoSaid, photoAsked, withArabiziWords, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutStrayYes } from './reply-fixes';
 import { serverTextLanguage } from './language';
-import { foldGuard } from './reply-guard';
+import { foldGuard, splitSentences } from './reply-guard';
 
 /** journey retest R1-1: told to the model on a message that only gives an order field (handoff_to_human is not offered). */
 export const FIELD_ONLY_NOTE =
@@ -82,17 +82,62 @@ const REFUSED_ORDER = new Set(['VALIDATION', 'VARIANT_REQUIRED', 'PRODUCT_NOT_AV
  * journey retest R8-1 / R8-2: the last create_order of the turn was refused (no recap, no order) — with the first field it asked
  * for; null when it returned a recap, placed the order, or was not called.
  */
-export const refusedOrder = (executed: Pick<ExecutedTool, 'name' | 'result'>[]): { field: string | null } | null => {
+export const refusedOrder = (executed: Pick<ExecutedTool, 'name' | 'result'>[]): { field: string | null; code: string } | null => {
   const last = [...executed].reverse().find((t) => canonicalTool(t.name) === 'create_order');
   const r = last?.result as { ok?: unknown; error?: { code?: unknown; field?: unknown } } | null | undefined;
   if (!r || r.ok === true || !REFUSED_ORDER.has(String(r.error?.code ?? ''))) return null;
-  return { field: r.error?.code === 'VALIDATION' && typeof r.error.field === 'string' ? r.error.field : null };
+  return { field: r.error?.code === 'VALIDATION' && typeof r.error.field === 'string' ? r.error.field : null, code: String(r.error?.code) };
+};
+/** journey retest R10-2: refusals of the product itself (nothing of it can be ordered) — « noté » after one is a false claim. */
+const PRODUCT_REFUSALS = new Set(['ORDER_INSUFFICIENT_STOCK', 'PRODUCT_NOT_AVAILABLE']);
+/**
+ * journey retest R10-2 (17/11): told to the model when its answer asks the customer to confirm while no server recap is waiting
+ * (N5 T3 « Pour confirmer : vous voulez bien le Coffret cadeau Aïd à 24990 DA à la place du Parfum Oud … ? » after a stock
+ * refusal) — the tools are still offered: the customer confirms the server's recap, which create_order returns.
+ */
+export const CONFIRM_WITHOUT_RECAP_NOTE =
+  'NO RECAP YET: your reply asks the customer to confirm, but no recap was shown — the customer only ever confirms the recap create_order returns. If the customer has accepted a product and every order field is known (name, phone, wilaya, address or stop-desk), call create_order now: the server shows the recap. Otherwise ask the one missing field, or ask whether they want the product (« Voulez-vous le … ? »). Never ask « pour confirmer … ? », « tu confirmes ? » or for a « oui » yourself.';
+/** Words of a message about an order of the customer (a status, a tracking number): lookup_order stays offered on it. */
+const ORDER_WORD = /command|order|colis|livraison|tracking|suivi|طلبي|الطلب|كوموند|komand|كولي|coli|wsel|wslat|wselt|وصلت|وين/u;
+/**
+ * journey retest R10-3 (17/11): a message that only gives a name or a place (no digit, no yes, no word about an order) needs no
+ * lookup_order (N4 T2 « سمير بن علي » ⇒ `lookup_order {}`, 0 order) — a phone stays able to look an order up.
+ */
+export const noLookupFor = (customerText: string | undefined, fieldOnly: boolean): boolean => {
+  const t = (customerText ?? '').trim();
+  return fieldOnly && !!t && !/\d/.test(t) && confirmation(t) !== 'yes' && !ORDER_WORD.test(foldGuard(t));
+};
+/** Words of no weight in a product search (folded). */
+const SEARCH_FILLERS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'un', 'une', 'en', 'et', 'au', 'aux', 'pour', 'avec', 'the', 'of', 'and', 'for', 'with', 'ta3', 'el', 'al', 'dyal']);
+/**
+ * journey retest R10-3 (17/11): a `search_products` whose words all name a product this turn already returned (by search_products
+ * or get_product) — F1 T1 « Sac à main cuir marron » then « Sac à main cuir », N12 T1 get_product then « hijab soie ». The earlier
+ * results are given back (`repeated: true`), nothing runs; null when the query asks for something else.
+ */
+export const searchAnswered = (query: unknown, executed: Pick<ExecutedTool, 'name' | 'result'>[]): Record<string, unknown> | null => {
+  if (typeof query !== 'string') return null;
+  const words = foldGuard(query).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2 && !SEARCH_FILLERS.has(w));
+  if (!words.length) return null;
+  type Found = { id?: unknown; name?: unknown; variants?: { name?: unknown }[] };
+  const found: Found[] = [];
+  for (const t of executed) {
+    const name = canonicalTool(t.name);
+    const r = t.result as { products?: Found[] } & Found;
+    if (name === 'search_products' && Array.isArray(r?.products)) found.push(...r.products);
+    else if (name === 'get_product' && typeof r?.id === 'string' && typeof r.name === 'string') found.push(r);
+  }
+  const hits = found.filter((p, i) => {
+    if (typeof p?.id !== 'string' || found.findIndex((q) => q?.id === p.id) !== i) return false;
+    const names = new Set(foldGuard([p.name, ...(Array.isArray(p.variants) ? p.variants.map((v) => v?.name) : [])].filter((x) => typeof x === 'string').join(' ')).split(/[^\p{L}\p{N}]+/u));
+    return words.every((w) => names.has(w));
+  });
+  return hits.length ? { products: hits, repeated: true, instruction: 'These products were already found in this turn (above): no new search is needed — answer the customer now.' } : null;
 };
 /** journey retest R1-1: the result given back for a call to a tool this step did not offer (it is not run). */
 export const unavailableTool = (name: string, fieldOnly: boolean, noPhone = false, noPlace = false, noStreet = false) => ({
   ok: false,
   error: { code: 'TOOL_NOT_AVAILABLE', tool: name },
-  instruction: `${name} cannot be used now${fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : canonicalTool(name) === 'create_order' && noPhone ? ': the customer has not given a phone number yet — ask for the next missing field (never a recap)' : canonicalTool(name) === 'create_order' && noPlace ? ': the customer has not named their wilaya yet — ask for it (never a default wilaya, never a recap)' : canonicalTool(name) === 'create_order' && noStreet ? ': the customer named only the wilaya / commune — ask for the street address (rue, cité, building, landmark) or offer the stop-desk (never a recap)' : canonicalTool(name) === 'create_order' ? ': it already answered in this turn — follow that answer (ask the missing field, or let the recap / confirmation go)' : canonicalTool(name) === 'cancel_order' ? ': the customer did not ask to cancel anything — take the order (ask the next missing field, or call create_order for the recap)' : ''}. Answer the customer now with the JSON object.`,
+  instruction: `${name} cannot be used now${fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : canonicalTool(name) === 'create_order' && noPhone ? ': the customer has not given a phone number yet — ask for the next missing field (never a recap)' : canonicalTool(name) === 'create_order' && noPlace ? ': the customer has not named their wilaya yet — ask for it (never a default wilaya, never a recap)' : canonicalTool(name) === 'create_order' && noStreet ? ': the customer named only the wilaya / commune — ask for the street address (rue, cité, building, landmark) or offer the stop-desk (never a recap)' : canonicalTool(name) === 'create_order' ? ': it already answered in this turn — follow that answer (ask the missing field, or let the recap / confirmation go)' : canonicalTool(name) === 'cancel_order' ? ': the customer did not ask to cancel anything — answer their message (lookup_order answers a question about an order; take the order otherwise)' : canonicalTool(name) === 'lookup_order' ? ': the customer only gave a name or a place — record it and ask the next missing field' : canonicalTool(name) === 'add_faq_candidate' ? ': the customer asked no question in this message — never file a note or a question they did not ask' : ''}. Answer the customer now with the JSON object.`,
 });
 /**
  * journey retest R2-4: a `create_order` answer after which the tool is not offered again in the same turn — the recap was
@@ -281,8 +326,19 @@ export class AiRunService implements OnModuleInit {
     const noStreet = noAddress && !noPlace && this.placeOnly(req.toolCtx.customerText, places);
     // journey retest R8-4: no cancel_order on a message that gives the order's details and asks no cancellation (N5 T2
     // `cancel_order {}` next to the recap, NO_OPEN_ORDER)
-    const noCancel = orderDetails;
-    const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !(d.name === 'handoff_to_human' && (noHandoff || !reasons.length)) && !(d.name === 'create_order' && (noPhone || noPlace || noStreet)) && !(d.name === 'cancel_order' && noCancel)).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
+    // journey retest R10-3 (17/11): nor without a cancel word in the customer's last messages or an order number in this one (N11 T3
+    // `cancel_order {}` on « وين راهي الطلبية تاعي؟ … », a tracking question)
+    const said = req.toolCtx.customerText;
+    const noCancel = orderDetails || (said !== undefined && !cancelAsked(said, req.toolCtx.customerHistory));
+    // journey retest R10-3: no lookup_order on a message that only gives a name / a place, no add_faq_candidate on a message that
+    // asks nothing (N4 T2 « سمير بن علي » ⇒ `lookup_order {}` + an internal note as an FAQ candidate; N5 T2 an unasked question)
+    const noLookup = noLookupFor(said, fieldOnly);
+    const noFaq = said !== undefined && !asksSomething(said);
+    const withheld = (name: string) =>
+      (name === 'handoff_to_human' && (noHandoff || !reasons.length)) || (name === 'create_order' && (noPhone || noPlace || noStreet)) || (name === 'cancel_order' && noCancel) || (name === 'lookup_order' && noLookup) || (name === 'add_faq_candidate' && noFaq);
+    const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !withheld(d.name)).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
+    // journey retest R10-2: a server recap of an earlier turn waits for the customer's « oui » (a request to confirm points at it)
+    const pendingBefore = recapPending(req.toolCtx.orderHistory);
     // journey retest R1-1: the model still called the withheld tool (the prompt describes it) and the SDK refused the whole
     // step — 5 of 59 turns of a shop with handoff rules ended in 503. The note says it is not available for this message
     // (after the cached start of the system prompt, so the cache is kept).
@@ -316,6 +372,7 @@ export class AiRunService implements OnModuleInit {
     let forcedHandoff: string | null = null;
     let toolRounds = 0;
     let handoffAsked = false;
+    let confirmAsked = false;
     let handoffRefused: HandoffRefusal | undefined;
     // journey retest R2-4: create_order is withdrawn for the rest of the turn once it answered for good (orderClosedBy), and a
     // call identical to one already answered this turn gets that answer back without running again
@@ -347,6 +404,8 @@ export class AiRunService implements OnModuleInit {
         // journey retest R9-3: the order wording follows lookup_order's status (« في الدرب » for an order not sent), one « درك »,
         // no opening « Ih, » that answers nothing
         text = withoutStrayYes(withOneNowWord(withOrderStatusWording(text, calls.filter((c) => c.name === 'lookup_order').map((c) => c.result))), req.toolCtx.customerText, asksSomething);
+        // journey retest R10-4: « بسعر Hijab soie — 1500 دج » (the name in the price slot), French words left in an arabizi reply
+        text = withArabiziWords(withoutNameInPriceSlot(text), textLang);
         return { ...plain, reply: withPhotoAnswer(output, text) };
       }
       const r = recapReply(plain.reply, recap, textLang, req.toolCtx.customerText);
@@ -383,7 +442,10 @@ export class AiRunService implements OnModuleInit {
       // journey retest R8-1 / R8-2: a tool that really failed; a create_order refused this turn (no recap shown) and the field it asked
       const refusal = refusedOrder(executed);
       const systemFailure = executed.some((t) => SYSTEM_FAILURES.has(String((t.result as { error?: { code?: unknown } } | null)?.error?.code ?? '')));
-      return { ...f, ...(quotes.length ? { quotes } : {}), ...(fields ? { customerFields: fields } : {}), ...(photoSent !== undefined ? { photoSent } : {}), ...(systemFailure ? { systemFailure } : {}), ...(refusal ? { orderRefused: true, ...(refusal.field ? { missingField: refusal.field } : {}) } : {}) };
+      // journey retest R10-2: no recap waiting at all (none this turn, none of an earlier turn still open, no order placed now) — a
+      // request to confirm confirms nothing; after a refusal of the product itself, « noté » is a false claim
+      const noRecapPending = !refusal && !pendingBefore && !recapNow() && !confirmationNow();
+      return { ...f, ...(quotes.length ? { quotes } : {}), ...(fields ? { customerFields: fields } : {}), ...(photoSent !== undefined ? { photoSent } : {}), ...(systemFailure ? { systemFailure } : {}), ...(refusal ? { orderRefused: true, ...(refusal.field ? { missingField: refusal.field } : {}), ...(PRODUCT_REFUSALS.has(refusal.code) ? { productRefused: true } : {}) } : {}), ...(noRecapPending ? { noRecapPending } : {}) };
     };
     /** The guard's last word: offending sentences dropped / greeting stripped / the safe sentence (never a handoff). */
     const enforce = (base: AiReplyOutput, text: string, violations: GuardViolation[], first: GuardViolation[], retried: boolean, extra: { salvaged?: boolean }): TurnResult => {
@@ -453,6 +515,12 @@ export class AiRunService implements OnModuleInit {
             messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: repeatedCall(answered.get(key)) });
             continue;
           }
+          // journey retest R10-3: a search for a product this turn already returned is answered with it (F1 T1, N12 T1)
+          const known = canonicalTool(call.name) === 'search_products' ? searchAnswered(call.args?.query, executed) : null;
+          if (known) {
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: known });
+            continue;
+          }
           const place = await placeSearch(call);
           if (place) {
             messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: placeSearchResult(place) });
@@ -479,6 +547,12 @@ export class AiRunService implements OnModuleInit {
           const key = sameCallKey(call.name, call.args);
           if (answered.has(key)) {
             messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: repeatedCall(answered.get(key)) });
+            continue;
+          }
+          // journey retest R10-3: a search for a product this turn already returned is answered with it (F1 T1, N12 T1)
+          const known = canonicalTool(call.name) === 'search_products' ? searchAnswered(call.args?.query, executed) : null;
+          if (known) {
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: known });
             continue;
           }
           const place = await placeSearch(call);
@@ -519,6 +593,14 @@ export class AiRunService implements OnModuleInit {
         if (!serverQuoted && parsed.value.status !== 'HANDOFF' && !forcedHandoff && !recapNow() && !confirmationNow()) {
           serverQuoted = true;
           await this.deliveryQuote(req, executed, seen, answered);
+        }
+        // journey retest R10-2 (17/11): an answer that asks the customer to confirm while no server recap waits (N5 T3 « Pour
+        // confirmer : vous voulez bien le Coffret … ? ») is sent back once with the tools still offered — create_order gives the
+        // recap the customer confirms (or the missing field is asked); a second such answer goes through the reply guard
+        if (!confirmAsked && req.guard && parsed.value.status !== 'HANDOFF' && !forcedHandoff && step < MAX_STEPS && !pendingBefore && !recapNow() && !confirmationNow() && !refusedOrder(executed) && !orderClosed && defs.some((d) => d.name === 'create_order') && toolRounds < (fieldOnly ? 2 : MAX_STEPS - 1) && splitSentences(parsed.value.reply).some(confirmRequest)) {
+          confirmAsked = true;
+          messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: CONFIRM_WITHOUT_RECAP_NOTE });
+          continue;
         }
         // retest 12/11: `status = HANDOFF` is checked like the tool (handoff-judge) — the customer's words of this turn must
         // ask for it. Refused ⇒ the model is told why and answers (once); insisting with a reply ⇒ that reply is sent and the

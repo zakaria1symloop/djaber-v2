@@ -332,6 +332,30 @@ const aboutRecap = (x: string) => [folded(x), x.toLowerCase()].some((v) => CONFI
 const CONFIRM_QUESTION = /(?<![\p{L}])(?:tu\s+confirmes?|vous\s+confirmez|confirmez[- ]vous|confirmes[- ]tu|do\s+you\s+confirm|t?confirmi\s*\??$)|r[eé]?pond\S*\s+(?:\S+\s+){0,3}?\W{0,3}(?:oui|ih|yes)\W{0,3}\s+(?:une\s+nouvelle\s+fois|encore|again|[aà]\s+nouveau)|(?:une\s+nouvelle\s+fois|encore\s+une\s+fois|again)\s+\W{0,3}(?:oui|ih|yes)/u;
 /** journey retest R8-1 / R8-2: a sentence that asks to confirm the order or talks about a recap (exported for the reply guard). */
 export const recapClaim = (sentence: string): boolean => aboutRecap(sentence);
+
+/** A word of confirming (folded / as written; « nconfirmi », « n2akkdou », « تأكيد »). */
+const CONFIRM_WORD = /confirm|(?<![\p{L}])[nt]?2?akk?[ei]?d(?:ou|o|i)?(?![\p{L}])|ta2?kk?id|تأكيد|تاكيد|نأكد|ناكد|نكد|أكد|اكد/u;
+/** « Répondez « oui » », « reply yes », « ktebli « ih » », « جاوبني بـ « إيه » » — a request to answer yes. */
+const REPLY_YES = /(?:r[eé]?pond\S*|repl(?:y|ies)|answer|(?<![\p{L}])say|ktebli|(?<![\p{L}])ktb|(?<![\p{L}])kteb|goulli|9olli|جاوبني|جاوب|اكتبلي|اكتب|قولي)\s+(?:\S+\s+){0,3}?\W{0,3}(?:oui|ih|iyeh|yes|إيه|ايه)(?![\p{L}])/u;
+/** A confirmation that is not the order's: a cancellation, the phone number or the address the customer is asked to check. */
+const OTHER_CONFIRMATION = /annul|cancel|(?<![\p{L}])b?t?batel|ألغ|الغ|إلغ|nlgh|num[eé]ro|t[eé]l[eé]phone|phone|number|ra9m|رقم|hatif|هاتف|adresse|address|3onwan|عنوان/u;
+/** A question that asks which one (« Pouvez-vous me confirmer de quel produit il s'agit ? »): information, not a confirmation. */
+const WHICH = /(?<![\p{L}])(?:quel(?:le)?s?|lequel|laquelle|lesquel(?:le)?s|which|wach\s+men|ach\s+men|أي|واش\s+من|شمن)(?![\p{L}])/u;
+/** A confirming word about the order within a few words (« confirmer la commande ? », « on valide votre commande ? », « نأكدو الطلبية ؟ »). */
+const CONFIRM_ORDER = new RegExp(String.raw`(?:${CONFIRM_WORD.source}|valid)\S*\s+(?:\S+\s+){0,3}?(?:command|order|achat|طلبي|الطلب|كوموند|komand)`, 'u');
+/**
+ * journey retest R10-2 (17/11): a sentence that asks the customer to confirm the order — « Pour confirmer : vous voulez bien le
+ * Coffret cadeau Aïd … ? », « tu confirmes ? », « Répondez « oui » … », « Ktebli « ih » bach nconfirmi » — and not a cancellation,
+ * a phone or an address to check. Said when no server recap is waiting (N5 T3), it is a confirmation without a recap.
+ */
+export const confirmRequest = (sentence: string): boolean =>
+  bothForms(sentence).some((v) => !OTHER_CONFIRMATION.test(v) && !WHICH.test(v) && (CONFIRM_QUESTION.test(v) || REPLY_YES.test(v) || /(?:^|[.!?؟]\s+)\W*pour\s+confirmer/u.test(v) || (/[?؟]/.test(v) && CONFIRM_ORDER.test(v))));
+/**
+ * journey retest R10-2: « Je vous ai bien noté », « c'est noté », « j'ai enregistré », « tsajjelt », « سجلت » — said after create_order
+ * refused the product (out of stock / not available), it reads as « order noted » while nothing was.
+ */
+const NOTED = /(?<![\p{L}])(?:bien\s+)?not[eé]e?s?(?![\p{L}])|enregistr|c['’]?\s*est\s+pris|(?<![\p{L}])(?:tsajl|tsajjel|sajjelt|sajelt|msajl|msajjel)|سجلت|تسجلت|تسجل|سجلنا|noted|got\s+it\s+down|registered|(?<![\p{L}])i\s+have\s+(?:taken|put)\s+(?:it|you)\s+down/u;
+export const notedClaim = (sentence: string): boolean => bothForms(sentence).some((v) => NOTED.test(v));
 /**
  * journey retest R4-1 (17/11): a handoff answer never talks about a recap nor asks for a « oui » — no server recap goes with
  * it (F6 T3: « votre commande est bien récapitulée ci-dessus … Répondez oui pour la confirmer » with no recap above). Those
