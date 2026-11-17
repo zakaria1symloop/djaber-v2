@@ -191,6 +191,49 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(0);
   });
 
+  it('journey retest R4-3 (Critical): « oui » to a product the AI suggested with the customer details ⇒ CONFIRMATION_REQUIRED + the server recap, no order; the « oui » to that recap places it', async () => {
+    const s = await shop();
+    const sender = newSender();
+    // N5 T5: no create_order — the AI proposes the product and repeats the details, the price and the total
+    fakeAi(app).script('reply', { reply: 'Voulez-vous plutôt la Robe satin bordeaux, 4900 DA livraison comprise ? J’ai bien noté Amine Benali, 0555123456, Cité des 200 logements, Bt 4, Bab Ezzouar.', intent: 'SALE' });
+    await turn(s, sender, 'Bon finalement je le prends. Amine Benali 0555 12 34 56, Alger, Bab Ezzouar, Cité des 200 logements, Bt 4');
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [createCall(s)] }, { reply: 'Votre commande est enregistrée ✓', intent: 'SALE' });
+    const t = await turn(s, sender, 'oui');
+    expect(lastResult(t.runs)).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recapToShow: true, recap: { total: 4900 } });
+    expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(0);
+    const sent = t.out.filter((m) => m.author === 'ai' && m.type === 'text').at(-1)!;
+    expect(sent.text).toMatch(/^Voici le récapitulatif de votre commande :/);
+    expect(sent.text).toContain('Livraison à domicile (Bab Ezzouar, Alger) : 400 DA');
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [createCall(s)] }, { reply: 'OK', intent: 'SALE' });
+    const placed = await turn(s, sender, 'oui');
+    expect(lastResult(placed.runs)).toMatchObject({ ok: true, number: 'CMD-1001', total: 4900 });
+  });
+
+  it('journey retest R4-1: status HANDOFF « order_limits » on a plain order message (no limit reached) is refused — the conversation stays with the AI', async () => {
+    const s = await shop({ maxQtyPerOrder: 5 });
+    fakeAi(app).script('reply', { reply: 'Je transmets.', status: 'HANDOFF', statusDetail: 'order_limits', evidence: 'Je voudrais la robe satin bordeaux', intent: 'SALE' }, { reply: 'Très bon choix ! Quel est votre nom ?', intent: 'SALE' });
+    const t = await turn(s, newSender(), 'Je voudrais la robe satin bordeaux');
+    expect(t.conversation.status).toBe('active');
+    expect(t.runs.at(-1)!.flags).toContain('handoff_refused');
+    expect(t.out.filter((m) => m.author === 'ai' && m.type === 'text').at(-1)!.text).toBe('Très bon choix ! Quel est votre nom ?');
+  });
+
+  it('journey retest R4-6: two phone numbers in one message ⇒ the main and the second phone, in the recap and the order', async () => {
+    const s = await shop();
+    const sender = newSender();
+    fakeAi(app).script('reply', { toolCalls: [createCall(s, { clientPhone: '0661234568' })] }, { reply: '', intent: 'SALE' });
+    const t = await turn(s, sender, 'Bonjour, je veux la robe satin bordeaux. Amine Benali, 0661234568 ou 0770998877, Bab Ezzouar, Cité des 200 logements, Bt 4');
+    expect(lastResult(t.runs)).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recap: { clientPhone: '0661234568', secondPhone: '0770998877' } });
+    expect(t.out.filter((m) => m.author === 'ai' && m.type === 'text').at(-1)!.text).toContain('Deuxième téléphone : 0770998877');
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [createCall(s, { clientPhone: '0661234568' })] }, { reply: 'OK', intent: 'SALE' });
+    const placed = await turn(s, sender, 'oui');
+    expect(lastResult(placed.runs)).toMatchObject({ ok: true });
+    expect(await db.order.findFirstOrThrow({ where: { workspaceId: s.owner.workspaceId } })).toMatchObject({ clientPhone: '0661234568', clientPhone2: '0770998877' });
+  });
+
   it('AT-AI-07 "annuler ma commande": a new order ⇒ cancelled through OrderEffects (its hold released); a shipped order ⇒ handoff', async () => {
     const s = await shop();
     const sender = newSender();
@@ -264,6 +307,8 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const t = await turn(s, blocked, 'oui');
     expect(lastResult(t.runs)).toMatchObject({ ok: false, error: { code: 'CUSTOMER_BLOCKED' } });
     expect(t.conversation.status).toBe('needs_human');
+    // journey retest R4-8: the server sentence, in line with the handoff (never « réessayez plus tard », never « bloqué »)
+    expect(t.out.filter((m) => m.author === 'ai' && m.type === 'text').at(-1)!.text).toBe('Je ne peux pas valider cette commande ici : l’équipe de la boutique va s’en occuper.');
     expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(0);
 
     const r = await shop({ riskyClientBehavior: 'handoff' });

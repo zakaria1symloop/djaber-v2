@@ -18,9 +18,9 @@ import { AI_GATEWAY, AiProviderError, type AiGateway, type AiMessage, type AiToo
 import { RoutingService, type RoutedModel } from './routing.service';
 import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
-import { allowedHandoffReasons, fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, type HandoffRefusal } from './handoff-judge';
+import { allowedHandoffReasons, establishedReasons, fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, type HandoffRefusal } from './handoff-judge';
 import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, quoteFacts, stripMarkdown, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
-import { orderConfirmationText, pendingRecap, recapReply } from './tools/order-confirmation-text';
+import { blockedOrderText, orderConfirmationText, pendingRecap, recapReply, withoutRecapClaims } from './tools/order-confirmation-text';
 
 /** journey retest R1-1: told to the model on a message that only gives an order field (handoff_to_human is not offered). */
 export const FIELD_ONLY_NOTE =
@@ -149,9 +149,11 @@ export class AiRunService implements OnModuleInit {
   }
 
   /** Executes one tool call of a run, or returns its stored result (replay). */
-  private async toolCall(req: TurnRequest, call: AiToolCallRequest, ordinal: number): Promise<ExecutedTool> {
+  private async toolCall(req: TurnRequest, call: AiToolCallRequest, ordinal: number, before: readonly ExecutedTool[] = []): Promise<ExecutedTool> {
     const callId = toolCallId(call.name, call.args, ordinal);
-    const ctx: ToolRunContext = { ...req.toolCtx, callId };
+    // journey retest R4-1: a server handoff reason (order_limits…) is accepted only after a tool of this turn reported it
+    const established = establishedReasons(before.map((t) => t.result));
+    const ctx: ToolRunContext = { ...req.toolCtx, callId, ...(established.length ? { established } : {}) };
     const simulated = (r: unknown) => req.toolCtx.dryRun && !!(r as { simulated?: unknown } | null)?.simulated;
     if (req.persist === false) {
       const result = await this.tools.execute(call.name, call.args, ctx);
@@ -211,9 +213,14 @@ export class AiRunService implements OnModuleInit {
       if (text) return { ...output, reply: text };
       // journey retest R2-6: Messenger shows « **Djellaba homme** » as typed — the reply goes out as plain text
       const plain = { ...output, reply: stripMarkdown(output.reply) };
+      const calls = executed.map((t) => ({ name: canonicalTool(t.name), result: t.result }));
+      // journey retest R4-8: a blocked customer's order gets the server's sentence, in line with the shop's handoff text
+      const blockedText = blockedOrderText(calls, req.guard?.lang ?? 'fr');
+      if (blockedText) return { ...plain, reply: blockedText };
+      // a handoff answer is not a recap to confirm — journey retest R4-1: and it never claims one (« récapitulée ci-dessus »)
+      if (output.status === 'HANDOFF' || forcedHandoff) return { ...plain, reply: withoutRecapClaims(plain.reply) };
       const recap = recapNow();
-      // a handoff answer (blocked customer…) is not a recap to confirm
-      if (!recap || output.status === 'HANDOFF' || forcedHandoff) return plain;
+      if (!recap) return plain;
       return { ...plain, reply: recapReply(plain.reply, recap, req.guard?.lang ?? 'fr').text };
     };
     const ok = (output: AiReplyOutput, extra: { salvaged?: boolean; guard?: GuardOutcome } = {}): TurnResult => ({ ok: true, output: confirmed(output), tools: executed, usage, model: model!, usedFallback, forcedHandoff, repaired, ...(handoffRefused ? { handoffRefused } : {}), ...extra });
@@ -237,7 +244,7 @@ export class AiRunService implements OnModuleInit {
     const guarded = (output: AiReplyOutput, extra: { salvaged?: boolean }, canRetry: boolean): TurnResult | 'retry' => {
       // the server's order confirmation replaces the text: nothing of the model's to check
       if (!req.guard || !output.reply.trim() || confirmationNow()) return ok(output, extra);
-      // journey retest R1-6: a pending recap — the server's text is sent unless the model's reply shows it whole; the
+      // journey retest R1-6: a pending recap — the server's text is always sent (R4-3: never the model's recap); the
       // model's sentence kept before it is checked, and dropped (no corrective turn) when it breaks a rule
       const recap = output.status !== 'HANDOFF' && !forcedHandoff ? recapNow() : null;
       if (recap) {
@@ -295,7 +302,7 @@ export class AiRunService implements OnModuleInit {
           }
           const ordinal = seen.get(hash) ?? 0;
           seen.set(hash, ordinal + 1);
-          const done = await this.toolCall(req, call, ordinal);
+          const done = await this.toolCall(req, call, ordinal, executed);
           executed.push(done);
           answered.set(hash, done.result);
           orderClosed ||= orderClosedBy(call.name, done.result);
@@ -317,7 +324,7 @@ export class AiRunService implements OnModuleInit {
           }
           const ordinal = seen.get(hash) ?? 0;
           seen.set(hash, ordinal + 1);
-          const done = await this.toolCall(req, call, ordinal);
+          const done = await this.toolCall(req, call, ordinal, executed);
           executed.push(done);
           answered.set(hash, done.result);
           orderClosed ||= orderClosedBy(call.name, done.result);
@@ -347,7 +354,7 @@ export class AiRunService implements OnModuleInit {
         // conversation stays with the AI; insisting with nothing to send ⇒ the handoff goes through (silence would be worse)
         const out = parsed.value;
         const ctx = req.toolCtx;
-        const verdict = out.status === 'HANDOFF' && !forcedHandoff && ctx.customerText !== undefined ? judgeHandoff({ reason: out.statusDetail, evidence: out.evidence, customerText: ctx.customerText, shopRules: ctx.agent.humanHandoffRules, keywords: ctx.agent.handoffKeywords, unclearStreak: ctx.unclearStreak }) : null;
+        const verdict = out.status === 'HANDOFF' && !forcedHandoff && ctx.customerText !== undefined ? judgeHandoff({ reason: out.statusDetail, evidence: out.evidence, customerText: ctx.customerText, shopRules: ctx.agent.humanHandoffRules, keywords: ctx.agent.handoffKeywords, unclearStreak: ctx.unclearStreak, established: establishedReasons(executed.map((t) => t.result)) }) : null;
         if (verdict && !verdict.ok) {
           handoffRefused = verdict.why;
           if (!handoffAsked && step < MAX_STEPS) {

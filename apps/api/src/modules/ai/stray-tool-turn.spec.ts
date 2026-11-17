@@ -97,13 +97,13 @@ describe('AiRunService.turn — journey retest R1', () => {
     expect(t.ok && t.output.reply).toBe(recapText('arabizi'));
   });
 
-  it('R1-6: a whole recap of the model in the right language is kept; a handoff answer is never turned into a recap', async () => {
+  it('R1-6 / R4-3: a whole recap of the model is replaced by the server recap; a handoff answer is never turned into a recap', async () => {
     const whole = 'Voici le récapitulatif : 3 × Tapis de prière : 8 400 DA, livraison à domicile (El Khroub) 700 DA, total 9 100 DA. Nom : Samira Benali, téléphone 0661234567. Répondez oui pour valider.';
     const g2 = new FakeAiGateway();
     g2.script('reply', { toolCalls: [{ name: 'create_order', args: { items: [] } }] }, { reply: whole, intent: 'SALE' });
     const s2 = setup(g2, recap);
     const kept = await s2.svc.turn(s2.req('cité 1000 logements bloc 5'));
-    expect(kept.ok && kept.output.reply).toBe(whole);
+    expect(kept.ok && kept.output.reply).toBe(recapText('fr'));
     const g3 = new FakeAiGateway();
     g3.script('reply', { toolCalls: [{ name: 'create_order', args: { items: [] } }] }, { reply: '', status: 'HANDOFF', statusDetail: 'customer_request', evidence: 'parler à un humain', intent: 'OTHER' });
     const s3 = setup(g3, recap);

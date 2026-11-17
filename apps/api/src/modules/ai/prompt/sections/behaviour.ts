@@ -55,7 +55,8 @@ const BUILT_IN: Record<string, string> = {
   anger: 'angry: insults, threats or a clearly furious customer (an impatient or short message is not anger: just answer it)',
   '3_unclear': `unclear_streak: ${UNCLEAR_STREAK_HANDOFF} messages in a row that you could not understand`,
   off_topic: 'off_catalogue: a request only the team can handle (wholesale or reseller prices, a custom order, a partnership, a problem the policies do not cover). A simple question you have no answer to is NOT a handoff: use status=UNKNOWN',
-  over_limits: 'order_limits: an order above MAX_QTY_PER_ORDER or MAX_AMOUNT',
+  // journey retest R4-1 (17/11): chosen on « Je voudrais le sac à main cuir marron » (1 item, limit 5) — a tool outcome only
+  over_limits: 'order_limits: create_order answered hint order_limit (an order above MAX_QTY_PER_ORDER or MAX_AMOUNT) in this turn — never on an order message alone',
   risky_client: 'risky_client: a tool reports a blocked or risky customer and RISKY_CLIENT_POLICY=handoff',
   keyword: 'keyword: the message contains one of HANDOFF_KEYWORDS',
 };

@@ -33,8 +33,10 @@ describe('judgeHandoff', () => {
     expect(judge('unclear_streak', '??', undefined, { unclearStreak: 0 })).toMatchObject({ ok: false, why: 'not_unclear' });
   });
 
-  it('reasons the server sets itself are not re-judged', () => {
-    for (const r of ['order_limits', 'order_limit', 'risky_client', 'blocked_word', 'orders_unavailable']) expect(judge(r, 'salam')).toMatchObject({ ok: true });
+  // journey retest R4-1: a server reason is accepted only when a tool result of the turn established it — never the model's choice
+  it('reasons the server sets itself are accepted only once a tool of the turn reported them', () => {
+    for (const r of ['order_limits', 'order_limit', 'risky_client', 'blocked_word', 'orders_unavailable']) expect(judge(r, 'salam')).toMatchObject({ ok: false, why: 'server_reason' });
+    for (const r of ['order_limits', 'order_limit']) expect(judge(r, 'salam', undefined, { established: ['order_limits'] })).toMatchObject({ ok: true, reason: 'order_limits' });
   });
 
   it('names the reason as the platform does', () => {

@@ -111,7 +111,8 @@ describe('R3-3 — an invented name, the handoff reasons offered', () => {
     expect(none).not.toContain('other');
     expect(none).not.toContain('keyword');
     expect(none).not.toContain('unclear_streak');
-    expect(none).toEqual(expect.arrayContaining(['customer_request', 'refund', 'complaint', 'angry', 'off_catalogue', 'order_limits', 'risky_client']));
+    // journey retest R4-1: no server reason (order_limits, risky_client) is offered to the model
+    expect(none).toEqual(['customer_request', 'refund', 'complaint', 'angry', 'off_catalogue']);
     expect(allowedHandoffReasons({ humanHandoffRules: 'Transférer les devis', handoffKeywords: ['facture'] }, 2)).toEqual(expect.arrayContaining(['other', 'keyword', 'unclear_streak']));
     expect(allowedHandoffReasons({ handoffRules: [{ kind: 'anger', enabled: false }, { kind: 'refund', enabled: true }] })).not.toContain('angry');
     const def = handoffDefWith(TOOL_DEFS.handoff_to_human, none);

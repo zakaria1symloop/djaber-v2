@@ -155,6 +155,43 @@ describe('playground (AGT-07)', () => {
     expect(next.reply).toMatch(/^Votre commande TEST-\d{4} est bien enregistrée/);
   });
 
+  it('journey retest R4-3 (Critical): N5 — « oui » to the product the AI suggested with the customer details ⇒ CONFIRMATION_REQUIRED + the server recap, no TEST-n', async () => {
+    const owner = await asOwner(app);
+    const agent = await linkedAgent(owner.workspaceId, [], { maxQtyPerOrder: 5 });
+    const coffret = await createProduct(owner, { name: 'Coffret cadeau Aïd', price: 24990, stock: 5 });
+    // home delivery free from 20 000 DA: the total equals the price the AI wrote in its suggestion
+    await feeRule(owner.workspaceId, 31, 600, 400, { freeAbove: 20000 });
+    await app.app.get(RedisService).client.del(`rl:playground:${owner.workspaceId}`);
+    const thread = [
+      { role: 'user', text: 'Bonjour, le parfum oud c\'est combien ?' },
+      { role: 'assistant', text: 'Désolé, Parfum Oud 50 ml est en rupture de stock pour le moment. Si vous cherchez un cadeau avec du parfum, notre Coffret cadeau Aïd (24990 DA) contient un parfum, du chocolat et une carte personnalisée.' },
+      { role: 'user', text: 'ok merci' },
+      { role: 'assistant', text: 'Avec plaisir ! Si vous voulez, je peux vous montrer d\'autres idées cadeaux ou nos autres produits.' },
+      { role: 'user', text: 'Vous livrez à Oran ?' },
+      { role: 'assistant', text: 'Oui, on livre à Oran ! Le tarif est de 600 DA à domicile, ou 400 DA en stop-desk, avec une livraison en 2 à 5 jours.' },
+      { role: 'user', text: 'Et ça prend combien de jours ?' },
+      { role: 'assistant', text: 'Pour Oran, la livraison prend 2 à 5 jours. Voulez-vous passer commande ?' },
+      { role: 'user', text: 'Bon finalement je le prends. Karim Haddad 0770112233, Oran, Bir El Djir, cité 1000 logements bloc 4' },
+      { role: 'assistant', text: 'Désolé, Parfum Oud 50 ml est en rupture de stock pour le moment, je ne peux donc pas le commander. J\'ai bien noté Karim Haddad, 0770112233, Oran, Bir El Djir, cité 1000 logements bloc 4. Voulez-vous plutôt le Coffret cadeau Aïd à 24990 DA, qui contient un parfum, du chocolat et une carte personnalisée ?' },
+      { role: 'user', text: 'oui' },
+    ];
+    const args = { clientName: 'Karim Haddad', clientPhone: '0770112233', wilayaId: 31, communeName: 'Bir El Djir', address: 'cité 1000 logements bloc 4', items: [{ productId: coffret.id, quantity: 1 }], isStopdesk: false, customerConfirmed: true };
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args }] }, { reply: 'Votre commande est enregistrée ✅', intent: 'SALE' });
+    const t6 = (await test(owner, agent.id, { sessionId: 'r4-n5', messages: thread }).expect(200)).body.data;
+    expect(t6.toolCalls[0]).toMatchObject({ result: { ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recapToShow: true, recap: { total: 24990, deliveryFee: 0 } } });
+    expect(t6.reply).toMatch(/^Voici le récapitulatif de votre commande :/);
+    expect(t6.reply).toContain('- 1 × Coffret cadeau Aïd : 24 990 DA');
+    expect(t6.reply).toContain('Livraison à domicile (Bir El Djir, Oran) : gratuite');
+    expect(t6.reply).toContain('Répondez « oui » pour confirmer la commande');
+    expect(t6.reply).not.toContain('enregistrée');
+    // the « oui » to that server recap, in the next message, gives the TEST-n order
+    fakeAi(app).reset();
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args }] }, { reply: 'ok', intent: 'SALE' });
+    const t7 = (await test(owner, agent.id, { sessionId: 'r4-n5', messages: [...thread, { role: 'assistant', text: t6.reply }, { role: 'user', text: 'oui' }] }).expect(200)).body.data;
+    expect(t7.toolCalls[0]).toMatchObject({ simulated: true, result: { ok: true, simulated: true, total: 24990 } });
+    expect(await db.order.count({ where: { workspaceId: owner.workspaceId } })).toBe(0);
+  });
+
   it('playground with attachments: a photo goes through the 2-pass vision (would cost 5), flag for evals, export of the session', async () => {
     const owner = await asOwner(app);
     const agent = await linkedAgent(owner.workspaceId, []);

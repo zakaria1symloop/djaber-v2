@@ -174,38 +174,20 @@ export const orderRecapText = (recap: Recap, lang: AiLanguage | string | undefin
 const numbersOf = (text: string) => new Set([...text.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/(?<=\d)[ .,\u00a0\u202f](?=\d{3}(?!\d))/g, '').matchAll(/\d+/g)].map((m) => m[0]));
 const wordsOf = (t: string) => ` ${folded(t).replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `;
 /**
- * The model's reply shows the whole recap as given: every product name as written, the total, the fee, the name and the
- * phone. Otherwise the server's recap is sent instead (« Votre commande de 3 tapis … attend votre confirmation » had no
- * line, no name and no phone; « جلابة رجالي » for « Djellaba homme »).
+ * What the customer gets when a recap is pending: the server's recap, after the model's sentence when that sentence answers
+ * something else (no amount, phone or product of the recap in it, at most 2 sentences) — any recap of the model is dropped.
+ * Journey retest R4-3 (17/11): the model's reply is never kept as the recap, even « complete » (`recapComplete`, R1-6): a
+ * product suggestion that repeated the customer's details and the price (free delivery: total = price) passed for one, with
+ * no delivery line and no request to confirm.
  */
-export const recapComplete = (reply: string, recap: Recap): boolean => {
-  const nums = numbersOf(reply);
-  const w = wordsOf(reply);
-  const has = (x: string) => !x.trim() || w.includes(wordsOf(x));
-  return (
-    nums.has(String(recap.total)) &&
-    (recap.deliveryFee <= 0 || nums.has(String(recap.deliveryFee))) &&
-    (!recap.clientPhone || nums.has(recap.clientPhone.replace(/\D/g, ''))) &&
-    has(recap.clientName) &&
-    recap.items.every((i) => has(s(i.name)))
-  );
-};
-
-/**
- * What the customer gets when a recap is pending: the model's reply when it already shows the whole recap; else the
- * server's recap, after the model's sentence when that sentence answers something else (no amount, phone or product of
- * the recap in it, at most 2 sentences) — a partial recap of the model is dropped.
- */
-export const recapReply = (reply: string, recap: Recap, lang: AiLanguage | string | undefined): { text: string; kept: 'model' | 'prefix' | 'server' } => {
+export const recapReply = (reply: string, recap: Recap, lang: AiLanguage | string | undefined): { text: string; kept: 'prefix' | 'server' } => {
   const full = reply.trim();
-  if (full && recapComplete(full, recap)) return { text: full, kept: 'model' };
   const server = orderRecapText(recap, lang);
   // journey retest R2-6: the model's own « Répondez oui pour confirmer » is dropped — the server recap ends with the request
   const all = full.split(/(?<=[.!?؟])\s+|\n+/).filter((x) => x.trim());
   // journey retest R3-4: nor a sentence about the recap itself (« le récapitulatif va vous être envoyé », « Recap ydhher dork »,
   // « I have everything for your order », « بدلنا الطلبية لـ 2 … ») — what is kept is a short lead-in or an answer to another question
-  const about = (x: string) => [folded(x), x.toLowerCase()].some((v) => CONFIRM_ASK.test(v) || RECAP_TALK.test(v));
-  const kept = all.filter((x) => !about(x));
+  const kept = all.filter((x) => !aboutRecap(x));
   const text = kept.join(' ').trim();
   const nums = numbersOf(text);
   const w = wordsOf(text);
@@ -217,13 +199,44 @@ export const recapReply = (reply: string, recap: Recap, lang: AiLanguage | strin
 };
 /** A request to confirm the order (folded): the server recap already ends with one. */
 // journey retest R3-4: also « استني تأكيدك بـ « إيه » », « t7ebb nkamlouh b confirmation ? », « prête à être confirmée »
-const CONFIRM_ASK = /r[e]?pond(?:ez|s)?\s+(?:par\s+)?\W{0,3}oui|(?:pour|de)\s+confirmer|confirmez|je\s+confirme\s+(?:la|votre)\s+commande|confirmation|(?:a|à)\s+[eê]tre\s+confirm|attend(?:s|ons)?\s+votre|en\s+attente\s+de\s+votre|repl(?:y|ies)\s+\W{0,3}yes|(?:say|answer)\s+\W{0,3}yes|to\s+confirm|confirm\s+(?:the|your)\s+order|(?:waiting|wait)\s+for\s+your|ktebli\s+\W{0,3}(?:ih|iyeh|oui)|goulli\s+\W{0,3}(?:ih|iyeh)|bach\s+n?confirm|n?confirmi|nestanna|جاوبني|باش\s+نأكد|باش\s+نكد|لتأكيد|للتأكيد|أكد\s+لي|تأكيد|نستنى|استنى|استني|نستنا/u;
+// journey retest R4-4: the darija verb « nakked / n2akked / nakkdou / ta2kid » and a bracketed « (yes / le) », « (oui / non) »
+const CONFIRM_ASK = /(?<![\p{L}\p{N}])(?:[nty](?:2|')?akk?[ei]?d(?:ou|o|i|ha|lek)?|ta2?kk?id|t2akk?id)(?![\p{L}\p{N}])|\(\s*(?:yes|oui|ih|iyeh|ey?h|wah)\s*\/\s*(?:no|non|le|la|lala|lla)\s*\)|r[e]?pond(?:ez|s)?\s+(?:par\s+)?\W{0,3}oui|(?:pour|de)\s+confirmer|confirmez|je\s+confirme\s+(?:la|votre)\s+commande|confirmation|(?:a|à)\s+[eê]tre\s+confirm|attend(?:s|ons)?\s+votre|en\s+attente\s+de\s+votre|repl(?:y|ies)\s+\W{0,3}yes|(?:say|answer)\s+\W{0,3}yes|to\s+confirm|confirm\s+(?:the|your)\s+order|(?:waiting|wait)\s+for\s+your|ktebli\s+\W{0,3}(?:ih|iyeh|oui)|goulli\s+\W{0,3}(?:ih|iyeh)|bach\s+n?confirm|n?confirmi|nestanna|جاوبني|باش\s+نأكد|باش\s+نكد|لتأكيد|للتأكيد|أكد\s+لي|تأكيد|نستنى|استنى|استني|نستنا/u;
 /**
  * journey retest R3-4: a sentence about the recap or the order being ready — the recap that follows says it all. Words of
  * the recap (récap, summary, ملخص), its sending (« va vous être envoyé », « ydhher »), « I have everything », « commande prête »,
  * and a change described (« بدلنا الطلبية », « j'ai modifié la commande », « I've updated your order »).
  */
-const RECAP_TALK = /r[eé]?cap|r[ée]sum[ée]|summary|ملخص|voici\s+(?:votre|la)\s+commande|here(?:'s|\s+is)\s+(?:your|the)\s+order|va\s+vous\s+[eê]tre\s+envoy|vous\s+sera\s+envoy|ydh+er|yban|(?:i|we)\s+(?:have|got)\s+everything|(?:j['’]ai|on\s+a|nous\s+avons)\s+(?:bien\s+)?tout|all\s+set|(?:commande|order)\s+(?:est\s+)?(?:pr[eê]te|ready)|(?:modifi|mis\s+a\s+jour|mise\s+a\s+jour|updated|changed|bdelna|beddelna|beddelt|bedelt)\S*\s+(?:\S+\s+)?(?:la\s+|votre\s+|your\s+|the\s+)?(?:commande|order)|(?:بدلنا|بدلت|بدّلنا|عدلنا|عدلت)\s+(?:لك\s+)?(?:الطلبية|الطلب|الكوموند)/u;
+const RECAP_TALK = /r[eé]?cap|r[ée]sum[ée]|summary|ملخص|voici\s+(?:votre|la)\s+commande|here(?:'s|\s+is)\s+(?:your|the)\s+order|va\s+vous\s+[eê]tre\s+envoy|vous\s+sera\s+envoy|ydh+er|yban|(?:i|we)\s+(?:have|got)\s+everything|(?:j['’]ai|on\s+a|nous\s+avons)\s+(?:bien\s+)?tout|all\s+set|(?:commande|order)\s+(?:est\s+)?(?:pr[eê]te|ready)|(?:modifi|mis\s+a\s+jour|mise\s+a\s+jour|updated|changed|bdelna|beddelna|beddelt|bedelt)\S*\s+(?:\S+\s+)?(?:la\s+|votre\s+|your\s+|the\s+)?(?:commande|order)|(?:بدلنا|بدلت|بدّلنا|عدلنا|عدلت)\s+(?:لك\s+)?(?:الطلبية|الطلب|الكوموند)|(?:commande|order)\S*\s+(?:\S+\s+){0,3}?(?:enregistr|confirm[eé]e|valid[eé]e|pass[eé]e|placed|registered|confirmed|tsajl|msajl)|تم\s+تسجيل|تسجلت\s+(?:ال)?طلبي/u;
+// journey retest R4-3: also an order said to be placed (« Votre commande est enregistrée ✓ ») on a turn that only shows the
+// recap — nothing is ordered yet, the sentence is never kept before the server recap (nor in a handoff answer)
+
+/** A sentence that asks to confirm the order or talks about the recap (both scripts, folded and as written). */
+const aboutRecap = (x: string) => [folded(x), x.toLowerCase()].some((v) => CONFIRM_ASK.test(v) || RECAP_TALK.test(v));
+/**
+ * journey retest R4-1 (17/11): a handoff answer never talks about a recap nor asks for a « oui » — no server recap goes with
+ * it (F6 T3: « votre commande est bien récapitulée ci-dessus … Répondez oui pour la confirmer » with no recap above). Those
+ * sentences are dropped; the rest (an answer to another question) stays.
+ */
+export const withoutRecapClaims = (reply: string): string => {
+  const all = reply.trim().split(/(?<=[.!?؟])\s+|\n+/).filter((x) => x.trim());
+  const kept = all.filter((x) => !aboutRecap(x));
+  return kept.length === all.length ? reply : kept.join(' ').trim();
+};
+
+/**
+ * journey retest R4-8 (17/11): the answer to an order of a blocked customer (04 §13: the shop cannot take it, the team takes
+ * over, never « you are blocked »). The model wrote « Vous pouvez réessayer un peu plus tard » right above the shop's « Je
+ * transmets à un membre de l'équipe … »: the server text agrees with that handoff line.
+ */
+const BLOCKED: Record<Loc, string> = {
+  fr: 'Je ne peux pas valider cette commande ici : l’équipe de la boutique va s’en occuper.',
+  ar: 'ما نقدرش نأكد هذي الطلبية هنا، الفريق تاع المحل راح يتكفل بيها.',
+  arabizi: 'Ma nqderch nconfirmi had la commande hna, l’équipe ta3 l’boutique rah tetkeffel biha.',
+  en: 'I can’t confirm this order here: the shop’s team will take care of it.',
+};
+/** The blocked-customer text when a `create_order` of this turn answered CUSTOMER_BLOCKED, else null. */
+export const blockedOrderText = (calls: { name: string; result: unknown }[], lang: AiLanguage | string | undefined): string | null =>
+  calls.some((c) => c.name === 'create_order' && (c.result as { error?: { code?: unknown } } | null)?.error?.code === 'CUSTOMER_BLOCKED') ? BLOCKED[locOf(lang)] : null;
 
 /** The confirmation of the order placed this turn, in the customer's language; null when no order was placed. */
 export const orderConfirmationText = (calls: { name: string; result: unknown }[], lang: AiLanguage | string | undefined): string | null => {

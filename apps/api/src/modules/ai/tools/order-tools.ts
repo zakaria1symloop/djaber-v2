@@ -36,7 +36,8 @@ export type CreateOrderRequest = {
 export type CancellableOrder = { id: string; number: string; total: number; status: string; orderedAt: string };
 export type ToolResult = Record<string, unknown>;
 /** 04 §13: the answer to an order for a blocked customer — the AI says the shop cannot take it and hands off (live and dry run). */
-export const customerBlockedResult = (): ToolResult => ({ ok: false, error: { code: 'CUSTOMER_BLOCKED' }, hint: 'handoff' });
+// journey retest R4-8: the platform sends the customer its own sentence (the team takes over) — never « réessayez plus tard »
+export const customerBlockedResult = (): ToolResult => ({ ok: false, error: { code: 'CUSTOMER_BLOCKED' }, hint: 'handoff', say: 'The shop cannot take this order in the chat: the team takes over the conversation and the platform tells the customer so. Never ask them to try again later and never mention a block.' });
 
 export interface OrderTools {
   /** false ⇒ the registry answers for the tool itself (dry run / unavailable) */

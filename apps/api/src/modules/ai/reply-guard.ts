@@ -22,7 +22,7 @@
 // Pure: no I/O. Conservative by design — a false positive costs one corrective model turn and, at worst, a dropped sentence.
 import { formatMoney } from '@djaber/shared';
 import { GUARD_MARK } from './ai.constants';
-import { detectLanguage, fixMoroccan, languageSwitched, moroccanIn, replyLanguage, SCRIPT_GLUE, wrongDarijaIn, type AiLanguage } from './language';
+import { detectLanguage, fixMoroccan, languageSwitched, moroccanIn, replyLanguage, SCRIPT_GLUE, withoutArabicValues, wrongDarijaIn, type AiLanguage } from './language';
 import type { CatalogueProduct } from './catalogue.service';
 import type { PromptContext } from './prompt/prompt.types';
 import { TOOL_ALIASES, TOOL_DEFS } from './tools/tool-registry';
@@ -480,7 +480,7 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
   if (rules.includes('self_name')) lines.push(facts.agentName ? `- YOUR NAME is "${facts.agentName}": never give yourself another name.` : "- YOU HAVE NO PERSONAL NAME: never give yourself one; if asked, you are the shop's assistant.");
   if (rules.includes('language_switch')) lines.push(`- LANGUAGE: the customer writes ${LANGUAGE_NAMES[facts.lang] ?? facts.lang}. Rewrite "reply" in that language and script, as they write it (never switch on your own).`);
   if (rules.includes('moroccan_darija'))
-    lines.push('- ALGERIAN DARIJA: the shop is Algerian. Replace the Moroccan / Tunisian words (chno, ach, dyal, walakin, daba, issa, nqdar, bghit / bghiti, chi / chi hadja, ma kaynch / ma kaynach, wakha, mezyan, barcha, tawa, mta3, شنو, ديال, دابا, بغيت, شي حاجة, ملي, فماش, برشا, صيفط / sifet / sift / sift-li) with Algerian ones (wach, ta3 / تاع, bessah / بصح, dork / درك, nqder, t7ebb / تحب, hadja / حاجة, makach / ماكانش, mlih, ki / كي, bezzaf / بزاف, ab3at / ab3atli / ابعث). « chhal / ch7al / شحال » means « how much »: never for « what » or « which » (never « ch7al men wilaya ? ») — « wach smitek ? », « a3tini numéro ta3ek », « wach men wilaya ? », « a3tini l\'adresse (rue, cité…) », « t7ebb nwasslouha l dar wela f stop-desk ? ».');
+    lines.push('- ALGERIAN DARIJA: the shop is Algerian. Replace the Moroccan / Tunisian words (chno, ach, dyal, walakin, daba, issa, nqdar / tanqdar / kanqdar / tandir, bghit / bghiti, chi / chi hadja, ma kaynch / ma kaynach, wakha, mezyan, barcha, tawa, mta3, شنو, ديال, دابا, بغيت, شي حاجة, ملي, فماش, برشا, صيفط / sifet / sift / sift-li) with Algerian ones (wach, ta3 / تاع, bessah / بصح, dork / درك, nqder, t7ebb / تحب, hadja / حاجة, makach / ماكانش, mlih, ki / كي, bezzaf / بزاف, ab3at / ab3atli / ابعث). « chhal / ch7al / شحال » means « how much »: never for « what » or « which » (never « ch7al men wilaya ? ») — « wach smitek ? », « a3tini numéro ta3ek », « wach men wilaya ? », « a3tini l\'adresse (rue, cité…) », « t7ebb nwasslouha l dar wela f stop-desk ? ».');
   if (rules.includes('false_confession'))
     lines.push(`- ORDER PLACED: order ${(facts.ordersPlaced ?? []).join(', ')} was placed with the details the customer gave in this conversation. Never say you invented them, that it was a mistake, that it does not exist or that nothing was ordered; never offer to cancel it unless the customer asks.`);
   if (rules.includes('contradicts_customer')) {
@@ -696,7 +696,8 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
   // the customer's own figures may be repeated (« avec 3000 DA de budget… », « je ne peux pas à 3500 DA »)
   const customerNumbers = numbersIn(foldGuard(i.customerText)).filter((n) => n >= 50);
   const thresholds = i.freeDeliveryThreshold ? [i.freeDeliveryThreshold] : [];
-  const messageLang = detectLanguage(i.customerText, undefined, { neutral: 'previous' });
+  // journey retest R4-2: a name typed in Arabic script (« سمير بن علي ») is no Arabic message — an Arabic reply to a French customer is a switch
+  const messageLang = detectLanguage(withoutArabicValues(i.customerText), undefined, { neutral: 'previous' });
   const base: GuardFacts = {
     lang: i.lang,
     ...(messageLang ? { messageLang } : {}),

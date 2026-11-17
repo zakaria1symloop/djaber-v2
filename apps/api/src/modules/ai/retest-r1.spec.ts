@@ -10,7 +10,7 @@ import { AiProviderError } from './provider/ai.gateway';
 import { sdkErrorDetail } from './provider/live-ai.gateway';
 import { breakerTrips } from './routing.service';
 import { checkReply, enforceReply, buildGuardFacts } from './reply-guard';
-import { orderRecapText, pendingRecap, recapComplete, recapReply } from './tools/order-confirmation-text';
+import { orderRecapText, pendingRecap, recapReply } from './tools/order-confirmation-text';
 import { absentFields } from './tools/tool-registry';
 
 const recapResult = (over: Record<string, unknown> = {}) => ({
@@ -123,13 +123,13 @@ describe('R1-6 / R1-7 — the server recap is the recap', () => {
     expect(orderRecapText(pendingRecap(calls(recapResult({ isStopdesk: true, deliveryFee: 450, total: 7950, address: null }) as never))!, 'en')).toContain('- Stop-desk delivery (Constantine): 450 DA');
     expect(orderRecapText(pendingRecap(calls(recapResult({ replaces: 'TEST-6619' }) as never))!, 'fr')).toContain('Elle remplacera la commande TEST-6619.');
   });
-  it('a model recap missing lines, the name or the phone, or with a translated name, is replaced; a whole one is kept', () => {
+  it('a model recap — missing lines, with a translated name, or whole (journey retest R4-3) — is replaced by the server recap', () => {
     const r = pendingRecap(calls())!;
     // F6 T7: one sentence, no line, no name, no phone
-    expect(recapComplete('Votre commande de 1 djellaba (total 8200 DA, livraison incluse) attend votre confirmation : répondez oui.', r)).toBe(false);
+    expect(recapReply('Votre commande de 1 djellaba (total 8200 DA, livraison incluse) attend votre confirmation : répondez oui.', r, 'fr').kept).toBe('server');
     // F2 T6: « جلابة رجالي » for « Djellaba homme »
-    expect(recapComplete('ملخص الطلب: جلابة رجالي × 1: 7500 دج، التوصيل 700 دج، المجموع 8200 دج. الاسم: Samir Ben Ali الهاتف: 0661234567', r)).toBe(false);
-    expect(recapComplete('Djellaba homme x1 : 7500 DA, livraison 700 DA, total 8 200 DA. Nom : Samir Ben Ali, téléphone 0661234567.', r)).toBe(true);
+    expect(recapReply('ملخص الطلب: جلابة رجالي × 1: 7500 دج، التوصيل 700 دج، المجموع 8200 دج. الاسم: Samir Ben Ali الهاتف: 0661234567', r, 'ar').kept).toBe('server');
+    expect(recapReply('Djellaba homme x1 : 7500 DA, livraison 700 DA, total 8 200 DA. Nom : Samir Ben Ali, téléphone 0661234567.', r, 'fr')).toEqual({ text: orderRecapText(r, 'fr'), kept: 'server' });
     expect(recapReply('Votre commande de 1 djellaba (total 8200 DA) attend votre confirmation.', r, 'fr')).toEqual({ text: orderRecapText(r, 'fr'), kept: 'server' });
     expect(recapReply('', r, 'arabizi')).toEqual({ text: orderRecapText(r, 'arabizi'), kept: 'server' });
     // another answer of the same message is kept before the recap
@@ -159,21 +159,11 @@ describe('R1-1 — a turn the AI did not answer is not counted in the 60 / h', (
   });
 });
 
-describe('R1-6 — the complete server recap of an earlier turn is not a « recap the AI showed » for another address or name', () => {
-  it('recapShown needs the address and the name of the call in the shown text', async () => {
-    const { recapShown } = await import('./tools/order-confirmation');
-    const shown = 'Voici le récapitulatif de votre commande :\n- 1 × Robe satin bordeaux : 4 500 DA\n- Livraison à domicile (Bab Ezzouar, Alger) : 400 DA\nTotal : 4 900 DA, à payer à la livraison.\nNom : Amine Benali\nTéléphone : 0555123456\nAdresse : Cité des 200 logements, Bt 4, Bab Ezzouar, Alger';
-    const base = { clientPhone: '0555123456', total: 4900, items: [{ name: 'Robe satin bordeaux' }] };
-    expect(recapShown(shown, { ...base, address: 'Cité des 200 logements, Bt 4, Bab Ezzouar', clientName: 'Amine Benali' })).toBe(true);
-    // « oui mais c'est le Bt 9 »
-    expect(recapShown(shown, { ...base, address: 'Cité des 200 logements, Bt 9, Bab Ezzouar', clientName: 'Amine Benali' })).toBe(false);
-    expect(recapShown(shown, { ...base, address: 'Cité des 200 logements, Bt 4, Bab Ezzouar', clientName: 'Sarah Benali' })).toBe(false);
-  });
-});
-
 describe('R1-6 — amounts written with no-break spaces', () => {
   it('« 8 200 DA » with U+00A0 / U+202F reads as 8200', () => {
     const r = pendingRecap([{ name: 'create_order', result: recapResult() }])!;
-    expect(recapComplete('Djellaba homme ×1 : 7\u00a0500 DA, livraison 700 DA, total 8\u202f200 DA. Samir Ben Ali, 0661234567.', r)).toBe(true);
+    // journey retest R4-3: the model's recap is never kept — the total written « 8\u202f200 » marks it as a recap to drop
+    expect(recapReply('Djellaba homme ×1 : 7\u00a0500 DA, livraison 700 DA, total 8\u202f200 DA. Samir Ben Ali, 0661234567.', r, 'fr').kept).toBe('server');
+    expect(recapReply('Total 8\u202f200 DA.', r, 'fr').kept).toBe('server');
   });
 });

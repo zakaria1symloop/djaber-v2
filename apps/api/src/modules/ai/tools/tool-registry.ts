@@ -17,7 +17,7 @@ import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
 import { fold, WILAYA_ALIASES } from './wilaya-aliases';
 import { handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
-import { asksCancel, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, recapShown, simulatedOrders, type OrderCallHistory } from './order-confirmation';
+import { asksCancel, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, simulatedOrders, type OrderCallHistory } from './order-confirmation';
 
 export type ToolName = 'search_products' | 'get_product' | 'check_availability' | 'quote_delivery' | 'create_order' | 'cancel_order' | 'lookup_order' | 'handoff_to_human' | 'add_faq_candidate' | 'create_payment_link';
 export type ToolRunContext = {
@@ -39,8 +39,8 @@ export type ToolRunContext = {
   customerHistory?: string;
   /** full-test 15/11 proposal 9: an order is being taken (the customer chose a product, `context.chosen`) */
   ordering?: boolean;
-  /** journey 16/11 J04-4: the AI's message(s) right before the customer's current one (a recap it wrote itself) */
-  lastAiText?: string;
+  /** journey retest R4-1: the server reasons the earlier tool results of this turn established (handoff-judge `establishedReasons`) */
+  established?: string[];
 };
 
 /** journey 16/11 J04-7: an FAQ suggestion that carries a customer's phone, address or « Cliente X » (a note about one customer). */
@@ -106,7 +106,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
   },
   create_order: {
     name: 'create_order',
-    description: 'Cash-on-delivery order. Call it only once the customer wrote their name, phone number and (home delivery) address in the conversation — never a placeholder or a guessed value (0000000000, 0500000000, « Client », a wilaya they did not name): ask for what is missing instead; never call it to test a phone number. First call: returns CONFIRMATION_REQUIRED with the recap to show — nothing is ordered; every recap (a change of a placed order too, with replacesOrder) comes from this first call. Call again with the same values only after the customer answered yes in a later message.',
+    description: 'Cash-on-delivery order. Call it only once the customer wrote their name, phone number and (home delivery) address in the conversation — never a placeholder or a guessed value (0000000000, 0500000000, « Client », a wilaya they did not name): ask for what is missing instead; never call it to test a phone number or to find out which field is missing (read the conversation: the product, name, phone and wilaya must each be in the customer\'s own messages or KNOWN CUSTOMER before the first call). First call: returns CONFIRMATION_REQUIRED with the recap to show — nothing is ordered; every recap (a change of a placed order too, with replacesOrder) comes from this first call. Call again with the same values only after the customer answered yes in a later message.',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -114,7 +114,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
       properties: {
         clientName: { type: 'string', minLength: 3, maxLength: 80, description: 'the name exactly as the customer wrote it — never « Client », « Customer » or another placeholder' },
         clientPhone: { type: 'string', pattern: '^(\\+213|00213|0)?[5-7][0-9]{8}$' },
-        secondPhone: { type: 'string' },
+        secondPhone: { type: 'string', description: 'the other number when the customer gave two (« 0661… ou 0770… »): keep both, never ask which one to keep' },
         wilayaId: { type: 'integer', minimum: 1, maximum: WILAYA_COUNT },
         communeName: { type: 'string', maxLength: 100 },
         address: { type: 'string', maxLength: 500, description: 'home delivery: the street, cité / building or landmark the customer wrote — never only the commune or wilaya name' },
@@ -258,6 +258,27 @@ export const placeOnlyAddress = (address: string, places: string[], wilayaId?: n
   const rest = w.trim().split(/\s+/).filter((x) => x && !PLACE_FILLERS.has(x) && !/^\d{5}$/.test(x) && x !== String(wilayaId ?? '') && x !== `0${wilayaId ?? ''}`);
   return rest.length === 0;
 };
+/** A correction between two numbers (« non, plutôt », « pardon », « machi »): the second one replaces the first. */
+const PHONE_CORRECTION = /(?<![\p{L}])(?:non|nn|pardon|plutot|erreur|errone|corrig\S*|remplac\S*|chang\S*|nouveau|nouvelle|jdid|jdida|machi|mchi|lala|bedel|beddel|instead|rather|sorry|wrong|ماشي|غالط|بدل|لالا|لا)(?![\p{L}])/u;
+/**
+ * journey retest R4-6 (17/11): the customer's other phone number, when one message gave two (« 0661234568 ou 0770998877 »)
+ * with this one, without a correction between them, and no later message chose one of the two.
+ */
+export const otherPhoneGiven = (history: string, main: string): string | null => {
+  let other: string | null = null;
+  for (const line of history.split(/\n+/)) {
+    const phones = [...phonesIn(line)].filter((p) => isPhoneDz(p));
+    if (phones.length === 2 && phones.includes(main) && !PHONE_CORRECTION.test(fold(line))) other = phones.find((p) => p !== main) ?? null;
+    // a later message with only one of the two numbers chose it (« gardez le 0661234568 »)
+    else if (other && phones.length === 1 && (phones[0] === main || phones[0] === other)) other = null;
+  }
+  return other;
+};
+/** The agent asks for a second phone (default fields, or `phone2` in « Prise de commande »). */
+const phone2Field = (agent: ToolRunContext['agent']): boolean => {
+  const fields = Array.isArray(agent.orderFields) ? (agent.orderFields as unknown as { key: string }[]) : [];
+  return !fields.length || fields.some((f) => f.key === 'phone2');
+};
 /** journey retest R2-7: the Arabic name of the commune of the order, when it is one of the wilaya's list. */
 export const communeAr = (communes: { nameFr: string; nameAr: string }[], name: string | null | undefined): string | null => {
   const n = name ? placeFold(name) : '';
@@ -345,7 +366,7 @@ export class ToolRegistry {
     const reason = typeof args.reason === 'string' ? args.reason : '';
     const refuse = (instruction: string, why?: string) => ({ ok: false, error: { code: 'HANDOFF_NOT_NEEDED', ...(why ? { why } : {}) }, instruction }) as ToolResult;
     if (ctx.customerText !== undefined) {
-      const v = judgeHandoff({ reason, evidence: typeof args.evidence === 'string' ? args.evidence : null, customerText: ctx.customerText, shopRules: ctx.agent.humanHandoffRules, keywords: ctx.agent.handoffKeywords, unclearStreak: ctx.unclearStreak });
+      const v = judgeHandoff({ reason, evidence: typeof args.evidence === 'string' ? args.evidence : null, customerText: ctx.customerText, shopRules: ctx.agent.humanHandoffRules, keywords: ctx.agent.handoffKeywords, unclearStreak: ctx.unclearStreak, established: ctx.established });
       return v.ok ? { ok: true } : refuse(handoffRefusedInstruction(v.why), v.why);
     }
     const known = (HANDOFF_REASONS as readonly string[]).includes(reason) && reason !== 'other';
@@ -546,8 +567,11 @@ export class ToolRegistry {
     // asked for first, before the address and the other checks — the model used to get a format error and guess again
     if (!isPhoneDz(phone)) return fail(known && known.size === 0 ? { ok: false, error: { code: 'VALIDATION', field: 'clientPhone', missing: true, example: EXAMPLES.clientPhone }, say: 'ask the customer for this value (one question); never invent it' } : invalid('clientPhone', EXAMPLES.clientPhone));
     if (known && !known.has(phone)) return ask('clientPhone');
-    const phone2 = d.secondPhone ? normalizePhoneDz(d.secondPhone) : null;
+    let phone2 = d.secondPhone ? normalizePhoneDz(d.secondPhone) : null;
     if (phone2 && !isPhoneDz(phone2)) return fail(invalid('secondPhone', EXAMPLES.secondPhone));
+    // journey retest R4-6: « Nadia Kaci, 0661234568 ou 0770998877 » — the other number is kept as the second phone (the model
+    // asked which one to keep, then dropped 0770998877 without an answer), unless the customer said one replaces the other
+    if (!phone2 && ctx.customerHistory !== undefined && phone2Field(ctx.agent)) phone2 = otherPhoneGiven(ctx.customerHistory, phone);
     if (!d.isStopdesk && (d.address ?? '').length < 10) return fail(invalid('address', EXAMPLES.address));
     // journey retest R2-2: « Adresse : Bab Ezzouar, Alger » — a home address that is only the commune / wilaya name
     if (!d.isStopdesk && place && placeOnlyAddress(d.address ?? '', [place.nameFr, place.nameAr, ...place.communes.flatMap((c) => [c.nameFr, c.nameAr]), ...(d.communeName ? [d.communeName] : [])], place.id))
@@ -642,12 +666,14 @@ export class ToolRegistry {
       ...(replaces ? { replaces: replaces.number } : {}),
       ...(beyondStock.length ? { beyondStock } : {}),
     };
-    // journey 16/11 J04-4: a recap the AI wrote itself in its previous message (a change after an order) counts as shown
-    // when it carries this phone, total, products (and replaced order) — and the customer's message of the turn says yes
-    const confirmsOwnRecap = () => confirmation(ctx.customerText ?? '') === 'yes' && recapShown(ctx.lastAiText, { clientPhone: phone, total: request.total, items, replaces, address: request.isStopdesk ? null : request.address, clientName: request.clientName });
-    if (!hasDraft(ctx.orderHistory, draft) && !confirmsOwnRecap()) {
+    // journey retest R4-3 (Critical): only a SERVER recap of an earlier turn (its CONFIRMATION_REQUIRED draft, or the latest
+    // recap with the same core, J03-10) can be confirmed. The J04-4 rule « the AI's previous message showed the phone, the total
+    // and the products » let a product suggestion that repeated the customer's details (« Voulez-vous plutôt le Coffret cadeau
+    // Aïd à 24990 DA ? », free delivery: total = price) count as a recap: « oui » placed TEST-8513 without any recap shown.
+    // Since R1-6 every recap is the server's, sent from the first call: this call returns it.
+    if (!hasDraft(ctx.orderHistory, draft)) {
       // journey retest R1-6 / R1-7: `recapToShow` — the platform sends this recap to the customer in their language (the
-      // reply is replaced by it unless it already shows every line, the name and the phone as given)
+      // reply never replaces it — journey retest R4-3)
       return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft, core }, recap, recapToShow: true, say: 'Nothing is ordered yet. The platform sends this recap to the customer right after your reply, as given (items with their catalogue names, quantities, prices, delivery mode and fee, total, name, phone, address) with the request to answer yes: write no recap of your own — "reply" only answers anything else the customer asked in this message, in one short sentence, or stays empty. Do not call create_order again in this turn: call it with the same values when the customer answers yes in their next message.' });
     }
     const said = confirmation(ctx.customerText ?? '');

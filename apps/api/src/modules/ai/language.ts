@@ -34,6 +34,9 @@ const words = (text: string) => text.toLowerCase().replace(/[’‘`]/g, "'").sp
  */
 export const detectLanguage = (text: string | null | undefined, previous?: AiLanguage, o: { neutral?: 'en' | 'previous' } = {}): AiLanguage | undefined => {
   if (!text) return previous;
+  // journey retest R4-2: inside a conversation, Arabic-script words that are only a value (« سمير بن علي », « smiti وليد بوزيد »)
+  // say nothing of the language — the Latin rest (or nothing) decides
+  if (previous && previous !== 'ar' && previous !== 'mixed') text = withoutArabicValues(text);
   const arabic = (text.match(/[؀-ۿ]/g) ?? []).length;
   const latin = (text.match(/[A-Za-zÀ-ÿ]/g) ?? []).length;
   if (arabic + latin === 0) return previous;
@@ -70,6 +73,26 @@ export const detectLanguage = (text: string | null | undefined, previous?: AiLan
   if (o.neutral === 'previous') return previous;
   return previous && previous !== 'ar' ? previous : 'en';
 };
+
+/**
+ * journey retest R4-2 (17/11): Arabic-script words that say the customer writes Arabic — greetings, thanks, yes / no, « اسمي »,
+ * question and request words (the darija / MSA markers below are added at use).
+ */
+const ARABIC_COMMON = /(?<!\p{L})[وفب]?(?:ال)?(?:عليكم|شكرا|شكراً|مرسي|صحيت|صحا|بارك|نعم|ايه|إيه|أيه|ايوه|لا|ممكن|فضلك|اسمي|إسمي|سميتي|انا|أنا|عندي|عندكم|عندك|حاجة|مرحبا|صباح|مساء|هذا|هذه|اريد|أريد|ابغي|عطيني|اعطيني|أعطيني|ابعث|ابعثلي|سعر|ثمن|توصيل|طلبية|طلب|نطلب|نشري|شري|كيف|بلاصة|نتا|نتي|انتم|كم)(?!\p{L})|(?<!عبد\s*)(?<!\p{L})[وفب]?(?:ال)?سلام(?!\p{L})/u;
+/** Arabic-script words of an address or a name that are no clue either (« حي 1000 مسكن عمارة 5 », « بن »). */
+const ARABIC_VALUE_WORDS = new Set(['حي', 'مسكن', 'مساكن', 'عمارة', 'عماره', 'رقم', 'شارع', 'نهج', 'طريق', 'بلدية', 'بلديه', 'ولاية', 'ولايه', 'دائرة', 'فيلا', 'قرب', 'بجانب', 'مقابل', 'في', 'و', 'بن', 'ابن', 'بنت', 'عبد', 'ستوب', 'ديسك']);
+/**
+ * journey retest R4-2: a message whose Arabic-script words are only a value — a name typed in Arabic script (« سمير بن علي »,
+ * « smiti وليد بوزيد »), a place, an address: at most 4 such words, none a word of the language. The French customer of N4 and
+ * the arabizi one of F3 got every later reply, the recap and the confirmation in Arabic script.
+ */
+export const arabicValuesOnly = (text: string): boolean => {
+  const tokens = text.match(/[؀-ۿ]+/g) ?? [];
+  if (!tokens.length || ARABIC_COMMON.test(text) || MSA_MARKERS.test(text) || DARIJA_MARKERS.test(text)) return false;
+  return tokens.filter((t) => !ARABIC_VALUE_WORDS.has(t)).length <= 4;
+};
+/** The text without its Arabic-script value words (unchanged when they say something of the language). */
+export const withoutArabicValues = (text: string): string => (arabicValuesOnly(text) ? text.replace(/[؀-ۿ]+/g, ' ') : text);
 
 /**
  * journey 16/11 J05-8: the language of a customer turn. A text with no clue (a phone number, a name, « ok ») keeps the
@@ -166,7 +189,7 @@ export const languageSwitched = (customer: AiLanguage, reply: string): boolean =
  * « kayen » are Algerian too: never flagged.
  */
 export const MOROCCAN_WORDS =
-  /(?<![\p{L}\p{N}_])(chno|chnou|chnu|chnowa|chnoua|achno|achnou|achnu|ach|dyal|dyalek|dyali|dyalna|dyalo|dyalha|walakin|nqdar|ndirolek|daba|bghiti|bghit|bghina|tbghi|nbghi|kanbghi|chi|kaynch|makaynch|kaynach|makaynach|kaynash|makaynash|wakha|barcha|barsha|famma|mafamach|mafamech|tawwa|tawa|mta3|mte3|mta3ek|mte3ek|mouch|hala2|halla2|ktir|kteer|baddak|biddak|3anjad|ezzayak|izzayak|mezyan|mzyan|mezyana|mzyana|mezyanin|mzyanin|n?sifet(?:li|lek|lik|lna)?|[nt]?sift(?:i?li|lek|lik|lna|ilek|ha|o)?|شنو|شنوة|ديال|ديالك|ديالي|دابا|والاكين|بغيت|بغيتي|تبغي|نبغي|كنبغي|ملي|فماش|برشا|واخا|توة|توا|هلق|هلأ|كتير|بدك|شو|شي حاجة|صيفط|صيفطلي|صيفطلك|نصيفط|نصيفطلك|نصيفطو)(?![\p{L}\p{N}_])/iu;
+  /(?<![\p{L}\p{N}_])(chno|chnou|chnu|chnowa|chnoua|achno|achnou|achnu|ach|dyal|dyalek|dyali|dyalna|dyalo|dyalha|walakin|nqdar|ndirolek|daba|bghiti|bghit|bghina|tbghi|nbghi|kanbghi|chi|kaynch|makaynch|kaynach|makaynach|kaynash|makaynash|wakha|barcha|barsha|famma|mafamach|mafamech|tawwa|tawa|mta3|mte3|mta3ek|mte3ek|mouch|hala2|halla2|ktir|kteer|baddak|biddak|3anjad|ezzayak|izzayak|mezyan|mzyan|mezyana|mzyana|mezyanin|mzyanin|tanqdar|kanqdar|tanqder|kanqder|tan9dar|kan9dar|katqdar|tatqdar|kat9dar|kayqdar|tayqdar|tandir|kandir|katdir|tatdir|kaydir|taydir|tan3ref|kan3ref|tankhdem|kankhdem|tanchouf|kanchouf|tanbghi|katbghi|tatbghi|n?sifet(?:li|lek|lik|lna)?|[nt]?sift(?:i?li|lek|lik|lna|ilek|ha|o)?|شنو|شنوة|ديال|ديالك|ديالي|دابا|والاكين|بغيت|بغيتي|تبغي|نبغي|كنبغي|ملي|فماش|برشا|واخا|توة|توا|هلق|هلأ|كتير|بدك|شو|شي حاجة|صيفط|صيفطلي|صيفطلك|نصيفط|نصيفطلك|نصيفطو)(?![\p{L}\p{N}_])/iu;
 /**
  * journey retest R2-1 (17/11): « Issa, sift-li l'adresse » — Moroccan « issa » (« now ») is flagged only at the start of a
  * sentence and before a comma: Issa is also a first name (« Merci Issa », « Saha Issa »).
@@ -190,7 +213,7 @@ export const WRONG_DARIJA = /(?<![\p{L}\p{N}_])(b?ch7al|b?chhal|chehal|chahal|ش
  * journey retest R3-5 (17/11): arabizi the model made up for the address question — « a3tini smiya ta3 nhar » (« the name of
  * the day »), « tswal l dar » (no such verb) — flagged and replaced like the Moroccan words.
  */
-const ODD_ARABIZI = /(?<![\p{L}\p{N}_])(?:smiy(?:a|et|at)\s+(?:ta3\s+)?e?nnhar|smiy(?:a|et|at)\s+(?:ta3\s+)?nhar|tswal)(?![\p{L}\p{N}_])/iu;
+const ODD_ARABIZI = /(?<![\p{L}\p{N}_])(?:smiy(?:a|et|at)\s+(?:ta3\s+)?e?nnhar|smiy(?:a|et|at)\s+(?:ta3\s+)?nhar|tswal|taf3il)(?![\p{L}\p{N}_])/iu;
 /** journey retest R3-2 / R3-5: « ch7al » used for « what / which », or made-up arabizi — the reply guard flags it with the Moroccan words. */
 export const wrongDarijaIn = (text: string): boolean => WRONG_DARIJA.test(text) || ODD_ARABIZI.test(text);
 /**
@@ -214,6 +237,11 @@ const ALGERIAN_FOR: [RegExp, string][] = (
     // journey retest R2-1 (17/11): « sift-li » (joined first, see fixMoroccan), « Ach numéro ta3ek ? », « Mezyan, Boufarik … »
     ['nsiftlek', 'nab3atlek'], ['nsiftlik', 'nab3atlek'], ['nsift', 'nab3at'], ['tsiftli', 'tab3atli'], ['tsift', 'tab3at'], ['siftili', 'ab3atli'], ['siftli', 'ab3atli'], ['siftilek', 'nab3atlek'], ['siftlek', 'nab3atlek'], ['siftlik', 'nab3atlek'], ['siftlna', 'ab3atelna'], ['siftha', 'ab3atha'], ['sifto', 'ab3atou'], ['sift', 'ab3at'],
     ['achnou', 'wach'], ['achno', 'wach'], ['achnu', 'wach'], ['ach', 'wach'],
+    // journey retest R4-5 (17/11): the Moroccan durative « ta- / ka- » forms (« o9rib tanqdar towsal fiha ? »)
+    ['tanqdar', 'nqder'], ['kanqdar', 'nqder'], ['tanqder', 'nqder'], ['kanqder', 'nqder'], ['tan9dar', 'nqder'], ['kan9dar', 'nqder'], ['katqdar', 'tqder'], ['tatqdar', 'tqder'], ['kat9dar', 'tqder'], ['kayqdar', 'yqder'], ['tayqdar', 'yqder'],
+    ['tandir', 'ndir'], ['kandir', 'ndir'], ['katdir', 'tdir'], ['tatdir', 'tdir'], ['kaydir', 'ydir'], ['taydir', 'ydir'], ['tan3ref', 'na3ref'], ['kan3ref', 'na3ref'], ['tankhdem', 'nkhdem'], ['kankhdem', 'nkhdem'], ['tanchouf', 'nchouf'], ['kanchouf', 'nchouf'], ['tanbghi', 'nheb'], ['katbghi', 't7ebb'], ['tatbghi', 't7ebb'],
+    // journey retest R4-5: « b taman w taf3il » (« activation ») for « tafasil » (details)
+    ['taf3il', 'tafasil'],
     ['mezyanin', 'mlah'], ['mzyanin', 'mlah'], ['mezyana', 'mliha'], ['mzyana', 'mliha'], ['mezyan', 'mlih'], ['mzyan', 'mlih'],
     ['شي حاجة', 'حاجة'], ['شنوة', 'واش'], ['شنو', 'واش'], ['ديالك', 'تاعك'], ['ديالي', 'تاعي'], ['ديال', 'تاع'], ['دابا', 'درك'], ['والاكين', 'بصح'],
     ['بغيتي', 'تحب'], ['بغيت', 'حبيت'], ['تبغي', 'تحب'], ['كنبغي', 'نحب'], ['نبغي', 'نحب'], ['ملي', 'كي'], ['فماش', 'ماكانش'], ['برشا', 'بزاف'], ['واخا', 'مليح'], ['توة', 'درك'], ['توا', 'درك'], ['هلق', 'درك'], ['هلأ', 'درك'], ['كتير', 'بزاف'], ['بدك', 'تحب'], ['شو', 'واش'],

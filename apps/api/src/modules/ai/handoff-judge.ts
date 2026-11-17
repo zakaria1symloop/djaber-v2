@@ -19,7 +19,22 @@ const SERVER_REASONS = new Set(['order_limits', 'risky_client', 'blocked_word', 
 /** Rule ids of the prompt and older names the model may still write. */
 const ALIASES: Record<string, string> = { human_request: 'customer_request', human: 'customer_request', anger: 'angry', over_limits: 'order_limits', order_limit: 'order_limits', off_topic: 'off_catalogue', '3_unclear': 'unclear_streak' };
 
-export type HandoffRefusal = 'greeting' | 'no_evidence' | 'evidence_not_in_message' | 'no_shop_rule' | 'keyword_absent' | 'not_unclear' | 'reason_mismatch';
+export type HandoffRefusal = 'greeting' | 'no_evidence' | 'evidence_not_in_message' | 'no_shop_rule' | 'keyword_absent' | 'not_unclear' | 'reason_mismatch' | 'server_reason';
+
+/**
+ * journey retest R4-1 (17/11): the server reasons a tool result of THIS turn established — `create_order` above a limit
+ * (`hint: 'order_limit'`), a blocked / risky customer, orders unavailable. Only these let the model write such a reason.
+ */
+export function establishedReasons(results: readonly unknown[]): string[] {
+  const out = new Set<string>();
+  for (const x of results) {
+    const r = x as { hint?: unknown; error?: { code?: unknown } } | null;
+    if (r?.hint === 'order_limit') out.add('order_limits');
+    if (r?.hint === 'risky_client' || r?.error?.code === 'CUSTOMER_BLOCKED') out.add('risky_client');
+    if (r?.error?.code === 'ORDERS_UNAVAILABLE') out.add('orders_unavailable');
+  }
+  return [...out];
+}
 export type HandoffVerdict = { ok: true; reason: string } | { ok: false; reason: string; why: HandoffRefusal };
 
 /** The reason as the platform names it (`statusDetail` is free text: an unknown value is `other`). */
@@ -59,11 +74,15 @@ export type HandoffInput = {
   keywords?: readonly string[];
   /** unclear turns in a row before this one */
   unclearStreak?: number;
+  /** journey retest R4-1: the server reasons this turn's tool results established (`establishedReasons`) */
+  established?: readonly string[];
 };
 
 export function judgeHandoff(i: HandoffInput): HandoffVerdict {
   const reason = handoffReason(i.reason);
-  if (SERVER_REASONS.has(reason)) return { ok: true, reason };
+  // journey retest R4-1 (17/11): a server reason is a tool outcome, never the model's choice — `handoff_to_human { order_limits,
+  // evidence « placeholder » }` was accepted on « Je voudrais le sac à main cuir marron » (1 item, limit 5) and on an address
+  if (SERVER_REASONS.has(reason)) return (i.established ?? []).includes(reason) ? { ok: true, reason } : { ok: false, reason, why: 'server_reason' };
   // the prompt asks for it on the 3rd unclear message in a row only
   if (reason === 'unclear_streak') return (i.unclearStreak ?? 0) >= UNCLEAR_STREAK_HANDOFF - 1 ? { ok: true, reason } : { ok: false, reason, why: 'not_unclear' };
   const text = i.customerText.trim();
@@ -120,6 +139,9 @@ export function reasonFits(reason: string, evidence: string, message: string): b
 }
 
 /**
+ * journey retest R4-1 (17/11): the reasons the model may write — the rules a customer message can trigger (customer_request,
+ * refund, complaint, angry, off_catalogue, keyword, other with « Shop rules », unclear_streak on the 3rd). `order_limits`,
+ * `risky_client`, `orders_unavailable` are server outcomes of `create_order`: never offered.
  * journey retest R3-3 (17/11): the `handoff_to_human` reasons this agent's rules allow right now — `other` only with « Shop
  * rules », `keyword` only with keywords, `unclear_streak` only on the 3rd unclear message, no built-in rule the shop turned
  * off. 4 calls `{ reason: "other" }` on an order / name / phone message of two shops without shop rules were refused
@@ -131,7 +153,7 @@ export function allowedHandoffReasons(agent: { humanHandoffRules?: string | null
     if (r === 'other') return !!(agent.humanHandoffRules ?? '').trim();
     if (r === 'keyword') return (agent.handoffKeywords ?? []).some((k) => k.trim());
     if (r === 'unclear_streak') return unclearStreak >= UNCLEAR_STREAK_HANDOFF - 1 && !off.has(r);
-    return SERVER_REASONS.has(r) || !off.has(r);
+    return !SERVER_REASONS.has(r) && !off.has(r);
   });
 }
 
@@ -147,6 +169,7 @@ export function handoffRefusedInstruction(why: HandoffRefusal): string {
     not_unclear: 'this is not the 3rd unclear message in a row',
     reason_mismatch:
       "the customer's words do not match that rule: a discount, a price or free delivery « the owner / the team said » is answered with the catalogue price and the delivery fee (politely, no handoff); a question about you (your name, are you a robot) is answered: you are the shop's virtual assistant; customer_request needs words asking for a person",
+    server_reason: 'that reason is set by the platform from a tool result (create_order above a limit, a blocked customer), never by you — no tool of this turn reported it; an order message is taken as usual (ask the next missing field, or call create_order for the recap)',
   };
   return `${HANDOFF_REFUSED_MARK}: ${cause[why]}. Keep the conversation and answer the customer's current message now, in their language (status OK; UNKNOWN when you have no answer — say you will check with the team and call add_faq_candidate; UNCLEAR when you did not understand). Hand off only when the customer's current message itself matches a rule, quoting their words in "evidence". Answer with the JSON object only.`;
 }

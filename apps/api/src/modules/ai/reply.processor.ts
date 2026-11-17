@@ -38,7 +38,7 @@ import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
 import { guardFactsOf } from './reply-guard';
 import { AiProviderError } from './provider/ai.gateway';
 import { canonicalTool } from './tools/tool-registry';
-import { lastAiText, latestRecap, nextChosen, orderHistoryOf, placedThisTurn } from './tools/order-confirmation';
+import { latestRecap, nextChosen, orderHistoryOf, placedThisTurn } from './tools/order-confirmation';
 import { TurnContextService } from './turn-context.service';
 import { VisionService, visionNoteText, type VisionNote } from './vision.service';
 
@@ -292,14 +292,15 @@ export class ReplyProcessor implements OnModuleInit {
       orderHistoryOf({ conversationId: conv.id, id: { not: run.id } }),
       prisma.message.findMany({ where: { conversationId: conv.id, author: 'customer' }, orderBy: { createdAt: 'desc' }, take: 200, select: { text: true, transcript: true } }),
     ]);
-    const customerHistory = customerRows.map((m) => [m.text ?? '', m.transcript ?? ''].join(' ')).join('\n');
+    // oldest first, as in the playground (journey retest R4-6: a later message choosing one of two phones counts after them)
+    const customerHistory = [...customerRows].reverse().map((m) => [m.text ?? '', m.transcript ?? ''].join(' ')).join('\n');
 
     // --- model loop ------------------------------------------------------------------------------------------------------------
     const turn = await this.runs.turn({
       runId: run.id,
       prompt,
       // retest 12/11: a handoff is checked against the customer's words of this batch (handoff-judge)
-      toolCtx: { workspaceId: conv.workspaceId, agent, conversationId: conv.id, clientId: conv.clientId, channelId: conv.channelId, runId: run.id, dryRun: false, customerText: batch.plain, unclearStreak: ctx.unclearStreak ?? 0, orderHistory, customerHistory, ordering: !!ctx.chosen?.length || !!latestRecap(orderHistory), lastAiText: lastAiText(history.messages) },
+      toolCtx: { workspaceId: conv.workspaceId, agent, conversationId: conv.id, clientId: conv.clientId, channelId: conv.channelId, runId: run.id, dryRun: false, customerText: batch.plain, unclearStreak: ctx.unclearStreak ?? 0, orderHistory, customerHistory, ordering: !!ctx.chosen?.length || !!latestRecap(orderHistory) },
       temperature: turnCtx.temperature,
       maxTokens: turnCtx.maxTokens,
       deadline,

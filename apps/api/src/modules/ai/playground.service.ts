@@ -22,7 +22,7 @@ import { AiRunService, guardFlags, intentOf, type RunMeta } from './ai-run.servi
 import { CatalogueService } from './catalogue.service';
 import { conversationLanguage, languageSwitched, systemLocale, turnLanguage, type AiLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
-import { lastAiText, latestRecap, nextChosen, orderHistoryOf, placedThisTurn, type ChosenItem } from './tools/order-confirmation';
+import { latestRecap, nextChosen, orderHistoryOf, placedThisTurn, type ChosenItem } from './tools/order-confirmation';
 import { canonicalTool } from './tools/tool-registry';
 import { guardFactsOf } from './reply-guard';
 import { productCards } from '../messaging/product-card';
@@ -223,7 +223,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         prompt,
         // retest 12/11: the same handoff check as the live replies (handoff-judge)
         // journey retest R1-5: an order is being taken once a product is chosen or a recap was shown
-        toolCtx: { workspaceId: agent.workspaceId, agent, conversationId: null, clientId: null, channelId: null, runId: run.id, dryRun: true, customerText: said, orderHistory, customerHistory: [...messages.filter((m) => m.role === 'user').map((m) => m.text), said].join('\n'), ordering: !!chosen?.length || !!latestRecap(orderHistory), lastAiText: lastAiText(history) },
+        toolCtx: { workspaceId: agent.workspaceId, agent, conversationId: null, clientId: null, channelId: null, runId: run.id, dryRun: true, customerText: said, orderHistory, customerHistory: [...messages.filter((m) => m.role === 'user').map((m) => m.text), said].join('\n'), ordering: !!chosen?.length || !!latestRecap(orderHistory) },
         temperature: turnCtx.temperature,
         maxTokens: turnCtx.maxTokens,
         deadline: Date.now() + RUN_BUDGET_MS,

@@ -62,7 +62,7 @@ export const orderRulesSection = (c: PromptContext): string => {
     ...(c.agent.maxQtyPerOrder ? [`MAX_QTY_PER_ORDER=${c.agent.maxQtyPerOrder}`] : []),
     ...(c.agent.maxAmountPerOrder ? [`MAX_AMOUNT=${c.agent.maxAmountPerOrder} DA`] : []),
     c.agent.maxQtyPerOrder || c.agent.maxAmountPerOrder
-      ? `An order above ${c.agent.maxQtyPerOrder && c.agent.maxAmountPerOrder ? 'one of these limits' : 'this limit'} is never created: hand off (status=HANDOFF, statusDetail=order_limits).${c.agent.maxQtyPerOrder ? '' : ' There is no quantity limit.'}${c.agent.maxAmountPerOrder ? '' : ' There is no amount limit.'}`
+      ? `An order above ${c.agent.maxQtyPerOrder && c.agent.maxAmountPerOrder ? 'one of these limits' : 'this limit'} is never created: create_order answers hint order_limit, then hand off (status=HANDOFF, statusDetail=order_limits) — never before that answer.${c.agent.maxQtyPerOrder ? '' : ' There is no quantity limit.'}${c.agent.maxAmountPerOrder ? '' : ' There is no amount limit.'}`
       : 'There is no quantity or amount limit: never refuse or hand off an order because of its size (the stock still applies).',
     `RISKY_CLIENT_POLICY=${c.agent.riskyClientBehavior ?? 'take_and_flag'}`,
     // journey 16/11 J03-12 (04 §5, assumptions-log 16/11 AI-CHAT-01): every order needs the recap and the customer's yes —
@@ -79,6 +79,8 @@ export const orderRulesSection = (c: PromptContext): string => {
     'Report in "customer" the order details the customer has given so far (name, phone, phone2, wilaya, commune, address), and in "cart" the product(s), variant and quantity they chose for this order.',
     // retest 12/11 (Badro: « the bot blocked after the phone number, again after the address »)
     'A message with only a phone number, a name, a wilaya, a commune or an address while you take an order is the value you asked for: record it, never treat it as UNCLEAR, as a request for a call or as a reason to hand off, and ask the next missing field (or show the recap).',
+    // journey retest R4-6 (17/11): « Nadia Kaci, 0661234568 ou 0770998877 » — « Lequel garder ? », then the second number dropped
+    'Two phone numbers in one message (« 0661… ou 0770… », « 0661… / 0770… »): the first is the phone, the other the secondPhone — keep both (the recap shows both), never ask which one to keep; keep only one when the customer says it replaces the other (« non, plutôt 0770… »).',
     'A place that is both a wilaya and a commune (Blida, Médéa, Sétif, Oran…) given once is that wilaya AND its commune of the same name, unless the customer says another commune: do not ask for the commune again (and do not tell the customer how you recorded it).',
     // journey retest R2-2 (17/11): « Bab Ezzouar » taken as the address — a recap « Adresse : Bab Ezzouar, Alger »
     'The home-delivery address is the street, the cité / building or a landmark (« rue des frères Bouadou n 5 », « cité 500 logements bloc 12 », « près de la mairie »): a commune or a wilaya name alone is NOT an address — record it as the commune and ask for the street (or offer the stop-desk). create_order refuses such an address (VALIDATION address missing=true).',

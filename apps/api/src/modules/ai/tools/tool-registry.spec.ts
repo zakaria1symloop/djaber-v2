@@ -101,7 +101,7 @@ describe('journey 16/11 J09-14 — the dry run (playground, shared test link) re
   const ctx = { workspaceId: 'w', agent: { id: 'a' } as never, conversationId: null, clientId: null, channelId: null, runId: 'r', callId: 'c', dryRun: true };
   it('blocked ⇒ CUSTOMER_BLOCKED + handoff, no TEST-n order', async () => {
     const r = await reg(true).execute('create_order', {}, ctx);
-    expect(r).toEqual({ ok: false, error: { code: 'CUSTOMER_BLOCKED' }, hint: 'handoff' });
+    expect(r).toMatchObject({ ok: false, error: { code: 'CUSTOMER_BLOCKED' }, hint: 'handoff' });
   });
   it('not blocked ⇒ the simulated TEST-n order', async () => {
     expect(await reg(false).execute('create_order', {}, ctx)).toMatchObject({ ok: true, simulated: true, total: 1650 });
