@@ -78,7 +78,7 @@ describe('R7-1 — « quand même » is no question; a line of the server recap 
     expect(repeatsRecapLine('هذي تعوض TEST-6619.', { replaces: 'TEST-6619' })).toBe(true);
     expect(repeatsRecapLine('Oui, on livre à Blida.', { replaces: 'TEST-6619' })).toBe(false);
     // without beyond-stock items nothing about a delay is a recap line
-    expect(repeatsRecapLine('La livraison peut prendre un peu plus de temps.', {})).toBe(false);
+    expect(repeatsRecapLine('La livraison peut prendre un peu plus de temps.', { replaces: null, beyondStock: undefined } as never)).toBe(false);
   });
 });
 
@@ -256,7 +256,7 @@ describe('R7-5 — « Vous livrez à Blida ? » gives the fee', () => {
   const setup = (...replies: { reply?: string; toolCalls?: { name: string; args: Record<string, unknown> }[] }[]) => {
     places();
     const gateway = new FakeAiGateway();
-    gateway.script('reply', ...replies.map((r) => (r.toolCalls ? r : { ...r, intent: 'INFO' })));
+    gateway.script('reply', ...(replies.map((r) => (r.toolCalls ? r : { ...r, intent: 'INFO' })) as never[]));
     const execute = jest.fn(async () => QUOTE);
     const tools = { defsFor: async () => [TOOL_DEFS.quote_delivery], forcedHandoff: () => null, execute } as unknown as ToolRegistry;
     return { gateway, execute, svc: new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never) };
