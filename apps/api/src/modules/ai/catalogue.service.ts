@@ -5,6 +5,7 @@ import { prisma, Prisma, TenantContext, type Agent } from '@djaber/db';
 import { approvedFields, approvedImages, approvedVariants } from '../catalog/approved-content';
 import { reservedQuantities } from '../catalog/stock.service';
 import { FULL_CATALOGUE_MAX, RETRIEVAL_TOP } from './ai.constants';
+import { foldText } from './tools/wilaya-aliases';
 
 export type AgentScope = Pick<Agent, 'id' | 'sellAllProducts' | 'catalogScope' | 'scopeCategoryIds'>;
 export type CatalogueVariant = { id: string; name: string; price: number; stock: number };
@@ -169,7 +170,8 @@ export class CatalogueService {
     if (!/^[0-9a-f-]{28,40}$/i.test(id.trim()) || !customerText.trim()) return null;
     if (/^[0-9a-f-]{36}$/i.test(id) && (await prisma.product.findFirst({ where: { id }, select: { id: true } }))) return null;
     const rows = await prisma.product.findMany({ where: this.scopeWhere(agent), select: { id: true, name: true, description: true, price: true, moderationStatus: true, approvedSnapshot: true }, take: 2000 });
-    const fold = (t: string) => ` ${t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `;
+    // journey retest R12-1: the shared fold (tatweel, full-width forms, Arabic-Indic digits, the punctuation of every script)
+    const fold = (t: string) => ` ${foldText(t)} `;
     const said = fold(customerText);
     const named = rows.map((r) => ({ id: r.id, key: fold(approvedFields(r).name) })).filter((r) => r.key.trim().length >= 3 && said.includes(r.key));
     const own = named.filter((r) => !named.some((o) => o !== r && o.key.length > r.key.length && o.key.includes(r.key)));

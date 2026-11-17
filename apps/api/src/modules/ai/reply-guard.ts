@@ -29,6 +29,8 @@
 //   confirm_without_recap journey retest R8-1 / R8-2: « Pouvez-vous répondre « oui » une nouvelle fois ? », « Le récapitulatif …
 //                    va venir », « tu confirmes la commande ? » on a turn whose create_order was refused (no recap is shown):
 //                    one corrective turn, then dropped (nothing left ⇒ the question for the field create_order asked)
+//   order_claim      journey retest R12-2: « ممتاز، سجلتلك الطلب », « votre commande est bien enregistrée », « tsajlet » on a turn that
+//                    created no order (the server writes the confirmation of a placed order itself): one corrective turn, then dropped
 // Pure: no I/O. Conservative by design — a false positive costs one corrective model turn and, at worst, a dropped sentence.
 import { formatMoney } from '@djaber/shared';
 import { GUARD_MARK } from './ai.constants';
@@ -36,11 +38,11 @@ import { detectLanguage, fixMoroccan, frenchSentenceIn, languageSwitched, morocc
 import type { CatalogueProduct } from './catalogue.service';
 import type { PromptContext } from './prompt/prompt.types';
 import { TOOL_ALIASES, TOOL_DEFS } from './tools/tool-registry';
-import { phonesIn } from './tools/order-confirmation';
-import { confirmRequest, notedClaim, recapClaim } from './tools/order-confirmation-text';
-import { fold as foldPlace, WILAYA_ALIASES } from './tools/wilaya-aliases';
+import { confirmation, phonesIn } from './tools/order-confirmation';
+import { confirmRequest, notedClaim, orderClaim, recapClaim } from './tools/order-confirmation-text';
+import { articleless, fold as foldPlace, WILAYA_ALIASES } from './tools/wilaya-aliases';
 
-export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing' | 'contradicts_customer' | 'unavailable_offer' | 'photo_claim' | 'invented_problem' | 'confirm_without_recap';
+export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing' | 'contradicts_customer' | 'unavailable_offer' | 'photo_claim' | 'invented_problem' | 'confirm_without_recap' | 'order_claim';
 /** Rules the server fixes itself: no corrective model turn for them alone. */
 export const AUTO_FIX_RULES: readonly GuardRule[] = ['script_mix'];
 export type LeakKind = 'uuid' | 'tool' | 'code' | 'key' | 'json' | 'marker';
@@ -118,6 +120,10 @@ export type GuardFacts = {
   noRecapPending?: boolean;
   /** journey retest R11-3: the folded names (with their variant names) of the products the prompt's CATALOGUE lists, ids included */
   catalogueNames?: string[];
+  /** journey retest R12-2: a server recap of an earlier turn waits for the customer's « oui » */
+  recapWaiting?: boolean;
+  /** journey retest R12-2: a lookup_order of this turn found the customer's orders (their status may be told) */
+  orderLookedUp?: boolean;
 };
 export type OrderField = 'name' | 'phone' | 'wilaya' | 'commune' | 'address';
 /** What a successful quote_delivery answered: the reply must give one of its fees (or say it is free). */
@@ -413,7 +419,7 @@ export const fieldClaims = (sentence: string): { kind: 'not_understood' | 'await
   return CLAIM_RES.filter((c) => c.re.test(f)).map(({ kind, field }) => ({ kind, field }));
 };
 /** The wilaya spellings customers type (letters only: « 06 » is no wilaya inside a phone number). */
-const PLACE_ALIASES = Object.keys(WILAYA_ALIASES).filter((a) => /\p{L}/u.test(a));
+const PLACE_ALIASES = Object.keys(WILAYA_ALIASES).map(articleless).filter((a) => /\p{L}/u.test(a));
 const placeWords = (t: string) => ` ${foldGuard(t).replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `;
 /** The order fields the customer's message gives: a valid phone, a wilaya name, the answer's own `customer` values written in it. */
 export const givenFields = (customerText: string, fields: GuardFacts['customerFields'] = {}): Set<OrderField> => {
@@ -424,7 +430,8 @@ export const givenFields = (customerText: string, fields: GuardFacts['customerFi
     const v = fields[k]?.trim();
     if (v && v.length >= 2 && w.includes(placeWords(v))) out.add(k);
   }
-  const padded = ` ${foldPlace(customerText)} `;
+  // journey retest R12-1: the articles dropped on both sides (« … ، البليدة »)
+  const padded = ` ${articleless(foldPlace(customerText))} `;
   if (PLACE_ALIASES.some((a) => padded.includes(` ${a} `))) out.add('wilaya');
   return out;
 };
@@ -436,6 +443,19 @@ const restWords = (customerText: string, fields: GuardFacts['customerFields'] = 
 };
 
 // --- the check --------------------------------------------------------------------------------------------------------------------
+/**
+ * journey retest R12-2 (17/11): the sentences of a reply that claim the order is registered while no order was created this turn —
+ * a sentence naming an order of the conversation (or after this turn's lookup_order, or once an order of the conversation was placed
+ * with no newer recap waiting) speaks of that real order; a bare « c'est noté »
+ * counts only as the answer to a yes for a recap that waits, or on a turn whose create_order was refused.
+ */
+export const orderClaimsIn = (parts: string[], facts: Pick<GuardFacts, 'customerText' | 'ordersPlaced' | 'tokens' | 'recapWaiting' | 'orderRefused' | 'orderLookedUp'>): number[] => {
+  // an order of this conversation was placed and no newer recap waits: « votre commande est bien enregistrée » speaks of it
+  if (facts.orderLookedUp || ((facts.ordersPlaced?.length ?? 0) > 0 && !facts.recapWaiting && !facts.orderRefused)) return [];
+  const customerYes = !!facts.customerText && confirmation(facts.customerText) === 'yes' && (!!facts.recapWaiting || !!facts.orderRefused);
+  const placed = [...(facts.ordersPlaced ?? []), ...(facts.tokens ?? []).filter((t) => /[a-z]{2,8}-\d{3,}/i.test(t))];
+  return parts.flatMap((s, i) => (orderClaim(s, { customerYes, placed }) ? [i] : []));
+};
 export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   if (!reply.trim()) return [];
   const parts = splitSentences(reply);
@@ -494,6 +514,9 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   else if (facts.noRecapPending) parts.forEach((s, i) => {
     if (confirmRequest(s)) out.push({ rule: 'confirm_without_recap', sentence: i });
   });
+  // journey retest R12-2 (17/11): the guard never runs on the turn whose create_order placed the order (the server sends its own
+  // confirmation) — so here no order exists yet, and « سجلتلك الطلب » / « commande enregistrée » / « c'est noté » to a yes is false
+  for (const i of orderClaimsIn(parts, facts)) if (!out.some((v) => v.sentence === i && v.rule === 'confirm_without_recap')) out.push({ rule: 'order_claim', sentence: i });
   // journey retest R2-3: never « not understood » / « waiting for » a field the customer's message just gave — nor « not
   // understood » another field when the message only gave one (« ما فهمتش الولاية » after a phone: no wilaya was asked)
   if (facts.customerText?.trim()) {
@@ -649,6 +672,12 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
           ? '- NO RECAP HAS BEEN SHOWN for this order: never ask the customer to confirm it yourself (« pour confirmer … ? », « tu confirmes ? », « répondez oui ») — they confirm the recap create_order shows. Ask the one missing field, or ask whether they want the product (« Voulez-vous le … ? »).'
           : `- NO RECAP WAS SHOWN in this turn (create_order did not return one): never ask the customer to confirm the order or to answer « oui » again, and never say a recap is coming. ${facts.missingField ? `Ask for ${FIELD_NAMES[facts.missingField] ?? facts.missingField} in one short question, in the customer's language.` : "Answer the customer's message in one short sentence and ask what is still missing, if anything — never a request to confirm, never a word about a technical refusal."}`,
     );
+  if (rules.includes('order_claim')) {
+    const placed = uniq(facts.ordersPlaced ?? []);
+    lines.push(
+      `- NO ORDER WAS CREATED in this turn: never say the order is registered, placed, noted or confirmed (« commande enregistrée », « c'est noté », « tsajlet », « سجلتلك الطلب », « order placed ») — the server sends the confirmation itself once create_order has created the order. ${facts.missingField ? `Ask for ${FIELD_NAMES[facts.missingField] ?? facts.missingField} in one short question, in the customer's language.` : 'Answer the customer\'s message and ask the next missing order field, if any.'}${placed.length ? ` When you speak of an order placed earlier (${placed.join(', ')}), name it by its number.` : ''}`,
+    );
+  }
   if (rules.includes('fee_missing'))
     lines.push(`- DELIVERY FEE: quote_delivery answered ${(facts.quotes ?? []).map(quoteText).join('; ')}. Give that fee in the reply (home and stop-desk when both are known), in the customer's language: it is the answer to their question.`);
   return lines.join('\n');
@@ -680,7 +709,7 @@ const selfSentence = (loc: 'fr' | 'en' | 'ar' | 'arabizi', name: string | null):
 // journey retest R9-1: the one language decision of the server texts (a `mixed` turn takes the shop's locale)
 const safeLocale = (lang: AiLanguage, shopLocale?: GuardFacts['shopLocale']): 'fr' | 'en' | 'ar' | 'arabizi' => serverTextLanguage(lang, shopLocale);
 
-const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession', 'contradicts_customer', 'unavailable_offer', 'photo_claim', 'invented_problem', 'confirm_without_recap'];
+const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession', 'contradicts_customer', 'unavailable_offer', 'photo_claim', 'invented_problem', 'confirm_without_recap', 'order_claim'];
 /** Rules about the form of the reply: the text is kept when the corrective turn did not fix them (a reply is better than none). */
 const STYLE_RULES: GuardRule[] = ['language_switch', 'moroccan_darija', 'script_mix', 'repeat_greeting'];
 const quoteText = (q: QuoteFact) => `${q.wilaya || 'this wilaya'}: ${q.isStopdesk ? `stop-desk ${q.fee} DA` : q.free || q.fee === 0 ? 'home delivery free' : `home ${q.fee} DA`}${!q.isStopdesk && q.stopdeskFee !== null ? `, stop-desk ${q.stopdeskFee} DA` : ''}`;
@@ -761,7 +790,7 @@ export function enforceReply(reply: string, violations: GuardViolation[], facts:
     text = lead.length > 1 && !stripGreeting(lead[0]!, facts.agentName).trim() ? `${lead[0]!.trim()} ${fee} ${lead.slice(1).join('').trim()}` : `${fee}${text ? ` ${text}` : ''}`;
   }
   // journey retest R8-2: the refusal's field is asked when what is left asks nothing (« Saha Walid, tsajjel: zoudj tapis … »)
-  const refusalQuestion = (rules0: Set<GuardRule>) => (rules0.has('invented_problem') || rules0.has('confirm_without_recap')) && facts.missingField ? FIELD_QUESTIONS[facts.missingField]?.[safeLocale(facts.lang, facts.shopLocale)] : undefined;
+  const refusalQuestion = (rules0: Set<GuardRule>) => (rules0.has('invented_problem') || rules0.has('confirm_without_recap') || rules0.has('order_claim')) && facts.missingField ? FIELD_QUESTIONS[facts.missingField]?.[safeLocale(facts.lang, facts.shopLocale)] : undefined;
   const ask = refusalQuestion(new Set(violations.map((v) => v.rule)));
   if (ask && wordCount(text) >= 2 && !/[?؟]/.test(text)) text = `${text} ${ask}`;
   text = text.replace(/\n{3,}/g, '\n\n');
@@ -770,7 +799,7 @@ export function enforceReply(reply: string, violations: GuardViolation[], facts:
   const rules = new Set(violations.map((v) => v.rule));
   const loc = safeLocale(facts.lang, facts.shopLocale);
   // journey retest R8-1 / R8-2: only an invented problem or a request to confirm was there — the question for the missing field
-  if (rules.has('invented_problem') || rules.has('confirm_without_recap')) {
+  if (rules.has('invented_problem') || rules.has('confirm_without_recap') || rules.has('order_claim')) {
     const q = facts.missingField ? FIELD_QUESTIONS[facts.missingField] : undefined;
     return { reply: q ? q[loc] : SAFE_SENTENCES.which[loc], action: 'safe_sentence' };
   }

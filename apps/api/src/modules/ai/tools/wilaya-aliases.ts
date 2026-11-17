@@ -1,19 +1,42 @@
 // 04-ai-pipeline §4.2 `quote_delivery` — common darija / arabizi / English spellings of wilaya names → wilaya id.
 // The official names (`Wilaya.nameFr | nameAr`) are matched first; this table only adds what customers really type.
-export const fold = (s: string) =>
+/**
+ * journey retest R12-1 (17/11): the script-neutral part of every fold that compares a model's argument with the customer's text —
+ * compatibility forms decomposed (full-width letters / digits / punctuation, Arabic presentation forms and ligatures: NFKD),
+ * Latin accents, Arabic tashkil and hamza marks dropped, the tatweel « \u0640 » dropped, Arabic-Indic digits ⇒ Latin, the hamza seats
+ * and « ٱ » ⇒ « ا », « ة » ⇒ « ه », « ى » ⇒ « ي », lower case. Punctuation is kept (see `foldText`).
+ */
+export const foldBase = (s: string): string =>
   s
-    // NFD splits accents and the Arabic hamza forms into base letter + mark; the marks (and the tashkil) are dropped
-    .normalize('NFD')
-    .replace(/[̀-ًͯ-ٕ]/g, '')
-    .toLowerCase()
-    .replace(/ة/g, 'ه') // ة → ه
-    .replace(/ى/g, 'ي') // ى → ي
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed\u0640]/g, '')
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x660))
+    .replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x6f0))
+    .replace(/[\u0622\u0623\u0625\u0671]/g, '\u0627')
+    .replace(/\u0629/g, '\u0647')
+    .replace(/\u0649/g, '\u064a')
+    .toLowerCase();
+/**
+ * `foldBase`, then every character that is no letter and no digit — the punctuation of every script (« ، ؛ ؟ » Arabic, « , ; ? »,
+ * « ‚ », quotes « » “ ” ' ’, full-width forms, dashes, brackets), symbols and emoji — becomes one space. R12-1: the Arabic comma
+ * of « البليدة، بوفاريك، … » stayed glued to the wilaya (`[^a-z0-9\u0600-ۿ]` kept all of U+0600–U+06FF) and the wilaya the customer wrote
+ * was refused as « never written by the customer ».
+ */
+export const foldText = (s: string): string => foldBase(s).replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+/** journey retest R12-1: the Arabic article (with a clitic « و ف ب ك » or « لل ») at the start of every Arabic word, and the Latin « el / al / l » words, dropped from a folded text — « … بوفاريك، البليدة » names « بليده » mid-text too. */
+export const articleless = (folded: string): string =>
+  folded
+    .split(' ')
+    .map((w) => w.replace(/^(?:[وفبك]?ال|لل)(?=\S{3})/u, ''))
+    .filter((w) => w && w !== 'el' && w !== 'al' && w !== 'l')
+    .join(' ');
+// 04-ai-pipeline §4.2 `quote_delivery` — the folded form a wilaya name is compared in: `foldText`, then a leading « wilaya » and
+// the leading article dropped — a separate word in Latin script ("El Oued"), attached in Arabic ("الوادي") — never the "Al" of "Alger"
+export const fold = (s: string) =>
+  foldText(s)
     .replace(/^(wilaya|ولايه)\s+/, '')
-    // the article: a separate word in Latin script ("El Oued"), attached in Arabic ("الوادي") — never the "Al" of "Alger"
-    .replace(/^(el|al)[\s-]+/, '')
-    .replace(/^ال/, '')
-    .replace(/[^a-z0-9؀-ۿ]+/g, ' ')
-    .trim();
+    .replace(/^(el|al)\s+/, '')
+    .replace(/^ال/, '');
 
 const RAW: Record<string, number> = {
   alger: 16, algiers: 16, dzair: 16, djazair: 16, 'alger centre': 16, 'الجزاير': 16, 'العاصمه': 16, 'دزاير': 16,

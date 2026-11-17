@@ -15,7 +15,7 @@ import { ConfigService } from '../../../core/config/config.service';
 import { aiDateTime } from '../../../core/time/algiers';
 import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
-import { fold, WILAYA_ALIASES } from './wilaya-aliases';
+import { articleless, fold, foldText, WILAYA_ALIASES } from './wilaya-aliases';
 import { handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
 import { asksCancel, bareYes, cancelWordsIn, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, simulatedOrders, type DraftOrder, type OrderCallHistory } from './order-confirmation';
 import { asksSomething, withoutPlaceSegments } from './order-confirmation-text';
@@ -276,9 +276,11 @@ export const matchWilaya = <W extends WilayaRow>(all: W[], text: string): W | nu
   if (exact) return exact;
   const alias = WILAYA_ALIASES[wanted];
   if (alias) return all.find((w) => w.id === alias) ?? null;
-  const padded = ` ${wanted} `;
+  // journey retest R12-1 (17/11): inside a longer text every word loses its article (« … بوفاريك، البليدة », « ana f el Oued »), on
+  // both sides — `fold` only drops it at the very start
+  const padded = ` ${articleless(wanted)} `;
   const longest = (pairs: [string, number][]) => pairs.filter(([n]) => n && padded.includes(` ${n} `)).sort((a, b) => b[0].length - a[0].length)[0]?.[1];
-  const id = longest(all.flatMap((w) => [[fold(w.nameFr), w.id], [fold(w.nameAr), w.id]] as [string, number][])) ?? longest(Object.entries(WILAYA_ALIASES).filter(([a]) => /\p{L}/u.test(a)));
+  const id = longest(all.flatMap((w) => [[articleless(fold(w.nameFr)), w.id], [articleless(fold(w.nameAr)), w.id]] as [string, number][])) ?? longest(Object.entries(WILAYA_ALIASES).filter(([a]) => /\p{L}/u.test(a)).map(([a, v]) => [articleless(a), v] as [string, number]));
   return id ? (all.find((w) => w.id === id) ?? null) : null;
 };
 /**
@@ -292,9 +294,29 @@ export const wilayaNamed = (all: WilayaRow[], wilayaId: number, history: string,
   if (lines.some((l) => matchWilaya(all, l)?.id === wilayaId)) return true;
   if (new RegExp(`(?<![\\p{L}\\p{N}])(?:wilaya|ولاية)\\s*(?:n°|no|رقم)?\\s*0?${wilayaId}(?!\\p{N})`, 'iu').test(history)) return true;
   // a commune the customer wrote, of this wilaya (or of no known spelling: the model's inference is not an invention)
+  // journey retest R12-1 (17/11): written in either script — the call's « Boufarik » / « El Khroub » for the customer's « بوفاريك » /
+  // « الخروب » (N21 T4, N18 T2 were refused as « never written by the customer »): the commune's other name of the place index counts
   const given = commune?.given ? placeFold(commune.given) : '';
-  if (given && ` ${placeFold(history)} `.includes(` ${given} `)) return !commune!.ofWilaya.length || commune!.ofWilaya.some((c) => placeFold(c.nameFr) === given || placeFold(c.nameAr) === given);
+  if (!given) return false;
+  const rows = commune!.ofWilaya.filter((c) => samePlace(c.nameFr, commune!.given!) || samePlace(c.nameAr, commune!.given!));
+  const spellings = [commune!.given!, ...rows.flatMap((c) => [c.nameFr, c.nameAr])];
+  if (spellings.some((n) => placeWritten(history, n))) return !commune!.ofWilaya.length || rows.length > 0;
   return false;
+};
+/** journey retest R12-1: two place names are the same once folded, with or without their articles (« El Khroub » = « Khroub »). */
+export const samePlace = (a: string, b: string): boolean => {
+  const x = placeFold(a);
+  const y = placeFold(b);
+  return !!x && !!y && (x === y || articleless(x) === articleless(y));
+};
+/** journey retest R12-1: the customer's text names this place — as whole words, any punctuation of any script, articles or not. */
+export const placeWritten = (text: string, name: string): boolean => {
+  const n = placeFold(name);
+  if (!n) return false;
+  const t = placeFold(text);
+  if (` ${t} `.includes(` ${n} `)) return true;
+  const bare = articleless(n);
+  return bare.replace(/\s/g, '').length >= 3 && ` ${articleless(t)} `.includes(` ${bare} `);
 };
 /**
  * journey retest R3-3 (17/11): is this `clientName` the customer's? Never a placeholder (« Client », « Client Messenger »,
@@ -333,7 +355,8 @@ const NAME_INTRO_AT = /(?<![\p{L}])(?:smiti|esmi|ismi|asmi|smiya\s+ta3i|je\s+m['
 const leadingWords = (rest: string, arabic: boolean): string | null => {
   const words: string[] = [];
   for (const w of rest.trim().split(/\s+/)) {
-    const bare = w.replace(/[,،.!?؟]+$/u, '');
+    // journey retest R12-1: any punctuation of any script around the word (« ؛ », quotes, « ‚ ») ends it like « , »
+    const bare = w.replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '');
     if (!bare || !(arabic ? /^[؀-ۿ]+$/u.test(bare) : /^[A-Za-zÀ-ÿ'’-]+$/u.test(bare))) break;
     words.push(bare);
     if (words.length === 4 || bare !== w) break;
@@ -358,7 +381,7 @@ export const customerOwnName = (callName: string, history: string): string | nul
       const run = leadingWords(line.slice((m.index ?? 0) + m[0].length), latinCall);
       if (run) found.push(run);
     }
-    if (latinCall && /^[؀-ۿ]+(?:\s+[؀-ۿ]+){0,3}[\s.!،,]*$/u.test(line)) found.push(line.replace(/[\s.!،,]+$/u, ''));
+    if (latinCall && /^[\u0600-ۿ]+(?:\s+[\u0600-ۿ]+){0,3}[\s\p{P}\p{S}]*$/u.test(line)) found.push(line.replace(/[\s\p{P}\p{S}]+$/u, ''));
   }
   const same = found.filter((name) => !NOT_A_NAME.test(name) && sameNameAcross(name, callName));
   return same.length ? same[same.length - 1]! : null;
@@ -369,7 +392,7 @@ const SIZE_CUE = /(?:taille|tailles|pointure|size|ma9as|m9as|mqas|en|t|n°|num|n
 const ADDRESS_WORDS = /(?<![\p{L}])(?:rue|cite|cité|bloc|bt|bat|batiment|villa|logements?|lgts?|quartier|hay|hai|residence|lotissement|lot|route|avenue|av|boulevard|bd|impasse|douar|village|immeuble|appartement|etage|street|road|building|apartment|floor|حي|شارع|عمارة|بلوك|فيلا|مسكن|طريق)(?![\p{L}])/iu;
 /** The variants of this product a message names (whole words; a short name such as « M » or « 42 » only after a size word). */
 const variantsNamedIn = (variants: { id: string; name: string }[], line: string): { id: string; name: string }[] => {
-  const segments = line.split(/[,،;.!?؟\n]+/).filter((s) => !ADDRESS_WORDS.test(s) && !/\d{8,}/.test(s.replace(/[\s.-]/g, '')));
+  const segments = line.split(/[,،;؛.!?؟…\n]+/).filter((s) => !ADDRESS_WORDS.test(s) && !/\d{8,}/.test(s.replace(/[\s.-]/g, '')));
   const out: { id: string; name: string }[] = [];
   for (const v of variants) {
     const key = placeFold(v.name);
@@ -400,11 +423,10 @@ export const namedVariant = <V extends { id: string; name: string }>(variants: V
   }
   return null;
 };
-/** Lower case, accents / Arabic marks removed, hamza / tā' marbūṭa / alif maqṣūra folded, anything else than letters and digits ⇒ space. */
-export const placeFold = (t: string) =>
-  t.normalize('NFD').replace(/[̀-ًͯ-ٰٕ]/g, '').toLowerCase().replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+/** Lower case, accents / Arabic marks / tatweel removed, hamza / tā' marbūṭa / alif maqṣūra folded, Arabic-Indic digits ⇒ Latin, anything else than letters and digits (the punctuation of every script) ⇒ space — `foldText` (journey retest R12-1). */
+export const placeFold = (t: string) => foldText(t);
 /** Words of an address that name no street, building or landmark. */
-const PLACE_FILLERS = new Set(['wilaya', 'commune', 'daira', 'de', 'du', 'des', 'd', 'la', 'le', 'l', 'a', 'au', 'en', 'w', 'f', 'fi', 'el', 'al', 'centre', 'center', 'ville', 'city', 'algerie', 'algeria', 'dz', 'ولايه', 'بلديه', 'دائره', 'في', 'ب', 'و', 'وسط', 'مدينه', 'المدينه', 'الجزائر']);
+const PLACE_FILLERS = new Set(['wilaya', 'commune', 'daira', 'de', 'du', 'des', 'd', 'la', 'le', 'l', 'a', 'au', 'en', 'w', 'f', 'fi', 'el', 'al', 'centre', 'center', 'ville', 'city', 'algerie', 'algeria', 'dz', 'ولايه', 'بلديه', 'دائره', 'في', 'ب', 'و', 'وسط', 'مدينه', 'المدينه', 'الجزائر'].map((w) => foldText(w)));
 /**
  * journey retest R2-2: a home-delivery address that is only the commune / wilaya name (« Bab Ezzouar », « Bab Ezzouar, Alger »,
  * « Boufarik centre ») — no street, cité, building or landmark. `places`: the names of the wilaya and of its communes.
@@ -440,7 +462,7 @@ const phone2Field = (agent: ToolRunContext['agent']): boolean => {
 /** journey retest R2-7: the Arabic name of the commune of the order, when it is one of the wilaya's list. */
 export const communeAr = (communes: { nameFr: string; nameAr: string }[], name: string | null | undefined): string | null => {
   const n = name ? placeFold(name) : '';
-  return (n && communes.find((c) => placeFold(c.nameFr) === n || placeFold(c.nameAr) === n)?.nameAr) || null;
+  return (n && communes.find((c) => samePlace(c.nameFr, n) || samePlace(c.nameAr, n))?.nameAr) || null;
 };
 /** journey retest R7-4: the variant of this product a mistyped variant id stands for (one or two characters off). */
 const fixedVariant = (p: CatalogueProduct, variantId: string | null): CatalogueProduct['variants'][number] | null => {
@@ -870,7 +892,7 @@ export class ToolRegistry {
     if ((maxQty !== null && quantity > maxQty) || (maxAmount !== null && subtotal + deliveryFee > maxAmount)) return fail({ ok: false, hint: 'order_limit', maxQty, maxAmount });
     // journey retest R11-4 (17/11): the address is stored (and shown) without the commune / wilaya it starts or ends with — the recap
     // adds them back as « street, commune, wilaya » (N21 T4 « البليدة، بوفاريك، حي الورود رقم 12 » was shown and stored wilaya first)
-    const communeRow = place && d.communeName ? place.communes.find((c) => placeFold(c.nameFr) === placeFold(d.communeName!) || placeFold(c.nameAr) === placeFold(d.communeName!)) : undefined;
+    const communeRow = place && d.communeName ? place.communes.find((c) => samePlace(c.nameFr, d.communeName!) || samePlace(c.nameAr, d.communeName!)) : undefined;
     const street = d.address ? withoutPlaceSegments(d.address, [place?.nameFr, place?.nameAr, d.communeName, communeRow?.nameFr, communeRow?.nameAr]) || d.address : null;
     const request: CreateOrderRequest = { clientName: d.clientName, clientPhone: phone, secondPhone: phone2, wilayaId: d.wilayaId, communeName: d.communeName || null, address: street, isStopdesk: d.isStopdesk, stopdeskId: d.stopdeskId || null, notes: d.notes || null, items, subtotal, deliveryFee, total: subtotal + deliveryFee, replaces };
     // full-test 15/11 AI-CHAT-01 (Blocker): the order exists only after the customer said yes, in a later message, to the

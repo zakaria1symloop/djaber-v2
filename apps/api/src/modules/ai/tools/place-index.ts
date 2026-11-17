@@ -3,10 +3,11 @@
 // given: `create_order { wilayaId: 1 }` was sent as a probe) and R7-5 (« Vous livrez à Blida ? » gets the fee).
 import { prisma } from '@djaber/db';
 import { matchWilaya, placeFold } from './tool-registry';
+import { articleless, foldText } from './wilaya-aliases';
 
 export type PlaceWilaya = { id: number; code: string; nameFr: string; nameAr: string };
 export type PlaceCommune = { wilayaId: number; nameFr: string; nameAr: string };
-export type PlaceIndex = { wilayas: PlaceWilaya[]; communes: { wilayaId: number; key: string }[] };
+export type PlaceIndex = { wilayas: PlaceWilaya[]; communes: { wilayaId: number; key: string; bare: string }[] };
 
 let cache: Promise<PlaceIndex> | null = null;
 /** The reference lists, cached for the process (a failed read is retried next time). */
@@ -27,7 +28,7 @@ export const resetPlaceIndex = (): void => {
 export const buildPlaceIndex = (wilayas: PlaceWilaya[], communes: PlaceCommune[]): PlaceIndex => ({
   wilayas,
   communes: communes
-    .flatMap((c) => [c.nameFr, c.nameAr].map((n) => ({ wilayaId: c.wilayaId, key: placeFold(n) })))
+    .flatMap((c) => [c.nameFr, c.nameAr].map((n) => ({ wilayaId: c.wilayaId, key: placeFold(n), bare: articleless(placeFold(n)) })))
     .filter((c) => c.key.replace(/\s/g, '').length >= 4)
     .sort((a, b) => b.key.length - a.key.length),
 });
@@ -37,11 +38,13 @@ export const wilayaIn = (idx: PlaceIndex, text: string): PlaceWilaya | null => {
   const w = matchWilaya(idx.wilayas, text);
   if (w) return w;
   const padded = ` ${placeFold(text)} `;
-  const c = idx.communes.find((x) => padded.includes(` ${x.key} `));
+  // journey retest R12-1 (17/11): with or without the article (« Khroub », « … ، الخروب »)
+  const bare = ` ${articleless(placeFold(text))} `;
+  const c = idx.communes.find((x) => padded.includes(` ${x.key} `)) ?? idx.communes.find((x) => x.bare.replace(/\s/g, '').length >= 4 && bare.includes(` ${x.bare} `));
   return c ? (idx.wilayas.find((x) => x.id === c.wilayaId) ?? null) : null;
 };
 /** Words that go with a place name and name no street (« wilaya de », « commune », « centre », « ana f », « je suis à »). */
-const PLACE_ONLY_FILLERS = new Set(['wilaya', 'commune', 'daira', 'baladiya', 'de', 'du', 'des', 'd', 'la', 'le', 'l', 'a', 'au', 'en', 'w', 'f', 'fi', 'el', 'al', 'centre', 'center', 'ville', 'city', 'et', 'and', 'ana', 'je', 'suis', 'j', 'habite', 'nseken', 'saken', 'sakna', 'men', 'mn', 'from', 'in', 'i', 'live', 'at', 'chez', 'moi', 'pour', 'svp', 'stp', 'please', 'merci', 'ولايه', 'بلديه', 'في', 'ب', 'و', 'من', 'انا', 'نسكن', 'ساكن', 'ساكنه', 'وسط', 'مدينه', 'المدينه']);
+const PLACE_ONLY_FILLERS = new Set(['wilaya', 'commune', 'daira', 'baladiya', 'de', 'du', 'des', 'd', 'la', 'le', 'l', 'a', 'au', 'en', 'w', 'f', 'fi', 'el', 'al', 'centre', 'center', 'ville', 'city', 'et', 'and', 'ana', 'je', 'suis', 'j', 'habite', 'nseken', 'saken', 'sakna', 'men', 'mn', 'from', 'in', 'i', 'live', 'at', 'chez', 'moi', 'pour', 'svp', 'stp', 'please', 'merci', 'ولايه', 'بلديه', 'في', 'ب', 'و', 'من', 'انا', 'نسكن', 'ساكن', 'ساكنه', 'وسط', 'مدينه', 'المدينه'].map((w) => foldText(w)));
 /**
  * journey retest R8-4 (17/11): the message only names a wilaya and / or a commune (« Sétif, El Eulma », « ana f Bab Ezzouar »)
  * — no street, building, landmark or other word. On such a message with no address yet, create_order can only be refused.

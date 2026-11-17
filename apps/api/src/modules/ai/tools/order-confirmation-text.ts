@@ -3,6 +3,7 @@
 // the model can no longer confirm with wrong figures, « correct » itself (« commande enregistrée par erreur »,
 // « coordonnées inventées ») or deny the order it just placed (AI-CHAT-02). Pure.
 import { serverTextLanguage, type AiLanguage } from '../language';
+import { foldText } from './wilaya-aliases';
 
 type Line = { name?: unknown; variant?: unknown; quantity?: unknown; unitPrice?: unknown };
 type Placed = { number: string; items: Line[]; deliveryFee: number; total: number; duplicate: boolean; replaced: string | null; beyondStock: boolean; eta: string };
@@ -126,7 +127,8 @@ const R: Record<Loc, { comma: string; head: string; home: (place: string) => str
   arabizi: { comma: ', ', head: 'Hada récap ta3 la commande:', home: (p) => `Tawsil l dar${p ? ` (${p})` : ''}`, stop: (p) => `Tawsil l stop-desk${p ? ` (${p})` : ''}`, free: 'batel', total: (v) => `Total: ${v}, tkhalles ki tewsel.`, name: 'Smitek', phone: 'Numéro', phone2: 'Numéro lokhra', address: 'Adresse', replaces: (n) => `Hadi t3awed la commande ${n}.`, beyond: T.arabizi.beyond, ask: 'Ktebli « ih » bach nconfirmi la commande, wela goulli wach nbeddlou.', cur: 'DA', sep: ': ' },
   en: { comma: ', ', head: 'Here is your order summary:', home: (p) => `Home delivery${p ? ` (${p})` : ''}`, stop: (p) => `Stop-desk delivery${p ? ` (${p})` : ''}`, free: 'free', total: (v) => `Total: ${v}, cash on delivery.`, name: 'Name', phone: 'Phone', phone2: 'Second phone', address: 'Address', replaces: (n) => `It will replace order ${n}.`, beyond: T.en.beyond, ask: 'Reply « yes » to confirm the order, or tell me what to change.', cur: 'DA', sep: ': ' },
 };
-const folded = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+// journey retest R12-1: compatibility forms (full-width, presentation forms) decomposed and the tatweel dropped too (punctuation kept)
+const folded = (t: string) => t.normalize('NFKD').replace(/[\u0300-\u036f\u0640]/g, '').toLowerCase();
 /** « Cité 20 Août, villa 3 » + « Boufarik » + « Blida »: the commune / wilaya are added when the address does not name them. */
 const placeOf = (comma: string, base: string | null, ...more: (string | null | undefined)[][]) => {
   const parts = base ? [base] : [];
@@ -143,17 +145,8 @@ const placeOf = (comma: string, base: string | null, ...more: (string | null | u
  * name not after a comma (« Rue de Boufarik ») and the first segment are never taken off.
  */
 export const withoutTrailingPlaces = (address: string, names: (string | null | undefined)[]): string => withoutPlaceSegments(address, names);
-/** A place name as compared: accents / Arabic marks removed, hamza / tā' marbūṭa folded, punctuation ⇒ space. */
-const placeKey = (t: string) =>
-  t
-    .normalize('NFD')
-    .replace(/[̀-ًͯ-ٰٕ]/g, '')
-    .toLowerCase()
-    .replace(/[أإآٱ]/g, 'ا')
-    .replace(/ة/g, 'ه')
-    .replace(/ى/g, 'ي')
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim();
+/** A place name as compared: `foldText` (journey retest R12-1: accents / Arabic marks / tatweel removed, hamza / tā' marbūṭa folded, the punctuation of every script ⇒ space). */
+const placeKey = (t: string) => foldText(t);
 const withoutArticle = (k: string) => k.replace(/^(?:el|al|ال)\s*/u, '');
 /**
  * journey retest R11-4 (17/11): the address without the commune / wilaya segments it starts OR ends with (between commas), so
@@ -163,7 +156,8 @@ const withoutArticle = (k: string) => k.replace(/^(?:el|al|ال)\s*/u, '');
 export const withoutPlaceSegments = (address: string, names: (string | null | undefined)[]): string => {
   const keys = new Set(names.filter((n): n is string => !!n && n.trim().length >= 2).flatMap((n) => [placeKey(n), withoutArticle(placeKey(n))]).filter((k) => k.length >= 2));
   // segments at the even indexes, their separators at the odd ones
-  const parts = address.trim().split(/(\s*[,،]\s*)/u);
+  // journey retest R12-1: any separator of a list of places — « , ، ; ؛ » and a spaced dash or slash (« حي الورود - بوفاريك - البليدة »)
+  const parts = address.trim().split(/(\s*[,،;؛]\s*|\s+[-–—/]\s+)/u);
   const isPlace = (seg: string) => {
     const k = placeKey(seg);
     return !k || keys.has(k) || keys.has(withoutArticle(k));
@@ -373,8 +367,82 @@ export const confirmRequest = (sentence: string): boolean =>
     (v) =>
       !OTHER_CONFIRMATION.test(v) &&
       !WHICH.test(v) &&
-      (CONFIRM_QUESTION.test(v) || REPLY_YES.test(v) || /(?:^|[.!?؟]\s+)\W*pour\s+confirmer/u.test(v) || (/[?؟]/.test(v) && (CONFIRM_ORDER.test(v) || (CONFIRM_WORD.test(v) && ORDER_NOUN.test(v)))) || ((!FIELD_WORD.test(v) || ORDER_NOUN.test(v)) && CONFIRM_FAMILY.some((re) => re.test(v))) || (!FIELD_WORD.test(v) && PLACE_ON_YES.some((re) => re.test(v)))),
+      (CONFIRM_QUESTION.test(v) ||
+        REPLY_YES.test(v) ||
+        /(?:^|[.!?؟]\s+)\W*pour\s+confirmer/u.test(v) ||
+        (/[?؟]/.test(v) && (CONFIRM_ORDER.test(v) || (CONFIRM_WORD.test(v) && ORDER_NOUN.test(v)))) ||
+        ((!FIELD_WORD.test(v) || ORDER_NOUN.test(v)) && CONFIRM_FAMILY.some((re) => re.test(v))) ||
+        (!FIELD_WORD.test(v) && PLACE_ON_YES.some((re) => re.test(v))) ||
+        // journey retest R12-2 (17/11): the same request written as a statement, with no question mark (N21 T4 « عطيني من فضلك كي تحب
+        // تأكد الطلبية. ») — never a field question, nor the shop's team calling to confirm
+        (!FIELD_WORD.test(v) && !TEAM_CONFIRMS.test(v) && !CLAIM_NEGATION.test(v) && CONFIRM_STATEMENT.some((re) => re.test(v)))),
   );
+/** The shop's team / the courier confirms by phone (« notre équipe vous appellera pour confirmer la commande »): information, no request. */
+const TEAM_CONFIRMS =
+  /(?<![\p{L}])(?:[eé]quipe|team|conseill\S*|livreur|courier|service\s+client|appel\S*|rappel\S*|call\S*|contact\S*|t[eé]l[eé]phon\S*|tilifoun\S*|الفريق|فريق|تلفون|تيليفون|بالتلفون|بالتيليفون|نعيطو\S*|يعيطو\S*|نتصلو\S*|يتصل\S*|نكلمو\S*|n3ayt\S*|y3ayt\S*|ncontact\S*)(?![\p{L}])/u;
+/**
+ * journey retest R12-2 (17/11): the confirm-request family without a question mark, in every language — a cue addressed to the
+ * customer (« si vous voulez », « dites-moi quand », « vous pouvez », « let me know », « ila t7ebb », « goulli », « كي تحب », « قولي »,
+ * « عطيني ») before a confirming verb, a confirming verb next to the order (« confirmer la commande », « tconfirmi la commande »,
+ * « تأكد الطلبية »), « أكدلي ». Folded / lower-case text; the caller leaves out field questions and the team's phone call.
+ */
+const CONFIRM_STATEMENT: RegExp[] = [
+  // French
+  /(?<![\p{L}])(?:si|quand|lorsque)\s+(?:vous|tu)\s+(?:\S+\s+){0,3}?(?:confirm|valid)/u,
+  /(?<![\p{L}])(?:dites|dis)[- ](?:moi|nous)\s+(?:\S+\s+){0,4}?(?:confirm|valid)/u,
+  /(?<![\p{L}])(?:vous|tu)\s+(?:pouvez|peux|pourrez|pourras|devez|dois)\s+(?:maintenant\s+|juste\s+)?(?:me\s+|nous\s+)?(?:le\s+|la\s+|l['’]\s*)?(?:confirm|valid)/u,
+  /(?<![\p{L}])(?:confirm|valid)(?:er|ez|e)(?![\p{L}])\s+(?:\S+\s+){0,1}?(?:la|votre|ta|ma)\s+commande/u,
+  // English
+  /let\s+me\s+know\s+(?:\S+\s+){0,4}?confirm|(?<![\p{L}])(?:if|when)\s+you\s+(?:\S+\s+){0,3}?confirm|you\s+(?:can|may)\s+(?:now\s+)?confirm|(?<![\p{L}])confirm\s+(?:the|your)\s+order/u,
+  // arabizi
+  /(?<![\p{L}])(?:ila|ida|ki|kif|goulli|gouli|9olli|a3tini|kteb\S*|t7ebb?\S*|t7ebi|bghit|7ab|7aba)\s+(?:\S+\s+){0,3}?(?:t|n)?(?:confirm\S*|(?:2|')?akk?[ei]d\S*)/u,
+  /(?<![\p{L}])(?:t|n)?confirm\S*\s+(?:\S+\s+){0,2}?(?:la\s+|l['’]?\s*)?(?:commande|komand)|(?<![\p{L}])(?:t|n)(?:2|')?akk?[ei]?d\S*\s+(?:\S+\s+){0,2}?(?:la\s+|l['’]?\s*)?(?:commande|komand)/u,
+  // Arabic script
+  /(?:تحب|تحبي|حاب|حابة|حابه|بغيت|كي|اذا|إذا|ايلا|إلا|قولي|قوللي|عطيني|ابعثلي|فضلك)\s+(?:\S+\s+){0,3}?(?:ت|ن)?(?:تأكد|تاكد|أكد|اكد|ا\u0654كد)/u,
+  /(?:تأكد|تاكد|أكد|اكد|ا\u0654كد|نأكد|ناكد|نا\u0654كد|نكد|تثبت|نثبت)\S*\s+(?:\S+\s+){0,3}?(?:ال)?(?:طلبي|طلب|كوموند)/u,
+  /(?<![\p{L}])(?:أ|ا|ا\u0654|تأ|تا|تا\u0654)كد(?:ي|و|وا)?لي(?![\p{L}])/u,
+];
+/** The order named (any language), for an order claim. */
+const CLAIM_NOUN = String.raw`(?:command\S*|order\S*|komand\S*|cmd|طلبي\S*|الطلب\S*|طلب(?:ك|كم)?|كوموند\S*)`;
+/** Said done to the order (participle / passive), any language. */
+const CLAIM_DONE = String.raw`(?:enregistr[eé]e?s?|valid[eé]e?s?|confirm[eé]e?s?|pass[eé]e?s?|not[eé]e?s?|prise?s?\s+en\s+compte|bien\s+re[cç]ue?|placed|registered|confirmed|noted|booked|recorded|submitted|tsajl\S*|tsejl\S*|tsjl\S*|msajl\S*|msejl\S*|t2akd\S*|tconfirma\S*|تسجل\S*|اتسجل\S*|مسجل\S*|تأكدت|تاكدت|تا\u0654كدت|مؤكد\S*|موكد\S*|مو\u0654كد\S*|تثبتت)(?![\p{L}])`;
+/**
+ * journey retest R12-2 (17/11): the family of « the order is registered » claims, whatever their wording — the order then a word
+ * saying it is done (« votre commande est bien enregistrée », « order placed », « commande ta3ek tsajlet », « طلبيتك تسجلت »), or a
+ * first-person / passive verb then the order (« j'ai enregistré votre commande », « I've placed your order », « sajjeltlek la
+ * commande », « سجلتلك الطلب », « تم تسجيل الطلبية »).
+ */
+const ORDER_CLAIM: RegExp[] = [
+  new RegExp(String.raw`(?<![\p{L}])${CLAIM_NOUN}\s+(?:\S+\s+){0,4}?${CLAIM_DONE}`, 'u'),
+  /(?<![\p{L}])(?:j['’]?\s*ai|on\s+a|nous\s+avons|je\s+vous\s+ai|je\s+t['’]\s*ai)\s+(?:bien\s+|d[eé]j[aà]\s+)?(?:enregistr|not|pass|valid|confirm|pris|lanc|transmis|envoy)\S*\s+(?:\S+\s+){0,2}?(?:la\s+|votre\s+|ta\s+)?commande/u,
+  /(?<![\p{L}])je\s+(?:vous\s+|te\s+)?(?:confirme|valide|enregistre|passe|lance)\s+(?:\S+\s+)?(?:votre|ta|la)\s+commande/u,
+  /(?<![\p{L}])(?:i['’]?ve|i\s+have|we['’]?ve|we\s+have)\s+(?:just\s+|already\s+)?(?:placed|registered|noted|booked|recorded|confirmed|submitted)\s+(?:\S+\s+)?order/u,
+  /(?<![\p{L}])(?:sajj?el|sejj?el|sjjel|sajj?alt|sajj?elt|confirmit)\S*\s+(?:\S+\s+){0,2}?(?:la\s+|l['’]?\s*)?(?:commande|komand)/u,
+  /(?:(?<![\p{L}])سجل\S*|(?<![\p{L}])تم\s+(?:ال)?(?:تسجيل|تأكيد|تاكيد|تا\u0654كيد)|(?<![\p{L}])(?:أ|ا|ا\u0654)كد(?:ت|نا)\S*|(?<![\p{L}])ثبت(?:ت|نا)\S*)\s+(?:\S+\s+){0,2}?(?:ال)?(?:طلب\S*|كوموند\S*)/u,
+];
+/** « c'est noté », « bien noté », « tsajlet », « noted », « سجلت » with nothing named: an order claim when it answers the customer's yes. */
+const BARE_CLAIM =
+  /c['’]?\s*est\s+(?:bien\s+)?(?:not[eé]|enregistr[eé]|pris)|(?<![\p{L}])(?:bien|tout\s+est)\s+not[eé]|(?<![\p{L}])(?:tsajl|tsejl|msajl|msejl)\S*|(?<![\p{L}])noted(?![\p{L}])|(?<![\p{L}])سجلت\S*|(?<![\p{L}])سجلنا\S*|(?<![\p{L}])تسجل\S*|(?<![\p{L}])مسجل\S*/u;
+/** The customer's details noted (« j'ai bien noté vos coordonnées », R11-6 accepted): about the fields, no order claim. */
+const DETAILS_WORD = /coordonn|d[eé]tails?|infos?(?![\p{L}])|informations?|ma3loumat|معلومات|المعلومات/u;
+/** A negation: « pas encore enregistrée », « not placed yet », « mazal ma tsajletch », « ما تسجلتش » — no claim. */
+const CLAIM_NEGATION = /(?<![\p{L}])(?:pas|jamais|aucune?|not|never|isn['’]?t|hasn['’]?t|haven['’]?t|mazal|mazel|machi|machy|لم|ليس|ليست|مازال\S*|مازالت|ماشي)(?![\p{L}])|(?<![\p{L}])ma\s*\S+c?h(?![\p{L}])|(?<![\p{L}])ما\s*\S+ش(?![\p{L}])|(?<![\p{L}])n['’]\s*(?:est|a|ai|avons)(?![\p{L}])/u;
+/** A future / a purpose: « sera enregistrée dès … », « pour enregistrer la commande », « bach nsajjel », « باش نسجل الطلبية » — no claim. */
+const CLAIM_LATER =
+  /(?<![\p{L}])(?:sera|seront|serait|va\s+[eê]tre|vais|allons|will|would|going\s+to|once|d[eè]s\s+que|d[eè]s\s+(?:votre|ta|r[eé]ception)|une\s+fois|apr[eè]s|avant|pour\s+(?:que|pouvoir|enregistrer|valider|passer|confirmer|finaliser|lancer)|afin|bach|bech|mba3d|rah\s+n\S*|ghadi|غادي|راح|باش|بش|من\s+بعد|بعد\s+ما|قبل|لتسجيل|للتسجيل)(?![\p{L}])/u;
+/**
+ * journey retest R12-2 (17/11): a sentence that says the order is registered / placed / noted (« ممتاز، سجلتلك الطلب. », N18 T2,
+ * with no recap and no order) — only true on the turn whose create_order placed it (the server writes that confirmation itself).
+ * `customerYes`: the customer's message is a yes, so a bare « c'est noté » / « tsajlet » answers it as the order. `placed`: the
+ * numbers of the orders placed in this conversation — a sentence naming one of them speaks of that real order. Never a question,
+ * a negation, a future / purpose, nor (bare) a sentence about an order field (« c'est noté : Sétif »).
+ */
+export const orderClaim = (sentence: string, o: { customerYes?: boolean; placed?: readonly string[] } = {}): boolean => {
+  if (/[?؟]/.test(sentence)) return false;
+  const lower = sentence.toLowerCase();
+  if ((o.placed ?? []).some((n) => n && lower.includes(n.toLowerCase()))) return false;
+  return bothForms(sentence).some((v) => !CLAIM_NEGATION.test(v) && !CLAIM_LATER.test(v) && (ORDER_CLAIM.some((re) => re.test(v)) || (!!o.customerYes && !FIELD_WORD.test(v) && !DETAILS_WORD.test(v) && BARE_CLAIM.test(v))));
+};
 /** A word naming the order (any language). */
 const ORDER_NOUN = /command|order|achat|طلبي|الطلب|كوموند|komand/u;
 /** An order field asked in the sentence (« donnez-moi votre adresse pour que je passe la commande »): a field question, no confirmation. */

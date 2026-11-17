@@ -148,6 +148,25 @@ const ARABIZI_FOR: [RegExp, (m: string, ...g: string[]) => string][] = [
   [/(?<![\p{L}])tissu\s+l[ée]ger(?![\p{L}])/giu, () => 'qmach khfif'],
   [/(?<![\p{L}])l\s+les\s+f[êe]tes(?![\p{L}])/giu, () => 'l l3rass w lmounasabat'],
   [/(?<![\p{L}])les\s+f[êe]tes(?![\p{L}])/giu, () => 'l3rass w lmounasabat'],
+  // journey retest R12-4 (17/11): N9 T1 « Tailles disponibles: S w M » (no « Les »), N3 T2 « Livraison à domicile: 700 DA, wela 450 DA
+  // f stop-desk », F9 T1 « T7ebb nchouf wach men produit t7ebbou ? » (« you want I see which product you like? »)
+  [/(?<![\p{L}])(tailles|couleurs|pointures|mod[eè]les)\s+disponibles(?![\p{L}])/giu, (_m, what: string) => `${what} li kaynin`],
+  [/(?<![\p{L}])livraison\s+(?:[aà]\s+)?domicile(?![\p{L}])/giu, (m) => (m[0] === 'L' ? 'Tawsil l dar' : 'tawsil l dar')],
+  [/(?<![\p{L}])livraison\s+(?:en\s+|f\s+)?stop[- ]?desk(?![\p{L}])/giu, (m) => (m[0] === 'L' ? 'Tawsil l stop-desk' : 'tawsil l stop-desk')],
+  [/(?<![\p{L}])t7ebb?\s+n(?:chouf|warrik)\s+wach\s+men\s+([\p{L}'’-]+)\s+t7ebb?(?:ou|i)?\s*([?؟])/giu, (m, what: string, mark: string) => `${m[0] === 'T' ? 'W' : 'w'}ach men ${what} t7ebb ${mark}`],
 ];
 export const withArabiziWords = (reply: string, lang: AiLanguage | string | undefined): string =>
   lang === 'arabizi' ? ARABIZI_FOR.reduce((t, [re, to]) => t.replace(re, to as (m: string, ...g: string[]) => string), reply) : reply;
+/**
+ * journey retest R12-4 (17/11): « DA » after an amount in a sentence written in Arabic script (N18 T1 « عندنا Djellaba homme بثمن 7500 DA
+ * (كانت 9000 DA) … ») — « دج », as the server recap writes it. A sentence mostly in Latin letters keeps « DA ».
+ */
+export const withArabicCurrency = (reply: string): string =>
+  splitSentences(reply)
+    .map((s) => {
+      if (!/\d\s*DA(?![\p{L}])/u.test(s)) return s;
+      const arabic = (s.match(/[\u0600-ۿ]/gu) ?? []).length;
+      const latin = (s.replace(/(?<=\d\s*)DA(?![\p{L}])/gu, '').match(/[A-Za-zÀ-ɏ]/gu) ?? []).length;
+      return arabic > latin ? s.replace(/(\d)\s*DA(?![\p{L}])/gu, '$1 دج') : s;
+    })
+    .join('');
