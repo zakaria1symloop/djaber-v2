@@ -513,7 +513,7 @@ export const unavailableOffers = (parts: string[], facts: Pick<GuardFacts, 'unav
  * « voici les photos », « je vous envoie la photo », « here are the pictures », « Hak tsawer ta3 … », « هاهي التصاور ». Not « ma
  * 3andnach tsawer », « pas de photo », « envoyez-moi la photo » (the customer's photo).
  */
-const PHOTO_WORD = String.raw`(?:les\s+|la\s+|des\s+|une\s+|the\s+|a\s+|some\s+|l\s*|el\s*|ال)?(?:photos?|images?|pictures?|pics?|tsawe?r|tswira|tsawra|taswira|sora|swar|صور|صورة|تصاور|تصويرة|تصويره|صوره)`;
+export const PHOTO_WORD = String.raw`(?:les\s+|la\s+|des\s+|une\s+|the\s+|a\s+|some\s+|l\s*|el\s*|ال)?(?:photos?|images?|pictures?|pics?|tsawe?r|tswira|tsawra|taswira|sora|swar|صور|صورة|تصاور|تصويرة|تصويره|صوره)`;
 const PHOTO_CLAIM = new RegExp(
   [
     String.raw`(?:voici|voila|ci[- ]dessous|ci[- ]joint)\s+${PHOTO_WORD}`,
@@ -677,7 +677,12 @@ export function enforceReply(reply: string, violations: GuardViolation[], facts:
   if (violations.some((v) => v.rule === 'moroccan_darija')) text = fixMoroccan(text);
   // journey 16/11 J03-2: the fee the corrective turn still left out is added from the tool's answer
   const quote = violations.some((v) => v.rule === 'fee_missing') ? facts.quotes?.[0] : undefined;
-  if (quote) text = `${feeSentence(quote, facts.lang)}${text ? ` ${text}` : ''}`;
+  if (quote) {
+    // journey retest R7-5: after an opening « Bonsoir ! », not before it
+    const fee = feeSentence(quote, facts.lang);
+    const lead = splitSentences(text);
+    text = lead.length > 1 && !stripGreeting(lead[0]!, facts.agentName).trim() ? `${lead[0]!.trim()} ${fee} ${lead.slice(1).join('').trim()}` : `${fee}${text ? ` ${text}` : ''}`;
+  }
   text = text.replace(/\n{3,}/g, '\n\n');
   // a language / dialect slip the corrective turn did not fix: the reply is sent as it is
   if (wordCount(text) >= 2) return { reply: text, action: text === reply.trim() && violations.every((v) => STYLE_RULES.includes(v.rule)) ? 'kept' : 'stripped' };

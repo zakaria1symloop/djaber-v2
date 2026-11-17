@@ -43,6 +43,33 @@ const include = {
   category: { select: { name: true } },
 } as const satisfies Prisma.ProductInclude;
 type Row = Prisma.ProductGetPayload<{ include: typeof include }>;
+/** Edit distance of two strings, stopping above `max` (then `max + 1`). */
+const distance = (a: string, b: string, max: number): number => {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let low = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+      low = Math.min(low, cur[j]!);
+    }
+    if (low > max) return max + 1;
+    prev = cur;
+  }
+  return prev[b.length]!;
+};
+/**
+ * journey retest R7-4: the one candidate id this mistyped id is at most 2 characters away from (hyphens ignored), when every
+ * other candidate is at least 6 away — never a guess between two close ids. Two real ids of a shop differ by far more.
+ */
+export const nearestId = (id: string, candidates: string[]): string | null => {
+  const key = id.toLowerCase().replace(/-/g, '');
+  const scored = candidates.map((c) => ({ c, d: distance(key, c.toLowerCase().replace(/-/g, ''), 8) })).sort((x, y) => x.d - y.d);
+  const [best, next] = scored;
+  if (!best || best.d === 0 || best.d > 2) return null;
+  return !next || next.d >= 6 ? best.c : null;
+};
 const like = (q: string) => `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 @Injectable()
@@ -109,6 +136,25 @@ export class CatalogueService {
     const rows = await prisma.product.findMany({ where: { AND: [this.scopeWhere(agent), { id: { in: valid } }] }, include });
     const by = new Map((await this.present(rows, withAlso, agent)).map((p) => [p.id, p]));
     return valid.map((id) => by.get(id)).filter((p): p is CatalogueProduct => !!p);
+  }
+
+  /**
+   * journey retest R7-4 (17/11): ids the model mistyped (« 01a1e51f-737c-… » for « 01a1e51f-4737-… », « …-9ef5-… » for
+   * « …-9fb5-… ») ⇒ the in-scope product each one is one or two characters away from (`nearestId`). Only ids that are not
+   * products of the scope are looked at; the server recap then names the product to the customer before anything is ordered.
+   */
+  async correctIds(agent: AgentScope, ids: string[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    const wrong = [...new Set(ids)].filter((id) => typeof id === 'string' && /^[0-9a-f-]{28,40}$/i.test(id.trim()));
+    if (!wrong.length) return out;
+    const rows = await prisma.product.findMany({ where: this.scopeWhere(agent), select: { id: true }, take: 5000 });
+    const all = rows.map((r) => r.id);
+    for (const id of wrong) {
+      if (all.includes(id)) continue;
+      const near = nearestId(id, all);
+      if (near) out.set(id, near);
+    }
+    return out;
   }
 
   /**

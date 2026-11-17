@@ -2,7 +2,7 @@
 // alternative (R5-1), Tunisian « taw » / « متاعك » (R5-2), odd darija wording (R5-3), « home or stop-desk? » after a street
 // address (R5-4), a delivery question answered only by the recap (R5-5), create_order probes before any phone (R5-6).
 import { prisma } from '@djaber/db';
-import { AiRunService, NO_PHONE_NOTE, unavailableTool, type TurnRequest } from './ai-run.service';
+import { AiRunService, NO_PHONE_NOTE, ORDER_DETAILS_NOTE, unavailableTool, type TurnRequest } from './ai-run.service';
 import { fixMoroccan, moroccanIn, wrongDarijaIn } from './language';
 import { languageSection } from './prompt/sections/contract';
 import { catalogueSection } from './prompt/sections/catalogue';
@@ -203,7 +203,9 @@ describe('R5-6 — create_order is not offered before the customer gave a phone 
     const { gateway, execute, svc, req } = setup({ toolCalls: [{ name: 'create_order', args: { clientName: 'Yacine Mansouri', clientPhone: '0555987654', wilayaId: 9, communeName: 'Boufarik', address: 'Cité 20 août villa 3', items: [{ productId: 'p', quantity: 1 }], customerConfirmed: true } }] }, { reply: '', intent: 'SALE' });
     const r = await svc.turn(req(said, said));
     expect((gateway.calls[0]!.tools ?? []).map((d) => d.name)).toContain('create_order');
-    expect(gateway.calls[0]!.system).toBe('S');
+    // journey retest R7-4: an order message with a phone that asks nothing of the team gets no handoff tool (and says so)
+    expect((gateway.calls[0]!.tools ?? []).map((d) => d.name)).not.toContain('handoff_to_human');
+    expect(gateway.calls[0]!.system).toBe(`S\n\n${ORDER_DETAILS_NOTE}`);
     expect(execute).toHaveBeenCalledTimes(1);
     expect(r.ok && r.output.reply).toBe(orderRecapText(pendingRecap([{ name: 'create_order', result: recap }])!, 'fr'));
   });

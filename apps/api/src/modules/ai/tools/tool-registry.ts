@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { HANDOFF_REASONS, isPhoneDz, normalizePhoneDz, WILAYA_COUNT } from '@djaber/shared';
 import { prisma, TenantContext, type Agent, type Prisma } from '@djaber/db';
 import { FAQ_CANDIDATE_INSIGHT_AT } from '../ai.constants';
-import { CatalogueService, type CatalogueProduct } from '../catalogue.service';
+import { CatalogueService, nearestId, type CatalogueProduct } from '../catalogue.service';
 import { stockWord } from '../prompt/sections/catalogue';
 import type { AiToolDef } from '../provider/ai.gateway';
 import { customerBlockedResult, ORDER_TOOLS, PAYMENT_LINK_TOOL, type CancellableOrder, type CreateOrderRequest, type OrderTools, type PaymentLinkTool, type ToolResult } from './order-tools';
@@ -284,6 +284,11 @@ export const communeAr = (communes: { nameFr: string; nameAr: string }[], name: 
   const n = name ? placeFold(name) : '';
   return (n && communes.find((c) => placeFold(c.nameFr) === n || placeFold(c.nameAr) === n)?.nameAr) || null;
 };
+/** journey retest R7-4: the variant of this product a mistyped variant id stands for (one or two characters off). */
+const fixedVariant = (p: CatalogueProduct, variantId: string | null): CatalogueProduct['variants'][number] | null => {
+  const near = variantId ? nearestId(variantId, p.variants.map((x) => x.id)) : null;
+  return near ? (p.variants.find((x) => x.id === near) ?? null) : null;
+};
 const normQuestion = (q: string) => fold(q).replace(/\s+/g, ' ').slice(0, 200);
 const seqOf = (s: string) => 1000 + ([...s].reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) >>> 0, 7) % 9000);
 
@@ -398,9 +403,25 @@ export class ToolRegistry {
     return { products: products.map((p) => this.view(p)) };
   }
 
+  /**
+   * journey retest R7-4 (17/11): the in-scope product a mistyped id stands for (one or two characters off, `nearestId`) — the
+   * model copied « 01a1e51f-737c-… » for « 01a1e51f-4737-… » and got PRODUCT_NOT_AVAILABLE, then called again. Ids that
+   * are products of the scope come back as they are.
+   */
+  private async fixedIds(agent: ToolRunContext['agent'], ids: string[]): Promise<Map<string, string>> {
+    if (typeof this.catalogue.correctIds !== 'function' || !ids.length) return new Map();
+    return this.catalogue.correctIds(agent, ids);
+  }
+  private async oneProduct(agent: ToolRunContext['agent'], id: string, withAlso: boolean): Promise<CatalogueProduct | undefined> {
+    const [p] = id ? await this.catalogue.byIds(agent, [id], withAlso) : [];
+    if (p) return p;
+    const fixed = (await this.fixedIds(agent, [id])).get(id);
+    return fixed ? (await this.catalogue.byIds(agent, [fixed], withAlso))[0] : undefined;
+  }
+
   private async product(args: Record<string, unknown>, ctx: ToolRunContext): Promise<ToolResult> {
     const id = typeof args.productId === 'string' ? args.productId : '';
-    const [p] = await this.catalogue.byIds(ctx.agent, [id], true);
+    const p = await this.oneProduct(ctx.agent, id, true);
     // FL-01 F-9: archived / inactive / not approved / out of scope — the model is told, the customer sees no error
     if (!p) return { ok: false, error: { code: 'PRODUCT_NOT_AVAILABLE', productId: id } };
     return { ...this.view(p), description: p.description, recommendations: p.also };
@@ -413,11 +434,11 @@ export class ToolRegistry {
   async availability(args: Record<string, unknown>, ctx: ToolRunContext): Promise<ToolResult> {
     const id = typeof args.productId === 'string' ? args.productId.trim() : '';
     const qty = Math.max(1, Math.floor(Number(args.quantity ?? 1)) || 1);
-    const [p] = id ? await this.catalogue.byIds(ctx.agent, [id], true) : [];
+    const p = await this.oneProduct(ctx.agent, id, true);
     if (!p) return { ok: false, error: { code: 'PRODUCT_NOT_AVAILABLE', productId: id } };
     const sell = p.sellOutOfStock;
     const variantId = typeof args.variantId === 'string' && args.variantId.trim() ? args.variantId.trim() : null;
-    const v = p.hasVariants ? p.variants.find((x) => x.id === variantId) : null;
+    const v = p.hasVariants ? (p.variants.find((x) => x.id === variantId) ?? fixedVariant(p, variantId)) : null;
     if (p.hasVariants && !v) return { ok: true, productId: p.id, variantRequired: true, variants: p.variants.map((x) => ({ id: x.id, name: x.name, price: x.price, available: sell || x.stock >= qty })), say: 'ask which variant the customer wants (only the available ones)' };
     const stock = v ? v.stock : p.stock;
     const base = { ok: true, productId: p.id, ...(v ? { variantId: v.id, variant: v.name } : {}), quantity: qty };
@@ -594,14 +615,17 @@ export class ToolRegistry {
     }
 
     const products = await this.catalogue.byIds(ctx.agent, d.items.map((i) => i.productId));
+    // journey retest R7-4: a mistyped id (one or two characters off) stands for its product — the server recap names it
+    const fixed = await this.fixedIds(ctx.agent, d.items.map((i) => i.productId).filter((id) => !products.some((p) => p.id === id)));
+    if (fixed.size) products.push(...(await this.catalogue.byIds(ctx.agent, [...new Set(fixed.values())])));
     const by = new Map(products.map((p) => [p.id, p]));
     const items: CreateOrderRequest['items'] = [];
     const beyondStock: { name: string; quantity: number }[] = [];
     for (const i of d.items) {
-      const p = by.get(i.productId);
+      const p = by.get(i.productId) ?? by.get(fixed.get(i.productId) ?? '');
       // AI-14: an archived / inactive product is dropped with a message, never ordered
       if (!p) return fail({ ok: false, error: { code: 'PRODUCT_NOT_AVAILABLE', productId: i.productId } });
-      const v = p.hasVariants ? p.variants.find((x) => x.id === i.variantId) : null;
+      const v = p.hasVariants ? (p.variants.find((x) => x.id === i.variantId) ?? fixedVariant(p, i.variantId ?? null)) : null;
       if (p.hasVariants && !v) return fail({ ok: false, error: { code: 'VARIANT_REQUIRED', productId: p.id, availableVariants: p.variants.filter((x) => p.sellOutOfStock || x.stock > 0).map((x) => ({ id: x.id, name: x.name, price: x.price })) } });
       const stock = v ? v.stock : p.stock !== null && freed.size ? p.stock + (freed.get(`${p.id}:`) ?? 0) : p.stock;
       const free = stock === null ? null : v ? stock + (freed.get(`${p.id}:${v.id}`) ?? 0) : stock;
@@ -618,7 +642,8 @@ export class ToolRegistry {
             ...(v ? { variantId: v.id, variant: v.name } : {}),
             available: free,
             ...(v ? { otherVariants: others, availableAllVariants: free + others.reduce((n, x) => n + x.available, 0) } : {}),
-            say: v ? 'offer `available` of this variant; when the customer wants more, offer to complete with otherVariants (their available quantities), never more than availableAllVariants in total' : 'offer `available`',
+            // journey retest R7-4: `available` 0 is « out of stock », not a quantity to offer (N5c: create_order on the Parfum Oud)
+            say: free <= 0 && !others.length ? 'Out of stock: nothing is ordered. Say it is out of stock and offer an in-stock product (or variant) instead — never order this one.' : v ? 'offer `available` of this variant; when the customer wants more, offer to complete with otherVariants (their available quantities), never more than availableAllVariants in total' : 'offer `available`',
           },
         });
       }

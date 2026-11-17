@@ -18,10 +18,14 @@ import { AI_GATEWAY, AiProviderError, type AiGateway, type AiMessage, type AiToo
 import { RoutingService, type RoutedModel } from './routing.service';
 import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
-import { allowedHandoffReasons, establishedReasons, fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, type HandoffRefusal } from './handoff-judge';
+import { allowedHandoffReasons, establishedReasons, fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, orderDetailsMessage, type HandoffRefusal } from './handoff-judge';
 import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, quoteFacts, stripMarkdown, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
-import { blockedOrderText, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, withoutRecapClaims } from './tools/order-confirmation-text';
+import { asksDelivery, blockedOrderText, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, withoutRecapClaims } from './tools/order-confirmation-text';
 import { phonesIn } from './tools/order-confirmation';
+import { matchWilaya } from './tools/tool-registry';
+import { placeIndex, placeNamedIn } from './tools/place-index';
+import { contextOf } from '../messaging/messaging.presenter';
+import { fillerMessage, noPhotoReply, noPhotoSaid, photoAsked, withoutPresenceTalk } from './reply-fixes';
 
 /** journey retest R1-1: told to the model on a message that only gives an order field (handoff_to_human is not offered). */
 export const FIELD_ONLY_NOTE =
@@ -40,17 +44,33 @@ export const NO_PHONE_NOTE =
  */
 export const NO_ADDRESS_NOTE =
   "NO ADDRESS YET: the customer's messages give no street address (rue, cité, bloc, building, landmark) and no stop-desk choice so far. Unless THIS message or KNOWN CUSTOMER gives it, do not call create_order: ask for the address in one short question (or offer the stop-desk).";
+/**
+ * journey retest R7-4 (17/11): told to the model when no wilaya (nor a commune of one) and no street address was given yet:
+ * create_order is not offered — it was called on « Je voudrais le sac …, 1 seul. Karim Haddad 0770112233 » with `wilayaId 1`
+ * (Adrar, never named), refused as `notGivenByCustomer`: without a wilaya the call can only be refused.
+ */
+export const NO_PLACE_NOTE =
+  'NO WILAYA YET: the customer has not named their wilaya (nor a commune or an address) in this conversation, so create_order is not available in this turn. Answer the customer and ask the next missing order field (the wilaya once the product, the name and the phone are known) — never a recap, never a default wilaya.';
+/** journey retest R7-4: told to the model on a message that gives the order's details (handoff_to_human is not offered). */
+export const ORDER_DETAILS_NOTE =
+  "THIS MESSAGE gives the order's details (product, name, phone, place) and asks nothing of the team: take the order — ask the next missing field, or call create_order for the recap when every field is known. handoff_to_human is not available for this message.";
 /** Words of a street address or of a stop-desk choice (accents removed, lower case), in any language. */
 const ADDRESS_HINT =
   /(?<![\p{L}])(?:rue|cite|bloc|blk|bt|bat|batiment|villa|logements?|lgts?|logts?|n°|quartier|qrt|hay|hai|residence|lotissement|lot|route|rte|avenue|av|boulevard|bd|impasse|allee|douar|village|cooperative|coop|immeuble|imm|appartement|appt|apt|etage|pres|cote|derriere|face|mairie|poste|mosquee|jami3|djama3|ecole|lycee|marche|souk|9rib|qrib|janb|street|st|road|building|near|apartment|flat|floor|stop|stopdesk|desk|bureau|agence|relais|zan9a|zenqa|derb|حي|شارع|نهج|عمارة|عماره|بلوك|فيلا|مسكن|سكن|طريق|قرب|قريب|جنب|مقابل|حذا|بجانب|المسجد|الجامع|البلدية|البريد|المدرسة|السوق|زنقة|درب|دوار|قرية|اقامة|إقامة|الطابق|ستوب|مكتب|وكالة)(?![\p{L}])/u;
 /** journey retest R6-5: no street address / stop-desk word in the customer's messages, and no create_order answer before. */
 export const noAddressYet = (ctx: Pick<ToolRunContext, 'customerHistory' | 'orderHistory'>): boolean =>
   ctx.customerHistory !== undefined && !(ctx.orderHistory ?? []).length && !ADDRESS_HINT.test(ctx.customerHistory.normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC').toLowerCase());
+/** journey retest R7-2: the product ids of a search_products / get_product result. */
+const productIdsOf = (result: unknown): string[] => {
+  const r = result as { products?: { id?: unknown }[]; id?: unknown } | null;
+  if (Array.isArray(r?.products)) return r.products.map((p) => p?.id).filter((id): id is string => typeof id === 'string');
+  return typeof r?.id === 'string' ? [r.id] : [];
+};
 /** journey retest R1-1: the result given back for a call to a tool this step did not offer (it is not run). */
-export const unavailableTool = (name: string, fieldOnly: boolean, noPhone = false) => ({
+export const unavailableTool = (name: string, fieldOnly: boolean, noPhone = false, noPlace = false) => ({
   ok: false,
   error: { code: 'TOOL_NOT_AVAILABLE', tool: name },
-  instruction: `${name} cannot be used now${fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : canonicalTool(name) === 'create_order' && noPhone ? ': the customer has not given a phone number yet — ask for the next missing field (never a recap)' : canonicalTool(name) === 'create_order' ? ': it already answered in this turn — follow that answer (ask the missing field, or let the recap / confirmation go)' : ''}. Answer the customer now with the JSON object.`,
+  instruction: `${name} cannot be used now${fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : canonicalTool(name) === 'create_order' && noPhone ? ': the customer has not given a phone number yet — ask for the next missing field (never a recap)' : canonicalTool(name) === 'create_order' && noPlace ? ': the customer has not named their wilaya yet — ask for it (never a default wilaya, never a recap)' : canonicalTool(name) === 'create_order' ? ': it already answered in this turn — follow that answer (ask the missing field, or let the recap / confirmation go)' : ''}. Answer the customer now with the JSON object.`,
 });
 /**
  * journey retest R2-4: a `create_order` answer after which the tool is not offered again in the same turn — the recap was
@@ -196,27 +216,37 @@ export class AiRunService implements OnModuleInit {
    */
   async turn(req: TurnRequest): Promise<TurnResult> {
     const usage: AiUsage = { inputTokens: 0, outputTokens: 0 };
-    const executed: ExecutedTool[] = [];
-    const seen = new Map<string, number>();
     const messages: AiMessage[] = [...req.prompt.messages];
     // full-test 15/11 AI-CHAT-07: no handoff tool on a message that is only an order field (refused every time, 5–10 s each)
     const fieldOnly = fieldOnlyMessage(req.toolCtx.customerText, !!req.toolCtx.ordering);
+    // journey retest R7-4: nor on a message that gives the order's details with a phone and asks nothing of the team (N5 T2
+    // `handoff_to_human { off_catalogue, evidence « none » }` next to the recap) — `status = HANDOFF` stays judged
+    const orderDetails = !fieldOnly && orderDetailsMessage(req.toolCtx.customerText, (t) => phonesIn(t).size > 0);
+    const noHandoff = fieldOnly || orderDetails;
     // journey retest R3-3: the handoff tool carries only the reasons this agent's rules allow now (no `other` without shop rules)
     // journey retest R6-5: and `keyword` only when one of the agent's keywords is in the customer's message
     const reasons = allowedHandoffReasons(req.toolCtx.agent, req.toolCtx.unclearStreak ?? 0, req.toolCtx.customerText);
     // journey retest R5-6: no create_order while the customer has given no phone number (every such call is refused) — the
     // probes `create_order {}` / placeholder values came on such turns; a complete order message carries its phone and keeps it
     const noPhone = !(await this.phoneGiven(req.toolCtx));
-    const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !(d.name === 'handoff_to_human' && (fieldOnly || !reasons.length)) && !(d.name === 'create_order' && noPhone)).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
-    // journey retest R1-1: the model still called the withheld tool (the prompt describes it) and the SDK refused the whole
-    // step — 5 of 59 turns of a shop with handoff rules ended in 503. The note says it is not available for this message
-    // (after the cached start of the system prompt, so the cache is kept).
-    // journey retest R5-6: and, without a phone, that create_order is not available (same place: the cache prefix is kept)
     // journey retest R6-5: with a phone create_order stays offered, but with no street address / stop-desk word in the
     // customer's messages (and no recap yet) the model is told to ask for the address rather than call it (F1b: « Sétif, El
     // Eulma » ⇒ `create_order` without an address, refused)
     const noAddress = !noPhone && noAddressYet(req.toolCtx);
-    const system = [req.prompt.system, ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(noAddress ? [NO_ADDRESS_NOTE] : [])].join('\n\n');
+    // journey retest R7-4: and with no wilaya either (none named, no commune of one, none known of the customer) it is not
+    // offered at all — such a call can only be refused (F1b T1 `wilayaId 1`)
+    const noPlace = noAddress && !(await this.placeKnown(req.toolCtx));
+    const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !(d.name === 'handoff_to_human' && (noHandoff || !reasons.length)) && !(d.name === 'create_order' && (noPhone || noPlace))).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
+    // journey retest R1-1: the model still called the withheld tool (the prompt describes it) and the SDK refused the whole
+    // step — 5 of 59 turns of a shop with handoff rules ended in 503. The note says it is not available for this message
+    // (after the cached start of the system prompt, so the cache is kept).
+    // journey retest R5-6: and, without a phone, that create_order is not available (same place: the cache prefix is kept)
+    const executed: ExecutedTool[] = [];
+    const seen = new Map<string, number>();
+    const answered = new Map<string, unknown>();
+    const system = [req.prompt.system, ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : [])].join('\n\n');
+    // journey retest R7-5: run once, when the answer to a delivery question comes without any quote_delivery of the turn
+    let serverQuoted = false;
     let model = null as RoutedModel | null;
     let usedFallback = false;
     let repaired = false;
@@ -228,7 +258,6 @@ export class AiRunService implements OnModuleInit {
     // journey retest R2-4: create_order is withdrawn for the rest of the turn once it answered for good (orderClosedBy), and a
     // call identical to one already answered this turn gets that answer back without running again
     let orderClosed = false;
-    const answered = new Map<string, unknown>();
     // §4.3 reply guard: the answer that broke a rule (its status, cards and fields are kept), and what it broke
     let guardFirst = null as { output: AiReplyOutput; extra: { salvaged?: boolean }; violations: GuardViolation[] } | null;
     // full-test 15/11 proposal 4: once create_order placed an order this turn, the customer gets the server's confirmation
@@ -250,11 +279,30 @@ export class AiRunService implements OnModuleInit {
       // a handoff answer is not a recap to confirm — journey retest R4-1: and it never claims one (« récapitulée ci-dessus »)
       if (output.status === 'HANDOFF' || forcedHandoff) return { ...plain, reply: withoutRecapClaims(plain.reply) };
       const recap = recapNow();
-      if (!recap) return plain;
+      if (!recap) {
+        // journey retest R7-3: « ? » / « ... » gets the pending question, not « Oui, je suis là ! » / « Vous êtes toujours là ? »
+        const text = fillerMessage(req.toolCtx.customerText) ? withoutPresenceTalk(plain.reply) : plain.reply;
+        return { ...plain, reply: withPhotoAnswer(output, text) };
+      }
       const r = recapReply(plain.reply, recap, req.guard?.lang ?? 'fr', req.toolCtx.customerText);
       // journey retest R5-5: « twasslou l Constantine ? » is answered in words when no sentence of the model goes before the recap
       const answer = r.kept === 'server' ? deliveryAnswer(calls, req.toolCtx.customerText ?? '', req.guard?.lang ?? 'fr') : null;
-      return { ...plain, reply: answer ? `${answer}\n\n${r.text}` : r.text };
+      return { ...plain, reply: withPhotoAnswer(output, answer ? `${answer}\n\n${r.text}` : r.text) };
+    };
+    /**
+     * journey retest R7-2: a photo request answered with no photo sent and no word about it, while every product of the answer
+     * (its cards, else this turn's search / get_product results) is known to have none — the server says so first (N9: the
+     * guard's rewrite of a `moroccan_darija` draft had dropped « ma 3andnach tsawer »).
+     */
+    const withPhotoAnswer = (output: AiReplyOutput, text: string): string => {
+      if (!req.guard || !photoAsked(req.toolCtx.customerText ?? '') || noPhotoSaid(text)) return text;
+      const f = factsNow(output);
+      if (f.photoSent !== false) return text;
+      const shown = [...new Set([...(output.productCards ?? []), ...(output.productPhotos ?? [])])];
+      const found = executed.flatMap((t) => (['search_products', 'get_product'].includes(canonicalTool(t.name)) ? productIdsOf(t.result) : []));
+      const concerned = shown.length ? shown : [...new Set(found)];
+      if (!concerned.length || !concerned.every((id) => (f.noPhoto ?? []).includes(id))) return text;
+      return noPhotoReply(text, concerned.length, req.guard.lang);
     };
     const ok = (output: AiReplyOutput, extra: { salvaged?: boolean; guard?: GuardOutcome } = {}): TurnResult => ({ ok: true, output: confirmed(output), tools: executed, usage, model: model!, usedFallback, forcedHandoff, repaired, ...(handoffRefused ? { handoffRefused } : {}), ...extra });
     // journey 16/11 J03-2: this turn's quote_delivery answers — the reply must give the fee (not checked on a handoff answer)
@@ -345,7 +393,7 @@ export class AiRunService implements OnModuleInit {
           messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: done.result });
           forcedHandoff ??= this.tools.forcedHandoff(call.name, call.args, done.result);
         }
-        messages.push({ role: 'user', content: stray.map((c) => `[tool result ${c.name}] ${JSON.stringify(unavailableTool(c.name, fieldOnly, noPhone))}`).join('\n') });
+        messages.push({ role: 'user', content: stray.map((c) => `[tool result ${c.name}] ${JSON.stringify(unavailableTool(c.name, noHandoff, noPhone, noPlace))}`).join('\n') });
         continue;
       }
       if (res.value.toolCalls.length && offerTools) {
@@ -385,6 +433,13 @@ export class AiRunService implements OnModuleInit {
         return null;
       };
       if (parsed.ok) {
+        // journey retest R7-5 (17/11): « Vous livrez à Blida ? » answered from the delivery policy text alone (« Oui, on livre à
+        // Blida … en 2 à 5 jours ») — the server runs quote_delivery for the wilaya the question names, so the guard's fee_missing
+        // rule applies to this answer (one corrective turn, then the fee sentence) as when the model called it
+        if (!serverQuoted && parsed.value.status !== 'HANDOFF' && !forcedHandoff && !recapNow() && !confirmationNow()) {
+          serverQuoted = true;
+          await this.deliveryQuote(req, executed, seen, answered);
+        }
         // retest 12/11: `status = HANDOFF` is checked like the tool (handoff-judge) — the customer's words of this turn must
         // ask for it. Refused ⇒ the model is told why and answers (once); insisting with a reply ⇒ that reply is sent and the
         // conversation stays with the AI; insisting with nothing to send ⇒ the handoff goes through (silence would be worse)
@@ -428,6 +483,48 @@ export class AiRunService implements OnModuleInit {
       messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: FORMAT_REMINDER });
     }
     return { ok: false, kind: 'format', error: 'malformed_output:steps', tools: executed, usage, model, usedFallback };
+  }
+
+  /**
+   * journey retest R7-4: the customer has named a wilaya (or a commune of one, « wilaya 16 ») in their messages, or one is known
+   * of them — the conversation's recorded details, their client record or an earlier order. Unsure (no messages, a read error) ⇒ true.
+   */
+  private async placeKnown(ctx: TurnRequest['toolCtx']): Promise<boolean> {
+    if (ctx.customerHistory === undefined) return true;
+    try {
+      if (placeNamedIn(await placeIndex(), ctx.customerHistory)) return true;
+      const conv = ctx.conversationId ? await prisma.conversation.findUnique({ where: { id: ctx.conversationId }, select: { context: true } }) : null;
+      if (conv && contextOf(conv).customer?.wilaya) return true;
+      if (!ctx.clientId) return false;
+      const [address, order] = await Promise.all([prisma.clientAddress.findFirst({ where: { clientId: ctx.clientId }, select: { id: true } }), prisma.order.findFirst({ where: { clientId: ctx.clientId }, select: { id: true } })]);
+      return !!address || !!order;
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * journey retest R7-5 (17/11): the answer to a delivery question naming a wilaya (« Bonsoir, vous livrez à Blida ? ») comes
+   * with no quote_delivery of this turn ⇒ the server runs it for that wilaya (stored like any tool call of the run). A turn that
+   * already called quote_delivery, or a message naming no wilaya, runs nothing.
+   */
+  private async deliveryQuote(req: TurnRequest, executed: ExecutedTool[], seen: Map<string, number>, answered: Map<string, unknown>): Promise<void> {
+    const text = req.toolCtx.customerText ?? '';
+    if (!req.guard || !asksDelivery(text) || executed.some((t) => canonicalTool(t.name) === 'quote_delivery')) return;
+    let wilaya: { id: number } | null = null;
+    try {
+      wilaya = matchWilaya((await placeIndex()).wilayas, text);
+    } catch {
+      return;
+    }
+    if (!wilaya) return;
+    const call: AiToolCallRequest = { id: 'server-quote', name: 'quote_delivery', args: { wilayaId: wilaya.id } };
+    const hash = toolCallId(call.name, call.args, 0);
+    const ordinal = seen.get(hash) ?? 0;
+    seen.set(hash, ordinal + 1);
+    const done = await this.toolCall(req, call, ordinal, executed);
+    executed.push(done);
+    answered.set(hash, done.result);
   }
 
   /**

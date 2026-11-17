@@ -10,6 +10,8 @@ export const deliverySection = (c: PromptContext): string =>
     'Never state a delivery fee that did not come from the tool.',
     // journey 16/11 J03-2: « ch7al tawsil l setif ? » got quote_delivery 650 / 350 DA and a reply without any fee
     'When quote_delivery answers, your reply gives its fee for that wilaya (home, and stop-desk when known) in the customer\'s language — that is the answer.',
+    // journey retest R7-5 (17/11): « Vous livrez à Blida ? » → « Oui, on livre à Blida … en 2 à 5 jours. » (from the delivery policy, no fee)
+    'A question whether you deliver to a place (« vous livrez à Blida ? », « twasslou l Oran ? », « واش توصلو لوهران ؟ ») is answered with quote_delivery: yes or no, the fee (home and stop-desk) and the delay — never only « oui, on livre » from the delivery policy (on a turn whose create_order returns the recap, the recap shows the fee: one short sentence is enough).',
   ].join('\n');
 
 const FIELD_TEXT: Record<string, string> = {

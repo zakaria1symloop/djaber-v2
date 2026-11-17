@@ -217,15 +217,38 @@ const ORDER_TALK =
 /** « oui / ih / yes » anywhere but as the first word of an answer (« Oui, on livre à Blida. », « Ih, nwasslou l Constantine. »). */
 const YES_WORD = /(?<![\p{L}\p{N}])(?:oui|ouais|ih|iyeh|iyyeh|ey?h|wah|yes|yeah|ايه|إيه|ايوه|نعم|واه)(?![\p{L}\p{N}])/u;
 const YES_OPENER = /^[\s\p{P}]*(?:oui|ouais|non|ih|iyeh|iyyeh|ey?h|wah|lala|yes|yeah|no|ايه|إيه|ايوه|نعم|واه|لا)(?![\p{L}\p{N}])[\s,،!.]*/u;
-/** The customer's message asks something (a question mark, a question word, « dites-moi / 9olli »). Folded text. */
+/**
+ * The customer's message asks something (a question mark, a question word, « dites-moi / 9olli »). Folded text.
+ * Journey retest R7-1 (17/11): « quand même » (« anyway ») is no question — « je la prends quand même » let a sentence through.
+ */
 const ASKS =
-  /[?؟]|(?<![\p{L}\p{N}])(?:combien|quand|comment|pourquoi|est[- ]ce|quel(?:le)?s?|how|when|what|which|where|why|do you|can you|is it|are they|ch7al|chhal|chal|9adach|qadach|kadach|wach|wa9tach|w9tach|wqtach|imta|kifach|kifech|3lach|win|wayn|9olli|goulli|gouli|dites[- ]moi|tell me|كم|شحال|قداش|وقتاش|واش|علاش|كيفاش|وين|هل|قولي|قوللي)(?![\p{L}\p{N}])/u;
+  /[?؟]|(?<![\p{L}\p{N}])(?:combien|quand(?![\s-]+(?:bien\s+)?m[eê]me)|comment|pourquoi|est[- ]ce|quel(?:le)?s?|how|when|what|which|where|why|do you|can you|is it|are they|ch7al|chhal|chal|9adach|qadach|kadach|wach|wa9tach|w9tach|wqtach|imta|kifach|kifech|3lach|win|wayn|9olli|goulli|gouli|dites[- ]moi|tell me|كم|شحال|قداش|وقتاش|واش|علاش|كيفاش|وين|هل|قولي|قوللي)(?![\p{L}\p{N}])/u;
 /** What an answer gives: a number, delivery, a delay, a price, a size, a colour, a fabric, the stock, the payment (folded). */
 const ANSWER_CONTENT =
   /\d|livr|deliver|twass?l|nwass?l|ywass?l|tawsil|توص|نوص|يوص|stop.?desk|jour|day|ayam|ayyam|يوم|ايام|prix|price|taman|thaman|soum|سعر|ثمن|سومة|taille|size|ma9as|مقاس|couleur|colou?r|لون|tissu|fabric|matiere|qmach|9mach|khfif|قماش|coton|cotton|laine|soie|silk|cuir|leather|stock|disponible|available|kayen|kayna|kaynin|makach|متوفر|موجود|كاين|ماكانش|garantie|warranty|paiement|payment|cash|khlas|الدفع|خلاص|gratuit|free|batel|مجان|frais|fee|tarif/u;
 
 /** Folded, and as written in lower case (a folded hamza is decomposed: « إيه » would no longer match). */
 const bothForms = (x: string) => [folded(x), x.toLowerCase()];
+/** journey retest R7-1: a delay that is longer than usual (« peut prendre un peu plus de temps », « may take longer », « yt3atel »). */
+const LATER_TALK = /plus\s+de\s+temps|plus\s+longue?|(?<![\p{L}])retard|d[ée]lai\s+(?:plus|suppl)|longer|(?<![\p{L}])delay|yt3att?el|t3att?al|ta3til|يتعطل|تتعطل|تعطل|تأخير|تاخير|يتأخر|يتاخر|وقت\s+(?:اكثر|أكثر|زايد)|chwiya\s+ktar/u;
+/** Words of 3 letters or more, no number (folded): what two sentences say in common. */
+const contentWords = (t: string) => [...new Set(folded(t).split(/[^\p{L}]+/u).filter((w) => w.length >= 3))];
+/**
+ * journey retest R7-1 (17/11): a sentence that says again a line of the server recap that has no amount — the « beyond stock »
+ * delay, the replaced order (N10: « La montre peut prendre un peu plus de temps à être livrée. » before a recap ending with « Une
+ * partie de la commande peut prendre un peu plus de temps à être livrée. »): 3 words or more of it, 60 % of the sentence.
+ */
+export const repeatsRecapLine = (sentence: string, recap: Pick<Recap, 'beyondStock' | 'replaces'>): boolean => {
+  const lines = [...(recap.beyondStock ? (Object.keys(R) as Loc[]).map((l) => R[l].beyond) : []), ...(recap.replaces ? (Object.keys(R) as Loc[]).map((l) => R[l].replaces(recap.replaces!)) : [])];
+  if (!lines.length) return false;
+  if (recap.beyondStock && bothForms(sentence).some((v) => LATER_TALK.test(v))) return true;
+  const words = contentWords(sentence);
+  return lines.some((line) => {
+    const said = new Set(contentWords(line));
+    const hits = words.filter((w) => said.has(w)).length;
+    return hits >= 3 && hits / words.length >= 0.6;
+  });
+};
 /** journey retest R6-1: a sentence that is only a thank-you / greeting (and the customer's name, or one capitalised name). */
 const leadOnly = (x: string, names: Set<string>): boolean => {
   const raw = x.match(/[\p{L}\p{N}]+/gu) ?? [];
@@ -255,6 +278,8 @@ export const recapLeadIn = (reply: string, recap: Recap, customerText?: string):
   const itemAmounts = recap.items.map((i) => (Number(i.unitPrice ?? 0) || 0) * (Number(i.quantity ?? 1) || 1)).filter((n) => n > 0).map(String);
   return all.filter((x) => {
     if (aboutRecap(x) || bothForms(x).some((v) => ORDER_TALK.test(v))) return false;
+    // journey retest R7-1: a line the server recap already says (the « beyond stock » delay, the replaced order)
+    if (repeatsRecapLine(x, recap)) return false;
     // a « oui » the sentence asks for (not the « Oui, … » that answers a question)
     if (bothForms(x).some((v) => YES_WORD.test(v.replace(YES_OPENER, '')))) return false;
     if (leadOnly(x, names)) return true;

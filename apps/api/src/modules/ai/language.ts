@@ -220,7 +220,7 @@ const ODD_ARABIZI = /(?<![\p{L}\p{N}_])(?:smiy(?:a|et|at)\s+(?:ta3\s+)?e?nnhar|s
  * question (« (نهار، حي، رقم الدار …) », « اسم النهار »), « سوي » only after a garment (« حجاب سوي » = « soie »), « t7ebb nchouf »
  * (« that I see ») only at the end of a question.
  */
-const ODD_FIXES: [RegExp, string][] = [
+const ODD_FIXES: [RegExp, string | ((m: string, ...groups: string[]) => string)][] = [
   [/(?<![\p{L}\p{N}_])(?:ال)?نهار(?=\s*[،,]\s*(?:ال)?(?:حي|عمارة|رقم|دار|بلوك))/gu, 'الشارع'],
   [/(?<=(?:\(|(?:ال)?حي\s*[،,])\s*)(?:ال)?نهار(?![\p{L}\p{N}_])/gu, 'الشارع'],
   [/(?<![\p{L}\p{N}_])(?:اسم|إسم|سمية|سميه)\s+(?:تاع\s+)?(?:ال)?نهار(?![\p{L}\p{N}_])/gu, 'الشارع'],
@@ -246,6 +246,12 @@ const ODD_FIXES: [RegExp, string][] = [
   // « حجاب سوي » (« soie » in Arabic letters) for « حرير »; « 700 دج لين الدار » (« until », not Algerian) for « للدار »
   [/(?<=(?:ال)?(?:حجاب|شال|فولار|خمار)\s+)سوي(?![\p{L}\p{N}_])/gu, 'حرير'],
   [/(?<![\p{L}\p{N}_])لين\s+(?:ال)?دار(?![\p{L}\p{N}_])/gu, 'للدار'],
+  // journey retest R7-3 (17/11): « ما عندناش رقم تتبع للحين » (Gulf « for now ») → « درك »; « بمجرد ما تتشحن » (Mashreq « is
+  // shipped ») → « تخرج »; « T7ebb nwarrik wach men taille ? » (« do you want me to show you which size ») → « Wach men taille t7ebb ? »
+  [/(?<![\p{L}\p{N}_])للحين(?![\p{L}\p{N}_])/gu, 'درك'],
+  [/(?<![\p{L}\p{N}_])(?:تتشحن|تنشحن)(?![\p{L}\p{N}_])/gu, 'تخرج'],
+  [/(?<![\p{L}\p{N}_])(?:يتشحن|ينشحن)(?![\p{L}\p{N}_])/gu, 'يخرج'],
+  [/(?<![\p{L}\p{N}_])t7ebb\s+nwarrik\s+(wach\s+men\s+[\p{L}'’-]+)\s*([?؟])/giu, (_m, what: string, mark: string) => `${what} t7ebb ${mark}`],
 ];
 const oddIn = (text: string) => ODD_FIXES.some(([re]) => new RegExp(re.source, re.flags.replace('g', '')).test(text));
 /** journey retest R3-2 / R3-5 / R5-3: « ch7al » used for « what / which », or made-up arabizi / darija — the reply guard flags it with the Moroccan words. */
@@ -307,7 +313,7 @@ export const fixMoroccan = (text: string): string => {
     return caseOf(m, `${ar ? 'واش' : 'wach'} ${wilaya ? `${ar ? 'من' : 'men'} ` : ''}${what}`);
   });
   // journey retest R5-3: the odd wording of the transcripts
-  for (const [re, to] of ODD_FIXES) out = out.replace(re, (m) => caseOf(m, to));
+  for (const [re, to] of ODD_FIXES) out = out.replace(re, (m: string, ...g: string[]) => caseOf(m, typeof to === 'string' ? to : to(m, ...g)));
   return out;
 };
 /** A Latin letter glued inside an Arabic word (« وnعاونك », rule 16 « one script per sentence »). */

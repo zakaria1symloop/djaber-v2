@@ -183,6 +183,22 @@ export function handoffRefusedInstruction(why: HandoffRefusal): string {
 const NAME_INTRO = /^(?:je\s+m['’]?\s*appelle|moi\s+c['’]?est|mon\s+nom\s+(?:est|c['’]?est)|my\s+name\s+is|smiti|esmi|ismi|asmi|اسمي|إسمي|سميتي)\s+\p{L}/iu;
 /** Words that can ask for the team in a short message (« un humain svp », « rembourse », « arnaque »…). */
 const TEAM_WORDS = /human|humain|conseill|responsable|personne|parler|appel|rappel|rembours|refund|arnaq|plainte|voleur|scam|manager|agent|bnadem|nhder|nehder|انسان|مسؤول|شخص|نهدر|سارق|نصاب|ترجع|فلوس|flous/;
+/** journey retest R7-4: words of a problem with an order (a complaint), in a message that also gives a phone. */
+const PROBLEM_WORDS = /jamais\s+(?:recu|arriv)|pas\s+(?:recu|arriv)|retard|cass[ee]|abim|defect|defectu|probleme|mochkil|wrong|damaged|broken|never\s+(?:arrived|came)|not\s+(?:arrived|received)|ma\s*wsel(?:ch|tch)|ma\s*wsl(?:at)?ch|ماوصل|ما\s+وصل|مكسور|مشكل|غالط/;
+/**
+ * journey retest R7-4 (17/11): a message that gives the order's details with a valid phone number and asks nothing of the
+ * team — no question, no word asking for a person, a refund, a change or a cancellation, no problem with an order
+ * (« Bon finalement je le prends. Karim Haddad 0770112233, Oran, Bir El Djir, cité 1000 logements bloc 4 »). The
+ * `handoff_to_human` tool is not offered then: N5 T2 called it `{ off_catalogue, evidence « none » }` next to the recap,
+ * refused after a model round. A real request still goes through `status = HANDOFF` (judged).
+ */
+export function orderDetailsMessage(text: string | undefined, validPhone: (t: string) => boolean): boolean {
+  const t = (text ?? '').trim();
+  if (!t || t.length > 300 || /[?؟]/.test(t) || !validPhone(t)) return false;
+  const f = foldText(t);
+  return !TEAM_WORDS.test(f) && !ASKS_TEAM.test(f) && !ORDER_CHANGE.test(f) && !ASKS_REFUND.test(f) && !PROBLEM_WORDS.test(f);
+}
+
 /**
  * full-test 15/11 AI-CHAT-07 (proposal 9): a message that is only an order field — a phone number, or, while an order is
  * being taken, a short answer with no question and no word asking for the team (« Sétif », « Bab Ezzouar », « Karim
