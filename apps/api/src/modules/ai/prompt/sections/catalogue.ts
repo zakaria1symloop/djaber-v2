@@ -43,18 +43,20 @@ export const catalogueSection = (c: PromptContext): string => {
   // the customer naming it, an older message or a page post never makes it available
   rules.push(
     catalogue.full
-      ? 'NOT_LISTED: a product or a variant (colour, size, model…) that is not in this list is not available, even when the customer names it or an earlier message mentioned it: say it is not available, offer what is listed, never confirm it, show it or take an order for it'
+      ? 'NOT_LISTED: a product or a variant (colour, size, model…) that is not in this list is not available, even when the customer names it or an earlier message mentioned it: say it is not available, offer what is listed and in stock, never confirm it, show it or take an order for it'
       : 'NOT_LISTED: a product or a variant (colour, size, model…) that search_products / get_product does not return is not available, even when the customer names it or an earlier message mentioned it: say it is not available, never confirm it, show it or take an order for it',
   );
   rules.push(
     'STOCK_PRIVATE: never tell the customer how many units are in stock or left (no « il en reste 5 », « we have 12 », « 3 pièces disponibles »), even when they ask: say it is available or not. Only when they ask for more than is left does check_availability (or create_order) give the number you may offer (availableQuantity, ORDER_INSUFFICIENT_STOCK).',
   );
   // full-test 15/11 AI-CHAT-13 (C19): a photo described in words is not a photo the AI saw
+  // journey retest R5-1 (17/11): « Je peux vous proposer notre sac …, notre montre … ou notre parfum Oud 50 ml » (out of stock)
+  rules.push('ALTERNATIVES_IN_STOCK: every product you offer, suggest or list (an alternative, « je peux vous proposer … », what the shop sells) has STOCK in stock, orderable or service — never one that is out of stock. An out-of-stock product is named only when the customer asks about it, and then as out of stock.');
   rules.push('PHOTO_NOT_SEEN: a photo the customer only describes in words (« comme sur la photo », « celle de votre page », « like in your post ») is one you have not seen: never confirm it is a given product; name the closest listed product as a question and ask them to send the photo.');
   if (sentence) rules.push(`OUT_OF_STOCK_SENTENCE: "${sentence}"`);
   // tester notes 25/10: the shop's sentence word for word (it was paraphrased, so an edit seemed not applied)
   const say = sentence ? 'write OUT_OF_STOCK_SENTENCE word for word ({product} = the product name; translate it only when the customer writes another language), never a sentence of your own' : 'say the product is out of stock';
-  rules.push(c.agent.outOfStockBehavior === 'suggest_alternative' ? `OUT_OF_STOCK: ${say}, then suggest an alternative from the same category` : `OUT_OF_STOCK: ${say}, nothing else about it`);
+  rules.push(c.agent.outOfStockBehavior === 'suggest_alternative' ? `OUT_OF_STOCK: ${say}, then suggest an alternative from the same category that is in stock` : `OUT_OF_STOCK: ${say}, nothing else about it`);
   // full-test 15/11 AI-CHAT-08 (X02: « Sac à main cuir est en rupture » when only the red one was)
   if (c.agent.showMissingVariants) rules.push('MISSING_VARIANT: when only some variants are out of stock the product is available: say which variants remain, never that the whole product is out of stock');
   // journey 16/11 J04-1: a new shop whose products still wait for Djaber's review is not a shop « with no product »

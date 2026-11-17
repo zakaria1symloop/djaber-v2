@@ -262,3 +262,37 @@ export const orderConfirmationText = (calls: { name: string; result: unknown }[]
     t.thanks,
   ].join('\n');
 };
+
+/**
+ * journey retest R5-5 (17/11): the customer's message asks whether / how the shop delivers there (« khouya twasslou l
+ * Constantine ? », « vous livrez à Oran ? », « واش توصلو لقسنطينة ؟ »).
+ */
+const DELIVERY_WORD = /livr|deliver|twass?l|nwass?l|ywass?l|tawsil|توص|تبعثو|ترسلو/u;
+export const asksDelivery = (text: string): boolean => {
+  const t = folded(text).trim();
+  return DELIVERY_WORD.test(t) && (/[?؟]/.test(t) || /^(?:wach|est[- ]ce|do you|can you|واش|هل)(?![\p{L}])/u.test(t));
+};
+const ANSWER: Record<Loc, (place: string, eta: [string, string] | null) => string> = {
+  fr: (p, e) => `Oui, on livre à ${p}${e ? `, en ${e[0]} à ${e[1]} jours` : ''}.`,
+  en: (p, e) => `Yes, we deliver to ${p}${e ? ` in ${e[0]} to ${e[1]} days` : ''}.`,
+  arabizi: (p, e) => `Ih, nwasslou l ${p}${e ? `, f ${e[0]} l ${e[1]} ayam` : ''}.`,
+  ar: (p, e) => `إيه، نوصلو لـ${p}${e ? `، من ${e[0]} إلى ${e[1]} أيام` : ''}.`,
+};
+/**
+ * journey retest R5-5: when the server recap goes out with no sentence of the model before it and the customer's message asked
+ * whether the shop delivers to the recap's wilaya / commune (N3 T3: « twasslou l Constantine ? » got the recap only), the
+ * answer in words — the fee is on the recap's delivery line, the delay from this turn's quote_delivery when it gave one.
+ * Null otherwise.
+ */
+export const deliveryAnswer = (calls: { name: string; result: unknown }[], customerText: string, lang: AiLanguage | string | undefined): string | null => {
+  const recap = pendingRecap(calls);
+  if (!recap || !asksDelivery(customerText)) return null;
+  const said = wordsOf(customerText);
+  const names = [recap.wilaya, recap.wilayaAr, recap.communeName, recap.communeAr].filter((n): n is string => !!n && n.trim().length >= 2);
+  if (!names.some((n) => said.includes(wordsOf(n)) || (/[؀-ۿ]/.test(n) && said.includes(wordsOf(n).trim())))) return null;
+  const loc = locOf(lang);
+  const quote = [...calls].reverse().find((c) => c.name === 'quote_delivery' && (c.result as { ok?: unknown } | null)?.ok === true)?.result as { etaDays?: unknown } | undefined;
+  const m = typeof quote?.etaDays === 'string' ? /^(\d+)\s*[–-]\s*(\d+)$/.exec(quote.etaDays) : null;
+  const place = loc === 'ar' ? recap.wilayaAr || recap.wilaya : recap.wilaya;
+  return place ? ANSWER[loc](place, m ? [m[1]!, m[2]!] : null) : null;
+};

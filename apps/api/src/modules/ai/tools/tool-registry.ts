@@ -141,7 +141,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
   },
   handoff_to_human: {
     name: 'handoff_to_human',
-    description: "Escalate to the merchant team, only when the customer's CURRENT message matches one of the HANDOFF rules (reason = that rule id; reason=other only for a « Shop rules » item). evidence = the customer's exact words from that message. Never for a greeting, a photo, an earlier message, a question you cannot answer (status=UNKNOWN) or a stock problem (offer what is available).",
+    description: "Escalate to the merchant team, only when the customer's CURRENT message matches one of the HANDOFF rules (reason = that rule id; reason=other only for a « Shop rules » item). evidence = the customer's exact words from that message. Never for a greeting, a photo, an earlier message, a question you cannot answer (status=UNKNOWN) or a stock problem (offer what is available); never called without a reason and the evidence, nor to find out whether a handoff applies.",
     parameters: { type: 'object', required: ['reason', 'evidence'], additionalProperties: false, properties: { reason: { enum: [...HANDOFF_REASONS] }, evidence: { type: 'string', maxLength: 300, description: "the customer's exact words, from their current message, that match the rule" }, detail: { type: 'string', maxLength: 200 } } },
   },
   add_faq_candidate: {

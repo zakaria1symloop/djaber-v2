@@ -19,6 +19,9 @@
 //   contradicts_customer journey retest R2-3: « rani nestanna numéro ta3ek » right after the number, « ما فهمتش الولاية » after
 //                    a phone — a field said not understood / awaited while the customer's message just gave it (or gave
 //                    another field and nothing else): one corrective turn, then the sentence is dropped
+//   unavailable_offer journey retest R5-1: a sentence names a catalogue product that is out of stock (not orderable beyond
+//                    stock) without saying so, and the customer's message did not ask about it (« Je peux vous proposer … notre
+//                    parfum Oud 50 ml »): one corrective turn, then the sentence is dropped
 // Pure: no I/O. Conservative by design — a false positive costs one corrective model turn and, at worst, a dropped sentence.
 import { formatMoney } from '@djaber/shared';
 import { GUARD_MARK } from './ai.constants';
@@ -29,7 +32,7 @@ import { TOOL_ALIASES, TOOL_DEFS } from './tools/tool-registry';
 import { phonesIn } from './tools/order-confirmation';
 import { fold as foldPlace, WILAYA_ALIASES } from './tools/wilaya-aliases';
 
-export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing' | 'contradicts_customer';
+export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing' | 'contradicts_customer' | 'unavailable_offer';
 /** Rules the server fixes itself: no corrective model turn for them alone. */
 export const AUTO_FIX_RULES: readonly GuardRule[] = ['script_mix'];
 export type LeakKind = 'uuid' | 'tool' | 'code' | 'key' | 'json' | 'marker';
@@ -81,6 +84,12 @@ export type GuardFacts = {
   customerText?: string;
   /** journey retest R2-3: the order fields the answer reports as given (its `customer`) — compared with `customerText` */
   customerFields?: Partial<Record<OrderField, string>>;
+  /** journey retest R5-1: the folded names of the catalogue products that are out of stock (and not sold beyond it) */
+  unavailable?: string[];
+  /** the catalogue names of those products (for the corrective instruction) */
+  unavailableNames?: string[];
+  /** journey retest R5-1: the folded names of the other catalogue products (an in-stock « Montre connectée » hides « montre ») */
+  available?: string[];
 };
 export type OrderField = 'name' | 'phone' | 'wilaya' | 'commune' | 'address';
 /** What a successful quote_delivery answered: the reply must give one of its fees (or say it is free). */
@@ -433,6 +442,8 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   });
   // journey 16/11 J03-2: the fee the tool returned this turn is the answer — never dropped for a « merci pour ta patience »
   if (facts.quotes?.length && !feeGiven(reply, facts.quotes)) out.push({ rule: 'fee_missing', sentence: 0 });
+  // journey retest R5-1: an out-of-stock product is never offered (N7: « … ou notre parfum Oud 50 ml » to « lunettes de soleil ? »)
+  if (facts.unavailable?.length) for (const i of unavailableOffers(parts, facts)) out.push({ rule: 'unavailable_offer', sentence: i });
   // journey retest R2-3: never « not understood » / « waiting for » a field the customer's message just gave — nor « not
   // understood » another field when the message only gave one (« ما فهمتش الولاية » after a phone: no wilaya was asked)
   if (facts.customerText?.trim()) {
@@ -446,6 +457,44 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   }
   return out;
 }
+
+/** journey retest R5-1: words that say a product is out of stock (folded) — a sentence with one names it as unavailable, not as an offer. */
+const OUT_OF_STOCK_WORDS = new RegExp(
+  [
+    'rupture', 'epuise', 'indisponible', String.raw`(?:plus|pas|n'?est\s+plus)\s+(?:disponible|dispo|en\s+stock)`, 'revient', 'reviendra', String.raw`out\s+of\s+stock`, String.raw`sold\s+out`, 'unavailable', String.raw`not\s+(?:available|in\s+stock)`, String.raw`no\s+longer`, String.raw`back\s+soon`,
+    'makach', 'makanch', 'mkach', String.raw`ma\s*kaynch`, String.raw`ma\s*kanch`, 'mahouch', 'marahouch', String.raw`machi\s+disponible`, 'kmel', 'khlas', 'tkemmel', 'tkamel',
+    'نفذ', 'نفد', 'نفذت', 'نفدت', String.raw`غير\s+متوفر`, String.raw`مش\s+متوفر`, 'ماكانش', 'مكانش', String.raw`ما\s+كانش`, 'ماكاش', 'مكاش', 'ماهوش', 'ماراهوش', 'خلاص', 'كمل', 'تكمل',
+  ].join('|'),
+  'u',
+);
+const plainWords = (t: string) => foldGuard(t).replace(/[^\p{L}\p{N}' ]+/gu, ' ').replace(/\s+/g, ' ').trim();
+/** The folded name of a product, and without its size words (« parfum oud 50 ml » → « parfum oud ») when two words or more are left. */
+const nameKeys = (name: string): string[] => {
+  const full = plainWords(name);
+  const words = full.split(' ');
+  while (words.length && /\d|^(?:ml|cl|l|cm|mm|m|g|kg|x)$/u.test(words[words.length - 1]!)) words.pop();
+  return [...new Set([full, ...(words.length >= 2 ? [words.join(' ')] : [])])].filter((k) => k.length >= 4);
+};
+/**
+ * journey retest R5-1 (17/11): the sentences that name an out-of-stock product with no out-of-stock word (in it or in the
+ * sentence before), when the customer's message does not name that product — an offer or a suggestion of it. The names of the
+ * other products are taken out first (« montre » of an in-stock « Montre connectée »).
+ */
+export const unavailableOffers = (parts: string[], facts: Pick<GuardFacts, 'unavailable' | 'available' | 'customerText'>): number[] => {
+  const asked = ` ${plainWords(facts.customerText ?? '')} `;
+  const keys = (facts.unavailable ?? []).filter((k) => !asked.includes(` ${k} `) && !asked.includes(` ${k.split(' ')[0]} `));
+  if (!keys.length) return [];
+  const others = [...(facts.available ?? [])].sort((a, b) => b.length - a.length);
+  const out: number[] = [];
+  parts.forEach((s, i) => {
+    let t = ` ${plainWords(s)} `;
+    for (const o of others) while (t.includes(` ${o} `)) t = t.replace(` ${o} `, ' ');
+    if (!keys.some((k) => t.includes(` ${k} `))) return;
+    if (OUT_OF_STOCK_WORDS.test(foldGuard(s)) || (i > 0 && OUT_OF_STOCK_WORDS.test(foldGuard(parts[i - 1]!)))) return;
+    out.push(i);
+  });
+  return out;
+};
 
 /** Folded phrases of a false confession about an order the tools did place (fr / en / arabizi / Arabic script). */
 const FALSE_CONFESSION = new RegExp(
@@ -480,12 +529,16 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
   if (rules.includes('self_name')) lines.push(facts.agentName ? `- YOUR NAME is "${facts.agentName}": never give yourself another name.` : "- YOU HAVE NO PERSONAL NAME: never give yourself one; if asked, you are the shop's assistant.");
   if (rules.includes('language_switch')) lines.push(`- LANGUAGE: the customer writes ${LANGUAGE_NAMES[facts.lang] ?? facts.lang}. Rewrite "reply" in that language and script, as they write it (never switch on your own).`);
   if (rules.includes('moroccan_darija'))
-    lines.push('- ALGERIAN DARIJA: the shop is Algerian. Replace the Moroccan / Tunisian words (chno, ach, dyal, walakin, daba, issa, nqdar / tanqdar / kanqdar / tandir, bghit / bghiti, chi / chi hadja, ma kaynch / ma kaynach, wakha, mezyan, barcha, tawa, mta3, شنو, ديال, دابا, بغيت, شي حاجة, ملي, فماش, برشا, صيفط / sifet / sift / sift-li) with Algerian ones (wach, ta3 / تاع, bessah / بصح, dork / درك, nqder, t7ebb / تحب, hadja / حاجة, makach / ماكانش, mlih, ki / كي, bezzaf / بزاف, ab3at / ab3atli / ابعث). « chhal / ch7al / شحال » means « how much »: never for « what » or « which » (never « ch7al men wilaya ? ») — « wach smitek ? », « a3tini numéro ta3ek », « wach men wilaya ? », « a3tini l\'adresse (rue, cité…) », « t7ebb nwasslouha l dar wela f stop-desk ? ».');
+    lines.push('- ALGERIAN DARIJA: the shop is Algerian. Replace the Moroccan / Tunisian words (chno, ach, dyal, walakin, daba, issa, nqdar / tanqdar / kanqdar / tandir, bghit / bghiti, chi / chi hadja, ma kaynch / ma kaynach, wakha, mezyan, barcha, taw / tawa, mta3 / mta3ek, شنو, ديال, دابا, بغيت, شي حاجة, ملي, فماش, برشا, تو / توا, متاع / متاعك, موش, صيفط / sifet / sift / sift-li) with Algerian ones (wach, ta3 / ta3ek / تاع / تاعك, bessah / بصح, dork / درك, nqder, t7ebb / تحب, hadja / حاجة, makach / ماكانش, mlih, ki / كي, bezzaf / بزاف, ab3at / ab3atli / ابعث); the street is « الشارع » / « rue » (never « نهار » / « nhar », « day »), show a product « nwarrik » (never « nchouf »). « chhal / ch7al / شحال » means « how much »: never for « what » or « which » (never « ch7al men wilaya ? ») — « wach smitek ? », « a3tini numéro ta3ek », « wach men wilaya ? », « a3tini l\'adresse (rue, cité…) », « t7ebb nwasslouha l dar wela f stop-desk ? ».');
   if (rules.includes('false_confession'))
     lines.push(`- ORDER PLACED: order ${(facts.ordersPlaced ?? []).join(', ')} was placed with the details the customer gave in this conversation. Never say you invented them, that it was a mistake, that it does not exist or that nothing was ordered; never offer to cancel it unless the customer asks.`);
   if (rules.includes('contradicts_customer')) {
     const given = [...givenFields(facts.customerText ?? '', facts.customerFields)];
     lines.push(`- THE CUSTOMER'S MESSAGE GAVE ${given.join(', ') || 'an order field'}: never say you did not understand it or that you are still waiting for it, nor that you did not understand a field they were not asked for. Thank them in a few words and ask the next missing field (nothing more when every field is known).`);
+  }
+  if (rules.includes('unavailable_offer')) {
+    const names = uniq(facts.unavailableNames ?? []);
+    lines.push(`- OUT OF STOCK: ${names.join(', ') || 'a product you named'} ${names.length > 1 ? 'are' : 'is'} out of stock: never offer, suggest or list it — offer only products that are in stock. Name it only when the customer asks about it, and then say it is out of stock.`);
   }
   if (rules.includes('fee_missing'))
     lines.push(`- DELIVERY FEE: quote_delivery answered ${(facts.quotes ?? []).map(quoteText).join('; ')}. Give that fee in the reply (home and stop-desk when both are known), in the customer's language: it is the answer to their question.`);
@@ -517,7 +570,7 @@ const selfSentence = (loc: 'fr' | 'en' | 'ar' | 'arabizi', name: string | null):
   })[loc];
 const safeLocale = (lang: AiLanguage): 'fr' | 'en' | 'ar' | 'arabizi' => (lang === 'ar' ? 'ar' : lang === 'en' ? 'en' : lang === 'arabizi' ? 'arabizi' : 'fr');
 
-const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession', 'contradicts_customer'];
+const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession', 'contradicts_customer', 'unavailable_offer'];
 /** Rules about the form of the reply: the text is kept when the corrective turn did not fix them (a reply is better than none). */
 const STYLE_RULES: GuardRule[] = ['language_switch', 'moroccan_darija', 'script_mix', 'repeat_greeting'];
 const quoteText = (q: QuoteFact) => `${q.wilaya || 'this wilaya'}: ${q.isStopdesk ? `stop-desk ${q.fee} DA` : q.free || q.fee === 0 ? 'home delivery free' : `home ${q.fee} DA`}${!q.isStopdesk && q.stopdeskFee !== null ? `, stop-desk ${q.stopdeskFee} DA` : ''}`;
@@ -649,7 +702,7 @@ export function withToolResults(facts: GuardFacts, results: unknown[]): GuardFac
   return f;
 }
 
-type FactsProduct = Pick<CatalogueProduct, 'name' | 'sku' | 'price' | 'oldPrice' | 'hasVariants' | 'variants' | 'also' | 'description'>;
+type FactsProduct = Pick<CatalogueProduct, 'name' | 'sku' | 'price' | 'oldPrice' | 'hasVariants' | 'variants' | 'also' | 'description'> & Partial<Pick<CatalogueProduct, 'stock' | 'sellOutOfStock'>>;
 export type GuardFactsInput = {
   lang: AiLanguage;
   products: FactsProduct[];
@@ -696,6 +749,10 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
   // the customer's own figures may be repeated (« avec 3000 DA de budget… », « je ne peux pas à 3500 DA »)
   const customerNumbers = numbersIn(foldGuard(i.customerText)).filter((n) => n >= 50);
   const thresholds = i.freeDeliveryThreshold ? [i.freeDeliveryThreshold] : [];
+  // journey retest R5-1: out of stock = a tracked stock at 0 (all variants) and no « sell beyond stock »; a service never is
+  const out = i.products.filter((p) => typeof p.stock === 'number' && p.stock <= 0 && !p.sellOutOfStock);
+  const unavailable = [...new Set(out.flatMap((p) => nameKeys(p.name)))];
+  const available = [...new Set(i.products.filter((p) => !out.includes(p)).map((p) => nameKeys(p.name)[0]).filter((k): k is string => !!k))];
   // journey retest R4-2: a name typed in Arabic script (« سمير بن علي ») is no Arabic message — an Arabic reply to a French customer is a switch
   const messageLang = detectLanguage(withoutArabicValues(i.customerText), undefined, { neutral: 'previous' });
   const base: GuardFacts = {
@@ -714,6 +771,7 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
     customerGreets: greetingAt(i.customerText) > 0,
     priceList,
     customerText: i.customerText,
+    ...(unavailable.length ? { unavailable, unavailableNames: out.map((p) => p.name), available } : {}),
   };
   return i.earlierToolResults?.length ? withToolResults(base, i.earlierToolResults) : base;
 }

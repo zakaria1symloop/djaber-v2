@@ -189,7 +189,7 @@ export const languageSwitched = (customer: AiLanguage, reply: string): boolean =
  * « kayen » are Algerian too: never flagged.
  */
 export const MOROCCAN_WORDS =
-  /(?<![\p{L}\p{N}_])(chno|chnou|chnu|chnowa|chnoua|achno|achnou|achnu|ach|dyal|dyalek|dyali|dyalna|dyalo|dyalha|walakin|nqdar|ndirolek|daba|bghiti|bghit|bghina|tbghi|nbghi|kanbghi|chi|kaynch|makaynch|kaynach|makaynach|kaynash|makaynash|wakha|barcha|barsha|famma|mafamach|mafamech|tawwa|tawa|mta3|mte3|mta3ek|mte3ek|mouch|hala2|halla2|ktir|kteer|baddak|biddak|3anjad|ezzayak|izzayak|mezyan|mzyan|mezyana|mzyana|mezyanin|mzyanin|tanqdar|kanqdar|tanqder|kanqder|tan9dar|kan9dar|katqdar|tatqdar|kat9dar|kayqdar|tayqdar|tandir|kandir|katdir|tatdir|kaydir|taydir|tan3ref|kan3ref|tankhdem|kankhdem|tanchouf|kanchouf|tanbghi|katbghi|tatbghi|n?sifet(?:li|lek|lik|lna)?|[nt]?sift(?:i?li|lek|lik|lna|ilek|ha|o)?|شنو|شنوة|ديال|ديالك|ديالي|دابا|والاكين|بغيت|بغيتي|تبغي|نبغي|كنبغي|ملي|فماش|برشا|واخا|توة|توا|هلق|هلأ|كتير|بدك|شو|شي حاجة|صيفط|صيفطلي|صيفطلك|نصيفط|نصيفطلك|نصيفطو)(?![\p{L}\p{N}_])/iu;
+  /(?<![\p{L}\p{N}_])(chno|chnou|chnu|chnowa|chnoua|achno|achnou|achnu|ach|dyal|dyalek|dyali|dyalna|dyalo|dyalha|walakin|nqdar|ndirolek|daba|bghiti|bghit|bghina|tbghi|nbghi|kanbghi|chi|kaynch|makaynch|kaynach|makaynach|kaynash|makaynash|wakha|barcha|barsha|famma|mafamach|mafamech|tawwa|tawa|taww|taw|mta3|mte3|mta3ek|mte3ek|mta3k|mte3k|mta3i|mte3i|mta3na|mte3na|mta3kom|mte3kom|mta3kum|mta3ha|mte3ha|mta3o|mta3ou|mte3o|mta3hom|mte3hom|chniya|chnia|chneya|mouch|hala2|halla2|ktir|kteer|baddak|biddak|3anjad|ezzayak|izzayak|mezyan|mzyan|mezyana|mzyana|mezyanin|mzyanin|tanqdar|kanqdar|tanqder|kanqder|tan9dar|kan9dar|katqdar|tatqdar|kat9dar|kayqdar|tayqdar|tandir|kandir|katdir|tatdir|kaydir|taydir|tan3ref|kan3ref|tankhdem|kankhdem|tanchouf|kanchouf|tanbghi|katbghi|tatbghi|n?sifet(?:li|lek|lik|lna)?|[nt]?sift(?:i?li|lek|lik|lna|ilek|ha|o)?|شنو|شنوة|شنية|ديال|ديالك|ديالي|ديالنا|ديالو|ديالها|دابا|والاكين|بغيت|بغيتي|تبغي|نبغي|كنبغي|ملي|فماش|مافماش|برشا|واخا|توة|توا|تو|هلق|هلأ|كتير|بدك|شو|شي حاجة|متاع|متاعك|متاعي|متاعنا|متاعكم|متاعها|متاعو|متاعه|متاعهم|موش|عنجد|ازيك|إزيك|مزيان|مزيانة|آش|اش|كنقدر|تنقدر|كندير|تندير|كاتدير|كنعرف|تنعرف|كنشوف|تنشوف|كاتبغي|صيفط|صيفطلي|صيفطلك|نصيفط|نصيفطلك|نصيفطو)(?![\p{L}\p{N}_])/iu;
 /**
  * journey retest R2-1 (17/11): « Issa, sift-li l'adresse » — Moroccan « issa » (« now ») is flagged only at the start of a
  * sentence and before a comma: Issa is also a first name (« Merci Issa », « Saha Issa »).
@@ -214,8 +214,34 @@ export const WRONG_DARIJA = /(?<![\p{L}\p{N}_])(b?ch7al|b?chhal|chehal|chahal|ش
  * the day »), « tswal l dar » (no such verb) — flagged and replaced like the Moroccan words.
  */
 const ODD_ARABIZI = /(?<![\p{L}\p{N}_])(?:smiy(?:a|et|at)\s+(?:ta3\s+)?e?nnhar|smiy(?:a|et|at)\s+(?:ta3\s+)?nhar|tswal|taf3il)(?![\p{L}\p{N}_])/iu;
-/** journey retest R3-2 / R3-5: « ch7al » used for « what / which », or made-up arabizi — the reply guard flags it with the Moroccan words. */
-export const wrongDarijaIn = (text: string): boolean => WRONG_DARIJA.test(text) || ODD_ARABIZI.test(text);
+/**
+ * journey retest R5-3 (17/11): wrong darija words of the R4 / R5 transcripts, each with the natural Algerian wording — flagged
+ * like the Moroccan words and replaced by `fixMoroccan`. Narrow on purpose: « نهار » / « nhar » (« day ») only inside an address
+ * question (« (نهار، حي، رقم الدار …) », « اسم النهار »), « سوي » only after a garment (« حجاب سوي » = « soie »), « t7ebb nchouf »
+ * (« that I see ») only at the end of a question.
+ */
+const ODD_FIXES: [RegExp, string][] = [
+  [/(?<![\p{L}\p{N}_])(?:ال)?نهار(?=\s*[،,]\s*(?:ال)?(?:حي|عمارة|رقم|دار|بلوك))/gu, 'الشارع'],
+  [/(?<=(?:\(|(?:ال)?حي\s*[،,])\s*)(?:ال)?نهار(?![\p{L}\p{N}_])/gu, 'الشارع'],
+  [/(?<![\p{L}\p{N}_])(?:اسم|إسم|سمية|سميه)\s+(?:تاع\s+)?(?:ال)?نهار(?![\p{L}\p{N}_])/gu, 'الشارع'],
+  [/(?<![\p{L}\p{N}_])nhar(?=\s*,\s*(?:cit[ée]|rue|bloc|ra9m|num[ée]ro|hay|dar)(?![\p{L}]))/giu, 'rue'],
+  [/(?<=\(\s*)nhar(?![\p{L}\p{N}_])/giu, 'rue'],
+  // « Rah yetsawar m3a l carte » (« it is being photographed ») for « its photos are on the card »
+  [/(?<![\p{L}\p{N}_])rah\s+yetsaw[ae]r(?![\p{L}\p{N}_])/giu, 'rahom tsawer ta3ou'],
+  [/(?<![\p{L}\p{N}_])yetsaw[ae]r(?![\p{L}\p{N}_])/giu, 'tsawer ta3ou'],
+  // « zouj ydjiw disponibles » for « both are available »
+  [/(?<![\p{L}\p{N}_])ydjiw\s+disponibles?(?![\p{L}\p{N}_])/giu, 'kaynin'],
+  // « Wach men produit t7ebb nchouf ? » (« that I see ») for « that I show you »
+  [/(?<![\p{L}\p{N}_])t7ebb\s+nchouf(?=\s*(?:[?؟.!]|$))/giu, 't7ebb nwarrik'],
+  // « Wach wahda men les wilayat li nwasslou ? » (a question with no meaning, after « not served »)
+  [/(?<![\p{L}\p{N}_])wach\s+wa[h7]da\s+men\s+(?:les\s+)?wilayat\s+li\s+nwasslou(?:lha|lhom)?\s*[?؟]/giu, 'T7ebb nwasslouha l wilaya okhra ?'],
+  // « حجاب سوي » (« soie » in Arabic letters) for « حرير »; « 700 دج لين الدار » (« until », not Algerian) for « للدار »
+  [/(?<=(?:ال)?(?:حجاب|شال|فولار|خمار)\s+)سوي(?![\p{L}\p{N}_])/gu, 'حرير'],
+  [/(?<![\p{L}\p{N}_])لين\s+(?:ال)?دار(?![\p{L}\p{N}_])/gu, 'للدار'],
+];
+const oddIn = (text: string) => ODD_FIXES.some(([re]) => new RegExp(re.source, re.flags.replace('g', '')).test(text));
+/** journey retest R3-2 / R3-5 / R5-3: « ch7al » used for « what / which », or made-up arabizi / darija — the reply guard flags it with the Moroccan words. */
+export const wrongDarijaIn = (text: string): boolean => WRONG_DARIJA.test(text) || ODD_ARABIZI.test(text) || oddIn(text);
 /**
  * journey retest R1-4 (17/11): the Algerian word for each Moroccan / Tunisian one — the server's last word when the
  * corrective turn of the reply guard kept them (« Wach t7ebb ta3raf 3la chi hadja ? » was sent as is). Longest forms first.
@@ -230,7 +256,9 @@ const ALGERIAN_FOR: [RegExp, string][] = (
     ['kanbghi', 'nheb'], ['nbghi', 'nheb'], ['tbghi', 't7ebb'], ['bghiti', 't7ebb'], ['bghina', 'n7ebbou'], ['bghit', 'nheb'],
     ['wakha', 'mlih'], ['barcha', 'bezzaf'], ['barsha', 'bezzaf'], ['mafamach', 'makach'], ['mafamech', 'makach'], ['famma', 'kayen'], ['tawwa', 'dork'],
     // journey retest R3-2 (17/11): Tunisian « tawa » (« Rani nab3atlek les photos tawa »), « mta3 », « mouch »; Middle-Eastern « hala2 », « ktir », « baddak »
-    ['tawa', 'dork'], ['mta3ek', 'ta3ek'], ['mte3ek', 'ta3ek'], ['mta3', 'ta3'], ['mte3', 'ta3'], ['mouch', 'machi'], ['halla2', 'dork'], ['hala2', 'dork'], ['kteer', 'bezzaf'], ['ktir', 'bezzaf'], ['baddak', 't7ebb'], ['biddak', 't7ebb'], ['3anjad', 'bessah'], ['ezzayak', 'kirak'], ['izzayak', 'kirak'],
+    ['tawa', 'dork'], ['mta3ek', 'ta3ek'], ['mte3ek', 'ta3ek'], ['mta3', 'ta3'], ['mte3', 'ta3'],
+    // journey retest R5-2 (17/11): the short Tunisian « taw » (« Rah … m3a l carte taw »), the other persons of « mta3 », « chniya »
+    ['taww', 'dork'], ['taw', 'dork'], ['mta3k', 'ta3ek'], ['mte3k', 'ta3ek'], ['mta3i', 'ta3i'], ['mte3i', 'ta3i'], ['mta3na', 'ta3na'], ['mte3na', 'ta3na'], ['mta3kom', 'ta3kom'], ['mte3kom', 'ta3kom'], ['mta3kum', 'ta3kom'], ['mta3ha', 'ta3ha'], ['mte3ha', 'ta3ha'], ['mta3ou', 'ta3ou'], ['mta3o', 'ta3ou'], ['mte3o', 'ta3ou'], ['mta3hom', 'ta3hom'], ['mte3hom', 'ta3hom'], ['chniya', 'wach'], ['chnia', 'wach'], ['chneya', 'wach'], ['mouch', 'machi'], ['halla2', 'dork'], ['hala2', 'dork'], ['kteer', 'bezzaf'], ['ktir', 'bezzaf'], ['baddak', 't7ebb'], ['biddak', 't7ebb'], ['3anjad', 'bessah'], ['ezzayak', 'kirak'], ['izzayak', 'kirak'],
     // journey retest R3-5: « a3tini smiya ta3 nhar (rue, cité…) », « Wach t7ebb tswal l dar … ? »
     ['smiya ta3 ennhar', "l'adresse"], ['smiyet ta3 ennhar', "l'adresse"], ['smiya ta3 nhar', "l'adresse"], ['smiyet ta3 nhar', "l'adresse"], ['smiyet ennhar', "l'adresse"], ['smiyet nhar', "l'adresse"], ['smiyat nhar', "l'adresse"], ['smiya nhar', "l'adresse"], ['tswal', 'nwasslouha'],
     ['nsifetlek', 'nab3atlek'], ['sifetli', 'ab3atli'], ['nsifet', 'nab3at'], ['sifet', 'ab3at'],
@@ -244,7 +272,12 @@ const ALGERIAN_FOR: [RegExp, string][] = (
     ['taf3il', 'tafasil'],
     ['mezyanin', 'mlah'], ['mzyanin', 'mlah'], ['mezyana', 'mliha'], ['mzyana', 'mliha'], ['mezyan', 'mlih'], ['mzyan', 'mlih'],
     ['شي حاجة', 'حاجة'], ['شنوة', 'واش'], ['شنو', 'واش'], ['ديالك', 'تاعك'], ['ديالي', 'تاعي'], ['ديال', 'تاع'], ['دابا', 'درك'], ['والاكين', 'بصح'],
-    ['بغيتي', 'تحب'], ['بغيت', 'حبيت'], ['تبغي', 'تحب'], ['كنبغي', 'نحب'], ['نبغي', 'نحب'], ['ملي', 'كي'], ['فماش', 'ماكانش'], ['برشا', 'بزاف'], ['واخا', 'مليح'], ['توة', 'درك'], ['توا', 'درك'], ['هلق', 'درك'], ['هلأ', 'درك'], ['كتير', 'بزاف'], ['بدك', 'تحب'], ['شو', 'واش'],
+    ['بغيتي', 'تحب'], ['بغيت', 'حبيت'], ['تبغي', 'تحب'], ['كنبغي', 'نحب'], ['نبغي', 'نحب'], ['ملي', 'كي'], ['مافماش', 'ماكانش'], ['فماش', 'ماكانش'], ['برشا', 'بزاف'], ['واخا', 'مليح'], ['توة', 'درك'], ['توا', 'درك'], ['هلق', 'درك'], ['هلأ', 'درك'], ['كتير', 'بزاف'], ['بدك', 'تحب'], ['شو', 'واش'],
+    // journey retest R5-2 (17/11): the Arabic-script twins of the Latin list — Tunisian « متاعك » (« واش الولاية متاعك »), « تو »,
+    // « موش », « شنية »; Moroccan « ديالنا », « مزيان », « آش » and the « ta- / ka- » forms; Middle-Eastern « عنجد », « ازيك »
+    ['متاعك', 'تاعك'], ['متاعي', 'تاعي'], ['متاعنا', 'تاعنا'], ['متاعكم', 'تاعكم'], ['متاعها', 'تاعها'], ['متاعو', 'تاعو'], ['متاعه', 'تاعه'], ['متاعهم', 'تاعهم'], ['متاع', 'تاع'], ['موش', 'ماشي'], ['تو', 'درك'], ['شنية', 'واش'],
+    ['ديالنا', 'تاعنا'], ['ديالو', 'تاعو'], ['ديالها', 'تاعها'], ['مزيانة', 'مليحة'], ['مزيان', 'مليح'], ['آش', 'واش'], ['اش', 'واش'], ['عنجد', 'بصح'], ['ازيك', 'كيراك'], ['إزيك', 'كيراك'],
+    ['كنقدر', 'نقدر'], ['تنقدر', 'نقدر'], ['كندير', 'ندير'], ['تندير', 'ندير'], ['كاتدير', 'تدير'], ['كنعرف', 'نعرف'], ['تنعرف', 'نعرف'], ['كنشوف', 'نشوف'], ['تنشوف', 'نشوف'], ['كاتبغي', 'تحب'],
     ['نصيفطلك', 'نبعثلك'], ['نصيفطو', 'نبعثو'], ['نصيفط', 'نبعث'], ['صيفطلي', 'ابعثلي'], ['صيفطلك', 'نبعثلك'], ['صيفط', 'ابعث'],
   ] as [string, string][]
   // a word with no Algerian equivalent (« chi ») is dropped with the space after it
@@ -265,6 +298,8 @@ export const fixMoroccan = (text: string): string => {
     const wilaya = /^(?:wilaya|ولاية)$/iu.test(what);
     return caseOf(m, `${ar ? 'واش' : 'wach'} ${wilaya ? `${ar ? 'من' : 'men'} ` : ''}${what}`);
   });
+  // journey retest R5-3: the odd wording of the transcripts
+  for (const [re, to] of ODD_FIXES) out = out.replace(re, (m) => caseOf(m, to));
   return out;
 };
 /** A Latin letter glued inside an Arabic word (« وnعاونك », rule 16 « one script per sentence »). */

@@ -75,7 +75,9 @@ describe('R2-3 — never deny a field the customer just gave', () => {
     const ar = 'عفوًا سمير، ما فهمتش الولاية. واش هي الولاية متاعك؟ (مثال: الجزائر)';
     const v2 = checkReply(ar, f2);
     expect(v2.map((x) => x.rule)).toContain('contradicts_customer');
-    expect(enforceReply(ar, v2, f2, { hasCards: false }).reply).toBe('واش هي الولاية متاعك؟ (مثال: الجزائر)');
+    // journey retest R5-2: the Tunisian « متاعك » of this R2 transcript is flagged too, and becomes « تاعك »
+    expect(v2.map((x) => x.rule)).toContain('moroccan_darija');
+    expect(enforceReply(ar, v2, f2, { hasCards: false }).reply).toBe('واش هي الولاية تاعك؟ (مثال: الجزائر)');
   });
   it('not flagged: a field really not understood, waiting for another field, a wrong phone', () => {
     expect(checkReply("Je n'ai pas compris la wilaya, pouvez-vous la préciser ?", facts('Bab')).map((x) => x.rule)).not.toContain('contradicts_customer');

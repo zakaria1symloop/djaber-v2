@@ -192,6 +192,47 @@ describe('playground (AGT-07)', () => {
     expect(await db.order.count({ where: { workspaceId: owner.workspaceId } })).toBe(0);
   });
 
+  it('journey retest R5-6 / R5-5 / R5-1: no create_order before a phone; « twasslou l Constantine ? » answered in words before the recap; an out-of-stock product never offered', async () => {
+    const owner = await asOwner(app);
+    const agent = await linkedAgent(owner.workspaceId, []);
+    const tapis = await createProduct(owner, { name: 'Tapis de prière', price: 2800, stock: 10 });
+    await createProduct(owner, { name: 'Parfum Oud 50 ml', price: 8900, stock: 0 });
+    await feeRule(owner.workspaceId, 25, 700, 450);
+    await app.app.get(RedisService).client.del(`rl:playground:${owner.workspaceId}`);
+    // R5-6 (N3 T1): no phone in the conversation ⇒ create_order is not offered; the probe is never run
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args: { clientName: '---', clientPhone: '0500000000', wilayaId: 1, items: [{ productId: tapis.id, quantity: 2 }], customerConfirmed: true } }] }, { reply: 'Parfait, les 2 tapis de prière sont disponibles. Quel est votre nom complet ?', intent: 'SALE' });
+    const t1 = (await test(owner, agent.id, { sessionId: 'r5-n3', ...say('Bonjour, je voudrais 2 tapis de prière') }).expect(200)).body.data;
+    expect(t1.toolCalls).toEqual([]);
+    expect(t1.reply).toBe('Parfait, les 2 tapis de prière sont disponibles. Quel est votre nom complet ?');
+    expect((fakeAi(app).callsOf('reply')[0]!.tools ?? []).map((d) => d.name)).not.toContain('create_order');
+    // R5-5 (N3 T3): the phone was given ⇒ the complete order goes through in one call; the delivery question gets its answer
+    fakeAi(app).reset();
+    const args = { clientName: 'Samira Benali', clientPhone: '0661234567', wilayaId: 25, communeName: 'El Khroub', address: 'cité 1000 logements bloc 5', items: [{ productId: tapis.id, quantity: 2 }], isStopdesk: false, customerConfirmed: true };
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'quote_delivery', args: { wilayaName: 'Constantine' } }, { name: 'create_order', args }] }, { reply: '', intent: 'SALE' });
+    const thread = [
+      { role: 'user', text: 'Bonjour, je voudrais 2 tapis de prière' },
+      { role: 'assistant', text: t1.reply },
+      { role: 'user', text: 'Samira Benali, 0661234567' },
+      { role: 'assistant', text: 'Merci Samira, c\'est noté ! Dans quelle wilaya souhaitez-vous recevoir la commande ?' },
+      { role: 'user', text: 'khouya twasslou l Constantine ? ana f El Khroub, cité 1000 logements bloc 5' },
+    ];
+    const t3 = (await test(owner, agent.id, { sessionId: 'r5-n3', messages: thread }).expect(200)).body.data;
+    expect(t3.toolCalls.map((c: any) => c.name)).toEqual(['quote_delivery', 'create_order']);
+    expect(t3.toolCalls[1]).toMatchObject({ result: { ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recapToShow: true, recap: { total: 6300 } } });
+    expect(t3.reply).toMatch(/^Ih, nwasslou l Constantine/);
+    expect(t3.reply).toContain('Hada récap ta3 la commande:');
+    // R5-1 (N7 T1): the offer naming the out-of-stock Parfum Oud is rewritten by the corrective turn
+    fakeAi(app).reset();
+    fakeAi(app).script(
+      'reply',
+      { reply: "Désolé, nous n'avons pas de lunettes de soleil pour le moment. Je peux vous proposer notre tapis de prière (2800 DA) ou notre parfum Oud 50 ml, si l'un d'eux vous intéresse.", intent: 'SALE' },
+      { reply: "Désolé, nous n'avons pas de lunettes de soleil pour le moment. Je peux vous proposer notre tapis de prière (2800 DA), si cela vous intéresse.", intent: 'SALE' },
+    );
+    const n7 = (await test(owner, agent.id, { sessionId: 'r5-n7', ...say('Bonjour, vous avez des lunettes de soleil ? Je suis Yacine Mansouri 0555987654, Blida, Boufarik, cité 20 août villa 3') }).expect(200)).body.data;
+    expect(n7.reply).toBe("Désolé, nous n'avons pas de lunettes de soleil pour le moment. Je peux vous proposer notre tapis de prière (2800 DA), si cela vous intéresse.");
+    expect(String((fakeAi(app).callsOf('reply')[1]!.messages.at(-1) as { content: unknown }).content)).toContain('Parfum Oud 50 ml is out of stock');
+  });
+
   it('playground with attachments: a photo goes through the 2-pass vision (would cost 5), flag for evals, export of the session', async () => {
     const owner = await asOwner(app);
     const agent = await linkedAgent(owner.workspaceId, []);

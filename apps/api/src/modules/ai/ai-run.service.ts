@@ -20,16 +20,24 @@ import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } f
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
 import { allowedHandoffReasons, establishedReasons, fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, type HandoffRefusal } from './handoff-judge';
 import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, quoteFacts, stripMarkdown, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
-import { blockedOrderText, orderConfirmationText, pendingRecap, recapReply, withoutRecapClaims } from './tools/order-confirmation-text';
+import { blockedOrderText, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, withoutRecapClaims } from './tools/order-confirmation-text';
+import { phonesIn } from './tools/order-confirmation';
 
 /** journey retest R1-1: told to the model on a message that only gives an order field (handoff_to_human is not offered). */
 export const FIELD_ONLY_NOTE =
   'THIS MESSAGE only gives an order field (a name, a phone number, a place, an address) or answers yes: record it and answer — ask the next missing field, or call create_order for the recap when every field is known. handoff_to_human is not available for this message.';
+/**
+ * journey retest R5-6 (17/11): told to the model when the customer has given no phone number in the conversation (and the client
+ * record has none): create_order is not offered — it was still called as a probe (`create_order {}`, `{ clientName: "---",
+ * clientPhone: "0500000000", wilayaId: 1 }`) to learn the missing fields.
+ */
+export const NO_PHONE_NOTE =
+  'NO PHONE NUMBER YET: the customer has not given a phone number in this conversation, so create_order is not available in this turn. Answer the customer and ask the next missing order field (the phone once the product and the name are known) — never a recap.';
 /** journey retest R1-1: the result given back for a call to a tool this step did not offer (it is not run). */
-export const unavailableTool = (name: string, fieldOnly: boolean) => ({
+export const unavailableTool = (name: string, fieldOnly: boolean, noPhone = false) => ({
   ok: false,
   error: { code: 'TOOL_NOT_AVAILABLE', tool: name },
-  instruction: `${name} cannot be used now${fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : canonicalTool(name) === 'create_order' ? ': it already answered in this turn — follow that answer (ask the missing field, or let the recap / confirmation go)' : ''}. Answer the customer now with the JSON object.`,
+  instruction: `${name} cannot be used now${fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : canonicalTool(name) === 'create_order' && noPhone ? ': the customer has not given a phone number yet — ask for the next missing field (never a recap)' : canonicalTool(name) === 'create_order' ? ': it already answered in this turn — follow that answer (ask the missing field, or let the recap / confirmation go)' : ''}. Answer the customer now with the JSON object.`,
 });
 /**
  * journey retest R2-4: a `create_order` answer after which the tool is not offered again in the same turn — the recap was
@@ -182,11 +190,15 @@ export class AiRunService implements OnModuleInit {
     const fieldOnly = fieldOnlyMessage(req.toolCtx.customerText, !!req.toolCtx.ordering);
     // journey retest R3-3: the handoff tool carries only the reasons this agent's rules allow now (no `other` without shop rules)
     const reasons = allowedHandoffReasons(req.toolCtx.agent, req.toolCtx.unclearStreak ?? 0);
-    const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !(d.name === 'handoff_to_human' && (fieldOnly || !reasons.length))).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
+    // journey retest R5-6: no create_order while the customer has given no phone number (every such call is refused) — the
+    // probes `create_order {}` / placeholder values came on such turns; a complete order message carries its phone and keeps it
+    const noPhone = !(await this.phoneGiven(req.toolCtx));
+    const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !(d.name === 'handoff_to_human' && (fieldOnly || !reasons.length)) && !(d.name === 'create_order' && noPhone)).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
     // journey retest R1-1: the model still called the withheld tool (the prompt describes it) and the SDK refused the whole
     // step — 5 of 59 turns of a shop with handoff rules ended in 503. The note says it is not available for this message
     // (after the cached start of the system prompt, so the cache is kept).
-    const system = fieldOnly ? `${req.prompt.system}\n\n${FIELD_ONLY_NOTE}` : req.prompt.system;
+    // journey retest R5-6: and, without a phone, that create_order is not available (same place: the cache prefix is kept)
+    const system = [req.prompt.system, ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : [])].join('\n\n');
     let model = null as RoutedModel | null;
     let usedFallback = false;
     let repaired = false;
@@ -221,7 +233,10 @@ export class AiRunService implements OnModuleInit {
       if (output.status === 'HANDOFF' || forcedHandoff) return { ...plain, reply: withoutRecapClaims(plain.reply) };
       const recap = recapNow();
       if (!recap) return plain;
-      return { ...plain, reply: recapReply(plain.reply, recap, req.guard?.lang ?? 'fr').text };
+      const r = recapReply(plain.reply, recap, req.guard?.lang ?? 'fr');
+      // journey retest R5-5: « twasslou l Constantine ? » is answered in words when no sentence of the model goes before the recap
+      const answer = r.kept === 'server' ? deliveryAnswer(calls, req.toolCtx.customerText ?? '', req.guard?.lang ?? 'fr') : null;
+      return { ...plain, reply: answer ? `${answer}\n\n${r.text}` : r.text };
     };
     const ok = (output: AiReplyOutput, extra: { salvaged?: boolean; guard?: GuardOutcome } = {}): TurnResult => ({ ok: true, output: confirmed(output), tools: executed, usage, model: model!, usedFallback, forcedHandoff, repaired, ...(handoffRefused ? { handoffRefused } : {}), ...extra });
     // journey 16/11 J03-2: this turn's quote_delivery answers — the reply must give the fee (not checked on a handoff answer)
@@ -309,7 +324,7 @@ export class AiRunService implements OnModuleInit {
           messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: done.result });
           forcedHandoff ??= this.tools.forcedHandoff(call.name, call.args, done.result);
         }
-        messages.push({ role: 'user', content: stray.map((c) => `[tool result ${c.name}] ${JSON.stringify(unavailableTool(c.name, fieldOnly))}`).join('\n') });
+        messages.push({ role: 'user', content: stray.map((c) => `[tool result ${c.name}] ${JSON.stringify(unavailableTool(c.name, fieldOnly, noPhone))}`).join('\n') });
         continue;
       }
       if (res.value.toolCalls.length && offerTools) {
@@ -392,6 +407,17 @@ export class AiRunService implements OnModuleInit {
       messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: FORMAT_REMINDER });
     }
     return { ok: false, kind: 'format', error: 'malformed_output:steps', tools: executed, usage, model, usedFallback };
+  }
+
+  /**
+   * journey retest R5-6: the customer has given a phone number — in one of their messages, or on their client record (a
+   * returning customer, KNOWN CUSTOMER). Without the conversation's messages (`customerHistory`) nothing is withheld.
+   */
+  private async phoneGiven(ctx: TurnRequest['toolCtx']): Promise<boolean> {
+    if (ctx.customerHistory === undefined || phonesIn(ctx.customerHistory).size) return true;
+    if (!ctx.clientId) return false;
+    const client = await prisma.client.findUnique({ where: { id: ctx.clientId }, select: { phone: true, phone2: true } });
+    return !!(client?.phone || client?.phone2);
   }
 
   /** Closes a run (inside the caller's transaction when given). Only a `running` run is closed: returns false otherwise. */
