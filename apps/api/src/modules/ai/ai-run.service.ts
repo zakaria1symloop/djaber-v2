@@ -23,7 +23,7 @@ import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, quoteFacts,
 import { asksDelivery, blockedOrderText, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, withoutRecapClaims } from './tools/order-confirmation-text';
 import { phonesIn } from './tools/order-confirmation';
 import { matchWilaya } from './tools/tool-registry';
-import { placeIndex, placeNamedIn } from './tools/place-index';
+import { placeIndex, placeNamedIn, placeOnlyMessage, type PlaceIndex } from './tools/place-index';
 import { contextOf } from '../messaging/messaging.presenter';
 import { fillerMessage, noPhotoReply, noPhotoSaid, photoAsked, withoutPresenceTalk } from './reply-fixes';
 
@@ -51,6 +51,12 @@ export const NO_ADDRESS_NOTE =
  */
 export const NO_PLACE_NOTE =
   'NO WILAYA YET: the customer has not named their wilaya (nor a commune or an address) in this conversation, so create_order is not available in this turn. Answer the customer and ask the next missing order field (the wilaya once the product, the name and the phone are known) — never a recap, never a default wilaya.';
+/**
+ * journey retest R8-4 (17/11): told to the model on a message that only names the wilaya / commune while no street address was
+ * given yet: create_order is not offered — F1b T2 « Sétif, El Eulma » ⇒ `create_order { items: [] }` without commune or address.
+ */
+export const NO_STREET_NOTE =
+  'NO STREET ADDRESS YET: this message only names the wilaya / commune, and no street address (rue, cité, building, landmark) nor stop-desk was given, so create_order is not available in this turn. Ask for the street address in one short question, or offer the stop-desk — never a recap.';
 /** journey retest R7-4: told to the model on a message that gives the order's details (handoff_to_human is not offered). */
 export const ORDER_DETAILS_NOTE =
   "THIS MESSAGE gives the order's details (product, name, phone, place) and asks nothing of the team: take the order — ask the next missing field, or call create_order for the recap when every field is known. handoff_to_human is not available for this message.";
@@ -66,11 +72,25 @@ const productIdsOf = (result: unknown): string[] => {
   if (Array.isArray(r?.products)) return r.products.map((p) => p?.id).filter((id): id is string => typeof id === 'string');
   return typeof r?.id === 'string' ? [r.id] : [];
 };
+/** journey retest R8-1: tool answers that are a real failure of the platform (the only ones that may be told as a problem). */
+const SYSTEM_FAILURES = new Set(['ORDERS_UNAVAILABLE', 'PAYMENT_LINK_UNAVAILABLE', 'UNKNOWN_TOOL']);
+/** journey retest R8-1 / R8-2: create_order answers after which no recap is shown and nothing is ordered (a field to ask, a product to change). */
+const REFUSED_ORDER = new Set(['VALIDATION', 'VARIANT_REQUIRED', 'PRODUCT_NOT_AVAILABLE', 'ORDER_INSUFFICIENT_STOCK', 'CONFIRMATION_REFUSED', 'WILAYA_NOT_SERVED', 'ORDER_NOT_REPLACEABLE']);
+/**
+ * journey retest R8-1 / R8-2: the last create_order of the turn was refused (no recap, no order) — with the first field it asked
+ * for; null when it returned a recap, placed the order, or was not called.
+ */
+export const refusedOrder = (executed: Pick<ExecutedTool, 'name' | 'result'>[]): { field: string | null } | null => {
+  const last = [...executed].reverse().find((t) => canonicalTool(t.name) === 'create_order');
+  const r = last?.result as { ok?: unknown; error?: { code?: unknown; field?: unknown } } | null | undefined;
+  if (!r || r.ok === true || !REFUSED_ORDER.has(String(r.error?.code ?? ''))) return null;
+  return { field: r.error?.code === 'VALIDATION' && typeof r.error.field === 'string' ? r.error.field : null };
+};
 /** journey retest R1-1: the result given back for a call to a tool this step did not offer (it is not run). */
-export const unavailableTool = (name: string, fieldOnly: boolean, noPhone = false, noPlace = false) => ({
+export const unavailableTool = (name: string, fieldOnly: boolean, noPhone = false, noPlace = false, noStreet = false) => ({
   ok: false,
   error: { code: 'TOOL_NOT_AVAILABLE', tool: name },
-  instruction: `${name} cannot be used now${fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : canonicalTool(name) === 'create_order' && noPhone ? ': the customer has not given a phone number yet — ask for the next missing field (never a recap)' : canonicalTool(name) === 'create_order' && noPlace ? ': the customer has not named their wilaya yet — ask for it (never a default wilaya, never a recap)' : canonicalTool(name) === 'create_order' ? ': it already answered in this turn — follow that answer (ask the missing field, or let the recap / confirmation go)' : ''}. Answer the customer now with the JSON object.`,
+  instruction: `${name} cannot be used now${fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : canonicalTool(name) === 'create_order' && noPhone ? ': the customer has not given a phone number yet — ask for the next missing field (never a recap)' : canonicalTool(name) === 'create_order' && noPlace ? ': the customer has not named their wilaya yet — ask for it (never a default wilaya, never a recap)' : canonicalTool(name) === 'create_order' && noStreet ? ': the customer named only the wilaya / commune — ask for the street address (rue, cité, building, landmark) or offer the stop-desk (never a recap)' : canonicalTool(name) === 'create_order' ? ': it already answered in this turn — follow that answer (ask the missing field, or let the recap / confirmation go)' : canonicalTool(name) === 'cancel_order' ? ': the customer did not ask to cancel anything — take the order (ask the next missing field, or call create_order for the recap)' : ''}. Answer the customer now with the JSON object.`,
 });
 /**
  * journey retest R2-4: a `create_order` answer after which the tool is not offered again in the same turn — the recap was
@@ -235,8 +255,16 @@ export class AiRunService implements OnModuleInit {
     const noAddress = !noPhone && noAddressYet(req.toolCtx);
     // journey retest R7-4: and with no wilaya either (none named, no commune of one, none known of the customer) it is not
     // offered at all — such a call can only be refused (F1b T1 `wilayaId 1`)
-    const noPlace = noAddress && !(await this.placeKnown(req.toolCtx));
-    const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !(d.name === 'handoff_to_human' && (noHandoff || !reasons.length)) && !(d.name === 'create_order' && (noPhone || noPlace))).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
+    // the wilaya / commune lists, read once for the turn (unreadable ⇒ null: nothing is withheld on their account)
+    const places = noAddress && req.toolCtx.customerHistory !== undefined ? await placeIndex().catch(() => null) : null;
+    const noPlace = noAddress && !(await this.placeKnown(req.toolCtx, places));
+    // journey retest R8-4 (17/11): nor on a message that only names the place (« Sétif, El Eulma ») while no street address was
+    // given — F1b T2 `create_order { items: [], no commune, no address }`, refused; the street (or the stop-desk) is asked
+    const noStreet = noAddress && !noPlace && this.placeOnly(req.toolCtx.customerText, places);
+    // journey retest R8-4: no cancel_order on a message that gives the order's details and asks no cancellation (N5 T2
+    // `cancel_order {}` next to the recap, NO_OPEN_ORDER)
+    const noCancel = orderDetails;
+    const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !(d.name === 'handoff_to_human' && (noHandoff || !reasons.length)) && !(d.name === 'create_order' && (noPhone || noPlace || noStreet)) && !(d.name === 'cancel_order' && noCancel)).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
     // journey retest R1-1: the model still called the withheld tool (the prompt describes it) and the SDK refused the whole
     // step — 5 of 59 turns of a shop with handoff rules ended in 503. The note says it is not available for this message
     // (after the cached start of the system prompt, so the cache is kept).
@@ -244,7 +272,7 @@ export class AiRunService implements OnModuleInit {
     const executed: ExecutedTool[] = [];
     const seen = new Map<string, number>();
     const answered = new Map<string, unknown>();
-    const system = [req.prompt.system, ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : [])].join('\n\n');
+    const system = [req.prompt.system, ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noStreet ? [NO_STREET_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : [])].join('\n\n');
     // journey retest R7-5: run once, when the answer to a delivery question comes without any quote_delivery of the turn
     let serverQuoted = false;
     let model = null as RoutedModel | null;
@@ -315,7 +343,10 @@ export class AiRunService implements OnModuleInit {
       // journey retest R6-2: whether this answer sends a photo — a card or a gallery of a product not known to have none
       const sent = answer ? [...(answer.productCards ?? []), ...(answer.productPhotos ?? []), ...(f.galleries ?? [])] : null;
       const photoSent = sent ? sent.some((id) => !(f.noPhoto ?? []).includes(id)) : undefined;
-      return { ...f, ...(quotes.length ? { quotes } : {}), ...(fields ? { customerFields: fields } : {}), ...(photoSent !== undefined ? { photoSent } : {}) };
+      // journey retest R8-1 / R8-2: a tool that really failed; a create_order refused this turn (no recap shown) and the field it asked
+      const refusal = refusedOrder(executed);
+      const systemFailure = executed.some((t) => SYSTEM_FAILURES.has(String((t.result as { error?: { code?: unknown } } | null)?.error?.code ?? '')));
+      return { ...f, ...(quotes.length ? { quotes } : {}), ...(fields ? { customerFields: fields } : {}), ...(photoSent !== undefined ? { photoSent } : {}), ...(systemFailure ? { systemFailure } : {}), ...(refusal ? { orderRefused: true, ...(refusal.field ? { missingField: refusal.field } : {}) } : {}) };
     };
     /** The guard's last word: offending sentences dropped / greeting stripped / the safe sentence (never a handoff). */
     const enforce = (base: AiReplyOutput, text: string, violations: GuardViolation[], first: GuardViolation[], retried: boolean, extra: { salvaged?: boolean }): TurnResult => {
@@ -393,7 +424,7 @@ export class AiRunService implements OnModuleInit {
           messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: done.result });
           forcedHandoff ??= this.tools.forcedHandoff(call.name, call.args, done.result);
         }
-        messages.push({ role: 'user', content: stray.map((c) => `[tool result ${c.name}] ${JSON.stringify(unavailableTool(c.name, noHandoff, noPhone, noPlace))}`).join('\n') });
+        messages.push({ role: 'user', content: stray.map((c) => `[tool result ${c.name}] ${JSON.stringify(unavailableTool(c.name, noHandoff, noPhone, noPlace, noStreet))}`).join('\n') });
         continue;
       }
       if (res.value.toolCalls.length && offerTools) {
@@ -489,10 +520,10 @@ export class AiRunService implements OnModuleInit {
    * journey retest R7-4: the customer has named a wilaya (or a commune of one, « wilaya 16 ») in their messages, or one is known
    * of them — the conversation's recorded details, their client record or an earlier order. Unsure (no messages, a read error) ⇒ true.
    */
-  private async placeKnown(ctx: TurnRequest['toolCtx']): Promise<boolean> {
-    if (ctx.customerHistory === undefined) return true;
+  private async placeKnown(ctx: TurnRequest['toolCtx'], places: PlaceIndex | null): Promise<boolean> {
+    if (ctx.customerHistory === undefined || !places) return true;
     try {
-      if (placeNamedIn(await placeIndex(), ctx.customerHistory)) return true;
+      if (placeNamedIn(places, ctx.customerHistory)) return true;
       const conv = ctx.conversationId ? await prisma.conversation.findUnique({ where: { id: ctx.conversationId }, select: { context: true } }) : null;
       if (conv && contextOf(conv).customer?.wilaya) return true;
       if (!ctx.clientId) return false;
@@ -501,6 +532,11 @@ export class AiRunService implements OnModuleInit {
     } catch {
       return true;
     }
+  }
+
+  /** journey retest R8-4: the customer's message only names a wilaya / commune (the lists cannot be read ⇒ false: nothing withheld). */
+  private placeOnly(text: string | undefined, places: PlaceIndex | null): boolean {
+    return !!places && !!text?.trim() && placeOnlyMessage(places, text);
   }
 
   /**

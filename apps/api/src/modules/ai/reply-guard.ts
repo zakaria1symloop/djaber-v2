@@ -24,6 +24,11 @@
 //                    parfum Oud 50 ml »): one corrective turn, then the sentence is dropped
 //   photo_claim      journey retest R6-2: « Hak tsawer ta3 … », « voici les photos » while this answer sends no photo (no card
 //                    nor gallery of a product that has one): one corrective turn, then the sentence is dropped
+//   invented_problem journey retest R8-1: « la commande n'est pas encore enregistrée à cause d'un problème technique de notre
+//                    côté » while no tool failed (a refused call is an answer, not a breakdown): one corrective turn, then dropped
+//   confirm_without_recap journey retest R8-1 / R8-2: « Pouvez-vous répondre « oui » une nouvelle fois ? », « Le récapitulatif …
+//                    va venir », « tu confirmes la commande ? » on a turn whose create_order was refused (no recap is shown):
+//                    one corrective turn, then dropped (nothing left ⇒ the question for the field create_order asked)
 // Pure: no I/O. Conservative by design — a false positive costs one corrective model turn and, at worst, a dropped sentence.
 import { formatMoney } from '@djaber/shared';
 import { GUARD_MARK } from './ai.constants';
@@ -32,9 +37,10 @@ import type { CatalogueProduct } from './catalogue.service';
 import type { PromptContext } from './prompt/prompt.types';
 import { TOOL_ALIASES, TOOL_DEFS } from './tools/tool-registry';
 import { phonesIn } from './tools/order-confirmation';
+import { recapClaim } from './tools/order-confirmation-text';
 import { fold as foldPlace, WILAYA_ALIASES } from './tools/wilaya-aliases';
 
-export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing' | 'contradicts_customer' | 'unavailable_offer' | 'photo_claim';
+export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing' | 'contradicts_customer' | 'unavailable_offer' | 'photo_claim' | 'invented_problem' | 'confirm_without_recap';
 /** Rules the server fixes itself: no corrective model turn for them alone. */
 export const AUTO_FIX_RULES: readonly GuardRule[] = ['script_mix'];
 export type LeakKind = 'uuid' | 'tool' | 'code' | 'key' | 'json' | 'marker';
@@ -98,6 +104,12 @@ export type GuardFacts = {
   photoSent?: boolean;
   /** journey retest R6-2: products whose gallery is sent whatever the answer (the customer tapped « Plus de photos ») */
   galleries?: string[];
+  /** journey retest R8-1: a tool of this turn really failed (orders module / payment link unavailable): a « problem » may be said */
+  systemFailure?: boolean;
+  /** journey retest R8-1 / R8-2: a create_order of this turn was refused (no recap, no order): no confirmation may be asked */
+  orderRefused?: boolean;
+  /** journey retest R8-2: the first field that refusal asked for (clientName, clientPhone, wilayaId, communeName, address, items) */
+  missingField?: string;
 };
 export type OrderField = 'name' | 'phone' | 'wilaya' | 'commune' | 'address';
 /** What a successful quote_delivery answered: the reply must give one of its fees (or say it is free). */
@@ -456,6 +468,14 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   if (facts.photoSent === false) parts.forEach((s, i) => {
     if (photoClaim(s)) out.push({ rule: 'photo_claim', sentence: i });
   });
+  // journey retest R8-1: no invented breakdown (« problème technique de notre côté ») when no tool failed
+  if (!facts.systemFailure) parts.forEach((s, i) => {
+    if (inventedProblem(s)) out.push({ rule: 'invented_problem', sentence: i });
+  });
+  // journey retest R8-1 / R8-2: create_order was refused this turn — no recap is shown, so no request to confirm, no « recap coming »
+  if (facts.orderRefused) parts.forEach((s, i) => {
+    if (recapClaim(s)) out.push({ rule: 'confirm_without_recap', sentence: i });
+  });
   // journey retest R2-3: never « not understood » / « waiting for » a field the customer's message just gave — nor « not
   // understood » another field when the message only gave one (« ما فهمتش الولاية » after a phone: no wilaya was asked)
   if (facts.customerText?.trim()) {
@@ -527,6 +547,34 @@ const PHOTO_CLAIM = new RegExp(
 );
 export const photoClaim = (sentence: string): boolean => PHOTO_CLAIM.test(foldGuard(sentence)) || PHOTO_CLAIM.test(sentence.toLowerCase());
 
+/**
+ * journey retest R8-1 (17/11): a technical problem / error / bug « on our side » (fr / en / arabizi / Arabic script) — never true
+ * when no tool failed: a tool that refused a call or asked for a field is not a breakdown.
+ */
+const INVENTED_PROBLEM = new RegExp(
+  [
+    String.raw`(?:probleme|souci|erreur|incident|panne|bug|beug|dysfonctionnement|anomalie|difficulte)s?\s+(?:\S+\s+){0,2}?(?:techniques?|informatiques?|systeme|du\s+systeme|de\s+notre\s+(?:cote|part)|chez\s+nous|internes?)`,
+    String.raw`(?<![\p{L}])(?:bug|beug|glitch)(?![\p{L}])`,
+    String.raw`(?:technical|system|server)\s+(?:issue|problem|error|glitch|difficult\w*|fault)`,
+    String.raw`(?:issue|problem|error)\s+on\s+our\s+(?:side|end)`,
+    String.raw`mo?chk?il\s+(?:\S+\s+)?(?:techni\w*|f\s+(?:le\s+)?syst\w*|men\s+3andna)`,
+    String.raw`(?:مشكل|مشكلة|مشكله|خلل|عطل|خطا)\s+(?:\S+\s+)?(?:تقني|تقنية|تقنيه|في\s+النظام|في\s+السيستام|من\s+عندنا)`,
+  ].join('|'),
+  'u',
+);
+export const inventedProblem = (sentence: string): boolean => INVENTED_PROBLEM.test(foldGuard(sentence)) || INVENTED_PROBLEM.test(sentence.toLowerCase());
+/** journey retest R8-2: what the corrective instruction calls each field create_order asked for. */
+const FIELD_NAMES: Record<string, string> = { items: 'the product', clientName: 'their name (as they write it)', clientPhone: 'their phone number', wilayaId: 'their wilaya', communeName: 'their commune', address: 'their street address (or offer the stop-desk)', secondPhone: 'a second phone number', notes: 'the note' };
+/** journey retest R8-2: the server's question for that field when nothing of the reply is left (no corrective turn fixed it). */
+const FIELD_QUESTIONS: Record<string, Record<'fr' | 'en' | 'ar' | 'arabizi', string>> = {
+  items: { fr: 'Quel produit souhaitez-vous commander ?', en: 'Which product would you like to order?', ar: 'واش من منتوج تحب تطلب ؟', arabizi: 'Wach men produit t7ebb ?' },
+  clientName: { fr: 'Quel est votre nom ?', en: 'What is your name?', ar: 'واش سميتك ؟', arabizi: 'Wach smitek ?' },
+  clientPhone: { fr: 'Quel est votre numéro de téléphone ? (ex : 0555123456)', en: 'What is your phone number? (e.g. 0555123456)', ar: 'عطيني رقم الهاتف تاعك (مثال: 0555123456)', arabizi: 'A3tini numéro ta3ek (ex: 0555123456)' },
+  wilayaId: { fr: 'Dans quelle wilaya êtes-vous ?', en: 'Which wilaya are you in?', ar: 'واش من ولاية ؟', arabizi: 'Wach men wilaya ?' },
+  communeName: { fr: 'Dans quelle commune êtes-vous ?', en: 'Which commune are you in?', ar: 'واش من بلدية ؟', arabizi: 'Wach men commune (baladiya) ?' },
+  address: { fr: 'Quelle est votre adresse (rue, cité, numéro), ou préférez-vous le stop-desk ?', en: 'What is your address (street, building, number), or would you rather use a stop-desk?', ar: 'عطيني العنوان تاعك (الشارع، الحي، رقم الدار)، ولا تحب ستوب ديسك ؟', arabizi: "A3tini l'adresse ta3ek (rue, cité, numéro ta3 dar), wela t7ebb stop-desk ?" },
+};
+
 /** Folded phrases of a false confession about an order the tools did place (fr / en / arabizi / Arabic script). */
 const FALSE_CONFESSION = new RegExp(
   [
@@ -573,6 +621,10 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
   }
   if (rules.includes('photo_claim'))
     lines.push('- NO PHOTO IS SENT with this answer: never say « voici les photos », « here are the pictures », « hak tsawer », « هاهي التصاور ». When the product has no photo (PHOTO:none, imageUrl null), say the shop has no photo of it for now (« ma 3andnach tsawer ta3ou f had lwaqt », « ما عندناش تصاور تاعو درك », « nous n\'avons pas encore de photo de ce produit ») and describe it in words.');
+  if (rules.includes('invented_problem'))
+    lines.push("- NO TECHNICAL PROBLEM: nothing failed on the shop's side — never say there is a technical problem, an error or a bug. A tool that refused a call or asked for a field is no problem: ask the customer for what is missing in one short question.");
+  if (rules.includes('confirm_without_recap'))
+    lines.push(`- NO RECAP WAS SHOWN in this turn (create_order did not return one): never ask the customer to confirm the order or to answer « oui » again, and never say a recap is coming. ${facts.missingField ? `Ask for ${FIELD_NAMES[facts.missingField] ?? facts.missingField} in one short question, in the customer's language.` : 'Say in one short sentence what create_order answered.'}`);
   if (rules.includes('fee_missing'))
     lines.push(`- DELIVERY FEE: quote_delivery answered ${(facts.quotes ?? []).map(quoteText).join('; ')}. Give that fee in the reply (home and stop-desk when both are known), in the customer's language: it is the answer to their question.`);
   return lines.join('\n');
@@ -603,7 +655,7 @@ const selfSentence = (loc: 'fr' | 'en' | 'ar' | 'arabizi', name: string | null):
   })[loc];
 const safeLocale = (lang: AiLanguage): 'fr' | 'en' | 'ar' | 'arabizi' => (lang === 'ar' ? 'ar' : lang === 'en' ? 'en' : lang === 'arabizi' ? 'arabizi' : 'fr');
 
-const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession', 'contradicts_customer', 'unavailable_offer', 'photo_claim'];
+const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession', 'contradicts_customer', 'unavailable_offer', 'photo_claim', 'invented_problem', 'confirm_without_recap'];
 /** Rules about the form of the reply: the text is kept when the corrective turn did not fix them (a reply is better than none). */
 const STYLE_RULES: GuardRule[] = ['language_switch', 'moroccan_darija', 'script_mix', 'repeat_greeting'];
 const quoteText = (q: QuoteFact) => `${q.wilaya || 'this wilaya'}: ${q.isStopdesk ? `stop-desk ${q.fee} DA` : q.free || q.fee === 0 ? 'home delivery free' : `home ${q.fee} DA`}${!q.isStopdesk && q.stopdeskFee !== null ? `, stop-desk ${q.stopdeskFee} DA` : ''}`;
@@ -683,11 +735,20 @@ export function enforceReply(reply: string, violations: GuardViolation[], facts:
     const lead = splitSentences(text);
     text = lead.length > 1 && !stripGreeting(lead[0]!, facts.agentName).trim() ? `${lead[0]!.trim()} ${fee} ${lead.slice(1).join('').trim()}` : `${fee}${text ? ` ${text}` : ''}`;
   }
+  // journey retest R8-2: the refusal's field is asked when what is left asks nothing (« Saha Walid, tsajjel: zoudj tapis … »)
+  const refusalQuestion = (rules0: Set<GuardRule>) => (rules0.has('invented_problem') || rules0.has('confirm_without_recap')) && facts.missingField ? FIELD_QUESTIONS[facts.missingField]?.[safeLocale(facts.lang)] : undefined;
+  const ask = refusalQuestion(new Set(violations.map((v) => v.rule)));
+  if (ask && wordCount(text) >= 2 && !/[?؟]/.test(text)) text = `${text} ${ask}`;
   text = text.replace(/\n{3,}/g, '\n\n');
   // a language / dialect slip the corrective turn did not fix: the reply is sent as it is
   if (wordCount(text) >= 2) return { reply: text, action: text === reply.trim() && violations.every((v) => STYLE_RULES.includes(v.rule)) ? 'kept' : 'stripped' };
   const rules = new Set(violations.map((v) => v.rule));
   const loc = safeLocale(facts.lang);
+  // journey retest R8-1 / R8-2: only an invented problem or a request to confirm was there — the question for the missing field
+  if (rules.has('invented_problem') || rules.has('confirm_without_recap')) {
+    const q = facts.missingField ? FIELD_QUESTIONS[facts.missingField] : undefined;
+    return { reply: q ? q[loc] : SAFE_SENTENCES.which[loc], action: 'safe_sentence' };
+  }
   if (!rules.has('unknown_amount') && !rules.has('stock_count') && !rules.has('technical_leak')) {
     // the reply only gave the AI another name (« comment tu t'appelles ? »): the right introduction instead
     if (rules.has('self_name')) return { reply: selfSentence(loc, facts.agentName), action: 'safe_sentence' };

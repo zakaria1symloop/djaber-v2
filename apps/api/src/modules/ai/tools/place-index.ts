@@ -40,6 +40,19 @@ export const wilayaIn = (idx: PlaceIndex, text: string): PlaceWilaya | null => {
   const c = idx.communes.find((x) => padded.includes(` ${x.key} `));
   return c ? (idx.wilayas.find((x) => x.id === c.wilayaId) ?? null) : null;
 };
+/** Words that go with a place name and name no street (« wilaya de », « commune », « centre », « ana f », « je suis à »). */
+const PLACE_ONLY_FILLERS = new Set(['wilaya', 'commune', 'daira', 'baladiya', 'de', 'du', 'des', 'd', 'la', 'le', 'l', 'a', 'au', 'en', 'w', 'f', 'fi', 'el', 'al', 'centre', 'center', 'ville', 'city', 'et', 'and', 'ana', 'je', 'suis', 'j', 'habite', 'nseken', 'saken', 'sakna', 'men', 'mn', 'from', 'in', 'i', 'live', 'at', 'chez', 'moi', 'pour', 'svp', 'stp', 'please', 'merci', 'ولايه', 'بلديه', 'في', 'ب', 'و', 'من', 'انا', 'نسكن', 'ساكن', 'ساكنه', 'وسط', 'مدينه', 'المدينه']);
+/**
+ * journey retest R8-4 (17/11): the message only names a wilaya and / or a commune (« Sétif, El Eulma », « ana f Bab Ezzouar »)
+ * — no street, building, landmark or other word. On such a message with no address yet, create_order can only be refused.
+ */
+export const placeOnlyMessage = (idx: PlaceIndex, text: string): boolean => {
+  if (!wilayaIn(idx, text)) return false;
+  let w = ` ${placeFold(text)} `;
+  const names = [...new Set([...idx.wilayas.flatMap((x) => [placeFold(x.nameFr), placeFold(x.nameAr)]), ...idx.communes.map((c) => c.key)])].filter((n) => n.length >= 3).sort((a, b) => b.length - a.length);
+  for (const n of names) if (w.includes(` ${n} `)) w = w.split(` ${n} `).join(' ');
+  return w.trim().split(/\s+/).filter((x) => x && !PLACE_ONLY_FILLERS.has(x)).length === 0;
+};
 /**
  * R7-4: one of the customer's messages names a wilaya (or a commune of one), or writes « wilaya 16 » — each message on its own
  * line, as `wilayaNamed` reads them.

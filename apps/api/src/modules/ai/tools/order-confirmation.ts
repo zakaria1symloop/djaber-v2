@@ -47,20 +47,53 @@ const codeOf = (r: unknown) => (r as { error?: { code?: unknown } } | null)?.err
 const isCreate = (h: OrderCallHistory[number]) => (h.name ?? 'create_order') === 'create_order';
 /** The wording of an order the customer reads in the recap (not part of its core). */
 export type RecapWording = { clientName: string; secondPhone: string | null; communeName: string | null; address: string | null };
+/**
+ * journey retest R8-1 (17/11): the order a server recap stands for, as the server built it (`create_order` arguments): kept in
+ * the `CONFIRMATION_REQUIRED` result so that a « oui » to that recap places exactly it, whatever the model's confirming call
+ * left out (N5 T3: no commune, no address, `customerConfirmed false` ⇒ « not given yet » and no order).
+ */
+export type DraftOrder = { clientName: string; clientPhone: string; secondPhone: string | null; wilayaId: number; communeName: string | null; address: string | null; isStopdesk: boolean; stopdeskId: string | null; notes: string | null; items: { productId: string; variantId: string | null; quantity: number }[]; replacesOrder: string | null };
 /** The latest recap an earlier turn of this conversation / session showed (fresh), with its core and its wording. */
-export type LatestRecap = { draft: string; core: string | null; wording: (RecapWording & { wilaya: string | null }) | null; at: Date };
+export type LatestRecap = { draft: string; core: string | null; wording: (RecapWording & { wilaya: string | null }) | null; at: Date; /** journey retest R8-1 */ order: DraftOrder | null; /** journey retest R8-1: every word the recap showed (names, items, place) */ shown: string };
+const draftOrderOf = (v: unknown): DraftOrder | null => {
+  const o = v as Partial<DraftOrder> | null | undefined;
+  if (!o || typeof o.clientName !== 'string' || typeof o.clientPhone !== 'string' || typeof o.wilayaId !== 'number' || !Array.isArray(o.items) || !o.items.length) return null;
+  if (!o.items.every((i) => i && typeof i.productId === 'string' && typeof i.quantity === 'number')) return null;
+  return o as DraftOrder;
+};
 export const latestRecap = (history: OrderCallHistory | undefined, now = Date.now()): LatestRecap | null => {
   let best: LatestRecap | null = null;
   for (const h of history ?? []) {
     if (!isCreate(h) || now - h.at.getTime() > DRAFT_TTL_MS || codeOf(h.result) !== 'CONFIRMATION_REQUIRED') continue;
     if (best && best.at.getTime() >= h.at.getTime()) continue;
-    const r = h.result as { error: { draft?: unknown; core?: unknown }; recap?: Record<string, unknown> };
+    const r = h.result as { error: { draft?: unknown; core?: unknown }; recap?: Record<string, unknown>; draftOrder?: unknown };
     if (typeof r.error.draft !== 'string') continue;
     const s = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
     const rc = r.recap;
-    best = { draft: r.error.draft, core: typeof r.error.core === 'string' ? r.error.core : null, wording: rc && typeof rc.clientName === 'string' ? { clientName: rc.clientName, secondPhone: s(rc.secondPhone), communeName: s(rc.communeName), address: s(rc.address), wilaya: s(rc.wilaya) } : null, at: h.at };
+    const items = Array.isArray(rc?.items) ? (rc.items as { name?: unknown; variant?: unknown }[]).flatMap((i) => [i?.name, i?.variant]) : [];
+    const shown = rc ? [rc.clientName, rc.clientPhone, rc.secondPhone, rc.wilaya, rc.wilayaAr, rc.communeName, rc.communeAr, rc.address, ...items].filter((x): x is string => typeof x === 'string').join(' ') : '';
+    best = { draft: r.error.draft, core: typeof r.error.core === 'string' ? r.error.core : null, wording: rc && typeof rc.clientName === 'string' ? { clientName: rc.clientName, secondPhone: s(rc.secondPhone), communeName: s(rc.communeName), address: s(rc.address), wilaya: s(rc.wilaya) } : null, at: h.at, order: draftOrderOf(r.draftOrder), shown };
   }
   return best;
+};
+/** Words of a bare confirmation (folded): a « oui » with them adds nothing to the recap. */
+const CONFIRM_FILLERS = new Set(
+  [
+    'est', 'cest', 'bien', 'tout', 'bon', 'bonne', 'tres', 'merci', 'beaucoup', 'svp', 'stp', 'please', 'thanks', 'thank', 'you', 'all', 'good', 'fine', 'right', 'correct', 'exact', 'exactement', 'parfait', 'nickel', 'super', 'allez', 'vas', 'vasy', 'go', 'ahead', 'sur', 'surement', 'evidemment',
+    'commande', 'order', 'recap', 'confirme', 'confirmer', 'confirm', 'confirmed', 'valide', 'valider', 'accord', 'daccord', 'the', 'and', 'that', 'this', 'its', 'moi', 'pour', 'vous', 'les', 'des', 'une', 'cela', 'ca', 'comme', 'ainsi', 'oui', 'ouii', 'ouiii', 'ouais', 'yes', 'yeah', 'yep', 'okay', 'oki', 'okey',
+    'saha', 'sahit', 'sahitek', 'yaatik', 'ya3tik', 'saha', 'khouya', 'khoya', 'khti', 'sahbi', 'inchallah', 'nchallah', 'allah', 'barak', 'baraka', 'fik', 'mlih', 'mli7', 'wah', 'iyeh', 'ayeh', 'safi', 'hakda', 'haka', 'kima', 'kifkif', 'nconfirmi', 'confirmi', 'tamam', 'ok',
+    'نعم', 'ايه', 'واه', 'صحيت', 'صحيتو', 'شكرا', 'بارك', 'الله', 'فيك', 'تمام', 'مليح', 'صافي', 'خويا', 'اختي', 'هكا', 'هكذا', 'كيما', 'موافق', 'اكد', 'ناكد', 'الطلبيه', 'الطلبية', 'الكوموند',
+  ].map((w) => norm(w)),
+);
+/**
+ * journey retest R8-1: the customer's message only confirms — a yes word, and no word the recap did not show besides the words
+ * of a confirmation (« oui », « oui c'est bon », « ih saha », « oui, c'est bien la cité 500 logements bloc 12 à El Eulma, Sétif »).
+ * « oui mais livrez à la villa 4 » brings « mais », « livrez », « villa », « 4 »: not a bare yes.
+ */
+export const bareYes = (text: string, shown: string): boolean => {
+  if (confirmation(text) !== 'yes') return false;
+  const recap = tokensOf(shown);
+  return [...tokensOf(text)].every((w) => recap.has(w) || CONFIRM_FILLERS.has(w) || YES.includes(w));
 };
 
 const tokensOf = (...texts: (string | null | undefined)[]) => new Set(texts.flatMap((t) => norm(t).split(' ')).filter((w) => w.length >= 3 || /\d/.test(w)));

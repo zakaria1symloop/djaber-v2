@@ -2,7 +2,7 @@
 // recap line said twice (R7-1), a photo request on a product without a photo left unanswered (R7-2), odd wording and filler
 // answers (R7-3), tool probes (R7-4), « Vous livrez à Blida ? » without the fee (R7-5).
 import { prisma } from '@djaber/db';
-import { AiRunService, NO_PLACE_NOTE, ORDER_DETAILS_NOTE, unavailableTool, type TurnRequest } from './ai-run.service';
+import { AiRunService, NO_PLACE_NOTE, NO_STREET_NOTE, ORDER_DETAILS_NOTE, unavailableTool, type TurnRequest } from './ai-run.service';
 import { nearestId } from './catalogue.service';
 import { orderDetailsMessage } from './handoff-judge';
 import { fixMoroccan, wrongDarijaIn } from './language';
@@ -226,12 +226,18 @@ describe('R7-4 — fewer probe calls', () => {
     expect(execute).not.toHaveBeenCalled();
     expect(String((gateway.calls[1]!.messages.at(-1) as { content: unknown }).content)).toContain('has not named their wilaya yet');
     expect(r.ok && r.output.reply).toBe('Merci Karim ! Dans quelle wilaya souhaitez-vous être livré ?');
-    // « Sétif, El Eulma » next: the wilaya is named ⇒ create_order offered again (with the R6-5 address note)
+    // « Sétif, El Eulma » next: the wilaya is named (no NO_PLACE_NOTE) — journey retest R8-4: but the message only names the
+    // place and no street was given, so create_order is still not offered (NO_STREET_NOTE); a street next ⇒ offered
     const next = new FakeAiGateway();
     next.script('reply', { reply: 'Quelle est votre adresse à El Eulma ?', intent: 'SALE' });
     await new AiRunService(next, routing as never, tools, {} as never, {} as never, {} as never).turn(turnReq('Sétif, El Eulma', `${f1b}\nSétif, El Eulma`));
-    expect((next.calls[0]!.tools ?? []).map((d) => d.name)).toContain('create_order');
+    expect((next.calls[0]!.tools ?? []).map((d) => d.name)).not.toContain('create_order');
     expect(next.calls[0]!.system).not.toContain(NO_PLACE_NOTE);
+    expect(next.calls[0]!.system).toContain(NO_STREET_NOTE);
+    const street = new FakeAiGateway();
+    street.script('reply', { reply: 'Merci !', intent: 'SALE' });
+    await new AiRunService(street, routing as never, tools, {} as never, {} as never, {} as never).turn(turnReq('El Eulma, Les Pins 12', `${f1b}\nEl Eulma, Les Pins 12`));
+    expect((street.calls[0]!.tools ?? []).map((d) => d.name)).toContain('create_order');
     expect(unavailableTool('create_order', false, false, true).instruction).toContain('has not named their wilaya yet');
   });
   it('a returning customer (client record / earlier order) keeps create_order offered', async () => {

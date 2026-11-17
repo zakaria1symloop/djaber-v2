@@ -220,8 +220,9 @@ describe('R6-5 — no probe calls', () => {
     gateway.script('reply', { reply: 'Quelle est votre adresse à El Eulma ?', intent: 'SALE' });
     const tools = { defsFor: async () => [TOOL_DEFS.create_order], forcedHandoff: () => null, execute: jest.fn() } as unknown as ToolRegistry;
     const svc = new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never);
-    const history = 'Je voudrais le sac à main cuir marron, 1 seul. Karim Haddad 0770112233\nSétif, El Eulma';
-    const req: TurnRequest = { runId: 'r', prompt: { system: 'S', messages: [{ role: 'user', content: 'Sétif, El Eulma' }] }, toolCtx: { workspaceId: 'w', agent: { humanHandoffRules: '', handoffKeywords: [] } as never, conversationId: null, clientId: null, channelId: null, runId: 'r', dryRun: true, customerText: 'Sétif, El Eulma', customerHistory: history }, temperature: 0.5, maxTokens: 500, deadline: Date.now() + 30_000, persist: false };
+    // journey retest R8-4: a message that only names the place gets no create_order at all (NO_STREET_NOTE); this one says more
+    const history = 'Je voudrais le sac à main cuir marron, 1 seul. Karim Haddad 0770112233\nSétif, El Eulma, Les Pins 12';
+    const req: TurnRequest = { runId: 'r', prompt: { system: 'S', messages: [{ role: 'user', content: 'Sétif, El Eulma, Les Pins 12' }] }, toolCtx: { workspaceId: 'w', agent: { humanHandoffRules: '', handoffKeywords: [] } as never, conversationId: null, clientId: null, channelId: null, runId: 'r', dryRun: true, customerText: 'Sétif, El Eulma, Les Pins 12', customerHistory: history }, temperature: 0.5, maxTokens: 500, deadline: Date.now() + 30_000, persist: false };
     await svc.turn(req);
     expect(gateway.calls[0]!.system).toContain(NO_ADDRESS_NOTE);
     expect((gateway.calls[0]!.tools ?? []).map((d) => d.name)).toContain('create_order');

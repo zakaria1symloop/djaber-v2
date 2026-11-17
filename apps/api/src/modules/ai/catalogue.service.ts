@@ -149,12 +149,32 @@ export class CatalogueService {
     if (!wrong.length) return out;
     const rows = await prisma.product.findMany({ where: this.scopeWhere(agent), select: { id: true }, take: 5000 });
     const all = rows.map((r) => r.id);
+    // journey retest R8-3: an id that is a product of the shop (archived, out of the agent's scope…) is never moved to a neighbour
+    const exact = new Set((await prisma.product.findMany({ where: { id: { in: wrong.filter((id) => /^[0-9a-f-]{36}$/i.test(id)) } }, select: { id: true } })).map((r) => r.id));
     for (const id of wrong) {
-      if (all.includes(id)) continue;
+      if (all.includes(id) || exact.has(id)) continue;
       const near = nearestId(id, all);
       if (near) out.set(id, near);
     }
     return out;
+  }
+
+  /** journey retest R8-3: the ids among these that are variants of the shop (any product): never read as a mistyped id. */
+  async knownVariantIds(ids: string[]): Promise<Set<string>> {
+    const valid = [...new Set(ids)].filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+    if (!valid.length) return new Set();
+    return new Set((await prisma.productVariant.findMany({ where: { id: { in: valid } }, select: { id: true } })).map((r) => r.id));
+  }
+
+  /**
+   * journey retest R8-4 (17/11): the in-scope product of each of these variant ids — an invented product id sent with the exact
+   * id of its variant (« 01a1e51f-4180-7000-8000-000000000000 » + the Basket's « 42 ») stands for that product.
+   */
+  async variantOwners(agent: AgentScope, variantIds: string[]): Promise<Map<string, string>> {
+    const valid = [...new Set(variantIds)].filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+    if (!valid.length) return new Map();
+    const rows = await prisma.productVariant.findMany({ where: { id: { in: valid }, deletedAt: null, product: this.scopeWhere(agent) }, select: { id: true, productId: true } });
+    return new Map(rows.map((r) => [r.id, r.productId]));
   }
 
   /**

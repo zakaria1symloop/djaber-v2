@@ -252,6 +252,13 @@ const ODD_FIXES: [RegExp, string | ((m: string, ...groups: string[]) => string)]
   [/(?<![\p{L}\p{N}_])(?:تتشحن|تنشحن)(?![\p{L}\p{N}_])/gu, 'تخرج'],
   [/(?<![\p{L}\p{N}_])(?:يتشحن|ينشحن)(?![\p{L}\p{N}_])/gu, 'يخرج'],
   [/(?<![\p{L}\p{N}_])t7ebb\s+nwarrik\s+(wach\s+men\s+[\p{L}'’-]+)\s*([?؟])/giu, (_m, what: string, mark: string) => `${what} t7ebb ${mark}`],
+  // journey retest R8-5 (17/11): « Ghir after that nkamlou la commande m3ak » (English inside arabizi) → « Mba3d nkamlou … »;
+  // « nchouf ash nqder ndir lik » (Moroccan « ash ») → « nchouflek wach nqder ndirlek »; « Ma 3andnachch » → « Ma 3andnach »;
+  // « مازال ما تخرجتش » → « مازال ما خرجتش »
+  [/(?<![\p{L}\p{N}_])(?:ghir\s+)?after\s+that(?=\s+n[\p{L}])/giu, 'mba3d'],
+  [/(?<![\p{L}\p{N}_])nchouf\s+ash\s+nqder(\s+ndir\s*(?:lik|lek|lak))?(?![\p{L}\p{N}_])/giu, (_m, dir?: string) => `nchouflek wach nqder${dir ? ' ndirlek' : ''}`],
+  [/(?<![\p{L}\p{N}_])3andna(?:ch){2,}(?![\p{L}\p{N}_])/giu, '3andnach'],
+  [/(?<=ما\s*)تخرجتش(?![\p{L}\p{N}_])/gu, 'خرجتش'],
 ];
 const oddIn = (text: string) => ODD_FIXES.some(([re]) => new RegExp(re.source, re.flags.replace('g', '')).test(text));
 /** journey retest R3-2 / R3-5 / R5-3: « ch7al » used for « what / which », or made-up arabizi / darija — the reply guard flags it with the Moroccan words. */

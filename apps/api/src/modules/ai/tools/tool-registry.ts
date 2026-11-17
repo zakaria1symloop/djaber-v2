@@ -17,7 +17,7 @@ import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
 import { fold, WILAYA_ALIASES } from './wilaya-aliases';
 import { handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
-import { asksCancel, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, simulatedOrders, type OrderCallHistory } from './order-confirmation';
+import { asksCancel, bareYes, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, simulatedOrders, type DraftOrder, type OrderCallHistory } from './order-confirmation';
 
 export type ToolName = 'search_products' | 'get_product' | 'check_availability' | 'quote_delivery' | 'create_order' | 'cancel_order' | 'lookup_order' | 'handoff_to_human' | 'add_faq_candidate' | 'create_payment_link';
 export type ToolRunContext = {
@@ -112,7 +112,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
       additionalProperties: false,
       required: ['clientName', 'clientPhone', 'wilayaId', 'items', 'customerConfirmed'],
       properties: {
-        clientName: { type: 'string', minLength: 3, maxLength: 80, description: 'the name exactly as the customer wrote it — never « Client », « Customer » or another placeholder' },
+        clientName: { type: 'string', minLength: 3, maxLength: 80, description: 'the name exactly as the customer wrote it, in the script they used (« وليد بوزيد » stays in Arabic letters, never « Walid Bouzid ») — never « Client », « Customer » or another placeholder' },
         clientPhone: { type: 'string', pattern: '^(\\+213|00213|0)?[5-7][0-9]{8}$' },
         secondPhone: { type: 'string', description: 'the other number when the customer gave two (« 0661… ou 0770… »): keep both, never ask which one to keep' },
         wilayaId: { type: 'integer', minimum: 1, maximum: WILAYA_COUNT },
@@ -241,6 +241,97 @@ export const nameGiven = (name: string, sources: string): boolean => {
   const hay = ` ${placeFold(sources)} `;
   if (tokens.some((t) => hay.includes(` ${t} `))) return true;
   return !(/[؀-ۿ]/.test(name) ? /[؀-ۿ]/ : /[A-Za-z]/).test(sources);
+};
+/** journey retest R8-2: the Latin first letters an Arabic-script letter is written with (« و » → w / o / ou / v…). */
+const ARABIC_INITIAL: Record<string, string> = {
+  ا: 'aeiou3', أ: 'aeiou3', إ: 'aeiou3', آ: 'aeiou3', ع: 'aeiou3', ء: 'aeiou3', ئ: 'aeiouy3', ب: 'bp', ت: 't', ث: 't', ج: 'djg', ح: 'h7', خ: 'kh5', د: 'd', ذ: 'dz', ر: 'r', ز: 'z', س: 'sc', ش: 'cs', ص: 's', ض: 'd', ط: 't', ظ: 'dz', غ: 'gr', ف: 'f', ق: 'kqg9', ك: 'kc', ل: 'l', م: 'm', ن: 'n', ه: 'h', و: 'wouv', ي: 'yie',
+};
+const ARABIC_LETTERS = /[؀-ۿ]/;
+/**
+ * The call's name is the customer's name written in the other script: each of its words starts with a letter the customer's word
+ * at the same place may be written with (« Walid Bouzid » / « وليد بوزيد », « Samir » / « سمير بن علي ») — never more words than
+ * the customer wrote.
+ */
+const sameNameAcross = (customer: string, call: string): boolean => {
+  const arabicCustomer = ARABIC_LETTERS.test(customer);
+  const c = (arabicCustomer ? customer.split(/\s+/) : placeFold(customer).split(' ')).filter(Boolean);
+  const k = (arabicCustomer ? placeFold(call).split(' ') : call.trim().split(/\s+/)).filter(Boolean);
+  if (!k.length || k.length > c.length) return false;
+  const fits = (arabic: string, latin: string) => (ARABIC_INITIAL[arabic.replace(/^ال(?=\S{2})/, '')[0] ?? ''] ?? '').includes(latin[0] ?? '#');
+  return k.every((w, i) => (arabicCustomer ? fits(c[i]!, w) : fits(w, c[i]!)));
+};
+/** « smiti / اسمي / je m'appelle / my name is … »: the words after it in one script, up to a digit, a comma or the other script. */
+const NAME_INTRO_AT = /(?<![\p{L}])(?:smiti|esmi|ismi|asmi|smiya\s+ta3i|je\s+m['’]?\s*appelle|moi\s+c['’]?est|mon\s+nom\s+(?:est|c['’]?est)|my\s+name\s+is|اسمي|إسمي|سميتي)\s+/giu;
+/** The words that start `rest` in this script (Arabic, or Latin letters), at most 4, up to a digit, a comma or the other script. */
+const leadingWords = (rest: string, arabic: boolean): string | null => {
+  const words: string[] = [];
+  for (const w of rest.trim().split(/\s+/)) {
+    const bare = w.replace(/[,،.!?؟]+$/u, '');
+    if (!bare || !(arabic ? /^[؀-ۿ]+$/u.test(bare) : /^[A-Za-zÀ-ÿ'’-]+$/u.test(bare))) break;
+    words.push(bare);
+    if (words.length === 4 || bare !== w) break;
+  }
+  return words.length ? words.join(' ') : null;
+};
+/** Arabic-script words that are no name (yes, thanks, greetings, order words) — a line made of one of them is not a name. */
+const NOT_A_NAME = /(?<![؀-ۿ])(?:نعم|ايه|إيه|واه|لا|شكرا|صحيت|السلام|عليكم|سلام|مرحبا|نحب|حاب|نشري|بغيت|حي|شارع|عمارة|ولاية|بلدية|قداش|شحال|واش|وين|كيفاش|تمام|صافي|الطلبية|طلبية|التوصيل)(?![؀-ۿ])/u;
+/**
+ * journey retest R8-2 (17/11): the name the customer wrote in the other script than the call's (« smiti وليد بوزيد » for the call's
+ * « Walid Bouzid »): the server keeps the customer's own text. Found after a name intro (« smiti », « اسمي », « je m'appelle ») or,
+ * for Arabic script, as a message of one to four Arabic words and nothing else; it must be the same name (`sameNameAcross`).
+ */
+export const customerOwnName = (callName: string, history: string): string | null => {
+  const latinCall = !ARABIC_LETTERS.test(callName) && /[A-Za-z]/.test(callName);
+  const arabicCall = ARABIC_LETTERS.test(callName) && !/[A-Za-z]/.test(callName);
+  if (!latinCall && !arabicCall) return null;
+  const found: string[] = [];
+  for (const raw of history.split(/\n+/)) {
+    const line = raw.trim();
+    for (const m of line.matchAll(NAME_INTRO_AT)) {
+      const run = leadingWords(line.slice((m.index ?? 0) + m[0].length), latinCall);
+      if (run) found.push(run);
+    }
+    if (latinCall && /^[؀-ۿ]+(?:\s+[؀-ۿ]+){0,3}[\s.!،,]*$/u.test(line)) found.push(line.replace(/[\s.!،,]+$/u, ''));
+  }
+  const same = found.filter((name) => !NOT_A_NAME.test(name) && sameNameAcross(name, callName));
+  return same.length ? same[same.length - 1]! : null;
+};
+/** A word of a size / measure before a short variant name (« taille M », « en 42 », « pointure 40 »). */
+const SIZE_CUE = /(?:taille|tailles|pointure|size|ma9as|m9as|mqas|en|t|n°|num|numero|numéro|مقاس|المقاس|قياس|نمرة|رقم)\s*$/iu;
+/** Address / phone segments of a message: a colour or size there names no variant (« Cité les Roses », « bloc 42 »). */
+const ADDRESS_WORDS = /(?<![\p{L}])(?:rue|cite|cité|bloc|bt|bat|batiment|villa|logements?|lgts?|quartier|hay|hai|residence|lotissement|lot|route|avenue|av|boulevard|bd|impasse|douar|village|immeuble|appartement|etage|street|road|building|apartment|floor|حي|شارع|عمارة|بلوك|فيلا|مسكن|طريق)(?![\p{L}])/iu;
+/** The variants of this product a message names (whole words; a short name such as « M » or « 42 » only after a size word). */
+const variantsNamedIn = (variants: { id: string; name: string }[], line: string): { id: string; name: string }[] => {
+  const segments = line.split(/[,،;.!?؟\n]+/).filter((s) => !ADDRESS_WORDS.test(s) && !/\d{8,}/.test(s.replace(/[\s.-]/g, '')));
+  const out: { id: string; name: string }[] = [];
+  for (const v of variants) {
+    const key = placeFold(v.name);
+    if (!key) continue;
+    const long = key.replace(/\s/g, '').length >= 3 && /\p{L}/u.test(key);
+    const hit = segments.some((seg) => {
+      const f = ` ${placeFold(seg)} `;
+      if (!f.includes(` ${key} `)) return false;
+      if (long) return true;
+      // « M », « XL », « 42 »: only right after a size word
+      const at = f.indexOf(` ${key} `);
+      return SIZE_CUE.test(f.slice(0, at + 1).trimEnd());
+    });
+    if (hit) out.push(v);
+  }
+  return out;
+};
+/**
+ * journey retest R8-3 (17/11): the variant of this product the customer named last (« le sac à main cuir marron » ⇒ Marron) —
+ * the latest message naming exactly one of its variants; a message naming two (« noir ou marron ? ») leaves it to the call.
+ */
+export const namedVariant = <V extends { id: string; name: string }>(variants: V[], history: string): V | null => {
+  const lines = history.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  for (const line of lines.reverse()) {
+    const named = variantsNamedIn(variants, line);
+    if (named.length === 1) return variants.find((v) => v.id === named[0]!.id) ?? null;
+    if (named.length > 1) return null;
+  }
+  return null;
 };
 /** Lower case, accents / Arabic marks removed, hamza / tā' marbūṭa / alif maqṣūra folded, anything else than letters and digits ⇒ space. */
 export const placeFold = (t: string) =>
@@ -438,7 +529,7 @@ export class ToolRegistry {
     if (!p) return { ok: false, error: { code: 'PRODUCT_NOT_AVAILABLE', productId: id } };
     const sell = p.sellOutOfStock;
     const variantId = typeof args.variantId === 'string' && args.variantId.trim() ? args.variantId.trim() : null;
-    const v = p.hasVariants ? (p.variants.find((x) => x.id === variantId) ?? fixedVariant(p, variantId)) : null;
+    const v = p.hasVariants ? (p.variants.find((x) => x.id === variantId) ?? (variantId && (await this.unknownVariantIds([variantId])).has(variantId) ? fixedVariant(p, variantId) : null)) : null;
     if (p.hasVariants && !v) return { ok: true, productId: p.id, variantRequired: true, variants: p.variants.map((x) => ({ id: x.id, name: x.name, price: x.price, available: sell || x.stock >= qty })), say: 'ask which variant the customer wants (only the available ones)' };
     const stock = v ? v.stock : p.stock;
     const base = { ok: true, productId: p.id, ...(v ? { variantId: v.id, variant: v.name } : {}), quantity: qty };
@@ -542,6 +633,11 @@ export class ToolRegistry {
   /** Validation, catalogue check and limits of `create_order` (04 §5, FL-02); the write itself is the `OrderTools` port. */
   async prepareOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<{ ok: true; request: CreateOrderRequest; draft: string; core?: string; beyondStock?: { name: string; quantity: number }[] } | { ok: false; result: ToolResult }> {
     const fail = (result: ToolResult) => ({ ok: false as const, result });
+    // journey retest R8-1 (17/11): a bare « oui » to the pending server recap confirms THAT recap — the order is the one the
+    // server built for it (stored with the recap), whatever the confirming call left out (N5 T3: no commune, no address,
+    // `customerConfirmed false` ⇒ « not given yet », no order, and an invented « problème technique »)
+    const pending = this.pendingOrder(args, ctx);
+    if (pending) args = pending;
     // journey retest R1-5 (J04-6): a call made before the customer gave the fields (« create_order {} », no address, no
     // wilaya) is refused at once, before the catalogue reads, with every missing field — the model asks for the first one
     const absent = absentFields(args, ctx.agent);
@@ -559,7 +655,16 @@ export class ToolRegistry {
     if (place && ctx.customerHistory !== undefined && !absent.includes('wilayaId') && !(await this.wilayaGiven(ctx, place, typeof args.communeName === 'string' ? args.communeName : null))) invented.push('wilayaId');
     // journey retest R3-3: a name the customer never wrote (« Client » with nothing else given) is refused with the rest — a
     // placeholder always, any other name when none of its words is in their messages or in the client record
-    const typedName = typeof args.clientName === 'string' ? args.clientName.trim() : '';
+    let typedName = typeof args.clientName === 'string' ? args.clientName.trim() : '';
+    // journey retest R8-2 (17/11): « smiti وليد بوزيد » sent as « Walid Bouzid » — the name the customer wrote in the other
+    // script is theirs: the server uses their own text (refused twice in F3, no recap was ever shown)
+    if (typedName && !absent.includes('clientName') && !isPlaceholderName(typedName) && ctx.customerHistory !== undefined && !(await this.nameKnown(ctx, typedName))) {
+      const own = customerOwnName(typedName, ctx.customerHistory);
+      if (own) {
+        args = { ...args, clientName: own };
+        typedName = own;
+      }
+    }
     if (typedName && !absent.includes('clientName') && (isPlaceholderName(typedName) || (ctx.customerHistory !== undefined && !(await this.nameKnown(ctx, typedName))))) invented.unshift('clientName');
     // journey retest R3-3: a phone the customer did type but with the wrong length (« 05559876 ») is named in the same answer
     const badPhone = typedPhone && !invented.includes('clientPhone') && !absent.includes('clientPhone') && !isPhoneDz(typedPhone) ? 'clientPhone' : null;
@@ -615,17 +720,32 @@ export class ToolRegistry {
     }
 
     const products = await this.catalogue.byIds(ctx.agent, d.items.map((i) => i.productId));
+    // journey retest R8-4 (17/11): an invented product id (« 01a1e51f-4180-7000-8000-000000000000 ») with the exact id of one of
+    // its variants stands for that variant's product (N6 T1: PRODUCT_NOT_AVAILABLE, then the same call with the right id)
+    const notFound = d.items.filter((i) => !products.some((p) => p.id === i.productId));
+    const owners = notFound.some((i) => i.variantId) && typeof this.catalogue.variantOwners === 'function' ? await this.catalogue.variantOwners(ctx.agent, notFound.map((i) => i.variantId).filter((x): x is string => !!x)) : new Map<string, string>();
     // journey retest R7-4: a mistyped id (one or two characters off) stands for its product — the server recap names it
-    const fixed = await this.fixedIds(ctx.agent, d.items.map((i) => i.productId).filter((id) => !products.some((p) => p.id === id)));
-    if (fixed.size) products.push(...(await this.catalogue.byIds(ctx.agent, [...new Set(fixed.values())])));
+    const fixed = await this.fixedIds(ctx.agent, notFound.filter((i) => !(i.variantId && owners.has(i.variantId))).map((i) => i.productId));
+    for (const i of notFound) if (i.variantId && owners.has(i.variantId)) fixed.set(i.productId, owners.get(i.variantId)!);
+    if (fixed.size) products.push(...(await this.catalogue.byIds(ctx.agent, [...new Set(fixed.values())].filter((id) => !products.some((p) => p.id === id)))));
     const by = new Map(products.map((p) => [p.id, p]));
     const items: CreateOrderRequest['items'] = [];
     const beyondStock: { name: string; quantity: number }[] = [];
+    // journey retest R7-4 / R8-3: a variant id one or two characters off stands for its variant only when it is no variant of the
+    // shop at all (an exact id is never moved to a neighbour)
+    const unknownVariants = await this.unknownVariantIds(d.items.map((i) => i.variantId).filter((x): x is string => !!x && !products.some((p) => p.variants.some((v) => v.id === x))));
     for (const i of d.items) {
       const p = by.get(i.productId) ?? by.get(fixed.get(i.productId) ?? '');
       // AI-14: an archived / inactive product is dropped with a message, never ordered
       if (!p) return fail({ ok: false, error: { code: 'PRODUCT_NOT_AVAILABLE', productId: i.productId } });
-      const v = p.hasVariants ? (p.variants.find((x) => x.id === i.variantId) ?? fixedVariant(p, i.variantId ?? null)) : null;
+      let v = p.hasVariants ? (p.variants.find((x) => x.id === i.variantId) ?? (i.variantId && unknownVariants.has(i.variantId) ? fixedVariant(p, i.variantId) : null)) : null;
+      // journey retest R8-3 (17/11): the variant the customer named wins (« le sac à main cuir marron » sent with the id of Noir,
+      // the product's first variant ⇒ recap « (Noir) »): the latest message naming exactly one variant of this product, when the
+      // order has this product once
+      if (p.hasVariants && ctx.customerHistory !== undefined && d.items.filter((x) => (by.get(x.productId) ?? by.get(fixed.get(x.productId) ?? ''))?.id === p.id).length === 1) {
+        const named = namedVariant(p.variants, ctx.customerHistory);
+        if (named && named.id !== v?.id) v = named;
+      }
       if (p.hasVariants && !v) return fail({ ok: false, error: { code: 'VARIANT_REQUIRED', productId: p.id, availableVariants: p.variants.filter((x) => p.sellOutOfStock || x.stock > 0).map((x) => ({ id: x.id, name: x.name, price: x.price })) } });
       const stock = v ? v.stock : p.stock !== null && freed.size ? p.stock + (freed.get(`${p.id}:`) ?? 0) : p.stock;
       const free = stock === null ? null : v ? stock + (freed.get(`${p.id}:${v.id}`) ?? 0) : stock;
@@ -696,17 +816,57 @@ export class ToolRegistry {
     // and the products » let a product suggestion that repeated the customer's details (« Voulez-vous plutôt le Coffret cadeau
     // Aïd à 24990 DA ? », free delivery: total = price) count as a recap: « oui » placed TEST-8513 without any recap shown.
     // Since R1-6 every recap is the server's, sent from the first call: this call returns it.
+    // journey retest R8-1: the order this recap stands for, as the server built it — a « oui » to it places exactly this
+    const draftOrder: DraftOrder = { clientName: request.clientName, clientPhone: request.clientPhone, secondPhone: request.secondPhone ?? null, wilayaId: request.wilayaId, communeName: request.communeName, address: request.address, isStopdesk: request.isStopdesk, stopdeskId: request.stopdeskId, notes: request.notes, items: request.items.map((i) => ({ productId: i.productId, variantId: i.variantId, quantity: i.quantity })), replacesOrder: d.replacesOrder?.trim() || null };
     if (!hasDraft(ctx.orderHistory, draft)) {
       // journey retest R1-6 / R1-7: `recapToShow` — the platform sends this recap to the customer in their language (the
       // reply never replaces it — journey retest R4-3)
-      return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft, core }, recap, recapToShow: true, say: 'Nothing is ordered yet. The platform sends this recap to the customer right after your reply, as given (items with their catalogue names, quantities, prices, delivery mode and fee, total, name, phone, address) with the request to answer yes: write no recap of your own — "reply" only answers anything else the customer asked in this message, in one short sentence, or stays empty. Do not call create_order again in this turn: call it with the same values when the customer answers yes in their next message.' });
+      return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft, core }, recap, recapToShow: true, draftOrder, say: 'Nothing is ordered yet. The platform sends this recap to the customer right after your reply, as given (items with their catalogue names, quantities, prices, delivery mode and fee, total, name, phone, address) with the request to answer yes: write no recap of your own — "reply" only answers anything else the customer asked in this message, in one short sentence, or stays empty. Do not call create_order again in this turn: call it with the same values when the customer answers yes in their next message.' });
     }
     const said = confirmation(ctx.customerText ?? '');
     if (said === 'no') return fail({ ok: false, error: { code: 'CONFIRMATION_REFUSED', draft, core }, say: 'The customer did not confirm this recap: nothing is ordered. Ask what they want to change (or whether they still want to order).' });
-    if (said === 'unclear') return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft, core }, recap, say: 'The customer has not clearly confirmed this recap yet: nothing is ordered. Answer their message, then ask them to reply « oui » to confirm the order (or say what to change).' });
+    if (said === 'unclear') return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft, core }, recap, draftOrder, say: 'The customer has not clearly confirmed this recap yet: nothing is ordered. Answer their message, then ask them to reply « oui » to confirm the order (or say what to change).' });
     // 04 §21: `phoneConfirmed` counts only once the tool asked the customer to re-confirm this number
     if (d.phoneConfirmed && phoneCheckAsked(ctx.orderHistory, phone)) request.phoneConfirmed = true;
     return { ok: true, request, draft, core, ...(beyondStock.length ? { beyondStock } : {}) };
+  }
+
+  /**
+   * journey retest R8-1: the arguments of the order the pending server recap stands for, when the customer's message only says
+   * yes to it (`bareYes`) and the model's confirming call is incomplete (a required field absent) — else null (the call is
+   * judged as it is: a complete call keeps the J03-10 core match, a change of the customer gets a new recap). Never once that
+   * recap (or an order after it) was placed.
+   */
+  private pendingOrder(args: Record<string, unknown>, ctx: ToolRunContext): Record<string, unknown> | null {
+    if (ctx.customerText === undefined || !absentFields(args, ctx.agent).length) return null;
+    const latest = latestRecap(ctx.orderHistory);
+    if (!latest?.order || !bareYes(ctx.customerText, latest.shown)) return null;
+    if (orderedBefore(ctx.orderHistory, latest.draft, Date.now(), latest.core ?? undefined)) return null;
+    if ((ctx.orderHistory ?? []).some((h) => (h.name ?? 'create_order') === 'create_order' && (h.result as { ok?: unknown } | null)?.ok === true && h.at.getTime() > latest.at.getTime())) return null;
+    const o = latest.order;
+    return {
+      clientName: o.clientName,
+      clientPhone: o.clientPhone,
+      ...(o.secondPhone ? { secondPhone: o.secondPhone } : {}),
+      wilayaId: o.wilayaId,
+      ...(o.communeName ? { communeName: o.communeName } : {}),
+      ...(o.address ? { address: o.address } : {}),
+      isStopdesk: o.isStopdesk,
+      ...(o.stopdeskId ? { stopdeskId: o.stopdeskId } : {}),
+      ...(o.notes ? { notes: o.notes } : {}),
+      items: o.items.map((i) => ({ productId: i.productId, ...(i.variantId ? { variantId: i.variantId } : {}), quantity: i.quantity })),
+      ...(o.replacesOrder ? { replacesOrder: o.replacesOrder } : {}),
+      customerConfirmed: true,
+      ...(args.phoneConfirmed === true ? { phoneConfirmed: true } : {}),
+    };
+  }
+
+  /** journey retest R8-3: the variant ids that are no variant of the shop at all (a fake catalogue in tests: all of them). */
+  private async unknownVariantIds(ids: string[]): Promise<Set<string>> {
+    if (!ids.length) return new Set();
+    if (typeof this.catalogue.knownVariantIds !== 'function') return new Set(ids);
+    const known = await this.catalogue.knownVariantIds(ids);
+    return new Set(ids.filter((id) => !known.has(id)));
   }
 
   /** journey retest R2-4: the customer named this wilaya (or a commune of it) in the conversation, or ordered there before. */

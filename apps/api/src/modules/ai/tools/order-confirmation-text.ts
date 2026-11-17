@@ -321,7 +321,14 @@ const RECAP_TALK = /r[eé]?cap|r[ée]sum[ée]|summary|ملخص|voici\s+(?:votre|
 // recap — nothing is ordered yet, the sentence is never kept before the server recap (nor in a handoff answer)
 
 /** A sentence that asks to confirm the order or talks about the recap (both scripts, folded and as written). */
-const aboutRecap = (x: string) => [folded(x), x.toLowerCase()].some((v) => CONFIRM_ASK.test(v) || RECAP_TALK.test(v));
+const aboutRecap = (x: string) => [folded(x), x.toLowerCase()].some((v) => CONFIRM_ASK.test(v) || RECAP_TALK.test(v) || CONFIRM_QUESTION.test(v));
+/**
+ * journey retest R8-1 / R8-2 (17/11): a question asking to confirm the order, or to say « oui » again — « tu confirmes la
+ * commande ? », « Pouvez-vous répondre « oui » une nouvelle fois … ? », « confirmez-vous ? », « do you confirm? ».
+ */
+const CONFIRM_QUESTION = /(?<![\p{L}])(?:tu\s+confirmes?|vous\s+confirmez|confirmez[- ]vous|confirmes[- ]tu|do\s+you\s+confirm|t?confirmi\s*\??$)|r[eé]?pond\S*\s+(?:\S+\s+){0,3}?\W{0,3}(?:oui|ih|yes)\W{0,3}\s+(?:une\s+nouvelle\s+fois|encore|again|[aà]\s+nouveau)|(?:une\s+nouvelle\s+fois|encore\s+une\s+fois|again)\s+\W{0,3}(?:oui|ih|yes)/u;
+/** journey retest R8-1 / R8-2: a sentence that asks to confirm the order or talks about a recap (exported for the reply guard). */
+export const recapClaim = (sentence: string): boolean => aboutRecap(sentence);
 /**
  * journey retest R4-1 (17/11): a handoff answer never talks about a recap nor asks for a « oui » — no server recap goes with
  * it (F6 T3: « votre commande est bien récapitulée ci-dessus … Répondez oui pour la confirmer » with no recap above). Those
