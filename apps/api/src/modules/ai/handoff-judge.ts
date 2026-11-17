@@ -12,6 +12,7 @@ import { HANDOFF_REASONS } from '@djaber/shared';
 import { containsWord, foldText } from '../catalog/moderation-prescreen.service';
 import { isGreetingOnly } from '../messaging/greeting';
 import { UNCLEAR_STREAK_HANDOFF } from './ai.constants';
+import { confirmation } from './tools/order-confirmation';
 
 /** Set by the server (tool results, counters, safety): the model's word is not needed. */
 const SERVER_REASONS = new Set(['order_limits', 'risky_client', 'blocked_word', 'orders_unavailable', 'outside_window', 'ai_error', 'abuse_guard', 'credits_exhausted', 'quota_exceeded']);
@@ -146,6 +147,10 @@ export function fieldOnlyMessage(text: string | undefined, ordering: boolean): b
   const t = (text ?? '').trim();
   if (!t || t.length > 120) return false;
   if (/^[\s+()\d.\-/٠-٩]{9,20}$/.test(t)) return true;
-  if (!ordering || /[?؟!]/.test(t) || TEAM_WORDS.test(foldText(t))) return false;
+  if (/[?؟]/.test(t) || TEAM_WORDS.test(foldText(t))) return false;
+  // journey retest R1-5: a bare yes (« oui », « ih », « yes », « ايه », « oui c'est bon ») never asks for the team — handoff
+  // was asked on « oui », « yes », « ih » after a recap or an order
+  if (words(t).length <= 4 && confirmation(t) === 'yes') return true;
+  if (!ordering || /!/.test(t)) return false;
   return words(t).length <= 6;
 }

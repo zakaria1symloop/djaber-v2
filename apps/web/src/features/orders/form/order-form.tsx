@@ -559,8 +559,8 @@ export function NewOrderForm() {
         </FormAlert>
       ) : null}
 
-      <div className="sticky -bottom-6 z-20 -mx-4 -mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line-hairline bg-ink-base px-4 py-3 md:-mx-8 md:px-8" data-testid="form-footer">
-        <p className={cn('min-w-0 flex-1 ts-label-micro', dirty ? 'text-text-secondary' : 'text-text-muted')} aria-live="polite" data-testid="draft-note">
+      <div className="sticky -bottom-6 z-20 -mx-4 -mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line-hairline bg-ink-base px-4 py-3 md:-mx-8 md:px-8" data-testid="form-footer" data-sticky-footer>
+        <p className={cn('min-w-0 flex-1 basis-48 ts-label-micro', dirty ? 'text-text-secondary' : 'text-text-muted')} aria-live="polite" data-testid="draft-note">
           {saving ? t('common.saving') : dirty ? t('orderForm.footer.draftSaved') : t('orderForm.footer.idle')}
         </p>
         {saving ? (

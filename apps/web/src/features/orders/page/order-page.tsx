@@ -12,6 +12,7 @@ import { Link, useRouter } from '@/i18n/navigation';
 import { actionState } from '@/lib/actions';
 import { conflictOf } from '@/lib/conflict';
 import { useLeaveGuard } from '@/lib/forms';
+import { iso } from '@/lib/format-message';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
@@ -130,7 +131,8 @@ export function OrderPage({ id }: { id: string }) {
     <AppPage
       permission="orders.read"
       back={back}
-      title={`#${order.number}`}
+      // journey J14-7: the « # » stays before the number in Arabic (isolated, as the sale and purchase pages)
+      title={iso(`#${order.number}`)}
       description={subtitle}
       badges={
         <>
@@ -155,12 +157,13 @@ export function OrderPage({ id }: { id: string }) {
               {t('action.cancel')}
             </Button>
           ) : null}
-          {call.present ? (
+          {/* journey J14-8 d (J05-11): a read-only order (delivered, cancelled, returned) has no « Appeler & confirmer » */}
+          {call.present && !ro ? (
             <Button variant="primary" onClick={() => actions.run('confirm', order)} disabledReason={call.enabled ? undefined : call.reason} data-testid="call-confirm">
               {t('orders.page.callConfirm')}
             </Button>
           ) : null}
-          <ActionsMenu label={t('action.actions')} size="md" heading={`#${order.number} · ${t(`enum.Order.status.${order.status}`)}`} actions={actions.menu(order, { onPage: true })} />
+          <ActionsMenu label={t('action.actions')} size="md" heading={`${iso(`#${order.number}`)} · ${t(`enum.Order.status.${order.status}`)}`} actions={actions.menu(order, { onPage: true })} />
         </>
       }
     >

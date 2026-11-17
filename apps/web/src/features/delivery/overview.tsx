@@ -145,7 +145,7 @@ export function DeliveryOverviewPage() {
       cell: (r) => (
         <div className="min-w-0 whitespace-nowrap">
           <OrderNumber number={r.orderNumber} className="text-[14px] font-medium" />
-          <div className="ts-label-micro truncate text-text-muted">{[r.client.name, r.wilaya?.name].filter(Boolean).join(' · ')}</div>
+          <div className="ts-label-micro truncate !normal-case text-text-muted">{/* J14-8 e: a name keeps its case */}{[r.client.name, r.wilaya?.name].filter(Boolean).join(' · ')}</div>
         </div>
       ),
     },

@@ -11,7 +11,7 @@ import type { GdsPeriodKey } from './contracts';
 export const int = (s: string | number | null | undefined): number => {
   if (typeof s === 'number') return Number.isFinite(s) ? Math.trunc(s) : 0;
   // full-test 15/11: the text of a NumberInput (digits, maybe a leading « - ») — never digits glued from « 2,5 » or a lost sign
-  const n = integerOf(String(s ?? '').replace(/[\s  ]/g, '')) ?? 0;
+  const n = integerOf(String(s ?? '').replace(/[\s\u00a0\u202f]/g, '')) ?? 0;
   return Number.isFinite(n) ? n : 0;
 };
 

@@ -25,7 +25,7 @@ describe('AiRunService.turn — reply guard', () => {
   const setup = (toolResult: unknown = { ok: true }) => {
     const gateway = new FakeAiGateway();
     const routing = { call: async <T>(_c: unknown, fn: (m: RoutedModel, t: number) => Promise<T>) => ({ value: await fn(model, 20_000), model, usedFallback: false }) };
-    const tools = { defsFor: async () => [{ name: 'quote_delivery', description: '', parameters: {} }], forcedHandoff: () => null, execute: async () => toolResult } as unknown as ToolRegistry;
+    const tools = { defsFor: async () => [{ name: 'quote_delivery', description: '', parameters: {} }, { name: 'create_order', description: '', parameters: {} }], forcedHandoff: () => null, execute: async () => toolResult } as unknown as ToolRegistry;
     const svc = new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never);
     const req = (guard: GuardFacts | undefined, customerText = 'prix de la robe ?'): TurnRequest => ({
       runId: 'r1',

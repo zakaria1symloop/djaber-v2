@@ -289,7 +289,8 @@ export function PlaygroundComposer({ pg, placeholder, shortPlaceholder, media, d
           </button>
         </div>
       ) : null}
-      <div className="flex items-end gap-2 rounded-card border border-line-edge bg-ink-surface p-2">
+      {/* journey J14-8 g: the field keeps 10 rem (85 px at 390 px, its hint cut to « Écrire »); « Envoyer » wraps under it */}
+      <div className="flex flex-wrap items-end gap-2 rounded-card border border-line-edge bg-ink-surface p-2">
         {media ? (
           <>
             <IconButton size="sm" variant="ghost" label={t('agents.playground.photo')} disabled={off} onClick={() => imageRef.current?.click()}>
@@ -318,9 +319,9 @@ export function PlaygroundComposer({ pg, placeholder, shortPlaceholder, media, d
               submit();
             }
           }}
-          className="max-h-32 min-h-8 min-w-0 flex-1 resize-none bg-transparent px-1 py-1.5 text-[14px] placeholder:text-text-muted focus:outline-none disabled:opacity-50"
+          className="max-h-32 min-h-8 min-w-40 flex-1 resize-none bg-transparent px-1 py-1.5 text-[14px] placeholder:text-text-muted focus:outline-none disabled:opacity-50"
         />
-        <Button variant="primary" size="sm" onClick={submit} disabled={off || (!text.trim() && !attachment)} loading={pg.typing} data-testid="playground-send">
+        <Button variant="primary" size="sm" className="ms-auto" onClick={submit} disabled={off || (!text.trim() && !attachment)} loading={pg.typing} data-testid="playground-send">
           {t('action.send')}
         </Button>
       </div>

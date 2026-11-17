@@ -4,7 +4,7 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import * as React from 'react';
-import { useReturnFocus } from './overlays';
+import { isInnerEscape, useReturnFocus } from './overlays';
 import { Button, cn } from './primitives';
 
 export type SheetNav = { onPrev?: () => void; onNext?: () => void; position?: string; prevLabel: string; nextLabel: string };
@@ -61,6 +61,7 @@ export function SideSheet({
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/40" />
         <DialogPrimitive.Content
           onCloseAutoFocus={returnFocus}
+          onEscapeKeyDown={(e) => isInnerEscape(e) && e.preventDefault()}
           onKeyDown={onKeyDown}
           style={{ maxWidth: width }}
           className="fixed inset-y-0 end-0 z-50 flex w-full flex-col border-s border-line-edge bg-ink-surface shadow-2xl focus:outline-none"

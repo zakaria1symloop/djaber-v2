@@ -107,4 +107,9 @@ describe('full-test 15/11 STOCK-14 / STOCK-07: values inside sentences', () => {
   it('iso() wraps a value in invisible isolates', () => {
     expect(iso('#ACH-1008')).toBe(`${String.fromCharCode(0x2068)}#ACH-1008${String.fromCharCode(0x2069)}`);
   });
+  it('journey J14-7: « #{number} » of an Arabic sentence is isolated with its « # »; other languages unchanged', () => {
+    const msgs = { 'orders.confirm.title': 'تأكيد الطلب #{number}' };
+    expect(makeT('ar', msgs)('orders.confirm.title', { number: 'CMD-1001' })).toBe(`تأكيد الطلب ${iso('#CMD-1001')}`);
+    expect(makeT('fr', { k: 'Commande #{number}' })('k', { number: 'CMD-1001' })).toBe('Commande #CMD-1001');
+  });
 });

@@ -30,8 +30,11 @@ describe('stored text tokens', () => {
     const v = storedText('stored.cash.orderCod', { number: 'CMD-1008' });
     expect(renderStoredTextIn(v, 'fr')).toBe('Commande #CMD-1008 livrée (COD)');
     expect(renderStoredTextIn(v, 'en')).toBe('Order #CMD-1008 delivered (COD)');
-    expect(renderStoredTextIn(v, 'ar')).toContain('#CMD-1008');
+    // journey J14-7: the reference is isolated in Arabic, its « # » stays before it (never « CMD-1008# »)
+    const iso = (s: string) => `${String.fromCharCode(0x2068)}${s}${String.fromCharCode(0x2069)}`;
+    expect(renderStoredTextIn(v, 'ar')).toContain(iso('#CMD-1008'));
     expect(renderStoredTextIn(v, 'ar')).not.toMatch(/Commande|livrée/);
+    expect(renderStoredTextIn(storedText('stored.cash.sale', { number: 'VNT-1002' }), 'ar')).toBe(`البيع ${iso('#VNT-1002')}`);
   });
 
   it('an unknown key is left out, never shown raw', () => {

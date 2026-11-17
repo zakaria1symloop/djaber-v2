@@ -13,7 +13,7 @@ import { algiersDay } from '../../core/time/algiers';
 import { ExportService } from '../jobs/export.service';
 import { isForeignKey, isUnique, skuTaken, type Warning, type WithWarnings } from './catalog.util';
 import type { ProductsQuery } from './dto';
-import { computeMargins, MARGIN_PERIOD_DAYS, MARGIN_SOLD_STATUSES } from './margin.calculator';
+import { computeMargins, MARGIN_PERIOD_DAYS, MARGIN_SOLD_ORDER_STATUS, marginSince } from './margin.calculator';
 import { ModerationHookService, needsReview } from './moderation-hook.service';
 import { PlanLimitService } from './plan-limit.service';
 import { folderOf, IMAGE_FILE, isProcessed, THUMB_FILE, thumbUrlOf } from './product-image.util';
@@ -28,7 +28,6 @@ import { VariantService } from './variant.service';
 const DAY_MS = 24 * 3600 * 1000;
 /** MOD-01: a restored product is re-submitted when its last validation is older than 90 days. */
 const RESUBMIT_AFTER_MS = 90 * DAY_MS;
-const SOLD_STATUSES = MARGIN_SOLD_STATUSES;
 
 const belowCost = (price: number, cost: number | null | undefined): Warning[] =>
   cost !== null && cost !== undefined && price < cost ? [{ code: 'SELLING_BELOW_COST', field: 'price' }] : [];
@@ -98,11 +97,14 @@ export class ProductService implements OnModuleInit {
     return row;
   }
 
-  /** Units and revenue of the last `days` days: orders not cancelled / returned + completed counter sales. */
-  async salesStats(productId: string, days = MARGIN_PERIOD_DAYS) {
-    const since = new Date(Date.now() - days * DAY_MS);
+  /**
+   * Units and line amounts (« Ventes brutes ») of the 30-day period: delivered orders (deliveredAt) + completed counter
+   * sales (soldAt) — the definition of Ventes par produit (04 §4; journey 16/11 J14-10: NEW orders were counted as sold).
+   */
+  async salesStats(productId: string) {
+    const since = marginSince();
     const [orders, sales] = await Promise.all([
-      prisma.orderItem.aggregate({ where: { productId, order: { status: { in: [...SOLD_STATUSES] }, orderedAt: { gte: since } } }, _sum: { quantity: true, total: true } }),
+      prisma.orderItem.aggregate({ where: { productId, order: { status: MARGIN_SOLD_ORDER_STATUS, deliveredAt: { gte: since } } }, _sum: { quantity: true, total: true } }),
       prisma.saleItem.aggregate({ where: { productId, sale: { status: 'completed', soldAt: { gte: since } } }, _sum: { quantity: true, total: true } }),
     ]);
     return { units: (orders._sum.quantity ?? 0) + (sales._sum.quantity ?? 0), revenue: (orders._sum.total ?? 0) + (sales._sum.total ?? 0) };
@@ -115,13 +117,13 @@ export class ProductService implements OnModuleInit {
   private async withTrueMargins(items: ProductListItemView[]): Promise<ProductListItemView[]> {
     const ids = items.filter((i) => i.costPrice !== null).map((i) => i.id);
     if (!ids.length) return items;
-    const since = new Date(Date.now() - MARGIN_PERIOD_DAYS * DAY_MS);
+    const since = marginSince();
     const expenses = await prisma.productExpense.findMany({ where: { productId: { in: ids }, OR: [{ isPerUnit: true }, { date: { gte: since } }] }, select: { productId: true, amount: true, isPerUnit: true } });
     if (!expenses.length) return items;
     const withFixed = [...new Set(expenses.filter((e) => !e.isPerUnit).map((e) => e.productId))];
     const [orders, sales] = withFixed.length
       ? await Promise.all([
-          prisma.orderItem.groupBy({ by: ['productId'], where: { productId: { in: withFixed }, order: { status: { in: [...SOLD_STATUSES] }, orderedAt: { gte: since } } }, _sum: { quantity: true } }),
+          prisma.orderItem.groupBy({ by: ['productId'], where: { productId: { in: withFixed }, order: { status: MARGIN_SOLD_ORDER_STATUS, deliveredAt: { gte: since } } }, _sum: { quantity: true } }),
           prisma.saleItem.groupBy({ by: ['productId'], where: { productId: { in: withFixed }, sale: { status: 'completed', soldAt: { gte: since } } }, _sum: { quantity: true } }),
         ])
       : [[], []];
@@ -141,7 +143,7 @@ export class ProductService implements OnModuleInit {
    */
   async margins(productId: string, product?: { price: number; costPrice: number | null; hasVariants?: boolean }, variants?: { id: string; name: string; price: number; costPrice: number | null; isActive: boolean; deletedAt?: Date | null }[]) {
     const p = product ?? (await this.rowOrNotFound(productId));
-    const since = new Date(Date.now() - MARGIN_PERIOD_DAYS * DAY_MS);
+    const since = marginSince();
     const [expenses, sales30d] = await Promise.all([
       prisma.productExpense.findMany({ where: { productId, OR: [{ isPerUnit: true }, { date: { gte: since } }] }, select: { amount: true, isPerUnit: true } }),
       this.salesStats(productId),

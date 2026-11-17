@@ -101,6 +101,8 @@ export const testOrder = async (workspaceId: string, product: { id: string; name
       subtotal: quantity * unitPrice,
       total: quantity * unitPrice,
       status: (o.status ?? 'confirmed') as never,
+      // a delivered order is a sale from its delivery (04 §4 named figures, journey J14-10)
+      deliveredAt: o.status === 'delivered' ? new Date() : null,
     },
   });
   await db.orderItem.create({ data: { orderId: order.id, productId: product.id, productName: product.name, unitPrice, quantity, total: quantity * unitPrice } });

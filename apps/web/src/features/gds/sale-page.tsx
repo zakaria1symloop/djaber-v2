@@ -105,7 +105,7 @@ function SaleDetail({ id }: { id: string }) {
                 <span className="text-text-secondary">{[s.customerName ?? t('sales.walkIn'), s.customerPhone ? formatPhoneDz(s.customerPhone) : null].filter(Boolean).join(' · ')}</span>
               ),
             },
-            { key: 'items', label: t('common.items'), value: [s.items.map((i) => `${iso(`${i.productName}${i.variantName ? ` ${i.variantName}` : ''}`)} ×${i.quantity}`).join(' · '), s.discount ? `${t('common.discount').toLowerCase()} ${formatMoney(s.discount)}` : null].filter(Boolean).join(' · ') },
+            { key: 'items', label: t('common.items'), value: [s.items.map((i) => iso(`${i.productName}${i.variantName ? ` ${i.variantName}` : ''} ×${i.quantity}`)).join(' · '), s.discount ? `${t('common.discount').toLowerCase()} ${formatMoney(s.discount)}` : null].filter(Boolean).join(' · ') },
             {
               key: 'payments',
               label: t('sales.page.payments'),

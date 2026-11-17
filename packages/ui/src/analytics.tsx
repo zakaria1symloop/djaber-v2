@@ -8,6 +8,7 @@ import { ChevronDown, ChevronRight, Star } from 'lucide-react';
 import * as React from 'react';
 import { DateInput } from './inputs';
 import { Button, Card, cn } from './primitives';
+import { onRadioGroupKeyDown, radioTabIndex } from './radio-keys';
 import { choroplethStep, wilayaGeometry } from './wilaya-geo';
 
 /* ---------- tones of the series (design tokens; validated CVD-safe pairs, see assumptions-log M8 web) ---------- */
@@ -823,7 +824,7 @@ export function PeriodPresets({
   return (
     <div className={cn('flex flex-wrap gap-2', className)} data-testid="period-presets">
       <div role="radiogroup" aria-label={label} className="contents">
-        {options.map((o) => {
+        {options.map((o, i) => {
           const on = o.value === value;
           return (
             <button
@@ -832,6 +833,9 @@ export function PeriodPresets({
               role="radio"
               aria-checked={on}
               data-preset={o.value}
+              // journey J14-8 c: one Tab stop, the arrows move (Space / Enter choose: each choice reloads the figures)
+              tabIndex={radioTabIndex(i, options.findIndex((x) => x.value === value))}
+              onKeyDown={(e) => onRadioGroupKeyDown(e, { select: false })}
               onClick={() => onChange(o.value)}
               className={presetClass(on)}
             >

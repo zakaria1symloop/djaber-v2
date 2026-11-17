@@ -444,7 +444,7 @@ Errors: `INVENTORY_IN_PROGRESS`, `INVENTORY_VARIANCE_NOTE_REQUIRED`, `INVENTORY_
 
 ## 32. Product expenses — `EXP` (P2, advanced; details of GDS-09) `[FIG DLG GDS II "Dépense produit", CAT-09]`
 
-EXP-01 dialog from the product page "Prix & marge": category marketing / livraison / emballage / douane / stockage / autre, amount, mode "par unité vendue" or "fixe (répartie sur les ventes de la période)", note; live preview "Nouvelle marge estimée 46,7 % → 44,0 %". EXP-02 true cost = weighted average cost (updated at purchase receipt only) + per-unit expenses + fixed expenses / units sold in period; margin % = (price − true cost) / price (V1 formula). EXP-03 simple mode hides the block (price + stock only). EXP-04 bulk price change previews lines falling below cost with the non-blocking warning `SELLING_BELOW_COST`.
+EXP-01 dialog from the product page "Prix & marge": category marketing / livraison / emballage / douane / stockage / autre, amount, mode "par unité vendue" or "fixe (répartie sur les ventes de la période)", note; live preview "Nouvelle marge estimée 46,7 % → 44,0 %". EXP-02 true cost = weighted average cost (updated at purchase receipt only) + per-unit expenses + fixed expenses / units sold in period (units sold = delivered orders + completed counter sales of the reports' « 30 j » period, 04 §4 — journey J14-10); margin % = (price − true cost) / price (V1 formula). EXP-03 simple mode hides the block (price + stock only). EXP-04 bulk price change previews lines falling below cost with the non-blocking warning `SELLING_BELOW_COST`.
 
 ## 33. Cash day closing — `CSH` (P2, advanced; extends GDS-08) `[v2 D56][FIG GDS-09, DLG GDS II]`
 

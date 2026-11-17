@@ -8,7 +8,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createGroq } from '@ai-sdk/groq';
 import { createOpenAI } from '@ai-sdk/openai';
-import { APICallError, RetryError, experimental_transcribe as transcribeAudio, generateText, jsonSchema, tool, type CoreMessage, type LanguageModel, type ToolSet } from 'ai';
+import { APICallError, InvalidToolArgumentsError, NoSuchToolError, RetryError, experimental_transcribe as transcribeAudio, generateText, jsonSchema, tool, type CoreMessage, type LanguageModel, type ToolSet } from 'ai';
 import {
   AiProviderError,
   type AiGateway,
@@ -127,6 +127,28 @@ const rejectsTemperature = (error: unknown): boolean => {
   const last = RetryError.isInstance(error) ? error.lastError : error;
   return APICallError.isInstance(last) && last.statusCode === 400 && /temperature/i.test(`${last.message} ${last.responseBody ?? ''}`);
 };
+/**
+ * journey retest R1-1 (17/11): what an SDK error that is not an HTTP answer was (« provider_error » alone hid an
+ * `AI_NoSuchToolError` — the model called the withheld handoff_to_human — for 5 turns of 59). The SDK's error name only,
+ * never its message (it quotes the request).
+ */
+const SDK_ERRORS: Record<string, string> = {
+  AI_NoSuchToolError: 'sdk:no_such_tool',
+  AI_InvalidToolArgumentsError: 'sdk:invalid_tool_args',
+  AI_ToolCallRepairError: 'sdk:tool_call_repair',
+  AI_InvalidPromptError: 'sdk:invalid_prompt',
+  AI_UnsupportedFunctionalityError: 'sdk:unsupported',
+  AI_InvalidArgumentError: 'sdk:invalid_argument',
+  AI_JSONParseError: 'sdk:response_parse',
+  AI_TypeValidationError: 'sdk:response_parse',
+  AI_InvalidResponseDataError: 'sdk:response_parse',
+  AI_NoContentGeneratedError: 'sdk:no_content',
+};
+export const sdkErrorDetail = (e: unknown): string => {
+  const name = errorName(e);
+  return SDK_ERRORS[name] ?? `sdk:${(name || 'error').replace(/^AI_/, '').replace(/[^\w]/g, '').slice(0, 40) || 'error'}`;
+};
+
 const toProviderError = (provider: AiProviderName, error: unknown, aborted: boolean): AiProviderError => {
   if (error instanceof AiProviderError) return error;
   const last = RetryError.isInstance(error) ? error.lastError : error;
@@ -141,10 +163,24 @@ const toProviderError = (provider: AiProviderName, error: unknown, aborted: bool
     try {
       type = (JSON.parse(last.responseBody ?? '') as { error?: { type?: unknown } }).error?.type;
     } catch {}
-    const detail = [typeof type === 'string' ? type.slice(0, 40) : null, params.length ? `params: ${params.join(', ')}` : null].filter(Boolean).join(' · ') || undefined;
+    // no HTTP status: the request never got an answer (connection refused / reset, DNS)
+    const detail = [typeof type === 'string' ? type.slice(0, 40) : null, params.length ? `params: ${params.join(', ')}` : null, status === undefined ? 'network' : null].filter(Boolean).join(' · ') || undefined;
     return new AiProviderError('provider_error', provider, `${provider} ${status ?? 'provider_error'}`, status, detail);
   }
-  return new AiProviderError('provider_error', provider, `${provider} provider_error`);
+  // the connection failed before any answer (`fetch failed`, ECONNRESET, DNS): the provider's side
+  const code = (e: unknown) => String((e as { code?: unknown } | null)?.code ?? '');
+  const cause = (last as { cause?: unknown } | null)?.cause;
+  if (last instanceof TypeError || /^(E[A-Z]{3,}|UND_ERR)/.test(code(last)) || /^(E[A-Z]{3,}|UND_ERR)/.test(code(cause))) return new AiProviderError('provider_error', provider, `${provider} provider_error`, undefined, 'network');
+  // not an answer of the provider: the SDK refused the request or could not read the step (never the provider's health)
+  return new AiProviderError('provider_error', provider, `${provider} provider_error`, undefined, sdkErrorDetail(last), true);
+};
+const parseArgs = (raw: string): Record<string, unknown> => {
+  try {
+    const v = JSON.parse(raw || '{}') as unknown;
+    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
 };
 
 type Row = Record<string, unknown>;
@@ -212,6 +248,8 @@ export class LiveAiGateway implements AiGateway {
     const provider = req.model.provider;
     const apiKey = requireKey(req.model);
     const signal = AbortSignal.timeout(req.timeoutMs);
+    // journey retest R1-1: the calls the SDK cannot accept (a tool this step does not offer, arguments that are not JSON)
+    const rejected: AiGenerateResult['rejectedToolCalls'] = [];
     try {
       const tools = toTools(req.tools);
       // full-test 15/11 proposal 13 (18 255 input tokens for one turn of a 10-product shop): Anthropic caches the stable
@@ -227,7 +265,16 @@ export class LiveAiGateway implements AiGateway {
           model: this.languageModel(req.model, apiKey, dropTemperature),
           ...(cached ? {} : { system: req.system }),
           messages: [...systemMessages, ...toMessages(tools ? req.messages : flattenTools(req.messages))],
-          ...(tools ? { tools } : {}),
+          ...(tools
+            ? {
+                tools,
+                // nothing is repaired: the call is kept aside (the SDK then throws) and handed back as `rejectedToolCalls`
+                experimental_repairToolCall: async ({ toolCall }) => {
+                  rejected.push({ id: toolCall.toolCallId, name: toolCall.toolName, args: parseArgs(toolCall.args) });
+                  return null;
+                },
+              }
+            : {}),
           ...(req.temperature !== undefined && !dropTemperature ? { temperature: req.temperature } : {}),
           ...(req.maxTokens !== undefined ? { maxTokens: req.maxTokens } : {}),
           maxSteps: 1,
@@ -248,6 +295,11 @@ export class LiveAiGateway implements AiGateway {
         finishReason: res.finishReason,
       };
     } catch (e) {
+      // journey retest R1-1: a step whose only fault is a call to a tool not offered (or unreadable arguments) is not a
+      // failure: its calls come back as `rejectedToolCalls` (the step's tokens are unknown here: counted 0)
+      if (rejected.length && (NoSuchToolError.isInstance(e) || InvalidToolArgumentsError.isInstance(e))) {
+        return { text: '', toolCalls: [], rejectedToolCalls: [...rejected], usage: { inputTokens: 0, outputTokens: 0 }, finishReason: 'tool-calls' };
+      }
       throw toProviderError(provider, e, signal.aborted);
     }
   }

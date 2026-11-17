@@ -378,12 +378,27 @@ describe('failure classes (04 §6)', () => {
     const error = await failure(gateway.generate(request('openai', 'gpt-4o-mini')));
     expect(error).toMatchObject({ kind: 'provider_error', provider: 'openai', message: 'openai provider_error' });
     expect(error.status).toBeUndefined();
+    // journey retest R1-1: the label says what it was (never a bare « provider_error »); it is the provider's side
+    expect(error.detail).toBe('network');
+    expect(error.local).toBe(false);
   });
+
+  it('journey retest R1-1: a tool_use for a tool the step did not declare is handed back as rejectedToolCalls — not an error', async () => {
+    expectHost('api.anthropic.com').reply({
+      json: { id: 'msg_r1', type: 'message', role: 'assistant', model: 'claude-haiku-5-5', content: [{ type: 'tool_use', id: 'toolu_r1', name: 'handoff_to_human', input: { reason: 'other', evidence: 'Boufarik' } }], stop_reason: 'tool_use', stop_sequence: null, usage: { input_tokens: 900, output_tokens: 30 } },
+    });
+    const res = await gateway.generate(request('anthropic', 'claude-haiku-5-5', { tools: [SEARCH_TOOL] }));
+    expect(res).toEqual({ text: '', toolCalls: [], rejectedToolCalls: [{ id: 'toolu_r1', name: 'handoff_to_human', args: { reason: 'other', evidence: 'Boufarik' } }], usage: { inputTokens: 0, outputTokens: 0 }, finishReason: 'tool-calls' });
+    expect(net.calls).toHaveLength(1);
+  });
+
 
   it('an unparsable 200 body ⇒ provider_error', async () => {
     expectHost('api.openai.com').reply({ json: { unexpected: true } });
     const error = await failure(gateway.generate(request('openai', 'gpt-4o-mini')));
     expect(error.kind).toBe('provider_error');
+    // journey retest R1-1: never a bare class — the HTTP status or what the SDK refused
+    expect(error.status !== undefined || /^sdk:/.test(error.detail ?? '')).toBe(true);
   });
 
   it('no answer before `timeoutMs` ⇒ timeout', async () => {

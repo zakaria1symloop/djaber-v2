@@ -19,6 +19,7 @@ import {
   Field,
   FilterChips,
   FilterDropdown,
+  focusSoon,
   FormAlert,
   Input,
   JobBanner,
@@ -679,15 +680,16 @@ export function RuleDialog({ rule, onClose }: { rule: CrossSellRule | 'new' | nu
   const picked = (p: Pick1, set: (v: Pick1) => void, id: string, disabled: boolean) =>
     p ? (
       <div className="flex items-center gap-2 rounded-card border border-line-edge px-3 py-2 text-[13px]" data-testid={`${id}-picked`}>
-        <span className="min-w-0 flex-1 truncate">{p.name}</span>
+        <span className="min-w-0 flex-1 truncate [text-align:match-parent]" dir="auto">{p.name}</span>
         {!disabled ? (
-          <button type="button" className="ts-label-meta text-text-muted hover:text-text-primary" onClick={() => set(null)}>
+          // journey J14-3: the focus follows the field that replaces the one it was on (search ⇄ picked card)
+          <button type="button" className="ts-label-meta text-text-muted hover:text-text-primary" onClick={() => (set(null), focusSoon(`#${id}`))}>
             {t('action.remove')}
           </button>
         ) : null}
       </div>
     ) : (
-      <ProductPicker id={id} onPick={(x: PickedProduct) => set({ id: x.id, name: x.name })} placeholder={t('recos.rule.search')} />
+      <ProductPicker id={id} onPick={(x: PickedProduct) => (set({ id: x.id, name: x.name }), focusSoon(`[data-testid="${id}-picked"] button`))} placeholder={t('recos.rule.search')} />
     );
   const guard = useCloseGuard(typed.dirty || (!editing && (!!product || !!recommended)), t('recos.rule.title'), onClose);
   return (

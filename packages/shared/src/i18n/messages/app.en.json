@@ -1952,7 +1952,7 @@
  "cash.close.note": "Note (required when there is a gap)",
  "cash.close.noteCorrection": "Creates a CORRECTION row {amount} · locks the day",
  "cash.close.noteLock": "Locks the day: no more additions or changes",
- "cash.close.notePlaceholder": "Too much change given, client #VTE-0087",
+ "cash.close.notePlaceholder": "Too much change given, client #VNT-1087",
  "cash.close.pickDay": "Choose a single day to close it.",
  "cash.close.submit": "Close",
  "cash.close.theoretical": "Theoretical balance (cash)",

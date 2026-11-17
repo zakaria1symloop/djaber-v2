@@ -3,7 +3,7 @@
 // product / variant with price, quantity, stock hint ("(stock 1)", "⚠ Dernière unité de cette variante") — the stock is
 // checked again by the server at save (`ORDER_INSUFFICIENT_STOCK` on the line), the variant is required (VARIANT_REQUIRED).
 import { formatMoney, formatNumber } from '@djaber/shared';
-import { cn, Ltr, MoneyInput, OrderFormCard, OrderLineRow, PickerSearch, QtyStepper, Select } from '@djaber/ui';
+import { cn, focusSoon, Ltr, MoneyInput, OrderFormCard, OrderLineRow, PickerSearch, QtyStepper, Select, useComboboxList } from '@djaber/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { catalogKeys } from '@/features/catalog/api';
@@ -53,14 +53,25 @@ export function ItemsSection({ lines, onChange, errors, locked, priceLocked = fa
   const qc = useQueryClient();
   const [q, setQ] = useState('');
   const [focused, setFocused] = useState(false);
+  // journeys J14-2 / J14-3: closed after a pick / Esc while the focus stays in the search (typing, ↓ or a click open it again)
+  const [dismissed, setDismissed] = useState(false);
   const [adding, setAdding] = useState(false);
-  const open = (focused || q.trim().length > 0) && !locked;
+  const open = (focused || q.trim().length > 0) && !dismissed && !locked;
   const results = useProductSearch(q, open);
   const rows = (results.data?.rows ?? []).filter((p) => !p.archived);
+  const list = useComboboxList({
+    count: rows.length,
+    open,
+    onSelect: (i) => void add(rows[i]!),
+    onOpen: () => setDismissed(false),
+    onClose: () => (setQ(''), setDismissed(true)),
+    isDisabled: () => adding,
+  });
 
-  const add = async (p: ProductListItem) => {
+  async function add(p: ProductListItem) {
     setQ('');
-    setFocused(false);
+    // the focus stays in the search for the next product; the list closes
+    setDismissed(true);
     // the same simple product again adds one unit to its line
     const same = !p.hasVariants ? lines.findIndex((l) => l.productId === p.id) : -1;
     if (same >= 0) return onChange(lines.map((l, i) => (i === same ? { ...l, quantity: l.quantity + 1 } : l)));
@@ -78,7 +89,7 @@ export function ItemsSection({ lines, onChange, errors, locked, priceLocked = fa
     } finally {
       setAdding(false);
     }
-  };
+  }
   const patch = (i: number, next: Partial<FormLine>) => onChange(lines.map((l, j) => (j === i ? { ...l, ...next } : l)));
   const err = (k: keyof FormErrors) => {
     const e = errors[k];
@@ -101,33 +112,37 @@ export function ItemsSection({ lines, onChange, errors, locked, priceLocked = fa
 
   return (
     <OrderFormCard index={2} title={t('orderForm.items.title')} badge={t('orderForm.items.badge')} data-section="items">
-      <div className="flex flex-col gap-2" onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setFocused(false)}>
+      <div className="flex flex-col gap-2" onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && (setFocused(false), setDismissed(false))}>
         <div onFocus={() => setFocused(true)}>
           <PickerSearch
             id="product-search"
             value={q}
-            onChange={setQ}
+            onChange={(v) => (setQ(v), setDismissed(false))}
+            onClick={() => setDismissed(false)}
             placeholder={t('orderForm.items.search')}
             label={t('orderForm.items.search')}
             active={open}
             disabled={locked}
             invalid={!!errors.lines}
-            onKeyDown={(e) => e.key === 'Escape' && (setQ(''), setFocused(false))}
+            combobox={list.comboboxProps}
+            onKeyDown={list.onKeyDown}
           />
         </div>
         {open ? (
           <ul
+            id={list.listId}
+            role="listbox"
             aria-label={t('orderForm.items.results')}
             className="max-h-72 divide-y divide-line-hairline overflow-y-auto rounded-card border border-line-edge bg-ink-surface"
             data-testid="product-results"
           >
-            {results.isPending ? <li className="px-3 py-2.5 text-[13px] text-text-muted">{t('common.loading')}</li> : null}
-            {!results.isPending && rows.length === 0 ? <li className="px-3 py-2.5 text-[13px] text-text-muted">{t('orderForm.items.noResults')}</li> : null}
-            {rows.map((p) => (
-              <li key={p.id}>
-                <button type="button" onClick={() => void add(p)} disabled={adding} className="flex w-full items-center gap-3 px-3 py-2 text-start hover:bg-ink-raised disabled:opacity-50">
+            {results.isPending ? <li role="option" aria-disabled="true" aria-selected={false} className="px-3 py-2.5 text-[13px] text-text-muted">{t('common.loading')}</li> : null}
+            {!results.isPending && rows.length === 0 ? <li role="option" aria-disabled="true" aria-selected={false} className="px-3 py-2.5 text-[13px] text-text-muted">{t('orderForm.items.noResults')}</li> : null}
+            {rows.map((p, i) => (
+              <li key={p.id} role="none">
+                <button type="button" {...list.optionProps(i)} onClick={() => void add(p)} disabled={adding} className="flex w-full items-center gap-3 px-3 py-2 text-start hover:bg-ink-raised aria-selected:bg-ink-raised disabled:opacity-50">
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-medium">{p.name}</span>
+                    <span className="block truncate text-[13px] font-medium [text-align:match-parent]" dir="auto">{p.name}</span>
                     <span className="block truncate ts-label-micro text-text-muted">
                       <Ltr>{p.sku}</Ltr>
                       {p.hasVariants
@@ -162,7 +177,7 @@ export function ItemsSection({ lines, onChange, errors, locked, priceLocked = fa
                 name={l.productName}
                 imageUrl={l.imageUrl}
                 removeLabel={t('orderForm.items.remove', { name: l.productName })}
-                onRemove={locked ? undefined : () => onChange(lines.filter((_, j) => j !== i))}
+                onRemove={locked ? undefined : () => (onChange(lines.filter((_, j) => j !== i)), focusSoon('#product-search'))}
                 detail={
                   <>
                     {l.hasVariants ? (

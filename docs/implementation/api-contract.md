@@ -294,7 +294,7 @@ type ProductListItemDto = {
 type ProductDto = ProductListItemDto & {
   description: string | null; weightGrams: number | null; keywords: string[]; images: { id: string; url: string; width: number; height: number; isPrimary: boolean; altText: string | null; moderationFlag: string | null }[];
   variants: VariantDto[]; stockDetail: { total: number | null; reserved: number; availableForAi: number; lastInventoryAt: string | null }; // `stock` stays the number of ProductListItemDto
-  pricing: { weightedCost: Money | null; expensesPerUnit: Money; trueCost: Money | null; marginDzd: Money | null; marginPct: number | null; sales30d: { units: number; revenue: Money } };
+  pricing: { weightedCost: Money | null; expensesPerUnit: Money; trueCost: Money | null; marginDzd: Money | null; marginPct: number | null; sales30d: { units: number; revenue: Money } }; // sales30d = delivered orders (deliveredAt) + completed counter sales (soldAt), reports' « 30 j » period (04 §4, J14-10)
   agents: AgentRef[]; mentions30d: { conversations: number; orders: number }; moderationDetail: ModerationDetailDto | null; version: number;
 };
 type VariantDto = { id: string; name: string; sku: string | null; attributes: Record<string, string>; price: Money; costPrice: Money | null; stock: number; minStock: number; isActive: boolean; stockState: 'ok'|'low'|'out' };

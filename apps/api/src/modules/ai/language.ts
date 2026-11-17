@@ -4,7 +4,9 @@ import type { AppLocale } from '@djaber/shared';
 
 export type AiLanguage = 'ar' | 'arabizi' | 'fr' | 'en' | 'mixed';
 
-const ARABIZI_WORDS = ['wach', 'wesh', 'rani', 'bghit', 'kayen', 'kayn', 'chhal', 'ch7al', 'bch7al', 'salam', 'slm', 'sahit', 'sa7it', 'nheb', 'n7eb', 'habit', '7abit', 'khoya', 'kho', 'chwiya', 'bezaf', 'bzaf', 'ndir', 'tawsil', 'win', 'wino', 'kifach', 'kifech', '3andkom', '3andi', 'machi', 'wela', 'wlh', 'saha', 'mlih', 'n3am', 'ih', 'makach', 'kach', 'nchri', 'ncommandi', 'dzair'];
+const ARABIZI_WORDS = ['wach', 'wesh', 'rani', 'bghit', 'kayen', 'kayn', 'chhal', 'ch7al', 'bch7al', 'salam', 'slm', 'sahit', 'sa7it', 'nheb', 'n7eb', 'habit', '7abit', 'khoya', 'kho', 'chwiya', 'bezaf', 'bzaf', 'ndir', 'tawsil', 'win', 'wino', 'kifach', 'kifech', '3andkom', '3andi', 'machi', 'wela', 'wlh', 'saha', 'mlih', 'n3am', 'ih', 'makach', 'kach', 'nchri', 'ncommandi', 'dzair',
+  // journey retest R1-3 (17/11): « nheb nechri 2 tapis de prière » read as French (« de », « prière »), the arabizi customer then answered in French
+  'nechri', 'nachri', 'nechriw', 'zoudj', 'zouj', 'jouj', 'wahed', 'wahda', 'tlata', 'tleta', 'smiti', 'smitek', 'goulili', 'goulli', 'gouli', 'rahi', 'raho', 'wla', 'iyeh', 'lkamla', 'dork', 'dorka', 'bessah', 'labas', 'nchallah', 'inchallah', 'khlas', 'sahbi', 'nta', 'nti', 'ghir', 'nchouf', 'bach', 'bech', 'mazal', 'mazel', 'kayna', 'makanch', 'mkach'];
 // journey 16/11 J04-2: « Bonsoir » (and the short forms « bsr », « bjr », « slt ») had no French word, so it was read as English
 const FRENCH_WORDS = ['le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'je', 'vous', 'nous', 'est', 'et', 'pour', 'avec', 'bonjour', 'bonsoir', 'bsr', 'bjr', 'slt', 'coucou', 'salut', 'merci', 'stp', 'votre', 'vos', 'mes', 'il', 'elle', "c'est", "j'ai", 'aimerais', "d'accord", 'quand', 'comment', 'pourquoi', 'aussi', 'bien', 'bonne', 'madame', 'monsieur', 'livrer', 'peux', 'pouvez', 'voulez', 'prix', 'combien', 'livraison', 'commande', 'commander', 'oui', 'non', 'svp', 'avez', 'voudrais', 'veux', 'quel', 'quelle', 'où', 'ou', 'ma', 'mon', 'ça', 'cette', 'ce', 'en', 'au', 'sur', 'pas', 'que', 'qui', 'dispo', 'disponible', 'taille', 'couleur', 'acheter', 'annuler', 'remboursement'];
 const ENGLISH_WORDS = ['the', 'is', 'are', 'you', 'do', 'have', 'how', 'much', 'price', 'hello', 'hi', 'hey', 'good', 'evening', 'morning', 'please', 'thanks', 'thank', 'order', 'delivery', 'want', 'need', 'what', 'where', 'my', 'your', 'this', 'that', 'and', 'for', 'with', 'to', 'of', 'it', 'i', "i'm", 'am', 'would', 'like', 'can', 'yes', 'no', 'buy', 'size', 'color', 'available', 'refund', 'cancel'];
@@ -42,6 +44,9 @@ export const detectLanguage = (text: string | null | undefined, previous?: AiLan
     if (FRENCH_WORDS.includes(x) || /[àâçéèêëîïôùûü]/.test(x)) fr += 1;
     if (ENGLISH_WORDS.includes(x)) en += 1;
   }
+  // journey retest R1-3: in an arabizi conversation, a message with a darija word stays arabizi whatever French nouns it
+  // carries (« nheb nechri 2 tapis de prière », « cite 20 aout wla stop desk ? »)
+  if (previous === 'arabizi' && arabizi >= 1) return 'arabizi';
   // one clear darija word carries a short sentence ("chhal la robe ?"): Algerian customers mix French nouns into darija
   const verdict: AiLanguage | null = arabizi >= 2 || (arabizi >= 1 && arabizi >= fr && arabizi >= en) ? 'arabizi' : fr > en ? 'fr' : en > fr ? 'en' : fr > 0 ? 'fr' : null;
   if (verdict) {
@@ -147,16 +152,41 @@ export const languageSwitched = (customer: AiLanguage, reply: string): boolean =
 /**
  * Moroccan (and Tunisian) darija words an Algerian shop never writes (« chno », « dyal », « walakin », « daba »…; journey
  * 16/11 J04-3: « bghiti », « chi 7aja », « ma kaynch », « ملي », « فماش », « برشا » from the J04 transcripts; J03 AI-CHAT-04
- * retest: « صيفطلي » / « sifetli », « send me »). « walou » and
+ * retest: « صيفطلي » / « sifetli », « send me »; retest R1-4 17/11: « chi hadja », « ma kaynach »). « walou » and
  * « kayen » are Algerian too: never flagged.
  */
 export const MOROCCAN_WORDS =
-  /(?<![\p{L}\p{N}_])(chno|chnou|chnu|chnowa|chnoua|dyal|dyalek|dyali|dyalna|dyalo|dyalha|walakin|nqdar|ndirolek|daba|bghiti|bghit|bghina|tbghi|nbghi|kanbghi|chi|kaynch|makaynch|wakha|barcha|barsha|famma|mafamach|mafamech|tawwa|sifet|sifetli|nsifet|nsifetlek|شنو|شنوة|ديال|ديالك|ديالي|دابا|والاكين|بغيت|بغيتي|تبغي|نبغي|كنبغي|ملي|فماش|برشا|واخا|توة|شي حاجة|صيفط|صيفطلي|صيفطلك|نصيفط|نصيفطلك|نصيفطو)(?![\p{L}\p{N}_])/iu;
+  /(?<![\p{L}\p{N}_])(chno|chnou|chnu|chnowa|chnoua|dyal|dyalek|dyali|dyalna|dyalo|dyalha|walakin|nqdar|ndirolek|daba|bghiti|bghit|bghina|tbghi|nbghi|kanbghi|chi|kaynch|makaynch|kaynach|makaynach|kaynash|makaynash|wakha|barcha|barsha|famma|mafamach|mafamech|tawwa|sifet|sifetli|nsifet|nsifetlek|شنو|شنوة|ديال|ديالك|ديالي|دابا|والاكين|بغيت|بغيتي|تبغي|نبغي|كنبغي|ملي|فماش|برشا|واخا|توة|شي حاجة|صيفط|صيفطلي|صيفطلك|نصيفط|نصيفطلك|نصيفطو)(?![\p{L}\p{N}_])/iu;
 /**
  * journey 16/11 J04-3: « chhal / ch7al / شحال » means « how much / how many » — never « what » (« Ch7al smitek ? » = « how
  * much is your name? », « Ch7al numéro », « Ch7al wilaya »).
  */
 export const WRONG_DARIJA = /(?<![\p{L}\p{N}_])(?:b?ch7al|b?chhal|chehal|chahal|شحال|بشحال)\s+(?:smitek|smiytek|smiyetek|esmek|ismek|ism|numéro|numero|num|wilaya|adresse|l'adresse|ladresse|اسمك|رقم|الرقم|الولاية|ولاية|العنوان)(?![\p{L}\p{N}_])/iu;
+/**
+ * journey retest R1-4 (17/11): the Algerian word for each Moroccan / Tunisian one — the server's last word when the
+ * corrective turn of the reply guard kept them (« Wach t7ebb ta3raf 3la chi hadja ? » was sent as is). Longest forms first.
+ */
+const ALGERIAN_FOR: [RegExp, string][] = (
+  [
+    ['ma kaynach', 'makach'], ['ma kaynash', 'makach'], ['ma kaynch', 'makach'], ['makaynach', 'makach'], ['makaynash', 'makach'], ['makaynch', 'makach'], ['kaynach', 'makach'], ['kaynash', 'makach'], ['kaynch', 'makach'],
+    ['chi hadja', 'hadja'], ['chi 7aja', 'hadja'], ['chi haja', 'hadja'], ['chi', ''],
+    ['chnowa', 'wach'], ['chnoua', 'wach'], ['chnou', 'wach'], ['chnu', 'wach'], ['chno', 'wach'],
+    ['dyalek', 'ta3ek'], ['dyali', 'ta3i'], ['dyalna', 'ta3na'], ['dyalo', 'ta3o'], ['dyalha', 'ta3ha'], ['dyal', 'ta3'],
+    ['walakin', 'bessah'], ['nqdar', 'nqder'], ['ndirolek', 'ndirlek'], ['daba', 'dork'],
+    ['kanbghi', 'nheb'], ['nbghi', 'nheb'], ['tbghi', 't7ebb'], ['bghiti', 't7ebb'], ['bghina', 'n7ebbou'], ['bghit', 'nheb'],
+    ['wakha', 'mlih'], ['barcha', 'bezzaf'], ['barsha', 'bezzaf'], ['mafamach', 'makach'], ['mafamech', 'makach'], ['famma', 'kayen'], ['tawwa', 'dork'],
+    ['nsifetlek', 'nab3atlek'], ['sifetli', 'ab3atli'], ['nsifet', 'nab3at'], ['sifet', 'ab3at'],
+    ['شي حاجة', 'حاجة'], ['شنوة', 'واش'], ['شنو', 'واش'], ['ديالك', 'تاعك'], ['ديالي', 'تاعي'], ['ديال', 'تاع'], ['دابا', 'درك'], ['والاكين', 'بصح'],
+    ['بغيتي', 'تحب'], ['بغيت', 'حبيت'], ['تبغي', 'تحب'], ['كنبغي', 'نحب'], ['نبغي', 'نحب'], ['ملي', 'كي'], ['فماش', 'ماكانش'], ['برشا', 'بزاف'], ['واخا', 'مليح'], ['توة', 'درك'],
+    ['نصيفطلك', 'نبعثلك'], ['نصيفطو', 'نبعثو'], ['نصيفط', 'نبعث'], ['صيفطلي', 'ابعثلي'], ['صيفطلك', 'نبعثلك'], ['صيفط', 'ابعث'],
+  ] as [string, string][]
+  // a word with no Algerian equivalent (« chi ») is dropped with the space after it
+).map(([from, to]) => [new RegExp(`(?<![\\p{L}\\p{N}_])${from}(?![\\p{L}\\p{N}_])${to ? '' : '[ \\t]*'}`, 'giu'), to]);
+export const fixMoroccan = (text: string): string => {
+  let out = text;
+  for (const [re, to] of ALGERIAN_FOR) out = out.replace(re, (m) => (to && /^\p{Lu}/u.test(m) ? to.charAt(0).toUpperCase() + to.slice(1) : to));
+  return out;
+};
 /** A Latin letter glued inside an Arabic word (« وnعاونك », rule 16 « one script per sentence »). */
 export const SCRIPT_GLUE = /(?<=[؀-ۿ])[A-Za-z]{1,3}(?=[؀-ۿ])/gu;
 

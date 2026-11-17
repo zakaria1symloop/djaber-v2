@@ -4,7 +4,7 @@ import { prisma, Prisma, TenantContext } from '@djaber/db';
 import { AppException } from '../../core/errors/app.exception';
 import { algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
 import { likePattern } from './catalog.util';
-import { MARGIN_PERIOD_DAYS, MARGIN_SOLD_STATUSES } from './margin.calculator';
+import { MARGIN_SOLD_ORDER_STATUS, marginSince } from './margin.calculator';
 import type { ProductsQuery } from './dto';
 
 const VARIANT_LOW = Prisma.sql`EXISTS (SELECT 1 FROM "ProductVariant" v WHERE v."productId" = p."id" AND v."deletedAt" IS NULL AND v."isActive" AND v."stock" <= v."minStock")`;
@@ -73,10 +73,10 @@ export const productWhere = (q: Partial<ProductsQuery>): Prisma.Sql => {
   // shared over the units sold in 30 days (margin.calculator, EXP-02). Every sub-select is bound to the product's workspace:
   // without it the planner scanned the whole Order table once per product row (07 §perf: p95 < 500 ms at 10 000 products,
   // a minutes-long query once the shared tables held 100 000 orders of other shops)
-  const since = new Date(Date.now() - MARGIN_PERIOD_DAYS * 86_400_000);
+  const since = marginSince();
   const perUnit = Prisma.sql`COALESCE((SELECT sum(e."amount") FROM "ProductExpense" e WHERE e."workspaceId" = p."workspaceId" AND e."productId" = p."id" AND e."isPerUnit"), 0)`;
   const fixed = Prisma.sql`COALESCE((SELECT sum(e."amount") FROM "ProductExpense" e WHERE e."workspaceId" = p."workspaceId" AND e."productId" = p."id" AND NOT e."isPerUnit" AND e."date" >= ${since}), 0)`;
-  const sold = Prisma.sql`((SELECT COALESCE(sum(i."quantity"), 0) FROM "OrderItem" i JOIN "Order" o ON o."id" = i."orderId" WHERE i."productId" = p."id" AND o."workspaceId" = p."workspaceId" AND o."status"::text = ANY(${[...MARGIN_SOLD_STATUSES]}::text[]) AND o."orderedAt" >= ${since})
+  const sold = Prisma.sql`((SELECT COALESCE(sum(i."quantity"), 0) FROM "OrderItem" i JOIN "Order" o ON o."id" = i."orderId" WHERE i."productId" = p."id" AND o."workspaceId" = p."workspaceId" AND o."status"::text = ${MARGIN_SOLD_ORDER_STATUS} AND o."deliveredAt" >= ${since})
     + (SELECT COALESCE(sum(i."quantity"), 0) FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId" WHERE i."productId" = p."id" AND s."workspaceId" = p."workspaceId" AND s."status" = 'completed' AND s."soldAt" >= ${since}))`;
   const margin = Prisma.sql`((p."price" - (p."costPrice" + ${perUnit} + round(${fixed}::numeric / GREATEST(${sold}, 1)))) * 100.0 / NULLIF(p."price", 0))`;
   if (q.minMargin !== undefined) and.push(Prisma.sql`(p."costPrice" IS NOT NULL AND ${margin} >= ${q.minMargin})`);

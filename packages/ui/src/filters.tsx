@@ -7,6 +7,7 @@ import { ChevronDown, X } from 'lucide-react';
 import * as React from 'react';
 import { DateInput, NumberInput } from './inputs';
 import { Button, Checkbox, cn, Input } from './primitives';
+import { onRadioGroupKeyDown, radioTabIndex } from './radio-keys';
 import { SideSheet } from './sheet';
 
 export type FilterOption = { value: string; label: string; count?: number };
@@ -211,8 +212,9 @@ export function FilterDateRange({
     <div className="flex flex-col gap-2">
       {presets?.length ? (
         <div role="radiogroup" aria-label={labels.presets} className="flex flex-wrap gap-1.5">
-          {presets.map((p) => (
-            <button key={p.value} type="button" role="radio" aria-checked={activePreset === p.value} onClick={() => onPreset?.(p.value)} className={chipClass(activePreset === p.value)}>
+          {presets.map((p, i) => (
+            // journey J14-8 c: one Tab stop, the arrows move (Space / Enter choose: each choice reloads the data)
+            <button key={p.value} type="button" role="radio" aria-checked={activePreset === p.value} tabIndex={radioTabIndex(i, presets.findIndex((x) => x.value === activePreset))} onKeyDown={(e) => onRadioGroupKeyDown(e, { select: false })} onClick={() => onPreset?.(p.value)} className={chipClass(activePreset === p.value)}>
               {p.label}
             </button>
           ))}

@@ -110,7 +110,7 @@ describe('prompt sections (04-ai-pipeline §3)', () => {
     expect(deliverySection(ctx({ workspace: { ...ctx().workspace, freeDeliveryThreshold: null, senderWilaya: null } }))).toBe("DELIVERY FEES: use quote_delivery.\nNever state a delivery fee that did not come from the tool.\nWhen quote_delivery answers, your reply gives its fee for that wilaya (home, and stop-desk when known) in the customer's language — that is the answer.");
     expect(orderRulesSection(ctx())).toMatchSnapshot();
     const custom = orderRulesSection(ctx({}, { maxQtyPerOrder: 3, maxAmountPerOrder: 20000, riskyClientBehavior: 'handoff', recapMode: 'when_unsure', orderFields: [{ key: 'product', required: true, locked: true }, { key: 'quantity', required: true, locked: true }, { key: 'name', required: true, locked: true }, { key: 'phone', required: true, locked: true }, { key: 'wilaya', required: true, locked: true }, { key: 'commune', required: false, locked: false }, { key: 'address', required: true, locked: false }, { key: 'note', required: false, locked: false }] }));
-    expect(custom).toContain('Required fields, in this order: product+variant → quantity → name → phone (10 digits, 05/06/07) → wilaya → address or stop-desk');
+    expect(custom).toContain('Required fields, in this order: product+variant → quantity (1 when the customer names the product without a number) → name → phone (10 digits, 05/06/07) → wilaya → address or stop-desk');
     expect(custom).toContain('Optional fields: commune, note');
     expect(custom).toContain('MAX_QTY_PER_ORDER=3\nMAX_AMOUNT=20000 DA');
     // journey 16/11 J03-12: 04 §5 — the recap is always asked, an old `when_unsure` setting is not passed to the model
@@ -124,6 +124,15 @@ describe('prompt sections (04-ai-pipeline §3)', () => {
     expect(chosen).toContain('2 × Robe satin bordeaux (M) [VID:44444444-4444-7444-8444-444444444444] [ID:11111111-1111-7111-8111-111111111111]');
     expect(chosen).not.toContain('not-in-slice');
     expect(orderRulesSection(ctx())).not.toContain('CURRENT ORDER');
+  });
+
+  it('journey retest R1-2: a product chosen without a number is 1 in CURRENT ORDER (never « ? » = ask again); darija numbers are given', () => {
+    const rules = orderRulesSection(ctx({ chosen: [{ productId: '11111111-1111-7111-8111-111111111111', variantId: null, quantity: null }] }));
+    expect(rules).toContain('1 × Robe satin bordeaux [ID:11111111-1111-7111-8111-111111111111]');
+    expect(rules).not.toContain('? ×');
+    expect(rules).toContain('a product named without a number counts 1');
+    expect(rules).toContain('zoudj / zouj / jouj / زوج / جوج = 2');
+    expect(rules).toContain('do not ask « combien ? »');
   });
 
   it('§3.8 image rule, §3.9 cross-sell, §3.10 card template, §3.11 closing', () => {

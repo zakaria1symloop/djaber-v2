@@ -38,7 +38,7 @@ import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
 import { guardFactsOf } from './reply-guard';
 import { AiProviderError } from './provider/ai.gateway';
 import { canonicalTool } from './tools/tool-registry';
-import { lastAiText, nextChosen, orderHistoryOf, placedThisTurn } from './tools/order-confirmation';
+import { lastAiText, latestRecap, nextChosen, orderHistoryOf, placedThisTurn } from './tools/order-confirmation';
 import { TurnContextService } from './turn-context.service';
 import { VisionService, visionNoteText, type VisionNote } from './vision.service';
 
@@ -299,7 +299,7 @@ export class ReplyProcessor implements OnModuleInit {
       runId: run.id,
       prompt,
       // retest 12/11: a handoff is checked against the customer's words of this batch (handoff-judge)
-      toolCtx: { workspaceId: conv.workspaceId, agent, conversationId: conv.id, clientId: conv.clientId, channelId: conv.channelId, runId: run.id, dryRun: false, customerText: batch.plain, unclearStreak: ctx.unclearStreak ?? 0, orderHistory, customerHistory, ordering: !!ctx.chosen?.length, lastAiText: lastAiText(history.messages) },
+      toolCtx: { workspaceId: conv.workspaceId, agent, conversationId: conv.id, clientId: conv.clientId, channelId: conv.channelId, runId: run.id, dryRun: false, customerText: batch.plain, unclearStreak: ctx.unclearStreak ?? 0, orderHistory, customerHistory, ordering: !!ctx.chosen?.length || !!latestRecap(orderHistory), lastAiText: lastAiText(history.messages) },
       temperature: turnCtx.temperature,
       maxTokens: turnCtx.maxTokens,
       deadline,

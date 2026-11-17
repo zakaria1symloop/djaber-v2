@@ -87,7 +87,7 @@ export async function addProduct(page: Page, name: string) {
   await page.locator('#product-search').fill(name);
   await page
     .getByTestId('product-results')
-    .getByRole('button', { name: new RegExp(name) })
+    .getByRole('option', { name: new RegExp(name) })
     .first()
     .click();
   await expect(page.getByTestId('order-lines')).toContainText(name);

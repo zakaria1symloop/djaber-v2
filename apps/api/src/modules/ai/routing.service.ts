@@ -9,7 +9,7 @@ import { CryptoService } from '../../core/crypto/crypto.service';
 import { AppException } from '../../core/errors/app.exception';
 import { RedisService } from '../../core/redis/redis.provider';
 import { WsEmitter } from '../../core/ws/ws.emitter';
-import { BREAKER_MIN_CALLS, BREAKER_OPEN_S, BREAKER_WINDOW_S, DEFAULT_CALL_TIMEOUT_S, VOICE_FALLBACK, VOICE_PRIMARY } from './ai.constants';
+import { BREAKER_MIN_CALLS, BREAKER_MIN_ERRORS, BREAKER_OPEN_S, BREAKER_WINDOW_S, DEFAULT_CALL_TIMEOUT_S, VOICE_FALLBACK, VOICE_PRIMARY } from './ai.constants';
 import { AI_GATEWAY, AiProviderError, type AiGateway, type AiModelRef, type AiProviderName } from './provider/ai.gateway';
 import { AdminNotifier } from '../notifications/admin-notifier.service';
 
@@ -29,7 +29,13 @@ export type Route = { capability: AiCapability; primary: RoutedModel; fallback: 
 export type Routed<T> = { value: T; model: RoutedModel; usedFallback: boolean };
 type ModelRow = AiModel & { provider: AiProvider };
 
-const ENV_KEYS = { openai: 'OPENAI_API_KEY', anthropic: 'ANTHROPIC_API_KEY', google: 'GOOGLE_AI_API_KEY', groq: 'GROQ_API_KEY' } as const;
+/**
+ * §6 circuit breaker: opens when the error rate of the 10-minute window passes the route's threshold — read only from
+ * BREAKER_MIN_CALLS calls and BREAKER_MIN_ERRORS failures (journey retest R1-1: 2 errors in 15 calls opened it).
+ */
+export const breakerTrips = (total: number, errors: number, thresholdPct: number): boolean => total >= BREAKER_MIN_CALLS && errors >= BREAKER_MIN_ERRORS && (errors / total) * 100 > thresholdPct;
+
+const ENV_KEYS ={ openai: 'OPENAI_API_KEY', anthropic: 'ANTHROPIC_API_KEY', google: 'GOOGLE_AI_API_KEY', groq: 'GROQ_API_KEY' } as const;
 
 @Injectable()
 export class RoutingService {
@@ -123,7 +129,7 @@ export class RoutingService {
     if (ok) return;
     const errors = await c.incr(this.k(model.id, 'err'));
     if (errors === 1) await c.expire(this.k(model.id, 'err'), BREAKER_WINDOW_S);
-    if (total >= BREAKER_MIN_CALLS && (errors / total) * 100 > thresholdPct) {
+    if (breakerTrips(total, errors, thresholdPct)) {
       const opened = await c.set(this.k(model.id, 'open'), '1', 'EX', BREAKER_OPEN_S, 'NX');
       if (opened) {
         this.log.warn({ model: model.modelId, provider: model.provider, errors, total }, 'ai circuit breaker opened');
@@ -163,8 +169,9 @@ export class RoutingService {
       } catch (e) {
         if (!(e instanceof AiProviderError)) throw e;
         last = e;
-        await this.record(model, false, route.errorThresholdPct);
-        this.log.warn({ provider: model.provider, model: model.modelId, kind: e.kind, status: e.status, detail: e.detail }, 'ai provider call failed');
+        // journey retest R1-1: a failure of this process (the SDK refused the request or the step) is not the provider's
+        if (!e.local) await this.record(model, false, route.errorThresholdPct);
+        this.log.warn({ provider: model.provider, model: model.modelId, kind: e.kind, status: e.status ?? null, detail: e.detail ?? null, local: e.local }, 'ai provider call failed');
         if (e.kind === 'provider_rejected') {
           this.ws.emit('admin:platform', 'platform.alert', { kind: 'provider_down', payload: { provider: model.provider, code: 'AI_PROVIDER_KEY_REJECTED' } });
           // a key the provider refuses (revoked, or a user key without its workspace): once per provider and hour

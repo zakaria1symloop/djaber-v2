@@ -50,11 +50,20 @@ export const renderStoredText = (value: string | null | undefined, t: (key: stri
     .join(PART_SEPARATOR);
 };
 
+/**
+ * journey 16/11 J14-7 (SALES-CASH-23): in an Arabic sentence « #{number} » is isolated (FSI … PDI) so that the « # » stays
+ * before the reference — « البيع VNT-1002# » / « الطلب CMD-1005# (دفعة) » in the cash rows. Invisible in every viewer.
+ */
+const FSI = String.fromCharCode(0x2068);
+const PDI = String.fromCharCode(0x2069);
+export const isolateRefs = (template: string): string => template.replace(/#\{(\w+)\}/g, `${FSI}#{$1}${PDI}`);
+
 /** One sentence of the shared catalogue in `locale` (French when the key has no translation there); null = unknown key. */
 export const textIn = (key: string, locale: string, params: Record<string, string | number> = {}): string | null => {
   const l: AppLocale = isAppLocale(locale) ? locale : 'fr';
-  const template = getMessages(l)[key] ?? getMessages('fr')[key];
-  if (template === undefined) return null;
+  const raw = getMessages(l)[key] ?? getMessages('fr')[key];
+  if (raw === undefined) return null;
+  const template = l === 'ar' ? isolateRefs(raw) : raw;
   // full-test 15/11 SALES-CASH-14: a value that is itself a token without values (`§sales.cancel.reason.entry_error`, a
   // reason picked from a list) is read in the reader's language too — typed text stays as typed
   const shown = Object.fromEntries(Object.entries(params).map(([k, v]) => [k, typeof v === 'string' && v.startsWith(STORED_TEXT_MARK) && !v.includes('|') ? (textIn(v.slice(STORED_TEXT_MARK.length), l) ?? '') : v]));

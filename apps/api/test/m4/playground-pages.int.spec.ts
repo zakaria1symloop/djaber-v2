@@ -124,6 +124,37 @@ describe('playground (AGT-07)', () => {
     expect(await db.order.count({ where: { workspaceId: owner.workspaceId } })).toBe(0);
   });
 
+  it('journey retest R1-1 / R1-6: the server recap is sent; a failed turn is not counted in the 60 / h and its « oui » is answered with the next message', async () => {
+    const owner = await asOwner(app);
+    const agent = await linkedAgent(owner.workspaceId, []);
+    const sac = await createProduct(owner, { name: 'Sac à main cuir', price: 6900, stock: 5 });
+    await feeRule(owner.workspaceId, 19, 650, 350);
+    await app.app.get(RedisService).client.del(`rl:playground:${owner.workspaceId}`);
+    const args = { clientName: 'Karim Haddad', clientPhone: '0770112233', wilayaId: 19, communeName: 'El Eulma', address: 'Cité 500 logements bloc 12', items: [{ productId: sac.id, quantity: 1 }], isStopdesk: false, customerConfirmed: true };
+    const details = 'Karim Haddad, 0770112233, Sétif, El Eulma, Cité 500 logements bloc 12, le sac';
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args }] }, { reply: 'Récap : sac, 7550 DA. OK ?', intent: 'SALE' });
+    const first = (await test(owner, agent.id, { sessionId: 'r1-1', ...say(details) }).expect(200)).body.data;
+    expect(first.hourlyUsed).toBe(1);
+    // R1-6: the server's recap (catalogue name, mode, fee, total, name, phone, address), not the model's short one
+    expect(first.reply).toContain('- 1 × Sac à main cuir : 6 900 DA');
+    expect(first.reply).toContain('Livraison à domicile (El Eulma');
+    expect(first.reply).toContain('Total : 7 550 DA');
+    expect(first.reply).toContain('Nom : Karim Haddad');
+    expect(first.reply).toContain('Téléphone : 0770112233');
+    fakeAi(app).reset();
+    fakeAi(app).script('reply', { error: 'provider_error' }, { error: 'provider_error' });
+    const thread = [{ role: 'user', text: details }, { role: 'assistant', text: first.reply }, { role: 'user', text: 'oui' }];
+    await test(owner, agent.id, { sessionId: 'r1-1', messages: thread }).expect(503);
+    fakeAi(app).reset();
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args }] }, { reply: 'ok', intent: 'SALE' });
+    const next = (await test(owner, agent.id, { sessionId: 'r1-1', messages: [...thread, { role: 'user', text: 'alors ?' }] }).expect(200)).body.data;
+    // the failed turn was given back to the hour's budget
+    expect(next.hourlyUsed).toBe(2);
+    // the « oui » of the failed turn confirms the recap
+    expect(next.toolCalls[0]).toMatchObject({ simulated: true, result: { ok: true, simulated: true, total: 7550 } });
+    expect(next.reply).toMatch(/^Votre commande TEST-\d{4} est bien enregistrée/);
+  });
+
   it('playground with attachments: a photo goes through the 2-pass vision (would cost 5), flag for evals, export of the session', async () => {
     const owner = await asOwner(app);
     const agent = await linkedAgent(owner.workspaceId, []);

@@ -116,7 +116,7 @@ function PurchaseDetail({ id }: { id: string }) {
                 '—'
               ),
             },
-            { key: 'items', label: t('purchases.col.items'), value: t('purchases.page.itemsLine', { lines: p.itemCount, units: iso(formatNumber(p.units.ordered)), pct: iso(`${pct} %`), date: p.receivedAt ? day(p.receivedAt.slice(0, 10)) : '—' }) },
+            { key: 'items', label: t('purchases.col.items'), value: t('purchases.page.itemsLine', { lines: p.itemCount, units: iso(formatNumber(p.units.ordered)), pct: iso(`${pct}\u00a0%`), date: p.receivedAt ? day(p.receivedAt.slice(0, 10)) : '—' }) },
             {
               key: 'amounts',
               label: t('purchases.page.amounts'),

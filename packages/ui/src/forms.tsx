@@ -4,7 +4,7 @@
 import { Check, Eye, EyeOff, Loader2 } from 'lucide-react';
 import * as React from 'react';
 import { cn, Input } from './primitives';
-import { onRadioGroupKeyDown } from './radio-keys';
+import { onRadioGroupKeyDown, radioTabIndex } from './radio-keys';
 
 /* ---------- Spinner ---------- */
 export function Spinner({ label, className }: { label: string; className?: string }) {
@@ -190,12 +190,15 @@ export function SegmentedControl<T extends string>({
 }) {
   return (
     <div role="radiogroup" aria-label={label} className={cn('inline-flex flex-wrap gap-1.5', className)}>
-      {options.map((o) => (
+      {options.map((o, i) => (
         <button
           key={o.value}
           type="button"
           role="radio"
           aria-checked={o.value === value}
+          // journey J14-8 c: one Tab stop for the group, ← → ↑ ↓ move and choose (WAI-ARIA radio group)
+          tabIndex={radioTabIndex(i, options.findIndex((x) => x.value === value))}
+          onKeyDown={(e) => onRadioGroupKeyDown(e)}
           dir={o.dir}
           disabled={disabled}
           onClick={() => onChange(o.value)}

@@ -14,7 +14,7 @@ export const deliverySection = (c: PromptContext): string =>
 
 const FIELD_TEXT: Record<string, string> = {
   product: 'product+variant',
-  quantity: 'quantity',
+  quantity: 'quantity (1 when the customer names the product without a number)',
   name: 'name',
   phone: 'phone (10 digits, 05/06/07)',
   wilaya: 'wilaya',
@@ -42,9 +42,10 @@ const currentOrderLines = (c: PromptContext): string[] => {
     const p = c.catalogue.products.find((x) => x.id === i.productId);
     if (!p) return [];
     const v = i.variantId ? p.variants.find((x) => x.id === i.variantId) : null;
-    return [`${i.quantity ?? '?'} × ${p.name}${v ? ` (${v.name}) [VID:${v.id}]` : ''} [ID:${p.id}]`];
+    // journey retest R1-2: « ? » (quantity still to ask) made the model ask « combien ? » on every turn until the flow died
+    return [`${i.quantity ?? 1} × ${p.name}${v ? ` (${v.name}) [VID:${v.id}]` : ''} [ID:${p.id}]`];
   });
-  return items.length ? [`CURRENT ORDER (chosen by the customer — keep it while you collect the other fields; change it only when they change it; « ? » = quantity still to ask): ${items.join(' · ')}`] : [];
+  return items.length ? [`CURRENT ORDER (chosen by the customer — keep it while you collect the other fields; change it only when they change it; a product named without a number counts 1): ${items.join(' · ')}`] : [];
 };
 
 export const orderRulesSection = (c: PromptContext): string => {
@@ -72,21 +73,24 @@ export const orderRulesSection = (c: PromptContext): string => {
     'Ask one field at a time; never invent a value; re-ask an invalid value with an example (0555123456). Never ask again for a value the customer already gave (KNOWN CUSTOMER or earlier messages): reuse it in the recap.',
     // recette 09/11 (Badro): the product was asked again after the wilaya, and a returning customer got an order with fields never asked
     'The product, variant and quantity the customer chose stay chosen while you collect the other fields (a message with only a wilaya, a phone or a name does not cancel them): never ask for them again unless the customer changes them.',
+    // journey retest R1-2 (17/11): « Combien de djellabas ? » asked 7 times in 7 turns, « zoudj tapis » not read as 2
+    'QUANTITY: a product named without a number (« le sac », « la djellaba », « un tapis », « nheb djellaba », « نحب جلابة ») is 1 — do not ask « combien ? »: go on with the next field; the recap shows 1 and the customer can change it there. Darija / arabizi numbers: wa7ed / wahed / wahda / wa7da / واحد / وحدة = 1, zoudj / zouj / jouj / زوج / جوج = 2, tlata / tleta / ثلاثة = 3, rab3a / arb3a / ربعة / أربعة = 4, khamsa / خمسة = 5, setta / ستة = 6, sab3a / سبعة = 7, tmenya / ثمانية = 8, tes3a / تسعة = 9, 3achra / عشرة = 10 (« zoudj tapis » = 2 tapis, « jouj djellabat » = 2). Ask the quantity only when the customer asks for several without saying how many (« des », « chwiya », « plusieurs »).',
     'A KNOWN CUSTOMER value is confirmed in the recap, never used silently; a required field that is neither known nor given in this conversation is asked before the recap. create_order answers VALIDATION with missing=true for a required field still missing: ask for it.',
     'Report in "customer" the order details the customer has given so far (name, phone, phone2, wilaya, commune, address), and in "cart" the product(s), variant and quantity they chose for this order.',
     // retest 12/11 (Badro: « the bot blocked after the phone number, again after the address »)
     'A message with only a phone number, a name, a wilaya, a commune or an address while you take an order is the value you asked for: record it, never treat it as UNCLEAR, as a request for a call or as a reason to hand off, and ask the next missing field (or show the recap).',
     'A place that is both a wilaya and a commune (Blida, Médéa, Sétif, Oran…) given once is that wilaya AND its commune of the same name, unless the customer says another commune: do not ask for the commune again.',
     // full-test 15/11 AI-CHAT-01: the recap and the confirmation are checked by the server
-    'When every required field is known, call create_order: the first call only returns CONFIRMATION_REQUIRED with the recap (items, quantities, prices, delivery fee, total, name, phone, address) — show that recap and ask the customer to confirm. Nothing is ordered until the customer answers yes in their NEXT message; then call create_order again with the same values. Never use create_order to check a price, the stock, a fee or a phone number, and never with a value the customer did not give (no « Client », no 0555000000, no wilaya they did not name): a phone with the wrong number of digits is re-asked by you, with no tool.',
+    // journey retest R1-6 / R1-7: the recap is the server's (catalogue names, delivery mode, name, phone, address), sent as given
+    'When every required field is known, call create_order: the first call only returns CONFIRMATION_REQUIRED with the recap — the platform sends that recap to the customer right after your reply, in their language and exactly as given (items with their catalogue names, quantities, prices, delivery mode and fee, total, name, phone, address), with the request to answer yes. Write no recap of your own: "reply" only answers anything else the customer asked in this message, in one short sentence, or stays empty. Nothing is ordered until the customer answers yes in their NEXT message; then call create_order again with the same values. Never use create_order to check a price, the stock, a fee or a phone number, and never with a value the customer did not give (no « Client », no 0555000000, no wilaya they did not name — wilayaId 1 is not a default): a phone with the wrong number of digits is re-asked by you, with no tool. A call with a required field missing is refused (VALIDATION missing=true, with every missing field): ask for the first one.',
     // journey 16/11 J04-4: a change's recap written by the model alone needed « oui » twice
-    'Every recap goes through create_order — the first order AND a change of an order already placed: never write a recap yourself without calling create_order first.',
+    'Every recap goes through create_order — the first order AND a change of an order already placed (a quantity, a product, an address): never write a recap yourself, and a change is never a cancellation (no cancel_order unless the customer asks to cancel).',
     // PV 09/11: the model refused orders on its own reading of STOCK; the tool knows the stock, the reservations and the shop's « sell out of stock » choice
     // full-test 15/11 proposal 2: check_availability answers stock / quantity questions — create_order is never a probe
     'Never refuse an order yourself because of STOCK, and never promise a quantity you did not check: to know whether a quantity can be sold, call check_availability (productId, variantId, quantity). available=false gives `availableQuantity` and `otherVariants`: offer that quantity, and when the customer wants more, propose to complete it with the other variants. create_order is only for a full recap; if it still answers ORDER_INSUFFICIENT_STOCK, offer `available` (never more than availableAllVariants in total). A stock shortage is never a reason to hand off (retest 11/11).',
     'Call create_order only once per confirmed recap. If the tool says the order already exists (duplicateOf, ORDER_ALREADY_PLACED), confirm that order instead of creating another one. Once an order is placed, the platform sends the customer its confirmation (number, items, total, delay): never cancel or re-create it unless the customer asks in a later message.',
     'To cancel: cancel_order works only on an order the shop has NOT confirmed yet (ask which one when there are several). ORDER_CONFIRMED_BY_SELLER ⇒ never promise a cancellation or a change: say the shop will contact them, then hand off (status=HANDOFF, statusDetail=customer_request).',
-    'To change an order already placed (product, size, quantity, address): call create_order with the new values and replacesOrder=<its number> — it returns the new recap (CONFIRMATION_REQUIRED): show it, wait for the confirmation, then call it again with the same values; the new order is created first, then the old one is cancelled. Never cancel an order to replace it. replaced=null in the result ⇒ hand off.',
+    'To change an order already placed (product, size, quantity, address): call create_order with the new values and replacesOrder=<its number> — it returns the new recap (CONFIRMATION_REQUIRED, sent by the platform), wait for the confirmation, then call it again with the same values; the new order is created first, then the old one is cancelled. Never cancel an order to replace it. replaced=null in the result ⇒ hand off.',
     'Payment is cash on delivery unless a payment link tool is available.',
     // PV 28/10 « ajout du tracking via le chatbot »
     'Where is my order / tracking: call lookup_order, then give the status in plain words, the courier, the tracking number, the trackingUrl link when there is one and the last courier event (place, date). Never invent a status, a date or a delay. Nothing found ⇒ ask for the phone number the order was placed with (or the parcel tracking number) and call lookup_order with it.',

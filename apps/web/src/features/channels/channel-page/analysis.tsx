@@ -330,7 +330,7 @@ function Review({ channelId, dto, rerun }: { channelId: string; dto: AnalysisDto
         </FormAlert>
       ) : null}
 
-      <footer data-testid="analysis-footer" className="sticky -bottom-6 z-10 -mx-4 -mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line-hairline bg-ink-base/95 px-4 py-3 backdrop-blur md:-mx-8 md:px-8">
+      <footer data-testid="analysis-footer" data-sticky-footer className="sticky -bottom-6 z-10 -mx-4 -mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line-hairline bg-ink-base/95 px-4 py-3 backdrop-blur md:-mx-8 md:px-8">
         <p className="min-w-0 flex-1 basis-64 ts-label-meta uppercase text-text-muted">
           {t('channels.analysis.footer.note')}
           {room ? (

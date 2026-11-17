@@ -5,7 +5,7 @@
 // Paiement verrouillé; Sur-réception accepted with a warning; Produit non suivi refused). The menu items come from the
 // server descriptors (`actions`), greyed with their code.
 import { formatMoney, formatNumber } from '@djaber/shared';
-import { Button, CodeInput, ConfirmDialog, Dialog, Field, FormAlert, Input, Ltr, MoneyInput, NumberInput, Pill, Select, toast, type MenuAction } from '@djaber/ui';
+import { Button, CodeInput, ConfirmDialog, Dialog, Field, focusSoon, FormAlert, Input, Ltr, MoneyInput, NumberInput, Pill, Select, toast, type MenuAction } from '@djaber/ui';
 import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { useCloseGuard, useTypedFlag } from '@/components/close-guard';
@@ -304,7 +304,7 @@ export function ReceiveDialog({ purchaseId, onClose }: { purchaseId: string | nu
                         </td>
                         <td className="px-1">
                           {l.added ? (
-                            <button type="button" aria-label={t('orderForm.items.remove', { name: l.name })} onClick={() => setLines((x) => (x ?? []).filter((_, j) => j !== i))} className="p-1 text-text-muted hover:text-text-primary">
+                            <button type="button" aria-label={t('orderForm.items.remove', { name: l.name })} onClick={() => (setLines((x) => (x ?? []).filter((_, j) => j !== i)), focusSoon('#receive-product'))} className="p-1 text-text-muted hover:text-text-primary">
                               <X className="size-3.5" aria-hidden />
                             </button>
                           ) : null}

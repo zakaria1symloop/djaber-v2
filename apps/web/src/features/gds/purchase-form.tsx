@@ -6,7 +6,7 @@
 // status legend. Prefill from `?supplierId`, the stock "Réapprovisionner" (`?productId&variantId&quantity&unitCost`).
 // Server field errors land on their line; content is kept; leave guard while dirty.
 import { formatMoney, formatNumber } from '@djaber/shared';
-import { Button, Card, CodeInput, Field, FormAlert, Input, Ltr, MoneyInput, QtyStepper, Select, Skeleton, Textarea, toast } from '@djaber/ui';
+import { Button, Card, CodeInput, focusSoon, Field, FormAlert, Input, Ltr, MoneyInput, QtyStepper, Select, Skeleton, Textarea, toast } from '@djaber/ui';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, X } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
@@ -300,7 +300,7 @@ function PurchaseForm({ purchase }: { purchase?: Purchase }) {
                           <Ltr className="tabular-nums">{l.trackStock ? formatMoney(l.quantity * int(l.unitCost)) : '—'}</Ltr>
                         </td>
                         <td className="px-1 align-top">
-                          <button type="button" aria-label={t('orderForm.items.remove', { name: l.name })} onClick={() => set({ lines: f.lines.filter((_, j) => j !== i) })} className="mt-2 p-1 text-text-muted hover:text-text-primary">
+                          <button type="button" aria-label={t('orderForm.items.remove', { name: l.name })} onClick={() => (set({ lines: f.lines.filter((_, j) => j !== i) }), focusSoon('#purchase-product'))} className="mt-2 p-1 text-text-muted hover:text-text-primary">
                             <X className="size-3.5" aria-hidden />
                           </button>
                         </td>

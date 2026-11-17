@@ -5,6 +5,7 @@ import * as Popover from '@radix-ui/react-popover';
 import { Check, ChevronDown, Minus, Plus, Search, X } from 'lucide-react';
 import * as React from 'react';
 import { parseIntegerInput } from './number-parse';
+import { onRadioGroupKeyDown, radioTabIndex } from './radio-keys';
 import { cn, Input } from './primitives';
 
 /* ---------- <Ltr>: numbers, phones, SKUs, amounts keep their reading order in Arabic ---------- */
@@ -347,7 +348,17 @@ export function SearchInput({
 }
 
 /* ---------- Combobox: searchable single select (category, unit, product, agent…) ---------- */
-export type ComboOption = { value: string; label: string; hint?: string; disabled?: boolean };
+/** `keywords`: more text the search matches (journey J14-5: the other-language name of a commune), never shown */
+export type ComboOption = { value: string; label: string; hint?: string; keywords?: string; disabled?: boolean };
+
+const TABBABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+/** Focus the next (1) or previous (-1) Tab stop of the page after `from`, as the Tab key would. */
+const focusAfter = (from: HTMLElement | null, dir: 1 | -1) => {
+  if (!from) return;
+  const all = [...document.querySelectorAll<HTMLElement>(TABBABLE)].filter((x) => x.getClientRects().length > 0 && !x.closest('[inert], [aria-hidden="true"]'));
+  const i = all.indexOf(from);
+  (all[i + dir] ?? from).focus();
+};
 export function Combobox({
   id,
   value,
@@ -386,11 +397,13 @@ export function Combobox({
   const [q, setQ] = React.useState('');
   const [active, setActive] = React.useState(0);
   const listId = React.useId();
+  const trigger = React.useRef<HTMLButtonElement>(null);
+  const tabOut = React.useRef<0 | 1 | -1>(0);
   const selected = options.find((o) => o.value === value) ?? null;
   const shown = React.useMemo(() => {
     if (onSearch || !q.trim()) return options;
     const needle = q.trim().toLowerCase();
-    return options.filter((o) => `${o.label} ${o.hint ?? ''}`.toLowerCase().includes(needle));
+    return options.filter((o) => `${o.label} ${o.hint ?? ''} ${o.keywords ?? ''}`.toLowerCase().includes(needle));
   }, [options, q, onSearch]);
   const rows: (ComboOption | null)[] = clearLabel ? [null, ...shown] : shown;
   const pick = (o: ComboOption | null) => {
@@ -412,6 +425,7 @@ export function Combobox({
     >
       <Popover.Trigger asChild>
         <button
+          ref={trigger}
           id={id}
           type="button"
           role="combobox"
@@ -430,7 +444,30 @@ export function Combobox({
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content align="start" sideOffset={4} className="z-[70] w-[var(--radix-popover-trigger-width)] min-w-56 rounded-card border border-line-edge bg-ink-raised p-1 shadow-xl">
+        <Popover.Content
+          align="start"
+          sideOffset={4}
+          onCloseAutoFocus={(e) => {
+            if (!tabOut.current) return;
+            e.preventDefault();
+            focusAfter(trigger.current, tabOut.current);
+            tabOut.current = 0;
+          }}
+          className="z-[70] w-[var(--radix-popover-trigger-width)] min-w-56 rounded-card border border-line-edge bg-ink-raised p-1 shadow-xl"
+        >
+          {/* journey J14-5: Tab past the last control (Shift+Tab before the first) closes the list and goes on to the next
+              field, as from the closed picker (the popover looped the focus on its search: 20 Tabs stayed in it) */}
+          <div
+            onKeyDownCapture={(e) => {
+              if (e.key !== 'Tab' || e.altKey || e.ctrlKey || e.metaKey) return;
+              const items = [...e.currentTarget.querySelectorAll<HTMLElement>(TABBABLE)].filter((x) => x.getClientRects().length > 0);
+              if (document.activeElement !== (e.shiftKey ? items[0] : items[items.length - 1])) return;
+              e.preventDefault();
+              e.stopPropagation();
+              tabOut.current = e.shiftKey ? -1 : 1;
+              setOpen(false);
+            }}
+          >
           <input
             autoFocus
             aria-label={searchPlaceholder}
@@ -480,6 +517,7 @@ export function Combobox({
             ))}
           </ul>
           {footer ? <div className="mt-1 border-t border-line-hairline pt-1">{footer}</div> : null}
+          </div>
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
@@ -504,7 +542,7 @@ export function RadioCards<T extends string>({
 }) {
   return (
     <div role="radiogroup" aria-label={label} className={cn('grid gap-2', columns === 3 ? 'sm:grid-cols-3' : columns === 2 ? 'sm:grid-cols-2' : '', className)}>
-      {options.map((o) => {
+      {options.map((o, i) => {
         const on = o.value === value;
         return (
           <button
@@ -512,6 +550,9 @@ export function RadioCards<T extends string>({
             type="button"
             role="radio"
             aria-checked={on}
+            // journey J14-8 c: one Tab stop for the group, the arrow keys move and choose (WAI-ARIA radio group)
+            tabIndex={radioTabIndex(i, options.findIndex((x) => x.value === value))}
+            onKeyDown={(e) => onRadioGroupKeyDown(e)}
             disabled={!!o.disabledReason}
             title={o.disabledReason}
             onClick={() => onChange(o.value)}

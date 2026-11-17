@@ -30,7 +30,7 @@ const pickClient = async (page: Page, q: string, name: string) => {
   await page.locator('#client-search').fill(q);
   await page
     .getByTestId('client-results')
-    .getByRole('button', { name: new RegExp(name) })
+    .getByRole('option', { name: new RegExp(name) })
     .click();
   await expect(page.getByTestId('picked-client')).toContainText(name);
 };

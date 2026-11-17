@@ -44,6 +44,12 @@ export type AiGenerateResult = {
   toolCalls: AiToolCallRequest[];
   usage: AiUsage;
   finishReason: string;
+  /**
+   * journey retest R1-1 (17/11): calls the model made to a tool this step did not offer (handoff_to_human withheld on an
+   * order-field message) or with arguments that are not JSON. They are not run: the pipeline tells the model and goes on.
+   * The SDK refused the whole step for them (`AI_NoSuchToolError`), which was logged as a bare `provider_error`.
+   */
+  rejectedToolCalls?: AiToolCallRequest[];
 };
 
 export type AiTranscribeRequest = { model: AiModelRef; audio: Buffer; mime: string; timeoutMs: number };
@@ -62,6 +68,12 @@ export class AiProviderError extends Error {
     public readonly status?: number,
     /** the provider's reason, for the logs only */
     public readonly detail?: string,
+    /**
+     * journey retest R1-1: the failure happened in this process (the SDK refused the request or the answer: invalid prompt,
+     * unsupported option, unreadable step), not at the provider — it says nothing of the provider's health and never
+     * counts in the circuit breaker.
+     */
+    public readonly local = false,
   ) {
     super(message);
     this.name = 'AiProviderError';

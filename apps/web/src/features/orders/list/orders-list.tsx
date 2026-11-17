@@ -279,7 +279,8 @@ export function OrdersList() {
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <Money value={r.total} className="ts-label-meta" />
                   <OrderStatusPill status={r.status} />
-                  <ConfirmationPill row={r} />
+                  {/* journey J14-8 b: « مؤكَّد · مؤكَّد » — a confirmed call says nothing the status pill does not (no column headers on a card) */}
+                  {r.confirmationStatus !== 'confirmed' ? <ConfirmationPill row={r} /> : null}
                 </div>
               </Link>
               {menu(r)}

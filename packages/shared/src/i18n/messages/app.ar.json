@@ -1952,7 +1952,7 @@
  "cash.close.note": "ملاحظة (إلزامية عند وجود فرق)",
  "cash.close.noteCorrection": "ينشئ سطر تصحيح {amount} · يُقفل اليوم",
  "cash.close.noteLock": "يُقفل اليوم: لا إضافة ولا تعديل بعد ذلك",
- "cash.close.notePlaceholder": "باقٍ زائد أُعطي لزبون #VTE-0087",
+ "cash.close.notePlaceholder": "باقٍ زائد أُعطي لزبون #VNT-1087",
  "cash.close.pickDay": "اختر يومًا واحدًا لإقفاله.",
  "cash.close.submit": "إقفال",
  "cash.close.theoretical": "الرصيد النظري (نقدًا)",

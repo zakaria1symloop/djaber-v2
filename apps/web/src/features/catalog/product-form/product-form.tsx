@@ -686,8 +686,8 @@ export function ProductForm(props: Props) {
       {formError ? <FormAlert>{formError}</FormAlert> : null}
 
       {archived ? null : (
-        <div className="sticky -bottom-6 z-20 -mx-4 -mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line-hairline bg-ink-base px-4 py-3 md:-mx-8 md:px-8" data-testid="form-footer">
-          <p className={cn('min-w-0 flex-1 ts-label-meta', dirty ? 'text-accent-starred' : 'text-text-muted')} aria-live="polite" data-testid="dirty-note">
+        <div className="sticky -bottom-6 z-20 -mx-4 -mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line-hairline bg-ink-base px-4 py-3 md:-mx-8 md:px-8" data-testid="form-footer" data-sticky-footer>
+          <p className={cn('min-w-0 flex-1 basis-48 ts-label-meta', dirty ? 'text-accent-starred' : 'text-text-muted')} aria-live="polite" data-testid="dirty-note">
             {dirty ? `● ${t('products.form.unsaved', { list: changeLabels.join(', ') })}` : ''}
           </p>
           {saving ? (

@@ -22,7 +22,7 @@ import { AiRunService, guardFlags, intentOf, type RunMeta } from './ai-run.servi
 import { CatalogueService } from './catalogue.service';
 import { conversationLanguage, languageSwitched, systemLocale, turnLanguage, type AiLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
-import { lastAiText, nextChosen, orderHistoryOf, placedThisTurn, type ChosenItem } from './tools/order-confirmation';
+import { lastAiText, latestRecap, nextChosen, orderHistoryOf, placedThisTurn, type ChosenItem } from './tools/order-confirmation';
 import { canonicalTool } from './tools/tool-registry';
 import { guardFactsOf } from './reply-guard';
 import { productCards } from '../messaging/product-card';
@@ -34,6 +34,16 @@ import { VisionService, visionNoteText } from './vision.service';
 
 export type PlaygroundJob = { workspaceId: string; agentId: string; userId: string | null; sessionId: string; turnId: string; messages: PlaygroundTurnInput['messages']; scenario?: TestScenarioKey; kind?: 'test' | 'test_scenario' };
 type JobAnswer = { ok: true; turn: PlaygroundTurnDto } | { ok: false; code: 'AI_PROVIDER_ERROR' | 'NOT_FOUND' };
+/**
+ * journey retest R1-1: index of the first customer message the AI has not answered yet — the messages after the last
+ * assistant message (a failed turn leaves its message in the thread with no answer after it). The last message is the
+ * current one.
+ */
+export const unansweredFrom = (messages: readonly { role: string }[]): number => {
+  let i = messages.length - 1;
+  while (i > 0 && messages[i - 1]!.role === 'user') i--;
+  return Math.max(0, i);
+};
 const SCENARIO_KEYS = Object.keys(SCENARIOS) as TestScenarioKey[];
 
 @Injectable()
@@ -79,6 +89,13 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
     }
     return n;
   }
+  /** journey retest R1-1: a turn the AI did not answer (provider failure, no answer in time) is given back to the hour's budget. */
+  async uncountTurn(subject: string): Promise<number> {
+    const key = `rl:playground:${subject}`;
+    const n = await this.redis.client.decr(key);
+    if (n < 0) await this.redis.client.set(key, '0', 'KEEPTTL');
+    return Math.max(0, n);
+  }
 
   /**
    * HTTP side: validates, counts the turn, hands it to the worker and waits for the answer.
@@ -88,11 +105,17 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
     const t = TenantContext.get();
     const agent = await prisma.agent.findFirst({ where: { id: agentId, deletedAt: null }, select: { id: true } });
     if (!agent) throw notFound();
-    const used = await this.countTurn(o.rateSubject ?? t.workspaceId);
+    const subject = o.rateSubject ?? t.workspaceId;
+    const used = await this.countTurn(subject);
     const sessionId = input.sessionId ?? randomUUID();
     const data: PlaygroundJob = { workspaceId: t.workspaceId, agentId, userId: o.userId ?? t.userId ?? null, sessionId, turnId: randomUUID(), messages: input.messages, scenario: input.scenario, kind: 'test' };
     let answer: JobAnswer;
-    if (this.config.isTest) answer = await this.process(data);
+    // journey retest R1-1: « the failed turn still counts in the 60 / h » — a turn without an answer is not counted
+    const failed = async <E>(e: E): Promise<E> => {
+      await this.uncountTurn(subject).catch(() => undefined);
+      return e;
+    };
+    if (this.config.isTest) answer = await this.process(data).catch(async (e) => Promise.reject(await failed(e)));
     else {
       this.events ??= new QueueEvents('ai-reply', { connection: bullConnection(this.config.get('REDIS_URL')) });
       const job = await this.queue.add('ai-reply', 'playground-turn', data as unknown as Record<string, unknown>, `pg:${sessionId}:${data.turnId}`, { attempts: 1, removeOnComplete: { age: 300 }, removeOnFail: { age: 3600 } });
@@ -100,10 +123,10 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         answer = (await job.waitUntilFinished(this.events, RUN_BUDGET_MS)) as JobAnswer;
       } catch (e) {
         this.log.warn({ agentId, err: e instanceof Error ? e.message.slice(0, 120) : 'error' }, 'playground turn did not finish');
-        throw new AppException('AI_PROVIDER_ERROR');
+        throw await failed(new AppException('AI_PROVIDER_ERROR'));
       }
     }
-    if (!answer.ok) throw answer.code === 'NOT_FOUND' ? notFound() : new AppException('AI_PROVIDER_ERROR');
+    if (!answer.ok) throw await failed(answer.code === 'NOT_FOUND' ? notFound() : new AppException('AI_PROVIDER_ERROR'));
     return { ...answer.turn, hourlyUsed: used };
   }
 
@@ -166,16 +189,25 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         if (r.note.kind === 'match') matched.push(r.note.productId);
         lines.push(`[image]\n${visionNoteText(r.note)}`);
       }
+      // journey retest R1-1: the customer messages the AI did not answer (a failed turn kept in the thread) are answered
+      // with this one, as one batch like on Messenger — a « oui » sent in a failed turn still confirms the recap
+      const start = unansweredFrom(messages);
+      const pending = messages.slice(start, -1).map((m) => m.text.trim()).filter(Boolean);
+      if (pending.length) {
+        lines.unshift(...pending);
+        said = [...pending, said].filter(Boolean).join('\n');
+      }
       // full-test 15/11 AI-CHAT-04: the previous language of the conversation, as on Messenger (a bare « Tamanrasset ? » gave English)
       // journey 16/11 J05-8: each earlier turn read with the one before it — a bare « Nadia Ferhat » read alone gave English, so
       // the phone number sent after it was answered in English in the middle of a French conversation
       // journey 16/11 J04-2: a first message with no clue (« Bonsoir » had none) takes the shop's language, not English
       const shop = { agentDefault: agent.defaultLanguage, workspaceLocale: TenantContext.get().locale };
-      const previous = conversationLanguage(messages.slice(0, -1).filter((m) => m.role === 'user').map((m) => m.text), shop);
+      const previous = conversationLanguage(messages.slice(0, start).filter((m) => m.role === 'user').map((m) => m.text), shop);
       const lang: AiLanguage = turnLanguage(said, previous, shop);
-      const history: HistoryMessage[] = messages.slice(0, -1).map((m) => ({ author: m.role === 'user' ? 'customer' : 'ai', text: m.text }));
+      const history: HistoryMessage[] = messages.slice(0, start).map((m) => ({ author: m.role === 'user' ? 'customer' : 'ai', text: m.text }));
       // full-test 15/11 AI-CHAT-05: what the customer chose in the earlier turns of the session (CURRENT ORDER), as on Messenger
-      const previousRun = await prisma.aiRun.findFirst({ where: { agentId: agent.id, batchKey: d.sessionId, id: { not: run.id }, status: { not: 'running' } }, orderBy: { startedAt: 'desc' }, select: { meta: true } });
+      // journey retest R1-1: a failed turn has no `chosen` — it no longer erases the product chosen before it
+      const previousRun = await prisma.aiRun.findFirst({ where: { agentId: agent.id, batchKey: d.sessionId, id: { not: run.id }, status: { notIn: ['running', 'error'] } }, orderBy: { startedAt: 'desc' }, select: { meta: true } });
       const chosen = ((previousRun?.meta as { chosen?: ChosenItem[] | null } | null)?.chosen ?? null) as ChosenItem[] | null;
       // journey 16/11 J03-13: as live (reply.processor `oncePer24h`), the out-of-hours text once per session per 24 h
       const oohBefore = (previousRun?.meta as { outOfHoursAt?: string } | null)?.outOfHoursAt ?? null;
@@ -185,11 +217,13 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       const earlier = await prisma.aiToolCall.findMany({ where: { executedAt: { not: null }, aiRun: { agentId: agent.id, batchKey: d.sessionId, id: { not: run.id } } }, orderBy: { executedAt: 'desc' }, take: GUARD_EARLIER_TOOL_CALLS, select: { result: true } });
       const guard = guardFactsOf(turnCtx.prompt, { customerText: said, answeredBefore: history.some((m) => m.author === 'ai'), freshStart: false, earlierToolResults: earlier.map((c) => c.result) });
 
+      const orderHistory = await orderHistoryOf({ agentId: agent.id, batchKey: d.sessionId, id: { not: run.id } });
       const result = await this.runs.turn({
         runId: run.id,
         prompt,
         // retest 12/11: the same handoff check as the live replies (handoff-judge)
-        toolCtx: { workspaceId: agent.workspaceId, agent, conversationId: null, clientId: null, channelId: null, runId: run.id, dryRun: true, customerText: said, orderHistory: await orderHistoryOf({ agentId: agent.id, batchKey: d.sessionId, id: { not: run.id } }), customerHistory: [...messages.filter((m) => m.role === 'user').map((m) => m.text), said].join('\n'), ordering: !!chosen?.length, lastAiText: lastAiText(history) },
+        // journey retest R1-5: an order is being taken once a product is chosen or a recap was shown
+        toolCtx: { workspaceId: agent.workspaceId, agent, conversationId: null, clientId: null, channelId: null, runId: run.id, dryRun: true, customerText: said, orderHistory, customerHistory: [...messages.filter((m) => m.role === 'user').map((m) => m.text), said].join('\n'), ordering: !!chosen?.length || !!latestRecap(orderHistory), lastAiText: lastAiText(history) },
         temperature: turnCtx.temperature,
         maxTokens: turnCtx.maxTokens,
         deadline: Date.now() + RUN_BUDGET_MS,

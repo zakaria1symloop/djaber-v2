@@ -41,6 +41,13 @@ body { min-height: 100dvh; -webkit-font-smoothing: antialiased; font-size: 13px;
    table (fee grid) that position is far to the inline end and, with no positioned ancestor, it widened the whole document
    on phones. Logical + no negative margin: the 1 px box stays inside the start edge in LTR and RTL (no scrollable overflow). */
 .sr-only { position: absolute; inset-inline-start: 0; width: 1px; height: 1px; margin: 0; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* journey J14-6 (MOBILE-A11Y-07): the skip link is hidden like `.sr-only` until it has the focus. It never carries
+   `.sr-only`: this unlayered rule beat `focus:not-sr-only` (a layered utility), so the focused link stayed a 1 × 1 px box. */
+.skip-link:not(:focus) { position: absolute; inset-inline-start: 0; width: 1px; height: 1px; margin: 0; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* journey J14-4 (WCAG 2.4.11): a page with a sticky save bar keeps the focused field above it — the browser scrolls a
+   focused control inside the scroll box minus this padding (the bar is up to 160 px high on a phone, ~60 px on a desktop) */
+#main:has([data-sticky-footer]) { scroll-padding-bottom: 11rem; }
+@media (min-width: 40rem) { #main:has([data-sticky-footer]) { scroll-padding-bottom: 5.5rem; } }
 
 /* next/font families (hashed names) feed the token font variables */
 html:root {

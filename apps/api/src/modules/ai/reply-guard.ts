@@ -19,7 +19,7 @@
 // Pure: no I/O. Conservative by design — a false positive costs one corrective model turn and, at worst, a dropped sentence.
 import { formatMoney } from '@djaber/shared';
 import { GUARD_MARK } from './ai.constants';
-import { detectLanguage, languageSwitched, MOROCCAN_WORDS, replyLanguage, SCRIPT_GLUE, WRONG_DARIJA, type AiLanguage } from './language';
+import { detectLanguage, fixMoroccan, languageSwitched, MOROCCAN_WORDS, replyLanguage, SCRIPT_GLUE, WRONG_DARIJA, type AiLanguage } from './language';
 import type { CatalogueProduct } from './catalogue.service';
 import type { PromptContext } from './prompt/prompt.types';
 import { TOOL_ALIASES, TOOL_DEFS } from './tools/tool-registry';
@@ -416,7 +416,7 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
   if (rules.includes('self_name')) lines.push(facts.agentName ? `- YOUR NAME is "${facts.agentName}": never give yourself another name.` : "- YOU HAVE NO PERSONAL NAME: never give yourself one; if asked, you are the shop's assistant.");
   if (rules.includes('language_switch')) lines.push(`- LANGUAGE: the customer writes ${LANGUAGE_NAMES[facts.lang] ?? facts.lang}. Rewrite "reply" in that language and script, as they write it (never switch on your own).`);
   if (rules.includes('moroccan_darija'))
-    lines.push('- ALGERIAN DARIJA: the shop is Algerian. Replace the Moroccan / Tunisian words (chno, dyal, walakin, daba, nqdar, bghit / bghiti, chi, ma kaynch, wakha, barcha, شنو, ديال, دابا, بغيت, شي حاجة, ملي, فماش, برشا, صيفط / sifet) with Algerian ones (wach, ta3 / تاع, bessah / بصح, dork / درك, nqder, t7ebb / تحب, hadja / حاجة, makach / ماكانش, ki / كي, bezzaf / بزاف, ab3at / ابعث). « chhal / ch7al / شحال » means « how much »: never for « what » — « wach smitek ? », « a3tini numéro ta3ek », « f ayya wilaya ? ».');
+    lines.push('- ALGERIAN DARIJA: the shop is Algerian. Replace the Moroccan / Tunisian words (chno, dyal, walakin, daba, nqdar, bghit / bghiti, chi / chi hadja, ma kaynch / ma kaynach, wakha, barcha, شنو, ديال, دابا, بغيت, شي حاجة, ملي, فماش, برشا, صيفط / sifet) with Algerian ones (wach, ta3 / تاع, bessah / بصح, dork / درك, nqder, t7ebb / تحب, hadja / حاجة, makach / ماكانش, ki / كي, bezzaf / بزاف, ab3at / ابعث). « chhal / ch7al / شحال » means « how much »: never for « what » — « wach smitek ? », « a3tini numéro ta3ek », « f ayya wilaya ? ».');
   if (rules.includes('false_confession'))
     lines.push(`- ORDER PLACED: order ${(facts.ordersPlaced ?? []).join(', ')} was placed with the details the customer gave in this conversation. Never say you invented them, that it was a mistake, that it does not exist or that nothing was ordered; never offer to cancel it unless the customer asks.`);
   if (rules.includes('fee_missing'))
@@ -506,6 +506,8 @@ export function enforceReply(reply: string, violations: GuardViolation[], facts:
   let text = parts.filter((_, i) => !drop.has(i)).join('').trim();
   if (violations.some((v) => v.rule === 'repeat_greeting')) text = stripGreeting(text, facts.agentName).trim();
   if (violations.some((v) => v.rule === 'script_mix')) text = fixScriptMix(text);
+  // journey retest R1-4: Moroccan words the corrective turn kept are replaced by the Algerian ones
+  if (violations.some((v) => v.rule === 'moroccan_darija')) text = fixMoroccan(text);
   // journey 16/11 J03-2: the fee the corrective turn still left out is added from the tool's answer
   const quote = violations.some((v) => v.rule === 'fee_missing') ? facts.quotes?.[0] : undefined;
   if (quote) text = `${feeSentence(quote, facts.lang)}${text ? ` ${text}` : ''}`;

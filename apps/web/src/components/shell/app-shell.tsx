@@ -2,6 +2,7 @@
 // Generic shell frame (sidebar + top bar + banner stack + content) used by MerchantShell and AdminShell.
 import { IconButton } from '@djaber/ui';
 import { Menu as MenuIcon } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAutoTitles } from '@/lib/auto-title';
 import { useT } from '@/lib/i18n';
@@ -42,6 +43,20 @@ export function AppShell({
   }, []);
   // truncated names / previews show their full text in a tooltip
   useAutoTitles();
+  // journey J14-3: a save that navigates (« Enregistrer la commande », « Valider la vente ») left the focus on `<body>`; the
+  // new page's main region takes it (the next Tab is its first control), never when the member already focused something
+  const pathname = usePathname();
+  const firstPath = useRef(pathname);
+  useEffect(() => {
+    // a page load keeps the browser's start (the skip link is the first Tab stop)
+    if (pathname === firstPath.current) return;
+    firstPath.current = '';
+    const timer = window.setTimeout(() => {
+      const now = document.activeElement;
+      if (!now || now === document.body) document.getElementById('main')?.focus({ preventScroll: true });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [pathname]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Ctrl+K focuses the search of the current list (GLOBAL shortcuts)
@@ -60,7 +75,7 @@ export function AppShell({
   return (
     <div className="flex h-dvh flex-col">
       {/* full-test 15/11 MOBILE-A11Y-07 (WCAG 2.4.1): the first Tab stop skips the 25 sidebar links */}
-      <a href="#main" className="sr-only z-50 rounded-card bg-white px-3 py-2 text-[13px] font-medium text-black focus:not-sr-only focus:fixed focus:start-3 focus:top-3">
+      <a href="#main" className="skip-link fixed start-3 top-3 z-[100] rounded-card bg-white px-3 py-2 text-[13px] font-medium text-black">
         {t('a11y.skipToContent')}
       </a>
       {fixedBar}

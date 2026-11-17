@@ -18,7 +18,7 @@ describe('order import error report', () => {
       { rows: [row(2, true), row(3, false, [{ field: 'phone', code: 'VALIDATION_ERROR' }]), row(4, true)], report: { created: 1, skipped: 1, failed: [{ row: 4, code: 'ORDER_INSUFFICIENT_STOCK' }], orderIds: [] } },
       { headers, describe: (e) => `msg:${e.code}` },
     );
-    const lines = csv.replace(/^﻿/, '').trim().split('\r\n');
+    const lines = csv.replace(/^\ufeff/, '').trim().split('\r\n');
     expect(lines).toHaveLength(3);
     expect(lines[0]).toBe('Ligne;Client;Téléphone;Wilaya;Articles;Erreur;Code (support)');
     expect(lines[1]).toBe('3;Client 3;0550111222;Alger;RB-1 × 2;msg:VALIDATION_ERROR;VALIDATION_ERROR');

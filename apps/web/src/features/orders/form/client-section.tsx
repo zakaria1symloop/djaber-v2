@@ -3,8 +3,8 @@
 // one ("UTILISER"), or create one inline. A typed phone that already belongs to a client shows the notice and the
 // "Utiliser ce client" action (CLI-02: the server never creates a duplicate — 409 CLIENT_PHONE_EXISTS).
 import { formatPhoneDz, normalizePhoneDz } from '@djaber/shared';
-import { Banner, Button, ClientResultRow, Field, Input, Ltr, OrderFormCard, PhoneInput, PickerSearch, StatusPill } from '@djaber/ui';
-import { useMemo, useState } from 'react';
+import { Banner, Button, ClientResultRow, Field, focusSoon, Input, Ltr, OrderFormCard, PhoneInput, PickerSearch, StatusPill } from '@djaber/ui';
+import { useId, useMemo, useState } from 'react';
 import type { ClientListItem } from '@/features/clients/contracts';
 import { fieldError } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
@@ -66,6 +66,8 @@ export function ClientSection({
   const pick = (r: ClientListItem) => {
     setQ('');
     onPick(r);
+    // journey J14-3: the focus follows the field that replaces the search (the picked card)
+    focusSoon('[data-testid="change-client"]');
   };
   const createNew = () => {
     const text = q.trim();
@@ -78,7 +80,9 @@ export function ClientSection({
     });
     window.setTimeout(() => document.getElementById(looksLikePhone(text) ? 'client-name' : 'client-phone')?.focus(), 30);
   };
-  const options = rows.length + 1;
+  // the list shows 6 clients + « Créer » (the keys walk what is shown)
+  const shown = rows.slice(0, 6);
+  const options = shown.length + 1;
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!open) return;
     if (e.key === 'ArrowDown') {
@@ -89,10 +93,13 @@ export function ClientSection({
       setActive((i) => Math.max(0, i - 1));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (active < rows.length) pick(rows[active]!);
+      if (active < shown.length) pick(shown[active]!);
       else createNew();
     } else if (e.key === 'Escape') setQ('');
   };
+  // journeys J14-2 / J14-3: an ARIA combobox — the results are options of the field (`aria-activedescendant`), not Tab stops
+  const listId = useId();
+  const optionProps = (i: number) => ({ id: `${listId}-${i}`, role: 'option' as const, 'aria-selected': i === active, tabIndex: -1, onMouseDown: (e: React.MouseEvent) => e.preventDefault() });
   const err = (k: 'client.name' | 'client.phone') =>
     errors[k] ? fieldError(t, t.has(errors[k]!.key) ? errors[k]!.key : errors[k]!.key, errors[k]!.params as Record<string, string | number>) : undefined;
   const conflictName = conflict?.name ?? owner?.name ?? null;
@@ -127,7 +134,7 @@ export function ClientSection({
             </div>
           </div>
           {locked ? null : (
-            <Button size="sm" variant="ghost" onClick={() => onChange({ id: null, name: '', phone: '', phone2: '' })} data-testid="change-client">
+            <Button size="sm" variant="ghost" onClick={() => (onChange({ id: null, name: '', phone: '', phone2: '' }), focusSoon('#client-search'))} data-testid="change-client">
               {t('orderForm.client.change')}
             </Button>
           )}
@@ -143,17 +150,19 @@ export function ClientSection({
             label={t('orderForm.client.search')}
             active={open}
             disabled={locked}
+            combobox={{ listId, expanded: open, activeId: open ? `${listId}-${active}` : undefined }}
           />
           {open ? (
-            <ul aria-label={t('orderForm.client.results')} className="divide-y divide-line-hairline overflow-hidden rounded-card border border-line-edge bg-ink-surface" data-testid="client-results">
-              {search.isPending ? <li className="px-3 py-2.5 text-[13px] text-text-muted">{t('common.loading')}</li> : null}
-              {rows.slice(0, 6).map((r, i) => (
+            <ul id={listId} role="listbox" aria-label={t('orderForm.client.results')} className="divide-y divide-line-hairline overflow-hidden rounded-card border border-line-edge bg-ink-surface" data-testid="client-results">
+              {search.isPending ? <li role="option" aria-disabled="true" aria-selected={false} className="px-3 py-2.5 text-[13px] text-text-muted">{t('common.loading')}</li> : null}
+              {shown.map((r, i) => (
                 <ClientResultRow
                   key={r.id}
                   name={r.name}
                   muted={r.isPlaceholder}
                   meta={meta(r)}
                   highlighted={i === active}
+                  optionProps={optionProps(i)}
                   onSelect={() => pick(r)}
                   badge={
                     r.id === matchInResults?.id ? (
@@ -166,11 +175,12 @@ export function ClientSection({
                   }
                 />
               ))}
-              <li>
+              <li role="none">
                 <button
                   type="button"
+                  {...optionProps(shown.length)}
                   onClick={createNew}
-                  className={`w-full px-3 py-2.5 text-start text-[13px] text-accent-inbound hover:bg-ink-raised ${active === Math.min(rows.length, 6) ? 'bg-ink-raised' : ''}`}
+                  className={`w-full px-3 py-2.5 text-start text-[13px] text-accent-inbound hover:bg-ink-raised ${active === shown.length ? 'bg-ink-raised' : ''}`}
                   data-testid="client-create"
                 >
                   {t('orderForm.client.create', { q: q.trim() })}

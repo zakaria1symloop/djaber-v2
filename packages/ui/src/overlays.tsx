@@ -24,12 +24,58 @@ export function useReturnFocus(open: boolean) {
   return React.useCallback((e: Event) => {
     const el = opener.current;
     opener.current = null;
-    if (el && el.isConnected) {
-      e.preventDefault();
-      el.focus();
-    }
+    e.preventDefault();
+    returnFocusTo(el);
   }, []);
 }
+
+const TABBABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const canFocus = (el: Element | null): boolean =>
+  el instanceof HTMLElement && el.isConnected && !el.matches(':disabled') && !el.closest('[inert], [aria-hidden="true"]') && el.getClientRects().length > 0;
+const keyOf = (el: HTMLElement) => (el.id ? `#${CSS.escape(el.id)}` : el.dataset.testid ? `[data-testid="${CSS.escape(el.dataset.testid)}"]` : null);
+/** The opener; else the element now in its place (same id / test id); else the next control after it; else the page's main region. */
+const focusTarget = (el: HTMLElement | null, key: string | null): HTMLElement | null => {
+  if (canFocus(el)) return el;
+  const same = key ? document.querySelector(key) : null;
+  if (canFocus(same)) return same as HTMLElement;
+  if (el?.isConnected) {
+    const all = [...document.querySelectorAll(TABBABLE)];
+    const next = all.find((x) => el.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING && canFocus(x));
+    if (next) return next as HTMLElement;
+  }
+  return document.getElementById('main');
+};
+/**
+ * journey J14-3: after a dialog saved, its opener was often gone or disabled (« Enregistrer un paiement » once the order is
+ * paid, the list behind a sheet after a navigation) and the focus fell to `<body>`. The focus goes to the opener or what
+ * stands in its place, and is checked again while the page re-renders after the save (2 s).
+ */
+export function returnFocusTo(el: HTMLElement | null) {
+  const key = el ? keyOf(el) : null;
+  let last: HTMLElement | null = null;
+  const apply = () => {
+    last = focusTarget(el, key);
+    last?.focus({ preventScroll: last !== el });
+  };
+  apply();
+  let n = 0;
+  const timer = window.setInterval(() => {
+    n += 1;
+    const now = document.activeElement;
+    if (!now || now === document.body) apply();
+    // the member moved on, or 2 s passed: stop watching
+    if (n >= 13 || (now && now !== document.body && now !== last)) window.clearInterval(timer);
+  }, 150);
+}
+
+/**
+ * Esc pressed in an open combobox closes its list, never the dialog / sheet around it (journey J14-2: Esc in the product
+ * search opened « Quitter sans enregistrer ? »). Radix reads Esc on the document before the field sees it.
+ */
+export const isInnerEscape = (e: KeyboardEvent) => {
+  const el = (e.target ?? document.activeElement) as Element | null;
+  return !!el?.closest?.('[role="combobox"][aria-expanded="true"]');
+};
 
 /* ---------- Dialog ---------- */
 export function Dialog({
@@ -61,7 +107,7 @@ export function Dialog({
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/70" />
         <DialogPrimitive.Content
           onCloseAutoFocus={returnFocus}
-          onEscapeKeyDown={hideClose ? (e) => e.preventDefault() : undefined}
+          onEscapeKeyDown={(e) => (hideClose || isInnerEscape(e)) && e.preventDefault()}
           onInteractOutside={hideClose ? (e) => e.preventDefault() : undefined}
           // the title and the footer stay put; only the body scrolls when the dialog is taller than the screen (90 dvh:
           // the visible height on phones, under the browser bars)

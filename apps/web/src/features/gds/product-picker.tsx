@@ -3,7 +3,7 @@
 // (added line), new sale, recommendation rule. Same search as the order form (`GET /products?q`); a product with
 // variants is read in full so that the caller gets its variants (variant required on purchases and sales).
 import { formatNumber } from '@djaber/shared';
-import { Ltr, PickerSearch } from '@djaber/ui';
+import { Ltr, PickerSearch, useComboboxList } from '@djaber/ui';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { catalogKeys } from '@/features/catalog/api';
@@ -80,14 +80,25 @@ export function ProductPicker({
   const qc = useQueryClient();
   const [q, setQ] = useState('');
   const [focused, setFocused] = useState(false);
+  // journey J14-2: closed after a pick / Esc while the focus stays in the field (typing, ↓ or a click open it again)
+  const [dismissed, setDismissed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const open = (focused || q.trim().length > 0) && !disabled;
+  const open = (focused || q.trim().length > 0) && !dismissed && !disabled;
   const results = useProductSearch(q, open);
   const rows = (results.data?.rows ?? []).filter((p) => !p.archived);
+  const list = useComboboxList({
+    count: rows.length,
+    open,
+    onSelect: (i) => void pick(rows[i]!),
+    onOpen: () => setDismissed(false),
+    onClose: () => (setQ(''), setDismissed(true)),
+    isDisabled: (i) => busy || !!refuse?.(rows[i]!),
+  });
 
-  const pick = async (p: ProductListItem) => {
+  async function pick(p: ProductListItem) {
     setQ('');
-    setFocused(false);
+    // the focus stays in the search (the next product), the list closes (journeys J14-2 / J14-3)
+    setDismissed(true);
     if (!p.hasVariants) return onPick(toPicked(p));
     setBusy(true);
     try {
@@ -98,24 +109,36 @@ export function ProductPicker({
     } finally {
       setBusy(false);
     }
-  };
+  }
 
   return (
-    <div className="flex flex-col gap-2" onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setFocused(false)}>
+    <div className="flex flex-col gap-2" onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && (setFocused(false), setDismissed(false))}>
       <div onFocus={() => setFocused(true)}>
-        <PickerSearch id={id} value={q} onChange={setQ} placeholder={placeholder ?? t('gds.picker.placeholder')} label={placeholder ?? t('gds.picker.placeholder')} active={open} disabled={disabled} invalid={invalid} onKeyDown={(e) => e.key === 'Escape' && (setQ(''), setFocused(false))} />
+        <PickerSearch
+          id={id}
+          value={q}
+          onChange={(v) => (setQ(v), setDismissed(false))}
+          onClick={() => setDismissed(false)}
+          placeholder={placeholder ?? t('gds.picker.placeholder')}
+          label={placeholder ?? t('gds.picker.placeholder')}
+          active={open}
+          disabled={disabled}
+          invalid={invalid}
+          combobox={list.comboboxProps}
+          onKeyDown={list.onKeyDown}
+        />
       </div>
       {open ? (
-        <ul aria-label={t('orderForm.items.results')} className="max-h-72 divide-y divide-line-hairline overflow-y-auto rounded-card border border-line-edge bg-ink-surface" data-testid="gds-product-results">
-          {results.isPending ? <li className="px-3 py-2.5 text-[13px] text-text-muted">{t('common.loading')}</li> : null}
-          {!results.isPending && rows.length === 0 ? <li className="px-3 py-2.5 text-[13px] text-text-muted">{t('orderForm.items.noResults')}</li> : null}
-          {rows.map((p) => {
+        <ul id={list.listId} role="listbox" aria-label={t('orderForm.items.results')} className="max-h-72 divide-y divide-line-hairline overflow-y-auto rounded-card border border-line-edge bg-ink-surface" data-testid="gds-product-results">
+          {results.isPending ? <li role="option" aria-disabled="true" aria-selected={false} className="px-3 py-2.5 text-[13px] text-text-muted">{t('common.loading')}</li> : null}
+          {!results.isPending && rows.length === 0 ? <li role="option" aria-disabled="true" aria-selected={false} className="px-3 py-2.5 text-[13px] text-text-muted">{t('orderForm.items.noResults')}</li> : null}
+          {rows.map((p, i) => {
             const reason = refuse?.(p) ?? null;
             return (
-              <li key={p.id}>
-                <button type="button" onClick={() => void pick(p)} disabled={busy || !!reason} title={reason ?? undefined} className="flex w-full items-center gap-3 px-3 py-2 text-start hover:bg-ink-raised disabled:opacity-50" data-product={p.id}>
+              <li key={p.id} role="none">
+                <button type="button" {...list.optionProps(i)} onClick={() => void pick(p)} disabled={busy || !!reason} aria-disabled={busy || !!reason || undefined} title={reason ?? undefined} className="flex w-full items-center gap-3 px-3 py-2 text-start hover:bg-ink-raised aria-selected:bg-ink-raised disabled:opacity-50" data-product={p.id}>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-medium">{p.name}</span>
+                    <span className="block truncate text-[13px] font-medium [text-align:match-parent]" dir="auto">{p.name}</span>
                     <span className="block truncate ts-label-micro text-text-muted">
                       <Ltr>{p.sku}</Ltr>
                       {p.hasVariants ? ` · ${p.variantSummary ?? t('orderForm.items.withVariants')}` : p.trackStock && p.stock !== null ? ` · ${t('orderForm.items.stock', { count: formatNumber(p.stock) })}` : ` · ${t('orderForm.items.service')}`}

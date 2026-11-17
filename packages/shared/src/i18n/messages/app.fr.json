@@ -1952,7 +1952,7 @@
  "cash.close.note": "Note (obligatoire si écart)",
  "cash.close.noteCorrection": "Crée une ligne CORRECTION {amount} · verrouille la journée",
  "cash.close.noteLock": "Verrouille la journée : plus d'ajout ni de modification",
- "cash.close.notePlaceholder": "Monnaie rendue en trop, client #VTE-0087",
+ "cash.close.notePlaceholder": "Monnaie rendue en trop, client #VNT-1087",
  "cash.close.pickDay": "Choisissez un seul jour pour le clôturer.",
  "cash.close.submit": "Clôturer",
  "cash.close.theoretical": "Solde théorique (espèces)",

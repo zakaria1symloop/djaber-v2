@@ -2,10 +2,17 @@
 // true cost = weighted average cost (updated at purchase receipt only) + per-unit expenses
 //             + fixed expenses of the period / units sold in the period;  margin % = (price − true cost) / price.
 import { roundHalfUp } from '@djaber/shared';
+import { periodRange } from '../../core/time/period';
 
 export const MARGIN_PERIOD_DAYS = 30;
-/** Orders whose units count as sold for the fixed-expense share (not cancelled / returned). */
-export const MARGIN_SOLD_STATUSES = ['new', 'confirmed', 'preparing', 'shipped', 'delivered'] as const;
+/**
+ * journey 16/11 J14-10 — « sold » is the named figure of 04 §4 (Ventes par produit, Statistiques › Top produits): delivered
+ * orders (by `deliveredAt`) + completed counter sales (by `soldAt`), over the reports' « 30 j » period (today and the 29
+ * days before, Africa/Algiers). An order not delivered yet holds reserved stock; it is never counted as sold.
+ */
+export const MARGIN_SOLD_ORDER_STATUS = 'delivered' as const;
+/** First instant of the 30-day period of the product page and the margins (the reports' `30d` preset). */
+export const marginSince = (now: Date = new Date()): Date => periodRange({ period: '30d' }, now).gte!;
 
 export type MarginInput = {
   price: number;
@@ -13,7 +20,7 @@ export type MarginInput = {
   weightedCost: number | null;
   /** per-unit expenses: all of them; fixed expenses: those dated inside the period */
   expenses: { amount: number; isPerUnit: boolean }[];
-  /** units sold in the period (orders not cancelled / returned + completed counter sales) */
+  /** units sold in the period (delivered orders + completed counter sales, 04 §4) */
   unitsSold: number;
 };
 export type Margins = {

@@ -179,6 +179,24 @@ const OrderArgs = z.object({
   replacesOrder: str.max(30).optional(),
 });
 const EXAMPLES: Record<string, string | number> = { clientName: 'Amine Benali', clientPhone: '0555123456', secondPhone: '0661123456', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'Cité 200 logements, Bt 4, Bab Ezzouar', quantity: 1 };
+/**
+ * journey retest R1-5: the required `create_order` fields absent from the call (not the invalid ones: a wrong phone or a
+ * short address keep their own VALIDATION answer with an example), in the order they are asked.
+ */
+export const absentFields = (args: Record<string, unknown>, agent: Pick<ToolRunContext['agent'], 'orderFields'>): string[] => {
+  const text = (v: unknown) => (typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '');
+  const fields = Array.isArray(agent.orderFields) ? (agent.orderFields as unknown as { key: string; required: boolean }[]) : [];
+  const required = new Set(fields.length ? fields.filter((f) => f.required).map((f) => f.key) : ['commune', 'address']);
+  const stopdesk = args.isStopdesk === true;
+  const out: string[] = [];
+  if (!Array.isArray(args.items) || !args.items.length) out.push('items');
+  if (!text(args.clientName)) out.push('clientName');
+  if (!text(args.clientPhone)) out.push('clientPhone');
+  if (!text(args.wilayaId)) out.push('wilayaId');
+  if (!stopdesk && required.has('commune') && !text(args.communeName)) out.push('communeName');
+  if (!stopdesk && !text(args.address)) out.push('address');
+  return out;
+};
 const normQuestion = (q: string) => fold(q).replace(/\s+/g, ' ').slice(0, 200);
 const seqOf = (s: string) => 1000 + ([...s].reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) >>> 0, 7) % 9000);
 
@@ -422,6 +440,16 @@ export class ToolRegistry {
   /** Validation, catalogue check and limits of `create_order` (04 §5, FL-02); the write itself is the `OrderTools` port. */
   async prepareOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<{ ok: true; request: CreateOrderRequest; draft: string; core?: string; beyondStock?: { name: string; quantity: number }[] } | { ok: false; result: ToolResult }> {
     const fail = (result: ToolResult) => ({ ok: false as const, result });
+    // journey retest R1-5 (J04-6): a call made before the customer gave the fields (« create_order {} », no address, no
+    // wilaya) is refused at once, before any read, with every missing field — the model asks for the first one
+    const absent = absentFields(args, ctx.agent);
+    if (absent.length) {
+      return fail({
+        ok: false,
+        error: { code: 'VALIDATION', field: absent[0]!, missing: true, fields: absent, ...(EXAMPLES[absent[0]!] !== undefined ? { example: EXAMPLES[absent[0]!] } : {}) },
+        say: `Not done: the customer has not given ${absent.join(', ')} yet. Ask for ${absent[0]} (one question). Call create_order only once the customer gave every required field — never with a value they did not write (no default wilaya such as 1, no « Client »).`,
+      });
+    }
     const a = OrderArgs.safeParse(args);
     if (!a.success) {
       const path = a.error.issues[0]?.path ?? [];
@@ -525,13 +553,16 @@ export class ToolRegistry {
       // J03-10: the wording of the request (the confirmed recap's, when the call only reworded it)
       subtotal, deliveryFee, total: subtotal + deliveryFee, clientName: request.clientName, clientPhone: phone, ...(request.secondPhone ? { secondPhone: request.secondPhone } : {}),
       wilaya: String(quote.wilayaName ?? ''), communeName: request.communeName, address: request.address, isStopdesk: d.isStopdesk,
+      ...(replaces ? { replaces: replaces.number } : {}),
       ...(beyondStock.length ? { beyondStock } : {}),
     };
     // journey 16/11 J04-4: a recap the AI wrote itself in its previous message (a change after an order) counts as shown
     // when it carries this phone, total, products (and replaced order) — and the customer's message of the turn says yes
-    const confirmsOwnRecap = () => confirmation(ctx.customerText ?? '') === 'yes' && recapShown(ctx.lastAiText, { clientPhone: phone, total: request.total, items, replaces });
+    const confirmsOwnRecap = () => confirmation(ctx.customerText ?? '') === 'yes' && recapShown(ctx.lastAiText, { clientPhone: phone, total: request.total, items, replaces, address: request.isStopdesk ? null : request.address, clientName: request.clientName });
     if (!hasDraft(ctx.orderHistory, draft) && !confirmsOwnRecap()) {
-      return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft, core }, recap, say: 'Nothing is ordered yet. Show this recap to the customer (items, quantities, prices, delivery fee, total, name, phone, address) and ask them to confirm. Do not call create_order again in this turn: call it with the same values when the customer answers yes in their next message.' });
+      // journey retest R1-6 / R1-7: `recapToShow` — the platform sends this recap to the customer in their language (the
+      // reply is replaced by it unless it already shows every line, the name and the phone as given)
+      return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft, core }, recap, recapToShow: true, say: 'Nothing is ordered yet. The platform sends this recap to the customer right after your reply, as given (items with their catalogue names, quantities, prices, delivery mode and fee, total, name, phone, address) with the request to answer yes: write no recap of your own — "reply" only answers anything else the customer asked in this message, in one short sentence, or stays empty. Do not call create_order again in this turn: call it with the same values when the customer answers yes in their next message.' });
     }
     const said = confirmation(ctx.customerText ?? '');
     if (said === 'no') return fail({ ok: false, error: { code: 'CONFIRMATION_REFUSED', draft, core }, say: 'The customer did not confirm this recap: nothing is ordered. Ask what they want to change (or whether they still want to order).' });

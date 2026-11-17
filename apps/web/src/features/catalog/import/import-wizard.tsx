@@ -209,7 +209,7 @@ export function ImportWizard() {
           <PreviewTiles totals={result.totals} plan={plan} />
           <PreviewRows result={result} tab={tab} onTabChange={(k) => setUrl({ tab: k === 'errors' ? null : k })} existingCategories={existingCategories} />
           {commitError ? <FormAlert>{commitError}</FormAlert> : null}
-          <div className="sticky -bottom-6 z-10 -mx-4 -mb-6 flex flex-wrap items-center justify-end gap-x-2 gap-y-2 border-t border-line-hairline bg-ink-base px-4 py-3 md:-mx-8 md:px-8" data-testid="import-footer">
+          <div className="sticky -bottom-6 z-10 -mx-4 -mb-6 flex flex-wrap items-center justify-end gap-x-2 gap-y-2 border-t border-line-hairline bg-ink-base px-4 py-3 md:-mx-8 md:px-8" data-testid="import-footer" data-sticky-footer>
             <p className="ts-label-meta me-auto min-w-0 basis-72 uppercase text-text-muted">{t('import.footer.note', { count: result.totals.invalid })}</p>
             <Button variant="ghost" onClick={() => downloadErrors(job.data)} disabledReason={invalidRows(result.rows).length ? undefined : t('import.errors.none')}>
               {t('import.errors.download')}

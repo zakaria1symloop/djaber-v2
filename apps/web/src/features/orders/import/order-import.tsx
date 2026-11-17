@@ -212,7 +212,7 @@ export function OrderImportWizard() {
           />
           <PreviewTable rows={result.rows.filter((r) => (tab === 'valid' ? r.ok : !r.ok))} />
           {error ? <FormAlert>{error}</FormAlert> : null}
-          <div className="sticky -bottom-6 z-10 -mx-4 -mb-6 flex flex-wrap items-center justify-end gap-2 border-t border-line-hairline bg-ink-base px-4 py-3 md:-mx-8 md:px-8" data-testid="order-import-footer">
+          <div className="sticky -bottom-6 z-10 -mx-4 -mb-6 flex flex-wrap items-center justify-end gap-2 border-t border-line-hairline bg-ink-base px-4 py-3 md:-mx-8 md:px-8" data-testid="order-import-footer" data-sticky-footer>
             <p className="ts-label-meta me-auto uppercase text-text-muted">{t('orderImport.footer', { count: result.totals.invalid })}</p>
             <Button variant="ghost" onClick={startOver} disabled={busy}>
               {t('action.back')}

@@ -4,10 +4,11 @@
 import { formatDate, formatMoney, formatPhoneDz, type AppLocale } from '@djaber/shared';
 import { Button, DetailRows, Field, FormAlert, IconButton, Input, Ltr, MoneyInput, MonoChip, OrderBlock, OrderTimeline, PhoneInput, QtyStepper, StatusPill, Textarea, TotalsRows, Tooltip, type TimelineItem } from '@djaber/ui';
 import { ExternalLink, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { ProductThumb } from '@/features/catalog/ui';
 import { Link } from '@/i18n/navigation';
 import { actionState } from '@/lib/actions';
+import { iso } from '@/lib/format-message';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { formatPhoneOnBlur, phonePreview, phonePreviewLine } from '@/lib/phone';
 import { relativeTime } from '@/lib/time';
@@ -233,7 +234,7 @@ export function ItemsBlock({
         <table className="w-full text-[13px]" aria-label={t('common.items')}>
           <thead>
             <tr className="border-b border-line-hairline">
-              <th className="ts-label-micro px-4 py-2.5 text-start text-text-muted">{t('orders.page.product')}</th>
+              <th className="ts-label-micro px-4 py-2.5 text-start text-text-muted max-md:hidden">{t('orders.page.product')}</th>
               <th className="ts-label-micro px-3 py-2.5 text-end text-text-muted">{t('common.price')}</th>
               <th className="ts-label-micro px-3 py-2.5 text-center text-text-muted">{t('orders.page.qty')}</th>
               <th className="ts-label-micro px-4 py-2.5 text-end text-text-muted">{t('common.total')}</th>
@@ -241,24 +242,34 @@ export function ItemsBlock({
             </tr>
           </thead>
           <tbody>
-            {lines.map((l) => (
-              <tr key={l.id} className="border-b border-line-hairline" data-item={l.id}>
-                {/* full-test ORDERS-17: on a phone the product cell truncates so PRICE / QTY / TOTAL stay readable */}
-                <td className="px-4 py-3 max-md:max-w-[150px] max-md:px-3">
-                  <div className="flex items-center gap-3">
-                    <ProductThumb src={l.product.primaryImageUrl} name={l.productName} size={36} />
-                    <div className="min-w-0">
-                      <Link href={`/products/${l.product.id}`} className="block truncate font-medium hover:underline">
-                        {l.productName}
-                      </Link>
-                      <div className="ts-label-micro truncate text-text-muted">
-                        {[l.variantName, l.sku ? t('orders.page.sku', { sku: l.sku }) : null].filter(Boolean).join(' · ')}
-                      </div>
-                      {/* journey J02-6: « variante » only for a variant line; a product sold beyond its stock is « to restock » */}
-                      {l.stockWarning ? <div className="ts-label-micro text-accent-starred">⚠ {t(`orders.page.stock.${l.stockWarning === 'last_unit' && !l.variantId ? 'last_unit_product' : l.stockWarning}`)}</div> : null}
+            {lines.map((l) => {
+              const product = (
+                <div className="flex items-center gap-3">
+                  <ProductThumb src={l.product.primaryImageUrl} name={l.productName} size={36} />
+                  <div className="min-w-0">
+                    {/* `dir="auto"`: a Latin name keeps its start in Arabic (journey J14-7) */}
+                    <Link href={`/products/${l.product.id}`} dir="auto" className="block font-medium [text-align:match-parent] hover:underline max-md:break-words md:truncate">
+                      {l.productName}
+                    </Link>
+                    <div className="ts-label-micro text-text-muted max-md:break-all md:truncate">
+                      {[l.variantName, l.sku ? t('orders.page.sku', { sku: iso(l.sku) }) : null].filter(Boolean).join(' · ')}
                     </div>
+                    {/* journey J02-6: « variante » only for a variant line; a product sold beyond its stock is « to restock » */}
+                    {l.stockWarning ? <div className="ts-label-micro text-accent-starred">⚠ {t(`orders.page.stock.${l.stockWarning === 'last_unit' && !l.variantId ? 'last_unit_product' : l.stockWarning}`)}</div> : null}
                   </div>
+                </div>
+              );
+              return (
+              <Fragment key={l.id}>
+              {/* journey J14-9 (ORDERS-17 kept): on a phone the product has its own row over PRICE / QTY / TOTAL — the
+                  column gave it 78 px and the name was unreadable */}
+              <tr className="md:hidden" data-item-name={l.id}>
+                <td colSpan={editing ? 5 : 4} className="px-3 pt-3">
+                  {product}
                 </td>
+              </tr>
+              <tr className="border-b border-line-hairline" data-item={l.id}>
+                <td className="px-4 py-3 max-md:hidden">{product}</td>
                 <td className="whitespace-nowrap px-3 py-3 text-end max-md:px-2">
                   {moneyEdit ? (
                     <MoneyInput className="ms-auto w-32 text-end" value={String(l.unitPrice)} onValueChange={(v) => setLine(l.id, { unitPrice: amountOf(v) })} aria-label={t('orders.page.unitPriceOf', { name: l.productName })} disabled={saving} data-testid="edit-unit-price" />
@@ -284,7 +295,9 @@ export function ItemsBlock({
                   </td>
                 ) : null}
               </tr>
-            ))}
+              </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

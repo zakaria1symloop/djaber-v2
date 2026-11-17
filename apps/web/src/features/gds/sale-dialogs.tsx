@@ -5,7 +5,7 @@
 // uniquement `SALE_DELETE_PAID` → Annuler la vente) and "Lier à un client" (GDS-07 fix). Menu items come from the
 // server descriptors (`actions`), greyed with their code.
 import { formatMoney, formatPhoneDz, storedText } from '@djaber/shared';
-import { Checkbox, ConfirmDialog, Dialog, Field, FormAlert, Input, Ltr, MoneyInput, Pill, PickerSearch, Select, Textarea, toast, type MenuAction } from '@djaber/ui';
+import { Checkbox, ConfirmDialog, Dialog, Field, focusSoon, FormAlert, Input, Ltr, MoneyInput, Pill, PickerSearch, Select, Textarea, toast, useComboboxList, type MenuAction } from '@djaber/ui';
 import { useState } from 'react';
 import { ApiError } from '@/lib/api';
 import type { ClientListItem } from '@/features/clients/contracts';
@@ -331,10 +331,18 @@ export function ClientPicker({ value, onPick, id = 'client-picker' }: { value: C
   const [q, setQ] = useState('');
   const search = useClientSearch(q);
   const rows = search.data ?? [];
+  const open = !value && q.trim().length >= 2;
+  // journeys J14-2 / J14-3: ↓ ↑ Enter in the search, Esc closes the list only; the focus follows search ⇄ picked card
+  const pick = (c: ClientListItem | null) => {
+    setQ('');
+    onPick(c);
+    focusSoon(c ? '[data-testid="picked-client"] button' : `#${id}`);
+  };
+  const list = useComboboxList({ count: rows.length, open, onSelect: (i) => pick(rows[i]!), onClose: () => setQ('') });
   if (value)
     return (
       <div className="flex items-center gap-2 rounded-card border border-line-edge px-3 py-2 text-[13px]" data-testid="picked-client">
-        <span className="min-w-0 flex-1 truncate">
+        <span className="min-w-0 flex-1 truncate [text-align:match-parent]" dir="auto">
           {value.name}
           {/* the « · » outside the left-to-right number, so it keeps its spaces in Arabic (SALES-CASH-22) */}
           {value.phone ? (
@@ -344,22 +352,22 @@ export function ClientPicker({ value, onPick, id = 'client-picker' }: { value: C
             </span>
           ) : null}
         </span>
-        <button type="button" className="ts-label-meta text-text-muted hover:text-text-primary" onClick={() => onPick(null)}>
+        <button type="button" className="ts-label-meta text-text-muted hover:text-text-primary" onClick={() => pick(null)}>
           {t('action.remove')}
         </button>
       </div>
     );
   return (
     <div className="flex flex-col gap-2">
-      <PickerSearch id={id} value={q} onChange={setQ} placeholder={t('sales.client.search')} label={t('sales.client.search')} active={q.trim().length >= 2} />
-      {q.trim().length >= 2 ? (
-        <ul className="max-h-56 divide-y divide-line-hairline overflow-y-auto rounded-card border border-line-edge bg-ink-surface" data-testid="client-results">
-          {search.isPending ? <li className="px-3 py-2 text-[13px] text-text-muted">{t('common.loading')}</li> : null}
-          {!search.isPending && rows.length === 0 ? <li className="px-3 py-2 text-[13px] text-text-muted">{t('sales.client.none')}</li> : null}
-          {rows.map((c) => (
-            <li key={c.id}>
-              <button type="button" className="flex w-full items-center gap-3 px-3 py-2 text-start text-[13px] hover:bg-ink-raised" onClick={() => (setQ(''), onPick(c))}>
-                <span className="min-w-0 flex-1 truncate">{c.name}</span>
+      <PickerSearch id={id} value={q} onChange={setQ} placeholder={t('sales.client.search')} label={t('sales.client.search')} active={open} combobox={list.comboboxProps} onKeyDown={list.onKeyDown} />
+      {open ? (
+        <ul id={list.listId} role="listbox" aria-label={t('sales.client.search')} className="max-h-56 divide-y divide-line-hairline overflow-y-auto rounded-card border border-line-edge bg-ink-surface" data-testid="client-results">
+          {search.isPending ? <li role="option" aria-disabled="true" aria-selected={false} className="px-3 py-2 text-[13px] text-text-muted">{t('common.loading')}</li> : null}
+          {!search.isPending && rows.length === 0 ? <li role="option" aria-disabled="true" aria-selected={false} className="px-3 py-2 text-[13px] text-text-muted">{t('sales.client.none')}</li> : null}
+          {rows.map((c, i) => (
+            <li key={c.id} role="none">
+              <button type="button" {...list.optionProps(i)} className="flex w-full items-center gap-3 px-3 py-2 text-start text-[13px] hover:bg-ink-raised aria-selected:bg-ink-raised" onClick={() => pick(c)}>
+                <span className="min-w-0 flex-1 truncate [text-align:match-parent]" dir="auto">{c.name}</span>
                 {c.phone ? <Ltr className="ts-label-micro text-text-muted">{formatPhoneDz(c.phone)}</Ltr> : null}
               </button>
             </li>

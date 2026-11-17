@@ -142,7 +142,7 @@ function Balance({ credits: c }: { credits: Credits }) {
           data-testid="tile-price"
           // journey J12-4: « (plan Pro) » only on the plan's own price per credit; a free / unlimited plan shows the platform price
           value={pricePerCredit(c.planPricePerCreditDzd ?? c.pricePerCreditDzd, locale)}
-          label={c.planPricePerCreditDzd != null && workspace?.plan?.name ? t('credits.tile.price.plan', { plan: workspace.plan.name }) : t('credits.tile.price')}
+          label={c.planPricePerCreditDzd !== null && c.planPricePerCreditDzd !== undefined && workspace?.plan?.name ? t('credits.tile.price.plan', { plan: workspace.plan.name }) : t('credits.tile.price')}
           meta={c.packPricePerCreditDzd !== null ? t('credits.tile.price.meta', { price: pricePerCredit(c.packPricePerCreditDzd, locale) }) : undefined}
         />
       </div>

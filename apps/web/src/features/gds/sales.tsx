@@ -16,6 +16,7 @@ import {
   cn,
   ConfirmDialog,
   DataTable,
+  focusSoon,
   Field,
   FilterChips,
   FilterDropdown,
@@ -121,8 +122,8 @@ function SalesList({ creating }: { creating?: boolean }) {
       header: t('common.items'),
       hideBelow: 'lg',
       className: 'max-w-[240px]',
-      // journeys 16/11 J06-9: each name is isolated, so « ×1 » stays after a mixed Latin / Arabic name
-      cell: (r) => <span className="block truncate">{r.items.map((i) => `${iso(`${i.name}${i.variant ? ` ${i.variant}` : ''}`)} ×${i.qty}`).join(' · ')}</span>,
+      // journeys 16/11 J06-9 / J14-7: each line « name ×qty » is one isolate, so « ×1 » stays after its name in Arabic
+      cell: (r) => <span className="block truncate">{r.items.map((i) => iso(`${i.name}${i.variant ? ` ${i.variant}` : ''} ×${i.qty}`)).join(' · ')}</span>,
     },
     { key: 'total', header: t('common.total'), sortKey: 'total', align: 'end', cell: (r) => <Ltr className="whitespace-nowrap tabular-nums">{formatMoney(r.total)}</Ltr> },
     { key: 'paid', header: t('sales.col.paid'), align: 'end', hideBelow: 'lg', cell: (r) => (r.status === 'cancelled' ? <span className="text-text-muted">—</span> : <Ltr className="whitespace-nowrap tabular-nums">{formatMoney(r.amountPaid)}</Ltr>) },
@@ -434,7 +435,7 @@ function NewSaleSheet({ draftId, onClose, blockedBy }: { draftId: string | null;
                   {/* full-test 15/11 SALES-CASH-03: the name has its own line (the 460 px sheet / a phone squeezed it to 0 px) */}
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="min-w-0 basis-full">
-                      <div className="truncate text-[14px]" title={l.name}>{l.name}</div>
+                      <div className="truncate text-[14px] [text-align:match-parent]" dir="auto" title={l.name}>{l.name}</div>
                       <div className="ts-label-micro text-text-muted">
                         {[v?.name, l.trackStock && stock !== null ? t('sales.form.stock', { count: stock }) : null, priceEdited(l) ? t('sales.form.priceEdited', { from: formatNumber(l.catalogPrice), to: formatNumber(int(l.unitPrice)) }) : null].filter(Boolean).join(' · ')}
                       </div>
@@ -442,7 +443,7 @@ function NewSaleSheet({ draftId, onClose, blockedBy }: { draftId: string | null;
                     <span className="flex-1" />
                     <QtyStepper value={l.quantity} onChange={(q) => patch(i, { quantity: q })} min={1} max={100000} labels={{ decrease: t('gds.qty.decrease'), increase: t('gds.qty.increase'), value: t('common.quantity') }} tone={l.trackStock && stock !== null && l.quantity > stock ? 'danger' : undefined} />
                     <MoneyInput aria-label={t('sales.form.priceFor', { name: l.name })} value={l.unitPrice} onValueChange={(x) => patch(i, { unitPrice: x })} className="!h-8 w-28 text-end" currency="" />
-                    <button type="button" aria-label={t('orderForm.items.remove', { name: l.name })} onClick={() => setLines((x) => x.filter((_, j) => j !== i))} className="p-1 text-text-muted hover:text-text-primary">
+                    <button type="button" aria-label={t('orderForm.items.remove', { name: l.name })} onClick={() => (setLines((x) => x.filter((_, j) => j !== i)), focusSoon('#sale-product'))} className="p-1 text-text-muted hover:text-text-primary">
                       <X className="size-3.5" aria-hidden />
                     </button>
                   </div>

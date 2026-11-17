@@ -20,7 +20,17 @@ import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } f
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
 import { fieldOnlyMessage, handoffRefusedInstruction, judgeHandoff, type HandoffRefusal } from './handoff-judge';
 import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, quoteFacts, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
-import { orderConfirmationText } from './tools/order-confirmation-text';
+import { orderConfirmationText, pendingRecap, recapReply } from './tools/order-confirmation-text';
+
+/** journey retest R1-1: told to the model on a message that only gives an order field (handoff_to_human is not offered). */
+export const FIELD_ONLY_NOTE =
+  'THIS MESSAGE only gives an order field (a name, a phone number, a place, an address) or answers yes: record it and answer — ask the next missing field, or call create_order for the recap when every field is known. handoff_to_human is not available for this message.';
+/** journey retest R1-1: the result given back for a call to a tool this step did not offer (it is not run). */
+export const unavailableTool = (name: string, fieldOnly: boolean) => ({
+  ok: false,
+  error: { code: 'TOOL_NOT_AVAILABLE', tool: name },
+  instruction: `${name} cannot be used now${fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : ''}. Answer the customer now with the JSON object.`,
+});
 
 export type ExecutedTool = { callId: string; name: string; args: Record<string, unknown>; result: unknown; simulated: boolean; replayed: boolean };
 export type TurnRequest = {
@@ -146,6 +156,10 @@ export class AiRunService implements OnModuleInit {
     // full-test 15/11 AI-CHAT-07: no handoff tool on a message that is only an order field (refused every time, 5–10 s each)
     const fieldOnly = fieldOnlyMessage(req.toolCtx.customerText, !!req.toolCtx.ordering);
     const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !(fieldOnly && d.name === 'handoff_to_human'));
+    // journey retest R1-1: the model still called the withheld tool (the prompt describes it) and the SDK refused the whole
+    // step — 5 of 59 turns of a shop with handoff rules ended in 503. The note says it is not available for this message
+    // (after the cached start of the system prompt, so the cache is kept).
+    const system = fieldOnly ? `${req.prompt.system}\n\n${FIELD_ONLY_NOTE}` : req.prompt.system;
     let model = null as RoutedModel | null;
     let usedFallback = false;
     let repaired = false;
@@ -160,9 +174,16 @@ export class AiRunService implements OnModuleInit {
     // (number, items, total, delay, payment) in their language — never the model's own wording of it (it « corrected »
     // itself, said the details were invented or that nothing was ordered: AI-CHAT-02)
     const confirmationNow = () => orderConfirmationText(executed.map((t) => ({ name: canonicalTool(t.name), result: t.result })), req.guard?.lang ?? 'fr');
+    // journey retest R1-6 / R1-7: a recap create_order returned this turn is sent as the server wrote it (catalogue names,
+    // delivery mode, name, phone, address) — the model's own recap was cut short or translated the product names
+    const recapNow = () => pendingRecap(executed.map((t) => ({ name: canonicalTool(t.name), result: t.result })));
     const confirmed = (output: AiReplyOutput): AiReplyOutput => {
       const text = confirmationNow();
-      return text ? { ...output, reply: text } : output;
+      if (text) return { ...output, reply: text };
+      const recap = recapNow();
+      // a handoff answer (blocked customer…) is not a recap to confirm
+      if (!recap || output.status === 'HANDOFF' || forcedHandoff) return output;
+      return { ...output, reply: recapReply(output.reply, recap, req.guard?.lang ?? 'fr').text };
     };
     const ok = (output: AiReplyOutput, extra: { salvaged?: boolean; guard?: GuardOutcome } = {}): TurnResult => ({ ok: true, output: confirmed(output), tools: executed, usage, model: model!, usedFallback, forcedHandoff, repaired, ...(handoffRefused ? { handoffRefused } : {}), ...extra });
     // journey 16/11 J03-2: this turn's quote_delivery answers — the reply must give the fee (not checked on a handoff answer)
@@ -182,6 +203,15 @@ export class AiRunService implements OnModuleInit {
     const guarded = (output: AiReplyOutput, extra: { salvaged?: boolean }, canRetry: boolean): TurnResult | 'retry' => {
       // the server's order confirmation replaces the text: nothing of the model's to check
       if (!req.guard || !output.reply.trim() || confirmationNow()) return ok(output, extra);
+      // journey retest R1-6: a pending recap — the server's text is sent unless the model's reply shows it whole; the
+      // model's sentence kept before it is checked, and dropped (no corrective turn) when it breaks a rule
+      const recap = output.status !== 'HANDOFF' && !forcedHandoff ? recapNow() : null;
+      if (recap) {
+        const r = recapReply(output.reply, recap, req.guard.lang);
+        const own = r.kept === 'server' ? '' : output.reply;
+        if (!own || !checkReply(own, factsNow(output)).length) return ok(output, extra);
+        return ok({ ...output, reply: '' }, extra);
+      }
       const violations = checkReply(output.reply, factsNow(output));
       if (!violations.length) return ok(output, extra);
       // a slip the server fixes itself (a Latin letter inside an Arabic word) costs no model turn
@@ -202,7 +232,7 @@ export class AiRunService implements OnModuleInit {
       try {
         res = await this.routing.call(
           'text',
-          (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose: 'reply', system: req.prompt.system, ...(req.prompt.cachePrefix ? { systemCachePrefix: req.prompt.cachePrefix } : {}), messages, tools: offerTools ? defs : undefined, temperature: req.temperature, maxTokens: req.maxTokens, timeoutMs: Math.max(1000, Math.min(timeoutMs, left)) }),
+          (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose: 'reply', system, ...(req.prompt.cachePrefix ? { systemCachePrefix: req.prompt.cachePrefix } : {}), messages, tools: offerTools ? defs : undefined, temperature: req.temperature, maxTokens: req.maxTokens, timeoutMs: Math.max(1000, Math.min(timeoutMs, left)) }),
           { only: (m) => m.supportsTools, prefer: model?.id },
         );
       } catch (e) {
@@ -214,6 +244,26 @@ export class AiRunService implements OnModuleInit {
       usage.inputTokens += res.value.usage.inputTokens;
       usage.outputTokens += res.value.usage.outputTokens;
 
+      // journey retest R1-1: a call to a tool this step did not offer is never run — the model is told and answers
+      const offered = new Set(defs.map((d) => d.name));
+      const stray = offerTools ? [...(res.value.rejectedToolCalls ?? []), ...res.value.toolCalls.filter((c) => !offered.has(canonicalTool(c.name)))] : [];
+      if (stray.length) {
+        toolRounds++;
+        const runnable = res.value.toolCalls.filter((c) => offered.has(canonicalTool(c.name)));
+        if (runnable.length) messages.push({ role: 'assistant', content: res.value.text ?? '', toolCalls: runnable });
+        else messages.push({ role: 'assistant', content: [res.value.text, ...stray.map((c) => `[tool call ${c.name} ${JSON.stringify(c.args ?? {})}]`)].filter(Boolean).join('\n') });
+        for (const call of runnable) {
+          const hash = toolCallId(call.name, call.args, 0);
+          const ordinal = seen.get(hash) ?? 0;
+          seen.set(hash, ordinal + 1);
+          const done = await this.toolCall(req, call, ordinal);
+          executed.push(done);
+          messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: done.result });
+          forcedHandoff ??= this.tools.forcedHandoff(call.name, call.args, done.result);
+        }
+        messages.push({ role: 'user', content: stray.map((c) => `[tool result ${c.name}] ${JSON.stringify(unavailableTool(c.name, fieldOnly))}`).join('\n') });
+        continue;
+      }
       if (res.value.toolCalls.length && offerTools) {
         toolRounds++;
         const calls = res.value.toolCalls;

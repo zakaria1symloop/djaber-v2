@@ -222,6 +222,10 @@ describe('journey 16/11 J05-3 / J05-17 — geo search and parcel timeline', () =
     expect(geoFilter(communes, 'سطيف').map((c) => c.label)).toEqual(['سَطِيف']);
     expect(geoFilter(communes, '  ')).toHaveLength(4);
     expect(foldGeo('Béjaïa')).toBe('bejaia');
+    // journey J14-5: the Arabic UI finds a commune by its French name too (and the other way round)
+    const ar = [{ label: 'بوفاريك', hint: '09001', keywords: 'Boufarik' }, { label: 'البليدة', keywords: 'Blida' }];
+    expect(geoFilter(ar, 'Boufarik').map((c) => c.label)).toEqual(['بوفاريك']);
+    expect(geoFilter(ar, 'بوفاريك').map((c) => c.label)).toEqual(['بوفاريك']);
   });
   it('newest first; events of the same minute follow the parcel life', () => {
     const e = (mappedStatus: string, at: string) => ({ mappedStatus, at });

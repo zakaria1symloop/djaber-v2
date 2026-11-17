@@ -342,4 +342,31 @@ describe('expenses & margins (GDS-09)', () => {
     await stranger.patch(`/products/${p.id}/expenses/${ads.body.data.id}`, { amount: 1 }).expect(404);
     await stranger.delete(`/products/${p.id}/expenses/${ads.body.data.id}`).expect(404);
   });
+
+  it('journey J14-10 « Ventes 30 j » and the margin units = Ventes par produit (04 §4): delivered orders + completed counter sales, never new / confirmed orders', async () => {
+    const owner = await asOwner(app);
+    const stranger = await asOwner(app);
+    const p = await createProduct(owner, { name: 'Musc J14', price: 3500, costPrice: 1500, stock: 20 });
+    await testOrder(owner.workspaceId, p, { quantity: 2, unitPrice: 3500, status: 'new' });
+    await testOrder(owner.workspaceId, p, { quantity: 1, unitPrice: 3500, status: 'confirmed' });
+    await testOrder(owner.workspaceId, p, { quantity: 3, unitPrice: 3500, status: 'returned' });
+    await testOrder(owner.workspaceId, p, { quantity: 1, unitPrice: 3500, status: 'delivered' });
+    const sale = (number: string, status: 'completed' | 'draft', quantity: number) =>
+      db.sale.create({ data: { workspaceId: owner.workspaceId, number, status, subtotal: quantity * 3500, total: quantity * 3500, createdById: owner.userId, items: { create: [{ productId: p.id, productName: p.name, quantity, unitPrice: 3500, costPrice: 1500, total: quantity * 3500 }] } } });
+    await sale('VNT-J14-1', 'completed', 1);
+    await sale('VNT-J14-2', 'draft', 5);
+
+    const report = ((await owner.get('/reports/sales_by_product?period=30d&groupBy=product').expect(200)).body.data.rows as any[]).find((r) => r.product === 'Musc J14');
+    expect(report).toMatchObject({ quantity: 2, grossSales: 7000 });
+    const detail = (await owner.get(`/products/${p.id}`).expect(200)).body.data;
+    // the 2 units of the NEW order are « réservé », not sold
+    expect(detail).toMatchObject({ pricing: { sales30d: { units: 2, revenue: 7000 } }, stockDetail: { reserved: 2 } });
+
+    // the fixed expense of the period is shared over the same 2 units
+    await owner.post(`/products/${p.id}/expenses`, { category: 'marketing', amount: 1000, isPerUnit: false }).expect(201);
+    expect((await owner.get(`/products/${p.id}/margins`).expect(200)).body.data).toMatchObject({ expensesPerUnit: 500, trueCost: 2000, marginDzd: 1500, marginPct: 42.9, sales30d: { units: 2, revenue: 7000 } });
+    expect((await owner.get(`/products?ids=${p.id}`).expect(200)).body.data[0].marginPct).toBe(42.9);
+    expect((await owner.get(`/products?ids=${p.id}&minMargin=42&maxMargin=43`).expect(200)).body.data).toHaveLength(1);
+    await stranger.get(`/products/${p.id}/margins`).expect(404);
+  });
 });

@@ -54,7 +54,7 @@ export function CommuneCombobox({ id, wilayaId, value, onChange, invalid, disabl
         const c = v ? (list.find((x) => String(x.id) === v) ?? null) : null;
         onChange(c ? c.id : null, c);
       }}
-      options={geoFilter(list.map((c) => ({ value: String(c.id), label: communeLabel(c, locale), hint: c.postalCode ?? undefined })), search)}
+      options={geoFilter(list.map((c) => ({ value: String(c.id), label: communeLabel(c, locale), hint: c.postalCode ?? undefined, keywords: locale === 'ar' ? c.nameFr : c.nameAr })), search)}
       placeholder={wilayaId ? t('geo.commune.placeholder') : t('geo.commune.pickWilaya')}
       searchPlaceholder={t('geo.commune.search')}
       emptyLabel={q.isPending && wilayaId ? t('common.loading') : t('geo.empty')}

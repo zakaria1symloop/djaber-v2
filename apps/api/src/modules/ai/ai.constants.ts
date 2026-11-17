@@ -44,7 +44,12 @@ export const DEFAULT_CALL_TIMEOUT_S = 20;
 /** §6 circuit breaker. */
 export const BREAKER_WINDOW_S = 600;
 export const BREAKER_OPEN_S = 300;
-export const BREAKER_MIN_CALLS = 5;
+/**
+ * journey retest R1-1 (17/11): with a 2 % threshold and 5 calls, 2 errors out of 15 calls opened the breaker. The rate is
+ * read only from 20 calls in the window and 5 failed calls.
+ */
+export const BREAKER_MIN_CALLS = 20;
+export const BREAKER_MIN_ERRORS = 5;
 /** §5: runs still `running` after this long are reaped (credits released). */
 export const RUN_REAP_AFTER_MS = 5 * 60_000;
 /** §9: customer photos above this size are not analysed. */

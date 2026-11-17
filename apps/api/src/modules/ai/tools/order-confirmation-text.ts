@@ -85,6 +85,120 @@ const T: Record<Loc, { head: (n: string) => string; again: (n: string) => string
 };
 const locOf = (lang: AiLanguage | string | undefined): Loc => (lang === 'ar' ? 'ar' : lang === 'arabizi' ? 'arabizi' : lang === 'en' ? 'en' : 'fr');
 
+// --- the recap (journey retest R1-6 / R1-7, 17/11) ---------------------------------------------------------------------------
+type Recap = { items: Line[]; deliveryFee: number; total: number; clientName: string; clientPhone: string; secondPhone: string | null; wilaya: string; communeName: string | null; address: string | null; isStopdesk: boolean; replaces: string | null };
+const s = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+/**
+ * The recap a `create_order` of this turn returned for the customer to confirm (`CONFIRMATION_REQUIRED` of a first recap,
+ * `recapToShow`), the latest one; null when there is none or an order was placed this turn.
+ */
+export const pendingRecap = (calls: { name: string; result: unknown }[]): Recap | null => {
+  if (placedOrder(calls)) return null;
+  for (const c of [...calls].reverse()) {
+    if (c.name !== 'create_order') continue;
+    const r = c.result as { error?: { code?: unknown }; recap?: Record<string, unknown>; recapToShow?: unknown } | null;
+    if (r?.error?.code !== 'CONFIRMATION_REQUIRED' || r.recapToShow !== true || !r.recap || !Array.isArray(r.recap.items)) continue;
+    const p = r.recap;
+    return {
+      items: p.items as Line[],
+      deliveryFee: Number(p.deliveryFee ?? 0) || 0,
+      total: Number(p.total ?? 0) || 0,
+      clientName: s(p.clientName),
+      clientPhone: s(p.clientPhone),
+      secondPhone: s(p.secondPhone) || null,
+      wilaya: s(p.wilaya),
+      communeName: s(p.communeName) || null,
+      address: s(p.address) || null,
+      isStopdesk: p.isStopdesk === true,
+      replaces: s(p.replaces) || null,
+    };
+  }
+  return null;
+};
+
+const R: Record<Loc, { head: string; home: (place: string) => string; stop: (place: string) => string; free: string; total: (v: string) => string; name: string; phone: string; phone2: string; address: string; replaces: (n: string) => string; ask: string; cur: string; sep: string }> = {
+  fr: { head: 'Voici le récapitulatif de votre commande :', home: (p) => `Livraison à domicile${p ? ` (${p})` : ''}`, stop: (p) => `Livraison en stop-desk${p ? ` (${p})` : ''}`, free: 'gratuite', total: (v) => `Total : ${v}, à payer à la livraison.`, name: 'Nom', phone: 'Téléphone', phone2: 'Deuxième téléphone', address: 'Adresse', replaces: (n) => `Elle remplacera la commande ${n}.`, ask: 'Répondez « oui » pour confirmer la commande, ou dites-moi ce qu’il faut changer.', cur: 'DA', sep: ' : ' },
+  ar: { head: 'هذا ملخص الطلبية:', home: (p) => `التوصيل للدار${p ? ` (${p})` : ''}`, stop: (p) => `التوصيل لنقطة الاستلام${p ? ` (${p})` : ''}`, free: 'مجاني', total: (v) => `المجموع: ${v}، الدفع عند الاستلام.`, name: 'الاسم', phone: 'الهاتف', phone2: 'الهاتف الثاني', address: 'العنوان', replaces: (n) => `هذي الطلبية تعوض الطلبية ${n}.`, ask: 'جاوبني بـ « إيه » باش نأكدو الطلبية، ولا قولي واش نبدلو.', cur: 'دج', sep: ': ' },
+  arabizi: { head: 'Hada récap ta3 la commande:', home: (p) => `Tawsil l dar${p ? ` (${p})` : ''}`, stop: (p) => `Tawsil l stop-desk${p ? ` (${p})` : ''}`, free: 'batel', total: (v) => `Total: ${v}, tkhalles ki tewsel.`, name: 'Smitek', phone: 'Numéro', phone2: 'Numéro lokhra', address: 'Adresse', replaces: (n) => `Hadi t3awed la commande ${n}.`, ask: 'Ktebli « ih » bach nconfirmi la commande, wela goulli wach nbeddlou.', cur: 'DA', sep: ': ' },
+  en: { head: 'Here is your order summary:', home: (p) => `Home delivery${p ? ` (${p})` : ''}`, stop: (p) => `Stop-desk delivery${p ? ` (${p})` : ''}`, free: 'free', total: (v) => `Total: ${v}, cash on delivery.`, name: 'Name', phone: 'Phone', phone2: 'Second phone', address: 'Address', replaces: (n) => `It will replace order ${n}.`, ask: 'Reply « yes » to confirm the order, or tell me what to change.', cur: 'DA', sep: ': ' },
+};
+const folded = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+/** « Cité 20 Août, villa 3 » + « Boufarik » + « Blida »: the commune / wilaya are added when the address does not name them. */
+const placeOf = (base: string | null, ...more: (string | null)[]) => {
+  const parts = base ? [base] : [];
+  for (const m of more) if (m && !parts.some((p) => folded(p).includes(folded(m)))) parts.push(m);
+  return parts.join(', ');
+};
+const itemLine = (i: Line, amount: (n: number) => string) => {
+  const qty = Number(i.quantity ?? 1) || 1;
+  const unit = Number(i.unitPrice ?? 0) || 0;
+  const name = [s(i.name), s(i.variant) ? `(${s(i.variant)})` : ''].filter(Boolean).join(' ');
+  return `- ${qty} × ${name}${unit ? ` : ${amount(unit * qty)}` : ''}`;
+};
+
+/**
+ * journey retest R1-6 / R1-7: the recap the customer confirms, written by the server from the `CONFIRMATION_REQUIRED`
+ * result in their language — every item with the catalogue name as written (never translated), the delivery mode and
+ * its fee, the total, the name, the phone(s), the address, the replaced order. Pure.
+ */
+export const orderRecapText = (recap: Recap, lang: AiLanguage | string | undefined): string => {
+  const loc = locOf(lang);
+  const t = R[loc];
+  const amount = (n: number) => `${money(n)} ${t.cur}`;
+  const place = recap.isStopdesk ? recap.wilaya : placeOf(recap.communeName, recap.wilaya);
+  const fee = recap.deliveryFee > 0 ? amount(recap.deliveryFee) : t.free;
+  return [
+    t.head,
+    ...recap.items.map((i) => itemLine(i, amount)),
+    `- ${recap.isStopdesk ? t.stop(place) : t.home(place)}${t.sep}${fee}`,
+    t.total(amount(recap.total)),
+    ...(recap.clientName ? [`${t.name}${t.sep}${recap.clientName}`] : []),
+    ...(recap.clientPhone ? [`${t.phone}${t.sep}${recap.clientPhone}`] : []),
+    ...(recap.secondPhone ? [`${t.phone2}${t.sep}${recap.secondPhone}`] : []),
+    ...(!recap.isStopdesk && recap.address ? [`${t.address}${t.sep}${placeOf(recap.address, recap.communeName, recap.wilaya)}`] : []),
+    ...(recap.replaces ? [t.replaces(recap.replaces)] : []),
+    t.ask,
+  ].join('\n');
+};
+
+/** Latin digits, thousands separators dropped: the numbers a text writes. */
+const numbersOf = (text: string) => new Set([...text.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/(?<=\d)[ .,  ](?=\d{3}(?!\d))/g, '').matchAll(/\d+/g)].map((m) => m[0]));
+const wordsOf = (t: string) => ` ${folded(t).replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `;
+/**
+ * The model's reply shows the whole recap as given: every product name as written, the total, the fee, the name and the
+ * phone. Otherwise the server's recap is sent instead (« Votre commande de 3 tapis … attend votre confirmation » had no
+ * line, no name and no phone; « جلابة رجالي » for « Djellaba homme »).
+ */
+export const recapComplete = (reply: string, recap: Recap): boolean => {
+  const nums = numbersOf(reply);
+  const w = wordsOf(reply);
+  const has = (x: string) => !x.trim() || w.includes(wordsOf(x));
+  return (
+    nums.has(String(recap.total)) &&
+    (recap.deliveryFee <= 0 || nums.has(String(recap.deliveryFee))) &&
+    (!recap.clientPhone || nums.has(recap.clientPhone.replace(/\D/g, ''))) &&
+    has(recap.clientName) &&
+    recap.items.every((i) => has(s(i.name)))
+  );
+};
+
+/**
+ * What the customer gets when a recap is pending: the model's reply when it already shows the whole recap; else the
+ * server's recap, after the model's sentence when that sentence answers something else (no amount, phone or product of
+ * the recap in it, at most 2 sentences) — a partial recap of the model is dropped.
+ */
+export const recapReply = (reply: string, recap: Recap, lang: AiLanguage | string | undefined): { text: string; kept: 'model' | 'prefix' | 'server' } => {
+  const text = reply.trim();
+  if (text && recapComplete(text, recap)) return { text, kept: 'model' };
+  const server = orderRecapText(recap, lang);
+  const nums = numbersOf(text);
+  const w = wordsOf(text);
+  const partial = nums.has(String(recap.total)) || (!!recap.clientPhone && nums.has(recap.clientPhone.replace(/\D/g, ''))) || recap.items.some((i) => s(i.name) && w.includes(wordsOf(s(i.name))));
+  const sentences = text.split(/(?<=[.!?؟])\s+|\n+/).filter((x) => x.trim()).length;
+  if (text && !partial && sentences <= 2) return { text: `${text}\n\n${server}`, kept: 'prefix' };
+  return { text: server, kept: 'server' };
+};
+
 /** The confirmation of the order placed this turn, in the customer's language; null when no order was placed. */
 export const orderConfirmationText = (calls: { name: string; result: unknown }[], lang: AiLanguage | string | undefined): string | null => {
   const o = placedOrder(calls);

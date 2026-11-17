@@ -1,5 +1,6 @@
 // ICU formatting of a flat catalogue key — shared by the client hook `useT()` (lib/i18n.tsx) and server code
 // (public pages metadata, lib/server-i18n.ts). No React, no 'use client'.
+import { isolateRefs } from '@djaber/shared';
 import { IntlMessageFormat } from 'intl-messageformat';
 
 export type Flat = Record<string, string>;
@@ -64,7 +65,8 @@ export const formatMessage = (locale: string, messages: Flat, key: string, param
   let fmt = cache.get(id);
   if (!fmt) {
     try {
-      fmt = new IntlMessageFormat(template, locale, undefined, { ignoreTag: true });
+      // journey J14-7: « #{number} » isolated in Arabic (« CMD-1001# » / « VNT-1002# » otherwise), as the stored texts
+      fmt = new IntlMessageFormat(locale === 'ar' ? isolateRefs(template) : template, locale, undefined, { ignoreTag: true });
     } catch {
       return fillWhatIsKnown(template, params);
     }

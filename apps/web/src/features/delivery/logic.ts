@@ -19,9 +19,10 @@ export const foldGeo = (s: string) =>
     .replace(/[-'’ʼ`]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-export const geoFilter = <T extends { label: string; hint?: string }>(options: T[], q: string): T[] => {
+/** journey J14-5: `keywords` = the other-language name (« Boufarik » finds « بوفاريك » in the Arabic UI) */
+export const geoFilter = <T extends { label: string; hint?: string; keywords?: string }>(options: T[], q: string): T[] => {
   const needle = foldGeo(q);
-  return needle ? options.filter((o) => foldGeo(`${o.label} ${o.hint ?? ''}`).includes(needle)) : options;
+  return needle ? options.filter((o) => foldGeo(`${o.label} ${o.hint ?? ''} ${o.keywords ?? ''}`).includes(needle)) : options;
 };
 
 /* ---------- parcel timeline order (journey 16/11 J05-17) ---------- */

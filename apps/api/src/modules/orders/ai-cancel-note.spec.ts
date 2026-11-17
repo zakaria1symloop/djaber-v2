@@ -21,6 +21,6 @@ describe('aiCancelNote', () => {
   it('a note already stored as a key (A9 « remplacée par #CMD-1010 ») is kept as it is', () => {
     const replaced = storedText('stored.order.replacedBy', { number: 'CMD-1010' });
     expect(aiCancelNote(replaced)).toBe(replaced);
-    expect(renderStoredTextIn(['changed_mind', aiCancelNote(replaced)].join(' · '), 'ar')).toBe('changed_mind · استُبدل بالطلب #CMD-1010');
+    expect(renderStoredTextIn(['changed_mind', aiCancelNote(replaced)].join(' · '), 'ar')).toBe(`changed_mind · استُبدل بالطلب ${String.fromCharCode(0x2068)}#CMD-1010${String.fromCharCode(0x2069)}`); // the reference isolated in Arabic (J14-7)
   });
 });
