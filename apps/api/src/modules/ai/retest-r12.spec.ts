@@ -331,7 +331,8 @@ describe('R12-3 (Minor) — no lookup_order on the « oui » turn, one search fo
     const r = await new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never).turn(turnReq('oui, et elle arrive quand ?', history, { orderHistory: shown }));
     if (!r.ok) throw new Error('turn failed');
     expect(offered(gateway, 0)).toEqual(['create_order', 'lookup_order']);
-    expect(offered(gateway, 1)).toEqual([]);
+    // journey retest R19-1 (18/11): once the order is placed the reply is the server's — no further model step at all
+    expect(gateway.calls).toHaveLength(1);
     expect(r.output.reply).toContain('TEST-2340');
   });
 

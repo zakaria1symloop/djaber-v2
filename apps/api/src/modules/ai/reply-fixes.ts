@@ -1,6 +1,7 @@
 // Journey retest R7 (17/11, docs/audit/journeys-2026-11-16/journeys/R7-ai-orders.md): the server's last word on the reply text
 // for two cases the model kept missing — a photo request for a product that has none (R7-2), a « ? » / « ... » answered with
 // « Oui, je suis là ! » / « Vous êtes toujours là ? » (R7-3). Pure.
+import { formatMoney } from '@djaber/shared';
 import { serverTextLanguage, type AiLanguage } from './language';
 import { productNamedIn, productWanted } from './product-named';
 import { FIELD_QUESTIONS, foldGuard, numbersIn, PHOTO_WORD, splitSentences, type CataloguePrice, type QuoteFact } from './reply-guard';
@@ -34,6 +35,12 @@ export const noPhotoSaid = (reply: string): boolean => NO_PHOTO_SAID.test(foldGu
 type Loc = 'fr' | 'ar' | 'arabizi' | 'en';
 // journey retest R9-1: the one language decision of the server texts (`serverTextLanguage`)
 const locOf = (lang: AiLanguage | string | undefined): Loc => serverTextLanguage(lang);
+/**
+ * journey retest R19-3 (18/11): every amount the server writes, as `formatMoney` writes it (rule 11: « 20 000 DA », a no-break space between
+ * the thousands and before the currency; « دج » in Arabic script) — PG1 « batel men 20000 DA », N5 « gratuite dès 20000 DA », PF1 « Sac à main
+ * cuir (Marron) : 6900 DA » were written by the server without the thousands space (the recaps write « 6 900 DA »).
+ */
+export const amountText = (n: number, lang: AiLanguage | string | undefined): string => (locOf(lang) === 'ar' ? formatMoney(n).replace(/DA$/u, 'دج') : formatMoney(n));
 const NO_PHOTO: Record<Loc, { one: string; many: string; offer: string }> = {
   fr: { one: "Nous n'avons pas encore de photo de ce produit", many: "Nous n'avons pas encore de photo de ces produits", offer: ', mais je peux vous donner tous les détails' },
   ar: { one: 'ما عندناش تصاور تاعو درك', many: 'ما عندناش تصاور تاعهم درك', offer: '، بصح نقدر نقولك كامل التفاصيل' },
@@ -250,16 +257,16 @@ export const withArabicWords = (reply: string, lang: AiLanguage | string | undef
 };
 
 const HOME_FEE: Record<Loc, (fee: string) => string> = {
-  fr: (f) => `La livraison à domicile est à ${f} DA.`,
-  ar: (f) => `التوصيل للدار ب\u0640 ${f} دج.`,
-  arabizi: (f) => `Tawsil l dar b ${f} DA.`,
-  en: (f) => `Home delivery is ${f} DA.`,
+  fr: (f) => `La livraison à domicile est à ${f}.`,
+  ar: (f) => `التوصيل للدار ب\u0640 ${f}.`,
+  arabizi: (f) => `Tawsil l dar b ${f}.`,
+  en: (f) => `Home delivery is ${f}.`,
 };
 const STOP_FEE: Record<Loc, (fee: string) => string> = {
-  fr: (f) => `En stop-desk, c'est ${f} DA.`,
-  ar: (f) => `ولا لنقطة الاستلام (stop-desk) ب\u0640 ${f} دج.`,
-  arabizi: (f) => `Wela f stop-desk b ${f} DA.`,
-  en: (f) => `Stop-desk delivery is ${f} DA.`,
+  fr: (f) => `En stop-desk, c'est ${f}.`,
+  ar: (f) => `ولا لنقطة الاستلام (stop-desk) ب\u0640 ${f}.`,
+  arabizi: (f) => `Wela f stop-desk b ${f}.`,
+  en: (f) => `Stop-desk delivery is ${f}.`,
 };
 /**
  * journey retest R13-6 (18/11): an answer that gives one delivery fee of a wilaya while this turn's quote_delivery gave both (home
@@ -277,10 +284,10 @@ export const withBothFees = (reply: string, quotes: readonly QuoteFact[], lang: 
     if (q.isStopdesk || q.free || !(q.fee > 0) || q.stopdeskFee === null || !(q.stopdeskFee > 0) || q.stopdeskFee === q.fee) continue;
     if (has(q.stopdeskFee) && !has(q.fee)) {
       const i = at(q.stopdeskFee);
-      parts = [...parts.slice(0, i), `${HOME_FEE[loc](String(q.fee))} `, ...parts.slice(i)];
+      parts = [...parts.slice(0, i), `${HOME_FEE[loc](amountText(q.fee, loc))} `, ...parts.slice(i)];
     } else if (has(q.fee) && !has(q.stopdeskFee)) {
       const i = at(q.fee);
-      parts = [...parts.slice(0, i + 1).map((p, k) => (k === i ? `${p}${sep(p)}` : p)), `${STOP_FEE[loc](String(q.stopdeskFee))}${i + 1 < parts.length ? ' ' : ''}`, ...parts.slice(i + 1)];
+      parts = [...parts.slice(0, i + 1).map((p, k) => (k === i ? `${p}${sep(p)}` : p)), `${STOP_FEE[loc](amountText(q.stopdeskFee, loc))}${i + 1 < parts.length ? ' ' : ''}`, ...parts.slice(i + 1)];
     }
   }
   return parts.join('').replace(/[ \t]+\n/g, '\n').trim();
@@ -319,11 +326,24 @@ export const withModeFees = (reply: string, quotes: readonly QuoteFact[], lang: 
   const nums = numbersIn(foldGuard(reply));
   if ((q.fee > 0 && nums.includes(q.fee)) || (q.stopdeskFee !== null && nums.includes(q.stopdeskFee))) return reply;
   const loc = locOf(lang);
-  const cur = loc === 'ar' ? 'دج' : 'DA';
-  const home = q.free || q.fee === 0 ? FREE_HOME[loc] : `${q.fee} ${cur}`;
+  const home = q.free || q.fee === 0 ? FREE_HOME[loc] : amountText(q.fee, loc);
   const parts = splitSentences(reply);
-  const line = MODE_FEES[loc](home, q.stopdeskFee !== null && q.stopdeskFee > 0 ? `${q.stopdeskFee} ${cur}` : null);
-  return [...parts.slice(0, i).map((p, k) => (k === i - 1 && !/\s$/u.test(p) ? `${p} ` : p)), `${line} `, ...parts.slice(i)].join('').replace(/[ \t]+\n/g, '\n').trim();
+  const line = MODE_FEES[loc](home, q.stopdeskFee !== null && q.stopdeskFee > 0 ? amountText(q.stopdeskFee, loc) : null);
+  // journey retest R19-3 (18/11): before the reply's questions, never between two of them (PG2 T2 « واش العنوان تاعك في بوفاريك؟ للدار: 450 دج، … عطيني
+  // الشارع … ولا تحب نوصلوها لنقطة الاستلام (stop-desk)؟ »)
+  const at = questionBlockStart(parts, i);
+  return [...parts.slice(0, at).map((p, k) => (k === at - 1 && !/\s$/u.test(p) ? `${p} ` : p)), `${line} `, ...parts.slice(at)].join('').replace(/[ \t]+\n/g, '\n').trim();
+};
+/** journey retest R19-3 (18/11): the first sentence of the run of questions that ends at sentence `at` (server facts go before it). */
+const questionBlockStart = (parts: readonly string[], at: number): number => {
+  let k = at;
+  while (k > 0 && /[?؟]/u.test(parts[k - 1]!)) k--;
+  return k;
+};
+/** journey retest R19-3: a sentence giving a delivery fee (an amount with its currency and a delivery / home / stop-desk word). */
+const feeLine = (s: string): boolean => {
+  const f = foldGuard(s);
+  return /\d[\d \u00a0\u202f.,]*\s*(?:da|dzd|دج|دينار)(?![\p{L}])/iu.test(s) && (HOME_WORD.test(f) || STOP_WORD.test(f) || /(?<![\p{L}])(?:livraison|livrer|tawsil|delivery|التوصيل|توصيل)(?![\p{L}])/u.test(f));
 };
 
 /**
@@ -460,14 +480,13 @@ export const withPlaceFacts = (reply: string, quotes: readonly QuoteFact[], prod
   const q = quotes.find((x) => !x.isStopdesk);
   const nums = numbersIn(foldGuard(reply));
   const loc = locOf(lang);
-  const cur = loc === 'ar' ? 'دج' : 'DA';
   const lines: string[] = [];
-  if (product && product.price > 0 && !nums.includes(product.price)) lines.push(PRODUCT_PRICE[loc](product.variant ? `${product.name} (${product.variant})` : product.name, `${product.price} ${cur}`));
+  if (product && product.price > 0 && !nums.includes(product.price)) lines.push(PRODUCT_PRICE[loc](product.variant ? `${product.name} (${product.variant})` : product.name, amountText(product.price, loc)));
   if (q && modeQuestionAt(reply) < 0 && !(q.fee > 0 && nums.includes(q.fee)) && !(q.stopdeskFee !== null && nums.includes(q.stopdeskFee))) {
     // journey retest R18-1 (18/11): a quote made with no order amount (a place given before any product) gives the home fee « from » the
     // free threshold — Oran 600 DA, free from 20 000 DA: the Coffret (24 990 DA) is delivered free, so the threshold goes with the fee
-    const home = q.free || q.fee === 0 ? FREE_HOME[loc] : `${q.fee} ${cur}${q.freeFrom ? FREE_FROM[loc](`${q.freeFrom} ${cur}`) : ''}`;
-    const stop = q.stopdeskFee !== null && q.stopdeskFee > 0 && !o.homeOnly ? `${q.stopdeskFee} ${cur}` : null;
+    const home = q.free || q.fee === 0 ? FREE_HOME[loc] : `${amountText(q.fee, loc)}${q.freeFrom ? FREE_FROM[loc](amountText(q.freeFrom, loc)) : ''}`;
+    const stop = q.stopdeskFee !== null && q.stopdeskFee > 0 && !o.homeOnly ? amountText(q.stopdeskFee, loc) : null;
     // journey retest R16-4 (18/11): the reply offers the stop-desk itself (« … ? Wela t7ebb nwasslouha f stop-desk ? ») — the fees only, the
     // stop-desk offered once
     lines.push(stop && STOP_WORD.test(foldGuard(reply)) ? MODE_FEES[loc](home, stop) : PLACE_FEES[loc](home, stop));
@@ -482,6 +501,11 @@ export const withPlaceFacts = (reply: string, quotes: readonly QuoteFact[], prod
         at = k;
         break;
       }
+  // journey retest R19-3 (18/11): before the run of questions it ends (never between two questions), and the price before a fee sentence the
+  // reply already has (PF1 T2 « … À domicile : 650 DA, en stop-desk : 350 DA. Sac à main cuir (Marron) : 6900 DA. Quelle est votre adresse … ? »)
+  if (at >= 0) at = questionBlockStart(parts, at);
+  const fee = product && lines[0] && !nums.includes(product.price) ? parts.findIndex(feeLine) : -1;
+  if (fee >= 0 && (at < 0 || fee < at)) at = fee;
   if (at < 0) return `${reply.trim()} ${lines.join(' ')}`.trim();
   return [...parts.slice(0, at).map((p, k) => (k === at - 1 && !/\s$/u.test(p) ? `${p} ` : p)), `${lines.join(' ')} `, ...parts.slice(at)].join('').replace(/[ \t]+\n/g, '\n').trim();
 };
@@ -515,7 +539,7 @@ export const withAskedPrice = (reply: string, customerText: string | undefined, 
   const nums = numbersIn(foldGuard(reply));
   if (nums.includes(prices[0]!)) return reply;
   const loc = locOf(lang);
-  const line = UNAVAILABLE_PRICE[loc](p.name, `${prices[0]} ${loc === 'ar' ? 'دج' : 'DA'}`);
+  const line = UNAVAILABLE_PRICE[loc](p.name, amountText(prices[0]!, loc));
   const parts = splitSentences(reply);
   const i = parts.findIndex((s) => !!productNamedIn(s, [p]));
   if (i < 0) return `${line} ${reply.trim()}`.trim();
@@ -569,6 +593,8 @@ const beforeLastQuestion = (reply: string, lines: string[]): string => {
       at = k;
       break;
     }
+  // (journey retest R19-3: before the run of questions that ends the reply)
+  if (at >= 0) at = questionBlockStart(parts, at);
   if (at < 0) return `${reply.trim()} ${lines.join(' ')}`.trim();
   return [...parts.slice(0, at).map((p, k) => (k === at - 1 && !/\s$/u.test(p) ? `${p} ` : p)), `${lines.join(' ')} `, ...parts.slice(at)].join('').replace(/[ \t]+\n/g, '\n').trim();
 };
@@ -591,7 +617,6 @@ export const withAskedFacts = (
   const said = f.customerText ?? '';
   if (!said.trim() || !text.trim()) return text;
   const loc = locOf(lang);
-  const cur = loc === 'ar' ? 'دج' : 'DA';
   const now = foldGuard(text);
   const before = foldGuard(original);
   const nowNums = numbersIn(now);
@@ -601,7 +626,7 @@ export const withAskedFacts = (
     const gone = (f.unavailableNames ?? []).includes(p.name);
     const prices = [...new Set([p.price, ...p.variants.map((v) => v.price)].filter((x) => x > 0))];
     const asked = priceAsked(said) ? prices.find((x) => numbersIn(before).includes(x)) : undefined;
-    if (asked !== undefined && !prices.some((x) => nowNums.includes(x))) lines.push(gone ? UNAVAILABLE_PRICE[loc](p.name, `${asked} ${cur}`) : PRODUCT_PRICE[loc](p.name, `${asked} ${cur}`));
+    if (asked !== undefined && !prices.some((x) => nowNums.includes(x))) lines.push(gone ? UNAVAILABLE_PRICE[loc](p.name, amountText(asked, loc)) : PRODUCT_PRICE[loc](p.name, amountText(asked, loc)));
     else if (STOCK_ASK.test(foldGuard(said))) {
       const stockSaid = (s: string) => OUT_OF_STOCK_SAID.test(foldGuard(s)) || STOCK_ASK.test(foldGuard(s));
       const stockBefore = splitSentences(original).some((s) => !!productNamedIn(s, [p]) && stockSaid(s));
@@ -702,6 +727,40 @@ export const withoutBookingOffer = (reply: string, customerText: string | undefi
   return text;
 };
 
+/** journey retest R19-3: « je vous confirme : » opening a question (N5 T2 « … je vous confirme : c'est bien le Hijab soie à 1500 DA que vous voulez ? »). */
+const I_CONFIRM = /^(\s*)(?:je\s+vous\s+(?:le\s+)?confirme|je\s+(?:le\s+)?confirme)\s*:\s*/iu;
+/** journey retest R19-3: the question asking whether the customer wants the product offered instead, in the customer's language. */
+const ALT_ASK: Record<Loc, string> = { fr: 'Ça vous intéresse ?', ar: 'تحب تديه ؟', arabizi: 'T7ebb teddih ?', en: 'Would you like it instead?' };
+/**
+ * journey retest R19-3 (18/11): before any recap, a question about the in-stock product offered for one that is not there is never worded as an
+ * order step — N5 T1 « … notre Hijab soie est en stock à 1500 DA … Voulez-vous que je vous le réserve ? » ⇒ « … Ça vous intéresse ? » (R16-4 left the
+ * booking question of an alternative alone), N5 T2 « Le Parfum Oud étant en rupture, je vous confirme : c'est bien le Hijab soie … que vous voulez ? »
+ * ⇒ « … C'est bien le Hijab soie … que vous voulez ? ». A question asking a field keeps its wording.
+ */
+export const withoutOrderStepAsk = (reply: string, lang: AiLanguage | string | undefined): string => {
+  const parts = splitSentences(reply);
+  const away = NOT_THERE.test(foldGuard(reply));
+  let changed = false;
+  const kept = parts.map((s) => {
+    if (!/[?؟]/u.test(s)) return s;
+    // (« Le Parfum Oud étant en rupture, je vous confirme : c'est bien … ? » — the words after a comma too)
+    const at = s.search(/(?:^|[,،]\s*)(?:je\s+vous\s+(?:le\s+)?confirme|je\s+(?:le\s+)?confirme)\s*:/iu);
+    if (at >= 0) {
+      changed = true;
+      const head = s.slice(0, at);
+      const tail = s.slice(at).replace(/^[,،]\s*/u, '').replace(I_CONFIRM, '');
+      return head.trim() ? `${head.replace(/\s+$/u, '')}, ${tail}` : `${/^\s*/u.exec(s)?.[0] ?? ''}${tail.charAt(0).toLocaleUpperCase()}${tail.slice(1)}`;
+    }
+    if (away && BOOKING_ASK.test(foldGuard(s).replace(/['’-]/g, ' ')) && !FIELD_ASKED.test(foldGuard(s))) {
+      changed = true;
+      const end = /\s*$/u.exec(s)?.[0] ?? '';
+      return `${/^\s*/u.exec(s)?.[0] ?? ''}${ALT_ASK[locOf(lang)]}${end}`;
+    }
+    return s;
+  });
+  return changed ? kept.join('').replace(/[ \t]+\n/g, '\n').trim() : reply;
+};
+
 /**
  * journey retest R16-4 (18/11): the stop-desk offered twice in one reply — F1b T2 « Livraison : 650 DA à domicile, ou 350 DA en stop-desk si
  * vous préférez. Quelle est votre adresse … ? Si vous préférez, on peut aussi vous livrer en stop-desk. ». A sentence that only offers the
@@ -777,7 +836,14 @@ const NOTED_VERB = /^(?:tsajj?el|tsajj?elt|sajj?elt|sajj?elna|tsajj?lou|tsajj?la
 const NOTED_FR = /^(?:c\s?est\s+(?:bien\s+)?note(?:e)?|(?:tout\s+est\s+)?bien\s+note(?:e)?|note|c\s?est\s+enregistre(?:e)?)$/u;
 const ORDER_NOUN = /(?<![\p{L}])(?:commande|order|طلبي[هة]|الطلبي[هة]|الطلب|طلب|lacommande|kommand)(?![\p{L}])/u;
 /** Words that name an order field (folded): with the customer's own words, a clause of them only echoes a field. */
-const FIELD_WORDS = new Set(['wilaya', 'commune', 'baladiya', 'numero', 'telephone', 'smitek', 'ta3ek', 'ولايه', 'بلديه', 'الولايه', 'البلديه', 'الرقم', 'رقم', 'الهاتف', 'الاسم', 'تاعك', 'سميتك'].map((w) => foldGuard(w)));
+/**
+ * journey retest R19-3 (18/11): a « noted » phrase opening a clause, followed by what is noted — F5 T1 « C'est noté : robe kabyle brodée taille M b
+ * 4900 DA », F1b T2 « c'est noté : Sétif, El Eulma », PF1 T2 « j'ai bien noté votre nom, votre numéro et El Eulma à Sétif », N5 T2 « j'ai bien noté
+ * Oran, Bir El Djir, … » (the R18-4 rule read a whole clause « c'est noté » only). As written (accents, apostrophes), case-insensitive.
+ */
+const NOTED_LEAD = /^(?:c['’]?\s?est\s+(?:bien\s+)?not[ée]e?|(?:tout\s+est\s+)?bien\s+not[ée]e?|j['’]\s?ai\s+(?:bien\s+)?(?:not[ée]|enregistr[ée])|on\s+a\s+(?:bien\s+)?not[ée]|nous\s+avons\s+(?:bien\s+)?not[ée])\s*:?\s*(?=\S)/iu;
+// (journey retest R19-3: « votre nom, votre numéro », « vos coordonnées » echo a field too)
+const FIELD_WORDS = new Set(['wilaya', 'commune', 'baladiya', 'numero', 'telephone', 'votre', 'vos', 'nom', 'prenom', 'adresse', 'coordonnees', 'informations', 'pour', 'dans', 'chez', 'avec', 'piece', 'pieces', 'smitek', 'ta3ek', 'ولايه', 'بلديه', 'الولايه', 'البلديه', 'الرقم', 'رقم', 'الهاتف', 'الاسم', 'تاعك', 'سميتك'].map((w) => foldGuard(w)));
 const THANK_WORD = /(?<![\p{L}])(?:merci|thanks|thank|saha|sahit|choukran|chokran|شكرا|صحيت|يعطيك|تشرفنا|بارك)(?![\p{L}])/u;
 /** A price in a clause: an amount with its currency (« 1500 DA », « 2800 دج »). */
 const PRICED = /\d[\d \u00a0\u202f.,]*\s*(?:da|dzd|دج|دينار)(?![\p{L}])/iu;
@@ -813,6 +879,16 @@ export const withoutNotedSteps = (reply: string, history?: string): string => {
         continue;
       }
       const lead = /^\s*/u.exec(c)?.[0] ?? '';
+      // journey retest R19-3: « c'est noté : … » / « j'ai bien noté … » — the phrase goes; what follows stays when the clause (or the rest of the
+      // sentence) gives a price, else it only echoes the customer's fields and goes with them
+      const noted = NOTED_LEAD.exec(c.trim());
+      if (noted) {
+        mine = true;
+        const rest = c.trim().slice(noted[0].length);
+        if (PRICED.test([rest, ...clauses.slice(k + 1)].join(''))) out.push(`${lead}${rest}`);
+        else drop = true;
+        continue;
+      }
       const m = NOTED_VERB.exec(foldGuard(c.trim()).replace(/['’]/g, ' '));
       if (!m) {
         out.push(c);
@@ -847,8 +923,43 @@ const NAME_CUE = /(?<![\p{L}])(?:nom|name|smitek|smiytek|merci|thanks|thank\s+yo
  * علي » (the recap and the order kept the Arabic script). A run of two to four capitalised Latin words after a name word (« nom : »,
  * « Merci ») that is the customer's Arabic-script name written in Latin letters (`customerOwnName`) becomes the customer's own text.
  */
+/** The consonants of an Arabic-script name, as Latin classes (long vowels, ع, ة, hamza dropped). */
+const AR_CONSONANT: Record<string, string> = { ب: 'b', ت: 't', ث: 't', ج: 'j', ح: 'h', خ: 'K', د: 'd', ذ: 'd', ر: 'r', ز: 'z', س: 's', ش: 'C', ص: 's', ض: 'd', ط: 't', ظ: 'd', غ: 'G', ف: 'f', ق: 'k', ك: 'k', ل: 'l', م: 'm', ن: 'n', ه: 'h' };
+const arabicSkeleton = (w: string): string => [...w.replace(/^ال(?=\S{2})/u, '')].map((ch) => AR_CONSONANT[ch] ?? '').join('').replace(/(.)\1+/gu, '$1');
+/** The consonants of a Latin name in the same classes (kh, gh, ch / sh, dj, th, dh, ph; c, q, g read as s, k, j; vowels, w, y dropped). */
+const latinSkeleton = (w: string): string =>
+  w
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/gu, '')
+    .replace(/kh/gu, 'K')
+    .replace(/gh/gu, 'G')
+    .replace(/ch|sh/gu, 'C')
+    .replace(/dj/gu, 'j')
+    .replace(/th/gu, 't')
+    .replace(/dh/gu, 'd')
+    .replace(/ph/gu, 'f')
+    .replace(/c/gu, 's')
+    .replace(/q/gu, 'k')
+    .replace(/g/gu, 'j')
+    .replace(/[^bdfhjklmnprstvzCGK]/gu, '')
+    .replace(/(.)\1+/gu, '$1');
+/** A Latin word after which a reply names the customer by their first name (« Merci Samir. », « Saha Walid. »). */
+const FIRST_NAME_CUE = /(?<![\p{L}])(Merci|Thanks|Thank\s+you|Bienvenue|Welcome|Bonjour|Bonsoir|Parfait|Super|Saha|Sahit|Ahlan|Marhba|Ya)(\s*,?\s+)(\p{Lu}[\p{Ll}'’-]{1,20})(?![\p{L}])(?!\s+\p{Lu}\p{Ll})/gu;
 export const withCustomerScriptName = (reply: string, history: string): string => {
   if (!history || !/[\u0600-\u06ff]/u.test(history)) return reply;
+  // journey retest R19-3 (18/11): the first name alone after a thank-you — N4 T2 « Merci Samir. » for « سمير بن علي », F3 T2 « Saha Walid. » for
+  // « smiti وليد بوزيد » (the R18-4 rule read two words or more): the customer's own first word when the Latin word writes the same consonants
+  reply = withCustomerScriptRun(reply, history);
+  return reply.replace(FIRST_NAME_CUE, (match: string, cue: string, gap: string, word: string) => {
+    const own = customerOwnName(word, history);
+    const first = own?.split(/\s+/)[0];
+    const skeleton = latinSkeleton(word);
+    return first && /^[\u0600-\u06ff]+$/u.test(first) && skeleton.length >= 2 && arabicSkeleton(first) === skeleton ? `${cue}${gap}${first}` : match;
+  });
+};
+/** journey retest R18-4: a run of two to four capitalised Latin words that is the customer's Arabic-script name \u21d2 the customer's own text. */
+const withCustomerScriptRun = (reply: string, history: string): string => {
   return reply.replace(/(?<![\p{L}])(\p{Lu}[\p{Ll}'’-]+(?:\s+\p{Lu}[\p{Ll}'’-]+){1,4})(?![\p{L}])/gu, (match: string, _g: string, at: number) => {
     // (« Merci Samir Ben Ali » is one capitalised run: its first word is the cue)
     const lead = /^(?:Merci|Thanks|Bienvenue|Welcome|Saha|Sahit)\s+/u.exec(match)?.[0] ?? '';

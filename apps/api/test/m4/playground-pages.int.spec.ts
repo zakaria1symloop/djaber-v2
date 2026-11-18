@@ -85,7 +85,8 @@ describe('playground (AGT-07)', () => {
     expect(turn.toolCalls[1]).toMatchObject({ simulated: false, result: { ok: false, error: { code: 'VALIDATION', field: 'clientPhone' } } });
     // journey retest R10-3: add_faq_candidate is offered only on a message that asks something — on « oui je confirme » the call is not run
     expect(turn.toolCalls).toHaveLength(2);
-    expect(JSON.stringify(fakeAi(app).callsOf('reply')[1]!.messages)).toContain('TOOL_NOT_AVAILABLE');
+    // journey retest R19-1 (18/11): once the order is placed the reply is the server's — no model call after that step
+    expect(fakeAi(app).callsOf('reply')).toHaveLength(1);
     expect(turn.status).toBe('OK'); // a simulated order does not hand the test over to a human
     expect(await db.order.count({ where: { workspaceId: owner.workspaceId } })).toBe(0);
     expect((await db.product.findUniqueOrThrow({ where: { id: robe.id } })).stock).toBe(stock);
@@ -145,7 +146,8 @@ describe('playground (AGT-07)', () => {
     expect(first.reply).toContain('Téléphone : 0770112233');
     fakeAi(app).reset();
     fakeAi(app).script('reply', { error: 'provider_error' }, { error: 'provider_error' });
-    const thread = [{ role: 'user', text: details }, { role: 'assistant', text: first.reply }, { role: 'user', text: 'oui' }];
+    // (journey retest R19-1: a plain « oui » to the recap is placed with no model call — a yes with a question still calls the model)
+    const thread = [{ role: 'user', text: details }, { role: 'assistant', text: first.reply }, { role: 'user', text: 'oui merci, c’est livré en combien de jours ?' }];
     await test(owner, agent.id, { sessionId: 'r1-1', messages: thread }).expect(503);
     fakeAi(app).reset();
     fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args }] }, { reply: 'ok', intent: 'SALE' });
@@ -205,7 +207,7 @@ describe('playground (AGT-07)', () => {
     fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args: { clientName: '---', clientPhone: '0500000000', wilayaId: 1, items: [{ productId: tapis.id, quantity: 2 }], customerConfirmed: true } }] }, { reply: 'Parfait, les 2 tapis de prière sont disponibles. Quel est votre nom complet ?', intent: 'SALE' });
     const t1 = (await test(owner, agent.id, { sessionId: 'r5-n3', ...say('Bonjour, je voudrais 2 tapis de prière') }).expect(200)).body.data;
     expect(t1.toolCalls).toEqual([]);
-    expect(t1.reply).toBe('Parfait, les 2 tapis de prière sont disponibles. Tapis de prière : 2800 DA. Quel est votre nom complet ?'); // journey retest R18-2
+    expect(t1.reply).toBe('Parfait, les 2 tapis de prière sont disponibles. Tapis de prière : 2\u00a0800\u00a0DA. Quel est votre nom complet ?'); // journey retest R18-2 (R19-3: formatMoney)
     expect((fakeAi(app).callsOf('reply')[0]!.tools ?? []).map((d) => d.name)).not.toContain('create_order');
     // R5-5 (N3 T3): the phone was given ⇒ the complete order goes through in one call; the delivery question gets its answer
     fakeAi(app).reset();
@@ -267,7 +269,8 @@ describe('playground (AGT-07)', () => {
     ];
     fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args: { ...args, clientName: 'Samir Ben Ali', clientPhone: '0661234567', wilayaId: 9, communeName: 'Boufarik', address: 'Cité 20 août villa 3, Blida' } }] }, { reply: 'Merci Samir !', intent: 'SALE' });
     const n4t3 = (await test(owner, agent.id, { sessionId: 'r6-n4', messages: n4 }).expect(200)).body.data;
-    expect(n4t3.reply).toMatch(/^Merci Samir !\n\nVoici le récapitulatif/);
+    // journey retest R19-1 (18/11): the message asks nothing — the recap ends the turn, no model lead-in is asked for
+    expect(n4t3.reply).toMatch(/^Voici le récapitulatif/);
     expect(n4t3.reply).toContain('Adresse : Cité 20 août villa 3, Boufarik, Blida');
     // R6-2 (N9 T1): « Voici la photo » with the card of a product that has none ⇒ the corrective turn's text is sent
     fakeAi(app).reset();
@@ -278,7 +281,7 @@ describe('playground (AGT-07)', () => {
     );
     const n9 = (await test(owner, agent.id, { sessionId: 'r6-n9', ...say('Bonjour, envoyez-moi une photo de la robe kabyle brodée, c\'est quel tissu ?') }).expect(200)).body.data;
     // (journey retest R18-2: the price of the product named, not told yet, is added)
-    expect(n9.reply).toBe('Nous n\'avons pas encore de photo de ce produit. Elle est brodée à la main, en tissu léger. Robe kabyle brodée : 4900 DA.');
+    expect(n9.reply).toBe('Nous n\'avons pas encore de photo de ce produit. Elle est brodée à la main, en tissu léger. Robe kabyle brodée : 4\u00a0900\u00a0DA.'); // (R19-3: formatMoney)
     expect(String((fakeAi(app).callsOf('reply')[1]!.messages.at(-1) as { content: unknown }).content)).toContain('NO PHOTO IS SENT with this answer');
   });
 

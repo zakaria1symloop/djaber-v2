@@ -263,7 +263,7 @@ describe('R17-1 (Major) — off_catalogue needs product words the catalogue has 
     const r = await new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never).turn(req);
     if (!r.ok) throw new Error('turn failed');
     expect((gateway.calls[0]!.tools ?? []).map((d) => d.name)).not.toContain('create_order');
-    expect(r.output.reply).toBe('Parfait Karim. Sac à main cuir (Marron) : 6900 DA. Souhaitez-vous une livraison à domicile à El Eulma (650 DA) ou en stop-desk (350 DA) ?');
+    expect(r.output.reply).toBe('Parfait Karim. Sac à main cuir (Marron) : 6\u00a0900\u00a0DA. Souhaitez-vous une livraison à domicile à El Eulma (650 DA) ou en stop-desk (350 DA) ?');
   });
 
   it('PF1 T2: a create_order sent anyway without an address is answered VALIDATION address and not run', async () => {

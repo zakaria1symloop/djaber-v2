@@ -87,7 +87,8 @@ describe('AiRunService.turn — journey retest R1', () => {
     const t = await svc.turn(req('Finalement mettez 3 tapis au lieu de 2'));
     expect(t.ok && t.output.reply).toBe(recapText('fr'));
     expect((t as { guard?: unknown }).guard).toBeUndefined();
-    expect(gateway.calls).toHaveLength(2); // no corrective turn for a text the server replaces
+    // no corrective turn for a text the server replaces — journey retest R19-1 (18/11): nor the answer step (the message asks nothing)
+    expect(gateway.calls).toHaveLength(1);
   });
 
   it('R1-3 / R1-7: an arabizi customer gets the arabizi recap — the model’s French recap is not sent', async () => {

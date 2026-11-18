@@ -71,7 +71,7 @@ describe('R15-1 (Minor) — a place given with no quote yet: the reply carries t
     const { r, execute, gateway } = await run(F5_T1, [], F5_T1_REPLY);
     // (journey retest R18-1: with the amount of the product the message names — it decides the free threshold)
     expect(execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 16, subtotal: 4900 }, expect.anything());
-    expect(r.output.reply).toBe("Salam Amina, 3andna la robe kabyle brodée taille M. Robe kabyle brodée (M) b 4900 DA. Tawsil: 400 DA l dar, wela 250 DA f stop-desk ila t7ebb. Wach howa l'adresse ta3ek f Bab Ezzouar (rue, cité, bâtiment wela blassa ma3roufa 9rib) ?");
+    expect(r.output.reply).toBe("Salam Amina, 3andna la robe kabyle brodée taille M. Robe kabyle brodée (M) b 4\u00a0900\u00a0DA. Tawsil: 400\u00a0DA l dar, wela 250\u00a0DA f stop-desk ila t7ebb. Wach howa l'adresse ta3ek f Bab Ezzouar (rue, cité, bâtiment wela blassa ma3roufa 9rib) ?");
     // the server's quote is no delivery question: no corrective model turn for a fee
     expect(gateway.calls).toHaveLength(1);
     expect(r.guard).toBeUndefined();
@@ -80,9 +80,9 @@ describe('R15-1 (Minor) — a place given with no quote yet: the reply carries t
 
   it('the variant the message names gives the price; a product whose variants differ in price and none named gives none', async () => {
     const xl = await run('je veux la robe kabyle en XL, Alger, Bab Ezzouar', [], 'Wach howa l’adresse ta3ek ?');
-    expect(xl.r.output.reply).toContain('Robe kabyle brodée (XL) b 5200 DA.');
+    expect(xl.r.output.reply).toContain('Robe kabyle brodée (XL) b 5\u00a0200\u00a0DA.');
     const none = await run('je veux la robe kabyle, Alger, Bab Ezzouar', [], 'Wach howa l’adresse ta3ek ?');
-    expect(none.r.output.reply).toBe('Tawsil: 400 DA l dar, wela 250 DA f stop-desk ila t7ebb. Wach howa l’adresse ta3ek ?');
+    expect(none.r.output.reply).toBe('Tawsil: 400\u00a0DA l dar, wela 250\u00a0DA f stop-desk ila t7ebb. Wach howa l’adresse ta3ek ?');
   });
 
   it('the wilaya already quoted in an earlier turn, no place in the message, a fee already given, a not-served wilaya ⇒ nothing added', async () => {
@@ -90,11 +90,11 @@ describe('R15-1 (Minor) — a place given with no quote yet: the reply carries t
     expect(before.execute).not.toHaveBeenCalled();
     // journey retest R17-1: no fee added (quoted earlier), the product the message names still gets its price before the address question
     expect(before.r.output.reply).not.toMatch(/400 DA/u);
-    expect(before.r.output.reply).toContain('Robe kabyle brodée (M) b 4900 DA. Wach howa');
+    expect(before.r.output.reply).toContain('Robe kabyle brodée (M) b 4\u00a0900\u00a0DA. Wach howa');
     const noPlace = await run('Amina Saadi', ['nheb la robe kabyle taille M'], 'Saha Amina, a3tini numéro ta3ek ?');
     expect(noPlace.execute).not.toHaveBeenCalled();
     const given = await run(F5_T1, [], 'Robe kabyle brodée (M) b 4900 DA, tawsil l Bab Ezzouar 400 DA. Wach howa l’adresse ta3ek ?');
-    expect(given.r.output.reply).toBe('Robe kabyle brodée (M) b 4900 DA, tawsil l Bab Ezzouar 400 DA. Wela f stop-desk b 250 DA. Wach howa l’adresse ta3ek ?');
+    expect(given.r.output.reply).toBe('Robe kabyle brodée (M) b 4900 DA, tawsil l Bab Ezzouar 400 DA. Wela f stop-desk b 250\u00a0DA. Wach howa l’adresse ta3ek ?');
     const illizi = await run('slm, nheb la robe kabyle taille M, ana f Illizi', [], 'Wach howa l’adresse ta3ek ?');
     expect(illizi.execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 33, subtotal: 4900 }, expect.anything());
     // journey retest R18-1 (18/11): a not-served wilaya named with no quote of it yet ⇒ « we don't deliver there »
@@ -104,15 +104,15 @@ describe('R15-1 (Minor) — a place given with no quote yet: the reply carries t
   it('withPlaceFacts in each language; free home delivery; no stop-desk; no question ⇒ at the end; « home or stop-desk? » is left to withModeFees', () => {
     const q = quoteFacts([{ name: 'quote_delivery', result: ALGER }]);
     const robe = { name: 'Robe kabyle brodée', variant: 'M', price: 4900 };
-    expect(withPlaceFacts('Merci Amina. Quelle est votre adresse (rue, cité) ?', q, robe, 'fr')).toBe('Merci Amina. Robe kabyle brodée (M) : 4900 DA. Livraison : 400 DA à domicile, ou 250 DA en stop-desk si vous préférez. Quelle est votre adresse (rue, cité) ?');
-    expect(withPlaceFacts('شكرا. واش هو العنوان تاعك ؟', q, robe, 'ar')).toBe('شكرا. Robe kabyle brodée (M) ب\u0640 4900 دج. التوصيل: 400 دج للدار، ولا 250 دج لنقطة الاستلام (stop-desk) إذا تحب. واش هو العنوان تاعك ؟');
-    expect(withPlaceFacts('Thanks. What is your address?', q, null, 'en')).toBe('Thanks. Delivery: 400 DA to your door, or 250 DA at a stop-desk if you prefer. What is your address?');
-    expect(withPlaceFacts('Merci Amina.', q, null, 'fr')).toBe('Merci Amina. Livraison : 400 DA à domicile, ou 250 DA en stop-desk si vous préférez.');
+    expect(withPlaceFacts('Merci Amina. Quelle est votre adresse (rue, cité) ?', q, robe, 'fr')).toBe('Merci Amina. Robe kabyle brodée (M) : 4\u00a0900\u00a0DA. Livraison : 400\u00a0DA à domicile, ou 250\u00a0DA en stop-desk si vous préférez. Quelle est votre adresse (rue, cité) ?');
+    expect(withPlaceFacts('شكرا. واش هو العنوان تاعك ؟', q, robe, 'ar')).toBe('شكرا. Robe kabyle brodée (M) ب\u0640 4\u00a0900\u00a0دج. التوصيل: 400\u00a0دج للدار، ولا 250\u00a0دج لنقطة الاستلام (stop-desk) إذا تحب. واش هو العنوان تاعك ؟');
+    expect(withPlaceFacts('Thanks. What is your address?', q, null, 'en')).toBe('Thanks. Delivery: 400\u00a0DA to your door, or 250\u00a0DA at a stop-desk if you prefer. What is your address?');
+    expect(withPlaceFacts('Merci Amina.', q, null, 'fr')).toBe('Merci Amina. Livraison : 400\u00a0DA à domicile, ou 250\u00a0DA en stop-desk si vous préférez.');
     const free = quoteFacts([{ name: 'quote_delivery', result: { ...ALGER, fee: 0, free: true, stopdeskAvailable: false, stopdeskFee: null } }]);
     expect(withPlaceFacts('Quelle est votre adresse ?', free, null, 'fr')).toBe('Livraison à domicile : gratuite. Quelle est votre adresse ?');
     // R12 F5 T1: the address question and its stop-desk alternative stay together, the fees before them; a street word quoted back asks nothing
     // (journey retest R16-4: the reply offers the stop-desk itself ⇒ the fees only, the stop-desk offered once)
-    expect(withPlaceFacts("Salam Amina ! Wach howa l'adresse ta3ek f Bab Ezzouar (rue, cité) ? Wela t7ebb nwasslouha f stop-desk ?", q, null, 'arabizi')).toBe("Salam Amina ! L dar: 400 DA, f stop-desk: 250 DA. Wach howa l'adresse ta3ek f Bab Ezzouar (rue, cité) ? Wela t7ebb nwasslouha f stop-desk ?");
+    expect(withPlaceFacts("Salam Amina ! Wach howa l'adresse ta3ek f Bab Ezzouar (rue, cité) ? Wela t7ebb nwasslouha f stop-desk ?", q, null, 'arabizi')).toBe("Salam Amina ! L dar: 400\u00a0DA, f stop-desk: 250\u00a0DA. Wach howa l'adresse ta3ek f Bab Ezzouar (rue, cité) ? Wela t7ebb nwasslouha f stop-desk ?");
     const mode = 'Vous préférez être livré à domicile ou en stop-desk ?';
     expect(withPlaceFacts(mode, q, null, 'fr')).toBe(mode);
     expect(withPlaceFacts('Le prix est de 4900 DA, livraison 400 DA. Votre adresse ?', q, robe, 'fr')).toBe('Le prix est de 4900 DA, livraison 400 DA. Votre adresse ?');
@@ -226,14 +226,14 @@ describe('R15-4 (Cosmetic) — narrow wording fixes', () => {
   it('N5 T1: the asked price of the out-of-stock Parfum Oud is given with « pas disponible »; no price asked or the price given ⇒ unchanged', () => {
     const reply = 'Désolé, Parfum Oud 50 ml est en rupture de stock pour le moment. Si vous cherchez un cadeau avec du parfum, notre Coffret cadeau Aïd (parfum, chocolat et carte personnalisée) est disponible à 24990 DA.';
     expect(withAskedPrice(reply, "Bonjour, le parfum oud c'est combien ?", unavailable, 'fr')).toBe(
-      "Parfum Oud 50 ml est à 3200 DA, mais ce produit n'est pas disponible pour le moment. Si vous cherchez un cadeau avec du parfum, notre Coffret cadeau Aïd (parfum, chocolat et carte personnalisée) est disponible à 24990 DA.",
+      "Parfum Oud 50 ml est à 3\u00a0200\u00a0DA, mais ce produit n'est pas disponible pour le moment. Si vous cherchez un cadeau avec du parfum, notre Coffret cadeau Aïd (parfum, chocolat et carte personnalisée) est disponible à 24990 DA.",
     );
-    expect(withAskedPrice('Ma 3andnach Parfum Oud 50 ml dork.', 'ch7al parfum oud ?', unavailable, 'arabizi')).toBe('Parfum Oud 50 ml b 3200 DA, bessah makach dork.');
+    expect(withAskedPrice('Ma 3andnach Parfum Oud 50 ml dork.', 'ch7al parfum oud ?', unavailable, 'arabizi')).toBe('Parfum Oud 50 ml b 3\u00a0200\u00a0DA, bessah makach dork.');
     expect(withAskedPrice(reply, 'Bonjour, vous avez le parfum oud ?', unavailable, 'fr')).toBe(reply);
     expect(withAskedPrice('Parfum Oud 50 ml (3200 DA) est en rupture.', 'le parfum oud c’est combien ?', unavailable, 'fr')).toBe('Parfum Oud 50 ml (3200 DA) est en rupture.');
     expect(priceAsked('بشحال العطر ؟')).toBe(true);
     // R11 / R12 N5 T1: the opening greeting of the replaced sentence stays
-    expect(withAskedPrice('Bonjour 👋 Désolé, Parfum Oud 50 ml est en rupture de stock pour le moment. Ça vous intéresse ?', "le parfum oud c'est combien ?", unavailable, 'fr')).toBe("Bonjour 👋 Parfum Oud 50 ml est à 3200 DA, mais ce produit n'est pas disponible pour le moment. Ça vous intéresse ?");
+    expect(withAskedPrice('Bonjour 👋 Désolé, Parfum Oud 50 ml est en rupture de stock pour le moment. Ça vous intéresse ?', "le parfum oud c'est combien ?", unavailable, 'fr')).toBe("Bonjour 👋 Parfum Oud 50 ml est à 3\u00a0200\u00a0DA, mais ce produit n'est pas disponible pour le moment. Ça vous intéresse ?");
   });
 
   it('F5 T3: « oui c’est bon » after an arabizi recap keeps arabizi; in a French chat French; darija words still say arabizi', () => {

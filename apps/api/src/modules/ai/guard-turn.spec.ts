@@ -133,7 +133,8 @@ describe('AiRunService.turn — reply guard', () => {
     const t = await svc.turn(req(facts(), 'oui'));
     expect(t.ok && t.output.reply.split(String.fromCharCode(10))[0]).toBe('Votre commande CMD-1042 est bien enregistrée ✅');
     expect((t as { guard?: unknown }).guard).toBeUndefined();
-    expect(gateway.calls).toHaveLength(2);
+    // journey retest R19-1 (18/11): the reply is the server's once the order is placed — no model step after the call
+    expect(gateway.calls).toHaveLength(1);
   });
 
   it('full-test 15/11 AI-CHAT-07: a message that is only an order field is not offered handoff_to_human', async () => {

@@ -12,6 +12,7 @@ import { buildGuardFacts, checkReply, enforceReply, guardInstruction } from './r
 import type { RoutedModel } from './routing.service';
 import { asksDelivery, blockedOrderText, deliveryAnswer, orderConfirmationText, orderRecapText, pendingRecap } from './tools/order-confirmation-text';
 import { TOOL_DEFS, type ToolRegistry } from './tools/tool-registry';
+import { resetPlaceIndex } from './tools/place-index';
 
 afterEach(() => jest.restoreAllMocks());
 
@@ -145,6 +146,13 @@ describe('R5-4 — a street address means home delivery', () => {
 });
 
 describe('R5-5 — a delivery question is answered in words, not only through the recap', () => {
+  // (journey retest R19-2: a delivery question reads the place lists for the handoff reasons — mocked, no database)
+  beforeEach(() => {
+    resetPlaceIndex();
+    jest.spyOn(prisma.wilaya, 'findMany').mockResolvedValue([{ id: 25, code: '25', nameFr: 'Constantine', nameAr: 'قسنطينة' }] as never);
+    jest.spyOn(prisma.commune, 'findMany').mockResolvedValue([{ wilayaId: 25, nameFr: 'El Khroub', nameAr: 'الخروب' }] as never);
+  });
+  afterEach(() => resetPlaceIndex());
   const quote = { name: 'quote_delivery', result: { ok: true, wilayaId: 25, wilayaName: 'Constantine', wilayaNameAr: 'قسنطينة', isStopdesk: false, fee: 700, stopdeskFee: 450, etaDays: '2–5' } };
   const recapCall = { name: 'create_order', result: { ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft: 'd', core: 'c' }, recapToShow: true, recap: { items: [{ name: 'Tapis de prière', quantity: 2, unitPrice: 2800 }], deliveryFee: 700, total: 6300, clientName: 'Samira Benali', clientPhone: '0661234567', wilaya: 'Constantine', wilayaAr: 'قسنطينة', communeName: 'El Khroub', communeAr: 'الخروب', address: 'El Khroub, cité 1000 logements bloc 5', isStopdesk: false } } };
   const N3_T3 = 'khouya twasslou l Constantine ? ana f El Khroub, cité 1000 logements bloc 5';
@@ -152,7 +160,8 @@ describe('R5-5 — a delivery question is answered in words, not only through th
     expect(deliveryAnswer([quote, recapCall], N3_T3, 'arabizi')).toBe('Ih, nwasslou l Constantine, f 2 l 5 ayam.');
     expect(deliveryAnswer([quote, recapCall], 'Vous livrez à Constantine ? Samira Benali, El Khroub, cité 1000 logements bloc 5', 'fr')).toBe('Oui, on livre à Constantine, en 2 à 5 jours.');
     expect(deliveryAnswer([quote, recapCall], 'واش توصلو لقسنطينة ؟ الخروب، حي 1000 مسكن', 'ar')).toBe('إيه، نوصلو لـقسنطينة، من 2 إلى 5 أيام.');
-    expect(deliveryAnswer([recapCall], 'Do you deliver to El Khroub?', 'en')).toBe('Yes, we deliver to Constantine.');
+    // (journey retest R19-1: the place the customer asked about — the commune here)
+    expect(deliveryAnswer([recapCall], 'Do you deliver to El Khroub?', 'en')).toBe('Yes, we deliver to El Khroub.');
     expect(bad(deliveryAnswer([quote, recapCall], N3_T3, 'arabizi')!)).toBe(false);
   });
   it('no answer when the message asks nothing about delivery, or about another place, or no recap goes out', () => {
@@ -174,7 +183,9 @@ describe('R5-5 — a delivery question is answered in words, not only through th
     };
     const server = orderRecapText(pendingRecap([recapCall])!, 'fr');
     expect(await run('')).toBe(`Oui, on livre à Constantine, en 2 à 5 jours.\n\n${server}`);
-    expect(await run('Oui, on livre bien à Constantine !')).toBe(`Oui, on livre bien à Constantine !\n\n${server}`);
+    // journey retest R19-1 (18/11): one delivery question to the recap's place — the server's answer and the recap end the turn, no model
+    // step after the recap call (its lead-in is not asked for)
+    expect(await run('Oui, on livre bien à Constantine !')).toBe(`Oui, on livre à Constantine, en 2 à 5 jours.\n\n${server}`);
   });
 });
 

@@ -611,6 +611,11 @@ export const deliveryAnswer = (calls: { name: string; result: unknown }[], custo
   const loc = locOf(lang);
   const quote = [...calls].reverse().find((c) => c.name === 'quote_delivery' && (c.result as { ok?: unknown } | null)?.ok === true)?.result as { etaDays?: unknown } | undefined;
   const m = typeof quote?.etaDays === 'string' ? /^(\d+)\s*[–-]\s*(\d+)$/.exec(quote.etaDays) : null;
-  const place = loc === 'ar' ? recap.wilayaAr || recap.wilaya : recap.wilaya;
+  // journey retest R19-1 (18/11): the place the customer asked about — « vous livrez à Bab Ezzouar ? » is answered for Bab Ezzouar (the
+  // commune), « twasslou l Constantine ? » for the wilaya (this answer now often goes out with no model step after the recap)
+  const named = (n: string | null | undefined) => !!n && n.trim().length >= 2 && (said.includes(wordsOf(n)) || (/[\u0600-\u06ff]/u.test(n) && said.includes(wordsOf(n).trim())));
+  const wilaya = loc === 'ar' ? recap.wilayaAr || recap.wilaya : recap.wilaya;
+  const commune = loc === 'ar' ? recap.communeAr || recap.communeName : recap.communeName;
+  const place = !named(recap.wilaya) && !named(recap.wilayaAr) && (named(recap.communeName) || named(recap.communeAr)) ? commune : wilaya;
   return place ? ANSWER[loc](place, m ? [m[1]!, m[2]!] : null) : null;
 };

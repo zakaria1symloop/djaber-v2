@@ -4,6 +4,7 @@ import { formatMoney, getMessages } from '@djaber/shared';
 import { RedisService } from '../../src/core/redis/redis.provider';
 import { ORDER_TOOLS, type OrderTools } from '../../src/modules/ai/tools/order-tools';
 import { GUARD_MARK } from '../../src/modules/ai/ai.constants';
+import { AiRunService } from '../../src/modules/ai/ai-run.service';
 import { CatalogueService } from '../../src/modules/ai/catalogue.service';
 import { RoutingService } from '../../src/modules/ai/routing.service';
 import { FORMAT_REMINDER } from '../../src/modules/ai/structured-output';
@@ -399,24 +400,28 @@ describe('tools', () => {
     await resetAi();
     const debitsBefore = (await debits(s.owner.workspaceId)).length;
     const { conversation } = await receive(app, s.page, sender, { text: 'oui je confirme' });
-    // attempt 1: the tool runs, then both models fail ⇒ the job throws (BullMQ will retry it)
+    // attempt 1: the tool runs, then the job crashes before the send ⇒ the job throws (BullMQ will retry it)
+    // journey retest R19-1 (18/11): a plain yes to the recap shown is placed by the server with no model call — the crash is the run's closing
+    const runs = app.app.get(AiRunService);
+    const finish = jest.spyOn(runs, 'finish').mockRejectedValueOnce(new Error('crash before the send'));
     fakeAi(app).script('reply', { toolCalls: [{ ...call, id: 'call_a' }] }, { error: 'provider_error' }, { error: 'provider_error' });
     const data = (await replyJob(app, conversation.id))!.data as never;
-    await expect(runReply(app, conversation.id, { attempt: 1, attempts: 3 })).rejects.toThrow(/ai provider unavailable/);
+    await expect(runReply(app, conversation.id, { attempt: 1, attempts: 3 })).rejects.toThrow(/crash before the send/);
+    finish.mockRestore();
     expect(create).toHaveBeenCalledTimes(1);
+    expect(fakeAi(app).callsOf('reply')).toHaveLength(0);
     const outBefore = (await outMessages(conversation.id)).length;
     expect((await runsOf(conversation.id)).at(-1)).toMatchObject({ status: 'running', attempt: 1 });
     expect((await balanceOf(app, s.owner.workspaceId)).reserved).toBe(1); // the reservation waits for the retry
 
-    // attempt 2: re-prompted, the model asks for the same call under another provider id ⇒ stored result, no execution
+    // attempt 2: the same yes places the same stored order ⇒ the stored result, no execution, no model call
     await resetAi();
     fakeAi(app).script('reply', { toolCalls: [{ ...call, id: 'call_b' }] }, { reply: 'Votre commande CMD-1042 est enregistrée. Total : 4900 DA.', intent: 'SALE' });
     const second = await runReply(app, conversation.id, { attempt: 2, attempts: 3, data });
     await work(app, [s.owner.workspaceId]);
     expect(second!.outcome).toBe('sent');
     expect(create).toHaveBeenCalledTimes(1);
-    const replayed = fakeAi(app).callsOf('reply')[1]!.messages.at(-1) as any;
-    expect(replayed).toMatchObject({ role: 'tool', name: 'create_order', result: { ok: true, number: 'CMD-1042' } });
+    expect(fakeAi(app).callsOf('reply')).toHaveLength(0);
     const run = (await runsOf(conversation.id)).at(-1);
     expect(run).toMatchObject({ status: 'ok', attempt: 2, creditsCharged: 1, toolCallCount: 1 });
     expect(run!.toolCalls).toHaveLength(1);
@@ -766,7 +771,7 @@ describe('handoff, insights, safety', () => {
     await resetAi();
     fakeAi(app).script('reply', { reply: 'Oui, elle est disponible. Il en reste 2.', intent: 'SALE' }, { reply: 'Oui, elle est disponible. Il en reste 2 pièces.', intent: 'SALE' });
     const kept = await turn(s, newSender(), { text: 'la robe est dispo ?' });
-    expect(kept.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('Oui, elle est disponible. Robe satin bordeaux : 4500 DA.'); // journey retest R18-2: the price of the product named, not told yet
+    expect(kept.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('Oui, elle est disponible. Robe satin bordeaux : 4\u00a0500\u00a0DA.'); // journey retest R18-2 (R19-3: formatMoney): the price of the product named, not told yet
     expect(kept.runs[0]!.flags).toContain('guard_enforced');
     expect((kept.runs[0]!.meta as any).guard).toMatchObject({ retried: true, action: 'stripped', remaining: [{ rule: 'stock_count', value: 2 }] });
   });

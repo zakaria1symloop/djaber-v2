@@ -150,14 +150,14 @@ describe('R6-2 — photos are announced only when they are sent', () => {
     const a = await run(['robe'], N9_AI, fixed);
     expect(a.calls).toBe(2);
     // (journey retest R18-2: the price of the product the card shows, never told yet, is added)
-    expect(a.reply).toBe(`${fixed} Robe kabyle brodée b 4900 DA.`);
+    expect(a.reply).toBe(`${fixed} Robe kabyle brodée b 4\u00a0900\u00a0DA.`);
     const b = await run(['sac'], 'Hak tsawer ta3 sac à main cuir. Kayen f noir w marron.');
     expect(b.calls).toBe(1);
     expect(b.guard).toBeUndefined();
     // « Plus de photos » tapped (pipeline PV 09/11): the gallery goes out whatever the answer — « Hahom tsawer » is true
     const c = await runWith([], { galleries: ['sac'] }, 'Hahom tsawer ta3 sac à main cuir.');
     expect(c.calls).toBe(1);
-    expect(c.reply).toBe('Hahom tsawer ta3 sac à main cuir. Sac à main cuir b 4900 DA.');
+    expect(c.reply).toBe('Hahom tsawer ta3 sac à main cuir. Sac à main cuir b 4\u00a0900\u00a0DA.');
   });
   it('the prompt: PHOTO:none on the product line, the PHOTOS rule, the arabizi wording only when photos are sent', () => {
     const p = { ...products[0]!, imageKey: null, category: null } as never;

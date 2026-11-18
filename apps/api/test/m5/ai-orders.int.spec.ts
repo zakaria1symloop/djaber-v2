@@ -2,6 +2,7 @@
 // order row + stock + `order.ai_created` + WS; replay, duplicate guard, cancellation, client merge, guards.
 // AT-AI-04 / 05 / 06 / 07, AT-CLI-01, AT-ORD-21, AT-ORD-25 (AI side). The AI adapter is the scriptable fake.
 import { ORDER_TOOLS, type OrderTools } from '../../src/modules/ai/tools/order-tools';
+import { AiRunService } from '../../src/modules/ai/ai-run.service';
 import { RoutingService } from '../../src/modules/ai/routing.service';
 import { asOwner, type Actor } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
@@ -128,9 +129,12 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const sender = newSender();
     await recap(s, sender);
     const { conversation } = await receive(app, s.page, sender, { text: 'oui je confirme' });
+    // journey retest R19-1 (18/11): the plain yes is placed by the server with no model call — the crash is the run's closing, before the send
+    const finish = jest.spyOn(app.app.get(AiRunService), 'finish').mockRejectedValueOnce(new Error('crash before the send'));
     fakeAi(app).script('reply', { toolCalls: [{ ...createCall(s), id: 'call_a' }] }, { error: 'provider_error' }, { error: 'provider_error' });
     const data = (await replyJob(app, conversation.id))!.data as never;
-    await expect(runReply(app, conversation.id, { attempt: 1, attempts: 3 })).rejects.toThrow(/ai provider unavailable/);
+    await expect(runReply(app, conversation.id, { attempt: 1, attempts: 3 })).rejects.toThrow(/crash before the send/);
+    finish.mockRestore();
     expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(1);
     await resetAi();
     fakeAi(app).script('reply', { toolCalls: [{ ...createCall(s), id: 'call_b' }] }, { reply: 'Commande CMD-1001 enregistrée.', intent: 'SALE' });
@@ -224,7 +228,7 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const t = await turn(s, newSender(), 'Je voudrais la robe satin bordeaux');
     expect(t.conversation.status).toBe('active');
     expect(t.runs.at(-1)!.flags).toContain('handoff_refused');
-    expect(t.out.filter((m) => m.author === 'ai' && m.type === 'text').at(-1)!.text).toBe('Très bon choix ! Robe satin bordeaux : 4500 DA. Quel est votre nom ?'); // journey retest R18-2
+    expect(t.out.filter((m) => m.author === 'ai' && m.type === 'text').at(-1)!.text).toBe('Très bon choix ! Robe satin bordeaux : 4\u00a0500\u00a0DA. Quel est votre nom ?'); // journey retest R18-2 (R19-3: formatMoney)
   });
 
   it('journey retest R4-6: two phone numbers in one message ⇒ the main and the second phone, in the recap and the order', async () => {
@@ -317,6 +321,8 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     // journey retest R4-8: the server sentence, in line with the handoff (never « réessayez plus tard », never « bloqué »)
     expect(t.out.filter((m) => m.author === 'ai' && m.type === 'text').at(-1)!.text).toBe('Je ne peux pas valider cette commande ici : l’équipe de la boutique va s’en occuper.');
     expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(0);
+    // journey retest R19-1 (18/11): the plain « oui » made no model call — its scripted answers are not left for the next turn
+    await resetAi();
 
     const r = await shop({ riskyClientBehavior: 'handoff' });
     await db.client.create({ data: { workspaceId: r.owner.workspaceId, name: 'Client risqué', phone: '0777000111', riskLevel: 'high', riskSetManually: true } });

@@ -94,12 +94,12 @@ describe('R18-1 (Minor) — a message naming a served wilaya no turn quoted gets
 
   it('PG1 T1 exact text: the arabizi fees with the free threshold of Oran (600 DA under 20 000 DA)', async () => {
     const { r } = await turnOf('slm, ana f Oran, Bir El Djir', 'arabizi', [{ reply: 'Salam, marhba bik! Ahlan bik f Oran. Wach men produit t7ebb tchri lyoum ?', intent: 'GREETING' }]);
-    expect(r.output.reply).toBe('Salam, marhba bik! Ahlan bik f Oran. Tawsil: 600 DA (batel men 20000 DA) l dar, wela 400 DA f stop-desk ila t7ebb. Wach men produit t7ebb tchri lyoum ?');
+    expect(r.output.reply).toBe('Salam, marhba bik! Ahlan bik f Oran. Tawsil: 600\u00a0DA (batel men 20\u00a0000\u00a0DA) l dar, wela 400\u00a0DA f stop-desk ila t7ebb. Wach men produit t7ebb tchri lyoum ?');
   });
 
   it('PF1 T1 exact text (fr)', async () => {
     const { r } = await turnOf("Bonjour, j'habite à Sétif, El Eulma", 'fr', [{ reply: "Bonjour ! Qu'est-ce qui vous intéresse aujourd'hui ?", intent: 'GREETING' }]);
-    expect(r.output.reply).toBe("Bonjour ! Livraison : 650 DA à domicile, ou 350 DA en stop-desk si vous préférez. Qu'est-ce qui vous intéresse aujourd'hui ?");
+    expect(r.output.reply).toBe("Bonjour ! Livraison : 650\u00a0DA à domicile, ou 350\u00a0DA en stop-desk si vous préférez. Qu'est-ce qui vous intéresse aujourd'hui ?");
   });
 
   it('a wilaya that is not served ⇒ « we don’t deliver there », in the customer’s script; already said ⇒ not twice', async () => {
@@ -116,7 +116,7 @@ describe('R18-1 (Minor) — a message naming a served wilaya no turn quoted gets
   it('a field answer naming the place, the reply asking another field ⇒ quoted (F1-like « Sétif, El Eulma »)', async () => {
     const { r, execute } = await turnOf('Sétif, El Eulma', 'fr', [{ reply: 'Merci ! Quel est votre nom ?', intent: 'SALE' }], { history: ['Je voudrais le hijab soie'] });
     expect(execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 19 }, expect.anything());
-    expect(r.output.reply).toBe('Merci ! Livraison : 650 DA à domicile, ou 350 DA en stop-desk si vous préférez. Quel est votre nom ?');
+    expect(r.output.reply).toBe('Merci ! Livraison : 650\u00a0DA à domicile, ou 350\u00a0DA en stop-desk si vous préférez. Quel est votre nom ?');
   });
 
   it('a street given already ⇒ the home fee alone (no stop-desk offered after an address)', async () => {
@@ -144,14 +144,14 @@ describe('R18-2 (Minor) — the price of the product being sold, not told yet in
     const T2 = 'نحب جلابة رجالي، سمير بن علي 0661234567';
     const reply = 'صحيت، سميتك سمير بن علي ورقمك 0661234567 وبلديتك بوفاريك، ولاية البليدة. للدار: 450 دج، لنقطة الاستلام (stop-desk): 300 دج. تحب نوصلوها للدار ولا في ستوب ديسك؟';
     const { r } = await turnOf(T2, 'ar', [{ toolCalls: [{ name: 'quote_delivery', args: { wilayaId: 9 } }] }, { reply, intent: 'SALE', productCards: [DJELLABA.id] }], { history: [T1], assistant: ['وعليكم السلام! التوصيل: 450 دج للدار، ولا 300 دج لنقطة الاستلام (stop-desk) إذا تحب. واش تحب تلقى عندنا اليوم؟'] });
-    expect(r.output.reply).toContain('Djellaba homme ب\u0640 7500 دج.');
+    expect(r.output.reply).toContain('Djellaba homme ب\u0640 7\u00a0500\u00a0دج.');
     expect(r.output.reply.indexOf('7500')).toBeLessThan(r.output.reply.indexOf('تحب نوصلوها'));
   });
 
   it('N3 T1 reproduction: « je voudrais 2 tapis de prière … », the model asks the wilaya with no price ⇒ « Tapis de prière : 2800 DA. » before the question (and no « c’est noté »)', async () => {
     const said = 'Bonjour, je voudrais 2 tapis de prière. Samira Benali, 0661234567';
     const { r } = await turnOf(said, 'fr', [{ reply: "Parfait Samira, 2 tapis de prière molletonnés 120 x 70 cm, c'est noté ! Dans quelle wilaya êtes-vous ?", intent: 'SALE', productCards: [TAPIS.id] }]);
-    expect(r.output.reply).toBe('Parfait Samira, 2 tapis de prière molletonnés 120 x 70 cm ! Tapis de prière : 2800 DA. Dans quelle wilaya êtes-vous ?');
+    expect(r.output.reply).toBe('Parfait Samira, 2 tapis de prière molletonnés 120 x 70 cm ! Tapis de prière : 2\u00a0800\u00a0DA. Dans quelle wilaya êtes-vous ?');
   });
 
   it('nothing added: the price told in an earlier AI message or in this reply, an out-of-stock product, a reply about another product', async () => {
@@ -163,7 +163,7 @@ describe('R18-2 (Minor) — the price of the product being sold, not told yet in
     const gone = await turnOf('je veux le parfum oud', 'fr', [{ reply: 'Le Parfum Oud n’est pas disponible pour le moment. Voulez-vous voir le Hijab soie (1500 DA) ?', intent: 'SALE' }]);
     expect(gone.r.output.reply).not.toMatch(/3200/u);
     const fresh = await turnOf(said, 'fr', [{ reply: 'Merci Nadia ! Votre numéro de téléphone ?', intent: 'SALE' }]);
-    expect(fresh.r.output.reply).toBe('Merci Nadia ! Hijab soie : 1500 DA. Votre numéro de téléphone ?');
+    expect(fresh.r.output.reply).toBe('Merci Nadia ! Hijab soie : 1\u00a0500\u00a0DA. Votre numéro de téléphone ?');
   });
 });
 

@@ -123,16 +123,16 @@ describe('R14-2 (Minor) — « home or stop-desk? » always carries both fees', 
   it('modeQuestionAt / withModeFees: the fee sentence goes before the question, in each language; one fee given or no mode asked ⇒ unchanged', () => {
     const q = quoteFacts([{ name: 'quote_delivery', result: SETIF }]);
     expect(modeQuestionAt(F1B_T2)).toBe(1);
-    expect(withModeFees(F1B_T2, q, 'fr')).toBe("Merci Karim, c'est noté : Sétif, El Eulma. À domicile : 650 DA, en stop-desk : 350 DA. Pour la livraison, préférez-vous être livré à domicile (il me faut alors votre rue ou votre cité) ou au stop-desk ?");
-    expect(withModeFees('Saha Karim. T7ebb nwasslouha l dar wela f stop-desk ?', q, 'arabizi')).toBe('Saha Karim. L dar: 650 DA, f stop-desk: 350 DA. T7ebb nwasslouha l dar wela f stop-desk ?');
-    expect(withModeFees('صحيت. تحب التوصيل للدار ولا لنقطة الاستلام ؟', q, 'ar')).toBe('صحيت. للدار: 650 دج، لنقطة الاستلام (stop-desk): 350 دج. تحب التوصيل للدار ولا لنقطة الاستلام ؟');
-    expect(withModeFees('Would you like home delivery or a stop-desk?', q, 'en')).toBe('Home delivery: 650 DA, stop-desk: 350 DA. Would you like home delivery or a stop-desk?');
+    expect(withModeFees(F1B_T2, q, 'fr')).toBe("Merci Karim, c'est noté : Sétif, El Eulma. À domicile : 650\u00a0DA, en stop-desk : 350\u00a0DA. Pour la livraison, préférez-vous être livré à domicile (il me faut alors votre rue ou votre cité) ou au stop-desk ?");
+    expect(withModeFees('Saha Karim. T7ebb nwasslouha l dar wela f stop-desk ?', q, 'arabizi')).toBe('Saha Karim. L dar: 650\u00a0DA, f stop-desk: 350\u00a0DA. T7ebb nwasslouha l dar wela f stop-desk ?');
+    expect(withModeFees('صحيت. تحب التوصيل للدار ولا لنقطة الاستلام ؟', q, 'ar')).toBe('صحيت. للدار: 650\u00a0دج، لنقطة الاستلام (stop-desk): 350\u00a0دج. تحب التوصيل للدار ولا لنقطة الاستلام ؟');
+    expect(withModeFees('Would you like home delivery or a stop-desk?', q, 'en')).toBe('Home delivery: 650\u00a0DA, stop-desk: 350\u00a0DA. Would you like home delivery or a stop-desk?');
     expect(withModeFees('À domicile 650 DA ou en stop-desk ?', q, 'fr')).toBe('À domicile 650 DA ou en stop-desk ?');
     expect(withModeFees('Quelle est votre adresse ?', q, 'fr')).toBe('Quelle est votre adresse ?');
     expect(withModeFees(F1B_T2, [], 'fr')).toBe(F1B_T2);
     // the server's own address question (create_order refused for the address) offers the stop-desk too
-    expect(withModeFees('Quelle est votre adresse (rue, cité, numéro), ou préférez-vous le stop-desk ?', q, 'fr')).toBe('À domicile : 650 DA, en stop-desk : 350 DA. Quelle est votre adresse (rue, cité, numéro), ou préférez-vous le stop-desk ?');
-    expect(withModeFees("A3tini l'adresse ta3ek (rue, cité, numéro ta3 dar), wela t7ebb stop-desk ?", q, 'arabizi')).toBe("L dar: 650 DA, f stop-desk: 350 DA. A3tini l'adresse ta3ek (rue, cité, numéro ta3 dar), wela t7ebb stop-desk ?");
+    expect(withModeFees('Quelle est votre adresse (rue, cité, numéro), ou préférez-vous le stop-desk ?', q, 'fr')).toBe('À domicile : 650\u00a0DA, en stop-desk : 350\u00a0DA. Quelle est votre adresse (rue, cité, numéro), ou préférez-vous le stop-desk ?');
+    expect(withModeFees("A3tini l'adresse ta3ek (rue, cité, numéro ta3 dar), wela t7ebb stop-desk ?", q, 'arabizi')).toBe("L dar: 650\u00a0DA, f stop-desk: 350\u00a0DA. A3tini l'adresse ta3ek (rue, cité, numéro ta3 dar), wela t7ebb stop-desk ?");
   });
 
   it('F1b T2 turn « Sétif, El Eulma »: no quote_delivery by the model ⇒ the server quotes Sétif, the reply gives both fees, no corrective turn', async () => {
@@ -143,7 +143,7 @@ describe('R14-2 (Minor) — « home or stop-desk? » always carries both fees', 
     const r = await svc.turn(turnReq('Sétif, El Eulma', ['Je cherche le sac à main cuir marron, 1 seul. Karim Haddad 0770112233'], { guard: facts('Sétif, El Eulma') }));
     if (!r.ok) throw new Error('turn failed');
     expect(execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 19 }, expect.anything());
-    expect(r.output.reply).toContain('À domicile : 650 DA, en stop-desk : 350 DA. Pour la livraison, préférez-vous');
+    expect(r.output.reply).toContain('À domicile : 650\u00a0DA, en stop-desk : 350\u00a0DA. Pour la livraison, préférez-vous');
     expect(gateway.calls).toHaveLength(1);
     expect(r.guard).toBeUndefined();
   });
@@ -159,18 +159,18 @@ describe('R14-2 (Minor) — « home or stop-desk? » always carries both fees', 
     };
     const a = await run('El Eulma', ['nheb sac a main cuir, Karim 0770112233', 'Sétif'], 'Saha. T7ebb nwasslouha l dar wela f stop-desk ?');
     expect(a.execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 19 }, expect.anything());
-    expect(a.r.output.reply).toContain('L dar: 650 DA, f stop-desk: 350 DA.');
+    expect(a.r.output.reply).toContain('L dar: 650\u00a0DA, f stop-desk: 350\u00a0DA.');
     const none = await run('Karim Haddad', ['nheb sac a main cuir'], 'Saha Karim. T7ebb l dar wela f stop-desk ?');
     expect(none.execute).not.toHaveBeenCalled();
     // journey retest R15-1 (18/11): the address question after a place with no quote of it yet is quoted too (both fees, stop-desk offered)
     const ask = await run('Sétif, El Eulma', ['nheb sac a main cuir, Karim 0770112233'], "A3tini l'adresse ta3ek (rue, cité) ?");
     expect(ask.execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 19 }, expect.anything());
-    expect(ask.r.output.reply).toBe("Tawsil: 650 DA l dar, wela 350 DA f stop-desk ila t7ebb. A3tini l'adresse ta3ek (rue, cité) ?");
+    expect(ask.r.output.reply).toBe("Tawsil: 650\u00a0DA l dar, wela 350\u00a0DA f stop-desk ila t7ebb. A3tini l'adresse ta3ek (rue, cité) ?");
     // journey retest R18-1 (18/11): a reply asking something else (no mode, no address) is quoted too — the place named with no quote of it
     // yet always gets its fees
     const other = await run('Sétif, El Eulma', ['nheb sac a main cuir, Karim 0770112233'], 'Saha Karim, wach smitek kamla ?');
     expect(other.execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 19 }, expect.anything());
-    expect(other.r.output.reply).toBe('Tawsil: 650 DA l dar, wela 350 DA f stop-desk ila t7ebb. Saha Karim, wach smitek kamla ?');
+    expect(other.r.output.reply).toBe('Tawsil: 650\u00a0DA l dar, wela 350\u00a0DA f stop-desk ila t7ebb. Saha Karim, wach smitek kamla ?');
   });
 });
 

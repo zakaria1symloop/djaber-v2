@@ -120,10 +120,10 @@ describe('R16-1 (Minor) — asked facts survive the guard: every quoted wilaya k
 
   it('withAskedFacts: an asked price / stock answer / not-served wilaya the rewrite dropped comes back; nothing when the text keeps it', () => {
     const f = { customerText: 'le hijab soie c’est combien ? vous livrez à Illizi ?', cataloguePrices: facts('x').cataloguePrices, unavailableNames: ['Parfum Oud 50 ml'], notServed: ['Illizi'] };
-    expect(withAskedFacts('Autre chose ?', 'Le Hijab soie est à 1500 DA. Nous ne livrons pas à Illizi, désolé. Autre chose ?', f, 'fr')).toBe('Hijab soie : 1500 DA. Nous ne livrons pas à Illizi pour le moment. Autre chose ?');
+    expect(withAskedFacts('Autre chose ?', 'Le Hijab soie est à 1500 DA. Nous ne livrons pas à Illizi, désolé. Autre chose ?', f, 'fr')).toBe('Hijab soie : 1\u00a0500\u00a0DA. Nous ne livrons pas à Illizi pour le moment. Autre chose ?');
     expect(withAskedFacts('Le Hijab soie est à 1500 DA, pas de livraison à Illizi.', 'x', f, 'fr')).toBe('Le Hijab soie est à 1500 DA, pas de livraison à Illizi.');
     // out of stock: the price with « not available »
-    expect(withAskedFacts('Wach t7ebb ?', 'Parfum Oud 50 ml b 3200 DA, makach dork. Wach t7ebb ?', { ...f, customerText: 'ch7al parfum oud ?', notServed: [] }, 'arabizi')).toBe('Parfum Oud 50 ml b 3200 DA, bessah makach dork. Wach t7ebb ?');
+    expect(withAskedFacts('Wach t7ebb ?', 'Parfum Oud 50 ml b 3200 DA, makach dork. Wach t7ebb ?', { ...f, customerText: 'ch7al parfum oud ?', notServed: [] }, 'arabizi')).toBe('Parfum Oud 50 ml b 3\u00a0200\u00a0DA, bessah makach dork. Wach t7ebb ?');
     // a stock question: « is it there? » kept
     expect(withAskedFacts('Wach smitek ?', 'Hijab soie kayen. Wach smitek ?', { ...f, customerText: 'hijab soie kayen ?', notServed: [] }, 'arabizi')).toBe('Hijab soie kayen. Wach smitek ?');
     // the price was never given by the model: nothing invented by this step

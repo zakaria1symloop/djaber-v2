@@ -86,6 +86,35 @@ export const extractJson = (text: string): string | null => {
   return null;
 };
 
+/**
+ * journey retest R19-1 (18/11): a JSON text with the slips a model makes that the server can mend — raw control characters (a line break, a tab)
+ * inside a string escaped, a trailing comma before « } » / « ] » dropped. Anything else stays as it was (the format retry decides).
+ */
+export const repairJson = (raw: string): string => {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+  for (const ch of raw) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      else if (ch === '\n') {
+        out += '\\n';
+        continue;
+      } else if (ch === '\r') {
+        out += '\\r';
+        continue;
+      } else if (ch === '\t') {
+        out += '\\t';
+        continue;
+      }
+    } else if (ch === '"') inString = true;
+    out += ch;
+  }
+  return out.replace(/,(\s*[}\]])/gu, '$1');
+};
+
 export const parseJsonObject = <S extends z.ZodTypeAny>(text: string, schema: S, prepare?: (parsed: Record<string, unknown>) => Record<string, unknown>): { ok: true; value: z.output<S> } | { ok: false; reason: string } => {
   const raw = extractJson(text);
   if (!raw) return { ok: false, reason: 'no_json' };
@@ -93,7 +122,13 @@ export const parseJsonObject = <S extends z.ZodTypeAny>(text: string, schema: S,
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { ok: false, reason: 'invalid_json' };
+    // journey retest R19-1 (18/11): an object the server can mend itself costs no format retry (F5 T1: a 4.8 s step, then the reminder) —
+    // a raw line break / tab inside a string, a comma before « } » / « ] »
+    try {
+      parsed = JSON.parse(repairJson(raw));
+    } catch {
+      return { ok: false, reason: 'invalid_json' };
+    }
   }
   // providers emit `null` for an absent optional field
   if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {

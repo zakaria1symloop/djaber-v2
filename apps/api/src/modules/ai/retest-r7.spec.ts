@@ -122,11 +122,11 @@ describe('R7-2 — a photo request for a product without a photo is answered « 
   it('the turn: the reply says it already, a product with a photo is sent, or no photo was asked ⇒ nothing added', async () => {
     const said = 'Ma 3andnach tsawer ta3ha f had lwaqt. Robe brodée bil yed, b qmach khfif.';
     // (journey retest R18-2: the price of the product the card shows, never told yet, is added)
-    expect((await run(N9_C, ['robe'], said)).reply).toBe(`${said} Robe kabyle brodée b 4900 DA.`);
-    expect((await run('ab3athli tswira ta3 sac', ['sac'], 'Sac à main cuir, kayen f noir w marron.')).reply).toBe('Sac à main cuir, kayen f noir w marron. Sac à main cuir b 4900 DA.');
-    expect((await run('Salam, 9olli 3la la robe kabyle brodée', ['robe'], 'Robe kabyle brodée bil yed, b qmach khfif.')).reply).toBe('Robe kabyle brodée bil yed, b qmach khfif. Robe kabyle brodée b 4900 DA.');
+    expect((await run(N9_C, ['robe'], said)).reply).toBe(`${said} Robe kabyle brodée b 4\u00a0900\u00a0DA.`);
+    expect((await run('ab3athli tswira ta3 sac', ['sac'], 'Sac à main cuir, kayen f noir w marron.')).reply).toBe('Sac à main cuir, kayen f noir w marron. Sac à main cuir b 4\u00a0900\u00a0DA.');
+    expect((await run('Salam, 9olli 3la la robe kabyle brodée', ['robe'], 'Robe kabyle brodée bil yed, b qmach khfif.')).reply).toBe('Robe kabyle brodée bil yed, b qmach khfif. Robe kabyle brodée b 4\u00a0900\u00a0DA.');
     // no card and no product of a tool: the server cannot tell which product — nothing is added
-    expect((await run(N9_C, [], 'Wach men robe t7ebb ?')).reply).toBe('Robe kabyle brodée b 4900 DA. Wach men robe t7ebb ?');
+    expect((await run(N9_C, [], 'Wach men robe t7ebb ?')).reply).toBe('Robe kabyle brodée b 4\u00a0900\u00a0DA. Wach men robe t7ebb ?');
   });
 });
 

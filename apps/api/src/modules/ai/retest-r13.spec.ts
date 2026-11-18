@@ -337,14 +337,16 @@ describe('R13-5 (Minor) — the recap of a substitute says first that it replace
     expect(substitutionLine([{ name: 'Parfum Oud 50 ml' }], N5.join('\n'), ['Parfum Oud 50 ml'], '', 'fr')).toBeNull();
   });
 
-  it('N5 T2 turn: check_availability (Oud false, Coffret true), create_order (Coffret recap) ⇒ the server line, then the recap', async () => {
-    const text = N5[1]!;
+  // journey retest R19-1 (18/11): T2 (the details while the product taken is out of stock) gets no create_order any more — the question
+  // whether the customer wants the Coffret; the « oui » of T3 gets its recap with the server line
+  it('N5 T3 turn: « oui » to the substitute question, create_order (Coffret recap) ⇒ the server line, then the recap', async () => {
+    const text = 'oui';
     const gateway = new FakeAiGateway();
     gateway.script('reply', { toolCalls: [{ name: 'create_order', args: { clientName: 'Karim Haddad' } }] }, { reply: '', intent: 'SALE' });
     const coffretRecap = { ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft: 'd', core: 'c' }, recapToShow: true, recap: { items: [{ name: 'Coffret cadeau Aïd', variant: null, quantity: 1, unitPrice: 24990 }], deliveryFee: 0, total: 24990, clientName: 'Karim Haddad', clientPhone: '0770112233', wilaya: 'Oran', communeName: 'Bir El Djir', address: 'cité 1000 logements bloc 4', isStopdesk: false } };
     const tools = { defsFor: async () => [TOOL_DEFS.create_order], forcedHandoff: () => null, execute: jest.fn(async () => coffretRecap) } as unknown as ToolRegistry;
     const g = facts(text, { products: [product(OUD, 9500, 0), product(COFFRET, 24990, 5)] });
-    const r = await new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never).turn(turnReq(text, [N5[0]!], { guard: g }));
+    const r = await new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never).turn(turnReq(text, [N5[0]!, N5[1]!], { guard: g }));
     if (!r.ok) throw new Error('turn failed');
     expect(r.output.reply.startsWith("Le produit Parfum Oud 50 ml n'est pas disponible pour le moment : à la place, ce récapitulatif est pour le produit Coffret cadeau Aïd.\n\nVoici le récapitulatif de votre commande")).toBe(true);
   });
@@ -357,9 +359,9 @@ describe('R13-6 (Cosmetic) — both fees, darija words, arabizi closing', () => 
 
   it('withBothFees: F1b T2 gets the home fee before the stop-desk sentence; a home-only answer gets the stop-desk; both given / stop-desk quote ⇒ unchanged', () => {
     const f1b = 'Parfait Karim, je note le Sac à main cuir Marron (1 pièce). Pour la livraison à domicile à El Eulma, donnez-moi votre adresse (rue, cité ou repère). Sinon, on peut aussi la livrer en stop-desk à 350 DA.';
-    expect(withBothFees(f1b, setif, 'fr')).toBe('Parfait Karim, je note le Sac à main cuir Marron (1 pièce). Pour la livraison à domicile à El Eulma, donnez-moi votre adresse (rue, cité ou repère). La livraison à domicile est à 650 DA. Sinon, on peut aussi la livrer en stop-desk à 350 DA.');
-    expect(withBothFees('Ih, nwasslou l Sétif: 650 DA l dar. Wach smitek ?', setif, 'arabizi')).toBe('Ih, nwasslou l Sétif: 650 DA l dar. Wela f stop-desk b 350 DA. Wach smitek ?');
-    expect(withBothFees('التوصيل لسطيف ب\u0640 650 دج.', setif, 'ar')).toBe('التوصيل لسطيف ب\u0640 650 دج. ولا لنقطة الاستلام (stop-desk) ب\u0640 350 دج.');
+    expect(withBothFees(f1b, setif, 'fr')).toBe('Parfait Karim, je note le Sac à main cuir Marron (1 pièce). Pour la livraison à domicile à El Eulma, donnez-moi votre adresse (rue, cité ou repère). La livraison à domicile est à 650\u00a0DA. Sinon, on peut aussi la livrer en stop-desk à 350 DA.');
+    expect(withBothFees('Ih, nwasslou l Sétif: 650 DA l dar. Wach smitek ?', setif, 'arabizi')).toBe('Ih, nwasslou l Sétif: 650 DA l dar. Wela f stop-desk b 350\u00a0DA. Wach smitek ?');
+    expect(withBothFees('التوصيل لسطيف ب\u0640 650 دج.', setif, 'ar')).toBe('التوصيل لسطيف ب\u0640 650 دج. ولا لنقطة الاستلام (stop-desk) ب\u0640 350\u00a0دج.');
     const f9 = 'Sétif: 650 DA l dar, wela 350 DA f stop-desk, ywasel f 2 l 5 ayam. Oran stop-desk: 400 DA, ywasel f 2 l 5 ayam.';
     expect(withBothFees(f9, [...setif, ...oranDesk], 'arabizi')).toBe(f9);
     expect(withBothFees('Merci Karim ! Votre numéro ?', setif, 'fr')).toBe('Merci Karim ! Votre numéro ?');
