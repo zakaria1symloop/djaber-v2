@@ -205,7 +205,7 @@ describe('playground (AGT-07)', () => {
     fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args: { clientName: '---', clientPhone: '0500000000', wilayaId: 1, items: [{ productId: tapis.id, quantity: 2 }], customerConfirmed: true } }] }, { reply: 'Parfait, les 2 tapis de prière sont disponibles. Quel est votre nom complet ?', intent: 'SALE' });
     const t1 = (await test(owner, agent.id, { sessionId: 'r5-n3', ...say('Bonjour, je voudrais 2 tapis de prière') }).expect(200)).body.data;
     expect(t1.toolCalls).toEqual([]);
-    expect(t1.reply).toBe('Parfait, les 2 tapis de prière sont disponibles. Quel est votre nom complet ?');
+    expect(t1.reply).toBe('Parfait, les 2 tapis de prière sont disponibles. Tapis de prière : 2800 DA. Quel est votre nom complet ?'); // journey retest R18-2
     expect((fakeAi(app).callsOf('reply')[0]!.tools ?? []).map((d) => d.name)).not.toContain('create_order');
     // R5-5 (N3 T3): the phone was given ⇒ the complete order goes through in one call; the delivery question gets its answer
     fakeAi(app).reset();
@@ -277,7 +277,8 @@ describe('playground (AGT-07)', () => {
       { reply: 'Nous n\'avons pas encore de photo de ce produit. Elle est brodée à la main, en tissu léger.', intent: 'INFO', productCards: [robe.id] },
     );
     const n9 = (await test(owner, agent.id, { sessionId: 'r6-n9', ...say('Bonjour, envoyez-moi une photo de la robe kabyle brodée, c\'est quel tissu ?') }).expect(200)).body.data;
-    expect(n9.reply).toBe('Nous n\'avons pas encore de photo de ce produit. Elle est brodée à la main, en tissu léger.');
+    // (journey retest R18-2: the price of the product named, not told yet, is added)
+    expect(n9.reply).toBe('Nous n\'avons pas encore de photo de ce produit. Elle est brodée à la main, en tissu léger. Robe kabyle brodée : 4900 DA.');
     expect(String((fakeAi(app).callsOf('reply')[1]!.messages.at(-1) as { content: unknown }).content)).toContain('NO PHOTO IS SENT with this answer');
   });
 

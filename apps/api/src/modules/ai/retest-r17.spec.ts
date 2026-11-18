@@ -350,7 +350,8 @@ describe('R17-6 (Minor) — N5 T2: no search for products the CATALOGUE lists on
     const tools = { defsFor: async () => [TOOL_DEFS.search_products, TOOL_DEFS.create_order], execute, forcedHandoff: () => null } as unknown as ToolRegistry;
     const req: TurnRequest = { runId: 'r', prompt: { system: 'S', messages: [{ role: 'user', content: said }] } as never, toolCtx: ctxOf(said, ["Bonjour, le parfum oud c'est combien ?"]), temperature: 0.5, maxTokens: 500, deadline: Date.now() + 30_000, persist: false, guard: guardOf(said, 'fr', [COFFRET]) };
     await new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never).turn(req);
-    expect(execute).not.toHaveBeenCalled();
+    // (journey retest R18-1: the place the message names, never quoted yet, is quoted by the server — no search runs)
+    expect(execute.mock.calls.map((c) => (c as unknown[])[0])).toEqual(['quote_delivery']);
     expect((gateway.calls[1]!.messages.at(-1) as { result?: unknown }).result).toMatchObject({ inCatalogue: true });
   });
 });

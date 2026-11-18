@@ -74,6 +74,8 @@ export const nearestId = (id: string, candidates: string[]): string | null => {
 };
 const like = (q: string) => `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
+/** journey retest R18-3: words of no weight in a catalogue search (French, English, arabizi, Arabic script). */
+const SEARCH_STOPWORDS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'un', 'une', 'en', 'et', 'au', 'aux', 'pour', 'avec', 'sur', 'dans', 'par', 'ou', 'the', 'of', 'and', 'for', 'with', 'an', 'in', 'on', 'or', 'ta3', 'في', 'من', 'على', 'مع']);
 @Injectable()
 export class CatalogueService {
   scopeWhere(agent: AgentScope): Prisma.ProductWhereInput {
@@ -226,7 +228,10 @@ export class CatalogueService {
   async search(agent: AgentScope, query: string, limit = 10, o: { maxWords?: number } = {}): Promise<CatalogueProduct[]> {
     const q = query.trim().slice(0, 200);
     if (!q) return [];
-    const words = [...new Set(q.split(/\s+/).filter((w) => w.length >= 2))].slice(0, o.maxWords ?? 8);
+    // journey retest R18-3 (18/11): a function word is no search word — « lunettes de soleil » matched every product with « de » in its
+    // name or keywords (« Tapis de prière », « Robe kabyle brodée »: 5 products, none a pair of glasses), so the model searched again
+    // (« lunettes » → nothing): N7 T1 two searches, 12.0 s
+    const words = [...new Set(q.split(/\s+/).filter((w) => w.length >= 2 && !SEARCH_STOPWORDS.has(w.toLowerCase())))].slice(0, o.maxWords ?? 8);
     if (!words.length) return [];
     const scope: Prisma.Sql[] = [Prisma.sql`p."isActive" = true`, Prisma.sql`p."deletedAt" IS NULL`, Prisma.sql`(p."moderationStatus" IN ('approved','not_required') OR (p."moderationStatus" = 'pending' AND p."approvedSnapshot" IS NOT NULL))`];
     if (!agent.sellAllProducts) scope.push(Prisma.sql`EXISTS (SELECT 1 FROM "AgentProduct" ap WHERE ap."productId" = p."id" AND ap."agentId" = ${agent.id}::uuid)`);

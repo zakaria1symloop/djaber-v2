@@ -18,15 +18,15 @@ import { AI_GATEWAY, AiProviderError, type AiGateway, type AiMessage, type AiToo
 import { RoutingService, type RoutedModel } from './routing.service';
 import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
 import { absentFields, canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
-import { allowedHandoffReasons, establishedReasons, fieldOnlyMessage, handoffReason, handoffRefusedInstruction, judgeHandoff, messageHandoffReasons, orderDetailsMessage, placeCandidate, type HandoffRefusal } from './handoff-judge';
+import { allowedHandoffReasons, complaintIn, establishedReasons, HANDOFF_REFUSED_MARK, productAsk, fieldOnlyMessage, handoffReason, handoffRefusedInstruction, judgeHandoff, messageHandoffReasons, orderDetailsMessage, orderStatusAsk, placeCandidate, type HandoffRefusal } from './handoff-judge';
 import { productNamedIn, productWanted, productWords } from './product-named';
-import { AUTO_FIX_RULES, checkReply, enforceReply, feeSentence, guardInstruction, orderClaimsIn, owedQuotes, quoteFacts, stripMarkdown, withToolResults, type CataloguePrice, type CatalogueStock, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
+import { AUTO_FIX_RULES, checkReply, enforceReply, feeSentence, guardInstruction, numbersIn, orderClaimsIn, owedQuotes, quoteFacts, stripMarkdown, withToolResults, type CataloguePrice, type CatalogueStock, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
 import { asksDelivery, asksSomething, blockedOrderText, confirmRequest, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, serverRecapAsked, withoutRecapClaims } from './tools/order-confirmation-text';
-import { cancelAsked, confirmation, phonesIn, placedNumbers, recapPending, recapYesArgs } from './tools/order-confirmation';
+import { asksCancel, cancelAsked, confirmation, phonesIn, placedNumbers, recapPending, recapYesArgs } from './tools/order-confirmation';
 import { matchWilaya, namedVariant } from './tools/tool-registry';
 import { offCatalogueWordsOf, placeIndex, placeNamedIn, placeOnlyMessage, wilayaIn, withoutPlaceNames, type PlaceIndex } from './tools/place-index';
 import { contextOf } from '../messaging/messaging.presenter';
-import { asksAddress, fillerMessage, handoffKind, handoffReply, handoffSystemLineShown, modeQuestionAt, noPhotoReply, noPhotoSaid, openingSaid, photoAsked, substitutionLine, withArabicCurrency, withArabicWords, withArabiziWords, withAskedPrice, withBothFees, withModeFees, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutQuickReply, withoutStrayYes, withPlaceFacts, withAskedFacts, withoutBookingOffer, withOneStopdeskOffer, withoutRefusals, withSingleSpaces, withoutUnrelatedOffer, teamSaid, teamOnlyKind, type PlaceProduct } from './reply-fixes';
+import { asksAddress, fillerMessage, handoffKind, handoffReply, handoffSystemLineShown, modeQuestionAt, noPhotoReply, noPhotoSaid, openingSaid, photoAsked, substitutionLine, withArabicCurrency, withArabicWords, withArabiziWords, withAskedPrice, withBothFees, withModeFees, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutQuickReply, withoutStrayYes, withPlaceFacts, withAskedFacts, withoutBookingOffer, withOneStopdeskOffer, withoutRefusals, withSingleSpaces, withoutUnrelatedOffer, teamSaid, teamOnlyKind, withNotServed, withoutNotedSteps, withCustomerScriptName, type PlaceProduct } from './reply-fixes';
 import { serverTextLanguage, systemLocale } from './language';
 import { foldText } from './tools/wilaya-aliases';
 import { foldGuard, splitSentences } from './reply-guard';
@@ -160,6 +160,55 @@ const ORDER_WORD_ASK = /tracking|suivi|colis|statut|status|كولي|coli|wsel|ws
 export const noLookupFor = (customerText: string | undefined, fieldOnly: boolean): boolean => {
   const t = (customerText ?? '').trim();
   return fieldOnly && !!t && !/\d/.test(t) && confirmation(t) !== 'yes' && !ORDER_WORD.test(foldGuard(t));
+};
+/**
+ * journey retest R18-1 (18/11): a message whose place the server quotes when no turn quoted it yet (`placeQuote`) — any message but one
+ * about an order already made (its status, a cancellation, a complaint): PF1 / PG1 / PG2 T1 « Bonjour, j'habite à Sétif, El Eulma »,
+ * « slm, ana f Oran, Bir El Djir », « السلام عليكم، أنا من البليدة بوفاريك » got no fee 3 times in 4 (the R15-1 quote needed a product named or
+ * an address question).
+ */
+export const placeQuoteMessage = (text: string | undefined): boolean => !!text?.trim() && /\p{L}/u.test(text) && !orderStatusAsk(text) && !complaintIn(text) && !asksCancel(text);
+/**
+ * journey retest R18-3 (18/11): a lookup_order by a phone the customer gave in this conversation, while the conversation placed an order —
+ * N11 T3 `lookup_order {phone 0661234567}` → no order (the playground's orders are simulated), then `{orderNumber TEST-4074}`: the call
+ * looks up the conversation's latest order by its number instead (one lookup). The call itself when it names an order / tracking number,
+ * a phone the customer did not write, or no order was placed.
+ */
+export const lookupByNumber = (call: AiToolCallRequest, orderHistory: ToolRunContext['orderHistory'], customerHistory: string | undefined): AiToolCallRequest => {
+  if (canonicalTool(call.name) !== 'lookup_order' || !customerHistory) return call;
+  const a = call.args ?? {};
+  const text = (k: string) => (typeof a[k] === 'string' && (a[k] as string).trim() ? (a[k] as string).trim() : null);
+  const phone = text('phone');
+  if (!phone || text('orderNumber') || text('trackingNumber')) return call;
+  const asked = [...phonesIn(phone)];
+  const own = phonesIn(customerHistory);
+  const placed = placedNumbers(orderHistory);
+  if (asked.length !== 1 || !own.has(asked[0]!) || !placed.length) return call;
+  return { ...call, args: { orderNumber: placed[placed.length - 1]! } };
+};
+/** journey retest R18-1: the wilaya a quote_delivery answer gives as not served at all (home nor stop-desk), else null. */
+export const notServedOf = (result: unknown): { id: number; name: string } | null => {
+  const e = (result as { error?: { code?: unknown; wilayaId?: unknown; wilayaName?: unknown; homeAvailable?: unknown } } | null)?.error;
+  return e?.code === 'WILAYA_NOT_SERVED' && e.homeAvailable !== true && typeof e.wilayaId === 'number' && typeof e.wilayaName === 'string' ? { id: e.wilayaId, name: e.wilayaName } : null;
+};
+/**
+ * journey retest R15-1 / R18-2: the price of a catalogue product for the reply — the variant the customer's text names (else the answer's
+ * `cart`, when it holds that one product), or the one price of all its variants; null when its variants' prices differ and none is named.
+ */
+export const productPrice = (p: CataloguePrice, said: string, output: Pick<AiReplyOutput, 'cart'>): PlaceProduct | null => {
+  const items = output.cart?.items ?? [];
+  const fromCart = items.length === 1 && items[0]!.productId === p.id && items[0]!.variantId ? p.variants.find((v) => v.id === items[0]!.variantId) : undefined;
+  const v = (p.variants.length ? namedVariant(p.variants.filter((x) => x.id), said) : null) ?? fromCart;
+  if (v) return { name: p.name, variant: v.name, price: v.price };
+  if (!p.variants.length) return { name: p.name, price: p.price };
+  const one = [...new Set(p.variants.map((x) => x.price))];
+  return one.length === 1 ? { name: p.name, price: one[0]! } : null;
+};
+/** journey retest R18-2: the text names this product by its whole name (every word of it, in order: « 2 tapis de prière molletonnés »). */
+export const namedWhole = (text: string, name: string): boolean => {
+  const n = productWords(name);
+  if (!n.length) return false;
+  return ` ${productWords(text).join(' ')} `.includes(` ${n.join(' ')} `);
 };
 /** Words of no weight in a product search (folded). */
 const SEARCH_FILLERS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'un', 'une', 'en', 'et', 'au', 'aux', 'pour', 'avec', 'the', 'of', 'and', 'for', 'with', 'ta3', 'el', 'al', 'dyal']);
@@ -502,11 +551,18 @@ export type TurnRequest = {
   /** §4.3 reply guard: what the server knows this turn (this turn's tool results are added as they come) */
   guard?: GuardFacts;
 };
-type TurnBase = { tools: ExecutedTool[]; usage: AiUsage; model: RoutedModel | null; usedFallback: boolean };
+/**
+ * journey retest R18-3 (18/11): one model call of a turn — its time, the tools it called, and why another call followed (`tools`: their
+ * results; `stray`: a tool not offered; `guard`: the reply guard's corrective turn; `confirm_note` / `yes_note` / `handoff_refused`: a
+ * send-back; `format` / `plain`: the format retries). Kept on `AiRun.meta.steps` (no message text): N5 T2 took 9.7 s with no tool call and
+ * nothing told how many model calls it made.
+ */
+export type TurnStep = { ms: number; calls?: string[]; next?: string };
+type TurnBase = { tools: ExecutedTool[]; usage: AiUsage; model: RoutedModel | null; usedFallback: boolean; steps?: TurnStep[] };
 export type TurnResult =
   | (TurnBase & { ok: true; output: AiReplyOutput; model: RoutedModel; forcedHandoff: string | null; repaired: boolean; salvaged?: boolean; /** retest 12/11: a handoff of the model was refused by the server this turn (handoff-judge) */ handoffRefused?: HandoffRefusal; /** §4.3: the reply guard found something (and what was done) */ guard?: GuardOutcome })
   | (TurnBase & { ok: false; kind: 'provider' | 'format'; error: string });
-export type RunMeta = { language?: string; toolNames?: string[]; cardsSent?: number; handoff?: boolean; costUsd?: number; plannedCost?: number; vision?: Record<string, unknown>; sessionId?: string; turn?: unknown; evalFlag?: unknown; scenario?: string; /** §4.3 reply guard (rules, amounts / leak kinds, action — never message text) */ guard?: GuardOutcome };
+export type RunMeta = { steps?: TurnStep[]; language?: string; toolNames?: string[]; cardsSent?: number; handoff?: boolean; costUsd?: number; plannedCost?: number; vision?: Record<string, unknown>; sessionId?: string; turn?: unknown; evalFlag?: unknown; scenario?: string; /** §4.3 reply guard (rules, amounts / leak kinds, action — never message text) */ guard?: GuardOutcome };
 /** §4.3: the run flags of a guard outcome (`guard_rewritten`: the corrective turn passed; `guard_enforced`: sentences dropped or the safe sentence sent). */
 export const guardFlags = (g?: GuardOutcome): string[] => (!g ? [] : g.action === 'rewritten' ? ['guard_rewritten'] : g.action === 'kept' ? ['guard_kept'] : ['guard_enforced']);
 /** §4.1 format retry: the earlier messages kept (the rest of the thread is left out). */
@@ -607,6 +663,26 @@ export class AiRunService implements OnModuleInit {
    * spent; `format`: the output stayed malformed after the format reminder).
    */
   async turn(req: TurnRequest): Promise<TurnResult> {
+    const steps: TurnStep[] = [];
+    const r = await this.modelLoop(req, steps);
+    return steps.length ? { ...r, steps } : r;
+  }
+
+  /** journey retest R18-3: why the loop asked the model again — read from the last message it added. */
+  private static nextReason(last: AiMessage | undefined): string {
+    if (!last) return 'other';
+    if (last.role === 'tool') return 'tools';
+    const text = typeof last.content === 'string' ? last.content : '';
+    if (text === FORMAT_REMINDER) return 'format';
+    if (text === PLAIN_TEXT_REMINDER) return 'plain';
+    if (text === CONFIRM_WITHOUT_RECAP_NOTE) return 'confirm_note';
+    if (text === YES_WITHOUT_ORDER_NOTE) return 'yes_note';
+    if (text.startsWith(HANDOFF_REFUSED_MARK)) return 'handoff_refused';
+    if (text.startsWith('[tool result')) return 'stray';
+    return last.role === 'user' ? 'guard' : 'other';
+  }
+
+  private async modelLoop(req: TurnRequest, steps: TurnStep[]): Promise<TurnResult> {
     const usage: AiUsage = { inputTokens: 0, outputTokens: 0 };
     const messages: AiMessage[] = [...req.prompt.messages];
     // full-test 15/11 AI-CHAT-07: no handoff tool on a message that is only an order field (refused every time, 5–10 s each)
@@ -784,6 +860,10 @@ export class AiRunService implements OnModuleInit {
     // product (its price) the message names
     let placeQuote: ExecutedTool | null = null;
     let placeProduct: PlaceProduct | null = null;
+    // journey retest R18-1 (18/11): a street address is in the customer's messages (home delivery: the place's home fee alone, R5-4)
+    const streetGiven = req.toolCtx.customerHistory !== undefined && !noAddressYet({ customerHistory: req.toolCtx.customerHistory, orderHistory: [] });
+    // journey retest R18-1: the place the customer named is not served (its names, for « we don't deliver there »)
+    let placeNotServed: { fr: string; ar?: string } | null = null;
     let model = null as RoutedModel | null;
     let usedFallback = false;
     let repaired = false;
@@ -863,17 +943,22 @@ export class AiRunService implements OnModuleInit {
         // journey retest R13-6 (18/11): a fee answer gives home AND stop-desk when this turn's quote gave both (F1b T2); « taille unique »,
         // « نعم » in an Arabic-script answer (N18 T1, A2 T1)
         // journey retest R14-2 (18/11): and « home or stop-desk? » carries both fees (the server's quote when the model made none)
-        const quotesNow = quoteFacts([...executed, ...reused].map((t) => ({ name: canonicalTool(t.name), result: t.result })));
+        // (journey retest R18-1: the server's quote of a place after a street was given writes the home fee alone — no stop-desk added to it)
+        const quotesNow = quoteFacts([...executed.filter((t) => !(streetGiven && t === placeQuote)), ...reused].map((t) => ({ name: canonicalTool(t.name), result: t.result })));
         text = withArabicWords(withModeFees(withBothFees(text, quotesNow, textLang), quotesNow, textLang), textLang);
         // journey retest R15-1 (18/11): a place given with no quote of it yet ⇒ the product's price and both fees (the server's quote)
-        if (placeQuote) text = withPlaceFacts(text, quoteFacts([{ name: 'quote_delivery', result: placeQuote.result }]), placeProduct, textLang);
+        // journey retest R18-1 (18/11): a place named with no quote of it yet that is not served ⇒ « we don't deliver there »
+        if (placeNotServed) text = withNotServed(text, placeNotServed, textLang);
+        else if (placeQuote) text = withPlaceFacts(text, quoteFacts([{ name: 'quote_delivery', result: placeQuote.result }]), placeProduct, textLang, { homeOnly: streetGiven });
         // journey retest R17-1 (18/11): the place quoted in an earlier turn (no server quote now) — the product this message names still gets
         // its price before the address / « home or stop-desk? » question (PF1 T2 « … à domicile à El Eulma (650 DA) ou en stop-desk (350 DA) ? »,
         // no 6 900 DA)
-        else if ((asksAddress(text) || modeQuestionAt(text) >= 0) && ![...executed, ...reused].some((t) => canonicalTool(t.name) === 'quote_delivery' && (t.result as { error?: { code?: unknown } } | null)?.error?.code === 'WILAYA_NOT_SERVED')) {
-          const product = this.placeProductOf(req, output);
-          if (product) text = withPlaceFacts(text, [], product, textLang);
-        }
+        // journey retest R18-2 (18/11): whatever the reply asks — every catalogue product being sold (the one the message names, the reply's
+        // one product card, a product the reply names by its whole name) whose price the customer was not told yet in the conversation: PG2 T2
+        // « … للدار: 450 دج، لنقطة الاستلام (stop-desk): 300 دج. تحب نوصلوها للدار ولا في ستوب ديسك؟ » (Djellaba homme 7 500 دج never said), N3 T1 « Parfait
+        // Samira, 2 tapis de prière …, c'est noté ! Dans quelle wilaya êtes-vous ? » (2 800 DA never said)
+        if (!placeNotServed && ![...executed, ...reused].some((t) => canonicalTool(t.name) === 'quote_delivery' && (t.result as { error?: { code?: unknown } } | null)?.error?.code === 'WILAYA_NOT_SERVED'))
+          for (const product of this.saleProductsOf(req, output, text)) text = withPlaceFacts(text, [], product, textLang);
         // journey retest R15-4 (18/11): the asked price of an out-of-stock product is given with « pas disponible » (N5 T1)
         const gone = new Set(req.guard?.unavailableNames ?? []);
         text = withAskedPrice(text, req.toolCtx.customerText, (req.guard?.cataloguePrices ?? []).filter((p) => gone.has(p.name)), textLang);
@@ -881,6 +966,11 @@ export class AiRunService implements OnModuleInit {
         // واحد؟ ») — the next missing field instead
         // journey retest R17-4 (18/11): the family in Arabic script / arabizi / French, and a clause saying it is booked / prepared / noted
         text = withoutBookingOffer(withOneStopdeskOffer(text), req.toolCtx.customerText, phoneSoFar, textLang, { history: req.toolCtx.customerHistory, orderedBefore: placedNumbers(req.toolCtx.orderHistory).length > 0 });
+        // journey retest R18-4 (18/11): no « tsajjel: … », « Tsajjelt Amina Saadi, … », « سجلت زوج من … », « c'est noté ! » before any recap (it
+        // reads like an order step) — while no recap waits and no order was placed in the conversation; the customer's name as they wrote it
+        // (N4 T2 « je note le nom : Samir Ben Ali » for « سمير بن علي »)
+        if (!pendingBefore && !placedNumbers(req.toolCtx.orderHistory).length) text = withoutNotedSteps(text, req.toolCtx.customerHistory ?? req.toolCtx.customerText);
+        text = withCustomerScriptName(text, req.toolCtx.customerHistory ?? req.toolCtx.customerText ?? '');
         // journey retest R17-5 (18/11): a delivery-only question gets no closing offer of the products (F9), nothing deliverable no « something
         // else that reaches you » (N16 Illizi)
         const quoteResults = [...executed, ...reused].filter((t) => canonicalTool(t.name) === 'quote_delivery').map((t) => t.result as { ok?: unknown } | null);
@@ -1039,6 +1129,8 @@ export class AiRunService implements OnModuleInit {
       const placedNow = orderClosed && !!confirmationNow();
       const stepDefs = orderClosed ? defs.filter((d) => d.name !== 'create_order' && !(placedNow && d.name === 'lookup_order')) : defs;
       let res;
+      if (steps.length) steps[steps.length - 1]!.next = AiRunService.nextReason(messages[messages.length - 1]);
+      const stepStart = Date.now();
       try {
         res = await this.routing.call(
           'text',
@@ -1049,6 +1141,7 @@ export class AiRunService implements OnModuleInit {
         if (e instanceof AiProviderError) return guardFallback() ?? { ok: false, kind: 'provider', error: providerErrorLabel(e), tools: executed, usage, model, usedFallback };
         throw e;
       }
+      steps.push({ ms: Date.now() - stepStart, ...(res.value.toolCalls.length ? { calls: res.value.toolCalls.map((c) => canonicalTool(c.name)) } : {}) });
       model = res.model;
       usedFallback ||= res.usedFallback;
       usage.inputTokens += res.value.usage.inputTokens;
@@ -1092,7 +1185,8 @@ export class AiRunService implements OnModuleInit {
             continue;
           }
           // journey retest R17-2: on a plain yes to the recap shown, the model's create_order places that recap's stored order
-          const run = yesCall(call);
+          // journey retest R18-3: a lookup by the customer's own phone after an order of this conversation looks up that order's number
+          const run = yesCall(lookupByNumber(call, req.toolCtx.orderHistory, req.toolCtx.customerHistory));
           const runHash = run === call ? hash : toolCallId(run.name, run.args, 0);
           const ordinal = seen.get(runHash) ?? 0;
           seen.set(runHash, ordinal + 1);
@@ -1140,7 +1234,8 @@ export class AiRunService implements OnModuleInit {
             continue;
           }
           // journey retest R17-2: on a plain yes to the recap shown, the model's create_order places that recap's stored order
-          const run = yesCall(call);
+          // journey retest R18-3: a lookup by the customer's own phone after an order of this conversation looks up that order's number
+          const run = yesCall(lookupByNumber(call, req.toolCtx.orderHistory, req.toolCtx.customerHistory));
           const runHash = run === call ? hash : toolCallId(run.name, run.args, 0);
           const ordinal = seen.get(runHash) ?? 0;
           seen.set(runHash, ordinal + 1);
@@ -1200,13 +1295,30 @@ export class AiRunService implements OnModuleInit {
           // it exists yet in the conversation — the model asked the street with no price, no fee and no stop-desk: the server quotes that
           // wilaya (kept out of the guard's fee rule, as R14-2's) and the reply carries the product's price and both fees. Only when the
           // reply asks the address or the message names a catalogue product (an order is being taken), never on a not-served wilaya.
+          // journey retest R18-1 (18/11): and on any message naming a place no turn quoted yet — a first message, a greeting with the place,
+          // a field answer, whatever the reply asks (PF1 / PG1 / PG2 T1 « Bonjour, j'habite à Sétif, El Eulma » ⇒ « … Qu'est-ce qui vous
+          // intéresse aujourd'hui ? », no fee: the R15-1 step needed a product named or an address question) — not on a question about an
+          // order already made; a wilaya that is not served gets « not delivered there »
           if (![...executed, ...reused].some((t) => canonicalTool(t.name) === 'quote_delivery')) {
             const product = this.placeProductOf(req, parsed.value);
-            const quoted = product || asksAddress(parsed.value.reply) ? await this.placeQuote(req, executed, seen, answered) : null;
+            // (nor on a wish for a product the CATALOGUE does not name, with no card shown — N7 T1 « vous avez des lunettes de soleil ? Je suis
+            // Yacine …, Blida, Boufarik, … »: nothing can be ordered yet)
+            const unsoldAsk = !!said && (productWanted(said) || productAsk(said, said)) && !asksDelivery(said) && !productNamedIn(said, req.guard?.cataloguePrices ?? []) && !(parsed.value.productCards ?? []).length;
+            const placeHere = placeQuoteMessage(said) && !unsoldAsk && !executed.some((t) => ['lookup_order', 'cancel_order'].includes(canonicalTool(t.name)));
+            // (the product's amount, when the message names one, decides the free threshold: the quote is that order's)
+            const cartItems = parsed.value.cart?.items ?? [];
+            const qty = cartItems.length === 1 ? Math.max(1, Number(cartItems[0]!.quantity) || 1) : 1;
+            const quoted = product || asksAddress(parsed.value.reply) || placeHere ? await this.placeQuote(req, executed, seen, answered, product ? product.price * qty : undefined) : null;
+            const notServed = quoted ? notServedOf(quoted.result) : null;
             if (quoted && (quoted.result as { ok?: unknown } | null)?.ok === true) {
               modeQuote = placeQuote = quoted;
               placeProduct = product;
-              parsed.value.reply = withPlaceFacts(parsed.value.reply, quoteFacts([{ name: 'quote_delivery', result: quoted.result }]), product, textLang);
+              parsed.value.reply = withPlaceFacts(parsed.value.reply, quoteFacts([{ name: 'quote_delivery', result: quoted.result }]), product, textLang, { homeOnly: streetGiven });
+            } else if (quoted && notServed) {
+              modeQuote = placeQuote = quoted;
+              const w = (await placeIndex().catch(() => null))?.wilayas.find((x) => x.id === notServed.id);
+              placeNotServed = { fr: notServed.name, ...(w?.nameAr ? { ar: w.nameAr } : {}) };
+              parsed.value.reply = withNotServed(parsed.value.reply, placeNotServed, textLang);
             }
           }
         }
@@ -1392,7 +1504,7 @@ export class AiRunService implements OnModuleInit {
    * names) when no earlier turn of the conversation quoted it (`GuardFacts.quotedWilayas`). Null when the message names no place, the
    * wilaya was quoted before, or the lists cannot be read.
    */
-  private async placeQuote(req: TurnRequest, executed: ExecutedTool[], seen: Map<string, number>, answered: Map<string, unknown>): Promise<ExecutedTool | null> {
+  private async placeQuote(req: TurnRequest, executed: ExecutedTool[], seen: Map<string, number>, answered: Map<string, unknown>, subtotal?: number): Promise<ExecutedTool | null> {
     const text = (req.toolCtx.customerText ?? '').trim();
     if (!req.guard || !text) return null;
     let wilaya: { id: number } | null = null;
@@ -1402,7 +1514,7 @@ export class AiRunService implements OnModuleInit {
       return null;
     }
     if (!wilaya || (req.guard.quotedWilayas ?? []).includes(wilaya.id)) return null;
-    const call: AiToolCallRequest = { id: 'server-place-quote', name: 'quote_delivery', args: { wilayaId: wilaya.id } };
+    const call: AiToolCallRequest = { id: 'server-place-quote', name: 'quote_delivery', args: { wilayaId: wilaya.id, ...(subtotal && subtotal > 0 ? { subtotal } : {}) } };
     const hash = toolCallId(call.name, call.args, 0);
     const ordinal = seen.get(hash) ?? 0;
     seen.set(hash, ordinal + 1);
@@ -1422,13 +1534,40 @@ export class AiRunService implements OnModuleInit {
     const prices = req.guard?.cataloguePrices ?? [];
     const p = text.trim() && prices.length ? productNamedIn(text, prices) : null;
     if (!p || (req.guard?.unavailableNames ?? []).includes(p.name)) return null;
-    const items = output.cart?.items ?? [];
-    const fromCart = items.length === 1 && items[0]!.productId === p.id && items[0]!.variantId ? p.variants.find((v) => v.id === items[0]!.variantId) : undefined;
-    const v = (p.variants.length ? namedVariant(p.variants.filter((x) => x.id), text) : null) ?? fromCart;
-    if (v) return { name: p.name, variant: v.name, price: v.price };
-    if (!p.variants.length) return { name: p.name, price: p.price };
-    const one = [...new Set(p.variants.map((x) => x.price))];
-    return one.length === 1 ? { name: p.name, price: one[0]! } : null;
+    return productPrice(p, text, output);
+  }
+
+  /**
+   * journey retest R18-2 (18/11): the catalogue products this reply sells whose price the customer was not told yet — the product the
+   * message names, the reply's one product card, the products the reply names by their whole name (at most 3) — with the price the
+   * variant named (or the one price of all variants) gives. Not an out-of-stock product, nor one at stock 0 the customer did not name,
+   * nor one whose price this reply or an earlier AI message of the conversation already gives.
+   */
+  private saleProductsOf(req: TurnRequest, output: AiReplyOutput, text: string): PlaceProduct[] {
+    const prices = req.guard?.cataloguePrices ?? [];
+    const said = req.toolCtx.customerText ?? '';
+    if (!prices.length || !said.trim() || fillerMessage(said)) return [];
+    const zero = new Set(req.guard?.zeroStockNames ?? []);
+    const out = new Set(req.guard?.unavailableNames ?? []);
+    const earlier = req.prompt.messages.filter((m) => m.role === 'assistant').map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n');
+    const told = new Set([...numbersIn(foldGuard(earlier)), ...numbersIn(foldGuard(text))]);
+    const cards = [...new Set(output.productCards ?? [])];
+    // (the product the message names, unless the reply speaks of others only — its cards show another product, or it names another one,
+    // and never this one)
+    const named = productNamedIn(said, prices);
+    const other = productNamedIn(text, prices.filter((p) => p !== named));
+    const asked = named && ((cards.length && !cards.includes(named.id)) || other) && !productNamedIn(text, [named]) ? null : named;
+    // (a reply naming three products or more lists the catalogue or alternatives — « Kayen bezzaf : basket, djellaba homme, … »: no price
+    // line for each)
+    const whole = prices.filter((p) => namedWhole(text, p.name));
+    const candidates = [asked, cards.length === 1 ? prices.find((p) => p.id === cards[0]) : undefined, ...(whole.length <= 2 ? whole : [])].filter((p): p is CataloguePrice => !!p);
+    const found: PlaceProduct[] = [];
+    for (const p of candidates) {
+      if (found.length >= 3 || found.some((x) => x.name === p.name) || out.has(p.name) || (zero.has(p.name) && p !== asked)) continue;
+      const priced = productPrice(p, said, output);
+      if (priced && priced.price > 0 && !told.has(priced.price)) found.push(priced);
+    }
+    return found;
   }
 
   /**
@@ -1445,14 +1584,14 @@ export class AiRunService implements OnModuleInit {
   /** Closes a run (inside the caller's transaction when given). Only a `running` run is closed: returns false otherwise. */
   async finish(
     runId: string,
-    p: { status: Exclude<AiRunStatus, 'running'>; turn?: Pick<TurnBase, 'usage' | 'model' | 'usedFallback' | 'tools'>; intent?: AiIntent | null; confidence?: number | null; error?: string | null; startedAt: Date; flags?: string[]; meta?: RunMeta },
+    p: { status: Exclude<AiRunStatus, 'running'>; turn?: Pick<TurnBase, 'usage' | 'model' | 'usedFallback' | 'tools' | 'steps'>; intent?: AiIntent | null; confidence?: number | null; error?: string | null; startedAt: Date; flags?: string[]; meta?: RunMeta },
     tx?: Tx,
   ): Promise<boolean> {
     const db = tx ?? prisma;
     const usage = p.turn?.usage ?? { inputTokens: 0, outputTokens: 0 };
     const model = p.turn?.model ?? null;
     const current = await db.aiRun.findUnique({ where: { id: runId }, select: { meta: true } });
-    const meta: RunMeta = { ...((current?.meta as RunMeta | null) ?? {}), ...(p.meta ?? {}), ...(p.turn ? { toolNames: p.turn.tools.map((t) => canonicalTool(t.name)) } : {}), ...(model ? { costUsd: costUsd(model, usage) } : {}) };
+    const meta: RunMeta = { ...((current?.meta as RunMeta | null) ?? {}), ...(p.meta ?? {}), ...(p.turn ? { toolNames: p.turn.tools.map((t) => canonicalTool(t.name)) } : {}), ...(p.turn?.steps?.length ? { steps: p.turn.steps } : {}), ...(model ? { costUsd: costUsd(model, usage) } : {}) };
     const r = await db.aiRun.updateMany({
       where: { id: runId, status: 'running' },
       data: {

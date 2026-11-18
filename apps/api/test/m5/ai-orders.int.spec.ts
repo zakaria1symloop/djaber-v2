@@ -224,7 +224,7 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const t = await turn(s, newSender(), 'Je voudrais la robe satin bordeaux');
     expect(t.conversation.status).toBe('active');
     expect(t.runs.at(-1)!.flags).toContain('handoff_refused');
-    expect(t.out.filter((m) => m.author === 'ai' && m.type === 'text').at(-1)!.text).toBe('Très bon choix ! Quel est votre nom ?');
+    expect(t.out.filter((m) => m.author === 'ai' && m.type === 'text').at(-1)!.text).toBe('Très bon choix ! Robe satin bordeaux : 4500 DA. Quel est votre nom ?'); // journey retest R18-2
   });
 
   it('journey retest R4-6: two phone numbers in one message ⇒ the main and the second phone, in the recap and the order', async () => {

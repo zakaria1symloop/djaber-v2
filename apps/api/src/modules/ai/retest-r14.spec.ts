@@ -166,9 +166,11 @@ describe('R14-2 (Minor) — « home or stop-desk? » always carries both fees', 
     const ask = await run('Sétif, El Eulma', ['nheb sac a main cuir, Karim 0770112233'], "A3tini l'adresse ta3ek (rue, cité) ?");
     expect(ask.execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 19 }, expect.anything());
     expect(ask.r.output.reply).toBe("Tawsil: 650 DA l dar, wela 350 DA f stop-desk ila t7ebb. A3tini l'adresse ta3ek (rue, cité) ?");
-    // a reply asking no mode and no address, about no product ⇒ nothing is quoted
+    // journey retest R18-1 (18/11): a reply asking something else (no mode, no address) is quoted too — the place named with no quote of it
+    // yet always gets its fees
     const other = await run('Sétif, El Eulma', ['nheb sac a main cuir, Karim 0770112233'], 'Saha Karim, wach smitek kamla ?');
-    expect(other.execute).not.toHaveBeenCalled();
+    expect(other.execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 19 }, expect.anything());
+    expect(other.r.output.reply).toBe('Tawsil: 650 DA l dar, wela 350 DA f stop-desk ila t7ebb. Saha Karim, wach smitek kamla ?');
   });
 });
 

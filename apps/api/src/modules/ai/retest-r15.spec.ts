@@ -69,7 +69,8 @@ describe('R15-1 (Minor) — a place given with no quote yet: the reply carries t
 
   it('F5 T1 (shared link): no quote_delivery by the model ⇒ the server quotes Alger; price, both fees and the stop-desk come before the street question', async () => {
     const { r, execute, gateway } = await run(F5_T1, [], F5_T1_REPLY);
-    expect(execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 16 }, expect.anything());
+    // (journey retest R18-1: with the amount of the product the message names — it decides the free threshold)
+    expect(execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 16, subtotal: 4900 }, expect.anything());
     expect(r.output.reply).toBe("Salam Amina, 3andna la robe kabyle brodée taille M. Robe kabyle brodée (M) b 4900 DA. Tawsil: 400 DA l dar, wela 250 DA f stop-desk ila t7ebb. Wach howa l'adresse ta3ek f Bab Ezzouar (rue, cité, bâtiment wela blassa ma3roufa 9rib) ?");
     // the server's quote is no delivery question: no corrective model turn for a fee
     expect(gateway.calls).toHaveLength(1);
@@ -95,8 +96,9 @@ describe('R15-1 (Minor) — a place given with no quote yet: the reply carries t
     const given = await run(F5_T1, [], 'Robe kabyle brodée (M) b 4900 DA, tawsil l Bab Ezzouar 400 DA. Wach howa l’adresse ta3ek ?');
     expect(given.r.output.reply).toBe('Robe kabyle brodée (M) b 4900 DA, tawsil l Bab Ezzouar 400 DA. Wela f stop-desk b 250 DA. Wach howa l’adresse ta3ek ?');
     const illizi = await run('slm, nheb la robe kabyle taille M, ana f Illizi', [], 'Wach howa l’adresse ta3ek ?');
-    expect(illizi.execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 33 }, expect.anything());
-    expect(illizi.r.output.reply).toBe('Wach howa l’adresse ta3ek ?');
+    expect(illizi.execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 33, subtotal: 4900 }, expect.anything());
+    // journey retest R18-1 (18/11): a not-served wilaya named with no quote of it yet ⇒ « we don't deliver there »
+    expect(illizi.r.output.reply).toBe('Ma nwasslouch l Illizi f had lwaqt. Wach howa l’adresse ta3ek ?');
   });
 
   it('withPlaceFacts in each language; free home delivery; no stop-desk; no question ⇒ at the end; « home or stop-desk? » is left to withModeFees', () => {

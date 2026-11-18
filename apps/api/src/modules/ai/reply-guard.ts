@@ -15,7 +15,8 @@
 //   false_confession full-test 15/11 AI-CHAT-02: « coordonnées inventées », « commande enregistrée par erreur », « la
 //                    commande n'existe pas » while an order of this conversation was placed
 //   fee_missing      journey 16/11 J03-2: quote_delivery answered this turn but the reply gives none of its fees (« Merci
-//                    3la sbr ! … » to « ch7al tawsil l setif ? »): one corrective turn, then the server adds the fee itself
+//                    3la sbr ! … » to « ch7al tawsil l setif ? »): the server adds the fee itself (journey retest R18-3: no
+//                    corrective model turn for it alone — AUTO_FIX_RULES)
 //   contradicts_customer journey retest R2-3: « rani nestanna numéro ta3ek » right after the number, « ما فهمتش الولاية » after
 //                    a phone — a field said not understood / awaited while the customer's message just gave it (or gave
 //                    another field and nothing else): one corrective turn, then the sentence is dropped
@@ -45,7 +46,9 @@ import { articleless, fold as foldPlace, WILAYA_ALIASES } from './tools/wilaya-a
 
 export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing' | 'contradicts_customer' | 'unavailable_offer' | 'photo_claim' | 'invented_problem' | 'confirm_without_recap' | 'order_claim';
 /** Rules the server fixes itself: no corrective model turn for them alone. */
-export const AUTO_FIX_RULES: readonly GuardRule[] = ['script_mix'];
+// journey retest R18-3 (18/11): and a missing fee — the server writes the fee sentence of every owed quote (`enforceReply`) instead of a corrective
+// model turn that only re-wrote the reply with the fee (F1b T2 7.8 s, R16 F9)
+export const AUTO_FIX_RULES: readonly GuardRule[] = ['script_mix', 'fee_missing'];
 export type LeakKind = 'uuid' | 'tool' | 'code' | 'key' | 'json' | 'marker';
 /** `sentence` = index in `splitSentences(reply)`; `value` = the amount / count (never message text) */
 export type GuardViolation = { rule: GuardRule; sentence: number; value?: number; kind?: LeakKind };
@@ -159,7 +162,7 @@ export type CatalogueStock = { id: string; stock: number | null; sell: boolean; 
 export type CataloguePrice = { id: string; name: string; price: number; variants: { id: string; name: string; price: number }[] };
 export type OrderField = 'name' | 'phone' | 'wilaya' | 'commune' | 'address';
 /** What a successful quote_delivery answered: the reply must give one of its fees (or say it is free). */
-export type QuoteFact = { wilaya: string; isStopdesk: boolean; fee: number; free: boolean; stopdeskFee: number | null; /** journey retest R16-1: its Arabic name */ wilayaAr?: string };
+export type QuoteFact = { wilaya: string; isStopdesk: boolean; fee: number; free: boolean; stopdeskFee: number | null; /** journey retest R16-1: its Arabic name */ wilayaAr?: string; /** journey retest R18-1: the home-delivery free threshold */ freeFrom?: number };
 
 // --- text helpers -------------------------------------------------------------------------------------------------------------
 /** Lower case, Latin accents and Arabic vowel marks removed, hamza / tā' marbūṭa folded, Arabic-Indic digits → Latin. */
@@ -419,9 +422,9 @@ export const selfNames = (sentence: string, facts: Pick<GuardFacts, 'agentName' 
 /** journey 16/11 J03-2: the quote_delivery answers of this turn (`tools` with their canonical names). */
 export const quoteFacts = (tools: { name: string; result: unknown }[]): QuoteFact[] =>
   tools.flatMap((t) => {
-    const r = t.result as { ok?: unknown; fee?: unknown; free?: unknown; wilayaName?: unknown; wilayaNameAr?: unknown; isStopdesk?: unknown; stopdeskFee?: unknown; stopdeskAvailable?: unknown } | null;
+    const r = t.result as { ok?: unknown; fee?: unknown; free?: unknown; wilayaName?: unknown; wilayaNameAr?: unknown; isStopdesk?: unknown; stopdeskFee?: unknown; stopdeskAvailable?: unknown; freeFrom?: unknown } | null;
     if (t.name !== 'quote_delivery' || r?.ok !== true || typeof r.fee !== 'number') return [];
-    return [{ wilaya: typeof r.wilayaName === 'string' ? r.wilayaName : '', isStopdesk: r.isStopdesk === true, fee: r.fee, free: r.free === true, stopdeskFee: typeof r.stopdeskFee === 'number' && r.stopdeskAvailable !== false ? r.stopdeskFee : null, ...(typeof r.wilayaNameAr === 'string' ? { wilayaAr: r.wilayaNameAr } : {}) }];
+    return [{ wilaya: typeof r.wilayaName === 'string' ? r.wilayaName : '', isStopdesk: r.isStopdesk === true, fee: r.fee, free: r.free === true, stopdeskFee: typeof r.stopdeskFee === 'number' && r.stopdeskAvailable !== false ? r.stopdeskFee : null, ...(typeof r.wilayaNameAr === 'string' ? { wilayaAr: r.wilayaNameAr } : {}), ...(typeof r.freeFrom === 'number' && r.freeFrom > 0 && r.free !== true && r.isStopdesk !== true ? { freeFrom: r.freeFrom } : {}) }];
   });
 /** The reply gives a fee of one of the quotes (the number with or without « DA », Arabic digits too) or says the delivery is free. */
 export const feeGiven = (reply: string, quotes: QuoteFact[]): boolean => {

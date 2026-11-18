@@ -766,7 +766,7 @@ describe('handoff, insights, safety', () => {
     await resetAi();
     fakeAi(app).script('reply', { reply: 'Oui, elle est disponible. Il en reste 2.', intent: 'SALE' }, { reply: 'Oui, elle est disponible. Il en reste 2 pièces.', intent: 'SALE' });
     const kept = await turn(s, newSender(), { text: 'la robe est dispo ?' });
-    expect(kept.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('Oui, elle est disponible.');
+    expect(kept.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('Oui, elle est disponible. Robe satin bordeaux : 4500 DA.'); // journey retest R18-2: the price of the product named, not told yet
     expect(kept.runs[0]!.flags).toContain('guard_enforced');
     expect((kept.runs[0]!.meta as any).guard).toMatchObject({ retried: true, action: 'stripped', remaining: [{ rule: 'stock_count', value: 2 }] });
   });

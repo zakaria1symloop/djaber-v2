@@ -651,6 +651,9 @@ export class ToolRegistry {
     const a = SearchArgs.safeParse(args);
     if (!a.success) return invalid(String(a.error.issues[0]?.path[0] ?? 'query'), 'robe satin');
     const products = await this.catalogue.search(ctx.agent, a.data.query, a.data.limit);
+    // journey retest R18-3 (18/11): nothing found is an answer — N7 T1 searched « lunettes de soleil », then « lunettes » (one more model
+    // step, 12.0 s): the model is told not to search again with other words
+    if (!products.length) return { products: [], say: `No product of the shop matches « ${a.data.query.slice(0, 80)} ». When the CATALOGUE in your instructions does not list it either, the shop does not sell it: answer the customer now (say it is not sold and offer what is listed and in stock) — do not search again with other words.` };
     return { products: products.map((p) => this.view(p)) };
   }
 

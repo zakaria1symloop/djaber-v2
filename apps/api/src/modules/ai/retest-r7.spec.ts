@@ -121,11 +121,12 @@ describe('R7-2 — a photo request for a product without a photo is answered « 
   });
   it('the turn: the reply says it already, a product with a photo is sent, or no photo was asked ⇒ nothing added', async () => {
     const said = 'Ma 3andnach tsawer ta3ha f had lwaqt. Robe brodée bil yed, b qmach khfif.';
-    expect((await run(N9_C, ['robe'], said)).reply).toBe(said);
-    expect((await run('ab3athli tswira ta3 sac', ['sac'], 'Sac à main cuir, kayen f noir w marron.')).reply).toBe('Sac à main cuir, kayen f noir w marron.');
-    expect((await run('Salam, 9olli 3la la robe kabyle brodée', ['robe'], 'Robe kabyle brodée bil yed, b qmach khfif.')).reply).toBe('Robe kabyle brodée bil yed, b qmach khfif.');
+    // (journey retest R18-2: the price of the product the card shows, never told yet, is added)
+    expect((await run(N9_C, ['robe'], said)).reply).toBe(`${said} Robe kabyle brodée b 4900 DA.`);
+    expect((await run('ab3athli tswira ta3 sac', ['sac'], 'Sac à main cuir, kayen f noir w marron.')).reply).toBe('Sac à main cuir, kayen f noir w marron. Sac à main cuir b 4900 DA.');
+    expect((await run('Salam, 9olli 3la la robe kabyle brodée', ['robe'], 'Robe kabyle brodée bil yed, b qmach khfif.')).reply).toBe('Robe kabyle brodée bil yed, b qmach khfif. Robe kabyle brodée b 4900 DA.');
     // no card and no product of a tool: the server cannot tell which product — nothing is added
-    expect((await run(N9_C, [], 'Wach men robe t7ebb ?')).reply).toBe('Wach men robe t7ebb ?');
+    expect((await run(N9_C, [], 'Wach men robe t7ebb ?')).reply).toBe('Robe kabyle brodée b 4900 DA. Wach men robe t7ebb ?');
   });
 });
 
@@ -275,17 +276,16 @@ describe('R7-5 — « Vous livrez à Blida ? » gives the fee', () => {
     const tools = { defsFor: async () => [TOOL_DEFS.quote_delivery], forcedHandoff: () => null, execute } as unknown as ToolRegistry;
     return { gateway, execute, svc: new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never) };
   };
-  it('F12 T1: answered without quote_delivery ⇒ the server runs it, one corrective turn gives the fee', async () => {
-    const fixed = 'Bonsoir ! Oui, on livre à Blida : 450 DA à domicile ou 300 DA en stop-desk, en 2 à 5 jours. Vous cherchez quelque chose en particulier ?';
-    const { gateway, execute, svc } = setup({ reply: F12_AI }, { reply: fixed });
+  // journey retest R18-3 (18/11): a missing fee is written by the server, no corrective model turn (AUTO_FIX_RULES)
+  it('F12 T1: answered without quote_delivery ⇒ the server runs it and writes the fee sentence (no corrective turn)', async () => {
+    const { gateway, execute, svc } = setup({ reply: F12_AI });
     const r = await svc.turn(turnReq(F12_C, F12_C, { guard: facts(F12_C) }));
     expect(execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 9 }, expect.anything());
-    expect(gateway.calls).toHaveLength(2);
-    expect(String((gateway.calls[1]!.messages.at(-1) as { content: unknown }).content)).toContain('DELIVERY FEE: quote_delivery answered Blida: home 450 DA, stop-desk 300 DA');
-    expect(r.ok && r.output.reply).toBe(fixed);
+    expect(gateway.calls).toHaveLength(1);
+    expect(r.ok && r.output.reply).toMatch(/^Bonsoir ! Livraison à Blida : 450\sDA à domicile, 300\sDA en stop-desk\. Oui, on livre à Blida\./u);
     expect(r.ok && r.tools.map((t) => t.name)).toEqual(['quote_delivery']);
   });
-  it('the corrective turn still gave none ⇒ the fee sentence goes after the greeting', async () => {
+  it('the fee sentence goes after the greeting (the corrective turn of another rule giving none either)', async () => {
     const { svc } = setup({ reply: F12_AI }, { reply: F12_AI });
     const r = await svc.turn(turnReq(F12_C, F12_C, { guard: facts(F12_C) }));
     expect(r.ok && r.output.reply).toMatch(/^Bonsoir ! Livraison à Blida : 450\sDA à domicile, 300\sDA en stop-desk\. Oui, on livre à Blida\./u);

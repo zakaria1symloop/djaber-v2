@@ -57,7 +57,8 @@ describe('AiRunService.turn — journey retest R1', () => {
     const gateway: AiGateway = { driver: 'fake', generate: async (r) => (seen.push(r), answers.shift()!), transcribe: async () => ({ text: '', language: null, durationSec: null }) };
     const { svc, req, execute } = setup(gateway);
     const t = await svc.turn(req('Sétif'));
-    expect(t).toMatchObject({ ok: true, output: { reply: 'Parfait, c’est noté. Quelle est votre commune ?' } });
+    // (journey retest R18-4: « c'est noté » before any recap reads like an order step — it goes)
+    expect(t).toMatchObject({ ok: true, output: { reply: 'Parfait. Quelle est votre commune ?' } });
     expect(execute).not.toHaveBeenCalled();
     expect(String((seen[1]!.messages.at(-2) as { content: unknown }).content)).toContain('[tool call handoff_to_human');
   });
