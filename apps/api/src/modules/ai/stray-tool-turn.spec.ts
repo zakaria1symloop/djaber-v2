@@ -1,6 +1,6 @@
 import { AiRunService, FIELD_ONLY_NOTE, type TurnRequest } from './ai-run.service';
 import { FakeAiGateway } from './provider/fake-ai.gateway';
-import { handoffLine } from './reply-fixes';
+import { handoffReply } from './reply-fixes';
 import type { AiGateway, AiGenerateRequest, AiGenerateResult } from './provider/ai.gateway';
 import { buildGuardFacts, type GuardFacts } from './reply-guard';
 import type { RoutedModel } from './routing.service';
@@ -109,7 +109,8 @@ describe('AiRunService.turn — journey retest R1', () => {
     g3.script('reply', { toolCalls: [{ name: 'create_order', args: { items: [] } }] }, { reply: '', status: 'HANDOFF', statusDetail: 'customer_request', evidence: 'parler à un humain', intent: 'OTHER' });
     const s3 = setup(g3, recap);
     const handed = await s3.svc.turn(s3.req('je veux parler à un humain'));
-    // journey retest R14-4: a handoff answer with no text gets the server's short sentence
-    expect(handed.ok && handed.output.reply).toBe(handoffLine('fr'));
+    // journey retest R14-4: a handoff answer with no text gets the server's short sentence — R15-2: the one of its reason (a person)
+    expect(handed.ok && handed.output.reply).toBe(handoffReply('customer_request', 'fr'));
+    expect(handoffReply('customer_request', 'fr')).toBe("Bien sûr, je vous mets en relation avec l'équipe de la boutique.");
   });
 });

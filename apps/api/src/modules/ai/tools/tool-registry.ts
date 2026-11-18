@@ -403,19 +403,33 @@ export const customerOwnStreet = (callStreet: string, history: string, placeName
   if (!words.length) return null;
   const hay = ` ${placeFold(history)} `;
   const bare = ` ${articleless(placeFold(history))} `;
-  if (words.some((w) => hay.includes(` ${w} `) || bare.includes(` ${articleless(w)} `))) return null;
-  const digits = numbersKey(callStreet);
-  const arabicCall = ARABIC_LETTERS.test(callStreet);
-  for (const line of history.split(/\n+/u).map((l) => l.trim()).filter(Boolean).reverse()) {
+  const lines = history.split(/\n+/u).map((l) => l.trim()).filter(Boolean).reverse();
+  /** The street of an address message as the customer typed it: from the address word (and the numbers just before it) to the end, without the phone and the place names. */
+  const ownStreetOf = (line: string): string | null => {
     const segments = line.split(/\s*[,،;؛]\s*|\s+[-–—]\s+/u);
     const i = segments.findIndex((x) => ADDRESS_WORDS.test(x));
-    if (i < 0) continue;
+    if (i < 0) return null;
     const first = segments[i]!;
     const m = ADDRESS_WORDS.exec(first)!;
     // « 1000 logements bloc 5 »: the numbers just before the address word belong to it
     const lead = /(?:(?:n°|no|رقم)?\s*\d+\s*)+$/u.exec(first.slice(0, m.index))?.[0] ?? '';
     const tail = [first.slice(m.index - lead.length), ...segments.slice(i + 1)].map((x) => x.replace(PHONE_IN_TEXT, ' ').replace(/\s+/gu, ' ').trim()).filter((x) => /\p{L}|\d/u.test(x));
-    const own = withoutPlaceSegments(tail.join(ARABIC_LETTERS.test(first) ? '، ' : ', '), placeNames).trim();
+    return withoutPlaceSegments(tail.join(ARABIC_LETTERS.test(first) ? '، ' : ', '), placeNames).trim();
+  };
+  if (words.some((w) => hay.includes(` ${w} `) || bare.includes(` ${articleless(w)} `))) {
+    // journey retest R15-4 (18/11): the call's street is the customer's own words re-typed — accents or a comma added (F3 T4 « Cité 20
+    // Août, villa 3 » for « cite 20 aout villa 3 »): the customer's text is kept as they typed it (a capital letter alone changes nothing)
+    for (const line of lines) {
+      const own = ownStreetOf(line);
+      if (own && /\p{L}/u.test(own) && own.toLocaleLowerCase() !== callStreet.toLocaleLowerCase() && placeFold(own) === placeFold(callStreet)) return own;
+    }
+    return null;
+  }
+  const digits = numbersKey(callStreet);
+  const arabicCall = ARABIC_LETTERS.test(callStreet);
+  for (const line of lines) {
+    const own = ownStreetOf(line);
+    if (own === null) continue;
     if (!/\p{L}/u.test(own) || numbersKey(own) !== digits) continue;
     if (!digits && ARABIC_LETTERS.test(own) === arabicCall) continue;
     return own;

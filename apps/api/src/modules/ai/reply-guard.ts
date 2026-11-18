@@ -127,7 +127,15 @@ export type GuardFacts = {
   recapWaiting?: boolean;
   /** journey retest R12-2: a lookup_order of this turn found the customer's orders (their status may be told) */
   orderLookedUp?: boolean;
+  /** journey retest R15-2: the shop is outside its opening hours this turn (`PromptContext.outOfHours`) */
+  outOfHours?: boolean;
+  /** journey retest R15-1: the wilayas an earlier turn of the conversation already quoted (quote_delivery, served or not) */
+  quotedWilayas?: number[];
+  /** journey retest R15-1 / R15-4: the price of each catalogue product of the prompt (and of its variants) */
+  cataloguePrices?: CataloguePrice[];
 };
+/** journey retest R15-1 / R15-4: a catalogue product's price and its variants' prices. */
+export type CataloguePrice = { id: string; name: string; price: number; variants: { id: string; name: string; price: number }[] };
 export type OrderField = 'name' | 'phone' | 'wilaya' | 'commune' | 'address';
 /** What a successful quote_delivery answered: the reply must give one of its fees (or say it is free). */
 export type QuoteFact = { wilaya: string; isStopdesk: boolean; fee: number; free: boolean; stopdeskFee: number | null };
@@ -887,6 +895,22 @@ export type GuardFactsInput = {
   earlierToolResults?: unknown[];
   /** journey retest R6-2: products whose gallery the platform sends this turn anyway (« Plus de photos » tapped) */
   galleries?: string[];
+  /** journey retest R15-2: the shop is outside its opening hours */
+  outOfHours?: boolean;
+};
+
+/**
+ * journey retest R15-1 (18/11): the wilayas a quote_delivery of an earlier turn answered (served or not) — a place named again needs
+ * no new quote. Read from the earlier tool results (a quote's own `wilayaId` / `stopdeskAvailable`, or a WILAYA_NOT_SERVED refusal).
+ */
+export const quotedWilayasIn = (results: readonly unknown[]): number[] => {
+  const out = new Set<number>();
+  for (const v of results) {
+    const r = v as { ok?: unknown; wilayaId?: unknown; stopdeskAvailable?: unknown; error?: { code?: unknown; wilayaId?: unknown } } | null;
+    if (r?.ok === true && typeof r.wilayaId === 'number' && 'stopdeskAvailable' in r) out.add(r.wilayaId);
+    else if (r?.error?.code === 'WILAYA_NOT_SERVED' && typeof r.error.wilayaId === 'number') out.add(r.error.wilayaId);
+  }
+  return [...out];
 };
 
 export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
@@ -951,7 +975,11 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
     ...(i.galleries?.length ? { galleries: i.galleries } : {}),
     ...(i.products.length ? { catalogueNames: i.products.map((p) => foldGuard([p.name, ...p.variants.map((v) => v.name)].join(' '))) } : {}),
     ...(i.products.some((p) => p.id) ? { catalogueIds: i.products.map((p) => p.id).filter((id): id is string => !!id) } : {}),
+    ...(i.products.some((p) => p.id) ? { cataloguePrices: i.products.filter((p) => p.id).map((p) => ({ id: p.id!, name: p.name, price: p.price, variants: p.variants.map((v) => ({ id: (v as { id?: string }).id ?? '', name: v.name, price: v.price })) })) } : {}),
+    ...(i.outOfHours ? { outOfHours: true } : {}),
   };
+  const quoted = quotedWilayasIn(i.earlierToolResults ?? []);
+  if (quoted.length) base.quotedWilayas = quoted;
   return i.earlierToolResults?.length ? withToolResults(base, i.earlierToolResults) : base;
 }
 
@@ -971,6 +999,7 @@ export function guardFactsOf(p: Omit<PromptContext, 'descriptionMax'>, o: Omit<G
     ...o,
     lang: p.lang,
     ...(p.locale === 'fr' || p.locale === 'ar' || p.locale === 'en' ? { shopLocale: p.locale } : {}),
+    ...(p.outOfHours ? { outOfHours: true } : {}),
     products: p.catalogue.products,
     shopTexts,
     freeDeliveryThreshold: p.workspace.freeDeliveryThreshold,

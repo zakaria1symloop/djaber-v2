@@ -169,6 +169,15 @@ const ARABIZI_FOR: [RegExp, (m: string, ...g: string[]) => string][] = [
   [/(?<![\p{L}])livraison\s+(?:[aà]\s+)?domicile(?![\p{L}])/giu, (m) => (m[0] === 'L' ? 'Tawsil l dar' : 'tawsil l dar')],
   [/(?<![\p{L}])livraison\s+(?:en\s+|f\s+)?stop[- ]?desk(?![\p{L}])/giu, (m) => (m[0] === 'L' ? 'Tawsil l stop-desk' : 'tawsil l stop-desk')],
   [/(?<![\p{L}])t7ebb?\s+n(?:chouf|warrik)\s+wach\s+men\s+([\p{L}'’-]+)\s+t7ebb?(?:ou|i)?\s*([?؟])/giu, (m, what: string, mark: string) => `${m[0] === 'T' ? 'W' : 'w'}ach men ${what} t7ebb ${mark}`],
+  // journey retest R15-4 (18/11): French left inside arabizi — P2 T1 « Lmqasat li kaynin sont S et M a 4900 DA, et XL a 5200 DA »,
+  // « parfaite pour l3rass »; F5 T1 « rani ndir lek la robe … » (« I am making it for you » for a product not yet ordered); F3 T1 « Bach
+  // ngoulou commande bsmek »
+  [/(?<![\p{L}])(li\s+kaynin)\s+sont(?![\p{L}])/giu, (_m, li: string) => `${li} homa`],
+  [/(?<![\p{L}])et(?=\s+(?:X{0,3}L|X{0,3}S|M|\d{2,3})(?![\p{L}\p{N}]))/gu, () => 'w'],
+  [/(?<![\p{L}])[aà]\s+(\d[\d \u00a0\u202f]*\d|\d)\s*(DA|دج)(?![\p{L}])/gu, (_m, n: string, cur: string) => `b ${n} ${cur}`],
+  [/(?<![\p{L}])(parfaite?)s?\s+pour\s+(?:les?\s+|la\s+|l['’]\s*)?/giu, (_m, w: string) => (/e$/iu.test(w) ? 'mliha l ' : 'mlih l ')],
+  [/(?<![\p{L}])rani\s+ndir\s?(?:lek|lik|lak)(?![\p{L}])(?!\s+(?:la\s+|l\s*['’]?\s*)?(?:commande|récap|recap))/giu, () => '3andna'],
+  [/(?<![\p{L}])bach\s+ngoulou\s+(?:la\s+)?commande\s+b\s?sm(?:ek|itek)(?![\p{L}])/giu, (m) => `${m[0] === 'B' ? 'B' : 'b'}ach nsajjel la commande b smitek`],
 ];
 export const withArabiziWords = (reply: string, lang: AiLanguage | string | undefined): string =>
   lang === 'arabizi' ? ARABIZI_FOR.reduce((t, [re, to]) => t.replace(re, to as (m: string, ...g: string[]) => string), reply) : reply;
@@ -292,17 +301,176 @@ export const withModeFees = (reply: string, quotes: readonly QuoteFact[], lang: 
   return [...parts.slice(0, i).map((p, k) => (k === i - 1 && !/\s$/u.test(p) ? `${p} ` : p)), `${line} `, ...parts.slice(i)].join('').replace(/[ \t]+\n/g, '\n').trim();
 };
 
-const HANDOFF_LINE: Record<Loc, string> = {
-  fr: "Merci pour votre message : l'équipe de la boutique va vous répondre.",
-  ar: 'شكرا على رسالتك، فريق المحل راح يجاوبك.',
-  arabizi: "Saha 3la la question, l'équipe ta3 lboutique rah tjawbek.",
-  en: "Thanks for your message: the shop's team will answer you.",
-};
 /**
  * journey retest R14-4 (18/11): the AI's sentence of a turn handed to the team when the model wrote none — W1 « prix de gros pour 50
  * pièces du hijab soie ? » got only the system line. One short sentence in the customer's language: the team will answer.
  */
-export const handoffLine = (lang: AiLanguage | string | undefined): string => HANDOFF_LINE[locOf(lang)];
+export const handoffLine = (lang: AiLanguage | string | undefined): string => handoffReply('other', lang);
+
+// --- journey retest R15-2 (18/11): one hand-off sentence per reason, in the customer's language and script ------------------------
+/** What the customer handed to the team is about: a person asked for, a refund, a complaint (or anger), anything else. */
+export type HandoffKind = 'person' | 'refund' | 'complaint' | 'team';
+export const handoffKind = (reason: string | null | undefined): HandoffKind =>
+  reason === 'customer_request' || reason === 'keyword' ? 'person' : reason === 'refund' ? 'refund' : reason === 'complaint' || reason === 'angry' ? 'complaint' : 'team';
+/** The opening of the sentence (thanks, of course, sorry) and what the team does — in hours, and out of hours (at the opening). */
+const HANDOFF_LEAD: Record<Loc, Record<HandoffKind, string>> = {
+  fr: { person: 'Bien sûr', refund: 'Désolé pour ce problème', complaint: 'Désolé pour ce problème', team: 'Merci pour votre message' },
+  ar: { person: 'أكيد', refund: 'سمحلي على هاد المشكل', complaint: 'سمحلي على هاد المشكل', team: 'شكرا على رسالتك' },
+  arabizi: { person: 'Ih akid', refund: 'Sme7li 3la had lmochkil', complaint: 'Sme7li 3la had lmochkil', team: 'Saha 3la le message' },
+  en: { person: 'Of course', refund: 'Sorry about this problem', complaint: 'Sorry about this problem', team: 'Thanks for your message' },
+};
+const HANDOFF_TEAM: Record<Loc, Record<HandoffKind, { now: string; later: string }>> = {
+  fr: {
+    person: { now: "je vous mets en relation avec l'équipe de la boutique", later: "l'équipe de la boutique est absente pour le moment, elle vous répondra dès l'ouverture" },
+    refund: { now: "l'équipe de la boutique va voir le remboursement avec vous", later: "l'équipe de la boutique est absente pour le moment, elle verra le remboursement avec vous dès l'ouverture" },
+    complaint: { now: "l'équipe de la boutique va s'en occuper avec vous", later: "l'équipe de la boutique est absente pour le moment, elle s'en occupera avec vous dès l'ouverture" },
+    team: { now: "l'équipe de la boutique va vous répondre", later: "l'équipe de la boutique est absente pour le moment, elle vous répondra dès l'ouverture" },
+  },
+  ar: {
+    person: { now: 'راح نوصلك بواحد من فريق المحل', later: 'فريق المحل ماهوش متوفر درك، راح يجاوبك كي نفتحو' },
+    refund: { now: 'فريق المحل راح يشوف معاك ترجيع الدراهم', later: 'فريق المحل ماهوش متوفر درك، راح يشوف معاك ترجيع الدراهم كي نفتحو' },
+    complaint: { now: 'فريق المحل راح يتكفل بيها معاك', later: 'فريق المحل ماهوش متوفر درك، راح يتكفل بيها معاك كي نفتحو' },
+    team: { now: 'فريق المحل راح يجاوبك', later: 'فريق المحل ماهوش متوفر درك، راح يجاوبك كي نفتحو' },
+  },
+  arabizi: {
+    person: { now: "rani nwasslek m3a wa7ed men l'équipe ta3 lboutique", later: "l'équipe ta3 lboutique ma kanetch dork, rah tjawbek ki n7ellou" },
+    refund: { now: "l'équipe ta3 lboutique rah tchouf m3ak le remboursement", later: "l'équipe ta3 lboutique ma kanetch dork, rah tchouf m3ak le remboursement ki n7ellou" },
+    complaint: { now: "l'équipe ta3 lboutique rah tetkeffel biha m3ak", later: "l'équipe ta3 lboutique ma kanetch dork, rah tetkeffel biha m3ak ki n7ellou" },
+    team: { now: "l'équipe ta3 lboutique rah tjawbek", later: "l'équipe ta3 lboutique ma kanetch dork, rah tjawbek ki n7ellou" },
+  },
+  en: {
+    person: { now: "I'm putting you in touch with the shop's team", later: "the shop's team is away right now and will answer you as soon as the shop opens" },
+    refund: { now: "the shop's team will look at the refund with you", later: "the shop's team is away right now and will look at the refund with you as soon as the shop opens" },
+    complaint: { now: "the shop's team will take care of it with you", later: "the shop's team is away right now and will take care of it with you as soon as the shop opens" },
+    team: { now: "the shop's team will answer you", later: "the shop's team is away right now and will answer you as soon as the shop opens" },
+  },
+};
+const capital = (s: string) => s.charAt(0).toLocaleUpperCase() + s.slice(1);
+/**
+ * journey retest R15-2 (18/11): the AI's sentence of a turn handed to the team — one per reason (H1 « je veux parler à quelqu'un » and
+ * H2 got an empty text, C1 « commande cassée … remboursement » the generic W1 sentence), in the customer's language and script
+ * (arabizi stays arabizi). Out of hours it says the team answers at the opening, never « très vite » (C1 / H2 on the J03 shop showed
+ * « Notre équipe est absente … » then « … qui vous répondra très vite »). `tail`: only what the team does, after the model's own sentence.
+ */
+export const handoffReply = (reason: string | null | undefined, lang: AiLanguage | string | undefined, o: { outOfHours?: boolean; tail?: boolean } = {}): string => {
+  const loc = locOf(lang);
+  const kind = handoffKind(reason);
+  const team = HANDOFF_TEAM[loc][kind][o.outOfHours ? 'later' : 'now'];
+  if (o.tail) return `${capital(team)}.`;
+  const sep = loc === 'ar' ? '، ' : kind === 'person' && !o.outOfHours ? ', ' : loc === 'fr' ? ' : ' : ', ';
+  return `${HANDOFF_LEAD[loc][kind]}${sep}${team}.`;
+};
+/** A sentence promising a quick answer (« très vite », « rapidement », « bientôt », « shortly », « قريبا », « dghya »), folded. */
+const QUICK_REPLY = /(?<![\p{L}])(?:tres\s+vite|vite|rapidement|au\s+plus\s+vite|bientot|sous\s+peu|tout\s+de\s+suite|immediatement|dans\s+(?:les|quelques)\s+(?:minutes|instants)|shortly|soon|right\s+away|asap|qriban|9riban|dghya|قريبا|حالا|دغيا|فيسع|فالحين)(?![\p{L}])/u;
+/** The sentence already tells when the team answers out of hours (« dès l'ouverture », « demain », « ki n7ellou », « كي نفتحو »). */
+const OPENING_SAID = /(?<![\p{L}])(?:ouverture|reouverture|horaires?|demain|opening|opens|tomorrow|n7ellou|n7el|tefta7|nefta7|nfat7ou|ghodwa|ghedwa|غدوة|نفتحو|نفتح|يفتح|الفتح|العمل)(?![\p{L}])/u;
+/**
+ * journey retest R15-2: the model's own sentence of an out-of-hours hand-off, without the sentences promising a quick answer (the team
+ * is away: « vous répondra très vite » next to « Notre équipe est absente » contradicts it).
+ */
+export const withoutQuickReply = (reply: string): string => {
+  const parts = splitSentences(reply);
+  const kept = parts.filter((s) => !QUICK_REPLY.test(foldGuard(s)));
+  return kept.length === parts.length ? reply : kept.join('').trim();
+};
+export const openingSaid = (reply: string): boolean => OPENING_SAID.test(foldGuard(reply));
+/**
+ * journey retest R15-2: the shop's hand-off system line is shown with this turn — not out of hours (it promises a quick answer: the
+ * AI's sentence says the team answers at the opening instead), nor on an arabizi turn whose system texts would be in Arabic script
+ * (C2: the Arabic-script hand-off line shown to an arabizi customer — the arabizi sentence of the AI says it).
+ */
+export const handoffSystemLineShown = (lang: AiLanguage | string | undefined, outOfHours: boolean | undefined, systemLocale: string): boolean => !outOfHours && !(lang === 'arabizi' && systemLocale === 'ar');
+
+// --- journey retest R15-1 (18/11): a place given with no quote yet — the reply carries the product's price and both fees ---------------
+/** A question of the reply asking the street address (« Wach howa l'adresse ta3ek … ? », « Quelle est votre adresse ? », « العنوان ؟ »). */
+// (the word of the address itself: « cité 1000 logements » quoted back in a question asks nothing)
+const ADDRESS_ASK = /(?<![\p{L}])(?:adresse|address|[وفب]?(?:ال)?عنوان(?:ك)?)(?![\p{L}])/u;
+export const asksAddress = (reply: string): boolean => splitSentences(reply).some((s) => /[?؟]/u.test(s) && ADDRESS_ASK.test(foldGuard(s)));
+const PLACE_FEES: Record<Loc, (home: string, stop: string | null) => string> = {
+  fr: (h, s) => (s ? `Livraison : ${h} à domicile, ou ${s} en stop-desk si vous préférez.` : `Livraison à domicile : ${h}.`),
+  ar: (h, s) => (s ? `التوصيل: ${h} للدار، ولا ${s} لنقطة الاستلام (stop-desk) إذا تحب.` : `التوصيل للدار: ${h}.`),
+  arabizi: (h, s) => (s ? `Tawsil: ${h} l dar, wela ${s} f stop-desk ila t7ebb.` : `Tawsil l dar: ${h}.`),
+  en: (h, s) => (s ? `Delivery: ${h} to your door, or ${s} at a stop-desk if you prefer.` : `Home delivery: ${h}.`),
+};
+const PRODUCT_PRICE: Record<Loc, (name: string, price: string) => string> = {
+  fr: (n, p) => `${n} : ${p}.`,
+  ar: (n, p) => `${n} ب\u0640 ${p}.`,
+  arabizi: (n, p) => `${n} b ${p}.`,
+  en: (n, p) => `${n}: ${p}.`,
+};
+export type PlaceProduct = { name: string; variant?: string | null; price: number };
+/**
+ * journey retest R15-1 (18/11): F5 T1 on the shared link « Salam, je veux la robe kabyle taille M, smiti Amina Saadi 0698765432, wilaya
+ * Alger, Bab Ezzouar » ⇒ « … Wach howa l'adresse ta3ek f Bab Ezzouar (…) ? » — no price, no fee, no stop-desk. When the customer named a
+ * place with no quote of it yet in the conversation, the server quotes it (ai-run) and this writes, before the reply's last question
+ * question (the address question first; else at the end): the product's price when the reply gives none (the product the message names), then both fees with the stop-desk
+ * offered. A reply that already gives a fee is left to `withBothFees`; one asking « home or stop-desk? » to `withModeFees`.
+ */
+export const withPlaceFacts = (reply: string, quotes: readonly QuoteFact[], product: PlaceProduct | null, lang: AiLanguage | string | undefined): string => {
+  const q = quotes.find((x) => !x.isStopdesk);
+  const nums = numbersIn(foldGuard(reply));
+  const loc = locOf(lang);
+  const cur = loc === 'ar' ? 'دج' : 'DA';
+  const lines: string[] = [];
+  if (product && product.price > 0 && !nums.includes(product.price)) lines.push(PRODUCT_PRICE[loc](product.variant ? `${product.name} (${product.variant})` : product.name, `${product.price} ${cur}`));
+  if (q && modeQuestionAt(reply) < 0 && !(q.fee > 0 && nums.includes(q.fee)) && !(q.stopdeskFee !== null && nums.includes(q.stopdeskFee))) {
+    const home = q.free || q.fee === 0 ? FREE_HOME[loc] : `${q.fee} ${cur}`;
+    lines.push(PLACE_FEES[loc](home, q.stopdeskFee !== null && q.stopdeskFee > 0 ? `${q.stopdeskFee} ${cur}` : null));
+  }
+  if (!lines.length) return reply;
+  const parts = splitSentences(reply);
+  // before the address question (« … ? Wela t7ebb stop-desk ? » stays one block), else the last question, else at the end
+  let at = parts.findIndex((p) => /[?؟]/u.test(p) && ADDRESS_ASK.test(foldGuard(p)));
+  if (at < 0)
+    for (let k = parts.length - 1; k >= 0; k--)
+      if (/[?؟]/u.test(parts[k]!)) {
+        at = k;
+        break;
+      }
+  if (at < 0) return `${reply.trim()} ${lines.join(' ')}`.trim();
+  return [...parts.slice(0, at).map((p, k) => (k === at - 1 && !/\s$/u.test(p) ? `${p} ` : p)), `${lines.join(' ')} `, ...parts.slice(at)].join('').replace(/[ \t]+\n/g, '\n').trim();
+};
+
+// --- journey retest R15-4 (18/11): the asked price of a product that is out of stock ---------------------------------------------
+/** The customer asks a price (« c'est combien ? », « quel prix », « ch7al », « بشحال », « قداش », « how much »), folded. */
+const PRICE_ASK = /(?<![\p{L}])(?:combien|prix|tarif|coute|cout|ch7al|chhal|sh7al|bch7al|b9addach|9addach|qaddach|bqaddach|soum|souma|price|cost|costs|much|بشحال|شحال|قداش|بقداش|سعر|ثمن|السومة|سومة|سومتو|سومتها)(?![\p{L}])/u;
+export const priceAsked = (text: string): boolean => PRICE_ASK.test(foldGuard(text));
+/** A greeting opening a sentence, with what follows it up to the next word (« Bonjour 👋 », « Salam ! », « السلام عليكم، »). */
+const OPENING_GREETING = /^\s*(?:bonjour|bonsoir|salut|salam|slm|hello|hi|السلام\s+عليكم|السلام|سلام|مرحبا)(?![\p{L}])[^\p{L}\p{N}]*/iu;
+/** A sentence saying a product is out of stock (folded): « en rupture », « pas disponible », « makach », « ماكانش », « out of stock ». */
+const OUT_OF_STOCK_SAID = /(?<![\p{L}])(?:rupture|indisponible|epuise|disponible|stock|available|makach|makanch|makaynch|ma\s*3andnach|3andnach|ماكانش|ماكاش|مكانش|ما\s*عندناش|ماعندناش|متوفر|متوفرش|نفد|خلاص)(?![\p{L}])/u;
+const UNAVAILABLE_PRICE: Record<Loc, (name: string, price: string) => string> = {
+  fr: (n, p) => `${n} est à ${p}, mais ce produit n'est pas disponible pour le moment.`,
+  ar: (n, p) => `${n} ب\u0640 ${p}، بصح ماهوش متوفر درك.`,
+  arabizi: (n, p) => `${n} b ${p}, bessah makach dork.`,
+  en: (n, p) => `${n} is ${p}, but it is not available right now.`,
+};
+/**
+ * journey retest R15-4 (18/11): N5 T1 « Bonjour, le parfum oud c'est combien ? » ⇒ « Désolé, Parfum Oud 50 ml est en rupture de stock …
+ * notre Coffret cadeau Aïd … » — the asked price (3 200 DA) was no longer given (R14 « Son prix est de 3200 DA »). When the message asks a
+ * price and names an out-of-stock catalogue product whose price the reply does not give, the reply's sentence naming that product
+ * (else a new first sentence) says its price and that it is not available.
+ */
+export const withAskedPrice = (reply: string, customerText: string | undefined, unavailable: readonly { id: string; name: string; price: number; variants: { price: number }[] }[], lang: AiLanguage | string | undefined): string => {
+  if (!customerText || !unavailable.length || !priceAsked(customerText)) return reply;
+  const p = productNamedIn(customerText, unavailable);
+  if (!p) return reply;
+  const prices = [...new Set([p.price, ...p.variants.map((v) => v.price)].filter((x) => x > 0))];
+  if (prices.length !== 1) return reply;
+  const nums = numbersIn(foldGuard(reply));
+  if (nums.includes(prices[0]!)) return reply;
+  const loc = locOf(lang);
+  const line = UNAVAILABLE_PRICE[loc](p.name, `${prices[0]} ${loc === 'ar' ? 'دج' : 'DA'}`);
+  const parts = splitSentences(reply);
+  const i = parts.findIndex((s) => !!productNamedIn(s, [p]));
+  if (i < 0) return `${line} ${reply.trim()}`.trim();
+  // the model's own « out of stock » sentence of that product is replaced; a sentence saying more of it keeps its place after the line
+  const end = /\s+$/u.exec(parts[i]!)?.[0] ?? (i < parts.length - 1 ? ' ' : '');
+  const replaced = OUT_OF_STOCK_SAID.test(foldGuard(parts[i]!)) && (parts[i]!.match(/[\p{L}\p{N}]+/gu) ?? []).length <= 16;
+  // an opening greeting of that sentence stays (« Bonjour 👋 Désolé, Parfum Oud … » ⇒ « Bonjour 👋 Parfum Oud … est à 3200 DA … »)
+  const greeting = replaced ? (OPENING_GREETING.exec(parts[i]!)?.[0] ?? '') : '';
+  return [...parts.slice(0, i), `${greeting}${line}${replaced ? end : ' '}`, ...(replaced ? [] : [parts[i]!]), ...parts.slice(i + 1)].join('').trim();
+};
 
 const SUBSTITUTE: Record<Loc, (gone: string, instead: string, many: boolean) => string> = {
   // journey retest R14-4 (18/11): « ce récapitulatif est pour Coffret cadeau Aïd » had no article — « le produit … » fits every name

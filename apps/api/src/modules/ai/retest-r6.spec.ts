@@ -1,6 +1,8 @@
 // Journey retest R6 (17/11, docs/audit/journeys-2026-11-16/journeys/R6-ai-orders.md): a model sentence asking to confirm in
 // front of the server recap, in new wordings (R6-1 — now an allow-list), photos announced that are not sent (R6-2), odd
 // wording (R6-3), the recap address « …, Blida, Boufarik » (R6-4), tool probes (R6-5).
+import { prisma } from '@djaber/db';
+import { resetPlaceIndex } from './tools/place-index';
 import { AiRunService, NO_ADDRESS_NOTE, noAddressYet, type TurnRequest } from './ai-run.service';
 import { allowedHandoffReasons, judgeHandoff } from './handoff-judge';
 import { fixMoroccan, wrongDarijaIn } from './language';
@@ -12,6 +14,13 @@ import type { RoutedModel } from './routing.service';
 import { orderRecapText, pendingRecap, recapLeadIn, recapReply, withoutRecapClaims, withoutTrailingPlaces } from './tools/order-confirmation-text';
 import { TOOL_DEFS, type ToolRegistry } from './tools/tool-registry';
 
+// journey retest R15-1: a turn naming a catalogue product reads the place lists (the server's quote of a place) — unreadable here
+// (no database: nothing is withheld or quoted on their account), unless a test gives them
+beforeEach(() => {
+  resetPlaceIndex();
+  jest.spyOn(prisma.wilaya, 'findMany').mockRejectedValue(new Error('no database in unit tests'));
+  jest.spyOn(prisma.commune, 'findMany').mockRejectedValue(new Error('no database in unit tests'));
+});
 afterEach(() => jest.restoreAllMocks());
 
 const model = { id: 'm1', providerId: 'p1', supportsTools: true, inputPricePerM: 1, outputPricePerM: 5, ref: { provider: 'anthropic', modelId: 'claude-haiku-5-5' } } as unknown as RoutedModel;

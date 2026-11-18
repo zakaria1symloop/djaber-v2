@@ -125,10 +125,20 @@ export const withoutLatinValues = (text: string): string => (latinValuesOnly(tex
 
 /** journey retest R14-1 (18/11): the yes words of every language the customers write (one or two of them make a bare yes). */
 const YES_WORDS = new Set(['ih', 'iyeh', 'iyyeh', 'ayh', 'ayeh', 'aywa', 'aywah', 'wah', 'eh', 'oui', 'ouii', 'ouais', 'yes', 'yeah', 'yep', 'ok', 'okay', 'ايه', 'إيه', 'أيه', 'ايوه', 'ايوا', 'واه', 'نعم']);
-/** A message that is only a yes (« ih », « wah », « ayh », « oui oui », « ايه 👍 ») — it says nothing of the language. */
+/**
+ * journey retest R15-4 (18/11): the French / English words that only confirm next to a yes (« oui c'est bon », « ok d'accord », « yes
+ * fine ») — F5 T3 « oui c'est bon » after an arabizi recap was read as French and confirmed in French. Arabizi customers write these
+ * French words in every message; darija words (« ih saha ») are no such filler: in a French conversation they still say arabizi.
+ */
+const CONFIRM_FILLERS = new Set(['c', "c'est", 'cest', 'bon', 'cbon', "d'accord", 'daccord', 'dacc', 'parfait', 'super', 'nickel', 'merci', 'bien', 'tout', 'ça', 'ca', 'marche', 'vas', 'allez', 'y', 'go', 'je', 'confirme', 'valide', 'thanks', 'fine', 'good', 'sure']);
+/**
+ * A message that is only a yes (« ih », « wah », « ayh », « oui oui », « ايه 👍 »), or a yes with words that only confirm (« oui c'est
+ * bon », « ok merci ») — it says nothing of the language.
+ */
 export const bareYes = (text: string): boolean => {
   const tokens = text.toLowerCase().replace(/[’‘`]/g, "'").split(/[^\p{L}\p{N}']+/u).filter(Boolean);
-  return tokens.length > 0 && tokens.length <= 2 && tokens.every((t) => YES_WORDS.has(t));
+  if (tokens.length > 0 && tokens.length <= 2 && tokens.every((t) => YES_WORDS.has(t))) return true;
+  return tokens.length <= 5 && tokens.some((t) => YES_WORDS.has(t)) && tokens.every((t) => YES_WORDS.has(t) || CONFIRM_FILLERS.has(t));
 };
 /** Words that open a street address (accents as typed or not). */
 const ADDRESS_OPENERS = new Set(['cité', 'cite', 'rue', 'bloc', 'bâtiment', 'batiment', 'bat', 'bt', 'villa', 'lotissement', 'lot', 'résidence', 'residence', 'quartier', 'qrt', 'avenue', 'av', 'boulevard', 'bd', 'route', 'rte', 'impasse', 'chemin', 'allée', 'allee', 'immeuble', 'imm', 'appartement', 'appt', 'apt', 'logements', 'logement', 'lgts', 'hay', 'numéro', 'numero', 'étage', 'etage', 'coopérative', 'cooperative', 'coop', 'douar', 'street', 'road', 'building', 'apartment']);

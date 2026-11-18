@@ -17,6 +17,13 @@ import { orderRecapText, pendingRecap, recapLeadIn, recapReply, repeatsRecapLine
 import { buildPlaceIndex, placeNamedIn, resetPlaceIndex, wilayaIn } from './tools/place-index';
 import { ToolRegistry, TOOL_DEFS } from './tools/tool-registry';
 
+// journey retest R15-1: a turn naming a catalogue product reads the place lists (the server's quote of a place) — unreadable here
+// (no database: nothing is withheld or quoted on their account), unless a test gives them
+beforeEach(() => {
+  resetPlaceIndex();
+  jest.spyOn(prisma.wilaya, 'findMany').mockRejectedValue(new Error('no database in unit tests'));
+  jest.spyOn(prisma.commune, 'findMany').mockRejectedValue(new Error('no database in unit tests'));
+});
 afterEach(() => jest.restoreAllMocks());
 
 const model = { id: 'm1', providerId: 'p1', supportsTools: true, inputPricePerM: 1, outputPricePerM: 5, ref: { provider: 'anthropic', modelId: 'claude-haiku-5-5' } } as unknown as RoutedModel;

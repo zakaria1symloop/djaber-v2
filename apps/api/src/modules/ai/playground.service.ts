@@ -25,6 +25,7 @@ import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
 import { latestRecap, nextChosen, orderHistoryOf, placedThisTurn, type ChosenItem } from './tools/order-confirmation';
 import { canonicalTool } from './tools/tool-registry';
 import { guardFactsOf } from './reply-guard';
+import { handoffSystemLineShown } from './reply-fixes';
 import { productCards } from '../messaging/product-card';
 import { SCENARIOS, type ScenarioCheck } from './prompt/scenarios';
 import { AiProviderError } from './provider/ai.gateway';
@@ -305,13 +306,14 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       const systemMessages = [
         ...(history.length === 0 && text('welcome') ? [{ key: 'welcome', text: text('welcome') }] : []),
         ...(oohNow ? [{ key: 'out_of_hours', text: text('out_of_hours') }] : []),
-        ...(handoff && text('handoff') ? [{ key: 'handoff', text: text('handoff') }] : []),
+        // journey retest R15-2 (18/11): not out of hours (it promises a quick answer next to « Notre équipe est absente … »), nor in Arabic
+        // script for an arabizi customer — the AI's sentence says what the team does then
+        ...(handoff && text('handoff') && handoffSystemLineShown(lang, turnCtx.prompt.outOfHours, locale) ? [{ key: 'handoff', text: text('handoff') }] : []),
       ];
-      // full-test 15/11 AI-CHAT-12: as on Messenger (04-ai-pipeline §10 « one message, not two »), a customer who only asked
-      // for a human (or wrote a handoff keyword) gets the shop's handoff text alone — the AI's own « je transmets » is dropped
-      const reason = result.forcedHandoff ?? (out.status === 'HANDOFF' ? (out.statusDetail ?? '').trim() : '');
-      const onlyHandoff = result.tools.every((t) => canonicalTool(t.name) === 'handoff_to_human');
-      const reply = handoff && onlyHandoff && (reason === 'customer_request' || reason === 'keyword') && text('handoff') ? '' : out.reply;
+      // full-test 15/11 AI-CHAT-12: a customer who only asked for a human (or wrote a handoff keyword) gets no « je transmets » of the
+      // model next to the shop's handoff text — journey retest R15-2 (18/11): the server's short sentence for the request (ai-run), never
+      // an empty text
+      const reply = out.reply;
       const dto: PlaygroundTurnDto = {
         turnId: run.id,
         sessionId: d.sessionId,

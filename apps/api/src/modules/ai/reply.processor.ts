@@ -36,6 +36,7 @@ import { InsightService } from './insight.service';
 import { systemLang, turnLanguage, type AiLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
 import { guardFactsOf } from './reply-guard';
+import { handoffSystemLineShown } from './reply-fixes';
 import { AiProviderError } from './provider/ai.gateway';
 import { canonicalTool } from './tools/tool-registry';
 import { latestRecap, nextChosen, orderHistoryOf, placedThisTurn } from './tools/order-confirmation';
@@ -390,7 +391,7 @@ export class ReplyProcessor implements OnModuleInit {
       status = 'handoff';
       reason = 'blocked_word';
     }
-    let replyText = blocked ? '' : out.reply.trim();
+    const replyText = blocked ? '' : out.reply.trim();
 
     return prisma.$transaction(async (db): Promise<ReplyOutcome> => {
       const tx = db as Tx;
@@ -402,13 +403,15 @@ export class ReplyProcessor implements OnModuleInit {
         return 'aborted';
       }
       // recette 09/11 (Badro: « asking for a human gives a useless double msg »): the model's « je vous passe un conseiller »
-      // and the shop's handoff text both went out. When the customer only asked for a human (or wrote a handoff keyword) —
-      // no other tool ran this turn, so the reply carries no order / cancellation news — and the shop's text is about to
-      // be sent, that text is the only message.
-      const onlyHandoff = turn.tools.every((t) => canonicalTool(t.name) === 'handoff_to_human');
+      // and the shop's handoff text both went out — journey retest R15-2 (18/11): a request for a person now gets the server's short
+      // sentence instead of the model's (ai-run `confirmed`), never an empty text
       // journey retest R2-5: an arabizi turn gets the Arabic system texts in a darija shop, the French ones otherwise
       const sysLang = systemLang(o.lang, agent.defaultLanguage, TenantContext.get().locale);
-      if (replyText && status === 'handoff' && onlyHandoff && (reason === 'customer_request' || reason === 'keyword') && !contextOf(fresh).handoffMessageSentAt && (await this.outbound.systemTemplate(tx, conv.id, 'handoff', sysLang))) replyText = '';
+      // journey retest R15-2: the shop's handoff text is not sent out of hours (it promises a quick answer: the AI's sentence says the
+      // team answers at the opening), nor in Arabic script to an arabizi customer (the AI's arabizi sentence says what the team does)
+      // (a turn with no AI text — a blocked word — or handed off by the processor — the 3rd unclear message — still gets the shop's
+      // text: the AI's sentence of the hand-off is written by ai-run only for its own hand-offs)
+      const handoffTextShown = handoffSystemLineShown(o.lang, o.outOfHours, sysLang);
       // the run is closed first: a second execution of the same batch stops here and stores nothing
       const closed = await this.runs.finish(
         run.id,
@@ -455,7 +458,7 @@ export class ReplyProcessor implements OnModuleInit {
         // question is recorded for the shop (insight `unknown_topic`), the AI keeps the conversation — PV 08/11 (« l'agent
         // IA fait des confusions »): a question missing from the FAQ used to hand the whole thread over silently, so the
         // AI stopped answering that customer after one or two messages
-        if (status === 'handoff') await this.conversations.handoff(conv.id, reason!, { tx, silent: false });
+        if (status === 'handoff') await this.conversations.handoff(conv.id, reason!, { tx, silent: !handoffTextShown && !!replyText && (out.status === 'HANDOFF' || !!turn.forcedHandoff) });
         await this.insights.create(tx, {
           agent,
           conversationId: conv.id,

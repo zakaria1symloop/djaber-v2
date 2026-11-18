@@ -237,7 +237,8 @@ describe('R13-2 (Minor) — the street never holds the wilaya / commune names, w
     expect(customerOwnStreet('Cité 1000 logements, immeuble 5', N18.join('\n'), NAMES)).toBe('حي 1000 مسكن عمارة 5');
     expect(customerOwnStreet('حي 1000 مسكن عمارة 5', N18.join('\n'), NAMES)).toBeNull();
     expect(customerOwnStreet('Cité 500 logements bloc 12', 'Je voudrais le sac\nKarim Haddad\n0770112233, Sétif, El Eulma, Cité 500 logements bloc 12', ['Sétif', 'El Eulma'])).toBeNull();
-    expect(customerOwnStreet('Cité 20 Août, villa 3', 'nheb tapis\n0770112244, Blida, Boufarik, cite 20 aout villa 3', ['Blida', 'Boufarik'])).toBeNull();
+    // journey retest R15-4 (18/11): accents / a comma added to the customer's own words ⇒ the customer's text as typed
+    expect(customerOwnStreet('Cité 20 Août, villa 3', 'nheb tapis\n0770112244, Blida, Boufarik, cite 20 aout villa 3', ['Blida', 'Boufarik'])).toBe('cite 20 aout villa 3');
     // other numbers: another address, not a translation
     expect(customerOwnStreet('Cité 200 logements, immeuble 9', N18.join('\n'), NAMES)).toBeNull();
     // Latin customer street, Arabic model street; numbers just before the address word

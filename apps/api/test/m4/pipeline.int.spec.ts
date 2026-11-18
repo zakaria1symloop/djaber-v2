@@ -310,7 +310,11 @@ describe('tools', () => {
     expect(r[1]).toMatchObject({ ok: true, wilayaId: 16, fee: 0, free: true, freeFrom: 5000 });
     expect(r[2]).toMatchObject({ ok: false, error: { code: 'WILAYA_NOT_SERVED', wilayaId: 19 } });
     expect(r[3]).toEqual({ ok: false, error: { code: 'VALIDATION', field: 'wilayaName', example: 'Alger' } }); // never throws: the model re-asks
-    expect(r[4]).toMatchObject({ ok: true, isStopdesk: true, fee: 450 });
+    // journey retest R15-3 (18/11): the stop-desk quote of Oran, quoted this turn, is answered from the first quote (`stopdeskFee`)
+    // without running — it is no stored tool call, the model gets the answer
+    expect(r).toHaveLength(4);
+    const answered = (fakeAi(app).callsOf('reply')[1]!.messages as { role: string; result?: unknown }[]).filter((m) => m.role === 'tool').at(-1);
+    expect(answered?.result).toMatchObject({ ok: true, isStopdesk: true, fee: 450, repeated: true });
     expect(t.runs[0]!.creditsCharged).toBe(1);
   });
 
