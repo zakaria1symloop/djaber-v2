@@ -13,13 +13,14 @@ import { containsWord, foldText } from '../catalog/moderation-prescreen.service'
 import { isGreetingOnly } from '../messaging/greeting';
 import { UNCLEAR_STREAK_HANDOFF } from './ai.constants';
 import { confirmation } from './tools/order-confirmation';
+import { productNamedIn, productWanted, teamOnlyRequest } from './product-named';
 
 /** Set by the server (tool results, counters, safety): the model's word is not needed. */
 const SERVER_REASONS = new Set(['order_limits', 'risky_client', 'blocked_word', 'orders_unavailable', 'outside_window', 'ai_error', 'abuse_guard', 'credits_exhausted', 'quota_exceeded']);
 /** Rule ids of the prompt and older names the model may still write. */
 const ALIASES: Record<string, string> = { human_request: 'customer_request', human: 'customer_request', anger: 'angry', over_limits: 'order_limits', order_limit: 'order_limits', off_topic: 'off_catalogue', '3_unclear': 'unclear_streak' };
 
-export type HandoffRefusal = 'greeting' | 'no_evidence' | 'evidence_not_in_message' | 'no_shop_rule' | 'keyword_absent' | 'not_unclear' | 'reason_mismatch' | 'server_reason' | 'not_sold';
+export type HandoffRefusal = 'greeting' | 'no_evidence' | 'evidence_not_in_message' | 'no_shop_rule' | 'keyword_absent' | 'not_unclear' | 'reason_mismatch' | 'server_reason' | 'not_sold' | 'in_catalogue';
 
 /**
  * journey retest R4-1 (17/11): the server reasons a tool result of THIS turn established — `create_order` above a limit
@@ -76,6 +77,11 @@ export type HandoffInput = {
   unclearStreak?: number;
   /** journey retest R4-1: the server reasons this turn's tool results established (`establishedReasons`) */
   established?: readonly string[];
+  /**
+   * journey retest R13-1: the product of the shop's catalogue the customer's message names, as the server's own catalogue check
+   * found it (`productNamedIn` over the agent's scope) — null / absent when none
+   */
+  soldNamed?: string | null;
 };
 
 export function judgeHandoff(i: HandoffInput): HandoffVerdict {
@@ -97,7 +103,15 @@ export function judgeHandoff(i: HandoffInput): HandoffVerdict {
   if (isGreetingOnly(evidence) || !quotedFrom(evidence, text)) return { ok: false, reason, why: 'evidence_not_in_message' };
   // journey retest R11-2 (17/11): « vous avez des lunettes de soleil ? » is a product the shop does not sell — answered (« nous ne
   // vendons pas … » + the catalogue), never a handoff (N7 T1 `off_catalogue` accepted, shop closed, full order details given)
-  if (reason === 'off_catalogue' && productAsk(evidence, text)) return { ok: false, reason, why: 'not_sold' };
+  if (reason === 'off_catalogue' && productAsk(evidence, text)) return { ok: false, reason, why: i.soldNamed && !teamOnlyRequest(text) ? 'in_catalogue' : 'not_sold' };
+  // journey retest R13-1 (18/11): « Je voudrais le sac à main cuir marron » (Marron in stock) was handed off as off_catalogue — the
+  // judge only knew « vous avez / je cherche … ». A message that names a product the shop sells (the server's catalogue check), or
+  // wants / asks for a product in any phrasing (« je voudrais / je veux / nheb / بغيت / I want … »), is answered, never handed off as
+  // off_catalogue — unless it asks for what only the team can quote (wholesale, a quote, a custom order, a partnership)
+  if (reason === 'off_catalogue' && !teamOnlyRequest(text)) {
+    if (i.soldNamed) return { ok: false, reason, why: 'in_catalogue' };
+    if (productWanted(evidence) || productWanted(text)) return { ok: false, reason, why: 'not_sold' };
+  }
   if (!reasonFits(reason, evidence, text)) return { ok: false, reason, why: 'reason_mismatch' };
   return { ok: true, reason };
 }
@@ -180,7 +194,7 @@ export function allowedHandoffReasons(agent: { humanHandoffRules?: string | null
 
 /** What the model is told when its handoff is refused: it answers the customer in the same turn. */
 export const HANDOFF_REFUSED_MARK = 'HANDOFF REFUSED BY THE PLATFORM';
-export function handoffRefusedInstruction(why: HandoffRefusal): string {
+export function handoffRefusedInstruction(why: HandoffRefusal, product?: string | null): string {
   const cause: Record<HandoffRefusal, string> = {
     greeting: 'the customer only greets you: this is a (new) conversation, welcome them and help',
     no_evidence: 'no words of the customer in their current message ask for it',
@@ -193,6 +207,7 @@ export function handoffRefusedInstruction(why: HandoffRefusal): string {
     server_reason: 'that reason is set by the platform from a tool result (create_order above a limit, a blocked customer), never by you — no tool of this turn reported it; an order message is taken as usual (ask the next missing field, or call create_order for the recap)',
     not_sold:
       "a product the shop does not sell is answered by you, never handed off: say plainly that the shop does not sell it (« nous ne vendons pas de … pour le moment »), then offer what the CATALOGUE lists in stock; when the customer also gave their details, take the order as usual once they choose a product (status OK)",
+    in_catalogue: `the customer's words name a product the shop sells${product ? ` (« ${product} »)` : ''}: answer it from the CATALOGUE (price, the variants in stock) and take the order as usual — a product of the shop is never a handoff (status OK)`,
   };
   return `${HANDOFF_REFUSED_MARK}: ${cause[why]}. Keep the conversation and answer the customer's current message now, in their language (status OK; UNKNOWN when you have no answer — say you will check with the team and call add_faq_candidate; UNCLEAR when you did not understand). Hand off only when the customer's current message itself matches a rule, quoting their words in "evidence". Answer with the JSON object only.`;
 }
@@ -226,15 +241,19 @@ export function orderDetailsMessage(text: string | undefined, validPhone: (t: st
  * soleil ? Je suis Yacine Mansouri 0555987654, Blida, … » got `off_catalogue` accepted (the R7 rule skipped it for its « ? »). No
  * reason left ⇒ the tool is not offered; `status = HANDOFF` stays judged.
  */
-export function messageHandoffReasons(reasons: string[], customerText: string | undefined, validPhone: (t: string) => boolean): string[] {
+export function messageHandoffReasons(reasons: string[], customerText: string | undefined, validPhone: (t: string) => boolean, catalogueNames?: readonly string[]): string[] {
   if (customerText === undefined) return reasons;
   const t = customerText.trim();
   const f = foldText(t).replace(/[’‘`]/g, "'");
   const details = orderDetailsMessage(t, validPhone, true);
+  // journey retest R13-1 (18/11): nor on a message that wants a product (« Je voudrais le sac à main cuir marron ») or names one of the
+  // CATALOGUE (its folded names, with the variants) — unless it asks for what only the team can quote
+  const team = teamOnlyRequest(t);
+  const wantsProduct = !team && (productWanted(t) || (!!catalogueNames?.length && !!productNamedIn(t, catalogueNames.map((name, i) => ({ id: String(i), name })))));
   return reasons.filter((r) => {
     if (r === 'customer_request') return ASKS_TEAM.test(f) || ORDER_CHANGE.test(f);
     if (r === 'refund') return ASKS_REFUND.test(f);
-    if (r === 'off_catalogue') return !details && !productAsk(t, t);
+    if (r === 'off_catalogue') return !details && !productAsk(t, t) && !wantsProduct;
     if (r === 'complaint' || r === 'angry' || r === 'other') return !details;
     return true;
   });

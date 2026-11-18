@@ -3,7 +3,7 @@
 // the model can no longer confirm with wrong figures, « correct » itself (« commande enregistrée par erreur »,
 // « coordonnées inventées ») or deny the order it just placed (AI-CHAT-02). Pure.
 import { serverTextLanguage, type AiLanguage } from '../language';
-import { foldText } from './wilaya-aliases';
+import { articleless, foldText } from './wilaya-aliases';
 
 type Line = { name?: unknown; variant?: unknown; quantity?: unknown; unitPrice?: unknown };
 type Placed = { number: string; items: Line[]; deliveryFee: number; total: number; duplicate: boolean; replaced: string | null; beyondStock: boolean; eta: string };
@@ -166,7 +166,51 @@ export const withoutPlaceSegments = (address: string, names: (string | null | un
   let b = parts.length - 1;
   while (b - 2 >= a && isPlace(parts[b]!)) b -= 2;
   while (a + 2 <= b && isPlace(parts[a]!)) a += 2;
-  return parts.slice(a, b + 1).join('').trim();
+  const street = parts.slice(a, b + 1).join('').trim();
+  // journey retest R13-2 (18/11): and the names wherever they stand in it — « حي 1000 مسكن عمارة 5، قسنطينة الخروب » (wilaya and commune
+  // in one segment, no separator between them) was shown and stored as the street
+  return withoutPlaceWords(street, keys) || street;
+};
+/** Words of a street name a place name may follow (« Rue de Boufarik », « شارع الجزائر », « Cité El Khroub »): the name is kept there. */
+const STREET_NAME_WORDS = new Set(['rue', 'avenue', 'av', 'boulevard', 'bd', 'route', 'rte', 'chemin', 'impasse', 'allee', 'place', 'cite', 'quartier', 'hay', 'hai', 'residence', 'lotissement', 'street', 'road', 'شارع', 'نهج', 'طريق', 'حي', 'زنقه', 'درب', 'اقامه', 'ساحه', 'تجزئه']);
+/** Small words that go with a place name (« wilaya de », « commune de », « à », « في », « ولاية »): dropped with the name. */
+const PLACE_LEAD_WORDS = new Set(['wilaya', 'commune', 'daira', 'de', 'du', 'd', 'a', 'au', 'en', 'f', 'fi', 'in', 'at', 'ولايه', 'بلديه', 'دائره', 'في', 'ب']);
+const CONNECTORS = new Set(['de', 'du', 'des', 'd']);
+/**
+ * journey retest R13-2 (18/11): the street without the commune / wilaya names (`keys`: folded, with and without their article) wherever
+ * they stand — at its start, its end or between its words, with the small words that lead them (« wilaya de », « à », « في ») — except
+ * a name that is part of a street name (« Rue de Boufarik », « شارع الجزائر »). A street left with no letter is not returned ('').
+ */
+export const withoutPlaceWords = (street: string, keys: ReadonlySet<string>): string => {
+  const raw = street.split(/\s+/u).filter(Boolean);
+  const folded = raw.map((w) => placeKey(w));
+  const drop = new Array<boolean>(raw.length).fill(false);
+  const isKey = (k: string) => !!k && (keys.has(k) || keys.has(withoutArticle(k)) || keys.has(articleless(k)));
+  for (let i = 0; i < raw.length; i++) {
+    let end = -1;
+    for (let j = Math.min(raw.length, i + 5); j > i; j--) {
+      if (isKey(folded.slice(i, j).join(' ').trim())) {
+        end = j;
+        break;
+      }
+    }
+    if (end < 0) continue;
+    const before = folded.slice(0, i).filter((_, k) => !drop[k]);
+    const prev = before[before.length - 1] ?? '';
+    const prev2 = before[before.length - 2] ?? '';
+    if (STREET_NAME_WORDS.has(prev) || (CONNECTORS.has(prev) && STREET_NAME_WORDS.has(prev2))) {
+      i = end - 1;
+      continue;
+    }
+    for (let k = i; k < end; k++) drop[k] = true;
+    // « wilaya de Sétif », « à El Eulma », « في الخروب »: the small words right before the name go with it
+    for (let k = i - 1; k >= 0 && !drop[k] && PLACE_LEAD_WORDS.has(folded[k]!) && !/[,،;؛]$/u.test(raw[k]!); k--) drop[k] = true;
+    i = end - 1;
+  }
+  if (!drop.some(Boolean)) return street;
+  const kept = raw.filter((_, k) => !drop[k]).join(' ');
+  const out = kept.replace(/\s+([,،;؛])/gu, '$1').replace(/([,،;؛])(?:\s*[,،;؛])+/gu, '$1').replace(/^[\s,،;؛\-–—/.]+|[\s,،;؛\-–—/]+$/gu, '').trim();
+  return /\p{L}/u.test(out) ? out : '';
 };
 const itemLine = (i: Line, amount: (n: number) => string) => {
   const qty = Number(i.quantity ?? 1) || 1;

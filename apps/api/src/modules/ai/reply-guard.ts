@@ -171,7 +171,7 @@ const MONEY = new RegExp(String.raw`(?<![\p{L}\p{N}.,])(\d{1,3}(?:[ .,]\d{3})+|\
 export const moneyAmounts = (folded: string): number[] =>
   [...folded.matchAll(MONEY)].map((m) => Number(m[1]!.replace(/[ .,]/g, '')) + (m[2] ? Number(m[2]) / 10 ** m[2].length : 0));
 /** Every number of a text (digits, any grouping), for shop texts and the customer's words. */
-const numbersIn = (folded: string): number[] => [...folded.matchAll(/(?<![\p{N}])(\d{1,3}(?:[ .,]\d{3})+|\d+)(?![\p{N}])/gu)].map((m) => Number(m[1]!.replace(/[ .,]/g, ''))).filter((n) => Number.isFinite(n));
+export const numbersIn = (folded: string): number[] => [...folded.matchAll(/(?<![\p{N}])(\d{1,3}(?:[ .,]\d{3})+|\d+)(?![\p{N}])/gu)].map((m) => Number(m[1]!.replace(/[ .,]/g, ''))).filter((n) => Number.isFinite(n));
 
 const QTY_MAX = 50;
 type Compiled = { amounts: Set<number>; lines: Set<number>; lineList: number[]; fees: number[]; thresholds: number[] };

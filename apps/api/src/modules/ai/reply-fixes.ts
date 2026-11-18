@@ -2,7 +2,8 @@
 // for two cases the model kept missing — a photo request for a product that has none (R7-2), a « ? » / « ... » answered with
 // « Oui, je suis là ! » / « Vous êtes toujours là ? » (R7-3). Pure.
 import { serverTextLanguage, type AiLanguage } from './language';
-import { foldGuard, PHOTO_WORD, splitSentences } from './reply-guard';
+import { productNamedIn } from './product-named';
+import { foldGuard, numbersIn, PHOTO_WORD, splitSentences, type QuoteFact } from './reply-guard';
 
 const PHOTO = new RegExp(String.raw`(?<![\p{L}])${PHOTO_WORD}(?![\p{L}])`, 'u');
 /**
@@ -151,6 +152,10 @@ const ARABIZI_FOR: [RegExp, (m: string, ...g: string[]) => string][] = [
   // journey retest R12-4 (17/11): N9 T1 « Tailles disponibles: S w M » (no « Les »), N3 T2 « Livraison à domicile: 700 DA, wela 450 DA
   // f stop-desk », F9 T1 « T7ebb nchouf wach men produit t7ebbou ? » (« you want I see which product you like? »)
   [/(?<![\p{L}])(tailles|couleurs|pointures|mod[eè]les)\s+disponibles(?![\p{L}])/giu, (_m, what: string) => `${what} li kaynin`],
+  // journey retest R13-6 (18/11): N9 T1 « Tailles li kayn: S w M » — the sizes / colours in darija (« Lmqasat / Lalwan li kaynin »)
+  [/(?<![\p{L}])(?:les\s+)?(tailles|pointures|couleurs)\s+li\s+kayn(?:in|ine|a)?(?![\p{L}])/giu, (m, what: string) => `${m[0] === m[0]!.toUpperCase() ? 'L' : 'l'}${/^couleurs$/iu.test(what) ? 'alwan' : 'mqasat'} li kaynin`],
+  // journey retest R13-6: F9 T1 closing « T7ebb nwarrik produit m3a l livraison ? » (« you want I show you a product with the delivery? »)
+  [/(?<![\p{L}])t7ebb?\s+nwarr?ik\s+(?:l\s*)?(?:produit|les\s+produits)\s+m3a\s+l\s*livraison\s*([?؟])/giu, (m, mark: string) => `${m[0] === 'T' ? 'T' : 't'}7ebb nwarrik wach kayen 3andna ${mark}`],
   [/(?<![\p{L}])livraison\s+(?:[aà]\s+)?domicile(?![\p{L}])/giu, (m) => (m[0] === 'L' ? 'Tawsil l dar' : 'tawsil l dar')],
   [/(?<![\p{L}])livraison\s+(?:en\s+|f\s+)?stop[- ]?desk(?![\p{L}])/giu, (m) => (m[0] === 'L' ? 'Tawsil l stop-desk' : 'tawsil l stop-desk')],
   [/(?<![\p{L}])t7ebb?\s+n(?:chouf|warrik)\s+wach\s+men\s+([\p{L}'’-]+)\s+t7ebb?(?:ou|i)?\s*([?؟])/giu, (m, what: string, mark: string) => `${m[0] === 'T' ? 'W' : 'w'}ach men ${what} t7ebb ${mark}`],
@@ -170,3 +175,88 @@ export const withArabicCurrency = (reply: string): string =>
       return arabic > latin ? s.replace(/(\d)\s*DA(?![\p{L}])/gu, '$1 دج') : s;
     })
     .join('');
+
+// --- journey retest R13 (18/11): server lines and narrow wording fixes ------------------------------------------------------------
+/**
+ * journey retest R13-6 (18/11): in a sentence written mostly in Arabic script, « taille unique » is « مقاس واحد » (and dropped when the
+ * sentence already says « مقاس… واحد », N18 T1 « مقاسها واحد (taille unique) »), the Standard Arabic « نعم » is the darija « إيه » (A2 T1
+ * « وعليكم السلام، نعم، … »), « نوصلوها لها » is « نوصلوهالك » (A4 T1). Arabic-script answers (`ar`) only.
+ */
+export const withArabicWords = (reply: string, lang: AiLanguage | string | undefined): string => {
+  if (lang !== 'ar') return reply;
+  return splitSentences(reply)
+    .map((s) => {
+      const arabic = (s.match(/[\u0600-\u06ff]/gu) ?? []).length;
+      const latin = (s.replace(/taille\s+unique/giu, '').match(/[A-Za-zÀ-ɏ]/gu) ?? []).length;
+      if (arabic <= latin) return s;
+      let t = s;
+      if (/(?<![\p{L}])مقاس\p{L}*\s+(?:واحد|وحدة|وحده)(?![\p{L}])/u.test(t)) t = t.replace(/\s*\(\s*taille\s+unique\s*\)/giu, '');
+      t = t.replace(/(?<![\p{L}])taille\s+unique(?![\p{L}])/giu, 'مقاس واحد');
+      t = t.replace(/(?<![\p{L}])نعم(?![\p{L}])/gu, 'إيه');
+      t = t.replace(/(?<![\p{L}])نوصلوها\s+لها(?![\p{L}])/gu, 'نوصلوهالك');
+      return t;
+    })
+    .join('');
+};
+
+const HOME_FEE: Record<Loc, (fee: string) => string> = {
+  fr: (f) => `La livraison à domicile est à ${f} DA.`,
+  ar: (f) => `التوصيل للدار ب\u0640 ${f} دج.`,
+  arabizi: (f) => `Tawsil l dar b ${f} DA.`,
+  en: (f) => `Home delivery is ${f} DA.`,
+};
+const STOP_FEE: Record<Loc, (fee: string) => string> = {
+  fr: (f) => `En stop-desk, c'est ${f} DA.`,
+  ar: (f) => `ولا لنقطة الاستلام (stop-desk) ب\u0640 ${f} دج.`,
+  arabizi: (f) => `Wela f stop-desk b ${f} DA.`,
+  en: (f) => `Stop-desk delivery is ${f} DA.`,
+};
+/**
+ * journey retest R13-6 (18/11): an answer that gives one delivery fee of a wilaya while this turn's quote_delivery gave both (home
+ * and stop-desk, different) gets the other one, in the reply's language — F1b T2 « … Sinon, on peut aussi la livrer en stop-desk à
+ * 350 DA. » (home 650 DA, quoted the same turn, not said). The home fee goes before the stop-desk sentence, the stop-desk fee after
+ * the home one. A quote asked for the stop-desk only (its home fee unknown) adds nothing.
+ */
+export const withBothFees = (reply: string, quotes: readonly QuoteFact[], lang: AiLanguage | string | undefined): string => {
+  let parts = splitSentences(reply);
+  const loc = locOf(lang);
+  const has = (n: number) => numbersIn(foldGuard(parts.join(''))).includes(n);
+  const at = (n: number) => parts.findIndex((p) => numbersIn(foldGuard(p)).includes(n));
+  const sep = (p: string) => (/\s$/u.test(p) ? '' : ' ');
+  for (const q of quotes) {
+    if (q.isStopdesk || q.free || !(q.fee > 0) || q.stopdeskFee === null || !(q.stopdeskFee > 0) || q.stopdeskFee === q.fee) continue;
+    if (has(q.stopdeskFee) && !has(q.fee)) {
+      const i = at(q.stopdeskFee);
+      parts = [...parts.slice(0, i), `${HOME_FEE[loc](String(q.fee))} `, ...parts.slice(i)];
+    } else if (has(q.fee) && !has(q.stopdeskFee)) {
+      const i = at(q.fee);
+      parts = [...parts.slice(0, i + 1).map((p, k) => (k === i ? `${p}${sep(p)}` : p)), `${STOP_FEE[loc](String(q.stopdeskFee))}${i + 1 < parts.length ? ' ' : ''}`, ...parts.slice(i + 1)];
+    }
+  }
+  return parts.join('').replace(/[ \t]+\n/g, '\n').trim();
+};
+
+const SUBSTITUTE: Record<Loc, (gone: string, instead: string) => string> = {
+  fr: (g, i) => `${g} n'est pas disponible pour le moment : ce récapitulatif est pour ${i} à la place.`,
+  ar: (g, i) => `${g} ماهوش متوفر درك، هذا الملخص فيه ${i} في بلاصتو.`,
+  arabizi: (g, i) => `${g} makach drok, had récap fih ${i} f blastou.`,
+  en: (g, i) => `${g} is not available right now: this summary is for ${i} instead.`,
+};
+/**
+ * journey retest R13-5 (18/11): the server line in front of a recap that holds another product than the out-of-stock one the
+ * customer asked for — N5: T1 « le parfum oud c'est combien ? » (out of stock, the Coffret offered), T2 « Bon finalement je le prends …
+ * » ⇒ the Coffret's recap with no word of the change. Only when the customer's latest message naming a product named an out-of-stock
+ * one (`unavailableNames`) that the recap does not hold, and the reply does not already name it. Null otherwise.
+ */
+export const substitutionLine = (recapItems: readonly { name?: unknown }[], history: string, unavailableNames: readonly string[], reply: string, lang: AiLanguage | string | undefined): string | null => {
+  const items = recapItems.map((i) => (typeof i.name === 'string' ? i.name : '')).filter(Boolean);
+  if (!items.length || !unavailableNames.length) return null;
+  const inRecap = items.map((name, k) => ({ id: `r${k}`, name }));
+  const gone = unavailableNames.map((name, k) => ({ id: `u${k}`, name })).filter((u) => !items.some((n) => foldGuard(n) === foldGuard(u.name)));
+  for (const line of history.split(/\n+/).map((l) => l.trim()).filter(Boolean).reverse()) {
+    if (productNamedIn(line, inRecap)) return null;
+    const asked = productNamedIn(line, gone);
+    if (asked) return productNamedIn(reply, [asked]) ? null : SUBSTITUTE[locOf(lang)](asked.name, items.join(', '));
+  }
+  return null;
+};

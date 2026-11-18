@@ -16,7 +16,7 @@ import { aiDateTime } from '../../../core/time/algiers';
 import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
 import { articleless, fold, foldText, WILAYA_ALIASES } from './wilaya-aliases';
-import { handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
+import { handoffReason, handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
 import { asksCancel, bareYes, cancelWordsIn, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, simulatedOrders, type DraftOrder, type OrderCallHistory } from './order-confirmation';
 import { asksSomething, withoutPlaceSegments } from './order-confirmation-text';
 
@@ -386,6 +386,42 @@ export const customerOwnName = (callName: string, history: string): string | nul
   const same = found.filter((name) => !NOT_A_NAME.test(name) && sameNameAcross(name, callName));
   return same.length ? same[same.length - 1]! : null;
 };
+/** The numbers of a text (Arabic-Indic digits read as Latin), sorted: « حي 1000 مسكن عمارة 5 » and « Cité 1000 logements, immeuble 5 » give « 1000 5 ». */
+const numbersKey = (t: string) => [...placeFold(t).matchAll(/\d+/gu)].map((m) => m[0]).sort().join(' ');
+/** A phone number inside a text (05 / 06 / 07, 10 digits, spaced or not; +213). */
+const PHONE_IN_TEXT = /(?:\+?213[\s.-]?|0)[5-7](?:[\s.-]?\d){8}/gu;
+/**
+ * journey retest R13-3 (18/11): the street address as the customer wrote it, when the call's street is a translation of it — N18b T2
+ * « Cité 1000 logements, immeuble 5 » for the customer's « حي 1000 مسكن عمارة 5 », kept in the recap and the order. As the name rule
+ * (R8-2): no word of the call's street is in the customer's messages, and their latest message with an address (a street / building
+ * word: « حي », « cité », « rue », « bloc » …) gives the same numbers (or, with no number, is written in the other script). The
+ * customer's text runs from that word (and the numbers just before it) to the end of the message, without the phone and the
+ * commune / wilaya names (`placeNames`). Null when the call's street is the customer's own (a word of it was written) or none fits.
+ */
+export const customerOwnStreet = (callStreet: string, history: string, placeNames: (string | null | undefined)[]): string | null => {
+  const words = placeFold(callStreet).split(' ').filter((w) => w.length >= 2 && /\p{L}/u.test(w));
+  if (!words.length) return null;
+  const hay = ` ${placeFold(history)} `;
+  const bare = ` ${articleless(placeFold(history))} `;
+  if (words.some((w) => hay.includes(` ${w} `) || bare.includes(` ${articleless(w)} `))) return null;
+  const digits = numbersKey(callStreet);
+  const arabicCall = ARABIC_LETTERS.test(callStreet);
+  for (const line of history.split(/\n+/u).map((l) => l.trim()).filter(Boolean).reverse()) {
+    const segments = line.split(/\s*[,،;؛]\s*|\s+[-–—]\s+/u);
+    const i = segments.findIndex((x) => ADDRESS_WORDS.test(x));
+    if (i < 0) continue;
+    const first = segments[i]!;
+    const m = ADDRESS_WORDS.exec(first)!;
+    // « 1000 logements bloc 5 »: the numbers just before the address word belong to it
+    const lead = /(?:(?:n°|no|رقم)?\s*\d+\s*)+$/u.exec(first.slice(0, m.index))?.[0] ?? '';
+    const tail = [first.slice(m.index - lead.length), ...segments.slice(i + 1)].map((x) => x.replace(PHONE_IN_TEXT, ' ').replace(/\s+/gu, ' ').trim()).filter((x) => /\p{L}|\d/u.test(x));
+    const own = withoutPlaceSegments(tail.join(ARABIC_LETTERS.test(first) ? '، ' : ', '), placeNames).trim();
+    if (!/\p{L}/u.test(own) || numbersKey(own) !== digits) continue;
+    if (!digits && ARABIC_LETTERS.test(own) === arabicCall) continue;
+    return own;
+  }
+  return null;
+};
 /** A word of a size / measure before a short variant name (« taille M », « en 42 », « pointure 40 »). */
 const SIZE_CUE = /(?:taille|tailles|pointure|size|ma9as|m9as|mqas|en|t|n°|num|numero|numéro|مقاس|المقاس|قياس|نمرة|رقم)\s*$/iu;
 /** Address / phone segments of a message: a colour or size there names no variant (« Cité les Roses », « bloc 42 »). */
@@ -547,18 +583,34 @@ export class ToolRegistry {
    * handoff is checked by `judgeHandoff` — the evidence must be the customer's words of the current message. Refused ⇒
    * `HANDOFF_NOT_NEEDED` with the instruction: the model answers in the same turn.
    */
-  private handoff(args: Record<string, unknown>, ctx: ToolRunContext): ToolResult {
+  private async handoff(args: Record<string, unknown>, ctx: ToolRunContext): Promise<ToolResult> {
     const reason = typeof args.reason === 'string' ? args.reason : '';
     const refuse = (instruction: string, why?: string) => ({ ok: false, error: { code: 'HANDOFF_NOT_NEEDED', ...(why ? { why } : {}) }, instruction }) as ToolResult;
     if (ctx.customerText !== undefined) {
-      const v = judgeHandoff({ reason, evidence: typeof args.evidence === 'string' ? args.evidence : null, customerText: ctx.customerText, shopRules: ctx.agent.humanHandoffRules, keywords: ctx.agent.handoffKeywords, unclearStreak: ctx.unclearStreak, established: ctx.established });
-      return v.ok ? { ok: true } : refuse(handoffRefusedInstruction(v.why), v.why);
+      // journey retest R13-1 (18/11): an off_catalogue handoff is accepted only when the server's own catalogue check finds no product
+      // of the shop named in the customer's message (F1 T1 « Je voudrais le sac à main cuir marron » ⇒ handed off, Marron in stock)
+      const soldNamed = handoffReason(reason) === 'off_catalogue' ? await this.soldProductNamed(ctx.agent, ctx.customerText) : null;
+      const v = judgeHandoff({ reason, evidence: typeof args.evidence === 'string' ? args.evidence : null, customerText: ctx.customerText, shopRules: ctx.agent.humanHandoffRules, keywords: ctx.agent.handoffKeywords, unclearStreak: ctx.unclearStreak, established: ctx.established, soldNamed });
+      return v.ok ? { ok: true } : refuse(handoffRefusedInstruction(v.why, soldNamed), v.why);
     }
     const known = (HANDOFF_REASONS as readonly string[]).includes(reason) && reason !== 'other';
     if (known || (ctx.agent.humanHandoffRules ?? '').trim()) return { ok: true };
     return refuse(
       'No handoff rule applies: keep the conversation and answer now. A question you have no answer to ⇒ status=UNKNOWN, call add_faq_candidate and say briefly you will check with the team. A stock problem (ORDER_INSUFFICIENT_STOCK, out of stock) ⇒ offer the quantity available, the other variants or a similar product. Hand off only for a listed rule (customer_request, refund, complaint, angry, unclear_streak, off_catalogue, order_limits, risky_client, keyword).',
     );
+  }
+
+  /**
+   * journey retest R13-1: the name of the in-scope product the customer's text names (`CatalogueService.productNamed`), else null — a
+   * read failure counts as none (the judge's other rules still apply).
+   */
+  async soldProductNamed(agent: ToolRunContext['agent'], text: string): Promise<string | null> {
+    if (typeof this.catalogue.productNamed !== 'function' || !text.trim()) return null;
+    try {
+      return (await this.catalogue.productNamed(agent, text))?.name ?? null;
+    } catch {
+      return null;
+    }
   }
 
   private view(p: CatalogueProduct) {
@@ -893,7 +945,11 @@ export class ToolRegistry {
     // journey retest R11-4 (17/11): the address is stored (and shown) without the commune / wilaya it starts or ends with — the recap
     // adds them back as « street, commune, wilaya » (N21 T4 « البليدة، بوفاريك، حي الورود رقم 12 » was shown and stored wilaya first)
     const communeRow = place && d.communeName ? place.communes.find((c) => samePlace(c.nameFr, d.communeName!) || samePlace(c.nameAr, d.communeName!)) : undefined;
-    const street = d.address ? withoutPlaceSegments(d.address, [place?.nameFr, place?.nameAr, d.communeName, communeRow?.nameFr, communeRow?.nameAr]) || d.address : null;
+    const placeNames = [place?.nameFr, place?.nameAr, d.communeName, communeRow?.nameFr, communeRow?.nameAr];
+    let street = d.address ? withoutPlaceSegments(d.address, placeNames) || d.address : null;
+    // journey retest R13-3 (18/11): a street the model translated (« Cité 1000 logements, immeuble 5 » for « حي 1000 مسكن عمارة 5 ») is
+    // the customer's own words — as the name (R8-2)
+    if (street && ctx.customerHistory !== undefined) street = customerOwnStreet(street, ctx.customerHistory, placeNames) ?? street;
     const request: CreateOrderRequest = { clientName: d.clientName, clientPhone: phone, secondPhone: phone2, wilayaId: d.wilayaId, communeName: d.communeName || null, address: street, isStopdesk: d.isStopdesk, stopdeskId: d.stopdeskId || null, notes: d.notes || null, items, subtotal, deliveryFee, total: subtotal + deliveryFee, replaces };
     // full-test 15/11 AI-CHAT-01 (Blocker): the order exists only after the customer said yes, in a later message, to the
     // recap the server sent — the model's `customerConfirmed` is never enough on its own

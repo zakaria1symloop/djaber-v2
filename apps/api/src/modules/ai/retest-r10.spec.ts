@@ -331,7 +331,7 @@ describe('R10-4 (Cosmetic) — catalogue words in their own script, no name in t
 
   it('N9 T1 arabizi: « mais » ⇒ « bessah », « Les tailles disponibles » ⇒ « Les tailles li kaynin »; French replies untouched', () => {
     const n9 = 'Ma 3andnach tsawer ta3 had la robe f had lwaqt, mais hiya robe kabyle brodée bil yed. Les tailles disponibles: S, M w XL.';
-    expect(withArabiziWords(n9, 'arabizi')).toBe('Ma 3andnach tsawer ta3 had la robe f had lwaqt, bessah hiya robe kabyle brodée bil yed. Les tailles li kaynin: S, M w XL.');
+    expect(withArabiziWords(n9, 'arabizi')).toBe('Ma 3andnach tsawer ta3 had la robe f had lwaqt, bessah hiya robe kabyle brodée bil yed. Lmqasat li kaynin: S, M w XL.'); // R13-6: « tailles li kaynin » ⇒ « Lmqasat li kaynin »
     expect(withArabiziWords('Elle est belle, mais les tailles disponibles sont S et M.', 'fr')).toBe('Elle est belle, mais les tailles disponibles sont S et M.');
     expect(withArabiziWords('jamais', 'arabizi')).toBe('jamais');
   });

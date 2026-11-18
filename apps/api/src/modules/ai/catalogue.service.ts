@@ -6,6 +6,7 @@ import { approvedFields, approvedImages, approvedVariants } from '../catalog/app
 import { reservedQuantities } from '../catalog/stock.service';
 import { FULL_CATALOGUE_MAX, RETRIEVAL_TOP } from './ai.constants';
 import { foldText } from './tools/wilaya-aliases';
+import { productNamedIn } from './product-named';
 
 export type AgentScope = Pick<Agent, 'id' | 'sellAllProducts' | 'catalogScope' | 'scopeCategoryIds'>;
 export type CatalogueVariant = { id: string; name: string; price: number; stock: number };
@@ -176,6 +177,18 @@ export class CatalogueService {
     const named = rows.map((r) => ({ id: r.id, key: fold(approvedFields(r).name) })).filter((r) => r.key.trim().length >= 3 && said.includes(r.key));
     const own = named.filter((r) => !named.some((o) => o !== r && o.key.length > r.key.length && o.key.includes(r.key)));
     return own.length === 1 && !exclude.includes(own[0]!.id) ? own[0]!.id : null;
+  }
+
+  /**
+   * journey retest R13-1 (18/11): the in-scope product this customer text names (`productNamedIn`: the first word of its approved name,
+   * two of its words, or one of its keywords) — the server's own catalogue check before an `off_catalogue` handoff is accepted
+   * (« Je voudrais le sac à main cuir marron » was handed off while the Sac à main cuir was in stock). Null when none.
+   */
+  async productNamed(agent: AgentScope, text: string): Promise<{ id: string; name: string } | null> {
+    if (!text.trim()) return null;
+    const rows = await prisma.product.findMany({ where: this.scopeWhere(agent), select: { id: true, name: true, description: true, price: true, keywords: true, moderationStatus: true, approvedSnapshot: true }, take: 2000 });
+    const hit = productNamedIn(text, rows.map((r) => ({ id: r.id, name: approvedFields(r).name, keywords: r.keywords })));
+    return hit ? { id: hit.id, name: hit.name } : null;
   }
 
   /** journey retest R8-3: the ids among these that are variants of the shop (any product): never read as a mistyped id. */

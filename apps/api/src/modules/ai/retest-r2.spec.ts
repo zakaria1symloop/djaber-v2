@@ -182,7 +182,7 @@ describe('R2-6 / R2-7 — the text before the server recap, Markdown, the Arabic
     // a name already written (in either script) is not added again — journey retest R6-4: a trailing one after a comma comes
     // back in the recap's order and script
     expect(orderRecapText(recapOf({ wilayaAr: 'البليدة', communeAr: 'بوفاريك', address: 'حي الورود، Boufarik' }), 'ar')).toContain('العنوان: حي الورود، بوفاريك، البليدة');
-    expect(orderRecapText(recapOf({ wilayaAr: 'البليدة', communeAr: 'بوفاريك', address: 'حي الورود Boufarik' }), 'ar')).toContain('العنوان: حي الورود Boufarik، البليدة');
+    expect(orderRecapText(recapOf({ wilayaAr: 'البليدة', communeAr: 'بوفاريك', address: 'حي الورود Boufarik' }), 'ar')).toContain('العنوان: حي الورود، بوفاريك، البليدة'); // R13-2: the commune never stays in the street
     expect(communeAr([{ nameFr: 'Boufarik', nameAr: 'بوفاريك' }], 'boufarik')).toBe('بوفاريك');
     expect(communeAr([{ nameFr: 'Boufarik', nameAr: 'بوفاريك' }], 'Blida')).toBeNull();
   });

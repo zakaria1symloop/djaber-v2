@@ -24,11 +24,17 @@ export const placeIndex = (): Promise<PlaceIndex> => {
 export const resetPlaceIndex = (): void => {
   cache = null;
 };
+/**
+ * journey retest R13-4 (18/11): bare commune names (the Latin article « El / Al » dropped) that are everyday words or first names /
+ * surnames — « Je voudrais le sac à main cuir marron » named « El Main » (Bordj Bou Arreridj), so create_order was offered with no
+ * wilaya given and sent as a probe (`wilayaId 1`, refused). They match only with their article.
+ */
+const COMMON_BARE = new Set(['main', 'maine', 'bordj', 'oued', 'hassi', 'khemis', 'marsa', 'achour', 'hamel', 'hachem', 'kerma', 'hadjar', 'hamma', 'alia', 'amra', 'amria', 'omaria', 'karimia', 'djazia', 'azizia', 'milia', 'tarf', 'kala', 'euch', 'achir', 'biar', 'ogla', 'ancor', 'ancer', 'aioun', 'biodh', 'attaf', 'messaid', 'mokrani']);
 /** Pure: the index of these lists (commune names folded, 4 letters or more, longest first). */
 export const buildPlaceIndex = (wilayas: PlaceWilaya[], communes: PlaceCommune[]): PlaceIndex => ({
   wilayas,
   communes: communes
-    .flatMap((c) => [c.nameFr, c.nameAr].map((n) => ({ wilayaId: c.wilayaId, key: placeFold(n), bare: articleless(placeFold(n)) })))
+    .flatMap((c) => [c.nameFr, c.nameAr].map((n) => ({ wilayaId: c.wilayaId, key: placeFold(n), bare: COMMON_BARE.has(articleless(placeFold(n))) ? placeFold(n) : articleless(placeFold(n)) })))
     .filter((c) => c.key.replace(/\s/g, '').length >= 4)
     .sort((a, b) => b.key.length - a.key.length),
 });

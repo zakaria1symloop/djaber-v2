@@ -352,7 +352,7 @@ describe('R12-3 (Minor) — no lookup_order on the « oui » turn, one search fo
 describe('R12-4 (Cosmetic) — narrow wording fixes', () => {
   it('F9 T1, N9 T1, N3 T2: arabizi', () => {
     expect(withArabiziWords('Illizi: ma nwasslouch l Illizi f had lwaqt. T7ebb nchouf wach men produit t7ebbou ?', 'arabizi')).toBe('Illizi: ma nwasslouch l Illizi f had lwaqt. Wach men produit t7ebb ?');
-    expect(withArabiziWords('Tailles disponibles: S w M (4900 DA).', 'arabizi')).toBe('Tailles li kaynin: S w M (4900 DA).');
+    expect(withArabiziWords('Tailles disponibles: S w M (4900 DA).', 'arabizi')).toBe('Lmqasat li kaynin: S w M (4900 DA).'); // R13-6
     expect(withArabiziWords('Ih, nwasslou l Constantine. Livraison à domicile: 700 DA, wela 450 DA f stop-desk.', 'arabizi')).toBe('Ih, nwasslou l Constantine. Tawsil l dar: 700 DA, wela 450 DA f stop-desk.');
     expect(withArabiziWords('Livraison à domicile : 700 DA.', 'fr')).toBe('Livraison à domicile : 700 DA.');
   });
