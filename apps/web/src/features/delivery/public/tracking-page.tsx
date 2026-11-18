@@ -17,11 +17,13 @@ import type { TrackingPublic } from '../contracts';
 import { algiersClock, parcelSteps, shipmentTone } from '../logic';
 import { ReportMerchantDialog } from './report-dialog';
 
-export function PublicTrackingPage({ code }: { code: string }) {
+export function PublicTrackingPage({ code, notFound = false }: { code: string; notFound?: boolean }) {
   const t = useT();
   const locale = useLocaleCode() as AppLocale;
   useDocumentTitle(t('tracking.public.title'));
   const q = useQuery({
+    // `notFound`: the server already got the API's 404 (route not-found.tsx) — no browser request, the state is drawn at once
+    enabled: !notFound,
     queryKey: ['public', 'track', code],
     queryFn: async (): Promise<TrackingPublic | null> => {
       try {
@@ -45,7 +47,11 @@ export function PublicTrackingPage({ code }: { code: string }) {
       <PublicHeader />
       <main id="main" className="flex flex-1 justify-center px-4 py-10">
         <div className="flex w-full min-w-0 max-w-[560px] flex-col gap-5">
-          {q.isPending ? (
+          {notFound ? (
+            <Card className="p-6" data-testid="tracking-public" data-state="not_found">
+              <NotFoundState className="border-0 !p-0" title={t('tracking.public.notFound.title')} description={t('tracking.public.notFound.description')} />
+            </Card>
+          ) : q.isPending ? (
             <Card className="p-6" data-testid="tracking-public" data-state="loading">
               <div role="status" aria-label={t('common.loading')} className="flex flex-col gap-3">
                 <Skeleton className="h-6 w-48" />
