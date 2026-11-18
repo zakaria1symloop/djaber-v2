@@ -9,6 +9,7 @@ import { algiersDay, algiersDayEnd, algiersDayStart } from '../../core/time/algi
 import { CURRENT_STATUSES } from '../billing/billing.util';
 import { DAY, freePlanName, pickLocal } from './admin.util';
 import { routeHealth } from './ai-route-health';
+import { CONSUMPTION_ACTIONS } from '../credits/consumption';
 
 export type PlatformMetrics = {
   signups: number;
@@ -67,7 +68,8 @@ export class AdminOverviewService implements OnModuleInit {
         SELECT count(*) AS n FROM "Subscription" s JOIN "Plan" p ON p.id = s."planId"
         WHERE p.slug = 'free' AND s."createdAt" >= ${gte} AND s."createdAt" < ${lt}
           AND EXISTS (SELECT 1 FROM "Subscription" o JOIN "Plan" op ON op.id = o."planId" WHERE o."workspaceId" = s."workspaceId" AND op.slug <> 'free' AND o."createdAt" < s."createdAt")`,
-      prisma.creditLedger.aggregate({ where: { kind: 'debit', createdAt: { gte, lt } }, _sum: { credits: true } }),
+      // journey J13r-5: AI consumption only — an admin removal is an adjustment, not « consommé »
+      prisma.creditLedger.aggregate({ where: { kind: 'debit', action: { in: CONSUMPTION_ACTIONS }, createdAt: { gte, lt } }, _sum: { credits: true } }),
       prisma.$queryRaw<{ n: bigint }[]>`SELECT count(DISTINCT "conversationId") AS n FROM "Message" WHERE "direction" = 'in' AND "sentAt" >= ${gte} AND "sentAt" < ${lt}`,
       prisma.aiRun.count({ where: { kind: 'reply', status: { not: 'error' }, startedAt: { gte, lt } } }),
       prisma.$queryRaw<{ modelId: string; runs: bigint; input: bigint | null; output: bigint | null; credits: bigint | null }[]>`
@@ -127,7 +129,7 @@ export class AdminOverviewService implements OnModuleInit {
       FROM "Workspace" w WHERE w."createdAt" >= ${gte} AND w."deletedAt" IS NULL`;
     const [byPlan, top, trials, incidents] = await Promise.all([
       prisma.subscription.groupBy({ by: ['planId'], where: { status: { in: [...CURRENT_STATUSES] } }, _count: { _all: true } }),
-      prisma.$queryRaw<{ workspaceId: string; credits: bigint }[]>`SELECT "workspaceId", -sum("credits") AS credits FROM "CreditLedger" WHERE "kind" = 'debit' AND "createdAt" >= ${gte} GROUP BY "workspaceId" ORDER BY credits DESC LIMIT 5`,
+      prisma.$queryRaw<{ workspaceId: string; credits: bigint }[]>`SELECT "workspaceId", -sum("credits") AS credits FROM "CreditLedger" WHERE "kind" = 'debit' AND "action" IN ('text_reply', 'image_recognition', 'voice_transcription') AND "createdAt" >= ${gte} GROUP BY "workspaceId" ORDER BY credits DESC LIMIT 5`,
       prisma.subscription.findMany({ where: { status: 'trial', trialEndsAt: { gte: now, lt: new Date(now.getTime() + 7 * DAY) } }, include: { workspace: { select: { id: true, name: true } } }, orderBy: { trialEndsAt: 'asc' }, take: 10 }),
       prisma.incident.findMany({ where: { OR: [{ resolvedAt: null }, { resolvedAt: { gte } }], startedAt: { lt: now } }, select: { startedAt: true, resolvedAt: true, severity: true, components: true } }),
     ]);

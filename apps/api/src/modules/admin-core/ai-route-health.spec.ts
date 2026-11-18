@@ -23,3 +23,16 @@ describe('routeHealth', () => {
     expect(routeHealth({ failoverActive: false, primaryModel: m(), fallbackModel: m(true, false) })).toEqual({ state: 'degraded', issue: 'no_fallback' });
   });
 });
+
+// journey J13r-9: every overview alert names its link — a new alert code without `admin.overview.alerts.link.<code>` showed
+// the raw key (`i18n:check` cannot see the dynamic key)
+describe('overview alert links', () => {
+  it('every alert code of overview.service has a link label in fr / ar / en', () => {
+    const { readFileSync } = require('node:fs') as typeof import('node:fs');
+    const { getMessages } = require('@djaber/shared') as typeof import('@djaber/shared');
+    const src = readFileSync(require.resolve('./overview.service.ts'), 'utf8');
+    const codes = [...new Set([...src.matchAll(/out\.push\(\{ code: '([a-z_]+)'/g)].map((m) => m[1]!))];
+    expect(codes.length).toBeGreaterThan(5);
+    for (const l of ['fr', 'ar', 'en'] as const) for (const c of codes) expect([l, c, getMessages(l)[`admin.overview.alerts.link.${c}`]]).toEqual([l, c, expect.any(String)]);
+  });
+});

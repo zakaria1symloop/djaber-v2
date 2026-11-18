@@ -35,6 +35,7 @@ import { money } from '../gds-document.pdf';
 import type { TableColumn } from '../../jobs/table-file';
 import { REPORT_PRODUCERS, type ReportCtx } from './definitions';
 import { ReportScheduleService } from './report-schedule.service';
+import { viewerUserId } from '../../../core/privacy/mask';
 
 const FILE_URL_TTL_S = 24 * 3600;
 const FILE_LINK_TTL_S = 3600;
@@ -72,7 +73,7 @@ export class ReportService implements OnModuleInit {
   async hub(): Promise<ReportsHubView> {
     const t = TenantContext.get();
     const [user, schedules, feature] = await Promise.all([
-      t.userId ? prisma.user.findUnique({ where: { id: t.userId }, select: { prefs: true } }) : null,
+      viewerUserId() ? prisma.user.findUnique({ where: { id: viewerUserId() }, select: { prefs: true } }) : null, // J13r-1
       prisma.reportSchedule.groupBy({ by: ['reportKey'], _count: { _all: true } }),
       this.tenants.hasFeature(t.workspaceId, 'scheduled_reports'),
     ]);

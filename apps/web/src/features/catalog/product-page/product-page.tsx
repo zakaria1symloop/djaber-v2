@@ -19,7 +19,7 @@ import type { Product } from '../contracts';
 import { AiPill, aiExclusion, ModerationPill, ProductStatePill } from '../ui';
 import { AgentsBlock, DetailsBlock, GalleryBlock, MovementsBlock, PricingBlock, StockBlock } from './blocks';
 import { moderationView } from './logic';
-import { AppealDialog, RejectedBanner, ValidationBlock } from './moderation';
+import { AppealDialog, ChangesRequestedBanner, RejectedBanner, ValidationBlock } from './moderation';
 import { useProductActions } from './use-product-actions';
 import { VariantsBlock } from './variants-block';
 
@@ -201,6 +201,7 @@ export function ProductPage({ id }: { id: string }) {
         </Banner>
       ) : null}
       {view.kind === 'rejected' && live ? <RejectedBanner product={product} view={view} canWrite={canWrite} onAppeal={() => setAppealOpen(true)} /> : null}
+      {view.kind === 'changes_requested' && live ? <ChangesRequestedBanner product={product} view={view} canWrite={canWrite} /> : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]" data-mode={advanced ? 'advanced' : 'simple'} data-testid="product-blocks">
         <div className="flex min-w-0 flex-col gap-4">

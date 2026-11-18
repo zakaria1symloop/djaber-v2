@@ -196,6 +196,7 @@ describe('read-only impersonation (D21-bis, AT-IMP-01, AT-IMP-02)', () => {
     expect((await db.impersonationSession.findUniqueOrThrow({ where: { id: session.id } })).actionsCount).toBe(2);
     const actions = await db.auditLog.findMany({ where: { action: 'impersonation.action', impersonationSessionId: session.id } });
     expect(actions).toHaveLength(2);
+
     expect(actions[0]).toMatchObject({ actorType: 'admin', actorId: support.userId, workspaceId: owner.workspaceId });
 
     // listed (super_admin sees every session; filters)
@@ -217,6 +218,26 @@ describe('read-only impersonation (D21-bis, AT-IMP-01, AT-IMP-02)', () => {
     await (await asPlatform(app, 'support')).delete(`/admin/impersonation/sessions/${session.id}`).expect(404);
     // no e-mail to the Owner
     expect(await db.outbox.count({ where: { topic: 'mail', key: { contains: session.id } } })).toBe(0);
+  });
+
+  it('journey J13r-1: the per-user screens show the shop owner, never the admin (notifications, preferences, sessions)', async () => {
+    const owner = await asOwner(app);
+    const support = await asPlatform(app, 'support');
+    const started = (await support.post('/admin/impersonation/sessions', { workspaceId: owner.workspaceId, reason: REASON }).expect(201)).body.data;
+    const imp = (url: string) => request(app.http()).get(`/api/v1${url}`).set('Authorization', `Bearer ${started.token}`).set('X-Impersonation-Session', started.sessionId);
+    const shopRow = await db.notification.create({ data: { workspaceId: owner.workspaceId, userId: owner.userId, type: 'credits_granted', title: {}, body: {}, data: { credits: 10, reason: 'test' } } });
+    const adminRow = await db.notification.create({ data: { workspaceId: null, userId: support.userId, type: 'platform_admin', title: {}, body: {}, data: {} } });
+    const listed = (await imp('/notifications').expect(200)).body.data.map((n: any) => n.id);
+    expect(listed).toContain(shopRow.id);
+    expect(listed).not.toContain(adminRow.id);
+    await imp('/notifications/unread-count').expect(200);
+    // the admin has no membership: the owner's matrix is read (it answered 404)
+    await imp('/notification-preferences').expect(200);
+    const sessions = (await imp('/me/sessions').expect(200)).body.data;
+    expect(sessions.every((x: any) => x.current === false && (x.ip === null || /x\.x$/.test(x.ip)))).toBe(true);
+    // the data export is an action: refused like every write
+    expect((await imp('/me/data-export').expect(403)).body.error.code).toBe('ADMIN_IMPERSONATION_FORBIDDEN_ACTION');
+    await support.delete(`/admin/impersonation/sessions/${started.sessionId}`).expect(200);
   });
 
   it('AT-IMP-02 every non-GET merchant route under the session ⇒ 403 ADMIN_IMPERSONATION_FORBIDDEN_ACTION, nothing changed, action audited', async () => {

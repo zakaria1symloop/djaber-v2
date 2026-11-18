@@ -279,6 +279,9 @@ describe('admin credit grants (PRM-03) & ledger export', () => {
     expect(ok.balance.total).toBe(before - 99000);
     // retest 11/11 M-31: taken-back credits lower the limit, they are not « used »
     expect((await owner.get('/credits').expect(200)).body.data.plan).toMatchObject({ used: planBefore.used, limit: planBefore.limit - 99000 });
+    // journey J13r-5: nor consumed — no burn rate « ≈ / J », no plan usage, nothing in the platform « crédits consommés »
+    expect((await owner.get('/credits').expect(200)).body.data.burnRatePerDay).toBe(0);
+    expect((await owner.get('/billing/subscription').expect(200)).body.data.usage.creditsUsed).toBe(0);
     expect((await finance.get('/admin/workspaces?pageSize=100').expect(200)).body.data.find((w: any) => w.id === owner.workspaceId).credits).toMatchObject({ used: planBefore.used, limit: planBefore.limit - 99000 });
     expect(await db.creditLedger.findUniqueOrThrow({ where: { id: ok.ledgerEntryId } })).toMatchObject({ action: 'adjustment', kind: 'debit', bucket: 'plan', credits: -99000, grantedById: expect.any(String) });
     expect(await eventually(() => db.auditLog.count({ where: { action: 'credits.remove', entityId: owner.workspaceId, reason: body.reason } }))).toBe(1);

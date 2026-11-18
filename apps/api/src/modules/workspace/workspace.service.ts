@@ -11,6 +11,7 @@ import { ImageUploadService, type UploadedFile } from '../uploads/image-upload.s
 import type { UpdateWorkspace } from './dto';
 import { LegalService } from './legal.service';
 import { ProvisioningService } from './provisioning.service';
+import { CONSUMPTION_ACTIONS } from '../credits/consumption';
 
 const CURRENT = ['trial', 'active', 'dunning'] as const;
 
@@ -77,7 +78,7 @@ export class WorkspaceService {
       prisma.product.count({ where: { deletedAt: null } }),
       prisma.conversation.count({ where: { createdAt: { gte: algiersMonthStart() } } }),
       prisma.membership.count(),
-      prisma.creditLedger.aggregate({ where: { kind: 'debit', createdAt: { gte: periodStart } }, _sum: { credits: true } }),
+      prisma.creditLedger.aggregate({ where: { kind: 'debit', action: { in: CONSUMPTION_ACTIONS }, createdAt: { gte: periodStart } }, _sum: { credits: true } }),
     ]);
     return { pages, agents, products, conversationsThisMonth, members, creditsUsed: Math.abs(debits._sum.credits ?? 0) };
   }

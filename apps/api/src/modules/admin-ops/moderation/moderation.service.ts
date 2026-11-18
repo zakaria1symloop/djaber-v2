@@ -39,7 +39,7 @@ export const decisionReason = (item: Pick<ModerationItem, 'merchantMessage' | 'r
 
 const include = {
   workspace: { select: { id: true, name: true, trustLevel: true } },
-  product: { select: { id: true, name: true, price: true, description: true, category: { select: { name: true } }, images: { orderBy: { sortOrder: 'asc' }, select: { url: true, moderationFlag: true } }, _count: { select: { variants: { where: { deletedAt: null } } } }, approvedSnapshot: true } },
+  product: { select: { id: true, name: true, price: true, description: true, category: { select: { name: true } }, images: { orderBy: { sortOrder: 'asc' }, select: { url: true, moderationFlag: true } }, _count: { select: { variants: { where: { deletedAt: null } } } }, variants: { where: { deletedAt: null, isActive: true }, select: { price: true } }, approvedSnapshot: true } },
   agent: { select: { id: true, name: true, customInstructions: true } },
   category: { select: { id: true, name: true } },
   assignee: userRefSelect,
@@ -107,7 +107,11 @@ export class ModerationService {
         ? {
             id: r.product.id,
             name: typeof snap.title === 'string' ? snap.title : r.product.name,
-            price: typeof snap.price === 'number' ? snap.price : r.product.price,
+            // journey J13r-3: the moderator judges what customers see — the live price / variant range, and the submitted
+            // price beside it when it changed since (a price edit does not create a new item)
+            price: r.product.price,
+            priceRange: r.product.variants.length ? { min: Math.min(...r.product.variants.map((v) => v.price)), max: Math.max(...r.product.variants.map((v) => v.price)) } : null,
+            submittedPrice: typeof snap.price === 'number' && snap.price !== r.product.price ? snap.price : null,
             marketReference: typeof snap.marketReference === 'number' ? snap.marketReference : null,
             category: r.product.category?.name ?? null,
             variants: r.product._count.variants,
@@ -279,12 +283,12 @@ export class ModerationService {
         await tx.product.update({ where: { id: product.id }, data: { moderationStatus: 'rejected' } });
         await this.hook.emitProduct(tx, ws, product.id, 'rejected');
       }
-      await this.notifications.emit(tx, { type: 'product_rejected', workspaceId: ws, target: { roles: ['owner', 'admin'] }, key: `product_rejected:${item.id}`, data: { productId: product.id, name: product.name, decision: item.decision, rejectedFields: item.rejectedFields } });
+      await this.notifications.emit(tx, { type: 'product_rejected', workspaceId: ws, target: { roles: ['owner', 'admin'] }, key: `product_rejected:${item.id}`, data: { productId: product.id, name: product.name, decision: item.decision, rejectedFields: item.rejectedFields, ...(item.merchantMessage ? { message: item.merchantMessage } : {}) } });
       return;
     }
     // changes requested: the previous state stays (last approved snapshot keeps selling, a new product stays hidden)
     if (current) await this.hook.emitProduct(tx, ws, product.id, 'pending');
-    await this.notifications.emit(tx, { type: 'product_changes_requested', workspaceId: ws, target: { roles: ['owner', 'admin'] }, key: `product_changes_requested:${item.id}`, data: { productId: product.id, name: product.name } });
+    await this.notifications.emit(tx, { type: 'product_changes_requested', workspaceId: ws, target: { roles: ['owner', 'admin'] }, key: `product_changes_requested:${item.id}`, data: { productId: product.id, name: product.name, ...(item.merchantMessage ? { message: item.merchantMessage } : {}), ...(item.rejectedFields.length ? { rejectedFields: item.rejectedFields } : {}) } });
   }
 
   async decide(id: string, kind: DecisionKind, input: ModerationDecisionInput, actor: PlatformActor, canWrite = true) {

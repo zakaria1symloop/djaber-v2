@@ -5,9 +5,10 @@
 // · deleting a shared view removes it for everyone (`sharedWith` = the count the confirmation shows);
 // · a view of another member that is not shared, or of another workspace, does not exist (404).
 import { Injectable } from '@nestjs/common';
-import { prisma, TenantContext, type Prisma, type SavedView, type SavedViewPage } from '@djaber/db';
+import { prisma, type Prisma, type SavedView, type SavedViewPage } from '@djaber/db';
 import { cleanSavedViewFilters, type SavedViewDto } from '@djaber/shared';
 import { AppException, notFound } from '../../core/errors/app.exception';
+import { viewerUserId } from '../../core/privacy/mask';
 
 type Row = SavedView & { sharedBy: { id: string; firstName: string; lastName: string; avatarUrl: string | null } | null };
 export type CreateInput = {
@@ -28,8 +29,9 @@ const readOnly = () => new AppException('SAVED_VIEW_SHARED_READONLY');
 export const foldName = (name: string) => name.normalize('NFC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('fr');
 const include = { sharedBy: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } } } as const;
 
+// J13r-1: during a read-only impersonation the owner's views are listed (writes are refused by the tenant guard)
 const me = () => {
-  const userId = TenantContext.get().userId;
+  const userId = viewerUserId();
   if (!userId) throw new AppException('FORBIDDEN');
   return userId;
 };

@@ -85,6 +85,14 @@ export function planCta(plan: PlanLike, sub: SubscriptionLike | null | undefined
   return { kind: 'change', direction: perMonth(here, cycle) >= perMonth(mine, sub.billingCycle === 'yearly' ? 'yearly' : 'monthly') ? 'upgrade' : 'downgrade' };
 }
 
+/**
+ * Journey J12r-1: what a `?change=<slug>` deep link (public Tarifs « Choisir ce plan », e-mails) does — the same as the card:
+ * `dialog` = the change-plan dialog (upgrade / downgrade / subscribe / renew), `cancel` = the cancel dialog (free card on a
+ * paid plan), `refuse` = nothing to open (the card is greyed: current plan, free plan during a trial, renewal not open yet,
+ * a scheduled change to undo on the card) — the page says the card's reason instead of a payment dialog for 0 DA.
+ */
+export const deepLinkAction = (cta: PlanCta): 'dialog' | 'cancel' | 'refuse' => (cta.kind === 'change' || cta.kind === 'renew' ? 'dialog' : cta.kind === 'cancel' ? 'cancel' : 'refuse');
+
 /* ---------- plan banners (shell + billing page) ---------- */
 export type PlanBannerId = 'planExpired' | 'dunning' | 'planExpiring';
 export type PlanState = {

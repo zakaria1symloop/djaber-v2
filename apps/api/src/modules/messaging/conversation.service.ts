@@ -26,7 +26,7 @@ import { prisma, Prisma, TenantContext, type BlockReason, type Conversation, typ
 import { AuditService } from '../../core/audit/audit.service';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
 import { CreditService } from '../credits/credit.service';
-import { impersonating, maskName, maskText } from '../../core/privacy/mask';
+import { impersonating, maskName, maskText, viewerUserId } from '../../core/privacy/mask';
 import type { BulkResult, CursorPage } from '../../core/http/pagination';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { OutboxService } from '../../core/outbox/outbox.service';
@@ -91,7 +91,6 @@ export class ConversationService implements OnModuleInit {
   }
 
   private filters(q: InboxQuery, index: BlockIndex, now: Date): Prisma.ConversationWhereInput[] {
-    const t = TenantContext.get();
     const and: Prisma.ConversationWhereInput[] = [{ deletedAt: null }];
     const channel = this.channelFilter(q);
     if (channel) and.push(channel);
@@ -107,7 +106,7 @@ export class ConversationService implements OnModuleInit {
     // page it is linked to (agent page "Conversations" link, M11)
     if (q.agentId?.length) and.push({ OR: [{ agentId: { in: q.agentId } }, { agentId: null, channel: { agentChannels: { some: { agentId: { in: q.agentId } } } } }] });
     if (q.unread !== undefined) and.push({ unreadCount: q.unread ? { gt: 0 } : 0 });
-    if (q.assigneeId === 'me') and.push({ assigneeId: t.userId ?? null });
+    if (q.assigneeId === 'me') and.push({ assigneeId: viewerUserId() ?? null }); // J13r-1 owner under impersonation
     else if (q.assigneeId === 'none') and.push({ assigneeId: null });
     else if (q.assigneeId) and.push({ assigneeId: q.assigneeId });
     if (q.order === 'with') and.push({ orders: { some: {} } });

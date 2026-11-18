@@ -360,6 +360,22 @@ describe('decisions', () => {
     expect((await db.product.findUniqueOrThrow({ where: { id: p.id } })).moderationStatus).toBe('pending');
     await drainAll(app, ['notification']);
     expect(await db.notification.count({ where: { workspaceId: owner.workspaceId, type: 'product_changes_requested' } })).toBe(1);
+    // journey J13r-2: the merchant reads what to change — notification body, product pill and detail, moderation endpoint
+    const notif = (await owner.get('/notifications?type=product_changes_requested').expect(200)).body.data[0];
+    expect(notif.body).toContain('Ajoutez une photo de face, merci.');
+    const view = (await owner.get(`/products/${p.id}`).expect(200)).body.data;
+    expect(view).toMatchObject({ moderation: { status: 'pending', changesRequested: true }, moderationDetail: { status: 'pending', changesRequested: true, merchantMessage: 'Ajoutez une photo de face, merci.' } });
+    expect((await owner.get(`/products/${p.id}/moderation`).expect(200)).body.data).toMatchObject({ status: 'pending', changesRequested: true, item: { status: 'changes_requested' } });
+  });
+
+  it('journey J13r-3: the review panel shows the live price (and the submitted one when it changed), the variants range', async () => {
+    const p = await createProduct(owner, { name: 'Robe kabyle test prix', price: 4900 });
+    const item = await itemOf(p.id);
+    await db.product.update({ where: { id: p.id }, data: { price: 5200 } });
+    const row = (await mod.get(`/admin/moderation/items/${item.id}`).expect(200)).body.data;
+    expect(row.product).toMatchObject({ price: 5200, submittedPrice: 4900, priceRange: null });
+    await db.productVariant.createMany({ data: [{ workspaceId: owner.workspaceId, productId: p.id, name: 'S', price: 1650, stock: 1 }, { workspaceId: owner.workspaceId, productId: p.id, name: 'L', price: 2090, stock: 1 }] });
+    expect((await mod.get(`/admin/moderation/items/${item.id}`).expect(200)).body.data.product.priceRange).toEqual({ min: 1650, max: 2090 });
   });
 
   it('AT-MOD-05 appeal once ⇒ appealed, decided by another moderator, moderation.appeal_result; second appeal refused; day 8 refused', async () => {

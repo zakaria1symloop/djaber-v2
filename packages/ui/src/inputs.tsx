@@ -153,7 +153,14 @@ function useFieldNotice() {
       {notice.text}
     </span>
   ) : null;
-  return { texts, say, clear: () => setNotice(null), element };
+  // journey J13r-11: in a form grid the floating notice covered the label of the field below (« + Pack » › Crédits « -5 » hid
+  // « ID PRODUIT GOOGLE PLAY »): the integer field shows it in the flow, under the field, for its few seconds
+  const flowElement = notice ? (
+    <span role="status" aria-live="polite" data-field-notice className="mt-1 block text-[12px] leading-4 text-accent-alert">
+      {notice.text}
+    </span>
+  ) : null;
+  return { texts, say, clear: () => setNotice(null), element, flowElement };
 }
 
 /*
@@ -237,76 +244,78 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
     caret.current = null;
   }, [shown]);
   return (
-    <div className="relative" dir="ltr">
-      <Input
-        ref={(el) => {
-          inner.current = el;
-          if (typeof ref === 'function') ref(el);
-          else if (ref) ref.current = el;
-        }}
-        inputMode={allowNegative ? 'text' : 'numeric'}
-        autoComplete="off"
-        value={shown}
-        onChange={(e) => {
-          const raw = e.target.value;
-          const at = e.target.selectionStart ?? raw.length;
-          // journey J06r-2 (18/11): where negatives are not allowed the « - » is refused like a letter (red flash, the value is
-          // unchanged — it used to be kept as an invalid value: the caret froze before it and a closing count « -1 000 » was read
-          // as +1 000); where they are allowed it is typed like a digit. A lone « - » is never a number (`integerOf` ⇒ null)
-          const r = parseIntegerInput(raw, { allowNegative, maxDigits, caret: at });
-          if (!r.ok) {
-            // refused keystroke: the value stays, the caret goes back where it was, the field flashes
-            back.current = Math.max(0, at - (raw.length - shown.length));
-            setRefused((n) => n + 1);
-            notice.say(notice.texts?.refused(r.reason, { maxDigits }));
-            tainted.current = true;
-            return;
-          }
-          notice.clear();
-          // an erasing key or typing over a selection is the merchant correcting what was refused
-          if (integerEntryErased(shown, raw)) tainted.current = false;
-          // the caret is in (or right after) the decimal part when it is past the separator of the typed text
-          const sep = Math.max(raw.lastIndexOf(','), raw.lastIndexOf('.'));
-          caret.current = r.fraction && sep >= 0 && at > sep ? Number.POSITIVE_INFINITY : r.caretDigits;
-          caretAfterMinus.current = raw.slice(0, at).includes('-');
-          const draft = integerDraftAfter(r);
-          setFraction(draft.fraction);
-          setBlank(draft.blank);
-          if (r.value !== value) onValueChange(r.value);
-        }}
-        onFocus={(e) => {
-          tainted.current = false;
-          onFocus?.(e);
-        }}
-        onBlur={(e) => {
-          const decimal = /[1-9]/.test(fraction);
-          // a decimal part with a non-zero digit is dropped: the merchant sees it happen, and reads it (J07r-4); a field saved
-          // on blur refuses the whole entry instead and says so itself (J08r-1)
-          if (decimal) {
-            setRefused((n) => n + 1);
-            if (!onRefusedEntry) notice.say(notice.texts?.decimalDropped(fraction));
-          }
-          setFraction('');
-          setBlank(false);
-          if (value === '-') onValueChange('');
-          if (onRefusedEntry && (tainted.current || decimal)) {
+    <div>
+      <div className="relative" dir="ltr">
+        <Input
+          ref={(el) => {
+            inner.current = el;
+            if (typeof ref === 'function') ref(el);
+            else if (ref) ref.current = el;
+          }}
+          inputMode={allowNegative ? 'text' : 'numeric'}
+          autoComplete="off"
+          value={shown}
+          onChange={(e) => {
+            const raw = e.target.value;
+            const at = e.target.selectionStart ?? raw.length;
+            // journey J06r-2 (18/11): where negatives are not allowed the « - » is refused like a letter (red flash, the value is
+            // unchanged — it used to be kept as an invalid value: the caret froze before it and a closing count « -1 000 » was read
+            // as +1 000); where they are allowed it is typed like a digit. A lone « - » is never a number (`integerOf` ⇒ null)
+            const r = parseIntegerInput(raw, { allowNegative, maxDigits, caret: at });
+            if (!r.ok) {
+              // refused keystroke: the value stays, the caret goes back where it was, the field flashes
+              back.current = Math.max(0, at - (raw.length - shown.length));
+              setRefused((n) => n + 1);
+              notice.say(notice.texts?.refused(r.reason, { maxDigits }));
+              tainted.current = true;
+              return;
+            }
             notice.clear();
-            onRefusedEntry();
-          }
-          tainted.current = false;
-          onBlur?.(e);
-        }}
-        data-refused={flash || undefined}
-        {...rest}
-        aria-invalid={(!allowNegative && value.startsWith('-')) || rest['aria-invalid'] || undefined}
-        className={cn('tabular-nums transition-shadow', suffix && 'pe-12', (flash || (!allowNegative && value.startsWith('-'))) && 'ring-2 ring-accent-alert', className)}
-      />
-      {suffix ? (
-        <span aria-hidden className="pointer-events-none absolute inset-y-0 end-3 flex items-center ts-label-micro text-text-muted">
-          {suffix}
-        </span>
-      ) : null}
-      {notice.element}
+            // an erasing key or typing over a selection is the merchant correcting what was refused
+            if (integerEntryErased(shown, raw)) tainted.current = false;
+            // the caret is in (or right after) the decimal part when it is past the separator of the typed text
+            const sep = Math.max(raw.lastIndexOf(','), raw.lastIndexOf('.'));
+            caret.current = r.fraction && sep >= 0 && at > sep ? Number.POSITIVE_INFINITY : r.caretDigits;
+            caretAfterMinus.current = raw.slice(0, at).includes('-');
+            const draft = integerDraftAfter(r);
+            setFraction(draft.fraction);
+            setBlank(draft.blank);
+            if (r.value !== value) onValueChange(r.value);
+          }}
+          onFocus={(e) => {
+            tainted.current = false;
+            onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            const decimal = /[1-9]/.test(fraction);
+            // a decimal part with a non-zero digit is dropped: the merchant sees it happen, and reads it (J07r-4); a field saved
+            // on blur refuses the whole entry instead and says so itself (J08r-1)
+            if (decimal) {
+              setRefused((n) => n + 1);
+              if (!onRefusedEntry) notice.say(notice.texts?.decimalDropped(fraction));
+            }
+            setFraction('');
+            setBlank(false);
+            if (value === '-') onValueChange('');
+            if (onRefusedEntry && (tainted.current || decimal)) {
+              notice.clear();
+              onRefusedEntry();
+            }
+            tainted.current = false;
+            onBlur?.(e);
+          }}
+          data-refused={flash || undefined}
+          {...rest}
+          aria-invalid={(!allowNegative && value.startsWith('-')) || rest['aria-invalid'] || undefined}
+          className={cn('tabular-nums transition-shadow', suffix && 'pe-12', (flash || (!allowNegative && value.startsWith('-'))) && 'ring-2 ring-accent-alert', className)}
+        />
+        {suffix ? (
+          <span aria-hidden className="pointer-events-none absolute inset-y-0 end-3 flex items-center ts-label-micro text-text-muted">
+            {suffix}
+          </span>
+        ) : null}
+      </div>
+      {notice.flowElement}
     </div>
   );
 });

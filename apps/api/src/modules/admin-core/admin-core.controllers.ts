@@ -789,7 +789,7 @@ export class AdminCmsController {
   @HttpCode(200)
   @RequirePlatformRole('admin.cms.write')
   publish(@Param('id') id: string, @Body() dto: PublishCmsDto, @Admin() a: AdminActor) {
-    return this.cms.publish(id, dto.fallbackToFr, a);
+    return this.cms.publish(id, dto.fallbackToFr, dto.reason, a);
   }
 
   @Post(':id/schedule')

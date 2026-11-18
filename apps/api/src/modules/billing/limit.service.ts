@@ -11,6 +11,7 @@ import type { AgentUpdatedEvent, PausedResourceView, PlanUsageView } from '@djab
 import type { Plan, Tx } from '@djaber/db';
 import { OutboxService } from '../../core/outbox/outbox.service';
 import { NotificationProducer } from '../notifications/notification.producer';
+import { CONSUMPTION_ACTIONS } from '../credits/consumption';
 
 const SLOT = ['active', 'pending_review', 'needs_reconnect'] as const;
 type Limits = Pick<Plan, 'maxPages' | 'maxAgents' | 'maxMembers'>;
@@ -64,7 +65,7 @@ export class LimitService {
       tx.product.count({ where: { deletedAt: null } }),
       tx.conversation.count({ where: { lastCustomerMessageAt: { gte: periodStart } } }),
       tx.membership.count({ where: { readOnly: false } }),
-      tx.creditLedger.aggregate({ where: { kind: 'debit', bucket: 'plan', periodStart }, _sum: { credits: true } }),
+      tx.creditLedger.aggregate({ where: { kind: 'debit', action: { in: CONSUMPTION_ACTIONS }, bucket: 'plan', periodStart }, _sum: { credits: true } }),
     ]);
     return { pages, agents, products, conversationsThisMonth, members, creditsUsed: Math.abs(debits._sum.credits ?? 0) };
   }

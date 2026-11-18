@@ -101,6 +101,11 @@ export default function AdminAuditPage() {
               <h2 className="text-[15px] font-medium">
                 {t('admin.audit.detail.title', { action: d.action.toUpperCase(), target: d.target.label, date: f.shortTime(d.at), actor: d.actor.name, ip: d.context.ip ?? '—', session: d.context.twoFactor ? t('admin.audit.detail.session2fa') : t('admin.audit.detail.session') })}
               </h2>
+              {/* journey J13r-10: the detail shows the reason too (it was only in the list) */}
+              <p className="text-[13px]" data-testid="audit-detail-reason">
+                <span className="ts-label-micro uppercase text-text-muted">{t('admin.audit.col.reason')} </span>
+                {d.reason ?? '—'}
+              </p>
               <CodeDiff beforeLabel={t('admin.audit.detail.before')} afterLabel={t('admin.audit.detail.after')} empty={t('admin.audit.detail.noDiff')} lines={diffLines(d.before, d.after)} />
               {d.context.impersonationSessionId ? (
                 <Button size="sm" variant="ghost" className="w-fit" onClick={() => list.set({ filters: { impersonationSessionId: d.context.impersonationSessionId! }, sheet: null })} data-testid="audit-session-link">

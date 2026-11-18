@@ -5,9 +5,9 @@
 // Admin sees them greyed with the reason); pay invoice `billing.write`. Cycle (`?cycle=`), the change dialog
 // (`?change=<planSlug>`) and the invoice filters / page live in the URL.
 import { formatDate, formatNumber, type AppLocale } from '@djaber/shared';
-import { Banner, Button, CreditsPill, PlanCard, PlanCardsSkeleton, SectionLabel, SegmentedControl, Skeleton, UsageTile, type CreditsLevel } from '@djaber/ui';
+import { Banner, Button, CreditsPill, PlanCard, PlanCardsSkeleton, SectionLabel, SegmentedControl, Skeleton, toast, UsageTile, type CreditsLevel } from '@djaber/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { QueryError } from '@/components/global-states';
 import { useCredits } from '@/features/credits/api';
 import { levelOf } from '@/features/credits/logic';
@@ -20,7 +20,7 @@ import { usePlans, useSubscription } from './api';
 import { CancelDialog, ChangePlanDialog, UndoCancelButton } from './billing-dialogs';
 import type { Cycle, Plan, Subscription } from './contracts';
 import { InvoicesCard, usePayInvoice } from './invoices';
-import { bestYearlyDiscount, cyclePrice, daysLeft, defaultCycle, isFreePlan, isPaidSubscription, monthlyEquivalent, parseCycle, planBanner, planCta, type PlanCta } from './logic';
+import { bestYearlyDiscount, cyclePrice, daysLeft, deepLinkAction, defaultCycle, isFreePlan, isPaidSubscription, monthlyEquivalent, parseCycle, planBanner, planCta, type PlanCta } from './logic';
 import { RecentLedger } from './recent-ledger';
 
 export function BillingPage() {
@@ -91,7 +91,21 @@ function BillingBody({ sub }: { sub: Subscription }) {
     },
     [params, pathname, router],
   );
-  const target = useMemo(() => (changeSlug ? (plans.data ?? []).find((p) => p.slug === changeSlug) ?? null : null), [changeSlug, plans.data]);
+  const linked = useMemo(() => (changeSlug ? (plans.data ?? []).find((p) => p.slug === changeSlug) ?? null : null), [changeSlug, plans.data]);
+  // journey J12r-1: the deep link follows the card — a greyed card opens nothing and says its reason; the free card of a paid
+  // plan opens the cancel dialog; only a real change opens the change-plan dialog (it opened « Payer 0 DA » for the free plan)
+  const linkedCta = linked ? planCta(linked, sub, cycle) : null;
+  const linkAction = linkedCta ? deepLinkAction(linkedCta) : null;
+  const target = linkAction === 'dialog' ? linked : null;
+  const handledLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (!changeSlug) handledLink.current = null;
+    if (!linked || !linkedCta || linkAction === 'dialog' || handledLink.current === changeSlug) return;
+    handledLink.current = changeSlug;
+    setParams({ change: null });
+    if (linkAction === 'cancel') setCancelOpen(true);
+    else toast(ctaReason(t, linkedCta, linked, sub, locale));
+  }, [changeSlug, linked, linkedCta, linkAction, setParams, sub, t, locale]);
 
   const banner = planBanner({
     status: sub.status,
@@ -227,6 +241,16 @@ function BillingBody({ sub }: { sub: Subscription }) {
   );
 }
 
+/** Why a card offers no change (its greyed button, and a `?change=` deep link to it — journey J12r-1). */
+function ctaReason(t: TFunction, cta: PlanCta, plan: Plan, sub: Subscription, locale: AppLocale): string {
+  const free = isFreePlan(plan);
+  if (cta.kind === 'renew_later') return t('billing.plan.renewLater', { date: formatDate(cta.from, locale) });
+  if (cta.kind === 'resume') return t('billing.plan.note.cancelling', { date: formatDate(sub.currentPeriodEnd, locale) });
+  if (sub.status === 'trial' && free) return t('billing.plan.freeAfterTrial', { date: formatDate(sub.trialEndsAt ?? sub.currentPeriodEnd, locale) });
+  if (sub.cancelAtPeriodEnd && free) return t('billing.plan.note.cancelling', { date: formatDate(sub.currentPeriodEnd, locale) });
+  return t('billing.plan.isCurrent');
+}
+
 /* ---------- one plan card ---------- */
 function PlanCardFor({ plan, sub, cycle, owner, onChange, onCancel }: { plan: Plan; sub: Subscription; cycle: Cycle; owner: boolean; onChange: () => void; onCancel: () => void }) {
   const t = useT();
@@ -238,7 +262,7 @@ function PlanCardFor({ plan, sub, cycle, owner, onChange, onCancel }: { plan: Pl
   const unit = free ? t('billing.plan.unit.monthly') : cycle === 'yearly' ? t('billing.plan.unit.yearly') : t('billing.plan.unit.monthly');
   const trialEnd = formatDate(sub.trialEndsAt ?? sub.currentPeriodEnd, locale);
   // journey J10-4: the greyed button of the free card says why (12 rule 7)
-  const currentReason = cta.kind !== 'current' ? undefined : sub.status === 'trial' && free ? t('billing.plan.freeAfterTrial', { date: trialEnd }) : sub.cancelAtPeriodEnd && free ? t('billing.plan.note.cancelling', { date: formatDate(sub.currentPeriodEnd, locale) }) : t('billing.plan.isCurrent');
+  const currentReason = cta.kind !== 'current' ? undefined : ctaReason(t, cta, plan, sub, locale);
   const note =
     free && !current && sub.status === 'trial'
       ? t('billing.plan.freeAfterTrial', { date: trialEnd })

@@ -3,7 +3,7 @@
 import type { Tone } from '@djaber/ui';
 import type { ModerationDetail, Product } from '../contracts';
 
-export type ModerationKind = 'none' | 'approved' | 'pending' | 'rejected' | 'appealed';
+export type ModerationKind = 'none' | 'approved' | 'pending' | 'changes_requested' | 'rejected' | 'appealed';
 export type ModerationView = {
   kind: ModerationKind;
   submittedAt: string | null;
@@ -28,6 +28,8 @@ const KINDS: Record<string, ModerationKind> = { approved: 'approved', pending: '
 export function moderationView(p: Pick<Product, 'moderation' | 'moderationDetail'>, o: { appealSent?: boolean; now?: number } = {}): ModerationView {
   const d = p.moderationDetail ?? null;
   let kind = KINDS[d?.status ?? p.moderation?.status ?? ''] ?? 'none';
+  // journey J13r-2: still pending, but the moderator asked for changes — the merchant has to act, not wait
+  if (kind === 'pending' && (d?.changesRequested || p.moderation?.changesRequested)) kind = 'changes_requested';
   if (kind === 'rejected' && (o.appealSent || d?.appeal?.status === 'used')) kind = 'appealed';
   const deadline = d?.appeal?.deadlineAt ? Date.parse(d.appeal.deadlineAt) : null;
   const open = d?.appeal ? d.appeal.status === 'available' && (deadline === null || Number.isNaN(deadline) || deadline > (o.now ?? Date.now())) : true;

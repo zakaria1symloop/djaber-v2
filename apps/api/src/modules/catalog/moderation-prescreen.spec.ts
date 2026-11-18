@@ -22,6 +22,21 @@ describe('moderation pre-screen', () => {
     expect(svc.score({ ...base, description: 'pas une ARNAQUE' }, rules, null).aiFlags[0]).toMatchObject({ code: 'blocked_word', field: 'description' });
   });
 
+  it('journey J13r-4: counterfeit / health words match whole words — « تقليدية » (traditional), the « (copie) » of Dupliquer and « manucure » are no claim', () => {
+    const codes = (p: Partial<typeof base> & Record<string, unknown>) => svc.score({ ...base, ...p }, rules, null).aiFlags.map((f) => f.code);
+    expect(codes({ name: 'قندورة قسنطينية مطرزة', description: 'قندورة تقليدية مطرزة باليد' })).not.toContain('counterfeit_wording');
+    expect(codes({ name: 'حلويات تقليدية علبة' })).not.toContain('counterfeit_wording');
+    expect(codes({ name: 'لباس تقليدي', description: 'بالطريقة التقليدية' })).not.toContain('counterfeit_wording');
+    expect(codes({ name: 'Robe kabyle brodée (copie)' })).not.toContain('counterfeit_wording');
+    expect(codes({ name: 'Robe kabyle brodée (copy 2)' })).not.toContain('counterfeit_wording');
+    expect(codes({ name: 'Photocopieuse A4' })).not.toContain('counterfeit_wording');
+    expect(codes({ name: 'Kit manucure' })).not.toContain('health_claim');
+    // the real claims still flag
+    expect(codes({ name: 'ساعة تقليد ممتاز' })).toContain('counterfeit_wording');
+    expect(codes({ name: 'Sac copie Louis Vuitton' })).toContain('counterfeit_wording');
+    expect(codes({ description: 'Crème qui soigne l’acné' })).toContain('health_claim');
+  });
+
   it('PV1: the keyword lists also scan variant names, search keywords and image captions (held for review)', () => {
     const variant = svc.score({ ...base, variantNames: ['Rouge', 'Modèle Arnaque'] }, rules, null);
     expect(variant.aiFlags[0]).toMatchObject({ code: 'blocked_word', message: 'arnaque', field: 'variants' });

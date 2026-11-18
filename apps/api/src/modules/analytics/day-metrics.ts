@@ -271,7 +271,7 @@ export async function computeDays(s: ComputeScope): Promise<Map<string, DayMetri
       GROUP BY 1,2`),
     q<{ d: string; action: string; ag: string | null; ch: string | null; c: number; credits: bigint }>(Prisma.sql`
       SELECT ${D('l."createdAt"')} d, l."action"::text action, l."agentId" ag, l."channelId" ch, count(*)::int c, coalesce(-sum(l."credits"),0)::bigint credits
-      FROM "CreditLedger" l WHERE l."workspaceId" = ${ws} AND l."kind" = 'debit' AND l."createdAt" >= ${gte} AND l."createdAt" < ${lt} ${chL}
+      FROM "CreditLedger" l WHERE l."workspaceId" = ${ws} AND l."kind" = 'debit' AND l."action" IN ('text_reply', 'image_recognition', 'voice_transcription') AND l."createdAt" >= ${gte} AND l."createdAt" < ${lt} ${chL}
       GROUP BY 1,2,3,4`),
     q<{ d: string; provider: string; acc: string | null; c: number; fees: bigint; customer: bigint }>(Prisma.sql`
       SELECT ${D('s."createdAt"')} d, s."provider"::text provider, s."courierAccountId" acc, count(*)::int c,

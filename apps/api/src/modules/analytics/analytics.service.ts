@@ -37,6 +37,7 @@ import { deadStock } from '../gds/reports/stock-queries';
 import { DailyStatsService } from './daily-stats.service';
 import { percentile, percentileAbove, sumDays, type DayMetrics, type HistName } from './day-metrics';
 import { addDays, deltaPct, eachDay, pct, resolveRange, round1, type DayRange } from './range';
+import { CONSUMPTION_ACTIONS } from '../credits/consumption';
 
 const DAY = 86_400_000;
 type Ctx = { hasChannels: boolean; range: DayRange; cur: DayMetrics; prev: DayMetrics | null; byDay: Map<string, DayMetrics>; prevByDay: Map<string, DayMetrics> | null; workspaceId: string; channelId: string | null; rangeView: AnalyticsRange; compare: boolean };
@@ -340,7 +341,7 @@ export class AnalyticsService {
     const { cur, prev } = ctx;
     const [credits, week, models] = await Promise.all([
       this.creditsHint(cur),
-      prisma.creditLedger.aggregate({ where: { kind: 'debit', createdAt: { gte: new Date(Date.now() - 7 * DAY) } }, _sum: { credits: true } }),
+      prisma.creditLedger.aggregate({ where: { kind: 'debit', action: { in: CONSUMPTION_ACTIONS }, createdAt: { gte: new Date(Date.now() - 7 * DAY) } }, _sum: { credits: true } }),
       Object.keys(cur.models).length
         ? TenantContext.runSystem(() => prisma.aiModel.findMany({ where: { id: { in: Object.keys(cur.models) } }, select: { id: true, displayName: true, provider: { select: { displayName: true } } } }))
         : Promise.resolve([]),

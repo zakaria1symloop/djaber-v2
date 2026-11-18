@@ -13,7 +13,7 @@ import { adminWrite, useAdminGet, useAdminInvalidate, useAdminJobToast } from '.
 import { AdminPill, useFormats } from '../ui';
 import { AnnouncementPreviewDialog, announcementTextOf } from './announcement-preview';
 import { announcementLinkOptions, EXTERNAL_LINK } from './link-options';
-import { UnpublishCmsDialog } from '../reason-confirm';
+import { ReasonConfirmDialog, UnpublishCmsDialog, type ReasonConfirm } from '../reason-confirm';
 
 type Loc = 'fr' | 'ar' | 'en';
 const LOCALES: Loc[] = ['fr', 'ar', 'en'];
@@ -48,6 +48,8 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
   const [versions, setVersions] = useState(false);
   const [preview, setPreview] = useState(false);
   const [unpublishing, setUnpublishing] = useState(false);
+  // journey J13r (J13-4): « Publier » asks a reason (logged); a scheduled publication keeps the direct call
+  const [publishing, setPublishing] = useState<ReasonConfirm | null>(null);
   // tester log 26/10 UX-036: « Lien » = a page picked by name, or « Adresse externe » for an https:// address
   const linkOptions = useMemo(() => [...announcementLinkOptions(t), { value: EXTERNAL_LINK, label: t('admin.cms.link.external'), hint: 'https://…' }], [t]);
   const [external, setExternal] = useState(() => !!base.link && !linkOptions.some((o) => o.value === base.link));
@@ -83,12 +85,32 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
     }
   };
   const future = d.startsAt && new Date(fromLocal(d.startsAt)!).getTime() > Date.now();
-  const publish = () =>
-    act(async () => {
-      if (dirty) await save();
-      if (future) await adminWrite(`/admin/cms/${entry.id}/schedule`, 'POST', { startsAt: fromLocal(d.startsAt), endsAt: fromLocal(d.endsAt), fallbackToFr: fallback });
-      else await adminWrite(`/admin/cms/${entry.id}/publish`, 'POST', { fallbackToFr: fallback });
-    }, future ? t('admin.cms.scheduled', { date: f.dateTime(fromLocal(d.startsAt)) }) : t('admin.cms.publishedToast'));
+  const publish = () => {
+    if (future)
+      return act(async () => {
+        if (dirty) await save();
+        await adminWrite(`/admin/cms/${entry.id}/schedule`, 'POST', { startsAt: fromLocal(d.startsAt), endsAt: fromLocal(d.endsAt), fallbackToFr: fallback });
+      }, t('admin.cms.scheduled', { date: f.dateTime(fromLocal(d.startsAt)) }));
+    setError(null);
+    setMissing(null);
+    setPublishing({
+      title: t('admin.cms.publishConfirm.title', { key: entry.key }),
+      context: t('admin.cms.publishConfirm.description'),
+      submitLabel: t('admin.cms.editor.publish'),
+      run: async (reason) => {
+        if (dirty) await save();
+        await adminWrite(`/admin/cms/${entry.id}/publish`, 'POST', { fallbackToFr: fallback, reason });
+      },
+      // the missing locales are shown in the editor with « replier sur FR »
+      onError: (e) => {
+        if (!(e instanceof ApiError && e.code === 'CMS_LOCALE_MISSING')) return false;
+        setMissing(String(e.body.params.locales ?? '').toUpperCase());
+        return true;
+      },
+      done: t('admin.cms.publishedToast'),
+      invalidate: '/admin/cms',
+    });
+  };
   const openPreview = async () => {
     try {
       const r = await api<CmsPreviewLinkDto>(`/admin/cms/${entry.id}/preview-link`);
@@ -232,6 +254,7 @@ export function CmsEditor({ entry, canWrite, onClose }: { entry: CmsEntryAdminDt
       </div>
       {guard}
       <UnpublishCmsDialog entry={unpublishing ? entry : null} onClose={() => setUnpublishing(false)} />
+      <ReasonConfirmDialog req={publishing} onClose={() => setPublishing(null)} testId="dlg-cms-publish" />
       <VersionsDialog id={entry.id} open={versions} onClose={() => setVersions(false)} />
       {/* UX-035: the draft as the clients will see it (banner, notification, public site) */}
       {preview ? <AnnouncementPreviewDialog open onClose={() => setPreview(false)} text={announcementTextOf(d.locales, fallback)} channels={d.channels} link={d.link.trim() || null} /> : null}

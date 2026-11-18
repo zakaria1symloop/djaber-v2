@@ -26,6 +26,25 @@ export function ModerationBanner({ product, dirty, canWrite }: { product: Produc
   if (!status || status === 'not_required' || status === 'approved') return null;
 
   const submittedAt = detail?.submittedAt ? formatDateTime(detail.submittedAt, locale) : null;
+  // journey J13r-2: a review that asked for changes says what to change — the form is where the merchant does it
+  if (status === 'pending' && (detail?.changesRequested || product.moderation?.changesRequested)) {
+    const changeFields = [...rejectedFieldSet(detail?.rejectedFields)];
+    return (
+      <Banner tone="warning">
+        <div data-testid="moderation-banner" data-status="changes_requested">
+          <div className="font-medium">{t('products.moderation.changes.title')}</div>
+          {detail?.merchantMessage ? (
+            <p className="mt-1 text-text-secondary">
+              <span className="text-text-muted">{t('products.moderation.moderatorMessage')} </span>
+              {detail.merchantMessage}
+            </p>
+          ) : null}
+          {changeFields.length ? <p className="mt-1 ts-label-meta text-text-muted">{t('products.moderation.changes.fields', { fields: changeFields.map((f) => t(`products.form.moderation.field.${f}`)).join(', ') })}</p> : null}
+          <p className="mt-1 ts-label-meta text-text-muted">{t('products.moderation.changes.after')}</p>
+        </div>
+      </Banner>
+    );
+  }
   if (status === 'pending') {
     return (
       <Banner tone="info">
@@ -66,7 +85,12 @@ export function ModerationBanner({ product, dirty, canWrite }: { product: Produc
       <div className="flex flex-wrap items-center gap-3" data-testid="moderation-banner" data-status="rejected">
         <div className="min-w-0 flex-1">
           <div className="font-medium">{t('products.form.moderation.rejected')}</div>
-          {detail?.merchantMessage ? <p className="mt-1 text-text-secondary">{detail.merchantMessage}</p> : null}
+          {detail?.merchantMessage ? (
+            <p className="mt-1 text-text-secondary">
+              <span className="text-text-muted">{t('products.moderation.moderatorMessage')} </span>
+              {detail.merchantMessage}
+            </p>
+          ) : null}
           {fields.length ? <p className="mt-1 ts-label-meta text-text-muted">{t('products.form.moderation.fields', { fields: fields.map(fieldLabel).join(', ') })}</p> : null}
           {error ? (
             <p role="alert" className="mt-1 text-accent-alert">

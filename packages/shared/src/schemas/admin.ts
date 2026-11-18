@@ -684,7 +684,8 @@ export type AdminPatchCmsInput = z.infer<typeof AdminPatchCmsSchema>;
 export const AdminPutCmsLocaleSchema = cmsLocaleInput;
 export type AdminPutCmsLocaleInput = z.infer<typeof AdminPutCmsLocaleSchema>;
 /** `POST /admin/cms/:id/publish { fallbackToFr? }` — `422 CMS_LOCALE_MISSING {locales}` unless every locale has content or `fallbackToFr`. */
-export const AdminPublishCmsSchema = z.object({ fallbackToFr: z.boolean().optional() }).strict();
+/** journey J13r (J13-4): `reason` ≥ 10 chars, required by the service (422 ADMIN_REASON_REQUIRED after the locale check). */
+export const AdminPublishCmsSchema = z.object({ fallbackToFr: z.boolean().optional(), reason: reason.optional() }).strict();
 /** `POST /admin/cms/:id/schedule { startsAt, endsAt?, fallbackToFr? }` — status `scheduled`, published by `sched-cms-publish` at `startsAt`. */
 export const AdminScheduleCmsSchema = z.object({ startsAt: instant, endsAt: instant.nullable().optional(), fallbackToFr: z.boolean().optional() }).strict();
 /** `POST /admin/cms/:id/translate { to? }` → 202 `{ jobId }` (AI translation from FR, worker job `cms-translate`; locales written as drafts). */
@@ -798,7 +799,8 @@ export type AdminViewerConversationRowDto = { id: string; workspace: { id: strin
 export type AdminViewerMessageDto = { id: string; at: string; direction: 'in' | 'out'; author: 'customer' | 'ai' | 'human' | 'system'; authorLabel: string; type: string; text: string | null; attachments: { type: string; url: string | null }[] };
 export type AdminViewerConversationDto = AdminViewerConversationRowDto & { agent: { id: string; name: string } | null; masked: boolean; messages: AdminViewerMessageDto[] };
 export const AdminViewerProductsQuerySchema = z.object({ ...paging, workspaceId: id, moderationStatus: csv(z.string().max(30)).optional(), q }).strict();
-export type AdminViewerProductRowDto = { id: string; name: string; sku: string | null; price: number; stock: number; status: string; moderationStatus: string; aiStatus: 'proposed' | 'excluded' | 'stale' | null; imageUrl: string | null; workspace: { id: string; name: string } };
+/** journey J13r-8: `priceRange` = the active variants' prices (shown instead of the hidden base price), null without variants */
+export type AdminViewerProductRowDto = { id: string; name: string; sku: string | null; price: number; priceRange: { min: number; max: number } | null; stock: number; status: string; moderationStatus: string; aiStatus: 'proposed' | 'excluded' | 'stale' | null; imageUrl: string | null; workspace: { id: string; name: string } };
 export type AdminViewerProductDto = AdminViewerProductRowDto & { description: string | null; category: string | null; images: { url: string; flag: string | null }[]; variants: { id: string; name: string; sku: string | null; price: number | null; stock: number }[]; moderationHistory: { at: string; status: string; decision: string | null; note: string | null }[] };
 
 /** `POST /admin/impersonation/sessions` (`admin.workspaces.impersonate`: super_admin, support). No `mode` field exists (read-only only). */

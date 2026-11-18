@@ -1,7 +1,7 @@
 // 03-events-and-jobs §5.1 / 03 §15 — per `NotificationType`: its family (filter chips of NTF-01) and its web deep link
 // (the mobile link is `djaber://` + the same path). Titles and bodies are i18n keys rendered in the reader's locale.
 import { Logger } from '@nestjs/common';
-import { ERROR_MESSAGES, getMessages, handoffReasonOf, type AppLocale, type NotificationGroup } from '@djaber/shared';
+import { ERROR_MESSAGES, formatNumber, getMessages, handoffReasonOf, type AppLocale, type NotificationGroup } from '@djaber/shared';
 import type { NotificationType } from '@djaber/db';
 
 /** `stock_low` → `stock.low`, `conversation_needs_human_message` → `conversation.needs_human_message` (00-build-order §0). */
@@ -225,6 +225,9 @@ export const NOTIFICATION_VARIANTS: Partial<Record<NotificationType, { suffix: s
     { suffix: 'resolved', params: ['status'], when: (d) => d.status === 'resolved', example: { status: 'resolved' } },
     { suffix: 'pending', params: ['status'], when: (d) => d.status === 'pending_customer', example: { status: 'pending_customer' } },
   ],
+  // journey J13r-2 / J13r-7: the moderator's message, labelled in the reader's language (the free text stays as written)
+  product_changes_requested: [{ suffix: 'message', params: ['name', 'message'], when: (d) => typeof d.message === 'string' && d.message.trim() !== '', example: { name: 'Robe', message: 'Ajoutez une photo.' } }],
+  product_rejected: [{ suffix: 'message', params: ['name', 'message'], when: (d) => typeof d.message === 'string' && d.message.trim() !== '', example: { name: 'Robe', message: 'Doublon.' } }],
   // journey J10-2: the order itself was marked returned (the return is done) — not a parcel on its way back
   shipment_returned: [{ suffix: 'done', params: ['number'], when: (d) => d.returned === true, example: { returned: true, number: 'CMD-1027' } }],
 };
@@ -290,6 +293,45 @@ const display = (type: string, key: string, value: string | number, messages: Re
 };
 
 /**
+ * Journey J13r-11: ICU plurals in the server-rendered texts (« سحب Djaber 10 أرصدة », « 1 crédit ajouté ») —
+ * `{credits, plural, one {…} few {…} other {…}}` picks its branch with the reader's plural rules (`=N` first), `#` is the
+ * number as displayed. A value that is not a number keeps the `other` branch.
+ */
+export const expandPlurals = (template: string, data: Data, locale: AppLocale): string => {
+  let out = '';
+  let i = 0;
+  const head = /\{(\w+), plural,/g;
+  for (let m = head.exec(template); m; m = head.exec(template)) {
+    let depth = 0;
+    let j = m.index;
+    for (; j < template.length; j++) {
+      if (template[j] === '{') depth++;
+      else if (template[j] === '}' && --depth === 0) break;
+    }
+    const body = template.slice(m.index + m[0].length, j);
+    const branches = new Map<string, string>();
+    const br = /\s*(=\d+|zero|one|two|few|many|other)\s*\{/g;
+    for (let b = br.exec(body); b; b = br.exec(body)) {
+      let d = 0;
+      let k = b.index + b[0].length - 1;
+      for (; k < body.length; k++) {
+        if (body[k] === '{') d++;
+        else if (body[k] === '}' && --d === 0) break;
+      }
+      branches.set(b[1]!, body.slice(b.index + b[0].length, k));
+      br.lastIndex = k + 1;
+    }
+    const raw = valueOf(data, m[1]!);
+    const n = typeof raw === 'number' ? raw : typeof raw === 'string' && /^-?\d+$/.test(raw) ? Number(raw) : NaN;
+    const pick = Number.isNaN(n) ? branches.get('other') : (branches.get(`=${n}`) ?? branches.get(new Intl.PluralRules(locale).select(n)) ?? branches.get('other'));
+    out += template.slice(i, m.index) + (pick ?? '').replace(/#/g, Number.isNaN(n) ? String(raw ?? '') : formatNumber(n));
+    i = j + 1;
+    head.lastIndex = j + 1;
+  }
+  return out + template.slice(i);
+};
+
+/**
  * Title / body in the reader's locale. A type without a body key renders an empty body. A placeholder never reaches the
  * reader as `{name}`: a parameter missing at runtime renders as an empty string and is logged with the type.
  */
@@ -300,7 +342,7 @@ export const renderNotification = (type: string, data: Data, locale: AppLocale, 
   const one = (suffix: 'title' | 'body') => {
     const template = (variant ? messages[`${base}.${variant.suffix}.${suffix}`] : undefined) ?? messages[`${base}.${suffix}`];
     if (!template) return suffix === 'title' ? notificationSlug(type) : '';
-    return template
+    return expandPlurals(template, data, locale)
       .replace(/\{(\w+)[^{}]*\}/g, (_m, key: string) => {
         const v = valueOf(data, key);
         if (v === undefined) {

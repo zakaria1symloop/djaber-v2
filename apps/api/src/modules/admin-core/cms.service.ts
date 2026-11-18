@@ -214,11 +214,13 @@ export class CmsAdminService implements OnModuleInit {
     return version;
   }
 
-  async publish(id: string, fallbackToFr: boolean | undefined, actor: AdminActor) {
+  /** journey J13r (J13-4): a publication reaches every merchant / visitor — it carries a reason (≥ 10 chars) like an unpublish. */
+  async publish(id: string, fallbackToFr: boolean | undefined, reasonIn: string | undefined, actor: AdminActor) {
     const e = await this.full(id);
     const missing = this.checkLocales(e, fallbackToFr);
+    const reason = requireReason(reasonIn);
     const version = await prisma.$transaction((db) => this.doPublish(db as Tx, e, missing, actor.userId), { timeout: 60_000 });
-    await this.log(actor, 'cms.publish', id, { status: e.status, version: e.currentVersion }, { status: 'published', version, fallbackLocales: missing });
+    await this.log(actor, 'cms.publish', id, { status: e.status, version: e.currentVersion }, { status: 'published', version, fallbackLocales: missing }, reason);
     return this.get(id, actor);
   }
 

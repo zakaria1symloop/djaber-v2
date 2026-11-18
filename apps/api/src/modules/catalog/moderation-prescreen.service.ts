@@ -164,6 +164,11 @@ export const DEFAULT_SENSITIVE_KEYWORDS = [
   'إلكترونيات', 'الكترونيات', 'هواتف', 'صحة', 'مكملات', 'أطفال', 'اطفال', 'رضع', 'ألعاب', 'تجميل', 'مستحضرات',
 ];
 const COUNTERFEIT_WORDING = ['copie', 'réplique', 'replica', 'first copy', 'master copy', 'high copy', 'qualité aaa', 'aaa+', 'aaa', 'contrefaçon', 'تقليد', 'كوبي', 'نسخة طبق الأصل'];
+/** « Robe kabyle (copie) » — the suffix of « Dupliquer » (`products.duplicate.copyName`, fr / ar / en), numbered or not. */
+export const stripCopySuffix = (folded: string) => folded.replace(/\s*\((?:copie|copy|نسخه)(?:\s*\d+)?\)\s*$/u, '');
+/** « تقليدي / تقليدية / تقليديا… » (traditional) is a different word from « تقليد » (imitation): those forms are left out. */
+const TRADITIONAL = new RegExp(`(^|[^\\p{L}\\p{N}])${AR_PREFIX}تقليدي\\p{L}*`, 'gu');
+export const notCounterfeit = (folded: string) => folded.replace(TRADITIONAL, '$1 ');
 const HEALTH_CLAIMS = ['guérit', 'guérison', 'miracle', 'perte de poids garantie', 'maigrir vite', 'soigne', 'cure', 'traitement naturel', 'يعالج', 'علاج نهائي', 'شفاء'];
 const WARRANTY_WORDS = ['garantie', 'warranty', 'ضمان'];
 const ELECTRONICS = ['électronique', 'electronics', 'téléphone', 'smartphone', 'informatique', 'high-tech', 'إلكترونيات', 'الكترونيات', 'هواتف'];
@@ -256,10 +261,16 @@ export class ModerationPrescreenService {
     if (prohibited) add('prohibited_category', prohibited, containsAny(cat, rules.prohibited) ? 'categoryId' : where(rules.prohibited));
     const word = containsAny(text, rules.words);
     if (word) add('blocked_word', word, where(rules.words));
-    const counterfeit = containsAny(text, COUNTERFEIT_WORDING);
-    if (counterfeit) add('counterfeit_wording', counterfeit, where(COUNTERFEIT_WORDING));
-    const health = containsAny(text, HEALTH_CLAIMS);
-    if (health) add('health_claim', health, where(HEALTH_CLAIMS));
+    // journey J13r-4: whole words only (« تقليد » imitation is not « تقليدية » traditional, « cure » is not « manucure »), on
+    // the texts without the « (copie) » the app's own « Dupliquer » writes and without the « traditional » forms
+    const claimTexts = { name: notCounterfeit(stripCopySuffix(name)), desc: notCounterfeit(desc), extra: extra.map(([k, t]) => [k, notCounterfeit(t)] as [string, string]) };
+    const claimText = [claimTexts.name, claimTexts.desc, ...claimTexts.extra.map(([, t]) => t)].join(' ');
+    const whereWord = (needles: readonly string[]) =>
+      containsWord(claimTexts.name, needles) ? 'name' : containsWord(claimTexts.desc, needles) ? 'description' : (claimTexts.extra.find(([, t]) => containsWord(t, needles))?.[0] ?? 'description');
+    const counterfeit = findWord(claimText, COUNTERFEIT_WORDING);
+    if (counterfeit) add('counterfeit_wording', counterfeit.matched, whereWord(COUNTERFEIT_WORDING));
+    const health = findWord(claimText, HEALTH_CLAIMS);
+    if (health) add('health_claim', health.matched, whereWord(HEALTH_CLAIMS));
     const ref = rules.priceRefs.find((r) => (r.categoryId && r.categoryId === p.categoryId) || containsAny(text, [r.value]));
     const marketReference = ref?.price ?? median;
     if (marketReference && p.price > 0 && p.price < marketReference * 0.5) add('misleading_price', `${Math.round((p.price / marketReference - 1) * 100)} %`, 'price');

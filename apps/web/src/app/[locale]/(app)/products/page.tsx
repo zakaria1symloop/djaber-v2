@@ -22,7 +22,7 @@ import { AddToAgentDialog, ProductsBulkBar, useProductsExport } from '@/features
 import { ProductsActiveFilters, ProductsFilterBar, ProductsFilterPanel, useCategoryOptions } from '@/features/catalog/products-list/filters';
 import { QuickEditSheet } from '@/features/catalog/products-list/quick-edit-sheet';
 import { PRODUCTS_LIST, productsQuery } from '@/features/catalog/products-list/spec';
-import { AiPill, aiExclusion, CategoryPill, ListPagination, ModerationPill, Money, Num, Pct, ProductStatePill, ProductThumb, StockPill, stockTone } from '@/features/catalog/ui';
+import { AiPill, aiExclusion, CategoryPill, ListPagination, ModerationPill, moderationPillStatus, Money, Num, Pct, ProductStatePill, ProductThumb, StockPill, stockTone } from '@/features/catalog/ui';
 import { Link, useRouter } from '@/i18n/navigation';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
@@ -165,7 +165,7 @@ export default function ProductsPage() {
       key: 'moderation',
       header: t('products.col.moderation'),
       hideBelow: '2xl',
-      cell: (r) => (r.moderation && r.moderation.status !== 'not_required' ? <ModerationPill status={r.moderation.status} /> : <span className="text-text-muted">—</span>),
+      cell: (r) => (r.moderation && r.moderation.status !== 'not_required' ? <ModerationPill status={moderationPillStatus(r.moderation)} /> : <span className="text-text-muted">—</span>),
     },
   ];
   // IA and validation columns only matter while something is under review or excluded
@@ -326,7 +326,7 @@ export default function ProductsPage() {
                       {r.archived || !r.isActive || (reviewing && r.moderation && r.moderation.status !== 'approved') ? (
                         <div className="mt-1 flex flex-wrap items-center gap-1.5" data-testid="grid-pills">
                           {r.archived || !r.isActive ? <ProductStatePill product={r} /> : null}
-                          {reviewing && r.moderation && r.moderation.status !== 'approved' ? <ModerationPill status={r.moderation.status} /> : null}
+                          {reviewing && r.moderation && r.moderation.status !== 'approved' ? <ModerationPill status={moderationPillStatus(r.moderation)} /> : null}
                         </div>
                       ) : null}
                     </div>
@@ -376,7 +376,7 @@ export default function ProductsPage() {
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="truncate text-[14px] font-medium">{r.name}</span>
                     {r.archived || !r.isActive ? <ProductStatePill product={r} /> : null}
-                    {reviewing && r.moderation && r.moderation.status !== 'approved' ? <ModerationPill status={r.moderation.status} /> : null}
+                    {reviewing && r.moderation && r.moderation.status !== 'approved' ? <ModerationPill status={moderationPillStatus(r.moderation)} /> : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-x-2 ts-label-meta text-text-muted">
                     <Ltr>{r.sku}</Ltr>

@@ -14,6 +14,7 @@ import { contextOf } from '../messaging/messaging.presenter';
 import { jobPath, jobRefs, parcelPath } from '../notifications/notification.catalog';
 import { SafetyService } from '../messaging/safety.service';
 import { OnboardingService } from '../workspace/settings.service';
+import { viewerUserId } from '../../core/privacy/mask';
 
 type Range = { gte: Date; lt: Date };
 const DAY = 86_400_000;
@@ -158,7 +159,7 @@ export class HomeService {
     const now = new Date();
     const { current, previous } = lastDays(30, now);
     const [user, ws, queue, channels, products, overview, rev, revSources, revPrev, aiRev, aiRevPrev, pipeline, cash, orders, ordersPrev, aiOrders, toConfirm, conversations, getStarted, balance, aiOrdersByChannel, subscription] = await Promise.all([
-      t.userId ? prisma.user.findUnique({ where: { id: t.userId }, select: { firstName: true } }) : null,
+      viewerUserId() ? prisma.user.findUnique({ where: { id: viewerUserId() }, select: { firstName: true } }) : null, // J13r-1 owner under impersonation
       prisma.workspace.findUniqueOrThrow({ where: { id: t.workspaceId }, select: { name: true, onboardingStep: true } }),
       this.queue(now, locale),
       prisma.channel.findMany({ where: { status: { not: 'disconnected' } }, include: { agentChannels: { take: 1, include: { agent: { select: { id: true, name: true, status: true } } } } }, orderBy: { createdAt: 'asc' } }),

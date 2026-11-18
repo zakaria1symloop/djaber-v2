@@ -29,7 +29,7 @@ import { catalogApi, catalogKeys, useCatalogRefresh, useCategories, useUnits } f
 import { flattenCategories, type AiFillResult, type Product } from '../contracts';
 import { GenerateVariantsDialog, type GeneratedVariants } from '../generate-variants-dialog';
 import { ArchiveProductDialog, PlanLimitDialog, planLimitOf, type PlanLimitInfo } from '../product-dialogs';
-import { ModerationPill, ProductStatePill } from '../ui';
+import { ModerationPill, moderationPillStatus, ProductStatePill } from '../ui';
 import { clearDraft, readDraft, writeDraft } from './draft';
 import { aiFillUnavailable, FromPhotoDialog } from './from-photo-dialog';
 import { imageHandover } from './images';
@@ -473,7 +473,7 @@ export function ProductForm(props: Props) {
           <>
             <ProductStatePill product={{ archived: product.archived, isActive: product.isActive }} />
             {product.variants?.length ? <Pill className="rounded-[4px]">{t('products.form.header.variants', { count: product.variants.length })}</Pill> : null}
-            <ModerationPill status={product.moderation?.status} />
+            <ModerationPill status={moderationPillStatus(product.moderation)} />
           </>
         ) : undefined
       }

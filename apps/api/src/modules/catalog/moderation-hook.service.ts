@@ -483,6 +483,7 @@ export class ModerationHookService implements OnModuleInit {
     const deadline = rejectedItem?.decidedAt ? new Date(rejectedItem.decidedAt.getTime() + APPEAL_WINDOW_MS) : null;
     return {
       status: product?.moderationStatus ?? 'not_required',
+      changesRequested: product?.moderationStatus === 'pending' && current.status === 'changes_requested',
       submittedAt: current.submittedAt.toISOString(),
       decidedAt: current.decidedAt ? current.decidedAt.toISOString() : null,
       decision: current.decision,
@@ -506,6 +507,7 @@ export class ModerationHookService implements OnModuleInit {
     const item = await prisma.moderationItem.findFirst({ where: { productId, type: 'product' }, orderBy: { submittedAt: 'desc' } });
     return {
       status: product.moderationStatus,
+      changesRequested: !!detail?.changesRequested,
       contentVersion: product.contentVersion,
       item: item
         ? { id: item.id, status: item.status, aiFlags: item.aiFlags, decision: item.decision, merchantMessage: item.merchantMessage, rejectedFields: item.rejectedFields, slaDueAt: item.slaDueAt.toISOString(), decidedAt: item.decidedAt ? item.decidedAt.toISOString() : null }

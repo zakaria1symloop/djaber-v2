@@ -41,7 +41,13 @@ export function RejectedBanner({ product, view, canWrite, onAppeal }: { product:
     <div role="alert" data-testid="rejected-banner" className="flex flex-wrap items-start gap-3 rounded-[6px] border-s-2 border-s-accent-alert bg-ink-raised px-3.5 py-3">
       <div className="min-w-0 flex-1">
         <div className="text-[14px] font-medium">{t('products.moderation.banner.title', { reason: decisionLabel(t, view.decision) })}</div>
-        {view.message ? <p className="mt-1.5 text-[13px] text-text-secondary">{view.message}</p> : null}
+        {/* journey J13r-7: the moderator's free text stays as written, under a label in the reader's language */}
+        {view.message ? (
+          <p className="mt-1.5 text-[13px] text-text-secondary">
+            <span className="text-text-muted">{t('products.moderation.moderatorMessage')} </span>
+            {view.message}
+          </p>
+        ) : null}
         {view.rejectedFields.length ? (
           <p className="mt-1 ts-label-meta text-text-secondary">{t('products.moderation.banner.fields', { fields: view.rejectedFields.map((f) => fieldLabel(t, f)).join(', ') })}</p>
         ) : null}
@@ -62,6 +68,34 @@ export function RejectedBanner({ product, view, canWrite, onAppeal }: { product:
             {t('products.moderation.editResubmit')}
           </Link>
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Journey J13r-2: banner on top of a product whose review asked for changes (deep link of `product.changes_requested`):
+ * the moderator's message (labelled, as written), the fields to change and « Modifier ». The product keeps its state.
+ */
+export function ChangesRequestedBanner({ product, view, canWrite }: { product: Pick<Product, 'id'>; view: ModerationView; canWrite: boolean }) {
+  const t = useT();
+  return (
+    <div role="status" data-testid="changes-requested-banner" className="flex flex-wrap items-start gap-3 rounded-[6px] border-s-2 border-s-accent-starred bg-ink-raised px-3.5 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="text-[14px] font-medium">{t('products.moderation.changes.title')}</div>
+        {view.message ? (
+          <p className="mt-1.5 text-[13px] text-text-secondary">
+            <span className="text-text-muted">{t('products.moderation.moderatorMessage')} </span>
+            <span data-testid="changes-requested-message">{view.message}</span>
+          </p>
+        ) : null}
+        {view.rejectedFields.length ? <p className="mt-1 ts-label-meta text-text-secondary">{t('products.moderation.changes.fields', { fields: view.rejectedFields.map((f) => fieldLabel(t, f)).join(', ') })}</p> : null}
+        <p className="mt-1 ts-label-meta text-text-muted">{t('products.moderation.changes.after')}</p>
+      </div>
+      {canWrite ? (
+        <Link href={`/products/${product.id}/edit`} className={buttonClass({ variant: 'primary', size: 'sm' })} data-testid="changes-requested-edit">
+          {t('action.edit')}
+        </Link>
       ) : null}
     </div>
   );
@@ -158,6 +192,24 @@ export function ValidationBlock({
             </Row>
             <Row label={t('products.moderation.delay')}>{t('products.moderation.sla')}</Row>
           </>
+        ) : view.kind === 'changes_requested' ? (
+          <>
+            <Row label={t('common.status')} testId="moderation-status">
+              <span className="text-accent-starred">{view.decidedAt ? t('products.moderation.changesOn', { date: date(view.decidedAt) }) : t('products.moderation.changes.title')}</span>
+            </Row>
+            {view.message ? <Row label={t('products.moderation.moderatorMessageRow')}>{view.message}</Row> : null}
+            {view.rejectedFields.length ? (
+              <Row label={t('products.moderation.changes.fieldsLabel')}>
+                <ul className="flex flex-wrap gap-1.5" data-testid="changes-fields">
+                  {view.rejectedFields.map((f) => (
+                    <li key={f} className="rounded-[4px] border border-accent-starred/60 px-1.5 py-0.5 ts-label-meta uppercase text-accent-starred">
+                      {fieldLabel(t, f)}
+                    </li>
+                  ))}
+                </ul>
+              </Row>
+            ) : null}
+          </>
         ) : view.kind === 'rejected' || view.kind === 'appealed' ? (
           <>
             <Row label={t('common.status')} testId="moderation-status">
@@ -166,7 +218,7 @@ export function ValidationBlock({
               </span>
             </Row>
             <Row label={t('common.reason')}>{decisionLabel(t, view.decision)}</Row>
-            {view.message ? <Row label={t('products.moderation.message')}>{view.message}</Row> : null}
+            {view.message ? <Row label={t('products.moderation.moderatorMessageRow')}>{view.message}</Row> : null}
             {moderationRuleLabels(view.rules, t).length ? <Row label={t('products.moderation.rules')}>{moderationRuleLabels(view.rules, t).join(' · ')}</Row> : null}
             {view.rejectedFields.length ? (
               <Row label={t('products.moderation.fields')}>
@@ -187,6 +239,13 @@ export function ValidationBlock({
         )}
       </Rows>
       <Timeline view={view} />
+      {view.kind === 'changes_requested' && editable ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={`/products/${product.id}/edit`} className={buttonClass({ variant: 'primary', size: 'sm' })}>
+            {t('action.edit')}
+          </Link>
+        </div>
+      ) : null}
       {view.kind === 'rejected' && editable ? (
         <div className="flex flex-wrap items-center gap-2">
           <Link href={`/products/${product.id}/edit`} className={buttonClass({ variant: 'primary', size: 'sm' })}>

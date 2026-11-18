@@ -10,7 +10,7 @@ import { AdminPage } from '@/features/admin/admin-page';
 import { adminWrite, useAdminGet, useAdminInvalidate, useAdminJobToast, useAdminList } from '@/features/admin/api';
 import { AnnouncementPreviewDialog, entryText } from '@/features/admin/cms/announcement-preview';
 import { CmsEditor } from '@/features/admin/cms/editor';
-import { UnpublishCmsDialog } from '@/features/admin/reason-confirm';
+import { PublishCmsDialog, UnpublishCmsDialog } from '@/features/admin/reason-confirm';
 import { AdminDialog, NO_ERRORS, toServerErrors, useOnOpen, type ServerErrors } from '@/features/admin/dialog-kit';
 import { AdminFilterBar, AdminListBody, type AdminFilter } from '@/features/admin/list-kit';
 import { usePlatform } from '@/features/admin/platform';
@@ -37,21 +37,12 @@ export default function AdminCmsPage() {
   const query = useAdminList<CmsEntryAdminDto, { counts?: AdminCmsCounts }>('/admin/cms', { ...list.apiQuery(), type });
   const counts = query.data?.meta?.counts;
   const open = useAdminGet<CmsEntryAdminDto>(list.state.sheet ? `/admin/cms/${list.state.sheet}` : null);
-  const invalidate = useAdminInvalidate();
   const track = useAdminJobToast();
   const [create, setCreate] = useState(false);
   const [previewed, setPreviewed] = useState<CmsEntryAdminDto | null>(null);
   const [unpublishing, setUnpublishing] = useState<CmsEntryAdminDto | null>(null);
-  const m = useMutation({ mutationFn: (fn: () => Promise<unknown>) => fn() });
-  const act = async (fn: () => Promise<unknown>, done: string) => {
-    try {
-      await m.mutateAsync(fn);
-      void invalidate('/admin/cms');
-      toast(done);
-    } catch (e) {
-      toast({ tone: 'danger', message: errorMessage(e, t) });
-    }
-  };
+  // journey J13r (J13-4): « Publier » from the menu asks its reason (it published at once, unlogged)
+  const [publishingEntry, setPublishingEntry] = useState<CmsEntryAdminDto | null>(null);
   const quick: AdminFilter[] = useMemo(
     () => [
       { kind: 'multi', key: 'status', label: t('admin.common.status'), options: (['draft', 'scheduled', 'published', 'archived'] as const).map((v) => ({ value: v, label: t(`admin.cms.status.${v}`) })) },
@@ -84,7 +75,7 @@ export default function AdminCmsPage() {
         e.actions,
         {
           edit: { label: t('admin.cms.action.edit'), onSelect: () => list.openSheet(e.id) },
-          publish: { label: t('admin.cms.action.publish'), onSelect: () => void act(() => adminWrite(`/admin/cms/${e.id}/publish`, 'POST', {}), t('admin.cms.publishedToast')), hidden: !write },
+          publish: { label: t('admin.cms.action.publish'), onSelect: () => setPublishingEntry(e), hidden: !write },
           schedule: { label: t('admin.cms.action.schedule'), onSelect: () => list.openSheet(e.id), hidden: !write },
           unpublish: { label: t('admin.cms.action.unpublish'), onSelect: () => setUnpublishing(e), destructive: true, hidden: !write },
           translate: { label: t('admin.cms.action.translate'), onSelect: () => void track(() => adminWrite<{ jobId: string }>(`/admin/cms/${e.id}/translate`, 'POST', {}), { running: t('admin.cms.translating'), done: t('admin.cms.translated') }), hidden: !write },
@@ -129,6 +120,7 @@ export default function AdminCmsPage() {
       <NewCmsDialog open={create} type={type} onClose={() => setCreate(false)} onCreated={(id, ty) => list.set({ tab: ty === 'announcement' ? null : ty, sheet: id })} />
       {previewed ? <AnnouncementPreviewDialog open onClose={() => setPreviewed(null)} text={entryText(previewed)} channels={previewed.channels} link={previewed.link} /> : null}
       <UnpublishCmsDialog entry={unpublishing} onClose={() => setUnpublishing(null)} />
+      <PublishCmsDialog entry={publishingEntry} onClose={() => setPublishingEntry(null)} />
     </AdminPage>
   );
 }

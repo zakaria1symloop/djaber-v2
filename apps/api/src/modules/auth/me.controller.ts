@@ -1,6 +1,8 @@
 // 06-api "Auth & account" + §8.1 — /me: profile, preferences, password, e-mail change, sessions, deletion request.
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { Authenticated, CurrentUser, type AuthUser } from '../../core/auth/decorators';
+import { AppException } from '../../core/errors/app.exception';
+import { impersonating, maskIp, viewerUserId } from '../../core/privacy/mask';
 import { ImageUploadService, type UploadedFile as Incoming } from '../uploads/image-upload.service';
 import { imageInterceptor } from '../uploads/uploads.controller';
 import { AccountDeletionService } from './account-deletion.service';
@@ -44,7 +46,7 @@ export class MeController {
   @Get('prefs')
   @Authenticated()
   getPrefs(@CurrentUser() user: AuthUser) {
-    return this.me.getPrefs(user.id);
+    return this.me.getPrefs(viewerUserId() ?? user.id);
   }
 
   @Patch('prefs')
@@ -68,7 +70,9 @@ export class MeController {
 
   @Get('sessions')
   @Authenticated()
-  sessions(@CurrentUser() user: AuthUser) {
+  async sessions(@CurrentUser() user: AuthUser) {
+    // J13r-1: a read-only impersonation shows the shop owner's devices (IP masked), never the admin's own sessions
+    if (impersonating()) return (await this.me.listSessions(viewerUserId() ?? user.id)).map((r) => ({ ...r, ip: maskIp(r.ip), current: false }));
     return this.me.listSessions(user.id, user.sessionId);
   }
 
@@ -89,7 +93,7 @@ export class MeController {
   @Get('deletion-request')
   @Authenticated()
   getDeletion(@CurrentUser() user: AuthUser) {
-    return this.deletion.current(user.id);
+    return this.deletion.current(viewerUserId() ?? user.id);
   }
 
   @Delete('deletion-request')
@@ -104,6 +108,8 @@ export class MeController {
   @Authenticated()
   @HttpCode(202)
   dataExport(@CurrentUser() user: AuthUser) {
+    // starts a job: an action, refused like every write during a read-only impersonation (D21-bis)
+    if (impersonating()) throw new AppException('ADMIN_IMPERSONATION_FORBIDDEN_ACTION');
     return this.exports.start(user.id);
   }
 

@@ -17,6 +17,15 @@ import { modApi, useModerationItem, useModerationRefresh, type DecisionKind } fr
 import { AGENT_NAME_REASONS, decisionState, flaggedFields, formatScore, formatWaiting, normaliseField, priceGapPct, refusableFields } from './logic';
 import { decisionLabel, flagText, itemTitle, trustLabel, waitUnits } from './ui';
 
+const FIELD_KEYS: Record<string, string> = { name: 'adminMod.panel.title', title: 'adminMod.panel.title', description: 'adminMod.panel.description', price: 'adminMod.panel.price', category: 'adminMod.panel.category', categoryId: 'adminMod.panel.category' };
+/** Journey J13r-10: a refused field by its label (« Titre », « Image 2 »), never the stored key (`name`, `image:2`). */
+const fieldName = (t: ReturnType<typeof useT>, f: string) => {
+  const image = /^images?[:.]?(\d+)?$/.exec(f);
+  if (image) return t('adminMod.panel.image', { n: image[1] ? Number(image[1]) : 1 });
+  const key = FIELD_KEYS[f];
+  return key ? t(key) : f;
+};
+
 export function ReviewPanel({ id, fallback, canWrite, onDecided }: { id: string; fallback?: ModerationItemDto; canWrite: boolean; onDecided: (id: string) => void }) {
   const t = useT();
   const q = useModerationItem(id);
@@ -130,7 +139,10 @@ function PanelBody({
   };
 
   const p = item.product;
-  const gap = p ? priceGapPct(p.price, p.marketReference) : null;
+  // journey J13r-3: the live price — the variants' range when the product has variants (their price is the one sold)
+  const shownPrice = p ? (p.priceRange ? p.priceRange.min : p.price) : 0;
+  const gap = p ? priceGapPct(shownPrice, p.marketReference) : null;
+  const priceText = p ? (p.priceRange && p.priceRange.min !== p.priceRange.max ? `${formatMoney(p.priceRange.min)} – ${formatMoney(p.priceRange.max)}` : formatMoney(shownPrice)) : '';
   const flagsOf = (field: string) => item.aiFlags.filter((f) => f.field && normaliseField(f.field) === field);
   const isRefused = (f: string) => fields.includes(f);
   const toggleField = (f: string) => setFields((cur) => (cur.includes(f) ? cur.filter((x) => x !== f) : [...cur, f]));
@@ -190,7 +202,12 @@ function PanelBody({
                 </FlaggedField>
               ) : null}
               <FlaggedField label={t('adminMod.panel.price')} flagged={isRefused('price')} evidence={flagsOf('price').map((f) => flagText(t, f)).join(' · ') || undefined} toggle={fieldToggle('price')}>
-                <Ltr>{p.marketReference ? t('adminMod.panel.priceRef', { price: formatMoney(p.price), ref: formatMoney(p.marketReference), gap: gap === null ? '—' : `${gap > 0 ? '+' : '−'}${Math.abs(gap)}` }) : formatMoney(p.price)}</Ltr>
+                <Ltr>{p.marketReference ? t('adminMod.panel.priceRef', { price: priceText, ref: formatMoney(p.marketReference), gap: gap === null ? '—' : `${gap > 0 ? '+' : '−'}${Math.abs(gap)}` }) : priceText}</Ltr>
+                {p.submittedPrice !== null && p.submittedPrice !== undefined && !p.priceRange ? (
+                  <span className="ms-2 ts-label-meta text-accent-starred" data-testid="mod-price-changed">
+                    {t('adminMod.panel.priceChanged', { price: formatMoney(p.submittedPrice) })}
+                  </span>
+                ) : null}
               </FlaggedField>
               <FlaggedField label={t('adminMod.panel.category')} flagged={isRefused('category')} toggle={fieldToggle('category')}>
                 {t('adminMod.panel.categoryValue', { category: p.category ?? '—', count: p.variants })}
@@ -312,7 +329,7 @@ function PanelBody({
                 .join(' · ')}
             </p>
             {item.merchantMessage ? <p className="mt-1 text-text-secondary">« {item.merchantMessage} »</p> : null}
-            {item.rejectedFields.length ? <p className="mt-1 ts-label-meta text-accent-alert">{t('adminMod.panel.refusedFields', { fields: item.rejectedFields.join(', ') })}</p> : null}
+            {item.rejectedFields.length ? <p className="mt-1 ts-label-meta text-accent-alert">{t('adminMod.panel.refusedFields', { fields: item.rejectedFields.map((f) => fieldName(t, f)).join(', ') })}</p> : null}
             {notice ? (
               <FormAlert className="mt-3">
                 <span data-testid="mod-conflict">{notice}</span> <span className="text-text-muted">{t('adminMod.panel.conflict')}</span>

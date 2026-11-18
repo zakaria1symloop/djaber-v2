@@ -27,7 +27,7 @@ import { AppException, notFound } from '../../core/errors/app.exception';
 import { AI_GATEWAY, AiProviderError, type AiGateway } from '../ai/provider/ai.gateway';
 import { RoutingService } from '../ai/routing.service';
 import { AdminBillingCatalogService } from './billing-admin.service';
-import { DAY, assertUuid, iso, userSelect, type AdminActor } from './admin.util';
+import { DAY, assertUuid, iso, requireReason, userSelect, type AdminActor } from './admin.util';
 import { routeHealth } from './ai-route-health';
 
 const ENV_KEYS: Record<AiProviderKey, string> = { openai: 'OPENAI_API_KEY', anthropic: 'ANTHROPIC_API_KEY', google: 'GOOGLE_AI_API_KEY', groq: 'GROQ_API_KEY' };
@@ -48,6 +48,15 @@ export const testFailure = (e: AiProviderError): { reason: AiProviderTestReason;
   if (s === 429) return { reason: 'rate_limited', status: s };
   if (s >= 500) return { reason: 'provider_down', status: s };
   return { reason: 'http_error', status: s };
+};
+
+/**
+ * Journey J13r (J13-7): a speech-to-text model (Whisper) only transcribes — marked « texte » / « vision » it was offered to the
+ * text route and could never answer a message. `422 VALIDATION_ERROR fields.capabilities`.
+ */
+export const isSpeechModel = (modelId: string) => /whisper/i.test(modelId);
+const assertSpeechOnly = (modelId: string, capabilities: readonly string[] | undefined) => {
+  if (capabilities && isSpeechModel(modelId) && capabilities.some((c) => c !== 'transcription')) throw new AppException('VALIDATION_ERROR', {}, { capabilities: 'validation.invalid' });
 };
 
 @Injectable()
@@ -206,6 +215,7 @@ export class AiAdminService {
   }
 
   async createModel(input: AdminCreateAiModelInput, actor: AdminActor) {
+    assertSpeechOnly(input.modelId, input.capabilities);
     const p = await this.providerOr404(input.providerKey);
     if (await prisma.aiModel.findUnique({ where: { providerId_modelId: { providerId: p.id, modelId: input.modelId } } })) throw new AppException('CONFLICT', {}, { modelId: 'validation.taken' });
     const { providerKey: _p, reason, ...data } = input;
@@ -219,6 +229,7 @@ export class AiAdminService {
     const m = await prisma.aiModel.findUnique({ where: { id }, include: { provider: true } });
     if (!m) throw notFound();
     const { reason, ...data } = input;
+    if (data.capabilities) assertSpeechOnly(m.modelId, data.capabilities);
     // journeys 16/11 J13-7: a model keeps the capability of every route that uses it (the Groq Whisper of the voice route had
     // become a « texte » model — offered for text replies, missing from the voice route's own list)
     if (data.capabilities) {
@@ -317,6 +328,9 @@ export class AiAdminService {
       if (!fb || !fb.capabilities.includes(cap) || fb.id === primary.id) throw new AppException('VALIDATION_ERROR', {}, { fallbackModelId: 'validation.invalid' });
     }
     if (input.failoverActive && !input.fallbackModelId) throw new AppException('VALIDATION_ERROR', {}, { failoverActive: 'validation.invalid' });
+    // journey J13r (J13-4 / J13r-6): a routing change or a forced switch is platform-wide — it carries a reason like the
+    // other platform writes (`422 ADMIN_REASON_REQUIRED`), logged on `ai_route.update`
+    const reason = requireReason(input.reason);
     const before = await prisma.aiRoute.findUnique({ where: { capability: cap } });
     const failover = input.failoverActive ?? (before?.failoverActive && !!input.fallbackModelId ? true : false);
     const data = {
@@ -331,7 +345,7 @@ export class AiAdminService {
     };
     await prisma.aiRoute.upsert({ where: { capability: cap }, create: { capability: cap, ...data }, update: data });
     if (input.failoverActive === false) await this.routing.resetBreaker(input.primaryModelId);
-    await this.log(actor, 'ai_route.update', 'AiRoute', cap, before ? { primaryModelId: before.primaryModelId, fallbackModelId: before.fallbackModelId, creditCost: before.creditCost, failoverActive: before.failoverActive } : null, { ...data, updatedById: undefined, failoverSince: iso(data.failoverSince) }, input.reason?.trim() || null);
+    await this.log(actor, 'ai_route.update', 'AiRoute', cap, before ? { primaryModelId: before.primaryModelId, fallbackModelId: before.fallbackModelId, creditCost: before.creditCost, failoverActive: before.failoverActive } : null, { ...data, updatedById: undefined, failoverSince: iso(data.failoverSince) }, reason);
     return this.route(cap);
   }
 

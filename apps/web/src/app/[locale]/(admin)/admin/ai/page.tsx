@@ -8,7 +8,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useConfirmAction } from '@/components/confirm-action';
 import { AdminPage, AdminQueryError } from '@/features/admin/admin-page';
-import { ModelDialog, PricingVersionDialog, ProviderKeyDialog, RouteDialog, testFailureOf } from '@/features/admin/ai/dialogs';
+import { FailoverDialog, ModelDialog, PricingVersionDialog, ProviderKeyDialog, RouteDialog, testFailureOf } from '@/features/admin/ai/dialogs';
 import { adminWrite, useAdminGet, useAdminInvalidate } from '@/features/admin/api';
 import { usePlatform } from '@/features/admin/platform';
 import { useFormats } from '@/features/admin/ui';
@@ -33,10 +33,11 @@ export default function AdminAiPage() {
   const [keyDlg, setKeyDlg] = useState<{ provider: AiProviderAdminDto | null } | null>(null);
   const [modelDlg, setModelDlg] = useState<{ model: AiModelAdminDto | null } | null>(null);
   const [routeDlg, setRouteDlg] = useState<AiRouteDto | null>(null);
+  // journey J13r-6: « Forcer la bascule » / « Revenir au principal » open a confirmation with a reason (it did nothing)
+  const [failoverDlg, setFailoverDlg] = useState<{ route: AiRouteDto; on: boolean } | null>(null);
   const confirm = useConfirmAction();
   const patch = useMutation({ mutationFn: (b: { key: string; body: unknown }) => adminWrite(`/admin/ai-providers/${b.key}`, 'PATCH', b.body) });
   const testOne = useMutation({ mutationFn: (key: string) => adminWrite<AiProviderTestDto>(`/admin/ai-providers/${key}/test`, 'POST', {}) });
-  const putRoute = useMutation({ mutationFn: (b: { cap: string; body: unknown }) => adminWrite(`/admin/ai-routes/${b.cap}`, 'PUT', b.body) });
 
   const toggle = async (p: AiProviderAdminDto) => {
     try {
@@ -62,18 +63,7 @@ export default function AdminAiPage() {
     }
     void invalidate('/admin/ai-providers');
   };
-  const failover = async (r: AiRouteDto, on: boolean) => {
-    const idOf = (m: string | undefined) => (models.data ?? []).find((x) => x.modelId === m)?.id;
-    const primaryModelId = idOf(r.primary.modelId);
-    if (!primaryModelId) return;
-    try {
-      await putRoute.mutateAsync({ cap: r.capability, body: { primaryModelId, fallbackModelId: idOf(r.fallback?.modelId) ?? null, creditCost: r.credits, timeoutSec: r.timeoutSec, errorThresholdPct: r.errorThresholdPct, failoverActive: on } });
-      void invalidate('/admin/ai-routes', '/admin/ai-providers');
-      toast(on ? t('admin.ai.route.failoverOn') : t('admin.ai.route.failoverOff'));
-    } catch (e) {
-      toast({ tone: 'danger', message: errorMessage(e, t) });
-    }
-  };
+  const failover = (r: AiRouteDto, on: boolean) => setFailoverDlg({ route: r, on });
 
   // recette 11/11 (Badro): « ACTIF » alone only when the key works — no key / rejected by the last test / never tested is said
   const pill = (p: AiProviderAdminDto) => {
@@ -109,7 +99,7 @@ export default function AdminAiPage() {
         heading={t(`admin.ai.capLong.${r.capability}`)}
         actions={[
           { key: 'edit', label: t('admin.ai.route.edit'), onSelect: () => setRouteDlg(r) },
-          r.state === 'failover' ? { key: 'clear', label: t('admin.ai.route.clear'), onSelect: () => void failover(r, false) } : { key: 'force', label: t('admin.ai.route.force'), onSelect: () => void failover(r, true), disabledReason: r.fallback ? undefined : t('admin.ai.noFallback') },
+          r.state === 'failover' ? { key: 'clear', label: t('admin.ai.route.clear'), onSelect: () => failover(r, false) } : { key: 'force', label: t('admin.ai.route.force'), onSelect: () => failover(r, true), disabledReason: r.fallback ? undefined : t('admin.ai.noFallback') },
         ]}
       />
     ) : null;
@@ -213,6 +203,7 @@ export default function AdminAiPage() {
       <ProviderKeyDialog providers={providers.data ?? []} initial={keyDlg?.provider ?? null} open={!!keyDlg} onClose={() => setKeyDlg(null)} />
       <ModelDialog model={modelDlg?.model ?? null} providers={providers.data ?? []} open={!!modelDlg} onClose={() => setModelDlg(null)} />
       <RouteDialog route={routeDlg} models={models.data ?? []} open={!!routeDlg} onClose={() => setRouteDlg(null)} />
+      <FailoverDialog req={failoverDlg} models={models.data ?? []} onClose={() => setFailoverDlg(null)} />
       {confirm.element}
     </AdminPage>
   );

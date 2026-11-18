@@ -160,3 +160,23 @@ describe('journeys 18/11 J10r-6 / J11r-6 (d)', () => {
     expect(`${r.title} ${r.body}`).toContain('Export du rapport « Paiements » (XLSX)');
   });
 });
+
+describe('journeys 18/11 J13r-2 / J13r-7 / J13r-11', () => {
+  it('a change request carries the moderator message, labelled in the reader language (the free text as written)', () => {
+    for (const locale of LOCALES) {
+      const r = renderNotification('product_changes_requested', { productId: 'p', name: 'Coque', message: 'ajoutez une photo' }, locale);
+      expect(r.body).toContain('ajoutez une photo');
+      expect(r.body).not.toBe('ajoutez une photo');
+      expect(renderNotification('product_rejected', { productId: 'p', name: 'Robe', message: 'doublon' }, locale).body).toContain('doublon');
+      // an old row without message keeps its title only
+      expect(renderNotification('product_changes_requested', { productId: 'p', name: 'Coque' }, locale).body).toBe('');
+    }
+  });
+  it('credit counts take the plural form of the reader language', () => {
+    expect(renderNotification('credits_removed', { credits: 1, reason: 'x' }, 'fr').title).toBe('1 crédit retiré par Djaber');
+    expect(renderNotification('credits_removed', { credits: 10, reason: 'x' }, 'fr').title).toBe('10 crédits retirés par Djaber');
+    expect(renderNotification('credits_removed', { credits: 10, reason: 'x' }, 'ar').title).toBe('سحب Djaber 10 أرصدة');
+    expect(renderNotification('credits_granted', { credits: 20, reason: 'x' }, 'ar').title).toBe('أضاف Djaber 20 رصيدًا');
+    expect(renderNotification('credits_granted', { credits: 1500, reason: 'x' }, 'en').title).toMatch(/^1\s500 credits added by Djaber$/u);
+  });
+});

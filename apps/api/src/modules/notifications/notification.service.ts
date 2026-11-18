@@ -27,6 +27,9 @@ export class NotificationService {
 
   private scope(): Prisma.NotificationWhereInput {
     const t = TenantContext.get();
+    // J13r-1: a read-only impersonation shows the shop owner's rows of this workspace — never the admin's own platform rows
+    // (`workspaceId: null`) nor the owner's account-level ones
+    if (t.impersonation) return { userId: t.impersonation.ownerUserId ?? '00000000-0000-0000-0000-000000000000', workspaceId: t.workspaceId };
     return { userId: t.userId!, OR: [{ workspaceId: t.workspaceId }, { workspaceId: null }] };
   }
 

@@ -40,7 +40,8 @@ export type TenantInfo = {
   /** outside production, a platform user listed in `PLATFORM_2FA_EXEMPT_EMAILS` (testing) skips the D41 2FA check */
   twoFaExempt?: boolean;
   limits: TenantLimits;
-  impersonation?: { sessionId: string; adminId: string };
+  /** J13r-1: `ownerUserId` = the workspace owner, whose per-user rows (notifications, prefs, saved views…) the session shows */
+  impersonation?: { sessionId: string; adminId: string; ownerUserId?: string };
   /** When true the tenant extension lets queries through without a workspace filter (platform/system code only). */
   bypass?: boolean;
 };

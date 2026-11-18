@@ -157,7 +157,16 @@ export function ProductsViewer({ workspaceId, sheet, onOpen }: { workspaceId: st
               {q.data.rows.map((p) => (
                 <tr key={p.id} className="cursor-pointer border-b border-line-hairline last:border-0 hover:bg-ink-raised" onClick={() => onOpen(p.id)} data-product={p.id}>
                   <td className="px-3 py-2.5">{p.name}</td>
-                  <td className="px-3 py-2.5"><Money value={p.price} /></td>
+                  <td className="px-3 py-2.5">
+                    {/* journey J13r-8: a variant product sells at its variants' prices — the base price is hidden from customers */}
+                    {p.priceRange && p.priceRange.min !== p.priceRange.max ? (
+                      <span className="whitespace-nowrap">
+                        <Money value={p.priceRange.min} /> – <Money value={p.priceRange.max} />
+                      </span>
+                    ) : (
+                      <Money value={p.priceRange ? p.priceRange.min : p.price} />
+                    )}
+                  </td>
                   <td className="px-3 py-2.5"><MonoChip tone={MOD_TONE[p.moderationStatus] ?? 'neutral'}>{modLabel(t, p.moderationStatus)}</MonoChip></td>
                   <td className="px-3 py-2.5">{p.aiStatus ? <MonoChip tone={AI_TONE[p.aiStatus] ?? 'neutral'}>{t(`admin.viewers.ai.${p.aiStatus}`)}</MonoChip> : '—'}</td>
                 </tr>

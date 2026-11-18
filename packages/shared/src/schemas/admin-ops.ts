@@ -142,7 +142,12 @@ export type ModerationItemDto = {
   product: {
     id: string;
     name: string;
+    /** journey J13r-3: the price customers see NOW (a price edit does not re-open the review) */
     price: number;
+    /** active variants: the range customers see (12 §103 « 1 650 DA – 2 090 DA »); null without variants */
+    priceRange: { min: number; max: number } | null;
+    /** the price of the submitted snapshot when it differs from `price` (« modifié depuis la soumission »), else null */
+    submittedPrice: number | null;
     marketReference: number | null;
     category: string | null;
     variants: number;

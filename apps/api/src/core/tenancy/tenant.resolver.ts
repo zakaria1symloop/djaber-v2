@@ -195,6 +195,8 @@ export class TenantResolver {
       if (u.status !== 'active' || !['super_admin', 'support'].includes(u.platformRole)) throw new AppException('ADMIN_IMPERSONATION_EXPIRED');
       const ctx = await this.workspaceCtx(session.workspaceId);
       if (!ctx) throw new AppException('ADMIN_IMPERSONATION_EXPIRED');
+      // J13r-1: the per-user screens (notifications, preferences, saved views, sessions…) show the shop owner's rows
+      const owner = await prisma.membership.findFirst({ where: { workspaceId: session.workspaceId, role: 'owner' }, select: { userId: true } });
       await prisma.impersonationSession.update({ where: { id: session.id }, data: { actionsCount: { increment: 1 } } });
       await prisma.auditLog.create({
         data: {
@@ -214,7 +216,7 @@ export class TenantResolver {
       return {
         ...this.toInfo(ctx, { userId: u.id, role: 'admin' as MembershipRole, readOnly: true, platformRole: u.platformRole, emailVerified: true, userLocale: u.locale }),
         suspended: false,
-        impersonation: { sessionId: session.id, adminId: u.id },
+        impersonation: { sessionId: session.id, adminId: u.id, ...(owner ? { ownerUserId: owner.userId } : {}) },
       };
     });
   }

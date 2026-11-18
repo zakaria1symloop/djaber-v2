@@ -95,18 +95,24 @@ export class AdminViewersService {
   }
 
   // --- products ------------------------------------------------------------------------------------------------------------
-  private productRow(p: Prisma.ProductGetPayload<{ include: { workspace: { select: { id: true; name: true } }; images: true } }> & { moderationItems?: { status: string }[] }): AdminViewerProductRowDto {
+  private productRow(p: Prisma.ProductGetPayload<{ include: { workspace: { select: { id: true; name: true } }; images: true } }> & { moderationItems?: { status: string }[]; variants?: { price: number; isActive: boolean; deletedAt: Date | null }[] }): AdminViewerProductRowDto {
     const img = p.images.find((i) => i.isPrimary) ?? p.images[0];
-    const aiStatus = !p.isActive || p.moderationStatus === 'rejected' ? 'excluded' : p.moderationStatus === 'pending' && p.approvedSnapshot ? 'stale' : 'proposed';
+    // journey J13r-8: the AI catalogue's own rule (ai/catalogue.service scopeWhere) — validated (or not reviewed) ⇒ PROPOSÉ;
+    // pending with a previously approved version ⇒ that version keeps selling; anything else (new product pending, changes
+    // requested, refused, contested, switched off) ⇒ EXCLU. A new pending product read « PROPOSÉ ».
+    const aiStatus = !p.isActive || p.deletedAt ? 'excluded' : p.moderationStatus === 'approved' || p.moderationStatus === 'not_required' ? 'proposed' : p.moderationStatus === 'pending' && p.approvedSnapshot !== null ? 'stale' : 'excluded';
+    // the price customers see: the active variants' range when the product has variants (the base price is hidden then)
+    const live = (p.variants ?? []).filter((v) => v.isActive && !v.deletedAt).map((v) => v.price);
+    const priceRange = live.length ? { min: Math.min(...live), max: Math.max(...live) } : null;
     // full-test 15/11 ADMIN-10: the product stays `pending` while the merchant fixes it; the pill follows the latest moderation
     // decision (« MODIFICATION DEMANDÉE »), like the moderation queue
     const moderationStatus = p.moderationStatus === 'pending' && p.moderationItems?.[0]?.status === 'changes_requested' ? 'changes_requested' : p.moderationStatus;
-    return { id: p.id, name: p.name, sku: p.sku, price: p.price, stock: p.stock ?? 0, status: p.deletedAt ? 'archived' : p.isActive ? 'active' : 'inactive', moderationStatus, aiStatus, imageUrl: img?.url ?? null, workspace: p.workspace };
+    return { id: p.id, name: p.name, sku: p.sku, price: p.price, priceRange, stock: p.stock ?? 0, status: p.deletedAt ? 'archived' : p.isActive ? 'active' : 'inactive', moderationStatus, aiStatus, imageUrl: img?.url ?? null, workspace: p.workspace };
   }
 
   async products(q: { page: number; pageSize: number; workspaceId: string; moderationStatus?: string[]; q?: string }): Promise<Page<AdminViewerProductRowDto>> {
     const where: Prisma.ProductWhereInput = { workspaceId: q.workspaceId, deletedAt: null, ...(q.moderationStatus?.length ? { moderationStatus: { in: q.moderationStatus as never } } : {}), ...(q.q ? { OR: [{ name: { contains: q.q, mode: 'insensitive' } }, { sku: { contains: q.q, mode: 'insensitive' } }] } : {}) };
-    const [total, rows] = await Promise.all([prisma.product.count({ where }), prisma.product.findMany({ where, include: { workspace: { select: { id: true, name: true } }, images: { orderBy: { sortOrder: 'asc' } }, moderationItems: { orderBy: { submittedAt: 'desc' }, take: 1, select: { status: true } } }, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }], ...toSkipTake(q) })]);
+    const [total, rows] = await Promise.all([prisma.product.count({ where }), prisma.product.findMany({ where, include: { workspace: { select: { id: true, name: true } }, images: { orderBy: { sortOrder: 'asc' } }, moderationItems: { orderBy: { submittedAt: 'desc' }, take: 1, select: { status: true } }, variants: { where: { deletedAt: null }, select: { price: true, isActive: true, deletedAt: true } } }, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }], ...toSkipTake(q) })]);
     return page(rows.map((p) => this.productRow(p)), total, q);
   }
 

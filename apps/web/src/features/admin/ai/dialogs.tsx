@@ -278,6 +278,7 @@ export function RouteDialog({ route, models, open, onClose }: { route: AiRouteDt
   const [timeout, setTimeoutSec] = useState('20');
   const [threshold, setThreshold] = useState('2');
   const [failover, setFailover] = useState(false);
+  const [reason, setReason] = useState('');
   const [errors, setErrors] = useState<ServerErrors>(NO_ERRORS);
   const m = useMutation({ mutationFn: (b: { cap: string; body: unknown }) => adminWrite(`/admin/ai-routes/${b.cap}`, 'PUT', b.body) });
   // journeys 16/11 J13-7: the route carries the model's row id (AiRouteDto.primary.modelId = AiModel.id) — it was compared with
@@ -290,25 +291,26 @@ export function RouteDialog({ route, models, open, onClose }: { route: AiRouteDt
     setTimeoutSec(String(route?.timeoutSec ?? 20));
     setThreshold(String(route?.errorThresholdPct ?? 2));
     setFailover(route?.state === 'failover');
+    setReason('');
     setErrors(NO_ERRORS);
   });
   if (!route) return null;
   // the models of the route's capability, plus the ones in use (shown even when switched off, so the admin sees what runs)
   const inUse = [idOf(route.primary.modelId), idOf(route.fallback?.modelId)];
-  const eligible = models.filter((x) => (x.isActive && x.capabilities.includes(route.capability)) || inUse.includes(x.id));
+  const eligible = models.filter((x) => (x.isActive && modelFits(x, route.capability)) || inUse.includes(x.id));
   const submit = async () => {
     setErrors(NO_ERRORS);
     try {
-      await m.mutateAsync({ cap: route.capability, body: { primaryModelId: primary, fallbackModelId: fallback || null, creditCost: Number(credits), timeoutSec: Number(timeout), errorThresholdPct: Number(threshold), failoverActive: failover } });
+      await m.mutateAsync({ cap: route.capability, body: { primaryModelId: primary, fallbackModelId: fallback || null, creditCost: Number(credits), timeoutSec: Number(timeout), errorThresholdPct: Number(threshold), failoverActive: failover, reason: reason.trim() } });
       void invalidate('/admin/ai-routes', '/admin/ai-providers', '/admin/ai-pricing');
       toast(t('admin.ai.route.saved'));
       onClose();
     } catch (e) {
-      setErrors(toServerErrors(e, t, ['primaryModelId', 'fallbackModelId', 'creditCost', 'timeoutSec', 'errorThresholdPct']));
+      setErrors(toServerErrors(e, t, ['primaryModelId', 'fallbackModelId', 'creditCost', 'timeoutSec', 'errorThresholdPct', 'reason'], { ADMIN_REASON_REQUIRED: 'reason' }));
     }
   };
   return (
-    <AdminDialog open={open} onClose={onClose} testId="dlg-route" title={t('admin.ai.route.title', { cap: t(`admin.ai.capLong.${route.capability}`) })} submitLabel={t('action.save')} disabled={!primary} pending={m.isPending} error={errors.form} onSubmit={() => void submit()}>
+    <AdminDialog open={open} onClose={onClose} testId="dlg-route" title={t('admin.ai.route.title', { cap: t(`admin.ai.capLong.${route.capability}`) })} submitLabel={t('action.save')} disabled={!primary || !reasonOk(reason)} pending={m.isPending} error={errors.form} onSubmit={() => void submit()}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t('admin.ai.col.primary')} required htmlFor="r-primary" error={errors.fields.primaryModelId}>
           <Select id="r-primary" value={primary} onChange={(e) => setPrimary(e.target.value)}>
@@ -346,6 +348,72 @@ export function RouteDialog({ route, models, open, onClose }: { route: AiRouteDt
         <Switch checked={failover} onCheckedChange={setFailover} label={t('admin.ai.route.failover')} />
         {t('admin.ai.route.failover')}
       </label>
+      <ReasonField value={reason} onChange={setReason} error={errors.fields.reason} />
+    </AdminDialog>
+  );
+}
+
+/**
+ * Journey J13r (J13-7): the models a route may use — the route's capability, and a speech-to-text model (Whisper) only on
+ * the voice route, whatever capabilities its row claims.
+ */
+export const modelFits = (m: Pick<AiModelAdminDto, 'modelId' | 'capabilities'>, capability: string) =>
+  m.capabilities.includes(capability) && (capability === 'transcription' || !/whisper/i.test(m.modelId));
+
+/** The route's model row id, whether the DTO carries the row id or the provider's model name (J13-7 / J13r-6). */
+export const routeModelId = (models: Pick<AiModelAdminDto, 'id' | 'modelId'>[], ref: string | undefined) => (ref ? (models.find((x) => x.id === ref) ?? models.find((x) => x.modelId === ref))?.id : undefined);
+
+/**
+ * Journey J13r-6: « Forcer la bascule » / « Revenir au principal » from the route menu — a platform-wide switch, confirmed
+ * with « Raison * » (≥ 10 chars, logged on `ai_route.update`); the route keeps its models, credits, timeout and threshold.
+ */
+export function FailoverDialog({ req, models, onClose }: { req: { route: AiRouteDto; on: boolean } | null; models: AiModelAdminDto[]; onClose: () => void }) {
+  const t = useT();
+  const invalidate = useAdminInvalidate();
+  const [reason, setReason] = useState('');
+  const [errors, setErrors] = useState<ServerErrors>(NO_ERRORS);
+  const m = useMutation({ mutationFn: (b: { cap: string; body: unknown }) => adminWrite(`/admin/ai-routes/${b.cap}`, 'PUT', b.body) });
+  useOnOpen(!!req, () => {
+    setReason('');
+    setErrors(NO_ERRORS);
+  });
+  if (!req) return null;
+  const { route, on } = req;
+  const primaryModelId = routeModelId(models, route.primary.modelId);
+  const fallbackModelId = routeModelId(models, route.fallback?.modelId) ?? null;
+  const cap = t(`admin.ai.capLong.${route.capability}`);
+  const submit = async () => {
+    setErrors(NO_ERRORS);
+    if (!primaryModelId) return setErrors({ ...NO_ERRORS, form: t('admin.ai.route.noPrimary') });
+    try {
+      await m.mutateAsync({ cap: route.capability, body: { primaryModelId, fallbackModelId, creditCost: route.credits, timeoutSec: route.timeoutSec, errorThresholdPct: route.errorThresholdPct, failoverActive: on, reason: reason.trim() } });
+      void invalidate('/admin/ai-routes', '/admin/ai-providers', '/admin/ai-pricing');
+      toast(on ? t('admin.ai.route.failoverOn') : t('admin.ai.route.failoverOff'));
+      onClose();
+    } catch (e) {
+      setErrors(toServerErrors(e, t, ['reason'], { ADMIN_REASON_REQUIRED: 'reason' }));
+    }
+  };
+  return (
+    <AdminDialog
+      open
+      onClose={onClose}
+      testId="dlg-route-failover"
+      size="sm"
+      title={on ? t('admin.ai.route.forceTitle', { cap }) : t('admin.ai.route.clearTitle', { cap })}
+      context={
+        on
+          ? t('admin.ai.route.forceEffect', { primary: `${route.primary.provider} · ${route.primary.label}`, fallback: route.fallback ? `${route.fallback.provider} · ${route.fallback.label}` : '—' })
+          : t('admin.ai.route.clearEffect', { primary: `${route.primary.provider} · ${route.primary.label}` })
+      }
+      submitLabel={on ? t('admin.ai.route.force') : t('admin.ai.route.clear')}
+      destructive={on}
+      disabled={!reasonOk(reason)}
+      pending={m.isPending}
+      error={errors.form}
+      onSubmit={() => void submit()}
+    >
+      <ReasonField value={reason} onChange={setReason} error={errors.fields.reason} />
     </AdminDialog>
   );
 }

@@ -22,6 +22,9 @@ export const languageAlternates = (path: string): Record<string, string> => {
   return out;
 };
 
+/** The default Open Graph picture of a locale (1200 × 630, `app/[locale]/opengraph-image.tsx`). */
+export const ogImage = (locale: AppLocale) => ({ url: `/${locale}/opengraph-image`, width: 1200, height: 630, alt: SITE_NAME });
+
 /** "Tarifs · Djaber.ai" — a page title, the description, canonical + hreflang; `noindex` for previews and 404s. */
 export function pageMetadata(o: { locale: AppLocale; path: string; title: string; description: string; noindex?: boolean }): Metadata {
   // journey J12-10.3: a title that already names the brand (the landing « Djaber.ai — votre vendeur IA… ») is not
@@ -32,7 +35,10 @@ export function pageMetadata(o: { locale: AppLocale; path: string; title: string
     title,
     description: o.description,
     alternates: { canonical: `/${o.locale}${o.path}`, languages: languageAlternates(o.path) },
-    openGraph: { title, description: o.description, siteName: SITE_NAME, locale: o.locale === 'ar' ? 'ar_DZ' : o.locale === 'en' ? 'en_US' : 'fr_DZ', type: 'website', url: `/${o.locale}${o.path}` },
+    // journey J12r-2: a page's own `openGraph` replaces the layout's, so the default picture (`app/[locale]/opengraph-image`)
+    // is named here too — the landing, pricing, status, help and legal links shared on Facebook / WhatsApp show it
+    openGraph: { title, description: o.description, siteName: SITE_NAME, locale: o.locale === 'ar' ? 'ar_DZ' : o.locale === 'en' ? 'en_US' : 'fr_DZ', type: 'website', url: `/${o.locale}${o.path}`, images: [ogImage(o.locale)] },
+    twitter: { card: 'summary_large_image', title, description: o.description, images: [ogImage(o.locale).url] },
     robots: o.noindex ? { index: false, follow: false } : { index: true, follow: true },
   };
 }

@@ -62,6 +62,10 @@ export function ProductStatePill({ product }: { product: Pick<ProductListItem, '
   );
 }
 
+/** Journey J13r-2: a product still pending whose review asked the merchant for changes shows « MODIFICATION DEMANDÉE ». */
+export const moderationPillStatus = (m: { status: string; changesRequested?: boolean } | null | undefined): string | null =>
+  m ? (m.status === 'pending' && m.changesRequested ? 'changes_requested' : m.status) : null;
+
 /** VALIDATION DJABER pill; `not_required` renders nothing. */
 export function ModerationPill({ status, long }: { status: ModerationStatus | string | null | undefined; long?: boolean }) {
   const t = useT();
@@ -79,13 +83,13 @@ export function ModerationPill({ status, long }: { status: ModerationStatus | st
  * Djaber — waiting, refused, contested. Report 12/11 (« casque »: IA « EXCLU » + « CONTESTATION » after « Ajouter à un
  * agent », read as a bug): the screens now say it.
  */
-export type AiExclusion = 'archived' | 'inactive' | 'pending' | 'rejected' | 'appealed';
-export function aiExclusion(p: { aiState?: string; archived?: boolean; isActive?: boolean; moderation?: { status: string } | null }): AiExclusion | null {
+export type AiExclusion = 'archived' | 'inactive' | 'pending' | 'changes_requested' | 'rejected' | 'appealed';
+export function aiExclusion(p: { aiState?: string; archived?: boolean; isActive?: boolean; moderation?: { status: string; changesRequested?: boolean } | null }): AiExclusion | null {
   if (p.aiState !== 'excluded') return null;
   if (p.archived) return 'archived';
   if (p.isActive === false) return 'inactive';
-  const s = p.moderation?.status;
-  return s === 'pending' || s === 'rejected' || s === 'appealed' ? s : null;
+  const s = moderationPillStatus(p.moderation);
+  return s === 'pending' || s === 'changes_requested' || s === 'rejected' || s === 'appealed' ? s : null;
 }
 
 /** PROPOSÉ / EXCLU (IA column); an excluded product says why (hover in the lists, written next to it on the product page). */

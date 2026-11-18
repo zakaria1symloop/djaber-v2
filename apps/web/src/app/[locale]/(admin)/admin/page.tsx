@@ -137,7 +137,7 @@ export default function AdminOverviewPage() {
                       tone={a.severity === 'critical' ? 'danger' : 'warning'}
                       title={t.has(`admin.alert.${a.code}`) ? t(`admin.alert.${a.code}`, a.code === 'courier_key_expired' && typeof a.params?.provider === 'string' ? { ...a.params, provider: courierLabel(t, a.params.provider) } : a.params) : a.code}
                       meta={[a.since ? t('admin.overview.alerts.since', { ago: f.ago(a.since) }) : null, t.has(`admin.alert.${a.code}.hint`) ? t(`admin.alert.${a.code}.hint`, a.params) : null].filter(Boolean).join(' · ')}
-                      action={<Link href={a.link} className="hover:underline">{t(`admin.overview.alerts.link.${a.code}`)}</Link>}
+                      action={<Link href={a.link} className="hover:underline">{t.has(`admin.overview.alerts.link.${a.code}`) ? t(`admin.overview.alerts.link.${a.code}`) : t('action.open')}</Link>}
                     />
                   ))}
                 </ul>

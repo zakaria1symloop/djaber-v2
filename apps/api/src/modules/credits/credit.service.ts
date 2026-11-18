@@ -16,6 +16,7 @@ import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { algiersDay, algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
 import { NotificationProducer } from '../notifications/notification.producer';
+import { CONSUMPTION_ACTIONS } from './consumption';
 
 export type Balance = { periodStart: Date; periodEnd: Date; /** the period is the trial's (J12-1) */ trial: boolean; planLimit: number; planUsed: number; plan: number; pack: number; total: number; reserved: number; unlimited: boolean; exhausted: boolean };
 export type SettleAction = Extract<CreditAction, 'text_reply' | 'image_recognition' | 'voice_transcription'>;
@@ -323,7 +324,7 @@ export class CreditService implements OnModuleInit {
     const workspaceId = TenantContext.workspaceId();
     const b = await this.balance(workspaceId);
     const since = new Date(Date.now() - 7 * DAY);
-    const week = await prisma.creditLedger.aggregate({ where: { workspaceId, kind: 'debit', createdAt: { gte: since } }, _sum: { credits: true } });
+    const week = await prisma.creditLedger.aggregate({ where: { workspaceId, kind: 'debit', action: { in: CONSUMPTION_ACTIONS }, createdAt: { gte: since } }, _sum: { credits: true } });
     const burn = Math.round((-(week._sum.credits ?? 0) / 7) * 10) / 10;
     const pricing = await TenantContext.runSystem(() => prisma.creditPricing.findFirst({ where: { effectiveAt: { lte: new Date() } }, orderBy: { version: 'desc' } }));
     // journey J12-4: « pack moyen » is the average DA / credit of the packs on sale (it was the first pack's price), and the

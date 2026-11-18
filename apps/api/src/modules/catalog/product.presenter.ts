@@ -22,6 +22,8 @@ export const isProposed = (p: { isActive: boolean; deletedAt: Date | null; moder
 export const moderationPill = (p: Pick<ProductListRow, 'moderationStatus' | 'currentModeration'>): ProductModerationPill => ({
   status: p.moderationStatus,
   ...(p.moderationStatus === 'pending' && p.currentModeration ? { etaLabel: p.currentModeration.slaDueAt.toISOString() } : {}),
+  // journey J13r-2: Djaber waits for the merchant, not the other way round
+  ...(p.moderationStatus === 'pending' && p.currentModeration?.status === 'changes_requested' ? { changesRequested: true } : {}),
   ...(p.moderationStatus === 'rejected' && p.currentModeration?.decision ? { reason: p.currentModeration.decision } : {}),
 });
 

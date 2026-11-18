@@ -7,7 +7,7 @@ import { Pill, type Tone } from './primitives';
 export const PILL_TONES = {
   'Product.state': { active: 'success', inactive: 'neutral', hidden: 'neutral', archived: 'neutral', service: 'neutral' },
   'Product.stock': { ok: 'neutral', low: 'warning', out: 'danger', untracked: 'neutral' },
-  'Product.moderationStatus': { not_required: 'neutral', pending: 'warning', approved: 'success', rejected: 'danger', appealed: 'violet' },
+  'Product.moderationStatus': { not_required: 'neutral', pending: 'warning', approved: 'success', rejected: 'danger', appealed: 'violet', changes_requested: 'warning' },
   'Product.ai': { proposed: 'success', excluded: 'neutral', outdated: 'warning' },
   'StockMovement.type': { in: 'success', out: 'danger', adjustment_in: 'success', adjustment_out: 'orange', inventory: 'warning', return: 'info' },
   'Job.status': { queued: 'neutral', running: 'info', done: 'success', partial: 'warning', failed: 'danger', cancelled: 'neutral' },

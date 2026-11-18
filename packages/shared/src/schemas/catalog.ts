@@ -277,7 +277,8 @@ export const PRODUCT_STOCK_STATE_FILTERS = ['low', 'out', 'in_stock'] as const;
 
 // --- read models (api-contract §3.5) ----------------------------------------------------------------------------------------
 export type StockState = 'ok' | 'low' | 'out' | 'untracked';
-export type ProductModerationPill = { status: 'not_required' | 'pending' | 'approved' | 'rejected' | 'appealed'; etaLabel?: string; reason?: string };
+/** journey J13r-2: `changesRequested` — still pending, but Djaber asked the merchant for changes (the item is `changes_requested`). */
+export type ProductModerationPill = { status: 'not_required' | 'pending' | 'approved' | 'rejected' | 'appealed'; etaLabel?: string; reason?: string; changesRequested?: boolean };
 export type CategoryRefView = { id: string; name: string; color: string };
 export type UnitRefView = { id: string; abbreviation: string };
 export type ProductListItemView = {
@@ -341,6 +342,8 @@ export type ProductImageView = {
 };
 export type ModerationDetailView = {
   status: string;
+  /** journey J13r-2: the moderator asked for changes (item `changes_requested`): the message and fields are the request */
+  changesRequested: boolean;
   submittedAt: string;
   decidedAt: string | null;
   decision: string | null;

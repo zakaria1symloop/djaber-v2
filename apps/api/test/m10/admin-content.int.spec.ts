@@ -78,6 +78,8 @@ describe('ADM-06 AI providers, models, routes, pricing', () => {
     const m = (await sa.post('/admin/ai-models', { providerKey: 'openai', modelId: mid, displayName: 'GPT test', capabilities: ['text'], inputPricePerM: 0.15, outputPricePerM: 0.6 }).expect(201)).body.data;
     expect(m).toMatchObject({ modelId: mid, providerKey: 'openai', usedBy: [] });
     expect((await sa.post('/admin/ai-models', { providerKey: 'openai', modelId: mid, displayName: 'dup', capabilities: ['text'], inputPricePerM: 1, outputPricePerM: 1 }).expect(409)).body.error.code).toBe('CONFLICT');
+    // journey J13r (J13-7): a Whisper model only transcribes
+    expect((await sa.post('/admin/ai-models', { providerKey: 'openai', modelId: `whisper-${mid}`, displayName: 'Whisper test', capabilities: ['text', 'transcription'], inputPricePerM: 0, outputPricePerM: 0 }).expect(422)).body.error.fields).toMatchObject({ capabilities: 'validation.invalid' });
     const routes = (await sa.get('/admin/ai-routes').expect(200)).body.data;
     const text = routes.find((r: any) => r.capability === 'text');
     expect(text).toMatchObject({ state: expect.any(String), credits: expect.any(Number) });
@@ -96,7 +98,8 @@ describe('ADM-06 AI providers, models, routes, pricing', () => {
     // journeys 16/11 J13-7: a routed model keeps the capability of its route
     expect((await sa.patch(`/admin/ai-models/${m.id}`, { capabilities: ['vision'] }).expect(422)).body.error.fields).toMatchObject({ capabilities: 'validation.invalid' });
     // deactivate the primary ⇒ routing serves the fallback
-    await sa.put('/admin/ai-routes/text', { primaryModelId: text.primary.modelId, fallbackModelId: m.id, creditCost: text.credits, failoverActive: false }).expect(200);
+    await sa.put('/admin/ai-routes/text', { primaryModelId: text.primary.modelId, fallbackModelId: m.id, creditCost: text.credits, failoverActive: false }).expect(422); // J13r: reason required
+    await sa.put('/admin/ai-routes/text', { primaryModelId: text.primary.modelId, fallbackModelId: m.id, creditCost: text.credits, failoverActive: false, reason: REASON }).expect(200);
     const { RoutingService } = await import('../../src/modules/ai/routing.service');
     await sa.patch(`/admin/ai-models/${text.primary.modelId}`, { isActive: false }).expect(200);
     expect((await app.app.get(RoutingService).route('text')).primary.id).toBe(m.id);
@@ -104,7 +107,7 @@ describe('ADM-06 AI providers, models, routes, pricing', () => {
     await expect(app.app.get(RoutingService).route('text')).rejects.toMatchObject({ code: 'AGENT_MODEL_UNAVAILABLE' });
     // restore
     await sa.patch(`/admin/ai-models/${text.primary.modelId}`, { isActive: true }).expect(200);
-    await sa.put('/admin/ai-routes/text', { primaryModelId: text.primary.modelId, fallbackModelId: text.fallback?.modelId ?? null, creditCost: text.credits, failoverActive: false }).expect(200);
+    await sa.put('/admin/ai-routes/text', { primaryModelId: text.primary.modelId, fallbackModelId: text.fallback?.modelId ?? null, creditCost: text.credits, failoverActive: false, reason: REASON }).expect(200);
     // never served ⇒ deleted
     expect((await sa.delete(`/admin/ai-models/${m.id}`).expect(200)).body.data).toEqual({ outcome: 'deleted' });
     expect(await db.aiModel.findUnique({ where: { id: m.id } })).toBeNull();
@@ -204,7 +207,7 @@ describe('ADM-08 CMS — announcements reach the merchant app and the public sit
       const key = `ux005-${randomUUID().slice(0, 8)}`;
       createdCms.push(key);
       const e = (await sa.post('/admin/cms', { key, type: 'announcement', target, channels, link: '/settings/billing', locales: { fr: { title: `Annonce ${key}`, body: 'Nouvelle grille\nDétails…' } } }).expect(201)).body.data;
-      await sa.post(`/admin/cms/${e.id}/publish`, { fallbackToFr: true }).expect(200);
+      await sa.post(`/admin/cms/${e.id}/publish`, { fallbackToFr: true, reason: REASON }).expect(200);
       return e.id as string;
     };
     const forAll = await make({ scope: 'all' }, ['banner', 'web', 'in_app']);
@@ -253,7 +256,9 @@ describe('ADM-08 CMS', () => {
     await sa.put(`/admin/cms/${e.id}/locales/ar`, { title: 'شبكة جديدة', body: 'ابتداءً من 1 نوفمبر' }).expect(200);
     await sa.put(`/admin/cms/${e.id}/locales/xx`, { title: 'x', body: 'y' }).expect(404);
     const owner = await asOwner(app);
-    const pub = (await sa.post(`/admin/cms/${e.id}/publish`, { fallbackToFr: true }).expect(200)).body.data;
+    // journey J13r (J13-4): a publication needs its reason
+    expect((await sa.post(`/admin/cms/${e.id}/publish`, { fallbackToFr: true }).expect(422)).body.error).toMatchObject({ code: 'ADMIN_REASON_REQUIRED', fields: { reason: 'validation.length' } });
+    const pub = (await sa.post(`/admin/cms/${e.id}/publish`, { fallbackToFr: true, reason: REASON }).expect(200)).body.data;
     expect(pub).toMatchObject({ status: 'published', currentVersion: 1 });
     expect(pub.locales.find((l: any) => l.locale === 'en')).toMatchObject({ status: 'missing', fallbackToFr: true });
     await drainAll(app, ['notification']);
@@ -326,12 +331,24 @@ describe('ADM-09 audit · ADM-17 viewers · ADM-01 overview', () => {
     expect((await support.get(`/admin/products?workspaceId=${owner.workspaceId}`).expect(200)).body.data[0]).toMatchObject({ id: prod.id, moderationStatus: 'approved', aiStatus: 'proposed' });
     expect((await support.get(`/admin/products/${prod.id}`).expect(200)).body.data).toMatchObject({ id: prod.id, variants: [], images: [] });
     expect(await lastAudit('viewer.open', prod.id)).toBeTruthy();
+    // journey J13r-8: a new product still pending is EXCLU (the AI does not offer it); a variant product shows its range
+    const pending = await db.product.create({ data: { workspaceId: owner.workspaceId, sku: `V-${randomUUID().slice(0, 6)}`, name: 'Coque silicone', price: 2200, moderationStatus: 'pending' } });
+    await db.productVariant.createMany({ data: [{ workspaceId: owner.workspaceId, productId: pending.id, name: 'S', price: 1650 }, { workspaceId: owner.workspaceId, productId: pending.id, name: 'L', price: 2090 }] });
+    const productRows = (await support.get(`/admin/products?workspaceId=${owner.workspaceId}&pageSize=100`).expect(200)).body.data;
+    expect(productRows.find((r: any) => r.id === pending.id)).toMatchObject({ aiStatus: 'excluded', priceRange: { min: 1650, max: 2090 } });
+    expect(productRows.find((r: any) => r.id === prod.id)).toMatchObject({ aiStatus: 'proposed', priceRange: null });
 
     // audit list filters + detail
     const audit = (await sa.get(`/admin/audit-logs?workspaceId=${owner.workspaceId}&action=viewer.open`).expect(200)).body.data;
     expect(audit.length).toBeGreaterThanOrEqual(2);
     expect(audit[0]).toMatchObject({ action: 'viewer.open', target: { workspace: { id: owner.workspaceId } }, actor: { type: 'admin' } });
     expect((await sa.get(`/admin/audit-logs/${audit[0].id}`).expect(200)).body.data.id).toBe(audit[0].id);
+    // journey J13r-10 / J13-6: a stored reason token is read in words; a merchant record is named, never « Supplier 01a1… »
+    const supplier = await db.supplier.create({ data: { workspaceId: owner.workspaceId, name: 'Fournisseur QA J13r' } });
+    const stored = await db.auditLog.create({ data: { workspaceId: owner.workspaceId, actorType: 'user', action: 'supplier.update', entity: 'Supplier', entityId: supplier.id, reason: '§sales.cancel.reason.entry_error' } });
+    const storedRow = (await sa.get(`/admin/audit-logs/${stored.id}`).set('Accept-Language', 'fr').expect(200)).body.data;
+    expect(storedRow.reason).toBe('Erreur de saisie');
+    expect(storedRow.target.label).toContain('Fournisseur QA J13r');
     // full-test 15/11 ADMIN-14: the « Action » filter lists every slug present in the log
     expect((await sa.get('/admin/audit-logs/actions').expect(200)).body.data).toContain('viewer.open');
     await sa.get(`/admin/audit-logs?impersonation=nope`).expect(422);

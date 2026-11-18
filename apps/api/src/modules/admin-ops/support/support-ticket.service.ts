@@ -34,6 +34,7 @@ import { moderationSlaDueAt } from '../../catalog/moderation-hook.service';
 import { NotificationProducer } from '../../notifications/notification.producer';
 import { auditAdmin, iso, pick, sys, sysTx, toUserRef, userRefSelect, type PlatformActor } from '../admin-ops.util';
 import { AdminNotifier } from '../../notifications/admin-notifier.service';
+import { viewerUserId } from '../../../core/privacy/mask';
 
 /** One business day of 09:00–18:00 = 540 business minutes. */
 const BUSINESS_DAY_MIN = 9 * 60;
@@ -234,7 +235,7 @@ export class SupportTicketService implements OnModuleInit {
   async list(q: TicketsQuery): Promise<Page<SupportTicketDto>> {
     const t = TenantContext.get();
     if (q.scope === 'workspace' && !can(t.role, 'support.read_all')) throw forbidden();
-    const where: Prisma.SupportTicketWhereInput = { workspaceId: t.workspaceId, ...(q.scope === 'mine' ? { userId: t.userId } : {}), ...(q.status?.length ? { status: { in: q.status } } : {}) };
+    const where: Prisma.SupportTicketWhereInput = { workspaceId: t.workspaceId, ...(q.scope === 'mine' ? { userId: viewerUserId() } : {}), ...(q.status?.length ? { status: { in: q.status } } : {}) };
     return TenantContext.runSystem(async () => {
       const [rows, total] = await Promise.all([prisma.supportTicket.findMany({ where, include: ticketInclude, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }], ...toSkipTake(q) }), prisma.supportTicket.count({ where })]);
       return page(rows.map((r) => this.presentMerchant(r)), total, q);

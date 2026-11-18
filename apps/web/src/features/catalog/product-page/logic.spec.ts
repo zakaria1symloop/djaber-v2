@@ -4,6 +4,7 @@ import { appealExpired, moderationView, qtyText, rejectedField, stockSummary, ti
 
 const detail = (o: Partial<NonNullable<Product['moderationDetail']>> = {}): NonNullable<Product['moderationDetail']> => ({
   status: 'rejected',
+  changesRequested: false,
   submittedAt: '2026-10-05T09:12:00.000Z',
   decidedAt: '2026-10-05T10:30:00.000Z',
   decision: 'counterfeit',

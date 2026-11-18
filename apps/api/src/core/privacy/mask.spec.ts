@@ -1,8 +1,9 @@
 // Recette 11/11 (Badro): the merchant inbox read through « Se connecter en tant que » masks the customer like the admin
 // viewers (04 §17 « Viewers »).
-import { TenantContext } from '@djaber/db';
+import { NO_LIMITS, TenantContext } from '@djaber/db';
 import { presentConversation, presentMessage, type ConversationRow, type MessageRow } from '../../modules/messaging/messaging.presenter';
-import { impersonating, maskName, maskPhone, maskText } from './mask';
+import { NotificationService } from '../../modules/notifications/notification.service';
+import { impersonating, maskIp, maskName, maskPhone, maskText, viewerUserId } from './mask';
 
 const conversation = {
   id: 'c1',
@@ -52,5 +53,23 @@ describe('PII masking', () => {
     const row = asMember(() => presentConversation(conversation, false));
     expect(row.client).toMatchObject({ name: 'Mehdi Hadj', phone: '0661987654' });
     expect(asMember(() => presentMessage(message)).text).toBe('Appelez-moi au 0661987654');
+  });
+});
+
+// journey J13r-1: « Se connecter en tant que » shows the shop owner's per-user rows, never the admin's own
+describe('viewerUserId / impersonation scope', () => {
+  const base = { workspaceId: 'w1', readOnly: true, locale: 'fr' as const, stockMode: 'simple' as const, suspended: false, limits: NO_LIMITS };
+  it('is the signed-in user, or the shop owner during an impersonation', () => {
+    expect(TenantContext.run({ ...base, userId: 'u1' }, () => viewerUserId())).toBe('u1');
+    expect(TenantContext.run({ ...base, userId: 'admin', impersonation: { sessionId: 's', adminId: 'admin', ownerUserId: 'owner' } }, () => viewerUserId())).toBe('owner');
+  });
+  it('the notification centre reads the owner rows of the shop only (no platform rows of the admin)', () => {
+    const svc = new NotificationService({} as never) as unknown as { scope: () => unknown };
+    expect(TenantContext.run({ ...base, userId: 'u1' }, () => svc.scope())).toEqual({ userId: 'u1', OR: [{ workspaceId: 'w1' }, { workspaceId: null }] });
+    expect(TenantContext.run({ ...base, userId: 'admin', impersonation: { sessionId: 's', adminId: 'admin', ownerUserId: 'owner' } }, () => svc.scope())).toEqual({ userId: 'owner', workspaceId: 'w1' });
+  });
+  it('masks the end of an IPv4 address', () => {
+    expect(maskIp('154.246.12.34')).toBe('154.246.x.x');
+    expect(maskIp(null)).toBeNull();
   });
 });

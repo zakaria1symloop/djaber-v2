@@ -24,6 +24,7 @@ import { algiersDay, algiersDayStart } from '../../core/time/algiers';
 import { containsWord, foldText } from '../catalog/moderation-prescreen.service';
 import { conversationHead, userRef } from './messaging.presenter';
 import { AdminNotifier } from '../notifications/admin-notifier.service';
+import { viewerUserId } from '../../core/privacy/mask';
 
 const senderKey = (channelId: string, externalSenderId: string) => `${channelId}:${externalSenderId}`;
 const maskPhone = (p: string | null | undefined) => (p && p.length >= 6 ? `${p.slice(0, 2)}•• •• •• ${p.slice(-2)}` : p ? '••' : null);
@@ -338,7 +339,7 @@ export class SafetyService {
 
   async listReports(q: { scope: 'mine' | 'workspace'; page: number; pageSize: number }): Promise<Page<SafetyReportView>> {
     const t = TenantContext.get();
-    const where: Prisma.ReportWhereInput = { workspaceId: t.workspaceId, reporterKind: 'merchant_user', ...(q.scope === 'mine' ? { reporterUserId: t.userId } : {}) };
+    const where: Prisma.ReportWhereInput = { workspaceId: t.workspaceId, reporterKind: 'merchant_user', ...(q.scope === 'mine' ? { reporterUserId: viewerUserId() } : {}) };
     const [rows, total] = await Promise.all([
       prisma.report.findMany({ where, include: { reporter: userRef }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], ...toSkipTake(q) }),
       prisma.report.count({ where }),

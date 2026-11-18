@@ -7,6 +7,7 @@ import { NOTIFICATION_CHANNELS, notificationChannelOn, NotificationTypeValues, t
 import { prisma, TenantContext, type Notification, type NotificationType, type Tx } from '@djaber/db';
 import { ConfigService } from '../../core/config/config.service';
 import { notFound } from '../../core/errors/app.exception';
+import { viewerUserId } from '../../core/privacy/mask';
 import { MailOutbox } from '../../core/mail/mail.outbox';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { QueueOutbox } from '../../core/queue/queue.outbox';
@@ -53,7 +54,8 @@ export class NotificationFanoutService implements OnModuleInit {
   /** `GET /notification-preferences` — one row per `NotificationType` (the table groups them by family). */
   async list(): Promise<NotificationPreferenceView[]> {
     const t = TenantContext.get();
-    const s = await this.stored(t.workspaceId, t.userId!);
+    // J13r-1: during an impersonation the owner's matrix is shown (the admin has no membership in the shop)
+    const s = await this.stored(t.workspaceId, viewerUserId()!);
     if (!s) throw notFound();
     // the super admin notifications (platform_admin) are not a member's to tune
     return NotificationTypeValues.filter((type) => type !== 'platform_admin').map((type) => {
