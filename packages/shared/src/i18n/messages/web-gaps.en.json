@@ -156,7 +156,7 @@
  "savedViews.sharedBy": "Shared by {name}",
  "savedViews.copy": "copy",
  "savedViews.copyN": "copy {n}",
- "savedViews.shareAdminOnly": "Workspace owners and admins only.",
+ "savedViews.shareAdminOnly": "Workspace owner and admins only.",
  "savedViews.action.rename": "Rename…",
  "savedViews.action.setDefault": "Set as default",
  "savedViews.action.unsetDefault": "Remove the default",

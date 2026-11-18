@@ -9,7 +9,7 @@ import type { ReactNode } from 'react';
 import { AppPage } from '@/components/app-page';
 import { withoutYear } from '@/features/catalog/stock/logic';
 import { Link } from '@/i18n/navigation';
-import { iso } from '@/lib/format-message';
+import { iso, rangeArrow } from '@/lib/format-message';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { filterText } from '@/lib/list-state';
 import { useSession } from '@/lib/session';
@@ -73,7 +73,7 @@ export function PeriodDropdown({ list, defaultKey, keys = GDS_PERIOD_KEYS, align
   const from = filterText(s, 'from');
   const to = filterText(s, 'to');
   const custom = !!(from || to);
-  const label = custom ? `${from ? day(from) : '…'} → ${to ? day(to) : '…'}` : period ? t(`gds.period.${period}`) : defaultKey ? t(`gds.period.${defaultKey}`) : null;
+  const label = custom ? `${from ? day(from) : '…'} ${rangeArrow(t.locale)} ${to ? day(to) : '…'}` : period ? t(`gds.period.${period}`) : defaultKey ? t(`gds.period.${defaultKey}`) : null;
   return (
     <FilterDropdown label={label ? t('common.period', { label }) : t('gds.period.label')} align={align}>
       <div className="flex flex-col gap-3" data-testid="period-dropdown">

@@ -21,6 +21,7 @@ import { QuickImagesStrip } from '../product-form/images-section';
 import type { Product } from '../contracts';
 import { MovementTypePill, Num, ProductThumb, StockPill, useMovementReason } from '../ui';
 import { uuid } from '@/lib/uuid';
+import { forbiddenReason } from '@/lib/actions';
 
 type Status = { tone: 'ok' | 'error' | 'busy'; text: string } | null;
 type PriceField = 'price' | 'oldPrice' | 'costPrice';
@@ -88,7 +89,7 @@ function Body({ product, setStatus }: { product: Product; setStatus: (s: Status)
   const { can, workspace } = useSession();
   const advanced = workspace?.stockMode === 'advanced';
   const editable = can('catalog.write') && !product.archived;
-  const forbidden = editable ? undefined : product.archived ? t('products.quick.archived') : t('toast.forbidden');
+  const forbidden = editable ? undefined : product.archived ? t('products.quick.archived') : forbiddenReason(t);
 
   /* prices: saved when the field loses focus */
   const [values, setValues] = useState<Record<PriceField, string>>({ price: moneyDigits(product.price), oldPrice: moneyDigits(product.oldPrice), costPrice: moneyDigits(product.costPrice) });
@@ -242,7 +243,7 @@ function StockSection({ product, setStatus }: { product: Product; setStatus: (s:
       </SheetSection>
     );
   }
-  const reasonOff = product.archived ? t('products.quick.archived') : can('stock.adjust') ? undefined : t('toast.forbidden');
+  const reasonOff = product.archived ? t('products.quick.archived') : can('stock.adjust') ? undefined : forbiddenReason(t);
   const lines = product.hasVariants
     ? product.variants.filter((v) => v.isActive).map((v) => ({ id: v.id, variantId: v.id as string | null, name: v.name, price: v.price, stock: v.stock, state: v.stockState }))
     : [{ id: 'product', variantId: null, name: t('products.quick.stockLine'), price: product.price, stock: product.stock ?? 0, state: product.stockState === 'untracked' ? ('ok' as const) : product.stockState }];

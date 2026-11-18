@@ -66,6 +66,7 @@ import { ListExportMenu } from './export-menu';
 import { AdvancedOnly, KpiSkeleton, PeriodDropdown, SaleStatusPill, shortName } from './ui';
 import { withoutYear } from '@/features/catalog/stock/logic';
 import { formatPhoneOnBlur, phoneError, phonePreviewLine } from '@/lib/phone';
+import { forbiddenReason } from '@/lib/actions';
 
 export const SALES_SPEC: ListSpec = {
   filters: { paymentStatus: 'list', status: 'list', createdById: 'list', clientId: 'text', productId: 'text', hasRemaining: 'bool', period: 'text', from: 'date', to: 'date' },
@@ -401,7 +402,7 @@ function NewSaleSheet({ draftId, onClose, blockedBy }: { draftId: string | null;
       setBusy(null);
     }
   };
-  const blocked = !can('gds.write') ? t('toast.forbidden') : offline ? t('banner.offline') : blockedBy ? t('sales.blockedByInventory', { number: blockedBy.number }) : live.discountOver ? t('sales.form.discountOver') : undefined;
+  const blocked = !can('gds.write') ? forbiddenReason(t) : offline ? t('banner.offline') : blockedBy ? t('sales.blockedByInventory', { number: blockedBy.number }) : live.discountOver ? t('sales.form.discountOver') : undefined;
   if (draftId && draft.isError)
     return (
       <SideSheet open onClose={onClose} title={t('sales.form.title')} closeLabel={t('action.close')} width={460}>

@@ -337,12 +337,13 @@ export const REPORT_PRODUCERS: Record<ReportKey, Producer> = {
       .map((e) => {
         const d = doc.get(e.sourceId);
         const direction = e.sourceType === 'purchase' ? 'out' : 'in';
-        // `received`: the chart measure (J11-1 — money collected by mode; a payment to a supplier is 0 there)
-        return { date: iso(e.paidAt), documentType: e.sourceType, number: d?.number ?? null, party: d?.party ?? null, method: reportMethod(e.method, e.sourceType, e.amount > 0 ? e.cashTransaction?.description : null), direction, amount: e.amount, received: direction === 'in' ? e.amount : 0, reference: e.reference, _ref: { type: e.sourceType as 'order' | 'sale' | 'purchase', id: e.sourceId } };
+        // journeys 18/11 J10r-1 / J11r-1: the amount sits in the column of its direction — `received` (money collected, also
+        // the chart measure of J11-1) or `paid` (paid to a supplier); the totals row then reads the two KPIs, never their sum
+        return { date: iso(e.paidAt), documentType: e.sourceType, number: d?.number ?? null, party: d?.party ?? null, method: reportMethod(e.method, e.sourceType, e.amount > 0 ? e.cashTransaction?.description : null), direction, received: direction === 'in' ? e.amount : null, paid: direction === 'out' ? e.amount : null, reference: e.reference, _ref: { type: e.sourceType as 'order' | 'sale' | 'purchase', id: e.sourceId } };
       })
       .filter((row) => !q || [row.number, row.party, row.reference].some((v) => v?.toLowerCase().includes(q)));
-    const received = rows.filter((x) => x.direction === 'in').reduce((s, x) => s + n(x.amount), 0);
-    const paid = rows.filter((x) => x.direction === 'out').reduce((s, x) => s + n(x.amount), 0);
+    const received = rows.reduce((s, x) => s + n(x.received), 0);
+    const paid = rows.reduce((s, x) => s + n(x.paid), 0);
     return { rows, kpis: { received, paid, count: rows.length } };
   },
 

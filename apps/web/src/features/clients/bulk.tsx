@@ -10,6 +10,7 @@ import { useSession } from '@/lib/session';
 import { clientsApi, useClientsExport, useClientsRefresh, type BulkResponse } from './api';
 import type { ClientListItem } from './contracts';
 import { TagsDialog } from './dialogs';
+import { forbiddenReason } from '@/lib/actions';
 
 type Outcome = { title: string; response: BulkResponse; retry: (ids: string[]) => Promise<BulkResponse> };
 
@@ -24,8 +25,8 @@ export function ClientsBulkBar({ rows, selected, total, knownTags, onSelectAllPa
   // names of every row seen on screen: a deleted client leaves the list before the result dialog opens
   const seen = useRef<Record<string, string>>({});
   for (const r of rows) seen.current[r.id] = r.name;
-  const writeReason = can('clients.write') ? undefined : t('toast.forbidden');
-  const deleteReason = can('clients.delete') ? undefined : t('toast.forbidden');
+  const writeReason = can('clients.write') ? undefined : forbiddenReason(t);
+  const deleteReason = can('clients.delete') ? undefined : forbiddenReason(t);
 
   const done = async (title: string, response: BulkResponse, retry: Outcome['retry']) => {
     setDialog(null);

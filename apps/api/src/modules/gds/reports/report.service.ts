@@ -261,6 +261,9 @@ export class ReportService implements OnModuleInit {
       width: c.type === 'text' ? 3 : c.type === 'datetime' ? 2.4 : 2,
     }));
     const totals = this.totals(run.def, run.rows);
+    // journeys 18/11 J11r-2: the XLSX ends with the totals row of the screen (label in the first column that is not summed)
+    const labelAt = cols.findIndex((c) => !c.sum);
+    const footer = cols.some((c) => c.sum) ? [cols.map((c, i) => (c.sum ? (totals[c.key] ?? 0) : i === labelAt ? this.i18n.t(locale, 'report.totals') : null))] : [];
     // J11-6: dates in words of the reader (« 16 nov. 2026 »); « – » because the PDF fonts have no « → » (it printed « ? »)
     const day = (d: string) => formatDate(`${d}T12:00:00Z`, locale);
     const period = run.range ? (run.range.from === run.range.to ? day(run.range.from) : `${day(run.range.from)} – ${day(run.range.to)}`) : this.i18n.t(locale, 'report.snapshot', { date: day(algiersDay()) });
@@ -269,6 +272,7 @@ export class ReportService implements OnModuleInit {
       fileName: `${run.def.key.replace(/_/g, '-')}-${run.range ? `${run.range.from}_${run.range.to}` : algiersDay()}`,
       columns,
       rows,
+      footer,
       pdf: {
         title,
         subtitle: '',

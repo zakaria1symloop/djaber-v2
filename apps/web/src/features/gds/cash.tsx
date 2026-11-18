@@ -38,9 +38,9 @@ import { refusal } from '@/features/orders/dialogs/common';
 import { useOffline } from '@/features/orders/offline';
 import { useMembers } from '@/features/workspace/api';
 import { useRouter } from '@/i18n/navigation';
-import { actionState, toMenuActions } from '@/lib/actions';
+import { actionState, toMenuActions, forbiddenReason } from '@/lib/actions';
 import { useHere, withBack } from '@/lib/back';
-import { iso } from '@/lib/format-message';
+import { iso, rangeArrow } from '@/lib/format-message';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
@@ -112,7 +112,7 @@ function CashLedger() {
   const methods = filterList(s, 'method');
   const by = filterList(s, 'createdById');
   const source = filterText(s, 'source');
-  const selLabel = sel.kind === 'day' ? (sel.day === today ? t('gds.period.today') : day(sel.day)) : sel.kind === 'period' ? t(`gds.period.${sel.period}`) : `${day(sel.from)} → ${day(sel.to)}`;
+  const selLabel = sel.kind === 'day' ? (sel.day === today ? t('gds.period.today') : day(sel.day)) : sel.kind === 'period' ? t(`gds.period.${sel.period}`) : `${day(sel.from)} ${rangeArrow(locale)} ${day(sel.to)}`;
   const chips = [
     ...(direction ? [{ key: 'direction', label: `${t('cash.filter.direction')} : ${t(`cash.direction.${direction}`)}`, onRemove: () => list.setFilter('direction', null) }] : []),
     ...(categories.length ? [{ key: 'category', label: `${t('cash.col.type')} : ${categories.map((c) => t(`enum.Cash.category.${c}`)).join(', ')}`, onRemove: () => list.setFilter('category', null) }] : []),
@@ -214,7 +214,7 @@ function CashLedger() {
   ];
 
   const since = q.dataUpdatedAt ? withoutYear(formatDateTime(new Date(q.dataUpdatedAt).toISOString(), locale)) : '—';
-  const writeBlocked = !canWrite ? t('toast.forbidden') : offline ? t('banner.offline') : undefined;
+  const writeBlocked = !canWrite ? forbiddenReason(t) : offline ? t('banner.offline') : undefined;
   const closeTheoretical = k?.day?.theoreticalCash ?? dayRow?.theoreticalCash ?? 0;
   return (
     <AppPage

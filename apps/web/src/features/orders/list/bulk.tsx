@@ -17,7 +17,7 @@ import { refusal, RadioList, useOnOpen } from '../dialogs/common';
 import { AssignDialog } from '../dialogs/order-dialogs';
 import { BulkSendDialog } from '@/features/delivery/bulk-send';
 import { PrintLabelsDialog } from '@/features/delivery/labels';
-import { actionState } from '@/lib/actions';
+import { actionState, forbiddenReason } from '@/lib/actions';
 import { ORDER_ACTION } from '../action-keys';
 import { mergeRetry } from '../logic';
 
@@ -263,7 +263,7 @@ export function OrdersBulkBar({
   // labels of every row seen on screen: a cancelled order may leave the tab before the result dialog opens
   const seen = useRef<Record<string, string>>({});
   for (const r of rows) seen.current[r.id] = `#${r.number} · ${r.client.name}`;
-  const forbidden = !can('orders.write') ? t('toast.forbidden') : offline ? t('banner.offline') : undefined;
+  const forbidden = !can('orders.write') ? forbiddenReason(t) : offline ? t('banner.offline') : undefined;
 
   const finish = async (title: string, response: BulkResponse, retry?: Outcome['retry']) => {
     await refresh();
@@ -293,7 +293,7 @@ export function OrdersBulkBar({
   });
   // an action no selected order allows is greyed with its reason (12 §5 « only valid actions »; full-test ORDERS-15)
   const noneAllows = (key: string) => (chosen.length && chosen.every((r) => !actionState(r.actions, key, t).enabled) ? t('orders.bulk.noneAllowed') : undefined);
-  const sendForbidden = !can('delivery.send') ? t('toast.forbidden') : offline ? t('banner.offline') : undefined;
+  const sendForbidden = !can('delivery.send') ? forbiddenReason(t) : offline ? t('banner.offline') : undefined;
   const actions: BulkAction[] = [
     { key: 'confirm', label: busy === 'confirmed' ? t('common.saving') : t('action.confirm'), onSelect: () => void status('confirmed', t('orders.bulk.title', { action: t('action.confirm'), count: ids.length })), disabledReason: forbidden ?? noneAllows(ORDER_ACTION.confirm) ?? (busy ? t('common.saving') : undefined) },
     { key: 'prepare', label: t('action.prepare'), onSelect: () => void status('preparing', t('orders.bulk.title', { action: t('action.prepare'), count: ids.length })), disabledReason: forbidden ?? noneAllows(ORDER_ACTION.prepare) ?? (busy ? t('common.saving') : undefined) },

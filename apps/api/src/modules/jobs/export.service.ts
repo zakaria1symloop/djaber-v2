@@ -10,7 +10,7 @@ import { money, renderGdsDocument } from '../gds/gds-document.pdf';
 import { JobService } from './job.service';
 import { exportDateTime } from './export-cells';
 import { writeTable, type TableColumn, type TableFormat } from './table-file';
-import { isDateCell } from './xlsx';
+import { isDateCell, type Cell } from './xlsx';
 import { logoBytes } from '../uploads/logo-bytes';
 import { viewerLocale } from '../../core/i18n/viewer-locale';
 
@@ -19,6 +19,8 @@ export type ExportTable<T = any> = {
   fileName: string;
   columns: TableColumn<T>[];
   rows: T[];
+  /** XLSX only: totals rows after the data (one cell per column, bold) — journeys 18/11 J11r-2 */
+  footer?: Cell[][];
   /** PDF only: title, meta lines and totals of the printed table */
   pdf?: { title: string; subtitle?: string; meta?: { label: string; value: string }[]; totals?: { label: string; value: string; bold?: boolean }[]; landscape?: boolean };
 };
@@ -72,7 +74,7 @@ export class ExportService implements OnModuleInit {
 
   /** Renders a table into a file (also used for immediate CSV / PDF answers and the scheduled report e-mails). */
   async render(table: ExportTable, format: ExportFormat, locale: 'fr' | 'ar' | 'en'): Promise<ExportFile> {
-    if (format !== 'pdf') return writeTable(format, table.sheetName, table.columns, table.rows);
+    if (format !== 'pdf') return writeTable(format, table.sheetName, table.columns, table.rows, table.footer);
     const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: TenantContext.workspaceId() }, select: { name: true, logoUrl: true } });
     const body = await renderGdsDocument({
       lang: locale,

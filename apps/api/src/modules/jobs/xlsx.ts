@@ -13,18 +13,24 @@ export const isDateCell = (v: unknown): v is DateCell => typeof v === 'object' &
 
 /** Style index in `xl/styles.xml` per date format (0 = the default style). */
 const DATE_STYLE = { datetime: 1, date: 2 } as const;
+/** journeys 18/11 J11r-2: bold rows (header and totals) — styles 3 (plain) and 4 / 5 (dates) use the bold font 1 */
+const BOLD_STYLE = 3;
+const BOLD_DATE_STYLE = { datetime: 4, date: 5 } as const;
 /** Width (characters) of a column holding dates, so that Excel does not show « ##### ». */
 const DATE_WIDTH = { datetime: 17, date: 11 } as const;
 const STYLES =
   '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
   '<numFmts count="2"><numFmt numFmtId="164" formatCode="dd/mm/yyyy hh:mm"/><numFmt numFmtId="165" formatCode="dd/mm/yyyy"/></numFmts>' +
-  '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
+  '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
   '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
   '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
   '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-  '<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+  '<cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
   '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
-  '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>' +
+  '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+  '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+  '<xf numFmtId="164" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>' +
+  '<xf numFmtId="165" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/></cellXfs>' +
   '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
   '</styleSheet>';
 
@@ -66,11 +72,14 @@ const colIndex = (ref: string) => {
   return n - 1;
 };
 
-/** One-sheet workbook. The first row is usually the header row. */
-export const writeXlsx = (sheetName: string, rows: Cell[][]): Buffer => {
+/** One-sheet workbook. The first row is usually the header row. `bold`: indexes of the rows written in bold (header, totals). */
+export const writeXlsx = (sheetName: string, rows: Cell[][], opts: { bold?: readonly number[] } = {}): Buffer => {
   const widths = new Map<number, number>();
+  const bold = new Set(opts.bold ?? []);
   const body = rows
     .map((row, r) => {
+      const b = bold.has(r);
+      const s = b ? ` s="${BOLD_STYLE}"` : '';
       const cells = row
         .map((v, c) => {
           const ref = `${colName(c)}${r + 1}`;
@@ -78,11 +87,11 @@ export const writeXlsx = (sheetName: string, rows: Cell[][]): Buffer => {
           if (isDateCell(v)) {
             if (!Number.isFinite(v.date)) return '';
             widths.set(c, Math.max(widths.get(c) ?? 0, DATE_WIDTH[v.format]));
-            return `<c r="${ref}" s="${DATE_STYLE[v.format]}"><v>${v.date}</v></c>`;
+            return `<c r="${ref}" s="${(b ? BOLD_DATE_STYLE : DATE_STYLE)[v.format]}"><v>${v.date}</v></c>`;
           }
-          if (typeof v === 'number' && Number.isFinite(v)) return `<c r="${ref}"><v>${v}</v></c>`;
-          if (typeof v === 'boolean') return `<c r="${ref}" t="b"><v>${v ? 1 : 0}</v></c>`;
-          return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${esc(String(v))}</t></is></c>`;
+          if (typeof v === 'number' && Number.isFinite(v)) return `<c r="${ref}"${s}><v>${v}</v></c>`;
+          if (typeof v === 'boolean') return `<c r="${ref}"${s} t="b"><v>${v ? 1 : 0}</v></c>`;
+          return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${esc(String(v))}</t></is></c>`;
         })
         .join('');
       return `<row r="${r + 1}">${cells}</row>`;

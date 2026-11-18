@@ -25,9 +25,17 @@ export function useFigure() {
   return (value: number | null | undefined, unit: Unit) => formatValue(value, unit, locale, units);
 }
 
+/** Journeys 18/11 J11r-4: the decimal mark and the « pts » unit of the delta pills in the page language. */
+export function useDeltaText() {
+  const t = useT();
+  const locale = useLocaleCode();
+  return { decimalMark: locale === 'en' ? '.' : ',', ptsLabel: t('analytics.delta.pts') };
+}
+
 /** Tile of one KPI: `analytics.kpi.<tab>.<key>` is the unit label ("DA revenus"), meta/sub come from the tab. */
 export function Kpi({ k, name, label, meta, sub, title, onClick }: { k: AnalyticsKpi | undefined; name: string; label: string; meta?: ReactNode; sub?: ReactNode; title?: string; onClick?: () => void }) {
   const fig = useFigure();
+  const deltaText = useDeltaText();
   const d = kpiDelta(k);
   return (
     <AnaKpiTile
@@ -35,7 +43,7 @@ export function Kpi({ k, name, label, meta, sub, title, onClick }: { k: Analytic
       // ANALYTICS-08: a median in the open last bucket of its histogram is only « above » that value
       value={`${hintNum(k, 'medianAbove') === 1 ? '> ' : ''}${fig(k?.value ?? null, k?.unit ?? 'count')}`}
       unit={label}
-      delta={d ? <DeltaBadge value={d.value} unit={d.unit} invert={INVERTED_KPIS.has(name)} /> : undefined}
+      delta={d ? <DeltaBadge value={d.value} unit={d.unit} invert={INVERTED_KPIS.has(name)} {...deltaText} /> : undefined}
       meta={meta}
       sub={sub}
       title={title}
@@ -117,7 +125,8 @@ export function TabFrame<T extends { empty: boolean; hasChannels: boolean }>({ q
   if (q.isError && !q.data) {
     if (isRangeError(q.error)) {
       const e = q.error as ApiError;
-      return <ErrorState title={t(`analytics.range.${e.code}`)} description={e.message} action={{ label: t('analytics.range.reset'), onClick: () => setPeriod({ ...period, period: DEFAULT_PRESET, from: '', to: '' }) }} />;
+      // journeys 18/11 J11r-5: one sentence — the title already says it (the API message repeated it under it)
+      return <ErrorState title={t(`analytics.range.${e.code}`)} action={{ label: t('analytics.range.reset'), onClick: () => setPeriod({ ...period, period: DEFAULT_PRESET, from: '', to: '' }) }} />;
     }
     return <QueryError error={q.error} onRetry={() => void q.refetch()} />;
   }
@@ -207,9 +216,10 @@ export const Num = ({ children }: { children: ReactNode }) => <Ltr className="wh
 /** Delta cell of a table row (% or pts). */
 export function DeltaCell({ pct, pts, invert, isNew }: { pct?: number | null; pts?: number | null; invert?: boolean; isNew?: boolean }) {
   const t = useT();
+  const deltaText = useDeltaText();
   if (isNew) return <span className="ts-label-micro text-text-muted">{t('analytics.new')}</span>;
-  if (pts !== undefined && pts !== null) return <DeltaBadge value={pts} unit="pts" invert={invert} />;
-  if (pct !== undefined && pct !== null) return <DeltaBadge value={pct} invert={invert} />;
+  if (pts !== undefined && pts !== null) return <DeltaBadge value={pts} unit="pts" invert={invert} {...deltaText} />;
+  if (pct !== undefined && pct !== null) return <DeltaBadge value={pct} invert={invert} {...deltaText} />;
   return <span className="text-text-muted">—</span>;
 }
 

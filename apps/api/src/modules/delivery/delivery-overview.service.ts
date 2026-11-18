@@ -15,7 +15,8 @@ import { clientRefOf, stateOf } from '../orders/order.presenter';
 import { SafetyService } from '../messaging/safety.service';
 import { exportDateTime, exportLabel } from '../jobs/export-cells';
 import { ExportService } from '../jobs/export.service';
-import { PROVIDER_NAMES, type CourierProvider } from './adapters/courier-adapter';
+import { providerName } from './adapters/courier-adapter';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { isNoMovement, isReturnPending, parseShipmentError, shipmentActions, errorCodeOf } from './shipment.presenter';
 import { syncAvailability } from './sync-cooldown';
 
@@ -69,7 +70,7 @@ export class DeliveryOverviewService implements OnModuleInit {
         { header: h.commune, value: (r: R) => r.communeName ?? '' },
         // full-test DELIVERY-14: « Oui » / « Non », like the other human-readable columns
         { header: h.stopdesk, value: (r: R) => (r.isStopdesk ? h.yes : h.no) },
-        { header: h.courier, value: (r: R) => r.shipment?.courierAccount?.displayName ?? (r.shipment ? PROVIDER_NAMES[r.shipment.provider as CourierProvider] ?? r.shipment.provider : '') },
+        { header: h.courier, value: (r: R) => r.shipment?.courierAccount?.displayName ?? (r.shipment ? providerName(r.shipment.provider, locale) : '') },
         { header: h.tracking, value: (r: R) => r.shipment?.trackingNumber ?? '' },
         // journey J08-12 #8: a sent self-delivery reads « ENVOYÉE » like on every screen (parcel.manual.sent), not « CRÉÉE »
         { header: h.status, value: (r: R) => (r.shipment?.provider === 'manual' && r.shipment.status === 'sent' ? exportLabel(locale, 'parcel.manual', 'sent') : exportLabel(locale, ['enum.Shipment.status', 'enum.Order.deliveryStatus'], r.shipment?.status ?? 'not_sent')) },
@@ -290,7 +291,7 @@ export class DeliveryOverviewService implements OnModuleInit {
         returned30d,
         returnedPct30d: closedTotal ? Math.round((returned30d / closedTotal) * 100) : 0,
         avgDays: round1(closed?.avg_days),
-        byCourier: byCourier.map((r) => ({ provider: r.provider as DeliveryOverviewView['kpis']['byCourier'][number]['provider'], courierAccountId: r.account, displayName: r.name ?? PROVIDER_NAMES[r.provider as CourierProvider] ?? r.provider, sent: n(r.sent), delivered: n(r.delivered), failed: n(r.failed), returned: n(r.returned), avgDays: round1(r.avg_days), codCollected: n(r.cod) })),
+        byCourier: byCourier.map((r) => ({ provider: r.provider as DeliveryOverviewView['kpis']['byCourier'][number]['provider'], courierAccountId: r.account, displayName: r.name ?? providerName(r.provider, viewerLocale()), sent: n(r.sent), delivered: n(r.delivered), failed: n(r.failed), returned: n(r.returned), avgDays: round1(r.avg_days), codCollected: n(r.cod) })),
       },
       tabs: tabCounts,
       failures: await this.rows(failures, locale),

@@ -41,7 +41,7 @@ import { ListPagination } from '@/features/catalog/ui';
 import { useOffline } from '@/features/orders/offline';
 import { algiersTime, decimalLabel } from '@/features/orders/logic';
 import { Link, useRouter } from '@/i18n/navigation';
-import { actionState, reasonText } from '@/lib/actions';
+import { actionState, reasonText, forbiddenReason } from '@/lib/actions';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { downloadUrl, jobFileName, trackJob, useJob } from '@/lib/jobs';
 import { filterList, filterText, listQueryString, patchListState } from '@/lib/list-state';
@@ -248,10 +248,10 @@ export function DeliveryOverviewPage() {
   const chosen = rows.filter((r) => selected.has(r.id));
   const sendTargets: SendTarget[] = chosen.map((r) => {
     const a = actionState(r.actions, SHIPMENT_ACTION.send, t);
-    return { id: r.orderId, number: r.orderNumber, label: `#${r.orderNumber} · ${r.client.name}`, blocked: a.present && a.enabled ? null : (a.reason ?? (r.shipment ? t('error.DELIVERY_ORDER_ALREADY_SENT') : t('error.FORBIDDEN'))) };
+    return { id: r.orderId, number: r.orderNumber, label: `#${r.orderNumber} · ${r.client.name}`, blocked: a.present && a.enabled ? null : (a.reason ?? (r.shipment ? t('error.DELIVERY_ORDER_ALREADY_SENT') : forbiddenReason(t))) };
   });
   const syncIds = chosen.filter((r) => r.shipment && actionState(r.actions, SHIPMENT_ACTION.sync, t).enabled).map((r) => r.shipment!.id);
-  const forbidden = !canSend ? t('toast.forbidden') : offline ? t('banner.offline') : undefined;
+  const forbidden = !canSend ? forbiddenReason(t) : offline ? t('banner.offline') : undefined;
   const manualIds = chosen.filter((r) => actionState(r.actions, SHIPMENT_ACTION.shipManual, t).enabled).map((r) => r.orderId);
   const bulkActions: BulkAction[] = [
     { key: 'send', label: t('action.sendToCourier'), onSelect: () => setDialog('send'), disabledReason: forbidden ?? (sendTargets.every((x) => x.blocked) ? t('delivery.bulk.noneSendable') : undefined) },

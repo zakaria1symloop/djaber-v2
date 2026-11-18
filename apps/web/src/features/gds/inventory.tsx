@@ -43,7 +43,7 @@ import { ListPagination } from '@/features/catalog/ui';
 import { DialogFooter, refusal, RadioList, useDialogSubmit, useOnOpen } from '@/features/orders/dialogs/common';
 import { useOffline } from '@/features/orders/offline';
 import { Link, useRouter } from '@/i18n/navigation';
-import { actionState, offlineMenu, toMenuActions } from '@/lib/actions';
+import { actionState, offlineMenu, toMenuActions, forbiddenReason } from '@/lib/actions';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { downloadUrl } from '@/lib/jobs';
 import { signedMoney, signedNumber } from '@/lib/money';
@@ -172,7 +172,7 @@ function InventoriesList() {
       description={t('inventory.subtitle')}
       permission="stock.count"
       actions={
-        <Button variant="primary" onClick={() => setStart(true)} disabledReason={!canStart ? t('toast.forbidden') : offline ? t('banner.offline') : open ? t('error.INVENTORY_IN_PROGRESS', { number: open.number }) : undefined} data-testid="inventory-start">
+        <Button variant="primary" onClick={() => setStart(true)} disabledReason={!canStart ? forbiddenReason(t) : offline ? t('banner.offline') : open ? t('error.INVENTORY_IN_PROGRESS', { number: open.number }) : undefined} data-testid="inventory-start">
           {t('inventory.start.action')}
         </Button>
       }

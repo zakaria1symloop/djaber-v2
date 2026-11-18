@@ -276,6 +276,13 @@ const display = (type: string, key: string, value: string | number, messages: Re
   if (type === 'agent_insight' && key === 'type') return inSentence(messages[`enum.AgentInsight.type.${v}`] ?? v);
   // a job is named by the code (`product-import-commit`, `export`): the reader sees what the task was
   // an export names what it holds and its format (« Export de la caisse (XLSX) », journeys 16/11 J06-10c)
+  // journeys 18/11 J11r-6 (d): a report export is named by its report, like the hub row (« Paiements · 18 nov. · XLSX »)
+  const reportTitle = typeof data.reportKey === 'string' ? messages[`report.${data.reportKey}.title`] : undefined;
+  if ((type === 'job_finished' || type === 'job_failed') && key === 'label' && data.kind === 'export' && data.exportKind === 'report' && reportTitle && messages['notification.value.exportKind.report'])
+    return `${messages['notification.value.exportKind.report'].replace('{report}', reportTitle)}${typeof data.format === 'string' ? ` (${data.format.toUpperCase()})` : ''}`;
+  // a shipment failure of the shop's own delivery reads the provider in the reader's language (journeys 18/11 J10r-6: the
+  // French « Livraison propre: » was written into Arabic and English cards — PROVIDER_NAMES are brand names, `manual` is not)
+  if (type === 'shipment_failed' && key === 'courier' && (data.provider === 'manual' || v === 'Livraison propre')) return messages['couriers.provider.manual'] ?? v;
   if ((type === 'job_finished' || type === 'job_failed') && key === 'label' && data.kind === 'export' && typeof data.exportKind === 'string' && messages[`notification.value.exportKind.${data.exportKind}`])
     return `${messages[`notification.value.exportKind.${data.exportKind}`]}${typeof data.format === 'string' ? ` (${data.format.toUpperCase()})` : ''}`;
   if ((type === 'job_finished' || type === 'job_failed') && key === 'label' && /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(v)) return messages[`notification.value.jobKind.${String(data.kind ?? '')}`] ?? messages['notification.value.jobKind.other'] ?? v;

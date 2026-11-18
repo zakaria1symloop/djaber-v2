@@ -509,12 +509,17 @@ export class CashService implements OnModuleInit {
         { header: h.auto, value: (r: R) => (r.isAutomatic ? 'AUTO' : '') },
         { header: h.by, value: (r: R) => (r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}`.trim() : '') },
       ],
+      // journeys 18/11 J11r-2: the XLSX ends with the page's totals — Entrées / Sorties of the selection (bold rows)
+      footer: [
+        [null, h.totalIn, null, null, null, views.filter((r) => r.type === 'income').reduce((s, r) => s + r.amount, 0), null, null, null],
+        [null, h.totalOut, null, null, null, -views.filter((r) => r.type !== 'income').reduce((s, r) => s + r.amount, 0), null, null, null],
+      ],
     };
   }
 }
 
 const CASH_HEADERS = {
-  fr: { sheet: 'Caisse', date: 'Date', description: 'Libellé', reference: 'Référence', category: 'Type', method: 'Mode', amount: 'Montant', balance: 'Solde', auto: 'Auto', by: 'Par' },
-  en: { sheet: 'Cash', date: 'Date', description: 'Label', reference: 'Reference', category: 'Type', method: 'Method', amount: 'Amount', balance: 'Balance', auto: 'Auto', by: 'By' },
-  ar: { sheet: 'الصندوق', date: 'التاريخ', description: 'البيان', reference: 'المرجع', category: 'النوع', method: 'الطريقة', amount: 'المبلغ', balance: 'الرصيد', auto: 'تلقائي', by: 'بواسطة' },
+  fr: { sheet: 'Caisse', date: 'Date', description: 'Libellé', reference: 'Référence', category: 'Type', method: 'Mode', amount: 'Montant', balance: 'Solde', auto: 'Auto', by: 'Par', totalIn: 'Total des entrées', totalOut: 'Total des sorties' },
+  en: { sheet: 'Cash', date: 'Date', description: 'Label', reference: 'Reference', category: 'Type', method: 'Method', amount: 'Amount', balance: 'Balance', auto: 'Auto', by: 'By', totalIn: 'Total in', totalOut: 'Total out' },
+  ar: { sheet: 'الصندوق', date: 'التاريخ', description: 'البيان', reference: 'المرجع', category: 'النوع', method: 'الطريقة', amount: 'المبلغ', balance: 'الرصيد', auto: 'تلقائي', by: 'بواسطة', totalIn: 'مجموع المداخيل', totalOut: 'مجموع المخارج' },
 } as const;

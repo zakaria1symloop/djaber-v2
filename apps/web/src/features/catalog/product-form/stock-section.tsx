@@ -15,6 +15,7 @@ import { catalogApi, useCatalogRefresh } from '../api';
 import type { Product } from '../contracts';
 import { totalVariantStock } from '../variants';
 import { emptyVariantRow, VARIANT_NAME_MAX, type ProductFormValues, type VariantField, type VariantRow } from './model';
+import { forbiddenReason } from '@/lib/actions';
 
 const GRID = 'grid grid-cols-[minmax(0,1fr)_4.25rem_3rem_2.5rem_2rem] items-center gap-2';
 const num = (s: string) => (s === '' ? 0 : Number(s));
@@ -162,7 +163,7 @@ export function StockSection({ form, rows, values, mode, product, advanced, lock
               const saved = !!row.id;
               const actions: MenuAction[] = [
                 { key: 'edit', label: open ? t('products.form.variants.collapse') : t('action.edit'), onSelect: () => onToggle(row.key), primary: true },
-                ...(mode === 'edit' && saved ? [{ key: 'adjust_stock', label: t('action.adjustStock'), onSelect: () => onAdjust(row.id), disabledReason: canAdjust ? undefined : t('toast.forbidden') } satisfies MenuAction] : []),
+                ...(mode === 'edit' && saved ? [{ key: 'adjust_stock', label: t('action.adjustStock'), onSelect: () => onAdjust(row.id), disabledReason: canAdjust ? undefined : forbiddenReason(t) } satisfies MenuAction] : []),
                 { key: row.isActive ? 'deactivate' : 'activate', label: row.isActive ? t('action.disable') : t('action.enable'), onSelect: () => form.setValue(`variants.${i}.isActive`, !row.isActive, { shouldDirty: true }) },
                 {
                   key: 'delete',

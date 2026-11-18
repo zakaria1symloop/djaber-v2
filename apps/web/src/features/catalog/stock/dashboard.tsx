@@ -17,6 +17,7 @@ import { useLowStock, useStockOverview } from '../api';
 import type { LowStockItem, StockMovement } from '../contracts';
 import { MovementTypePill, Num, useMovementReason } from '../ui';
 import { actorName, formatSigned, movementTimeLabel, noteBeyondReference, quantityTone, referenceKind, signedQuantity, withoutYear } from './logic';
+import { forbiddenReason } from '@/lib/actions';
 
 type Adjust = { product: AdjustTarget | null; variantId: string | null };
 
@@ -57,7 +58,7 @@ export function StockDashboard() {
               {t('nav.movements')}
             </Link>
           ) : null}
-          <Button variant="primary" onClick={() => setAdjust({ product: null, variantId: null })} disabledReason={canAdjust ? undefined : t('toast.forbidden')}>
+          <Button variant="primary" onClick={() => setAdjust({ product: null, variantId: null })} disabledReason={canAdjust ? undefined : forbiddenReason(t)}>
             {t('stock.dashboard.adjust')}
           </Button>
         </>
@@ -154,7 +155,7 @@ export function StockDashboard() {
                           <div className="ts-label-meta mt-0.5 text-text-muted">{t('stock.dashboard.threshold', { count: r.minStock })}</div>
                         </div>
                         <Num value={r.stock} className={cn('ts-numeral-l', r.stock <= 0 ? 'text-accent-alert' : 'text-accent-starred')} />
-                        <Button variant="ghost" onClick={() => restock(r)} disabledReason={canPurchase || canAdjust ? undefined : t('toast.forbidden')}>
+                        <Button variant="ghost" onClick={() => restock(r)} disabledReason={canPurchase || canAdjust ? undefined : forbiddenReason(t)}>
                           {t(advanced ? 'stock.dashboard.restock' : 'stock.dashboard.adjustRow')}
                         </Button>
                       </Card>

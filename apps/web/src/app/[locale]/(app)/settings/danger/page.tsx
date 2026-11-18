@@ -68,12 +68,12 @@ export default function DangerZonePage() {
         )}
       </Section>
       <DeleteAccountSection />
-      {workspace ? <DeleteWorkspaceDialog open={open} name={workspace.name} onClose={() => setOpen(false)} /> : null}
+      {workspace ? <DeleteWorkspaceDialog open={open} name={workspace.name} paid={!!plan && plan.slug !== 'free' && plan.status !== 'trial'} onClose={() => setOpen(false)} /> : null}
     </SettingsPage>
   );
 }
 
-function DeleteWorkspaceDialog({ open, name, onClose }: { open: boolean; name: string; onClose: () => void }) {
+function DeleteWorkspaceDialog({ open, name, paid, onClose }: { open: boolean; name: string; paid: boolean; onClose: () => void }) {
   const t = useT();
   const qc = useQueryClient();
   const write = useWorkspaceCache();
@@ -144,7 +144,8 @@ function DeleteWorkspaceDialog({ open, name, onClose }: { open: boolean; name: s
         <div>
           <Pill tone="danger">{t('common.destructive')}</Pill>
         </div>
-        <FormAlert>{t('settings.danger.dialog.warning')}</FormAlert>
+        {/* journeys 18/11 J10r-5: « no refund of the running subscription » only when one was paid — a trial or the free plan has none */}
+        <FormAlert>{t(paid ? 'settings.danger.dialog.warningPaid' : 'settings.danger.dialog.warning')}</FormAlert>
         <Field label={t('settings.danger.dialog.typeName')} htmlFor="confirm-name" hint={t('settings.danger.dialog.nameHint', { name })} error={error?.field === 'name' ? error.message : undefined}>
           <Input id="confirm-name" autoComplete="off" placeholder={name} value={typed} onChange={(e) => setTyped(e.target.value)} disabled={busy} aria-invalid={error?.field === 'name'} />
         </Field>

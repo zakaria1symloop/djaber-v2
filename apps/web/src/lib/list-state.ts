@@ -205,3 +205,18 @@ export const filterText = (s: ListState, name: string): string => {
   return typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
 };
 export const filterBool = (s: ListState, name: string): boolean => s.filters[name] === true;
+
+/**
+ * Journeys 18/11 J10r-2: the URL filters of this list that a failed request refused. `fields` = the field names of the 400 /
+ * 422 answer (`action`, `action.0`), `queryKey` = the JSON of the failed query's key — the filter must be part of that
+ * request, so a refusal of another form on the page never drops a filter. `sort` counts when the answer names it.
+ */
+export function rejectedUrlFilters(spec: ListSpec, s: ListState, fields: string[], queryKey: string): string[] {
+  const names = new Set(fields.map((f) => f.split(/[.[]/)[0]!).filter(Boolean));
+  const out: string[] = [];
+  for (const name of names) {
+    if (name === 'sort' && s.sort !== spec.defaultSort && queryKey.includes(`"sort":${JSON.stringify(s.sort)}`)) out.push('sort');
+    else if (name in spec.filters && s.filters[name] !== undefined && queryKey.includes(`"${name}":`)) out.push(name);
+  }
+  return out;
+}

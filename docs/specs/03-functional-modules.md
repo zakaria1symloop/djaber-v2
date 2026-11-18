@@ -183,7 +183,7 @@ V1 has adapter code (Yalidine, ZR Express, Maystro) and a send flow; missing in 
 
 ## 13. Cross-sell — `REC` (P2) `[CDC §6.6][V1 recommendation.service.ts]`
 
-REC-01 rules (product → recommended, cross_sell / up_sell, score 0–100 — a negative typed score stays in the field as invalid and is never saved, reason, active), max 3 per turn; a pair that already has a rule of that type is refused `409 RECOMMENDATION_ALREADY_EXISTS` with the existing rule, shown inline in the dialog with « Modifier la règle existante » (journeys 16/11 J11-5). REC-02 "Analyse" = V1 rule engine (co-purchase, same-category up-sell, keyword similarity), background job, free, stale pairs removed (D18). REC-03 impressions when shown; conversion only if shown in the same conversation within 7 days and the product is ordered; reversed on cancel (**fix**).
+REC-01 rules (product → recommended, cross_sell / up_sell, score 0–100 — a negative typed score stays in the field as invalid and is never saved — the score field takes the minus key, unlike the other integer fields, journeys 18/11 ANALYTICS-13 —, reason, active), max 3 per turn; a pair that already has a rule of that type is refused `409 RECOMMENDATION_ALREADY_EXISTS` with the existing rule, shown inline in the dialog with « Modifier la règle existante » (journeys 16/11 J11-5). REC-02 "Analyse" = V1 rule engine (co-purchase, same-category up-sell, keyword similarity), background job, free, stale pairs removed (D18). REC-03 impressions when shown; conversion only if shown in the same conversation within 7 days and the product is ordered; reversed on cancel (**fix**).
 
 ## 14. GDS · Stock operations — `GDS` `[V1][FIG][D1]`
 

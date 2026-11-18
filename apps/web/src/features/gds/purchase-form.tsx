@@ -29,6 +29,7 @@ import { int, lineVariants, purchaseTotals } from './logic';
 import { ProductPicker, toPicked, useProductVariants, type PickedProduct } from './product-picker';
 import { SupplierDialog, supplierLabel } from './suppliers';
 import { AdvancedOnly } from './ui';
+import { forbiddenReason } from '@/lib/actions';
 
 type Line = { key: string; productId: string; name: string; sku: string; trackStock: boolean; hasVariants: boolean; variants: PickedProduct['variants']; variantId: string | null; quantity: number; unitCost: string };
 type Form = { supplierId: string; expectedAt: string; invoice: string; tax: string; shipping: string; paid: string; method: CashMethod; notes: string; lines: Line[] };
@@ -204,7 +205,7 @@ function PurchaseForm({ purchase }: { purchase?: Purchase }) {
   };
 
   const supplierOptions = suppliers.data?.rows ?? [];
-  const blocked = !can('gds.write') ? t('toast.forbidden') : offline ? t('banner.offline') : undefined;
+  const blocked = !can('gds.write') ? forbiddenReason(t) : offline ? t('banner.offline') : undefined;
   return (
     <AppPage
       title={purchase ? t('purchases.form.editTitle', { number: purchase.number }) : t('purchases.form.title')}

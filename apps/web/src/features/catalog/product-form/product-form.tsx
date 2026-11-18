@@ -15,7 +15,7 @@ import { AppPage } from '@/components/app-page';
 import { ConflictDialog } from '@/components/global-states';
 import { gdsApi } from '@/features/gds/api';
 import { Link, useRouter } from '@/i18n/navigation';
-import { actionState } from '@/lib/actions';
+import { actionState, forbiddenReason } from '@/lib/actions';
 import { ApiError, apiSession } from '@/lib/api';
 import { isOwnChange } from '@/lib/origin';
 import { conflictOf } from '@/lib/conflict';
@@ -482,7 +482,7 @@ export function ProductForm(props: Props) {
         product && !archived ? (
           <>
             {archive.present || editable ? (
-              <Button className="!border-accent-alert/60 !text-accent-alert hover:!border-accent-alert" onClick={() => setDialog('archive')} disabledReason={!editable ? t('toast.forbidden') : archive.present && !archive.enabled ? archive.reason : undefined} data-testid="product-archive">
+              <Button className="!border-accent-alert/60 !text-accent-alert hover:!border-accent-alert" onClick={() => setDialog('archive')} disabledReason={!editable ? forbiddenReason(t) : archive.present && !archive.enabled ? archive.reason : undefined} data-testid="product-archive">
                 {t('action.archive')}
               </Button>
             ) : null}

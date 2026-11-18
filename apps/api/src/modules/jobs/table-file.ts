@@ -89,9 +89,17 @@ const csvCell = (v: Cell) => {
   return /[",;\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-export const writeTable = <T>(format: TableFormat, sheetName: string, columns: TableColumn<T>[], rows: T[]): { body: Buffer; mime: string; ext: TableFormat } => {
+/**
+ * `footer`: rows written after the data in the XLSX only, in bold, one cell per column — the totals of the screen
+ * (journeys 18/11 J11r-2: the report menu promised « XLSX (mise en forme + totaux) » and the file had none). The CSV keeps
+ * the data rows only (a machine-readable file: a totals line would be read back as one more row). The header row is bold.
+ */
+export const writeTable = <T>(format: TableFormat, sheetName: string, columns: TableColumn<T>[], rows: T[], footer: Cell[][] = []): { body: Buffer; mime: string; ext: TableFormat } => {
   const matrix: Cell[][] = [columns.map((c) => c.header), ...rows.map((r) => columns.map((c) => c.value(r)))];
-  if (format === 'xlsx') return { body: writeXlsx(sheetName, matrix.map((r) => r.map(safe))), mime: XLSX_MIME, ext: 'xlsx' };
+  if (format === 'xlsx') {
+    const all = [...matrix, ...footer];
+    return { body: writeXlsx(sheetName, all.map((r) => r.map(safe)), { bold: [0, ...footer.map((_f, i) => matrix.length + i)] }), mime: XLSX_MIME, ext: 'xlsx' };
+  }
   // BOM so that Excel opens the file as UTF-8 (Arabic product names)
   const text = '\ufeff' + matrix.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
   return { body: Buffer.from(text, 'utf8'), mime: 'text/csv; charset=utf-8', ext: 'csv' };

@@ -5,6 +5,12 @@ import { IntlMessageFormat } from 'intl-messageformat';
 
 export type Flat = Record<string, string>;
 export type Params = Record<string, string | number | Date | null | undefined>;
+/**
+ * Journeys 18/11 J11r-6 (b): the arrow of a date range points the way the page reads — « 01 جانفي ← 18 نوفمبر » in Arabic
+ * (the J11-7 (i) rule of « عرض الكل ← »), « 01 janv. → 18 nov. » in French and English.
+ */
+export const rangeArrow = (locale: string | undefined): string => (locale === 'ar' ? '←' : '→');
+
 export type TFunction = ((key: string, params?: Params) => string) & { has: (key: string) => boolean; /** locale of the catalogue (dates / numbers in reasons) */ locale?: string };
 
 const cache = new Map<string, IntlMessageFormat>();

@@ -27,6 +27,7 @@ import { BuyPackDialog } from './buy-pack-dialog';
 import { CalculatorDialog } from './calculator-dialog';
 import { BUCKETS, FILTER_ACTIONS, type Credits, type LedgerRow } from './contracts';
 import { burnRate, creditsTone, isBookkeeping, levelOf, orderedRange, packsShown, pricePerCredit, rowLabelKey, signedCredits } from './logic';
+import { rangeArrow } from '@/lib/format-message';
 
 /** `GET /credits/ledger` parameters (api-contract §4 `LedgerQuery`). */
 export const LEDGER_SPEC: ListSpec = { filters: { from: 'date', to: 'date', action: 'list', agentId: 'text', bucket: 'text' }, sorts: ['at'], defaultSort: '-at' };
@@ -197,7 +198,7 @@ function Ledger() {
   const agentName = agentOptions.find((a) => a.value === agentId)?.label ?? '…';
 
   const chips: ActiveFilter[] = [];
-  if (from || to) chips.push({ key: 'period', label: `${t('credits.filter.period')} : ${from ? day(from) : '…'} → ${to ? day(to) : '…'}`, onRemove: () => list.setFilters({ from: null, to: null }) });
+  if (from || to) chips.push({ key: 'period', label: `${t('credits.filter.period')} : ${from ? day(from) : '…'} ${rangeArrow(locale)} ${to ? day(to) : '…'}`, onRemove: () => list.setFilters({ from: null, to: null }) });
   if (actions.length) chips.push({ key: 'action', label: `${t('credits.filter.action')} : ${actions.map((a) => actionOptions.find((o) => o.value === a)?.label ?? a).join(', ')}`, onRemove: () => list.setFilter('action', null) });
   if (agentId) chips.push({ key: 'agentId', label: `${t('credits.filter.agent')} : ${agentName}`, onRemove: () => list.setFilter('agentId', null) });
   if (bucket) chips.push({ key: 'bucket', label: `${t('credits.filter.bucket')} : ${t(`credits.bucket.${bucket === 'pack' ? 'pack' : 'plan'}`)}`, onRemove: () => list.setFilter('bucket', null) });
@@ -230,7 +231,7 @@ function Ledger() {
     <Section title={t('credits.ledger.title')}>
       <div className="flex flex-col gap-3" data-testid="credits-ledger">
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('action.filters')}>
-          <FilterDropdown label={from || to ? `${from ? day(from) : '…'} → ${to ? day(to) : '…'}` : t('credits.filter.period')} count={from || to ? 1 : undefined}>
+          <FilterDropdown label={from || to ? `${from ? day(from) : '…'} ${rangeArrow(locale)} ${to ? day(to) : '…'}` : t('credits.filter.period')} count={from || to ? 1 : undefined}>
             <FilterDateRange from={from} to={to} onChange={(r) => list.setFilters({ from: r.from || null, to: r.to || null })} labels={{ from: t('common.from'), to: t('common.to'), presets: t('credits.filter.period'), invalid: t('error.INVALID_DATE_RANGE') }} />
           </FilterDropdown>
           <FilterDropdown label={t('credits.filter.action')} count={actions.length || undefined}>

@@ -15,6 +15,8 @@ import { TenantResolver } from '../../src/core/tenancy/tenant.resolver';
 import { ReportScheduleService, previousMonth } from '../../src/modules/gds/reports/report-schedule.service';
 import { at, client, daysAgo, db, order, todayAlgiers } from '../support/m8';
 import { addDays } from '../../src/modules/analytics/range';
+import { StorageService } from '../../src/core/storage/storage.service';
+import { readXlsx } from '../../src/modules/jobs/xlsx';
 
 let app: TestApp;
 beforeAll(async () => {
@@ -151,6 +153,30 @@ describe('report template (ANA-04)', () => {
     expect(pay.kpis.find((k: any) => k.key === 'received').value).toBe(3000);
     expect(pay.chart.points.reduce((sum: number, x: any) => sum + x.values.received, 0)).toBe(3000);
     expect(pay.chart.points.every((x: any) => x.values.received > 0)).toBe(true);
+  });
+
+  it('journeys 18/11 J10r-1 / J11r-1 / J11r-2: Paiements splits in / out — totals = KPIs on screen and in the XLSX (bold totals row)', async () => {
+    const owner = await advancedShop(app);
+    const p = await product(owner, { price: 3400, costPrice: 1000, stock: 10 });
+    await sale(owner, { items: [{ productId: p.id, quantity: 1 }], amountPaid: 3400 });
+    const s = await supplier(owner);
+    await purchase(owner, { supplierId: s.id, status: 'pending', items: [{ productId: p.id, quantity: 3, unitCost: 1000 }], amountPaid: 3000 });
+    const pay = (await get(owner, '/reports/payments?period=today')).data;
+    expect(pay.definition.columns.map((c: any) => c.key)).toEqual(['date', 'documentType', 'number', 'party', 'method', 'direction', 'received', 'paid', 'reference']);
+    expect(pay.kpis.find((k: any) => k.key === 'received').value).toBe(3400);
+    expect(pay.kpis.find((k: any) => k.key === 'paid').value).toBe(3000);
+    expect(pay.totals).toEqual({ received: 3400, paid: 3000 });
+    expect(pay.rows.find((r: any) => r.direction === 'out')).toMatchObject({ received: null, paid: 3000 });
+    expect(pay.rows.find((r: any) => r.direction === 'in')).toMatchObject({ received: 3400, paid: null });
+    const r = await owner.get('/reports/payments?period=today&format=xlsx').expect(202);
+    await work(app, [owner.workspaceId]);
+    const job = await jobOf(owner, r.body.data.jobId);
+    expect(job).toMatchObject({ status: 'done', result: { reportKey: 'payments', rows: 2, format: 'xlsx' } });
+    const upload = await rawPrisma.upload.findFirstOrThrow({ where: { workspaceId: owner.workspaceId, kind: 'export' }, orderBy: { createdAt: 'desc' } });
+    const sheet = readXlsx((await app.app.get(StorageService).get(upload.storageKey)).body);
+    expect(sheet).toHaveLength(4);
+    // the label sits in the first column that is not summed, the two totals under « Encaissé » / « Payé »
+    expect(sheet[3]).toEqual(['Totaux', '', '', '', '', '', '3400', '3000']);
   });
 
   it('AT-INV-02 (report side): "Écarts d’inventaire" lists the inventory movement with its #INV reference', async () => {

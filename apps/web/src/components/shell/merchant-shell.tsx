@@ -32,6 +32,7 @@ import { HelpPanelButton } from '@/features/help/help-panel';
 import { MaintenanceGate, useMaintenanceBanner } from '@/features/status/maintenance';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
+import { setMerchantViewerRole } from '@/lib/actions';
 import { apiSession } from '@/lib/api';
 import type { LegalPending } from '@/lib/contracts';
 import { formatClock, retryAfterSeconds, useCooldown } from '@/lib/countdown';
@@ -58,6 +59,9 @@ export function MerchantShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const search = useSearchParams().toString();
 
+  // journeys 18/11 J10r-3: the refusal sentences name who can, from the reader's role (lib/actions `forbiddenReason`)
+  setMerchantViewerRole(s.impersonating ? null : s.role);
+  useEffect(() => () => setMerchantViewerRole(null), []);
   const decision = decideApp({
     status: s.status,
     pathname,

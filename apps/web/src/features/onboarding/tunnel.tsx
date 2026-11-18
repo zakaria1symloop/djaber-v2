@@ -36,6 +36,7 @@ import { ONBOARDING_STEPS, onboardingPath, onboardingWrite, stepNumber, type Onb
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { digitsToInt } from '@/lib/money';
 import { useSession, useWorkspaceId } from '@/lib/session';
+import { forbiddenReason } from '@/lib/actions';
 
 const STEP_LABEL: Record<OnboardingSlug, string> = {
   welcome: 'onboarding.step.welcome',
@@ -698,7 +699,7 @@ function Ready() {
   // full-test 15/11 ONBOARDING-02: the plan picked on /pricing is offered here too (the shell banner also offers it)
   const [intent, setIntent] = useState<PlanIntent | null>(null);
   useEffect(() => setIntent(readPlanIntent()), []);
-  const testReason = agents.isError ? errorMessage(agents.error, t) : !agent ? t('onboarding.ready.noAgent') : !can('agents.test') ? t('error.FORBIDDEN') : undefined;
+  const testReason = agents.isError ? errorMessage(agents.error, t) : !agent ? t('onboarding.ready.noAgent') : !can('agents.test') ? forbiddenReason(t) : undefined;
   const rows: { key: string; done: boolean; title: string; hint: string }[] = [
     { key: 'stock', done: true, title: t('onboarding.ready.stock', { mode: t(`settings.stockMode.${workspace?.stockMode ?? 'simple'}.title`) }), hint: t('onboarding.ready.stockHint') },
     // full-test 15/11 ONBOARDING-04: a product waiting for Djaber's validation is not sold by the AI yet — said here
@@ -730,7 +731,7 @@ function Ready() {
         <NextAction href={agent ? agentTestPath(agent) : null} reason={testReason} loading={agents.isLoading} testId="ready-test-agent">
           {t('onboarding.ready.testAgent')}
         </NextAction>
-        <NextAction href="/products/import" reason={!can('catalog.write') ? t('error.FORBIDDEN') : productsFull ? limitReason(productsFull, t('products.form.planResource')) : undefined} testId="ready-import">
+        <NextAction href="/products/import" reason={!can('catalog.write') ? forbiddenReason(t) : productsFull ? limitReason(productsFull, t('products.form.planResource')) : undefined} testId="ready-import">
           {t('onboarding.ready.importCatalogue')}
         </NextAction>
         {intent && can('billing.plan') ? (
@@ -738,7 +739,7 @@ function Ready() {
             {t('onboarding.ready.choosePlan')}
           </NextAction>
         ) : null}
-        <NextAction href="/settings/members" variant="ghost" reason={!can('members.write') ? t('error.FORBIDDEN') : membersFull ? limitReason(membersFull, t('onboarding.ready.membersResource')) : undefined} testId="ready-invite">
+        <NextAction href="/settings/members" variant="ghost" reason={!can('members.write') ? forbiddenReason(t) : membersFull ? limitReason(membersFull, t('onboarding.ready.membersResource')) : undefined} testId="ready-invite">
           {t('onboarding.ready.inviteTeam')}
         </NextAction>
       </div>

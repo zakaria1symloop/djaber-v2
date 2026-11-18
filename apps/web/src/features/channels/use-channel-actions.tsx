@@ -208,7 +208,7 @@ function DisconnectDialog({ channel, onClose, onDone }: { channel: Channel | nul
             <span>
               {t(`channels.platform.${channel.platform}`)} ·{' '}
               {channel.agent ? t('channels.disconnect.agent', { name: channel.agent.name }) : t('channels.agent.none')} ·{' '}
-              <Ltr>{t('channels.disconnect.conversations', { count: formatNumber(channel.counts.conversations) })}</Ltr>
+              <Ltr>{t('channels.disconnect.conversations', { count: channel.counts.conversations, n: formatNumber(channel.counts.conversations) })}</Ltr>
             </span>
           </div>
           <ul className="mt-4 flex list-disc flex-col gap-3 ps-4 text-[13px] text-text-secondary">

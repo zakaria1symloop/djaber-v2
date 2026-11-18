@@ -4,6 +4,7 @@ import { formatNumber, type ReportColumnDef, type ReportDefinition, type ReportJ
 import type { ExportJobState } from '@djaber/ui';
 import { dayLabel, decimal } from '@/features/analytics/format';
 import type { JobDto } from '@/lib/jobs';
+import { rangeArrow } from '@/lib/format-message';
 
 const NBSP = String.fromCharCode(160);
 type T = ((key: string, params?: Record<string, string | number>) => string) & { has: (key: string) => boolean };
@@ -29,7 +30,7 @@ export function jobView(job: JobDto, t: T, locale: string, now = Date.now()): { 
   const created = dayLabel(new Date(job.createdAt).toISOString().slice(0, 10), locale);
   const kindKey = other ? `notification.value.exportKind.${other.kind}` : null;
   const title = r
-    ? [t(`report.${r.reportKey}.title`), r.from && r.to ? `${dayLabel(r.from, locale)} → ${dayLabel(r.to, locale)}` : t('reports.jobs.snapshot', { date: created }), r.format.toUpperCase()].join(' · ')
+    ? [t(`report.${r.reportKey}.title`), r.from && r.to ? `${dayLabel(r.from, locale)} ${rangeArrow(locale)} ${dayLabel(r.to, locale)}` : t('reports.jobs.snapshot', { date: created }), r.format.toUpperCase()].join(' · ')
     : kindKey && t.has(kindKey)
       ? [t(kindKey), created, ...(other?.format ? [other.format.toUpperCase()] : [])].join(' · ')
       : t('reports.jobs.generic', { date: created });

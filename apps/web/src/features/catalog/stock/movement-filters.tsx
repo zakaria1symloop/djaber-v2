@@ -14,6 +14,7 @@ import type { ListController } from '@/lib/use-list-state';
 import { catalogApi, useCategories, useProduct } from '../api';
 import { flattenCategories, MOVEMENT_REASONS, MOVEMENT_REF_TYPES, MOVEMENT_TYPES } from '../contracts';
 import { activePeriod, PERIOD_PRESETS, periodRange, withoutYear, type PeriodPreset } from './logic';
+import { rangeArrow } from '@/lib/format-message';
 
 /** `GET /stock/movements` parameters (06 §10). */
 export const MOVEMENTS_SPEC: ListSpec = {
@@ -68,7 +69,7 @@ export function useMovementFilters(list: ListController, fallbackProductName?: s
 
   const period = activePeriod(from, to);
   const day = (d: string) => withoutYear(formatDate(`${d}T12:00:00Z`, locale));
-  const periodLabel = period === null ? null : period === 'custom' ? `${from ? day(from) : '…'} → ${to ? day(to) : '…'}` : t(`common.period.${period}`);
+  const periodLabel = period === null ? null : period === 'custom' ? `${from ? day(from) : '…'} ${rangeArrow(locale)} ${to ? day(to) : '…'}` : t(`common.period.${period}`);
   const productName = product.data?.name ?? fallbackProductName ?? '…';
   const variantName = product.data?.variants?.find((v) => v.id === variantId)?.name ?? '…';
   const labels = (values: string[], options: FilterOption[]) => values.map((v) => options.find((o) => o.value === v)?.label ?? v).join(', ');

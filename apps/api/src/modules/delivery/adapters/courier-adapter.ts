@@ -3,7 +3,7 @@
 // Every provider error leaves the adapter as a `CourierError` (05 §2.1 last paragraph).
 // ZR Express runs two platforms under the one provider: Procolis (token + key) and the new api.zrexpress.app (API key +
 // tenant id); the account's `baseUrl` tells them apart (`ZR_APP_BASE_URL` = new platform) — see `capabilitiesOf`.
-import { ZR_APP_BASE_URL, type CourierCapabilities, type FailureReasonCode, type ShipmentStatusName, type ZrPlatform } from '@djaber/shared';
+import { getMessages, ZR_APP_BASE_URL, type AppLocale, type CourierCapabilities, type FailureReasonCode, type ShipmentStatusName, type ZrPlatform } from '@djaber/shared';
 
 export type CourierProvider = 'zrexpress' | 'ecotrack' | 'yalidine' | 'manual';
 export type CourierCredentials = {
@@ -126,3 +126,9 @@ export const capabilitiesOf = (provider: string, baseUrl?: string | null): Adapt
   zrPlatformOf(provider, baseUrl) === 'app' ? ZR_APP_CAPABILITIES : PROVIDER_CAPABILITIES[provider as CourierProvider];
 
 export const PROVIDER_NAMES: Record<CourierProvider, string> = { zrexpress: 'ZR Express', ecotrack: 'EcoTrack', yalidine: 'Yalidine', manual: 'Livraison propre' };
+/**
+ * The provider's name for a reader: couriers are brand names; the shop's own delivery is words of the reader's language
+ * (« توصيل ذاتي », « Self-delivery » — journeys 18/11 J10r-6: « Livraison propre » was written into Arabic / English screens).
+ */
+export const providerName = (provider: string, locale: AppLocale): string =>
+  provider === 'manual' ? (getMessages(locale)['couriers.provider.manual'] ?? PROVIDER_NAMES.manual) : (PROVIDER_NAMES[provider as CourierProvider] ?? provider);

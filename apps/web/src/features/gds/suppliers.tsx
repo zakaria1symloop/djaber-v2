@@ -51,7 +51,7 @@ import { DialogFooter, refusal, useDialogSubmit, useOnOpen } from '@/features/or
 import { useOffline } from '@/features/orders/offline';
 import { Link, useRouter } from '@/i18n/navigation';
 import { ApiError } from '@/lib/api';
-import { toMenuActions } from '@/lib/actions';
+import { toMenuActions, forbiddenReason } from '@/lib/actions';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { filterText, type ListSpec } from '@/lib/list-state';
 import { digitsToInt, moneyDigits } from '@/lib/money';
@@ -204,7 +204,7 @@ function SuppliersList() {
       description={t('suppliers.subtitle')}
       permission="gds.read"
       actions={
-        <Button variant="primary" onClick={actions.create} disabledReason={!can('gds.write') ? t('toast.forbidden') : offline ? t('banner.offline') : undefined} data-testid="supplier-new">
+        <Button variant="primary" onClick={actions.create} disabledReason={!can('gds.write') ? forbiddenReason(t) : offline ? t('banner.offline') : undefined} data-testid="supplier-new">
           {t('suppliers.new')}
         </Button>
       }
@@ -315,7 +315,7 @@ function SupplierSheet({
   const s = q.data;
   const day = useDayLabel();
   const month = (iso: string) => formatDate(iso, locale).split(' ').slice(1).join(' ');
-  const writeReason = !actions.canWrite ? t('toast.forbidden') : offline ? t('banner.offline') : undefined;
+  const writeReason = !actions.canWrite ? forbiddenReason(t) : offline ? t('banner.offline') : undefined;
   return (
     <SideSheet
       open={!!supplierId}

@@ -203,8 +203,10 @@ export const REPORT_DEFINITIONS: Record<ReportKey, ReportDefinition> = {
     group: 'orders',
     simple: false,
     period: 'range',
-    columns: [c('date', 'datetime'), c('documentType', 'enum', { enumKey: 'report.documentType' }), c('number', 'text', { link: 'order' }), c('party', 'text'), c('method', 'enum', { enumKey: 'report.paymentMethod' }), c('direction', 'enum', { enumKey: 'report.direction' }), c('amount', 'money', { sum: true }), c('reference', 'text')],
+    columns: [c('date', 'datetime'), c('documentType', 'enum', { enumKey: 'report.documentType' }), c('number', 'text', { link: 'order' }), c('party', 'text'), c('method', 'enum', { enumKey: 'report.paymentMethod' }), c('direction', 'enum', { enumKey: 'report.direction' }), c('received', 'money', { sum: true }), c('paid', 'money', { sum: true }), c('reference', 'text')],
     kpis: [k('received', 'money'), k('paid', 'money'), k('count', 'count')],
+    // journeys 18/11 J10r-1 / J11r-1: one money column per direction (« Encaissé » / « Payé », like the KPIs and the Caisse's
+    // Entrées / Sorties) — a single « Montant » column summed both directions (« TOTAL 65 600 » = 47 600 in + 18 000 out)
     // journeys 16/11 J11-1: the donut splits the money collected (rows « in ») by mode — the payments to suppliers are not
     // added to it (« Espèces 24 000 » mixed 16 000 collected and 8 000 paid out)
     chart: { type: 'donut', x: 'method', y: ['received'] },

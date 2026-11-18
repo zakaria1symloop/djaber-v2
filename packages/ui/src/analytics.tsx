@@ -42,18 +42,26 @@ const LEGEND: Record<ChartTone, string> = {
 };
 
 /* ---------- delta vs the previous period: "+18 %" / "−3 pts" (hidden when no comparison) ---------- */
+/**
+ * Journeys 18/11 J11r-4: the decimal mark and the points unit are the page's (« +33.3 pts » in English, « +33,3 نقطة » in
+ * Arabic) — `decimalMark` / `ptsLabel` given by the app; without them « , » and « pts » (French).
+ */
 export function DeltaBadge({
   value,
   unit = '%',
   invert,
   newLabel,
   className,
+  decimalMark = ',',
+  ptsLabel = 'pts',
 }: {
   value: number | null | undefined;
   unit?: '%' | 'pts';
   invert?: boolean;
   newLabel?: string;
   className?: string;
+  decimalMark?: string;
+  ptsLabel?: string;
 }) {
   if (value === null || value === undefined) {
     return newLabel ? (
@@ -64,7 +72,7 @@ export function DeltaBadge({
   const bad = invert ? value > 0 : value < 0;
   const sign = value > 0 ? '+' : value < 0 ? '−' : '';
   const abs = Math.abs(value);
-  const n = Number.isInteger(abs) ? String(abs) : abs.toFixed(1).replace('.', ',');
+  const n = Number.isInteger(abs) ? String(abs) : abs.toFixed(1).replace('.', decimalMark);
   return (
     <bdi
       dir="ltr"
@@ -75,7 +83,7 @@ export function DeltaBadge({
         className,
       )}
     >
-      {`${sign}${n} ${unit}`}
+      {`${sign}${n} ${unit === 'pts' ? ptsLabel : unit}`}
     </bdi>
   );
 }

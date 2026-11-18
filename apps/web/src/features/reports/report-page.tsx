@@ -65,6 +65,7 @@ import { useToggleFavorite } from './hub';
 import { cellText, chartForm, columnHeader, rowHref, visibleColumns } from './logic';
 import { ScheduleDialog } from './schedule-dialog';
 import { AdvancedOnly } from '@/features/gds/ui';
+import { rangeArrow } from '@/lib/format-message';
 
 const TONES: ChartTone[] = ['money', 'orders', 'inbound', 'clients', 'starred'];
 const DAYS = [30, 60, 90, 180, 365];
@@ -279,7 +280,7 @@ function ReportView({ reportKey }: { reportKey: ReportKey }) {
         <EmptyState icon={<FileBarChart className="size-5" />} title={t('analytics.range.REPORT_CUSTOM_RANGE_REQUIRED')} description={t('analytics.range.pickBoth')} />
       ) : rq.isError && !rq.data ? (
         rq.error instanceof ApiError && ['REPORT_RANGE_TOO_LONG', 'REPORT_CUSTOM_RANGE_REQUIRED', 'INVALID_DATE_RANGE'].includes(rq.error.code) ? (
-          <EmptyState icon={<FileBarChart className="size-5" />} title={t(`analytics.range.${rq.error.code}`)} description={rq.error.message} action={{ label: t('analytics.range.reset'), onClick: () => setPeriod({ ...period, period: '30d', from: '', to: '' }) }} />
+          <EmptyState icon={<FileBarChart className="size-5" />} title={t(`analytics.range.${rq.error.code}`)} action={{ label: t('analytics.range.reset'), onClick: () => setPeriod({ ...period, period: '30d', from: '', to: '' }) }} />
         ) : (
           <QueryError error={rq.error} onRetry={() => void rq.refetch()} backHref="/reports" />
         )
@@ -330,7 +331,7 @@ function PeriodChip({ period, onChange }: { period: PeriodState; onChange: (p: P
   const locale = useLocaleCode();
   const [draft, setDraft] = useState({ from: period.from, to: period.to });
   const [error, setError] = useState<string | null>(null);
-  const label = period.period === 'custom' && period.from && period.to ? `${dayLabel(period.from, locale)} → ${dayLabel(period.to, locale)}` : t(`analytics.period.${period.period === 'custom' ? 'custom' : period.period}`);
+  const label = period.period === 'custom' && period.from && period.to ? `${dayLabel(period.from, locale)} ${rangeArrow(locale)} ${dayLabel(period.to, locale)}` : t(`analytics.period.${period.period === 'custom' ? 'custom' : period.period}`);
   return (
     <FilterDropdown label={t('common.period', { label })}>
       <div className="flex flex-col gap-3" data-testid="report-period">
@@ -575,7 +576,12 @@ function ReportTable({
       <FilteredEmptyState title={t('state.list.filteredEmpty.title')} description={t('reports.filteredEmptyRows')} action={{ label: t('action.clearFilters'), onClick: onClear }} />
     ) : (
       // J07-11: a snapshot report (stock today) has no period — its empty state says so
-      <EmptyState icon={<FileBarChart className="size-5" />} title={t(view.definition.period === 'snapshot' ? 'reports.emptySnapshot.title' : 'analytics.empty.title')} description={t(view.definition.period === 'snapshot' ? 'reports.emptySnapshot.description' : 'reports.emptyDescription')} />
+      <EmptyState
+        icon={<FileBarChart className="size-5" />}
+        title={t(view.definition.period === 'snapshot' ? 'reports.emptySnapshot.title' : 'analytics.empty.title')}
+        // journeys 18/11 J11r-3: a report with its own empty text (« Clients inactifs » is about clients, not today's stock)
+        description={t.has(`reports.empty.${view.key}`) ? t(`reports.empty.${view.key}`, { days: Number(view.filters.days ?? view.definition.defaultDays ?? 90) }) : t(view.definition.period === 'snapshot' ? 'reports.emptySnapshot.description' : 'reports.emptyDescription')}
+      />
     );
   }
   const numeric = (c: ReportColumnDef) => c.type === 'money' || c.type === 'int' || c.type === 'pct' || c.type === 'days';

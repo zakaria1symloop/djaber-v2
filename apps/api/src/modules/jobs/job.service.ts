@@ -201,10 +201,12 @@ export class JobService {
   }
 
   /** What an export holds (`cash`, `sales` …) and its format: three exports are not three identical « Export » (J06-10c). */
-  private exportOf(job: Pick<Job, 'payload' | 'kind'>): { exportKind?: string; format?: string } {
+  private exportOf(job: Pick<Job, 'payload' | 'kind'>): { exportKind?: string; format?: string; reportKey?: string } {
     if (job.kind !== 'export') return {};
-    const p = job.payload as { kind?: unknown; format?: unknown } | null;
-    return { ...(typeof p?.kind === 'string' ? { exportKind: p.kind } : {}), ...(typeof p?.format === 'string' ? { format: p.format } : {}) };
+    const p = job.payload as { kind?: unknown; format?: unknown; filters?: { key?: unknown } | null } | null;
+    // journeys 18/11 J11r-6 (d): a report export names its report (« Export du rapport « Paiements » (XLSX) »)
+    const reportKey = p?.kind === 'report' && typeof p.filters?.key === 'string' ? p.filters.key : undefined;
+    return { ...(typeof p?.kind === 'string' ? { exportKind: p.kind } : {}), ...(typeof p?.format === 'string' ? { format: p.format } : {}), ...(reportKey ? { reportKey } : {}) };
   }
 
   /** An import that committed reports its counts: the notification uses the `job.finished.import` texts. */

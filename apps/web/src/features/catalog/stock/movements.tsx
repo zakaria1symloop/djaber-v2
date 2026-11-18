@@ -11,7 +11,7 @@ import { SavedViews } from '@/features/saved-views/saved-views';
 import { AppPage } from '@/components/app-page';
 import { ListEmpty, ListFilteredEmpty, ListLoading, QueryError } from '@/components/global-states';
 import { Link, useRouter } from '@/i18n/navigation';
-import { toMenuActions } from '@/lib/actions';
+import { toMenuActions, forbiddenReason } from '@/lib/actions';
 import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { JobParamBanner } from '@/components/job-param-banner';
@@ -177,7 +177,7 @@ function Journal() {
           <Button variant="ghost" onClick={exportCsv} loading={exporting} disabledReason={total === 0 ? t('movements.export.none') : undefined}>
             {t('movements.export')}
           </Button>
-          <Button variant="primary" onClick={() => setAdjust(true)} disabledReason={canAdjust ? undefined : t('toast.forbidden')}>
+          <Button variant="primary" onClick={() => setAdjust(true)} disabledReason={canAdjust ? undefined : forbiddenReason(t)}>
             {t('movements.adjust')}
           </Button>
         </>

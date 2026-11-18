@@ -9,7 +9,7 @@ import { AppPage } from '@/components/app-page';
 import { refusal } from '@/features/orders/dialogs/common';
 import { useOffline } from '@/features/orders/offline';
 import { Link, usePathname } from '@/i18n/navigation';
-import { actionState } from '@/lib/actions';
+import { actionState, forbiddenReason } from '@/lib/actions';
 import { useT } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 import { SHIPMENT_ACTION } from './action-keys';
@@ -33,7 +33,7 @@ function SendConfirmed() {
       setTargets(
         page.rows.map((r) => {
           const a = actionState(r.actions, SHIPMENT_ACTION.send, t);
-          return { id: r.orderId, number: r.orderNumber, label: `#${r.orderNumber} · ${r.client.name}${r.wilaya ? ` · ${r.wilaya.name}` : ''}`, blocked: a.present && a.enabled ? null : (a.reason ?? t('error.FORBIDDEN')) };
+          return { id: r.orderId, number: r.orderNumber, label: `#${r.orderNumber} · ${r.client.name}${r.wilaya ? ` · ${r.wilaya.name}` : ''}`, blocked: a.present && a.enabled ? null : (a.reason ?? forbiddenReason(t)) };
         }),
       );
     } catch (e) {

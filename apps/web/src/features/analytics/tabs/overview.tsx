@@ -12,7 +12,7 @@ import { useLocaleCode, useT } from '@/lib/i18n';
 import { useAnalytics, usePeriod } from '../api';
 import { bestPoint, dayLabel } from '../format';
 import { periodHref } from '../period';
-import { axis, hintNum, Kpi, KpiRow, RevenueDefinition, TabFrame, toBuckets, useFigure } from '../parts';
+import { axis, hintNum, Kpi, KpiRow, RevenueDefinition, TabFrame, toBuckets, useDeltaText, useFigure } from '../parts';
 import { useReportRange } from '../shell';
 import { listRange } from './links';
 
@@ -27,6 +27,7 @@ function Overview({ d }: { d: AnalyticsOverviewView }) {
   const t = useT();
   const locale = useLocaleCode();
   const fig = useFigure();
+  const deltaText = useDeltaText();
   const { period } = usePeriod();
   const [measure, setMeasure] = useState<'revenue' | 'orders'>('revenue');
   const k = d.kpis;
@@ -124,7 +125,7 @@ function Overview({ d }: { d: AnalyticsOverviewView }) {
             key: p.productId,
             label: p.name,
             value: `${formatNumber(p.revenue)} DA`,
-            delta: p.isNew ? <span className="ts-label-micro text-text-muted">{t('analytics.new')}</span> : <DeltaBadge value={p.deltaPct} />,
+            delta: p.isNew ? <span className="ts-label-micro text-text-muted">{t('analytics.new')}</span> : <DeltaBadge value={p.deltaPct} {...deltaText} />,
             href: `/products/${p.productId}`,
           }))}
         />
@@ -142,7 +143,7 @@ function Overview({ d }: { d: AnalyticsOverviewView }) {
             key: String(w.wilayaId),
             label: `${w.code} ${locale === 'ar' ? w.nameAr : w.name}`,
             value: `${formatNumber(w.delivered)} · ${fig(w.deliveredPct, 'pct')}`,
-            delta: <DeltaBadge value={w.deltaPts} unit="pts" />,
+            delta: <DeltaBadge value={w.deltaPts} unit="pts" {...deltaText} />,
             href: `/orders?wilayaId=${w.wilayaId}&${range}`,
           }))}
         />
@@ -159,8 +160,8 @@ function Overview({ d }: { d: AnalyticsOverviewView }) {
           rows={d.byChannel.map((c) => ({
             key: c.channelId ?? 'manual',
             label: c.channelId ? `${c.name ?? '—'}${c.platform ? ` (${c.platform === 'facebook' ? 'FB' : 'IG'})` : ''}${c.agent ? ` · ${c.agent.name}` : ''}` : t('analytics.overview.noChannel'),
-            value: t('analytics.overview.channelLine', { orders: formatNumber(c.orders), conversations: formatNumber(c.conversations) }),
-            delta: <DeltaBadge value={c.deltaPct} />,
+            value: t('analytics.overview.channelLine', { orders: c.orders, ordersN: formatNumber(c.orders), conversations: c.conversations, conversationsN: formatNumber(c.conversations) }),
+            delta: <DeltaBadge value={c.deltaPct} {...deltaText} />,
             // ANALYTICS-07: the row counts every order without a page (manual, import, mobile, API): the link opens the same ones
             href: c.channelId ? `/orders?channelId=${c.channelId}&${range}` : `/orders?source=manual,import,mobile,api&${range}`,
           }))}

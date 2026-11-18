@@ -70,7 +70,7 @@ export class ShipmentEffects {
     const data: Record<string, unknown> = { orderId: o.id, shipmentId: s.id, number: o.number, ...extra };
     if (type === 'shipment_created') Object.assign(data, { trackingNumber: s.trackingNumber, tracking: s.trackingNumber ?? '—' });
     // `reason` = the code (FailureReason or `courier_unavailable`); the notification renders it localized
-    if (type === 'shipment_failed') Object.assign(data, { failureReason: s.failureReason, courier: this.courierName(s), reason: (extra.reason as string | undefined) ?? s.failureReason ?? 'other' });
+    if (type === 'shipment_failed') Object.assign(data, { failureReason: s.failureReason, provider: s.provider, courier: this.courierName(s), reason: (extra.reason as string | undefined) ?? s.failureReason ?? 'other' });
     if (type === 'shipment_returned') Object.assign(data, { failureReason: s.failureReason });
     await this.orders.effects.notify(tx, type, { workspaceId: o.workspaceId, key: `${type}:${s.id}:${s.deliveryAttempts}:${(extra.stamp as string | undefined) ?? s.status}`, data, exceptUserId });
   }

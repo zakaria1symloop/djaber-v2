@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import { algiersDay, algiersDayEnd, algiersDayStart } from '../../src/core/time/algiers';
 import { exportDateTime } from '../../src/modules/jobs/export-cells';
 import { parseCsv } from '../../src/modules/jobs/table-file';
+import { readXlsx } from '../../src/modules/jobs/xlsx';
 import { asAdmin, asOperator, asOwner } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
 import { eventually } from '../support/m1';
@@ -279,6 +280,20 @@ describe('09 §4 regression: period selection ↔ table ↔ KPIs', () => {
     const lines = parseCsv(String(file.text ?? file.body));
     expect(lines[1]).toEqual([exportDateTime(row.body.data.date)!.text, 'Apport ouverture', '', 'Apport', 'Espèces', '1000', expect.any(String), '', expect.any(String)]);
     expect(lines[1]![0]).toMatch(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
+    // journeys 18/11 J11r-2: the CSV holds the rows only; the XLSX ends with the totals of the page (Entrées / Sorties)
+    expect(lines.filter((l) => l.some((c) => c !== ''))).toHaveLength(2);
+    const x = await owner.get('/cash/export?format=xlsx').expect(202);
+    await drain(app, owner.workspaceId, ['job']);
+    const xl = new URL((await jobOf(owner, x.body.data.jobId)).resultUrl);
+    const sheet = readXlsx((await request(app.http()).get(`${xl.pathname}${xl.search}`).buffer(true).parse((res, cb) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => cb(null, Buffer.concat(chunks)));
+    }).expect(200)).body as Buffer);
+    expect(sheet.slice(-2)).toEqual([
+      ['', 'Total des entrées', '', '', '', '1000'],
+      ['', 'Total des sorties', '', '', '', '0'],
+    ]);
     await request(app.http()).get(`${link.pathname}${link.search.replace(/sig=[^&]+/, 'sig=nope')}`).expect(404);
     await request(app.http()).get(`${link.pathname}${link.search.replace(/exp=\d+/, 'exp=1')}`).expect(404);
     const op = await asOperator(app, owner.workspaceId);

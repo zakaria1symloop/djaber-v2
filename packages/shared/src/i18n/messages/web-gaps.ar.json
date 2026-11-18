@@ -156,7 +156,7 @@
  "savedViews.sharedBy": "شاركه {name}",
  "savedViews.copy": "نسخة",
  "savedViews.copyN": "نسخة {n}",
- "savedViews.shareAdminOnly": "مخصص لمالك المساحة والمشرفين.",
+ "savedViews.shareAdminOnly": "مخصّص لمالك المساحة ومسؤوليها.",
  "savedViews.action.rename": "إعادة التسمية…",
  "savedViews.action.setDefault": "تعيين كافتراضي",
  "savedViews.action.unsetDefault": "إلغاء الافتراضي",

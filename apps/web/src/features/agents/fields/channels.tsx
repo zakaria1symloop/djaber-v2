@@ -66,7 +66,7 @@ export function ChannelsFields({ agentId, agentName, readOnly, lead }: { agentId
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[14px] font-medium">{c.name}</div>
                     <div className="ts-label-micro mt-1 truncate text-text-muted">
-                      {t(`enum.Channel.platform.${c.platform}`)} · <Ltr>{t('agents.channels.conversations', { count: formatNumber(c.counts.conversations) })}</Ltr> · {t(`enum.Channel.status.${c.status}`)}
+                      {t(`enum.Channel.platform.${c.platform}`)} · <Ltr>{t('agents.channels.conversations', { count: c.counts.conversations, n: formatNumber(c.counts.conversations) })}</Ltr> · {t(`enum.Channel.status.${c.status}`)}
                     </div>
                   </div>
                   {state === 'selected' ? <MonoChip tone="success">{t('agents.channels.state.selected')}</MonoChip> : null}

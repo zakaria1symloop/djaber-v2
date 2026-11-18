@@ -48,7 +48,7 @@ import { DialogFooter, RadioList, refusal, useDialogSubmit, useOnOpen } from '@/
 import { useOffline } from '@/features/orders/offline';
 import { useRouter } from '@/i18n/navigation';
 import { ApiError } from '@/lib/api';
-import { toMenuActions } from '@/lib/actions';
+import { toMenuActions, forbiddenReason, reasonText } from '@/lib/actions';
 import { decimal } from '@/features/analytics/format';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { isJobRunning, useJob } from '@/lib/jobs';
@@ -69,7 +69,7 @@ export function RecommendationsPage() {
   const list = useListState(RECOS_SPEC);
   const view = filterText(list.state, 'view') || 'cards';
   const offline = useOffline();
-  const writeReason = !can('catalog.write') ? t('toast.forbidden') : offline ? t('banner.offline') : undefined;
+  const writeReason = !can('catalog.write') ? forbiddenReason(t) : offline ? t('banner.offline') : undefined;
   const simple = workspace?.stockMode !== 'advanced';
   const tabs = [
     { key: 'cards', label: t('recos.view.cards') },
@@ -179,7 +179,7 @@ function Cards({ list, offline, simple }: { list: ReturnType<typeof useListState
   const cats = flattenCategories(categories.data ?? []);
   const k = stats.data;
   const rows = q.data ?? [];
-  const writeReason = !can('catalog.write') ? t('toast.forbidden') : offline ? t('banner.offline') : undefined;
+  const writeReason = !can('catalog.write') ? forbiddenReason(t) : offline ? t('banner.offline') : undefined;
   const jobId = filterText(s, 'job') || null;
   // "Désactiver cette règle pour ce produit" cannot be undone from the screen: confirmed first
   const [mute, setMute] = useState<StockReco | null>(null);
@@ -337,7 +337,7 @@ function Cards({ list, offline, simple }: { list: ReturnType<typeof useListState
                   r.status === 'active' || r.status === 'snoozed' ? (
                     <>
                       {applyAction ? (
-                        <Button size="sm" variant="primary" onClick={() => void apply(r)} disabledReason={writeReason ?? (applyAction.enabled ? undefined : t(`error.${applyAction.reasonCode ?? 'FORBIDDEN'}`))} data-testid="reco-apply">
+                        <Button size="sm" variant="primary" onClick={() => void apply(r)} disabledReason={writeReason ?? (applyAction.enabled ? undefined : reasonText(t, applyAction.reasonCode))} data-testid="reco-apply">
                           {t(`recos.apply.${r.suggestedAction.kind}`)}
                         </Button>
                       ) : null}
@@ -724,7 +724,9 @@ export function RuleDialog({ rule, onClose }: { rule: CrossSellRule | 'new' | nu
         <div className="grid gap-3 sm:grid-cols-2">
           {/* full-test 15/11 ANALYTICS-13: 101 is refused with its bounds, never saved as 100 without a word */}
           <Field label={t('recos.rule.score')} htmlFor="rule-score" error={scoreBad ? t('validation.range', { min: 0, max: 100 }) : s.fieldError('score', { min: 0, max: 100 })}>
-            <NumberInput id="rule-score" value={score} onValueChange={setScore} maxDigits={3} aria-invalid={scoreBad || undefined} />
+            {/* journeys 18/11 ANALYTICS-13: the minus is typed (`allowNegative`) so « -1 » stays in the field, refused by `scoreBad`
+              and never saved (03 REC-01) — the integer field drops a refused « - », which turned « -1 » into a saved 1 */}
+          <NumberInput id="rule-score" value={score} onValueChange={setScore} maxDigits={3} allowNegative aria-invalid={scoreBad || undefined} />
           </Field>
           <Field label={t('recos.rule.active')} htmlFor="rule-active">
             <Select id="rule-active" value={active} onChange={(e) => setActive(e.target.value)}>

@@ -18,6 +18,7 @@ import { flattenCategories, type BulkResponse, type ProductListItem } from '../c
 import { aiExclusion } from '../ui';
 import { addToAgentOutcome } from './spec';
 import { ProductLabelsDialog } from '../product-labels-dialog';
+import { forbiddenReason } from '@/lib/actions';
 
 export type BulkKind = 'category' | 'minStock' | 'price' | 'agent' | 'archive' | 'labels';
 type Outcome = { title: string; response: BulkResponse; retry: (ids: string[]) => Promise<BulkResponse> };
@@ -56,7 +57,7 @@ export function ProductsBulkBar({ rows, selected, total, onSelectAllPage, onClea
   const ids = useMemo(() => [...selected], [selected]);
   const picked = rows.filter((r) => selected.has(r.id));
   const withVariants = picked.filter((r) => r.hasVariants).length;
-  const forbidden = can('catalog.write') ? undefined : t('toast.forbidden');
+  const forbidden = can('catalog.write') ? undefined : forbiddenReason(t);
   const advanced = workspace?.stockMode === 'advanced';
   // names of every row seen on screen: an archived product leaves the list before the result dialog opens
   const seenNames = useRef<Record<string, string>>({});

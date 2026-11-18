@@ -473,7 +473,8 @@ function OrdersTab() {
                         <Link href={`/orders?source=${s.source}&${range}`} className="text-text-secondary hover:text-text-primary">
                           {tr(t, `analytics.source.${s.source}`, s.source)}
                         </Link>
-                        <Num>{`${n(s.orders)} · ${n(s.revenue)} DA`}</Num>
+                        {/* journeys 18/11 J11r-6 (e): the orders created and the revenue of the delivered ones are two figures — each named */}
+                        <Num>{t('analytics.orders.bySourceLine', { orders: s.orders, ordersN: n(s.orders), delivered: s.delivered, deliveredN: n(s.delivered), revenue: n(s.revenue) })}</Num>
                       </li>
                     ))}
                   </ul>

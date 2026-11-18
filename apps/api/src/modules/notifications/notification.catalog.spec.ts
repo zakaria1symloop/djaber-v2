@@ -142,3 +142,21 @@ describe("journey 16/11 J05-15 — grouped « Produits validés aujourd'hui »",
     expect(mergeGroupIds(undefined, ['c', 3])).toEqual(['c']);
   });
 });
+
+describe('journeys 18/11 J10r-6 / J11r-6 (d)', () => {
+  it('a failed own-delivery parcel names the provider in the reader language (old rows stored « Livraison propre » too)', () => {
+    for (const locale of LOCALES) {
+      const own = getMessages(locale)['couriers.provider.manual']!;
+      const r = renderNotification('shipment_failed', { number: 'CMD-1022', courier: 'Livraison propre', provider: 'manual', reason: 'unreachable' }, locale);
+      expect(r.body).toContain(own);
+      if (locale !== 'fr') expect(r.body).not.toContain('Livraison propre');
+      expect(renderNotification('shipment_failed', { number: 'CMD-1022', courier: 'Livraison propre', reason: 'unreachable' }, locale).body).toContain(own);
+      expect(renderNotification('shipment_failed', { number: 'CMD-1022', courier: 'Yalidine', provider: 'yalidine', reason: 'unreachable' }, locale).body).toContain('Yalidine');
+    }
+  });
+
+  it('a report export is named by its report and format', () => {
+    const r = renderNotification('job_finished', { kind: 'export', exportKind: 'report', reportKey: 'payments', format: 'xlsx', label: 'export', name: 'export' }, 'fr');
+    expect(`${r.title} ${r.body}`).toContain('Export du rapport « Paiements » (XLSX)');
+  });
+});

@@ -40,12 +40,27 @@ export const reasonValue = (t: TFunction, name: string, value: ReasonValue, o: P
 };
 
 /**
+ * Journeys 18/11 J10r-3: one sentence for « your role cannot do this », and it says who can — the 403 pages' wording.
+ * In a shop there are three roles, so who can is the roles above the reader: an Operator is refused an Admin+ action
+ * (« Réservé au propriétaire et aux admins de l'espace. »), an Admin an Owner-only one (« Réservé au propriétaire de
+ * l'espace. »). The merchant shell says who reads (`setMerchantViewerRole`); outside it (platform admin) the generic
+ * `error.FORBIDDEN` stays. It replaced five wordings (« Action non autorisée pour votre rôle », « Vous n'avez pas la
+ * permission. », « Réservé aux propriétaires et admins … »).
+ */
+let merchantViewerRole: string | null = null;
+export const setMerchantViewerRole = (role: string | null) => {
+  merchantViewerRole = role;
+};
+export const forbiddenReason = (t: TFunction): string =>
+  merchantViewerRole === 'admin' ? t('actions.reason.ownerOnly') : merchantViewerRole ? t('actions.reason.ownerAndAdmins') : t('error.FORBIDDEN');
+
+/**
  * "Ce produit n'a pas de stock (service)." — the reason only, never the code (it stays on the descriptor's
  * `reasonCode`, retest 11/11 UX-056), with every value it is given filled in (UX-060). A slot nobody filled is dropped by
  * the formatter (lib/format-message `stripPlaceholders`): the sentence never shows `{from}` / `{retryAfter}`.
  */
 export const reasonText = (t: TFunction, code: string | undefined, params?: ReasonParams, o: ReasonOptions = {}): string => {
-  if (!code) return t('error.FORBIDDEN');
+  if (!code || code === 'FORBIDDEN') return forbiddenReason(t);
   const key = `error.${code}`;
   // UX-059: an unknown code is never shown as such
   if (!t.has(key)) return t('actions.reason.unavailable');

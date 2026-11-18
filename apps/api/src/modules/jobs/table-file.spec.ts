@@ -114,7 +114,7 @@ describe('XLSX', () => {
     expect(sheet).toMatch(/<c r="A2" s="1"><v>46337\.65\d*<\/v><\/c>/);
     expect(sheet).toContain('<cols><col min="1" max="1" width="17" customWidth="1"/></cols><sheetData>');
     expect(styles).toContain('<numFmt numFmtId="164" formatCode="dd/mm/yyyy hh:mm"/>');
-    expect(styles).toMatch(/<cellXfs count="3">.*numFmtId="164"[^>]*applyNumberFormat="1".*numFmtId="165"/);
+    expect(styles).toMatch(/<cellXfs count="6">.*numFmtId="164"[^>]*applyNumberFormat="1".*numFmtId="165"/);
     expect(strFromU8(files['xl/_rels/workbook.xml.rels']!)).toContain('Target="styles.xml"');
     expect(strFromU8(files['[Content_Types].xml']!)).toContain('PartName="/xl/styles.xml"');
     // still readable by the import reader (the serial number as text)
@@ -124,5 +124,33 @@ describe('XLSX', () => {
     expect(csv).toBe(`${BOM}Date,Libellé\r\n11/11/2026 15:38,Commande #CMD-1008 livrée (COD)\r\n`);
     // no date column ⇒ no <cols>
     expect(strFromU8(unzipSync(new Uint8Array(writeXlsx('S', [['a']])))['xl/worksheets/sheet1.xml']!)).not.toContain('<cols>');
+  });
+});
+
+describe('journeys 18/11 J11r-2: totals rows', () => {
+  const columns = [
+    { header: 'Libellé', value: (r: { l: string; a: number }) => r.l },
+    { header: 'Montant', value: (r: { l: string; a: number }) => r.a },
+  ];
+  const rows = [
+    { l: 'Vente', a: 4500 },
+    { l: 'Achat', a: -3000 },
+  ];
+  it('the XLSX ends with the footer rows in bold (header bold too); the CSV keeps the data rows only', () => {
+    const xlsx = writeTable('xlsx', 'Caisse', columns, rows, [['Totaux', 1500]]);
+    expect(readXlsx(xlsx.body)).toEqual([
+      ['Libellé', 'Montant'],
+      ['Vente', '4500'],
+      ['Achat', '-3000'],
+      ['Totaux', '1500'],
+    ]);
+    const sheet = strFromU8(unzipSync(new Uint8Array(xlsx.body))['xl/worksheets/sheet1.xml']!);
+    expect(sheet).toContain('<c r="A1" s="3" t="inlineStr">');
+    expect(sheet).toContain('<c r="B4" s="3"><v>1500</v></c>');
+    expect(sheet).toContain('<c r="B2"><v>4500</v></c>');
+    const styles = strFromU8(unzipSync(new Uint8Array(xlsx.body))['xl/styles.xml']!);
+    expect(styles).toContain('<font><b/>');
+    const csv = writeTable('csv', 'Caisse', columns, rows, [['Totaux', 1500]]).body.toString('utf8');
+    expect(csv).not.toContain('Totaux');
   });
 });

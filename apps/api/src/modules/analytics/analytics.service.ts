@@ -31,7 +31,8 @@ import { notFound } from '../../core/errors/app.exception';
 import { algiersDay } from '../../core/time/algiers';
 import { StockService } from '../catalog/stock.service';
 import { CreditService } from '../credits/credit.service';
-import { PROVIDER_NAMES } from '../delivery/adapters/courier-adapter';
+import { providerName } from '../delivery/adapters/courier-adapter';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { deadStock } from '../gds/reports/stock-queries';
 import { DailyStatsService } from './daily-stats.service';
 import { percentile, percentileAbove, sumDays, type DayMetrics, type HistName } from './day-metrics';
@@ -546,7 +547,7 @@ export class AnalyticsService {
           key,
           provider,
           courierAccountId: acc === 'none' ? null : acc,
-          name: (acc !== 'none' ? accName.get(acc) : undefined) ?? PROVIDER_NAMES[provider as keyof typeof PROVIDER_NAMES] ?? provider,
+          name: (acc !== 'none' ? accName.get(acc) : undefined) ?? providerName(provider, viewerLocale()),
           parcels: c.parcels,
           delivered: c.delivered,
           deliveredPct: pct(c.delivered, c.parcels || closed),

@@ -156,7 +156,7 @@
  "savedViews.sharedBy": "Partagée par {name}",
  "savedViews.copy": "copie",
  "savedViews.copyN": "copie {n}",
- "savedViews.shareAdminOnly": "Réservé aux propriétaires et admins de l’espace.",
+ "savedViews.shareAdminOnly": "Réservé au propriétaire et aux admins de l’espace.",
  "savedViews.action.rename": "Renommer…",
  "savedViews.action.setDefault": "Définir par défaut",
  "savedViews.action.unsetDefault": "Retirer le défaut",

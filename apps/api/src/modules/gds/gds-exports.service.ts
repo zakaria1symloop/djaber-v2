@@ -60,7 +60,8 @@ export class GdsExportsService implements OnModuleInit {
       if (!list.includes(e.method)) list.push(e.method);
       modes.set(e.sourceId, list);
     }
-    const method = (r: R) => (modes.get(r.id) ?? [r.paymentMethod]).filter(Boolean).map((m) => exportLabel(locale, ['sales.method', 'orders.payment.method'], m)).join(' + ');
+    // journeys 18/11 J11r-6 (f): the mode reads « CCP » as in Caisse, Paiements and the cash journal (not the sale form's « CCP / BaridiMob »)
+    const method = (r: R) => (modes.get(r.id) ?? [r.paymentMethod]).filter(Boolean).map((m) => exportLabel(locale, ['orders.payment.method', 'sales.method'], m)).join(' + ');
     return {
       sheetName: h.sales,
       fileName: `ventes-${algiersDay()}`,

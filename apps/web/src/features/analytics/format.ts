@@ -1,6 +1,7 @@
 // Figures of the analytics tabs and reports (CLAUDE.md rule 11: integer DZD `12 500 DA`, Latin digits; one decimal
 // with the locale separator for rates and durations). Pure, unit-tested.
 import { formatNumber } from '@djaber/shared';
+import { rangeArrow } from '@/lib/format-message';
 
 export type Unit = 'count' | 'money' | 'pct' | 'seconds' | 'minutes' | 'days' | 'ratio' | 'credits' | 'usd';
 const NBSP = String.fromCharCode(160);
@@ -63,7 +64,7 @@ export function rangeLabel(from: string, to: string, locale: string, o: { endYea
   const thisYear = o.currentYear ?? new Date().toISOString().slice(0, 4);
   const startYear = from.slice(0, 4) !== to.slice(0, 4);
   const endYear = o.endYear || startYear || to.slice(0, 4) !== thisYear;
-  return `${dayLabel(from, locale, startYear)} → ${dayLabel(to, locale, endYear)}`;
+  return `${dayLabel(from, locale, startYear)} ${rangeArrow(locale)} ${dayLabel(to, locale, endYear)}`;
 }
 
 /** Largest value of a series point list (best day) — `null` when everything is 0. */
