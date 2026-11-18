@@ -60,7 +60,7 @@ function StackChart({ title, series, data, format, height = 200, end }: { title:
 }
 
 /** Chart of one measure picked among several (rates / durations: never stacked). */
-function SwitchChart({ title, series, data, format }: { title: string; series: ChartSeries[]; data: Parameters<typeof StackChart>[0]['data']; format: (n: number) => string }) {
+function SwitchChart({ title, series, data, format, empty }: { title: string; series: ChartSeries[]; data: Parameters<typeof StackChart>[0]['data']; format: (n: number) => string; empty?: string }) {
   const [pick, setPick] = useState<string | null>(null);
   const t = useT();
   const locale = useLocaleCode();
@@ -75,7 +75,7 @@ function SwitchChart({ title, series, data, format }: { title: string; series: C
         </LegendChip>
       ))}
     >
-      <BarChart label={title} buckets={buckets} series={active ? [active] : []} previous={previous} previousLabel={t('analytics.legend.previousShort')} format={format} empty={t('analytics.empty.title')} height={200} {...axis(data, locale)} />
+      <BarChart label={title} buckets={buckets} series={active ? [active] : []} previous={previous} previousLabel={t('analytics.legend.previousShort')} format={format} empty={empty ?? t('analytics.empty.title')} height={200} {...axis(data, locale)} />
     </ChartPanel>
   );
 }
@@ -553,7 +553,8 @@ function DeliveryTab() {
               <Kpi k={k.courierFees} name="courierFees" label={t('analytics.unit.courierFees')} meta={t('analytics.delivery.customerFees', { value: n(hintNum(k.courierFees, 'customerFees')) })} />
             </KpiRow>
             <ChartAndTable>
-              <SwitchChart title={t('analytics.delivery.chart')} data={d.series} format={(v) => fig(v, 'days')} series={d.couriers.slice(0, 5).map((c, i) => ({ key: c.key, label: c.name.toUpperCase(), tone: TONES[i % TONES.length]! }))} />
+              {/* journey J08r-7 #3: deliveries made the same day average « 0 j » — the bars are flat, the period is not empty */}
+              <SwitchChart title={t('analytics.delivery.chart')} data={d.series} format={(v) => fig(v, 'days')} empty={d.couriers.some((c) => c.avgDays !== null) ? t('analytics.delivery.chartSameDay') : undefined} series={d.couriers.slice(0, 5).map((c, i) => ({ key: c.key, label: c.name.toUpperCase(), tone: TONES[i % TONES.length]! }))} />
               <TabTable
                 title={t('analytics.table.couriers')}
                 testId="tab-table"

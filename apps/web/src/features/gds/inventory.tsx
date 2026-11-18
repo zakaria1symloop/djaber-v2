@@ -356,9 +356,17 @@ function InventoryCount({ id }: { id: string }) {
     if (d) return d.counted.trim() === '' ? null : Number(d.counted);
     return l.countedQty;
   }, [drafts]);
+  // journey J08r-1: a count saved on blur is not saved when its entry was refused (a minus, a letter, a decimal part)
+  const refusedEntry = useRef<string | null>(null);
   const save = async (l: InventoryLine) => {
     const k = lineKey(l);
     const d = drafts[k];
+    if (refusedEntry.current === k) {
+      refusedEntry.current = null;
+      setDrafts((x) => ({ ...x, [k]: { counted: l.countedQty === null ? '' : String(l.countedQty), note: x[k]?.note ?? l.note ?? '' } }));
+      setSaving((x) => ({ ...x, [k]: 'error' }));
+      return toast({ tone: 'danger', message: t('input.notice.entryRefused') });
+    }
     if (!d || !inv) return;
     const counted = d.counted.trim() === '' ? null : Number(d.counted);
     if (counted === l.countedQty && (d.note.trim() || null) === (l.note ?? null)) return;
@@ -497,6 +505,7 @@ function InventoryCount({ id }: { id: string }) {
                         aria-label={t('inventory.page.countFor', { name: [l.name, l.variantName].filter(Boolean).join(' · ') })}
                         value={d ? d.counted : l.countedQty === null ? '' : String(l.countedQty)}
                         onValueChange={(x) => setDrafts((all) => ({ ...all, [k]: { counted: x, note: all[k]?.note ?? l.note ?? '' } }))}
+                        onRefusedEntry={() => (refusedEntry.current = k)}
                         onBlur={() => void save(l)}
                         onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
                         maxDigits={7}

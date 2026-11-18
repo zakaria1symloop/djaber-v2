@@ -63,7 +63,7 @@ test('AT-CLI-04 · list paginated, filters in the URL, search by phone fragment'
 
   // panel: source + never ordered ⇒ results; reload keeps the state (URL)
   await page.getByTestId('open-filters').click();
-  await page.getByRole('checkbox', { name: 'Jamais commandé' }).click();
+  await page.getByRole('checkbox', { name: 'Jamais commandé ni acheté' }).click();
   await expect(page.getByRole('button', { name: /Afficher 1 client/ })).toBeVisible();
   await page.getByRole('button', { name: /Afficher 1 client/ }).click();
   await expectUrl(page, /neverOrdered=1/);
@@ -198,7 +198,7 @@ test('AT-CLI-06 · merge: preview (409 CUSTOMER_MERGE_IRREVERSIBLE) then confirm
   await page.getByRole('menuitem', { name: /Fusionner avec un client existant/ }).click();
   const dialog = page.getByRole('dialog', { name: 'Fusionner les clients' });
   await dialog.getByRole('combobox').click();
-  await page.getByRole('textbox', { name: 'Nom ou téléphone (ex. 0555…)' }).fill('Amina Bel');
+  await page.getByRole('textbox', { name: 'Nom ou téléphone' }).fill('Amina Bel');
   await page.getByRole('option', { name: /Amina Belkacem/ }).click();
   // journey J09-3: the card the merge started from is kept by default; a click on the other card swaps
   await expect(dialog.getByRole('radio', { checked: true })).toContainText('Amina B.');

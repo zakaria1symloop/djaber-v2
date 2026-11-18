@@ -341,7 +341,8 @@ function InboxFilterPanel({ open, onClose, filters, setFilters, total, more }: {
       open={open}
       onClose={onClose}
       title={t('action.filters')}
-      summary={t('inbox.filters.summary', { active, count: total, more: more ? '+' : '' })}
+      // journey J09r-4: real plurals (« 0 ACTIFS · 0 CONVERSATIONS ») — `shown` is the count with its « + » when there are more
+      summary={t('inbox.filters.summary', { active, count: total, more: more ? '+' : '', shown: `${total}${more ? '+' : ''}` })}
       resetLabel={t('inbox.filters.reset')}
       onReset={() => setFilters({ ...DEFAULT_FILTERS, channel: filters.channel })}
       applyLabel={t('inbox.filters.apply', { count: total, more: more ? '+' : '' })}

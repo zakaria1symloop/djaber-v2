@@ -256,3 +256,15 @@ export const orderAnchor = (hash: string): (typeof ORDER_PAGE_ANCHORS)[number] |
 };
 
 export type { ConfirmationStatus };
+
+/**
+ * Journey J08r-5 (04 §4): the fee the order page's items editor shows. The server re-quotes the grid for the new subtotal
+ * (after the discount) unless the fee was an Admin override (≠ what the grid gave for the saved subtotal) or the Admin typed
+ * a fee in the editor — the editor kept the old fee (« 0 DA », total 9 800) and saved 500 / 10 300. `before` / `after`: the
+ * grid quotes for the saved and the edited subtotal (undefined while loading ⇒ the saved fee).
+ */
+export function itemsEditorFee(saved: number, draft: { deliveryFee: number; feeTouched?: boolean }, before?: { fee: number; wilayaServed: boolean } | null, after?: { fee: number; wilayaServed: boolean } | null): { fee: number; requoted: boolean } {
+  if (draft.feeTouched) return { fee: draft.deliveryFee, requoted: false };
+  if (!before || !after || !before.wilayaServed || !after.wilayaServed || before.fee !== saved) return { fee: saved, requoted: false };
+  return { fee: after.fee, requoted: after.fee !== saved };
+}

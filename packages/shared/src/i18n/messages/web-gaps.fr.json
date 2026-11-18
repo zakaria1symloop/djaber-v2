@@ -148,7 +148,7 @@
  "savedViews.title": "Vues enregistrées",
  "savedViews.saveCurrent": "Enregistrer la vue courante…",
  "savedViews.empty": "Aucune vue enregistrée pour cette liste.",
- "savedViews.note": "Menu ⋯ : renommer · définir par défaut · partager à l’équipe (admin) · supprimer. Une vue partagée est en lecture pour les autres.",
+ "savedViews.note": "Une vue partagée est proposée à toute l'équipe, sans pouvoir être modifiée par les autres.",
  "savedViews.sharedPill": "PARTAGÉE",
  "savedViews.rowMenu": "Actions de la vue « {name} »",
  "savedViews.loading": "Chargement des vues",

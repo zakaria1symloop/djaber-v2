@@ -551,7 +551,9 @@ export class AnalyticsService {
           delivered: c.delivered,
           deliveredPct: pct(c.delivered, c.parcels || closed),
           returned: c.returned,
-          returnedPct: pct(c.returned, c.parcels || closed),
+          // journey J08r-6: one return rate in the app — returned ÷ (delivered + returned), as the Livraison tile, the orders tab
+          // and the reports (it was ÷ parcels here: 25 % next to the tile's 33 %)
+          returnedPct: pct(c.returned, closed),
           failed: c.failed,
           avgDays: c.daysCount ? round1(c.daysSum / c.daysCount) : null,
           codCollected: c.cod,

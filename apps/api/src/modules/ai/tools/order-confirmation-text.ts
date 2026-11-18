@@ -183,35 +183,57 @@ const STREET_NAME_WORDS = new Set(['rue', 'avenue', 'av', 'boulevard', 'bd', 'ro
 const PLACE_LEAD_WORDS = new Set(['wilaya', 'commune', 'daira', 'de', 'du', 'd', 'a', 'au', 'en', 'f', 'fi', 'in', 'at', 'ولايه', 'بلديه', 'دائره', 'في', 'ب']);
 const CONNECTORS = new Set(['de', 'du', 'des', 'd']);
 /**
- * journey retest R13-2 (18/11): the street without the commune / wilaya names (`keys`: folded, with and without their article) wherever
- * they stand — at its start, its end or between its words, with the small words that lead them (« wilaya de », « à », « في ») — except
- * a name that is part of a street name (« Rue de Boufarik », « شارع الجزائر »). A street left with no letter is not returned ('').
+ * journey J09r-5 (18/11): words that make a place name part of a neighbourhood name when they follow it (« Blida centre », « Sétif
+ * ville », « Oran est ») — the name is kept there: it is the customer's street words.
+ */
+const NEIGHBOURHOOD_WORDS = new Set(['centre', 'center', 'centreville', 'ville', 'nord', 'sud', 'est', 'ouest', 'gare', 'port', 'plage', 'vieille', 'nouvelle', 'وسط', 'مركز', 'المركز', 'سنتر', 'الوسط', 'المدينه', 'مدينه', 'الجديده', 'القديمه', 'شرق', 'غرب', 'الشرقي', 'الغربي']);
+/**
+ * journey retest R13-2 (18/11): the street without the commune / wilaya names (`keys`: folded, with and without their article) it starts
+ * or ends with — with the small words that lead them (« wilaya de », « à », « في ») and with no separator between them and the street
+ * (« ولاية قسنطينة الخروب حي 1000 مسكن », « … bloc 12 à El Eulma »). Journey J09r-5 (18/11): only those runs at the two ends — never a
+ * name between the street's words — and never a name followed by a neighbourhood word (« Blida centre, rue des orangers 16 » stays
+ * whole: the recap read « centre, rue des orangers 16 »); a name that is part of a street name stays (« Rue de Boufarik »,
+ * « شارع الجزائر »). A street left with no letter is not returned ('').
  */
 export const withoutPlaceWords = (street: string, keys: ReadonlySet<string>): string => {
   const raw = street.split(/\s+/u).filter(Boolean);
   const folded = raw.map((w) => placeKey(w));
   const drop = new Array<boolean>(raw.length).fill(false);
   const isKey = (k: string) => !!k && (keys.has(k) || keys.has(withoutArticle(k)) || keys.has(articleless(k)));
-  for (let i = 0; i < raw.length; i++) {
-    let end = -1;
-    for (let j = Math.min(raw.length, i + 5); j > i; j--) {
-      if (isKey(folded.slice(i, j).join(' ').trim())) {
-        end = j;
+  /** the end (exclusive, ≤ `max`) of the longest place name that starts at word `i`, -1 when none */
+  const nameAt = (i: number, max = raw.length) => {
+    for (let j = Math.min(max, i + 5); j > i; j--) if (isKey(folded.slice(i, j).join(' ').trim())) return j;
+    return -1;
+  };
+  const isLead = (k: number) => PLACE_LEAD_WORDS.has(folded[k]!) && !/[,،;؛]$/u.test(raw[k]!);
+  // from the start: [lead words] name, again — up to the first street word, or a neighbourhood word right after the name
+  let first = 0;
+  for (;;) {
+    let k = first;
+    while (k < raw.length && isLead(k)) k++;
+    const end = k < raw.length ? nameAt(k) : -1;
+    if (end < 0 || end >= raw.length || NEIGHBOURHOOD_WORDS.has(folded[end]!)) break;
+    for (let x = first; x < end; x++) drop[x] = true;
+    first = end;
+  }
+  // from the end: name, with the lead words before it — a name after a street-name word (« Rue de Boufarik ») stays
+  let stop = raw.length;
+  while (stop > first) {
+    let start = -1;
+    for (let s = Math.max(first, stop - 5); s < stop; s++) {
+      if (nameAt(s, stop) === stop) {
+        start = s;
         break;
       }
     }
-    if (end < 0) continue;
-    const before = folded.slice(0, i).filter((_, k) => !drop[k]);
-    const prev = before[before.length - 1] ?? '';
-    const prev2 = before[before.length - 2] ?? '';
-    if (STREET_NAME_WORDS.has(prev) || (CONNECTORS.has(prev) && STREET_NAME_WORDS.has(prev2))) {
-      i = end - 1;
-      continue;
-    }
-    for (let k = i; k < end; k++) drop[k] = true;
-    // « wilaya de Sétif », « à El Eulma », « في الخروب »: the small words right before the name go with it
-    for (let k = i - 1; k >= 0 && !drop[k] && PLACE_LEAD_WORDS.has(folded[k]!) && !/[,،;؛]$/u.test(raw[k]!); k--) drop[k] = true;
-    i = end - 1;
+    if (start <= first) break;
+    const prev = folded[start - 1] ?? '';
+    const prev2 = folded[start - 2] ?? '';
+    if (STREET_NAME_WORDS.has(prev) || (CONNECTORS.has(prev) && STREET_NAME_WORDS.has(prev2))) break;
+    let lead = start;
+    while (lead - 1 > first && isLead(lead - 1)) lead--;
+    for (let x = lead; x < stop; x++) drop[x] = true;
+    stop = lead;
   }
   if (!drop.some(Boolean)) return street;
   const kept = raw.filter((_, k) => !drop[k]).join(' ');

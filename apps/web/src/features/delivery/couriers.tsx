@@ -211,7 +211,11 @@ export function CouriersPage() {
                   </CourierCard>
                 );
               })}
-              {missing.map((p) => (
+              {missing.map((p) => {
+                // journey J08r-7 #1: the card names the credentials of the default platform (ZR Express: zrexpress.app) — its
+                // capabilities are that platform's too, not the legacy Procolis ones of the provider entry
+                const caps = p.platforms?.[0]?.capabilities ?? p.capabilities;
+                return (
                 <CourierCard
                   key={p.provider}
                   data-courier={p.provider}
@@ -225,9 +229,10 @@ export function CouriersPage() {
                     </Button>
                   }
                 >
-                  <p>{t('couriers.capabilities', { parcel: yes(p.capabilities.parcel), tracking: yes(p.capabilities.tracking), rates: yes(p.capabilities.rates), label: yes(p.capabilities.label) }) + (p.capabilities.stopdesk ? ` · ${t('couriers.stopdeskCap')}` : '')}</p>
+                  <p>{t('couriers.capabilities', { parcel: yes(caps.parcel), tracking: yes(caps.tracking), rates: yes(caps.rates), label: yes(caps.label) }) + (caps.stopdesk ? ` · ${t('couriers.stopdeskCap')}` : '')}</p>
                 </CourierCard>
-              ))}
+                );
+              })}
               {manual ? (
                 <CourierCard key="manual" data-courier="manual" name={t('couriers.provider.manual')} status={{ label: t('couriers.state.always'), tone: 'success' }} meta={t('couriers.credentials.manual').toUpperCase()}>
                   <p>{t('couriers.manual.description')}</p>

@@ -83,7 +83,7 @@ All settled. Decisions D36–D66 and the amendments below were closed on 2026-10
 | D24 | **Prices**: selling price > 0 required; cost optional (simple mode) ; selling < cost allowed with a warning (V1 blocked). | 04 §2 |
 | D25 | **AI provider layer = Vercel AI SDK** (structured output + tool steps). | 07 |
 | D26 | **CMS** gains a locale (fr/ar/en); V1 content migrates to `fr`. | 05, 03 ADM-06 |
-| D27 | **Return cost**: on `returned`, an expense cash row `shipping` = fee grid `returnPrice` (reversible). | 04 §3 |
+| D27 | **Return cost**: on `returned`, an expense cash row `shipping` = fee grid `returnPrice` (reversible) — for a courier parcel; a self-delivered parcel has no courier to bill it and books none unless a fee is stated (journey J08r-3, 18/11). | 04 §3 |
 | D28 | **Conversation retention**: purge messages/attachments after 12 months; keep conversation rows anonymised. | 04 §9 |
 | D29 | **Mobile keeps CSV/XLSX import** via file picker. | 03 MOB |
 | D30 | **Ownership**: exactly one Owner per workspace at any time (`Membership.role=owner` unique per workspace); the Owner cannot be removed or demoted by anyone else; the Owner may transfer ownership to an Admin of the same workspace (D51, DECIDED 2026-10-11); sign-up through an invitation creates no workspace (`User.ownedWorkspaceId` nullable); an invited-only user may later create their own workspace (`POST /workspaces`, one per user). | 02 §1, 05, 06, FL-13 |

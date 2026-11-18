@@ -144,6 +144,9 @@ describe('creation (ORD-01 / ORD-02, 04 §3 "Order created")', () => {
     // J08-1: « -5 » / « -100 » never become 5 / 100 on the server either
     expect((await owner.patch('/workspace', { freeDeliveryThreshold: -5, version: await version() }).expect(422)).body.error.fields).toMatchObject({ freeDeliveryThreshold: 'validation.price' });
     expect((await owner.put('/delivery/fees/16', { homePrice: -100, stopdeskPrice: 250 }).expect(422)).body.error.fields).toMatchObject({ homePrice: 'validation.price' });
+    // journey J08r-1: a decimal, a string or a 0 threshold is a field error too (0 is not « off »: off is null)
+    for (const bad of [1.5, '1e3', 0, 12500.5]) expect((await owner.patch('/workspace', { freeDeliveryThreshold: bad, version: await version() }).expect(422)).body.error.fields).toMatchObject({ freeDeliveryThreshold: 'validation.price' });
+    for (const bad of [1.5, '1e3', 2.5]) expect((await owner.put('/delivery/fees/31', { homePrice: bad, stopdeskPrice: 250 }).expect(422)).body.error.fields).toMatchObject({ homePrice: 'validation.price' });
     await owner.put('/delivery/fees/16', { homePrice: 400, stopdeskPrice: 250 }).expect(200);
     await owner.patch('/workspace', { freeDeliveryThreshold: 10000, version: await version() }).expect(200);
     // J08-2: 10 000 − 500 discount = 9 500 < threshold ⇒ grid fee, and the order page says so (no « MODIFIÉ »)
@@ -154,6 +157,12 @@ describe('creation (ORD-01 / ORD-02, 04 §3 "Order created")', () => {
     const desk = await postOrder(owner, orderBody(p.id, { items: [{ productId: p.id, quantity: 3 }], delivery: address({ isStopdesk: true, address: null, stopdeskId: 'SD-1' }) })).expect(201);
     expect(desk.body.data).toMatchObject({ subtotal: 15000, deliveryFee: 250 });
     expect((await owner.get('/delivery/fees/quote?wilayaId=16&stopdesk=true&subtotal=15000').expect(200)).body.data).toMatchObject({ fee: 250, free: false, freeFrom: 10000, reason: 'grid' });
+    // journey J08r-5: an items edit under the threshold re-quotes the grid AND writes the fee's history line
+    const free = (await postOrder(owner, orderBody(p.id, { items: [{ productId: p.id, quantity: 2 }] })).expect(201)).body.data;
+    expect(free).toMatchObject({ subtotal: 10000, deliveryFee: 0 });
+    const edited = (await owner.patch(`/orders/${free.id}`, { items: [{ productId: p.id, quantity: 1 }], version: free.version }).expect(200)).body.data;
+    expect(edited).toMatchObject({ subtotal: 5000, deliveryFee: 400, total: 5400 });
+    expect(edited.history).toEqual(expect.arrayContaining([expect.objectContaining({ field: 'deliveryFee', from: '0', to: '400' }), expect.objectContaining({ field: 'total', from: '10000', to: '5400' })]));
   });
 
   it('AT-DLV-10 a commune of another wilaya is refused (validation.commune)', async () => {
@@ -258,7 +267,7 @@ describe('status machine and effects (04 §1.2, §3)', () => {
     expect(await productStock(product.id)).toBe(10);
   });
 
-  it('AT-ORD-06 returned ⇒ stock back with the return, income rows removed, expense `shipping` = grid returnPrice (D27); client returnCount', async () => {
+  it('AT-ORD-06 returned ⇒ stock back with the return, income rows removed; a self-delivered parcel books no return fee (J08r-3; courier ⇒ grid returnPrice, AT-DLV-06); client returnCount', async () => {
     const owner = await shop();
     const { order, product } = await newOrder(owner, { status: 'confirmed' });
     const shipped = await owner.post(`/orders/${order.id}/ship-manual`, { trackingNumber: 'LIV-1' }).expect(200);
@@ -267,10 +276,10 @@ describe('status machine and effects (04 §1.2, §3)', () => {
     expect(delivered.body.data.paymentStatus).toBe('paid');
     expect(await productStock(product.id)).toBe(9);
     const returned = await owner.post(`/orders/${order.id}/return`, { reason: 'refused', restoreStock: true }).expect(200);
-    expect(returned.body.data).toMatchObject({ status: 'returned', deliveryStatus: 'returned', amountPaid: 0, paymentStatus: 'refunded', returnFee: 200 });
+    // journey J08r-3: no courier bills the return of a parcel the merchant delivered himself — no fee, no Caisse row
+    expect(returned.body.data).toMatchObject({ status: 'returned', deliveryStatus: 'returned', amountPaid: 0, paymentStatus: 'refunded', returnFee: 0 });
     expect(await productStock(product.id)).toBe(10);
-    const cash = await cashOf(order.id);
-    expect(cash.map((c) => [c.type, c.category, c.amount])).toEqual([['expense', 'shipping', 200]]);
+    expect(await cashOf(order.id)).toEqual([]);
     expect(await db.client.findUniqueOrThrow({ where: { id: order.client.id } })).toMatchObject({ returnCount: 1, totalSpent: 0, uncollectedCount: 1 });
     expect((await movementsOf(order.id)).map((m) => [m.type, m.reason])).toEqual([['out', 'order_created'], ['return', 'order_returned']]);
   });

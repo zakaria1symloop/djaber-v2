@@ -107,10 +107,17 @@ function BulkDeleteDialog({ open, ids, onClose, onDone }: { open: boolean; ids: 
   );
 }
 
+/**
+ * journey J09r-4: a row refused by a rule fails the same way when retried (« Ce client a des commandes (2) : archivez-le plutôt. »,
+ * a card gone, a forbidden action, a bad value) — only the other errors (network, server, conflict) get « Réessayer ».
+ */
+const FINAL_BULK_CODES = new Set(['CUSTOMER_HAS_ORDERS', 'NOT_FOUND', 'FORBIDDEN', 'VALIDATION_ERROR', 'CUSTOMER_MERGE_IRREVERSIBLE']);
+export const retryableRows = <R extends { ok: boolean; error?: { code: string } }>(rows: readonly R[]): R[] => rows.filter((r) => !r.ok && !(r.error && FINAL_BULK_CODES.has(r.error.code)));
+
 function BulkResultDialog({ outcome, names, onClose, onRetried }: { outcome: Outcome | null; names: Record<string, string>; onClose: () => void; onRetried: (r: BulkResponse) => Promise<void> }) {
   const t = useT();
   const [error, setError] = useState<string | null>(null);
-  const failed = outcome?.response.results.filter((r) => !r.ok) ?? [];
+  const failed = retryableRows(outcome?.response.results ?? []);
   const retry = useMutation({ mutationFn: (ids: string[]) => outcome!.retry(ids) });
   const again = async () => {
     setError(null);

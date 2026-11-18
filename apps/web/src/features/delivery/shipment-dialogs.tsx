@@ -272,15 +272,17 @@ export function ParcelReturnedDialog({ parcel, open, onClose, onDone }: Props) {
   const t = useT();
   const [reason, setReason] = useState<FailureReason | null>(null);
   const [restock, setRestock] = useState(true);
-  const [fee, setFee] = useState(true);
+  // journey J08r-3: only a courier bills a return (04 §5 D27) — a self-delivered parcel has no fee box and books nothing
+  const byCourier = parcel.provider !== 'manual';
+  const [fee, setFee] = useState(byCourier);
   const [note, setNote] = useState('');
   useOnOpen(open, () => {
     setReason(null);
     setRestock(true);
-    setFee(true);
+    setFee(byCourier);
     setNote('');
   });
-  const s = useDialogSubmit(() => deliveryApi.markReturned(parcel.id, { ...(reason ? { reason } : {}), restoreStock: restock, ...(fee ? {} : { returnFee: 0 }), note: note.trim() || null }));
+  const s = useDialogSubmit(() => deliveryApi.markReturned(parcel.id, { ...(reason ? { reason } : {}), restoreStock: restock, ...(fee && byCourier ? {} : { returnFee: 0 }), note: note.trim() || null }));
   const submit = async () => {
     const r = await s.submit();
     if (r === undefined) return;
@@ -307,13 +309,19 @@ export function ParcelReturnedDialog({ parcel, open, onClose, onDone }: Props) {
             <span className="block ts-label-micro !normal-case text-text-muted">{t('orders.return.restockHint')}</span>
           </span>
         </label>
-        <label className="flex items-start gap-2 text-[13px]">
-          <Checkbox checked={fee} onChange={(e) => setFee(e.target.checked)} className="mt-0.5" />
-          <span>
-            {t('orders.return.feeGrid')}
-            <span className="block ts-label-micro !normal-case text-text-muted">{t('orders.return.feeHint')}</span>
-          </span>
-        </label>
+        {byCourier ? (
+          <label className="flex items-start gap-2 text-[13px]">
+            <Checkbox checked={fee} onChange={(e) => setFee(e.target.checked)} className="mt-0.5" />
+            <span>
+              {t('orders.return.feeGrid')}
+              <span className="block ts-label-micro !normal-case text-text-muted">{t('orders.return.feeHint')}</span>
+            </span>
+          </label>
+        ) : (
+          <p className="text-[12px] text-text-secondary" data-testid="return-self-no-fee">
+            {t('orders.return.selfNoFee')}
+          </p>
+        )}
         <Field label={t('common.noteOptional')} htmlFor="ret-note">
           <Input id="ret-note" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} />
         </Field>

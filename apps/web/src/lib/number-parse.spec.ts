@@ -1,6 +1,6 @@
 // Full-test 15/11 ORDERS-01 / PRODUCTS-01 / DELIVERY-01 / STOCK-02 / SETTINGS-09 / SALES-CASH-07: the one reading of an integer field.
 import { describe, expect, it } from 'vitest';
-import { integerDraftAfter, integerFieldText, integerOf, parseIntegerInput as parse } from '../../../../packages/ui/src/number-parse';
+import { integerDraftAfter, integerEntryErased, integerFieldText, integerOf, parseIntegerInput as parse } from '../../../../packages/ui/src/number-parse';
 
 const value = (raw: string, o: Parameters<typeof parse>[1] = {}) => {
   const r = parse(raw, o);
@@ -89,5 +89,14 @@ describe('parseIntegerInput', () => {
     expect(shown()).toBe('500');
     expect(value).toBe('500');
     expect(integerFieldText('1 100', integerDraftAfter({ value: '1100', fraction: ',0' }))).toBe('1 100,0');
+  });
+});
+
+describe('journey J08r-1 — a refused key taints a field saved on blur until the merchant erases', () => {
+  it('a plain keystroke is no correction; Backspace, a cut or typing over a selection is', () => {
+    expect(integerEntryErased('1', '13')).toBe(false); // « 1e3 »: the « 3 » after the refused « e »
+    expect(integerEntryErased('700', '7001')).toBe(false); // « -100 » over 700: the digits after the refused « - »
+    expect(integerEntryErased('13', '1')).toBe(true);
+    expect(integerEntryErased('1 000', '5')).toBe(true);
   });
 });

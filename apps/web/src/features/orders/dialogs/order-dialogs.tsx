@@ -380,7 +380,7 @@ export function ReturnDialog({ order, open, onClose, onDone }: Props) {
     setNote('');
     setTouched(false);
   });
-  const s = useDialogSubmit(() => ordersApi.returnOrder(order.id, { reason: reason!, restoreStock: restock, returnFee: fee ? undefined : 0, note: note.trim() || null, version: order.version }));
+  const s = useDialogSubmit(() => ordersApi.returnOrder(order.id, { reason: reason!, restoreStock: restock, returnFee: fee && byCourier ? undefined : 0, note: note.trim() || null, version: order.version }));
   const submit = async () => {
     setTouched(true);
     if (!reason) return;
@@ -412,13 +412,20 @@ export function ReturnDialog({ order, open, onClose, onDone }: Props) {
             <span className="block ts-label-micro !normal-case text-text-muted">{t('orders.return.restockHint')}</span>
           </span>
         </label>
-        <label className="flex items-start gap-2 text-[13px]">
-          <Checkbox checked={fee} onChange={(e) => setFee(e.target.checked)} className="mt-0.5" />
-          <span>
-            {order.returnFee !== null ? t('orders.return.fee', { amount: formatMoney(order.returnFee) }) : t('orders.return.feeGrid')}
-            <span className="block ts-label-micro !normal-case text-text-muted">{t('orders.return.feeHint')}</span>
-          </span>
-        </label>
+        {/* journey J08r-3: only a courier bills a return (04 §5 D27) — a self-delivered order has no fee box and books nothing */}
+        {byCourier ? (
+          <label className="flex items-start gap-2 text-[13px]">
+            <Checkbox checked={fee} onChange={(e) => setFee(e.target.checked)} className="mt-0.5" />
+            <span>
+              {order.returnFee !== null ? t('orders.return.fee', { amount: formatMoney(order.returnFee) }) : t('orders.return.feeGrid')}
+              <span className="block ts-label-micro !normal-case text-text-muted">{t('orders.return.feeHint')}</span>
+            </span>
+          </label>
+        ) : (
+          <p className="text-[12px] text-text-secondary" data-testid="return-self-no-fee">
+            {t('orders.return.selfNoFee')}
+          </p>
+        )}
         {order.amountPaid > 0 ? (
           <FormAlert tone="info">{t('orders.return.paymentsCleared', { amount: formatMoney(order.amountPaid) })}</FormAlert>
         ) : null}

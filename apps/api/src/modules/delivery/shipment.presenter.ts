@@ -145,8 +145,10 @@ export const shipmentActions = (s: Pick<Shipment, 'provider' | 'status' | 'track
   const queued = s.status === 'pending' && errorCodeOf(s.lastError) === 'COURIER_UNAVAILABLE';
   const proposeReturn = s.status === 'failed' && !sendFailed && s.deliveryAttempts >= SHIPMENT_MAX_ATTEMPTS;
   const inFlight = ['sent', 'picked_up', 'in_transit', 'out_for_delivery', 'failed'].includes(s.status) && !sendFailed;
-  // a manual parcel prints Djaber's own slip (label.service): « Bordereau » exists once it is sent, with or without a tracking
-  const printable = created || (!courier && !['pending', 'failed'].includes(s.status));
+  // a manual parcel prints Djaber's own slip (label.service): « Bordereau » exists once it is sent, with or without a tracking —
+  // and stays printable after a failed attempt, for the next one (journey J08r-4: a failed manual parcel without tracking had
+  // its slip greyed « Pas de colis créé »; label.service already printed it)
+  const printable = created || (!courier && s.status !== 'pending');
   const list = [
     act('sync', 'delivery.send', { reasonCode: !courier || terminal ? NOT_OFFERED : !created ? 'SHIPMENT_NOT_CREATED' : coolingDown ? 'TRACKING_SYNC_RATE_LIMITED' : null, reasonParams: coolingDown ? { retryAfter } : undefined }),
     act('label', 'delivery.send', { reasonCode: s.status === 'cancelled' ? NOT_OFFERED : printable ? null : 'SHIPMENT_NOT_CREATED' }),

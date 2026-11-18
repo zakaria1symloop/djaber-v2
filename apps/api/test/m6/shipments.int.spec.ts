@@ -272,6 +272,11 @@ describe('parcel actions (04 §22, FL-25)', () => {
     o = await reloadOrder(owner, order.id);
     expect(o).toMatchObject({ status: 'returned', paymentStatus: 'refunded' });
     expect(await productStock(product.id)).toBe((stockBefore ?? 0) + 1);
+    // D27 (journey J08r-3): a courier parcel's return costs the grid returnPrice — income row removed, one `shipping` expense
+    const rows = await cashOf(order.id);
+    expect(rows.map((c) => [c.type, c.category])).toEqual([['expense', 'shipping']]);
+    expect(o.returnFee).toBe(rows[0]!.amount);
+    expect(o.returnFee).toBeGreaterThan(0);
   });
 
   it('mark failed (FailureReason) ⇒ notification + order stays shipped; mark delivered ⇒ COD; 409 on a closed parcel', async () => {

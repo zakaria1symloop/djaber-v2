@@ -136,7 +136,13 @@ export class OrderWorkflowService implements OnModuleInit {
     } else if (plan.cash === 'clear_and_return_fee') {
       const hadPaid = o.amountPaid > 0;
       await this.effects.clearPayments(tx, o.id);
-      const fee = opt.returnFee ?? (await this.orders.fees.returnPrice(o.wilayaId, tx));
+      // journey J08r-3 (04 §5 D27): the grid return price is what a **courier** bills for a returned parcel. A self-delivered
+      // parcel (provider `manual`, or no parcel at all) has no courier to bill it: no return fee and no Caisse row unless the
+      // caller states one (a cost the merchant really paid) — the 300 DA « FRAIS · Espèces » row took money out of a drawer
+      // that never paid it
+      const parcel = active ?? o.shipments[0] ?? null;
+      const selfDelivered = !parcel || parcel.provider === 'manual';
+      const fee = opt.returnFee ?? (selfDelivered ? 0 : await this.orders.fees.returnPrice(o.wilayaId, tx));
       await this.effects.addReturnExpense(tx, o, fee, at, opt.actor);
       data.returnFee = fee;
       paid = { amountPaid: 0, paymentStatus: hadPaid ? 'refunded' : 'unpaid' };

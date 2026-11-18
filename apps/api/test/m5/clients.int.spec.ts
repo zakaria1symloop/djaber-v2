@@ -174,7 +174,9 @@ describe('clients', () => {
     const merged = await admin.post('/clients/merge', { ...body, confirm: true }).expect(200);
     expect(merged.body.data).toMatchObject({ id: body.keepId, orderCount: 2, mergedFrom: [expect.objectContaining({ id: body.mergeId })] });
     expect(merged.body.data.phone2).toBe(merge.order.client.phone);
-    expect(await db.client.findUniqueOrThrow({ where: { id: body.mergeId } })).toMatchObject({ mergedIntoId: body.keepId, deletedAt: expect.any(Date) });
+    // journey J09r-1: the merged card keeps no figure that moved to the kept one
+    expect(await db.client.findUniqueOrThrow({ where: { id: body.mergeId } })).toMatchObject({ mergedIntoId: body.keepId, deletedAt: expect.any(Date), orderCount: 0, totalSpent: 0 });
+    expect((await admin.get(`/clients/${body.mergeId}`).expect(200)).body.data).toMatchObject({ mergedIntoId: body.keepId, orderCount: 0 });
     expect((await db.order.findUniqueOrThrow({ where: { id: merge.order.id } })).clientId).toBe(body.keepId);
     expect(await db.auditLog.count({ where: { action: 'client.merge', entityId: body.keepId } })).toBe(1);
     const ids: string[] = [];

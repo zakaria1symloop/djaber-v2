@@ -12,7 +12,7 @@ const labels = {
   title: 'Vues enregistrées',
   saveCurrent: 'Enregistrer la vue courante…',
   empty: 'Aucune vue enregistrée pour cette liste.',
-  note: 'Menu ⋯ : renommer · définir par défaut · partager à l’équipe (admin) · supprimer. Une vue partagée est en lecture pour les autres.',
+  note: "Une vue partagée est proposée à toute l'équipe, sans pouvoir être modifiée par les autres.",
   defaultPill: 'DÉFAUT',
   sharedPill: 'PARTAGÉE',
   rowMenu: (name: string) => `Actions de la vue « ${name} »`,

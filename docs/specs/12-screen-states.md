@@ -93,7 +93,7 @@ Journey 16/11 (J01-3…J01-10, ONBOARDING-13 retest): the tunnel header holds FR
 
 ## 7. Clients
 
-List ([S], [E], [FE], filters, pagination, export job) · Detail (metrics tiles, addresses with default, orders list, conversations list, placeholder notice, merged-into notice, risk badge) · Add/edit (phone conflict → use existing; address with wilaya/commune) · Delete (confirm; blocked note none) .
+List ([S], [E], [FE], filters, pagination, export job) · Detail (metrics tiles, addresses with default, orders list, conversations list, placeholder notice, merged-into notice, risk badge — on the full page once, next to the name (journey J09r-2)) · merged-away card (journey J09r-1: its old URL opens the kept card; the sheet shows « Fiche fusionnée dans une autre fiche client … » + « Ouvrir la fiche conservée », no tile, no « archivé » notice, no edit / new order; its aggregates are recomputed to 0 at the merge) · filter chips « ≥ 2 commandes ou ventes » / « Jamais commandé ni acheté » (they count orders + counter sales, J09r-3) · bulk result « Réessayer » only for the rows that may succeed again (a rule refusal such as `CUSTOMER_HAS_ORDERS` is not retried, J09r-4) · Add/edit (phone conflict → use existing; address with wilaya/commune) · Delete (confirm; blocked note none) .
 
 ## 8. GDS — catalogue
 

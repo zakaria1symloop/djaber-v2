@@ -14,7 +14,8 @@ import { formatPhoneOnBlur, phonePreview, phonePreviewLine } from '@/lib/phone';
 import { relativeTime } from '@/lib/time';
 import { ORDER_ACTION } from '../action-keys';
 import type { Order, OrderItem } from '../contracts';
-import { actorKind, algiersTime, historyParams, historyReason, historyValue, isIsoInstant, isReadOnly, newestFirst, shortName } from '../logic';
+import { useFeeQuote } from '@/features/delivery/api';
+import { actorKind, algiersTime, historyParams, historyReason, historyValue, isIsoInstant, isReadOnly, itemsEditorFee, newestFirst, shortName } from '../logic';
 import { CallResultPill, PaymentPill, RiskPill } from '../ui';
 
 const linkClass = 'text-[13px] text-text-secondary hover:text-text-primary disabled:opacity-45';
@@ -165,13 +166,15 @@ export function ClientBlock({
 
 /* ---------- ARTICLES ---------- */
 // journey 16/11 J05-4: an Admin+ (`orders.money`) also edits the unit prices, the order discount and the delivery fee
-export type ItemsDraft = { lines: { id: string; productId: string; variantId: string | null; quantity: number; unitPrice: number }[]; discount: number; deliveryFee: number };
-export const itemsOf = (o: Order): ItemsDraft => ({ lines: o.items.map((i) => ({ id: i.id, productId: i.product.id, variantId: i.variantId, quantity: i.quantity, unitPrice: i.unitPrice })), discount: o.discount, deliveryFee: o.deliveryFee });
+// journey J08r-5: `feeTouched` = the Admin typed the fee in the editor (an override, sent even when equal to the saved one);
+// otherwise the server re-quotes the grid for the new subtotal and the editor shows that quote
+export type ItemsDraft = { lines: { id: string; productId: string; variantId: string | null; quantity: number; unitPrice: number }[]; discount: number; deliveryFee: number; feeTouched?: boolean };
+export const itemsOf = (o: Order): ItemsDraft => ({ lines: o.items.map((i) => ({ id: i.id, productId: i.product.id, variantId: i.variantId, quantity: i.quantity, unitPrice: i.unitPrice })), discount: o.discount, deliveryFee: o.deliveryFee, feeTouched: false });
 /** `PATCH /orders/:id` body of the items edit: the discount / fee only when an Admin changed them (a fee sent is an override). */
 export const itemsPatch = (d: ItemsDraft, o: Pick<Order, 'discount' | 'deliveryFee'>) => ({
   items: d.lines.map((i) => ({ productId: i.productId, variantId: i.variantId, quantity: i.quantity, unitPrice: i.unitPrice })),
   ...(d.discount !== o.discount ? { discount: d.discount } : {}),
-  ...(d.deliveryFee !== o.deliveryFee ? { deliveryFee: d.deliveryFee } : {}),
+  ...(d.feeTouched ? { deliveryFee: d.deliveryFee } : {}),
 });
 const amountOf = (digits: string) => (/^\d+$/.test(digits) ? Number(digits) : 0);
 
@@ -207,12 +210,17 @@ export function ItemsBlock({
   const byId = new Map(order.items.map((i) => [i.id, i]));
   const lines: (OrderItem & { qty: number })[] = editing ? draft.lines.map((d) => ({ ...byId.get(d.id)!, qty: d.quantity, unitPrice: d.unitPrice })).filter((l) => l.id) : order.items.map((i) => ({ ...i, qty: i.quantity }));
   const subtotal = editing ? lines.reduce((s, l) => s + l.unitPrice * l.qty - l.discount, 0) : order.subtotal;
-  const fee = editing ? draft.deliveryFee : order.deliveryFee;
   const discount = editing ? draft.discount : order.discount;
+  // journey J08r-5: the grid fee follows the edited subtotal (after the discount), as the server does when it saves
+  const a = order.address;
+  const quoteOf = (sub: number) => ({ wilayaId: editing && a ? a.wilayaId : null, stopdesk: !!a?.isStopdesk, subtotal: sub });
+  const quoteBefore = useFeeQuote(quoteOf(order.subtotal - order.discount));
+  const quoteAfter = useFeeQuote(quoteOf(subtotal - discount));
+  const shownFee = editing ? itemsEditorFee(order.deliveryFee, draft, quoteBefore.data, quoteAfter.data) : { fee: order.deliveryFee, requoted: false };
+  const fee = shownFee.fee;
   const total = editing ? subtotal - discount + order.tax + fee : order.total;
   const moneyEdit = editing && canMoney;
   const setLine = (id: string, patch: Partial<ItemsDraft['lines'][number]>) => onDraft({ ...draft, lines: draft.lines.map((d) => (d.id === id ? { ...d, ...patch } : d)) });
-  const a = order.address;
   const feeLabel = [t('common.deliveryFee').toUpperCase(), a ? a.wilayaName.toUpperCase() : null, a ? (a.isStopdesk ? t('common.stopdesk').toUpperCase() : t('common.home').toUpperCase()) : null].filter(Boolean).join(' · ');
   return (
     <OrderBlock
@@ -308,8 +316,9 @@ export function ItemsBlock({
             {
               key: 'delivery',
               label: feeLabel,
-              value: moneyEdit ? <MoneyInput className="ms-auto w-32 text-end" value={String(draft.deliveryFee)} onValueChange={(v) => onDraft({ ...draft, deliveryFee: amountOf(v) })} aria-label={t('common.deliveryFee')} disabled={saving} data-testid="edit-delivery-fee" /> : <Ltr>{formatMoney(fee)}</Ltr>,
+              value: moneyEdit ? <MoneyInput className="ms-auto w-32 text-end" value={String(fee)} onValueChange={(v) => onDraft({ ...draft, deliveryFee: amountOf(v), feeTouched: true })} aria-label={t('common.deliveryFee')} disabled={saving} data-testid="edit-delivery-fee" /> : <Ltr>{formatMoney(fee)}</Ltr>,
             },
+            ...(shownFee.requoted ? [{ key: 'feeRequoted', label: '', value: <span className="ts-label-micro !normal-case text-text-muted" data-testid="fee-requoted">{t('orders.page.feeRequoted', { old: formatMoney(order.deliveryFee) })}</span> }] : []),
             ...(order.feeExplanation && !moneyEdit ? [{ key: 'feeNote', label: '', value: <span className="ts-label-micro !normal-case text-text-muted">{order.feeExplanation}</span> }] : []),
             {
               key: 'discount',

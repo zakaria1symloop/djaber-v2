@@ -2,7 +2,7 @@
 // /clients/[id] — direct load of a client (deep links, notifications): the body of the CLI-03 side sheet as a page.
 import type { AppLocale } from '@djaber/shared';
 import { ActionsMenu, Button, Skeleton } from '@djaber/ui';
-import { use } from 'react';
+import { use, useEffect } from 'react';
 import { AppPage } from '@/components/app-page';
 import { QueryError } from '@/components/global-states';
 import { useClient } from '@/features/clients/api';
@@ -23,18 +23,24 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
   const c = q.data;
   const actions = useClientActions({ openSheet: (next) => (next !== id ? router.push(`/clients/${next}`) : void q.refetch()), afterDelete: () => router.push('/clients') });
   const back = { href: '/clients', label: t('nav.clients') };
+  // journey J09r-1: the URL of a card merged into another one opens the kept card (its figures moved there)
+  const keptId = c?.mergedIntoId ?? null;
+  useEffect(() => {
+    if (keptId) router.replace(`/clients/${keptId}`);
+  }, [keptId, router]);
+  const live = c && !c.mergedIntoId ? c : null;
   return (
     <AppPage
       title={c?.name ?? t('nav.clients')}
       back={back}
       permission="clients.read"
-      badges={c ? <ClientPillView client={c} /> : undefined}
-      description={c ? clientSubtitle(t, c, locale) : undefined}
+      badges={live ? <ClientPillView client={live} /> : undefined}
+      description={live ? clientSubtitle(t, live, locale) : undefined}
       actions={
-        c ? (
+        live ? (
           <>
-            {can('clients.write') ? <Button onClick={() => actions.edit(c)}>{c.isPlaceholder ? t('clients.action.complete') : t('action.edit')}</Button> : null}
-            <ActionsMenu label={t('action.actions')} actions={actions.menu(c, { sheet: true })} size="md" />
+            {can('clients.write') ? <Button onClick={() => actions.edit(live)}>{live.isPlaceholder ? t('clients.action.complete') : t('action.edit')}</Button> : null}
+            <ActionsMenu label={t('action.actions')} actions={actions.menu(live, { sheet: true })} size="md" />
           </>
         ) : undefined
       }
@@ -45,10 +51,13 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
         <QueryError error={q.error} onRetry={() => q.refetch()} backHref={`/${locale}/clients`} />
       ) : c ? (
         <div className="flex w-full flex-col gap-5">
-          <ClientDetailBody client={c} />
-          <div className="max-w-sm">
-            <NewOrderCta client={c} canOrder={can('orders.write')} />
-          </div>
+          {/* journey J09r-2: the pill is in the header, next to the name — not a second time above the tiles */}
+          <ClientDetailBody client={c} pillInHeader />
+          {live ? (
+            <div className="max-w-sm">
+              <NewOrderCta client={live} canOrder={can('orders.write')} />
+            </div>
+          ) : null}
         </div>
       ) : null}
       {actions.dialogs}

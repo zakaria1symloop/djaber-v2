@@ -175,6 +175,16 @@ describe('blocked words, auto-rules, export', () => {
     expect((await mod.get('/admin/reports/blocks').expect(200)).body.data.map((r: any) => r.id)).not.toContain(block.id);
   });
 
+  it('journey J09r-6: a number blocked before any card exists names the card created later with that number', async () => {
+    const o = await asOwner(app);
+    const phone = newPhone();
+    const block = (await o.post('/safety/blocks', { phone, reason: 'spam' }).expect(201)).body.data;
+    expect(block.client).toBeNull();
+    const c = await db.client.create({ data: { workspaceId: o.workspaceId, name: 'Numéro Bloqué J09r', phone, isPlaceholder: false, source: 'manual' } });
+    const rows = (await o.get('/safety/blocks').expect(200)).body.data;
+    expect(rows.find((r: any) => r.id === block.id)).toMatchObject({ phone, client: { id: c.id, name: 'Numéro Bloqué J09r' } });
+  });
+
   it('AT-SAFE-06 phone blocked by 3 workspaces in 7 d ⇒ system report proposing the blacklist; 3 end-customer reports of a merchant ⇒ "revue de l\'espace"; 5 AI-message reports on one agent ⇒ platform alert; idempotent', async () => {
     const phone = newPhone();
     for (let i = 0; i < 3; i++) {

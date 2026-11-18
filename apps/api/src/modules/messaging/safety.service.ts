@@ -93,9 +93,15 @@ export class SafetyService {
 
   // --- blocks -----------------------------------------------------------------------------------------------------------
   private async presentBlocks(rows: Prisma.CustomerBlockGetPayload<{ include: { client: true; blockedBy: typeof userRef; report: { select: { status: true } } } }>[]): Promise<CustomerBlockView[]> {
-    return rows.map((b) => ({
+    // journey J09r-6: a number blocked before any card had it names the card created with it later (an order on that number) —
+    // the row read « (sans nom) » while the list and the card said « BLOQUÉ »
+    const loose = [...new Set(rows.filter((b) => !b.client && b.phone).map((b) => b.phone!))];
+    const byPhone = new Map((loose.length ? await prisma.client.findMany({ where: { phone: { in: loose }, deletedAt: null }, orderBy: { createdAt: 'asc' } }) : []).map((c) => [c.phone!, c]));
+    return rows.map((b) => {
+      const client = b.client ?? (b.phone ? (byPhone.get(b.phone) ?? null) : null);
+      return {
       id: b.id,
-      client: b.client ? { id: b.client.id, name: b.client.name, phone: b.client.phone, riskLevel: b.client.riskLevel, isPlaceholder: b.client.isPlaceholder, blocked: true, orderCount: b.client.orderCount, avatarUrl: null } : null,
+      client: client ? { id: client.id, name: client.name, phone: client.phone, riskLevel: client.riskLevel, isPlaceholder: client.isPlaceholder, blocked: true, orderCount: client.orderCount, avatarUrl: null } : null,
       phone: b.phone,
       reason: b.reason,
       note: renderStoredTextIn(b.note, viewerLocale()),
@@ -104,7 +110,8 @@ export class SafetyService {
       blockedAt: b.blockedAt.toISOString(),
       reportStatus: b.report?.status ?? null,
       unblockable: b.source !== 'platform',
-    }));
+      };
+    });
   }
 
   async listBlocks(q: SafetyBlocksQuery): Promise<Page<CustomerBlockView>> {

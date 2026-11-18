@@ -492,7 +492,9 @@ export class OrderService implements OnModuleInit {
         const before = await this.fees.quote({ wilayaId: o.wilayaId, isStopdesk: o.isStopdesk, subtotal: o.subtotal - o.discount }, tx);
         if (before.fee === o.deliveryFee) deliveryFee = (await this.fees.quote({ wilayaId: o.wilayaId, isStopdesk: o.isStopdesk, subtotal: subtotal - discount }, tx)).fee;
       }
-      if (input.deliveryFee !== undefined) changed.push('deliveryFee');
+      // journey J08r-5: a fee the grid re-quoted for the new subtotal gets its history line too (« Frais de livraison : 0 → 500 »),
+      // as the address change does — only the total had one
+      if (deliveryFee !== o.deliveryFee) changed.push('deliveryFee');
       if (input.discount !== undefined) changed.push('discount');
       const total = subtotal - discount + tax + deliveryFee;
       if (total < 0) throw new AppException('VALIDATION_ERROR', {}, { discount: 'validation.range' });

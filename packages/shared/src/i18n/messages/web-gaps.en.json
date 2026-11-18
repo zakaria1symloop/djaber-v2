@@ -148,7 +148,7 @@
  "savedViews.title": "Saved views",
  "savedViews.saveCurrent": "Save the current view…",
  "savedViews.empty": "No saved view for this list yet.",
- "savedViews.note": "Menu ⋯: rename · set as default · share with the team (admin) · delete. A shared view is read-only for the others.",
+ "savedViews.note": "A shared view is offered to the whole team; the others cannot change it.",
  "savedViews.sharedPill": "SHARED",
  "savedViews.rowMenu": "Actions for the view “{name}”",
  "savedViews.loading": "Loading the views",

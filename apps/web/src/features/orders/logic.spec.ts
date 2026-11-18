@@ -263,3 +263,15 @@ describe('journey J05r-5 — a localized date is never parsed', () => {
     expect(historyParams(o, { at: '2026-11-18T12:40:00.000Z', from: 'pending', to: 'callback' }, 'to').time).toBe('');
   });
 });
+
+describe('journey J08r-5 — items editor fee follows the grid like the server', () => {
+  const q = (fee: number) => ({ fee, wilayaServed: true });
+  it('grid fee re-quoted for the new subtotal; an Admin override or a typed fee kept; loading ⇒ saved fee', async () => {
+    const { itemsEditorFee } = await import('./logic');
+    expect(itemsEditorFee(0, { deliveryFee: 0 }, q(0), q(500))).toEqual({ fee: 500, requoted: true });
+    expect(itemsEditorFee(500, { deliveryFee: 500 }, q(500), q(500))).toEqual({ fee: 500, requoted: false });
+    expect(itemsEditorFee(300, { deliveryFee: 300 }, q(500), q(0))).toEqual({ fee: 300, requoted: false });
+    expect(itemsEditorFee(0, { deliveryFee: 0, feeTouched: true }, q(0), q(500))).toEqual({ fee: 0, requoted: false });
+    expect(itemsEditorFee(0, { deliveryFee: 0 }, undefined, q(500))).toEqual({ fee: 0, requoted: false });
+  });
+});

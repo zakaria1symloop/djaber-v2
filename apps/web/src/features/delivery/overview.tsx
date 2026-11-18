@@ -168,7 +168,8 @@ export function DeliveryOverviewPage() {
         r.shipment ? (
           <div className="whitespace-nowrap">
             <div className="text-[14px]">{r.shipment.courierAccount?.displayName ?? t(`couriers.provider.${r.shipment.provider}`)}</div>
-            <Ltr className="ts-label-micro text-text-muted">{r.shipment.trackingNumber ?? '—'}</Ltr>
+            {/* journey J08r-7 #7: a tracking number is shown as typed (a free-text self-delivery reference was put in capitals) */}
+            <Ltr className="ts-label-micro !normal-case text-text-muted">{r.shipment.trackingNumber ?? '—'}</Ltr>
           </div>
         ) : (
           <span className="text-text-muted">—</span>
@@ -321,7 +322,10 @@ export function DeliveryOverviewPage() {
   return (
     <div className="flex flex-col gap-5">
       {offline ? <OfflineBanner since={since} onRetry={() => void rowsQ.refetch()} /> : null}
-      {bulkJob && (isBulkSend || jobQ.isPending) ? null : <JobParamBanner />}
+      {/* journey J08r-7 #2 (DELIVERY-12): the banner stays mounted while the job loads (its own « loading » state) and only a
+          bulk send hides it for its dialog — hiding it while pending made a loop: each remount refetched the 404 job, which put
+          the query back to pending, so an unknown `?job=` showed nothing and 14 × 404 */}
+      {bulkJob && isBulkSend ? null : <JobParamBanner />}
 
       <section aria-label={t('delivery.kpi.label')} className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" data-testid="delivery-kpis">
         {k ? (
@@ -331,7 +335,7 @@ export function DeliveryOverviewPage() {
             <KpiTile value={formatNumber(k.inTransit)} label={t('delivery.kpi.inTransit')} meta={t('delivery.kpi.stale', { count: k.staleOver5d })} tone={k.staleOver5d ? 'warning' : undefined} data-kpi="inTransit" />
             <KpiTile value={formatNumber(k.failedToday)} label={t('delivery.kpi.failed')} meta={t('delivery.kpi.failedMeta')} tone={k.failedToday ? 'danger' : undefined} data-kpi="failed" />
             <KpiTile value={formatNumber(k.delivered30d)} label={t('delivery.kpi.delivered')} meta={t('delivery.kpi.deliveredPct', { pct: decimalLabel(k.deliveredPct30d, locale) })} data-kpi="delivered" />
-            <KpiTile value={formatNumber(k.returned30d)} label={t('delivery.kpi.returned')} meta={`${k.returnedPct30d} %`} data-kpi="returned" />
+            <KpiTile value={formatNumber(k.returned30d)} label={t('delivery.kpi.returned')} meta={t('delivery.kpi.returnedPct', { pct: decimalLabel(k.returnedPct30d, locale) })} data-kpi="returned" />
           </>
         ) : overview.isError ? null : (
           Array.from({ length: 6 }).map((_, i) => <KpiTileSkeleton key={i} />)

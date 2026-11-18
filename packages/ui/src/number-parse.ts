@@ -74,3 +74,10 @@ export const integerOf = (value: string): number | null => (/^-?\d+$/.test(value
 export type IntegerDraft = { fraction: string; blank: boolean };
 export const integerDraftAfter = (r: { value: string; fraction: string }): IntegerDraft => ({ fraction: r.fraction, blank: r.value === '' && r.fraction === '' });
 export const integerFieldText = (grouped: string, draft: IntegerDraft): string => (draft.blank ? '' : grouped + draft.fraction);
+
+/**
+ * Journey J08r-1: an accepted edit that removed text (Backspace, Delete, a cut, typing over a selection): the merchant
+ * correcting a refused key, so the entry is clean again for `NumberInput.onRefusedEntry`. `shown` is the field's text before
+ * the edit, `raw` after it — a plain keystroke adds one character.
+ */
+export const integerEntryErased = (shown: string, raw: string): boolean => raw.length <= shown.length;

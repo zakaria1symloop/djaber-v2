@@ -26,11 +26,31 @@ const monthYear = (iso: string, locale: AppLocale) => {
   return parts.slice(1, 2).join(' ');
 };
 
-export function ClientDetailBody({ client: c }: { client: Client }) {
+/**
+ * journey J09r-1: the card of a client merged into another one (its old URL — a bookmark, a sale history, an export) says so and
+ * links the kept card; it shows no figure (they moved to the kept card) and no « archived » notice.
+ */
+function MergedAwayNotice({ client: c }: { client: Client }) {
+  const t = useT();
+  return (
+    <div className="flex flex-col gap-3" data-testid="client-detail" data-client-state="merged">
+      <Banner tone="info">{t('clients.sheet.mergedAway')}</Banner>
+      {c.mergedIntoId ? (
+        <Link href={`/clients/${c.mergedIntoId}`} className={buttonClass({ variant: 'primary' })} data-testid="client-merged-open">
+          {t('clients.sheet.mergedAwayOpen')}
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
+/** `pillInHeader`: the full page shows the pill next to the name already (journey J09r-2: it was there twice). */
+export function ClientDetailBody({ client: c, pillInHeader = false }: { client: Client; pillInHeader?: boolean }) {
   const t = useT();
   const locale = useLocaleCode() as AppLocale;
   const { can } = useSession();
   const here = useHere();
+  if (c.mergedIntoId) return <MergedAwayNotice client={c} />;
   const address = c.addresses.find((a) => a.isDefault) ?? c.addresses[0] ?? null;
   const merged = c.mergedFrom[0];
   const addressText = address
@@ -38,9 +58,9 @@ export function ClientDetailBody({ client: c }: { client: Client }) {
     : null;
   return (
     <div className="flex flex-col gap-5" data-testid="client-detail">
-      {clientPill(c) && clientPill(c) !== 'unknown' ? (
+      {clientPill(c) && clientPill(c) !== 'unknown' && (!pillInHeader || c.block?.source === 'platform') ? (
         <div className="flex flex-wrap items-center gap-2">
-          <ClientPillView client={c} />
+          {pillInHeader ? null : <ClientPillView client={c} />}
           {c.block?.source === 'platform' ? <span className="ts-label-meta text-text-muted">{t('error.CUSTOMER_BLOCKED_BY_PLATFORM')}</span> : null}
         </div>
       ) : null}
@@ -240,7 +260,7 @@ export function ClientSheet({
       title={c?.name ?? t('nav.clients')}
       subtitle={c ? clientSubtitle(t, c, locale) : undefined}
       headerAction={
-        c ? (
+        c && !c.mergedIntoId ? (
           <div className="flex items-center gap-1.5">
             {canEdit ? (
               <Button size="sm" onClick={() => onEdit(c)} data-testid="client-edit">
@@ -252,7 +272,7 @@ export function ClientSheet({
         ) : undefined
       }
       nav={{ onPrev, onNext, position, prevLabel: t('clients.sheet.prev'), nextLabel: t('clients.sheet.next') }}
-      footer={c ? <NewOrderCta client={c} canOrder={canOrder} /> : undefined}
+      footer={c && !c.mergedIntoId ? <NewOrderCta client={c} canOrder={canOrder} /> : undefined}
       width={440}
       closeLabel={t('action.close')}
     >

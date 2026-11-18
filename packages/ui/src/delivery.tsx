@@ -16,6 +16,7 @@ export function FeeCell({
   disabled,
   state = 'idle',
   invalid,
+  onRefused,
   className,
 }: {
   /** stored amount */
@@ -26,11 +27,22 @@ export function FeeCell({
   disabled?: boolean;
   state?: CellState;
   invalid?: boolean;
+  /**
+   * journey J08r-1: the entry was not a clean integer (a minus, a letter, a decimal part): nothing is saved, the stored
+   * amount comes back and the screen says what is accepted (« 1e3 » typed key by key was saved as 13 DA, « 1.5 » as 1)
+   */
+  onRefused?: () => void;
   className?: string;
 }) {
   const [draft, setDraft] = React.useState(String(value));
   React.useEffect(() => setDraft(String(value)), [value]);
+  const refused = React.useRef(false);
   const commit = () => {
+    if (refused.current) {
+      refused.current = false;
+      setDraft(String(value));
+      return onRefused?.();
+    }
     const n = draft === '' ? value : Number(draft);
     if (draft === '') setDraft(String(value));
     if (n !== value) onCommit(n);
@@ -41,6 +53,7 @@ export function FeeCell({
         aria-label={label}
         value={draft}
         onValueChange={setDraft}
+        onRefusedEntry={() => (refused.current = true)}
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
@@ -77,6 +90,7 @@ export function FreeDeliveryBar({
   disabled,
   saving,
   error,
+  onAmountRefused,
 }: {
   enabled: boolean;
   onEnabledChange: (v: boolean) => void;
@@ -91,11 +105,23 @@ export function FreeDeliveryBar({
   disabled?: boolean;
   saving?: boolean;
   error?: string | null;
+  /**
+   * journey J08r-1: the typed threshold is not an integer above 0 (« -5 », « 1e3 », « 1.5 », « 0 »): nothing is saved, the
+   * saved amount comes back (the rule stays as it was — « -5 » used to switch it off) and the screen says what is accepted.
+   * An emptied field just gets its saved amount back.
+   */
+  onAmountRefused?: () => void;
 }) {
   const [draft, setDraft] = React.useState(amount === null ? '' : String(amount));
   React.useEffect(() => setDraft(amount === null ? '' : String(amount)), [amount]);
+  const refused = React.useRef(false);
   const commit = () => {
-    if (draft === '' || Number(draft) <= 0) return setDraft(amount === null ? '' : String(amount));
+    const bad = refused.current || (draft !== '' && !(Number(draft) > 0));
+    refused.current = false;
+    if (bad || draft === '') {
+      setDraft(amount === null ? '' : String(amount));
+      return bad ? onAmountRefused?.() : undefined;
+    }
     if (Number(draft) !== amount) onAmountCommit(Number(draft));
   };
   return (
@@ -109,6 +135,7 @@ export function FreeDeliveryBar({
             aria-label={amountLabel}
             value={draft}
             onValueChange={setDraft}
+            onRefusedEntry={() => (refused.current = true)}
             onBlur={commit}
             onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
             currency={currency}

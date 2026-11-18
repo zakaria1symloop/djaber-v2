@@ -4,7 +4,7 @@
 import * as Popover from '@radix-ui/react-popover';
 import { Check, ChevronDown, Minus, Plus, Search, X } from 'lucide-react';
 import * as React from 'react';
-import { integerDraftAfter, integerFieldText, parseIntegerInput, type IntegerRefusal } from './number-parse';
+import { integerDraftAfter, integerEntryErased, integerFieldText, parseIntegerInput, type IntegerRefusal } from './number-parse';
 import { onRadioGroupKeyDown, radioTabIndex } from './radio-keys';
 import { cn, Input } from './primitives';
 
@@ -171,13 +171,22 @@ export type NumberInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>,
   suffix?: string;
   maxDigits?: number;
   allowNegative?: boolean;
+  /**
+   * Journey J08r-1 (18/11): fields saved on blur with no button (fee grid cells, free-delivery threshold). Called on blur —
+   * before `onBlur` — when the entry since the field took focus was not a clean integer: a key was refused (minus, letter,
+   * digit too many) and not corrected by an erasing key, or a decimal part was typed. The screen then saves nothing and says
+   * so: « 1e3 » typed key by key gave 13 DA, « -100 » over 700 gave 700 100, « 1.5 » gave 1 — saved without a word.
+   */
+  onRefusedEntry?: () => void;
 };
 export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(function NumberInput(
-  { value, onValueChange, suffix, maxDigits = 9, allowNegative = false, className, onBlur, ...rest },
+  { value, onValueChange, suffix, maxDigits = 9, allowNegative = false, className, onBlur, onFocus, onRefusedEntry, ...rest },
   ref,
 ) {
   const inner = React.useRef<HTMLInputElement | null>(null);
   const notice = useFieldNotice();
+  // journey J08r-1: a refused key since the field took focus, not corrected by an erasing key (`onRefusedEntry`)
+  const tainted = React.useRef(false);
   // number of digits before the caret after the last keystroke: the caret is put back there once the value is regrouped
   const caret = React.useRef<number | null>(null);
   const caretAfterMinus = React.useRef(false);
@@ -250,9 +259,12 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
             back.current = Math.max(0, at - (raw.length - shown.length));
             setRefused((n) => n + 1);
             notice.say(notice.texts?.refused(r.reason, { maxDigits }));
+            tainted.current = true;
             return;
           }
           notice.clear();
+          // an erasing key or typing over a selection is the merchant correcting what was refused
+          if (integerEntryErased(shown, raw)) tainted.current = false;
           // the caret is in (or right after) the decimal part when it is past the separator of the typed text
           const sep = Math.max(raw.lastIndexOf(','), raw.lastIndexOf('.'));
           caret.current = r.fraction && sep >= 0 && at > sep ? Number.POSITIVE_INFINITY : r.caretDigits;
@@ -262,15 +274,26 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
           setBlank(draft.blank);
           if (r.value !== value) onValueChange(r.value);
         }}
+        onFocus={(e) => {
+          tainted.current = false;
+          onFocus?.(e);
+        }}
         onBlur={(e) => {
-          // a decimal part with a non-zero digit is dropped: the merchant sees it happen, and reads it (J07r-4)
-          if (/[1-9]/.test(fraction)) {
+          const decimal = /[1-9]/.test(fraction);
+          // a decimal part with a non-zero digit is dropped: the merchant sees it happen, and reads it (J07r-4); a field saved
+          // on blur refuses the whole entry instead and says so itself (J08r-1)
+          if (decimal) {
             setRefused((n) => n + 1);
-            notice.say(notice.texts?.decimalDropped(fraction));
+            if (!onRefusedEntry) notice.say(notice.texts?.decimalDropped(fraction));
           }
           setFraction('');
           setBlank(false);
           if (value === '-') onValueChange('');
+          if (onRefusedEntry && (tainted.current || decimal)) {
+            notice.clear();
+            onRefusedEntry();
+          }
+          tainted.current = false;
           onBlur?.(e);
         }}
         data-refused={flash || undefined}

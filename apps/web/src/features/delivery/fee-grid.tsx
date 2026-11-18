@@ -172,6 +172,7 @@ export function FeeGridView() {
         disabled={!editable || !can('workspace.settings') || !workspace}
         saving={patch.isPending}
         error={ruleError}
+        onAmountRefused={() => setRuleError(t('fees.free.amountRange', { max: formatMoney(THRESHOLD_MAX) }))}
       />
 
       <Card className="overflow-hidden">
@@ -226,6 +227,7 @@ export function FeeGridView() {
                             disabled={!editable || state === 'saving'}
                             state={state === 'error' ? 'error' : 'idle'}
                             onCommit={(v) => isChange(r, f, v) && void save(r, { [f]: v })}
+                            onRefused={() => mark(r.wilayaId, 'error', t('fees.amountRange', { max: formatMoney(FEE_MAX) }))}
                           />
                         </Td>
                       ))}

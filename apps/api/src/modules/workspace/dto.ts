@@ -26,7 +26,9 @@ export const UpdateWorkspaceSchema = z
     senderWilayaId: z.number().int().min(1, 'validation.wilaya').max(WILAYA_COUNT, 'validation.wilaya').nullable().optional(),
     locale: localeSchema.optional(),
     stockMode: z.enum(['simple', 'advanced']).optional(),
-    freeDeliveryThreshold: z.number().int('validation.price').min(0, 'validation.price').max(100_000_000, 'validation.price').nullable().optional(),
+    // journey J08r-1: a threshold is an integer DZD amount of at least 1 DA (« off » is null — a 0 threshold was stored and read
+    // as off); a string, a decimal or a negative amount is a field error `validation.price`, never another amount
+    freeDeliveryThreshold: z.number({ invalid_type_error: 'validation.price' }).int('validation.price').min(1, 'validation.price').max(100_000_000, 'validation.price').nullable().optional(),
     autoPauseOnManualReply: z.boolean().optional(),
     handoffReminderMin: z.number().int('validation.range').min(0, 'validation.range').max(1440, 'validation.range').optional(),
     targetMarginPct: z.number().int('validation.range').min(0, 'validation.range').max(100, 'validation.range').optional(),

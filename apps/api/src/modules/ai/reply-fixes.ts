@@ -276,6 +276,9 @@ const STOP_FEE: Record<Loc, (fee: string) => string> = {
  */
 export const withBothFees = (reply: string, quotes: readonly QuoteFact[], lang: AiLanguage | string | undefined): string => {
   let parts = splitSentences(reply);
+  // journey J08r-7 #5: a reply that says home delivery is free for this cart gets no « La livraison à domicile est à 750 DA. » — the
+  // two sentences contradicted each other (« … la livraison à domicile à Sétif est gratuite. La livraison à domicile est à 750 DA. »)
+  const homeFree = (q: QuoteFact) => parts.some((p) => homeFreeClaim(p, q));
   const loc = locOf(lang);
   const has = (n: number) => numbersIn(foldGuard(parts.join(''))).includes(n);
   const at = (n: number) => parts.findIndex((p) => numbersIn(foldGuard(p)).includes(n));
@@ -283,6 +286,7 @@ export const withBothFees = (reply: string, quotes: readonly QuoteFact[], lang: 
   for (const q of quotes) {
     if (q.isStopdesk || q.free || !(q.fee > 0) || q.stopdeskFee === null || !(q.stopdeskFee > 0) || q.stopdeskFee === q.fee) continue;
     if (has(q.stopdeskFee) && !has(q.fee)) {
+      if (homeFree(q)) continue;
       const i = at(q.stopdeskFee);
       parts = [...parts.slice(0, i), `${HOME_FEE[loc](amountText(q.fee, loc))} `, ...parts.slice(i)];
     } else if (has(q.fee) && !has(q.stopdeskFee)) {
@@ -291,6 +295,18 @@ export const withBothFees = (reply: string, quotes: readonly QuoteFact[], lang: 
     }
   }
   return parts.join('').replace(/[ \t]+\n/g, '\n').trim();
+};
+
+const FREE_CLAIM = /(?<![\p{L}])(?:gratuit\p{L}*|offert\p{L}*|free|batel|bla\s*flous|مجان\p{L}*)(?![\p{L}])/u;
+const THRESHOLD_WORD = /(?<![\p{L}])(?:(?:des|from|above|men|من|ابتداء\s+من)\s*\d|a\s+partir|starting)/u;
+/**
+ * journey J08r-7 #5: a sentence that says home delivery is free (a free word + a home word, no stop-desk word), not the threshold
+ * rule (« gratuite dès 10 000 DA » names the threshold or a « dès / à partir de / from / men » word).
+ */
+export const homeFreeClaim = (sentence: string, q: Pick<QuoteFact, 'freeFrom'>): boolean => {
+  const f = foldGuard(sentence);
+  if (!FREE_CLAIM.test(f) || !HOME_WORD.test(f) || STOP_WORD.test(f) || THRESHOLD_WORD.test(f)) return false;
+  return !(q.freeFrom && numbersIn(f).includes(q.freeFrom));
 };
 
 /** A word of home delivery / of the stop-desk (folded text). */

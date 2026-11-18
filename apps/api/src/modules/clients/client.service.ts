@@ -504,6 +504,8 @@ export class ClientService implements OnModuleInit {
       },
     });
     await this.aggregates.recompute(tx, keep.id);
+    // journey J09r-1: the merged-away card keeps no figure that moved to the kept one (its old URL showed 1 sale / 4 500 DA, counted twice)
+    await this.aggregates.recompute(tx, merge.id);
     for (const c of convs) {
       const conv = await tx.conversation.findUniqueOrThrow({ where: { id: c.id } });
       await this.outbox.ws(tx, `ws:${conv.workspaceId}`, 'conversation.updated', { id: conv.id, conversation: conversationHead(conv) });

@@ -101,4 +101,8 @@ describe('« Actualiser » and « Bordereau »', () => {
   it('a manual parcel sent without tracking prints Djaber’s slip (as label.service does)', () => {
     expect(menu(parcel({ provider: 'manual', trackingNumber: null })).get('label')).toEqual({ key: 'label', enabled: true });
   });
+  it('journey J08r-4: a failed manual parcel without tracking keeps its slip for the next attempt; a failed courier send has none', () => {
+    expect(menu(parcel({ provider: 'manual', status: 'failed', trackingNumber: null }), { status: 'shipped' }).get('label')).toEqual({ key: 'label', enabled: true });
+    expect(menu(parcel({ status: 'failed', trackingNumber: null }), { status: 'shipped' }).get('label')).toMatchObject({ enabled: false, reasonCode: 'SHIPMENT_NOT_CREATED' });
+  });
 });

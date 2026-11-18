@@ -92,7 +92,8 @@ export function PublicTrackingPage({ code, notFound = false }: { code: string; n
                     {d.trackingNumber ? (
                       <>
                         {' · '}
-                        <Ltr className="!inline [overflow-wrap:anywhere]">{d.trackingNumber}</Ltr>
+                        {/* journey J08r-7 #7: the tracking number as typed, never in capitals */}
+                        <Ltr className="!inline !normal-case [overflow-wrap:anywhere]">{d.trackingNumber}</Ltr>
                       </>
                     ) : null}
                   </span>

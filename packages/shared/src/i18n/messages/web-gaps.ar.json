@@ -148,7 +148,7 @@
  "savedViews.title": "العروض المحفوظة",
  "savedViews.saveCurrent": "حفظ العرض الحالي…",
  "savedViews.empty": "لا يوجد عرض محفوظ لهذه القائمة.",
- "savedViews.note": "القائمة ⋯: إعادة التسمية · تعيين كافتراضي · مشاركة مع الفريق (المشرف) · حذف. العرض المشترك للقراءة فقط لدى الآخرين.",
+ "savedViews.note": "العرض المشترك يظهر لكل الفريق، ولا يمكن للآخرين تعديله.",
  "savedViews.sharedPill": "مشترك",
  "savedViews.rowMenu": "إجراءات العرض «{name}»",
  "savedViews.loading": "جارٍ تحميل العروض",

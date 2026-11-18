@@ -112,7 +112,14 @@ function Body({ product, setStatus }: { product: Product; setStatus: (s: Status)
     setErrors((prev) => ({ ...prev, [field]: message }));
     setStatus({ tone: 'error', text: message });
   };
+  // journey J08r-1: a price saved on blur is not saved when its entry was refused (a minus, a letter, a decimal part)
+  const refusedEntry = useRef<PriceField | null>(null);
   const savePrice = async (field: PriceField) => {
+    if (refusedEntry.current === field) {
+      refusedEntry.current = null;
+      setValues((prev) => ({ ...prev, [field]: moneyDigits(product[field]) }));
+      return setErrors((prev) => ({ ...prev, [field]: t('input.notice.entryRefused') }));
+    }
     const value = digitsToInt(values[field]);
     const current = product[field];
     if (value === current) return;
@@ -154,6 +161,7 @@ function Body({ product, setStatus }: { product: Product; setStatus: (s: Status)
         id={`quick-${field}`}
         value={values[field]}
         onValueChange={(v) => setValues((prev) => ({ ...prev, [field]: v }))}
+        onRefusedEntry={() => (refusedEntry.current = field)}
         onBlur={() => void savePrice(field)}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
         disabled={!editable}
