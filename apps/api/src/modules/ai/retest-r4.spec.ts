@@ -108,8 +108,8 @@ describe('R4-1 — server handoff reasons are tool outcomes, never the model’s
     const r = await svc.turn(req);
     expect(r.ok && r.handoffRefused).toBe('server_reason');
     expect(r.ok && r.output).toMatchObject({ status: 'OK', reply: 'Très bon choix ! Quel est votre nom ?' });
-    const offered = gateway.calls[0]!.tools!.find((d) => d.name === 'handoff_to_human')!;
-    expect((offered.parameters as { properties: { reason: { enum: string[] } } }).properties.reason.enum).not.toContain('order_limits');
+    // journey retest R14-3: no reason fits « Je voudrais le sac à main cuir marron » any more (no complaint / anger word) ⇒ the tool is not offered
+    expect(gateway.calls[0]!.tools!.find((d) => d.name === 'handoff_to_human')).toBeUndefined();
   });
   it('F6 T3: a handoff answer never claims a recap that was not shown', () => {
     expect(withoutRecapClaims('Merci Samira, votre commande est bien récapitulée ci-dessus (2 tapis de prière, total 6300 DA livraison comprise). Répondez oui pour la confirmer.')).toBe('');

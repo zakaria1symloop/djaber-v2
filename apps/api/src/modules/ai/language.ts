@@ -9,7 +9,9 @@ const ARABIZI_WORDS = ['wach', 'wesh', 'rani', 'bghit', 'kayen', 'kayn', 'chhal'
   'nechri', 'nachri', 'nechriw', 'zoudj', 'zouj', 'jouj', 'wahed', 'wahda', 'tlata', 'tleta', 'smiti', 'smitek', 'goulili', 'goulli', 'gouli', 'rahi', 'raho', 'wla', 'iyeh', 'lkamla', 'dork', 'dorka', 'bessah', 'labas', 'nchallah', 'inchallah', 'khlas', 'sahbi', 'nta', 'nti', 'ghir', 'nchouf', 'bach', 'bech', 'mazal', 'mazel', 'kayna', 'makanch', 'mkach',
   // journey retest R3-1 (17/11): « khouya twasslou l Constantine ? ana f El Khroub, cité 1000 logements bloc 5 » after two
   // French messages stayed French (one clue only: the « kh » of « khouya »), so the server recap was French, the confirmation arabizi
-  'khouya', 'khouia', 'khoui', 'khti', 'ana', 'ntouma', 'ntaya', 'ntiya', 'twasslou', 'twaslou', 'twasslo', 'twassli', 'nwasslou', 'nwaslou', 'twasselna', 'ywasel', 'ywasslou', 'twasel', 'n7ebb', 't7ebb', 'theb', 'chwia', 'ya3tik', 'kima'];
+  'khouya', 'khouia', 'khoui', 'khti', 'ana', 'ntouma', 'ntaya', 'ntiya', 'twasslou', 'twaslou', 'twasslo', 'twassli', 'nwasslou', 'nwaslou', 'twasselna', 'ywasel', 'ywasslou', 'twasel', 'n7ebb', 't7ebb', 'theb', 'chwia', 'ya3tik', 'kima',
+  // journey retest R14-1 (18/11): the other darija yes words
+  'wah', 'ayh', 'ayeh', 'aywa', 'aywah', 'iyyeh'];
 /** journey retest R3-1: the one-letter darija prepositions (« l Constantine », « f El Khroub ») — half a clue each. */
 const ARABIZI_PARTICLES = new Set(['l', 'f', 'fi']);
 // journey 16/11 J04-2: « Bonsoir » (and the short forms « bsr », « bjr », « slt ») had no French word, so it was read as English
@@ -40,6 +42,12 @@ export const detectLanguage = (text: string | null | undefined, previous?: AiLan
   // journey retest R9-1: and Latin words that are only a value (« Samir Benali 0661234567، قسنطينة، الخروب … », a product name)
   // next to Arabic-script words say nothing of it either — the Arabic rest decides
   if (previous) text = withoutLatinValues(text);
+  // journey retest R14-1 (18/11): and the words of an address or a field label (« rue des frères Bouadou n 5 », « taille S ») carry
+  // no language either — a bare yes (« ih », « wah », « oui », « ايه ») counts as the conversation's language
+  if (previous) {
+    if (bareYes(text)) return previous;
+    text = withoutFieldWords(text);
+  }
   const arabic = (text.match(/[؀-ۿ]/g) ?? []).length;
   const latin = (text.match(/[A-Za-zÀ-ÿ]/g) ?? []).length;
   if (arabic + latin === 0) return previous;
@@ -114,6 +122,53 @@ export const latinValuesOnly = (text: string): boolean => {
 };
 /** The text without its Latin value words (unchanged when they say something of the language, or with no Arabic script). */
 export const withoutLatinValues = (text: string): string => (latinValuesOnly(text) ? text.replace(/[A-Za-zÀ-ÿ]+/g, ' ') : text);
+
+/** journey retest R14-1 (18/11): the yes words of every language the customers write (one or two of them make a bare yes). */
+const YES_WORDS = new Set(['ih', 'iyeh', 'iyyeh', 'ayh', 'ayeh', 'aywa', 'aywah', 'wah', 'eh', 'oui', 'ouii', 'ouais', 'yes', 'yeah', 'yep', 'ok', 'okay', 'ايه', 'إيه', 'أيه', 'ايوه', 'ايوا', 'واه', 'نعم']);
+/** A message that is only a yes (« ih », « wah », « ayh », « oui oui », « ايه 👍 ») — it says nothing of the language. */
+export const bareYes = (text: string): boolean => {
+  const tokens = text.toLowerCase().replace(/[’‘`]/g, "'").split(/[^\p{L}\p{N}']+/u).filter(Boolean);
+  return tokens.length > 0 && tokens.length <= 2 && tokens.every((t) => YES_WORDS.has(t));
+};
+/** Words that open a street address (accents as typed or not). */
+const ADDRESS_OPENERS = new Set(['cité', 'cite', 'rue', 'bloc', 'bâtiment', 'batiment', 'bat', 'bt', 'villa', 'lotissement', 'lot', 'résidence', 'residence', 'quartier', 'qrt', 'avenue', 'av', 'boulevard', 'bd', 'route', 'rte', 'impasse', 'chemin', 'allée', 'allee', 'immeuble', 'imm', 'appartement', 'appt', 'apt', 'logements', 'logement', 'lgts', 'hay', 'numéro', 'numero', 'étage', 'etage', 'coopérative', 'cooperative', 'coop', 'douar', 'street', 'road', 'building', 'apartment']);
+/** Labels of an order field followed by its value (« taille S », « pointure 38 », « couleur noire », « size M »). */
+const FIELD_LABELS = new Set(['taille', 'pointure', 'couleur', 'size', 'color', 'colour', 'quantité', 'quantite', 'qté', 'qte']);
+/** Words that start a sentence of the customer's own, ending an address (« cité 5 je préfère le stop desk »). */
+const SENTENCE_STARTERS = new Set(['je', "j'ai", "j'", 'vous', 'nous', 'tu', 'il', 'elle', "c'est", 'merci', 'svp', 'stp', 'pour', 'mais', 'est', 'please', 'thanks', 'thank', 'i', "i'm", 'you', 'can', 'my']);
+/**
+ * journey retest R14-1 (18/11): the customer's text without the words of a street address (from an address word to the end of its
+ * segment, the darija words kept) and without an order field label and its value — P2 T2 « taille S, Amina Saadi 0698765432, Alger,
+ * Bab Ezzouar, rue des frères Bouadou n 5 » in an arabizi conversation read as French (« taille », « des », « frères »), and the recap
+ * and the confirmation of the « ih » after it came out in French. Like the R4-2 / R9-1 values, these words say nothing of the language.
+ */
+export const withoutFieldWords = (text: string): string =>
+  text
+    .split(/([,،;.!?؟\n]+)/u)
+    .map((segment, k) => {
+      if (k % 2) return segment;
+      const kept: string[] = [];
+      let address = false;
+      let label = false;
+      for (const token of segment.split(/\s+/u).filter(Boolean)) {
+        const w = words(token)[0] ?? '';
+        if (label) {
+          label = false;
+          continue;
+        }
+        if (FIELD_LABELS.has(w)) {
+          label = true;
+          continue;
+        }
+        if (address && SENTENCE_STARTERS.has(w)) address = false;
+        if (!address && ADDRESS_OPENERS.has(w)) address = true;
+        // inside an address only a darija word still speaks (« cite 20 aout wla stop desk »)
+        if (address && !(ARABIZI_WORDS.includes(w) || /[a-z][379]|[379][a-z]/.test(w) || /[؀-ۿ]/.test(token))) continue;
+        kept.push(token);
+      }
+      return kept.join(' ');
+    })
+    .join('');
 
 /**
  * journey 16/11 J05-8: the language of a customer turn. A text with no clue (a phone number, a name, « ok ») keeps the

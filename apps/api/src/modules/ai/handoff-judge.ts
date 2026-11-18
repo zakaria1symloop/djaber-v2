@@ -140,6 +140,36 @@ const ASKS_REFUND = /rembours|refund|money back|argent|flous|drahm|dra7m|nerja3|
 const PRICE_CLAIM = /patron|boss|owner|proprietaire|gerant|le chef|la chef|moul |صاحب|المدير|مول |remise|reduc|rabais|discount|promo|solde|moins cher|gratuit|offert|free delivery|livraison a 0|-\s?\d+\s?%|\d+\s?%|تخفيض|خصم|تخفيظ|بلاش|remiz|takhfid/;
 /** …unless the customer asks for what only the team can quote (wholesale, a custom order, a partnership). */
 const TEAM_ONLY_REQUEST = /gros|grossiste|revendeu|wholesale|reseller|jumla|jomla|جمله|sur mesure|personnalis|custom|partenariat|partner|collaboration/;
+/**
+ * journey retest R14-3 (18/11): words of a complaint — a problem with an order or a product, a scam, a delay, disappointment — fr / en /
+ * arabizi / Arabic script, folded (`foldText`: accents, Arabic marks and hamza dropped, ة → ه). N9 T1 « ab3athli tswira … le tissu, les
+ * tailles ? » got `handoff_to_human { complaint, evidence « unused » }` (refused, 15.7 s).
+ */
+const COMPLAINT_WORDS = new RegExp(
+  [
+    String.raw`plainte|reclam|arnaq|escroq|voleu?r|inadmissible|inacceptable|honte|honteu|scandal|decu|deception|mecontent|pas\s+content|pas\s+satisfait|insatisfait|(?<![\p{L}])nule?(?![\p{L}])|mauvaise?\s+qualite|pas\s+conforme|non\s+conforme|abim|cass[ee]|dechir|troue|tache|(?:ne\s+)?(?:marche|fonctionne)\s+pas|defectu|defaut|probleme|souci|retard|jamais\s+(?:recu|arriv)|pas\s+(?:recu|arriv)|toujours\s+pas|rien\s+recu|contrefa|pas\s+(?:le|la)\s+bon|trompe|menti|mensonge`,
+    String.raw`complain|scam|fraud|disappoint|unacceptable|terrible|awful|worst|broken|damaged|defective|never\s+(?:arrived|came|received)|not\s+(?:arrived|received)|(?<![\p{L}])fake(?![\p{L}])|poor\s+quality|wrong\s+(?:item|size|product|colou?r)`,
+    String.raw`mo?u?chkil|mushkil|machakil|ghalet|ghalta|ghlat|khayeb|khayba|ma\s*3j[ae]?bn?i(?:ch|tch)|ma\s*wsel(?:ch|tch|ni)|ma\s*wsl(?:at)?ch|ma\s*wselt(?:ch|ni)|nass?ab|sarr?ak|serak|kd[ae]b|[7h]chouma|mkass?r|tkasser|m9atta3`,
+    String.raw`شكوي|شكوى|نشكي|مشكل|غالط|غلط|خايب|ماعجبنيش|ما\s+عجبنيش|ماوصل|ما\s+وصل|ماوصلتنيش|نصاب|سراق|سارق|كذاب|كذب|حشومه|مكسور|معطل|مزور|تقليد|تاخر|روطار`,
+    String.raw`(?:ca\s+fait|depuis|hadi|fatet|fat|هادي|فاتت|فات|عندي)\s+\d+\s*(?:jours?|semaines?|mois|days?|weeks?|ayam|iyam|smana|smanat|يوم|ايام|سمانه|سمانات|اسبوع|اسابيع|شهر)`,
+  ].join('|'),
+  'u',
+);
+/** journey retest R14-3: words / marks of anger (insults, « !! », « ?! ») — with the complaint words, what `angry` needs. */
+const ANGER_WORDS = /!{2,}|\?!|!\?|merde|putain|connard|idiot|imbecile|foutez|fout(?:re|u)|(?<![\p{L}])wtf(?![\p{L}])|damn|stupid|mahboul|[7h]mar(?![\p{L}])|kelb|حمار|كلب|مهبول|تفو|زبل/u;
+/** Words of 4 letters or more all in capitals (« C'EST INADMISSIBLE, VOUS ÊTES OÙ ») — a raised voice (two of them: one may be a brand). */
+const SHOUTING = /(?<![\p{L}])\p{Lu}{4,}(?![\p{L}])/gu;
+/** journey retest R14-3: the message (or the quoted words) carries a complaint. */
+export const complaintIn = (text: string): boolean => COMPLAINT_WORDS.test(foldText(text).replace(/[’‘`]/g, "'"));
+/** journey retest R14-3: the message carries anger (or a complaint) — a raised voice, an insult, « !! ». */
+export const angerIn = (text: string): boolean => complaintIn(text) || ANGER_WORDS.test(foldText(text)) || (text.replace(/(?<![\p{L}])(?:CMD|TEST|SKU|PRD)-?\S*/gu, '').match(SHOUTING)?.length ?? 0) >= 2;
+/**
+ * journey retest R14-3: a question about an order already made — where it is, when it arrives, its tracking number (« وين راهي الطلبية
+ * تاعي؟ وقتاش توصلني », « où est ma commande ? », « win rahi la commande »). lookup_order answers it: never `off_catalogue`.
+ */
+const ORDER_STATUS_ASK = /(?<![\p{L}])(?:ou\s+(?:est|en\s+est)\s+(?:ma|mon|la|le)\s+(?:commande|colis)|suivi|tracking|track|statut|status|where\s+is\s+my|win\s+rahi|win\s+raha|wsel(?:et|t)?|وين\s+راهي|وين\s+راه|وين\s+وصلت|وقتاش\s+توصل|رقم\s+(?:ال)?تتبع|نتبعها|نتبعو|كولي|colis)(?![\p{L}])/u;
+export const orderStatusAsk = (text: string): boolean => ORDER_STATUS_ASK.test(foldText(text).replace(/[’‘`]/g, "'"));
+
 /** journey 16/11 J04-5: a question about the assistant itself (« are you a robot? », « tu t'appelles comment ? ») — rule 11: answered. */
 const WANTS_TO_TALK = /parler|talk|speak|nhder|nehder|nahder|kalem|klem|appel|call|rappel|3ayet|a3yet|نهدر|نتكلم|تكلم|كلم|اتصل|عيط|humain svp|human please|conseiller|responsable/;
 const ABOUT_ASSISTANT = /ton nom|votre nom|your name|t'?appel+es|vous appelez|smitek|smiytek|esmek|اسمك|who are you|qui es[ -]tu|qui etes[ -]vous|chkoun nta|شكون نتا|are you (a |an )?(robot|bot|human|real|ai)\b|(t'?es|tu es|vous etes|etes[ -]vous|es[ -]tu) (un |une )?(robot|bot|ia|humain|vrai)\b|nta robot|enta robot|انت روبوت|راك روبوت/;
@@ -161,6 +191,9 @@ export function reasonFits(reason: string, evidence: string, message: string): b
   // or a cancellation / change the AI cannot make itself (the prompt hands off ORDER_CONFIRMED_BY_SELLER as customer_request)
   if (reason === 'customer_request') return (either(ASKS_TEAM) || either(ORDER_CHANGE)) && !(ABOUT_ASSISTANT.test(m) && !WANTS_TO_TALK.test(noName(m)));
   if (reason === 'refund') return either(ASKS_REFUND);
+  // journey retest R14-3 (18/11): a complaint needs the words of one, anger its words or marks — in the message or the quoted words
+  if (reason === 'complaint' && !complaintIn(evidence) && !complaintIn(message)) return false;
+  if (reason === 'angry' && !angerIn(evidence) && !angerIn(message)) return false;
   if (reason === 'off_catalogue' || reason === 'complaint') {
     if (ABOUT_ASSISTANT.test(e) && !ASKS_TEAM.test(noName(e))) return false;
     if (reason === 'off_catalogue' && PRICE_CLAIM.test(e) && !TEAM_ONLY_REQUEST.test(m)) return false;
@@ -203,7 +236,7 @@ export function handoffRefusedInstruction(why: HandoffRefusal, product?: string 
     keyword_absent: 'no handoff keyword is in the current message',
     not_unclear: 'this is not the 3rd unclear message in a row',
     reason_mismatch:
-      "the customer's words do not match that rule: a discount, a price or free delivery « the owner / the team said » is answered with the catalogue price and the delivery fee (politely, no handoff); a question about you (your name, are you a robot) is answered: you are the shop's virtual assistant; customer_request needs words asking for a person",
+      "the customer's words do not match that rule: a discount, a price or free delivery « the owner / the team said » is answered with the catalogue price and the delivery fee (politely, no handoff); a question about you (your name, are you a robot) is answered: you are the shop's virtual assistant; customer_request needs words asking for a person; complaint needs a problem the customer describes (an order not received, a broken or wrong product, a delay), angry an angry message — a question about a product or an order is answered (lookup_order for an order)",
     server_reason: 'that reason is set by the platform from a tool result (create_order above a limit, a blocked customer), never by you — no tool of this turn reported it; an order message is taken as usual (ask the next missing field, or call create_order for the recap)',
     not_sold:
       "a product the shop does not sell is answered by you, never handed off: say plainly that the shop does not sell it (« nous ne vendons pas de … pour le moment »), then offer what the CATALOGUE lists in stock; when the customer also gave their details, take the order as usual once they choose a product (status OK)",
@@ -253,8 +286,13 @@ export function messageHandoffReasons(reasons: string[], customerText: string | 
   return reasons.filter((r) => {
     if (r === 'customer_request') return ASKS_TEAM.test(f) || ORDER_CHANGE.test(f);
     if (r === 'refund') return ASKS_REFUND.test(f);
-    if (r === 'off_catalogue') return !details && !productAsk(t, t) && !wantsProduct;
-    if (r === 'complaint' || r === 'angry' || r === 'other') return !details;
+    // journey retest R14-3 (18/11): nor on a question about an order already made (N11 T3 « وين راهي الطلبية تاعي؟ … »: lookup_order answers)
+    if (r === 'off_catalogue') return !details && !productAsk(t, t) && !wantsProduct && !orderStatusAsk(t);
+    // journey retest R14-3: `complaint` needs words of a complaint, `angry` words / marks of anger (N9 T1 `complaint` probe on a photo
+    // request, N11 T3 on a tracking question)
+    if (r === 'complaint') return !details && complaintIn(t);
+    if (r === 'angry') return !details && angerIn(t);
+    if (r === 'other') return !details;
     return true;
   });
 }

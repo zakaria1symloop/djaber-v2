@@ -34,9 +34,10 @@
 // Pure: no I/O. Conservative by design — a false positive costs one corrective model turn and, at worst, a dropped sentence.
 import { formatMoney } from '@djaber/shared';
 import { GUARD_MARK } from './ai.constants';
-import { detectLanguage, fixMoroccan, frenchSentenceIn, languageSwitched, moroccanIn, replyLanguage, SCRIPT_GLUE, serverTextLanguage, withoutArabicValues, withoutLatinValues, wrongDarijaIn, type AiLanguage } from './language';
+import { detectLanguage, fixMoroccan, frenchSentenceIn, languageSwitched, moroccanIn, replyLanguage, SCRIPT_GLUE, serverTextLanguage, withoutArabicValues, withoutFieldWords, withoutLatinValues, wrongDarijaIn, type AiLanguage } from './language';
 import type { CatalogueProduct } from './catalogue.service';
 import type { PromptContext } from './prompt/prompt.types';
+import { productWanted } from './product-named';
 import { TOOL_ALIASES, TOOL_DEFS } from './tools/tool-registry';
 import { confirmation, phonesIn } from './tools/order-confirmation';
 import { confirmRequest, notedClaim, orderClaim, recapClaim } from './tools/order-confirmation-text';
@@ -120,6 +121,8 @@ export type GuardFacts = {
   noRecapPending?: boolean;
   /** journey retest R11-3: the folded names (with their variant names) of the products the prompt's CATALOGUE lists, ids included */
   catalogueNames?: string[];
+  /** journey retest R14-3: the ids of those products (their description, variants and stock are in the prompt) */
+  catalogueIds?: string[];
   /** journey retest R12-2: a server recap of an earlier turn waits for the customer's « oui » */
   recapWaiting?: boolean;
   /** journey retest R12-2: a lookup_order of this turn found the customer's orders (their status may be told) */
@@ -615,6 +618,8 @@ const FIELD_QUESTIONS: Record<string, Record<'fr' | 'en' | 'ar' | 'arabizi', str
   communeName: { fr: 'Dans quelle commune êtes-vous ?', en: 'Which commune are you in?', ar: 'واش من بلدية ؟', arabizi: 'Wach men commune (baladiya) ?' },
   address: { fr: 'Quelle est votre adresse (rue, cité, numéro), ou préférez-vous le stop-desk ?', en: 'What is your address (street, building, number), or would you rather use a stop-desk?', ar: 'عطيني العنوان تاعك (الشارع، الحي، رقم الدار)، ولا تحب ستوب ديسك ؟', arabizi: "A3tini l'adresse ta3ek (rue, cité, numéro ta3 dar), wela t7ebb stop-desk ?" },
 };
+/** journey retest R14-4: whether the customer wants the product, when the reply's own question was dropped. */
+const WANT_QUESTION: Record<'fr' | 'en' | 'ar' | 'arabizi', string> = { fr: 'Souhaitez-vous passer commande ?', en: 'Would you like to order it?', ar: 'تحب تطلب ؟', arabizi: 'T7ebb tcommandi ?' };
 
 /** Folded phrases of a false confession about an order the tools did place (fr / en / arabizi / Arabic script). */
 const FALSE_CONFESSION = new RegExp(
@@ -793,6 +798,12 @@ export function enforceReply(reply: string, violations: GuardViolation[], facts:
   const refusalQuestion = (rules0: Set<GuardRule>) => (rules0.has('invented_problem') || rules0.has('confirm_without_recap') || rules0.has('order_claim')) && facts.missingField ? FIELD_QUESTIONS[facts.missingField]?.[safeLocale(facts.lang, facts.shopLocale)] : undefined;
   const ask = refusalQuestion(new Set(violations.map((v) => v.rule)));
   if (ask && wordCount(text) >= 2 && !/[?؟]/.test(text)) text = `${text} ${ask}`;
+  // journey retest R14-4 (18/11): the request to confirm was the reply's only question (N21 T1 « … بسعر 1500 دج (بدل 2000 دج). » left
+  // with no next step) — the pending question: the name when the customer wants the product, else whether they want it
+  else if (!ask && !facts.orderRefused && violations.some((v) => v.rule === 'confirm_without_recap' || v.rule === 'order_claim') && wordCount(text) >= 2 && !/[?؟]/.test(text) && !phonesIn(facts.customerText ?? '').size) {
+    const loc = safeLocale(facts.lang, facts.shopLocale);
+    text = `${text} ${productWanted(facts.customerText ?? '') ? FIELD_QUESTIONS.clientName![loc] : WANT_QUESTION[loc]}`;
+  }
   text = text.replace(/\n{3,}/g, '\n\n');
   // a language / dialect slip the corrective turn did not fix: the reply is sent as it is
   if (wordCount(text) >= 2) return { reply: text, action: text === reply.trim() && violations.every((v) => STYLE_RULES.includes(v.rule)) ? 'kept' : 'stripped' };
@@ -914,7 +925,8 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
   const available = [...new Set(i.products.filter((p) => !out.includes(p)).map((p) => nameKeys(p.name)[0]).filter((k): k is string => !!k))];
   // journey retest R4-2: a name typed in Arabic script (« سمير بن علي ») is no Arabic message — an Arabic reply to a French customer is a switch
   // journey retest R9-1: nor a Latin name next to Arabic-script words (« Samir Benali 0661234567، قسنطينة … ») a Latin message
-  const messageLang = detectLanguage(withoutLatinValues(withoutArabicValues(i.customerText)), undefined, { neutral: 'previous' });
+  // journey retest R14-1: nor the words of an address / a field label (« taille S, …, rue des frères Bouadou n 5 ») a French message
+  const messageLang = detectLanguage(withoutFieldWords(withoutLatinValues(withoutArabicValues(i.customerText))), undefined, { neutral: 'previous' });
   // journey retest R6-2: the catalogue products known to have no photo
   const noPhoto = i.products.filter((p) => p.id && p.imageUrl === null).map((p) => p.id!);
   const base: GuardFacts = {
@@ -938,6 +950,7 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
     ...(noPhoto.length ? { noPhoto } : {}),
     ...(i.galleries?.length ? { galleries: i.galleries } : {}),
     ...(i.products.length ? { catalogueNames: i.products.map((p) => foldGuard([p.name, ...p.variants.map((v) => v.name)].join(' '))) } : {}),
+    ...(i.products.some((p) => p.id) ? { catalogueIds: i.products.map((p) => p.id).filter((id): id is string => !!id) } : {}),
   };
   return i.earlierToolResults?.length ? withToolResults(base, i.earlierToolResults) : base;
 }

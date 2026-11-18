@@ -127,7 +127,7 @@ describe('R3-3 — an invented name, the handoff reasons offered', () => {
     const gateway = new FakeAiGateway();
     gateway.script('reply', { reply: 'Très bon choix ! Quel est votre nom complet ?', intent: 'SALE' });
     const svc = new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never);
-    const req: TurnRequest = { runId: 'r', prompt: { system: 'S', messages: [{ role: 'user', content: 'Bonjour, je veux 1 hijab soie' }] }, toolCtx: { workspaceId: 'w', agent: { humanHandoffRules: '', handoffKeywords: [] } as never, conversationId: null, clientId: null, channelId: null, runId: 'r', dryRun: true, customerText: 'Bonjour, je veux 1 hijab soie' }, temperature: 0.5, maxTokens: 500, deadline: Date.now() + 30_000, persist: false };
+    const req: TurnRequest = { runId: 'r', prompt: { system: 'S', messages: [{ role: 'user', content: 'Bonjour, je veux 1 hijab soie, le dernier était abîmé' }] }, toolCtx: { workspaceId: 'w', agent: { humanHandoffRules: '', handoffKeywords: [] } as never, conversationId: null, clientId: null, channelId: null, runId: 'r', dryRun: true, customerText: 'Bonjour, je veux 1 hijab soie, le dernier était abîmé' }, temperature: 0.5, maxTokens: 500, deadline: Date.now() + 30_000, persist: false };
     await svc.turn(req);
     const offered = gateway.calls[0]!.tools!.find((d) => d.name === 'handoff_to_human')!;
     expect((offered.parameters as { properties: { reason: { enum: string[] } } }).properties.reason.enum).not.toContain('other');

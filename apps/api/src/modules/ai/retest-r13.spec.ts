@@ -156,7 +156,8 @@ describe('R13-1 (Major) — off_catalogue only when the shop sells nothing the m
     if (!r.ok) throw new Error('turn failed');
     expect(r.forcedHandoff).toBeNull();
     expect(r.output.status).toBe('OK');
-    expect(r.tools.find((t) => t.name === 'handoff_to_human')?.result).toMatchObject({ ok: false, error: { code: 'HANDOFF_NOT_NEEDED', why: 'in_catalogue' } });
+    // journey retest R14-3: no reason is left on this message (no complaint / anger word) ⇒ the tool is not offered and the call is not run
+    expect(r.tools.some((t) => t.name === 'handoff_to_human')).toBe(false);
     const def = gateway.calls[0]!.tools!.find((t) => t.name === 'handoff_to_human');
     expect(JSON.stringify(def?.parameters ?? {})).not.toContain('off_catalogue');
   });
@@ -326,7 +327,7 @@ describe('R13-5 (Minor) — the recap of a substitute says first that it replace
   const items = [{ name: 'Coffret cadeau Aïd' }];
 
   it('substitutionLine: in the customer’s language; none when the customer named the substitute, when the reply names the product, or with no stock problem', () => {
-    expect(substitutionLine(items, N5.join('\n'), ['Parfum Oud 50 ml'], '', 'fr')).toBe("Parfum Oud 50 ml n'est pas disponible pour le moment : ce récapitulatif est pour Coffret cadeau Aïd à la place.");
+    expect(substitutionLine(items, N5.join('\n'), ['Parfum Oud 50 ml'], '', 'fr')).toBe("Le produit Parfum Oud 50 ml n'est pas disponible pour le moment : à la place, ce récapitulatif est pour le produit Coffret cadeau Aïd.");
     expect(substitutionLine(items, 'salam, ch7al parfum oud ?\nih nakhdou', ['Parfum Oud 50 ml'], '', 'arabizi')).toBe('Parfum Oud 50 ml makach drok, had récap fih Coffret cadeau Aïd f blastou.');
     expect(substitutionLine(items, 'شحال Parfum Oud ؟\nايه نديه', ['Parfum Oud 50 ml'], '', 'ar')).toBe('Parfum Oud 50 ml ماهوش متوفر درك، هذا الملخص فيه Coffret cadeau Aïd في بلاصتو.');
     expect(substitutionLine(items, `${N5[0]}\nOk je prends le coffret cadeau. Karim Haddad 0770112233`, ['Parfum Oud 50 ml'], '', 'fr')).toBeNull();
@@ -344,7 +345,7 @@ describe('R13-5 (Minor) — the recap of a substitute says first that it replace
     const g = facts(text, { products: [product(OUD, 9500, 0), product(COFFRET, 24990, 5)] });
     const r = await new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never).turn(turnReq(text, [N5[0]!], { guard: g }));
     if (!r.ok) throw new Error('turn failed');
-    expect(r.output.reply.startsWith("Parfum Oud 50 ml n'est pas disponible pour le moment : ce récapitulatif est pour Coffret cadeau Aïd à la place.\n\nVoici le récapitulatif de votre commande")).toBe(true);
+    expect(r.output.reply.startsWith("Le produit Parfum Oud 50 ml n'est pas disponible pour le moment : à la place, ce récapitulatif est pour le produit Coffret cadeau Aïd.\n\nVoici le récapitulatif de votre commande")).toBe(true);
   });
 });
 

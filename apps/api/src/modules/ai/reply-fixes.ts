@@ -155,7 +155,17 @@ const ARABIZI_FOR: [RegExp, (m: string, ...g: string[]) => string][] = [
   // journey retest R13-6 (18/11): N9 T1 « Tailles li kayn: S w M » — the sizes / colours in darija (« Lmqasat / Lalwan li kaynin »)
   [/(?<![\p{L}])(?:les\s+)?(tailles|pointures|couleurs)\s+li\s+kayn(?:in|ine|a)?(?![\p{L}])/giu, (m, what: string) => `${m[0] === m[0]!.toUpperCase() ? 'L' : 'l'}${/^couleurs$/iu.test(what) ? 'alwan' : 'mqasat'} li kaynin`],
   // journey retest R13-6: F9 T1 closing « T7ebb nwarrik produit m3a l livraison ? » (« you want I show you a product with the delivery? »)
-  [/(?<![\p{L}])t7ebb?\s+nwarr?ik\s+(?:l\s*)?(?:produit|les\s+produits)\s+m3a\s+l\s*livraison\s*([?؟])/giu, (m, mark: string) => `${m[0] === 'T' ? 'T' : 't'}7ebb nwarrik wach kayen 3andna ${mark}`],
+  // journey retest R14-4 (18/11): F9 T1 « T7ebb nwarrik produit ? » (no « m3a l livraison » this time)
+  [/(?<![\p{L}])t7ebb?\s+nwarr?ik\s+(?:l\s*)?(?:produit|les\s+produits|lproduit|chi\s+produit)(?:\s+m3a\s+l\s*livraison)?\s*([?؟])/giu, (m, mark: string) => `${m[0] === 'T' ? 'T' : 't'}7ebb nwarrik wach kayen 3andna ${mark}`],
+  // journey retest R14-4: French left inside arabizi — N9 T1 « hiya brodée à la main, b qmach khfif, et mnasba bezzaf lel fêtes », N3 T2
+  // « Tawsil l dar 700 DA, 2 à 5 jours. »
+  // (« brodée » only after a darija pronoun: « Robe kabyle brodée » is a product name and stays)
+  [/(?<![\p{L}])(hiya|hia|hya|rahi|raha)\s+brod[ée]e?(?![\p{L}])/giu, (_m, who: string) => `${who} mtarza`],
+  [/(?<![\p{L}])[àa]\s+la\s+main(?![\p{L}])/giu, () => 'b lyedd'],
+  // « , et » before a darija word (never before a French pronoun or article: a French sentence keeps its « et »)
+  [/(?<=[,،]\s*)et(?=\s+(?!(?:nous|vous|tu|je|il|elle|ils|elles|on|le|la|les|un|une|des|du|de|c['’]|j['’]|qu)(?![\p{L}]))\p{Ll})/gu, () => 'w'],
+  [/(?<![\p{L}])lel\s+f[êe]tes(?![\p{L}])/giu, () => 'l l3rass w lmounasabat'],
+  [/(?<![\p{L}\p{N}])(\d+)\s*(?:à|a|-)\s*(\d+)\s+jours(?![\p{L}])/giu, (_m, a: string, b: string) => `${a} l ${b} ayam`],
   [/(?<![\p{L}])livraison\s+(?:[aà]\s+)?domicile(?![\p{L}])/giu, (m) => (m[0] === 'L' ? 'Tawsil l dar' : 'tawsil l dar')],
   [/(?<![\p{L}])livraison\s+(?:en\s+|f\s+)?stop[- ]?desk(?![\p{L}])/giu, (m) => (m[0] === 'L' ? 'Tawsil l stop-desk' : 'tawsil l stop-desk')],
   [/(?<![\p{L}])t7ebb?\s+n(?:chouf|warrik)\s+wach\s+men\s+([\p{L}'’-]+)\s+t7ebb?(?:ou|i)?\s*([?؟])/giu, (m, what: string, mark: string) => `${m[0] === 'T' ? 'W' : 'w'}ach men ${what} t7ebb ${mark}`],
@@ -194,6 +204,12 @@ export const withArabicWords = (reply: string, lang: AiLanguage | string | undef
       t = t.replace(/(?<![\p{L}])taille\s+unique(?![\p{L}])/giu, 'مقاس واحد');
       t = t.replace(/(?<![\p{L}])نعم(?![\p{L}])/gu, 'إيه');
       t = t.replace(/(?<![\p{L}])نوصلوها\s+لها(?![\p{L}])/gu, 'نوصلوهالك');
+      // journey retest R14-4 (18/11): Standard Arabic / odd forms in darija — A3 T1 « الكمية 2 من Tapis de prière، … والمنتج متوفر », A3b T1
+      // « زوج تابيس الصلاة » (« tapis » in Arabic letters)
+      t = t.replace(/(?<![\p{L}])الكمية\s+(\d+)\s+من\s+/gu, (_m, n: string) => (n === '2' ? 'زوج ' : `${n} `));
+      t = t.replace(/(?<![\p{L}])(و?)(?:ال)?منتو?ج\s+متوفر(?![\p{L}])/gu, (_m, w: string) => `${w}راهو متوفر`);
+      t = t.replace(/(?<![\p{L}])(?:ال)?تابيس\s+(?:ال)?صلاة(?![\p{L}])/gu, 'سجادات الصلاة');
+      t = t.replace(/(?<![\p{L}])(?:ال)?تابي\s+(?:ال)?صلاة(?![\p{L}])/gu, 'سجادة الصلاة');
       return t;
     })
     .join('');
@@ -236,8 +252,61 @@ export const withBothFees = (reply: string, quotes: readonly QuoteFact[], lang: 
   return parts.join('').replace(/[ \t]+\n/g, '\n').trim();
 };
 
-const SUBSTITUTE: Record<Loc, (gone: string, instead: string) => string> = {
-  fr: (g, i) => `${g} n'est pas disponible pour le moment : ce récapitulatif est pour ${i} à la place.`,
+/** A word of home delivery / of the stop-desk (folded text). */
+const HOME_WORD = /(?<![\p{L}])(?:domicile|adresse|address|[وفب]?(?:ال)?عنوان(?:ك)?|a\s+la\s+maison|chez\s+vous|l\s*dar|ldar|l\s+bit|home|door|(?:[وفب]?(?:لل|ل|ال))(?:دار|بيت|منزل|دوميسيل))(?![\p{L}])/u;
+const STOP_WORD = /(?<![\p{L}])(?:stop\s*-?\s*desk|stopdesk|point\s+(?:de\s+)?relais|bureau\s+(?:de\s+)?(?:livraison|la\s+societe)|[وفب]?(?:ل|ال|لل)?(?:نقطه\s+(?:ال)?استلام|ستوب\s*ديسك|مكتب))(?![\p{L}])/u;
+/**
+ * journey retest R14-2 (18/11): a sentence of the reply that asks the customer to choose home delivery (or their address) or the stop-desk
+ * (both named, as a question or with « ou / wela / ولا / or ») — the server's own address question too — F1b T2 « … préférez-vous être livré à domicile (il me faut alors votre rue ou
+ * votre cité) ou au stop-desk ? ». The index of that sentence, -1 when none.
+ */
+export const modeQuestionAt = (reply: string): number =>
+  splitSentences(reply).findIndex((s) => {
+    const f = foldGuard(s);
+    return HOME_WORD.test(f) && STOP_WORD.test(f) && (/[?؟]/.test(s) || /(?<![\p{L}])(?:ou|wela|wla|walla|ولا|او|أو|or)(?![\p{L}])/u.test(f));
+  });
+const MODE_FEES: Record<Loc, (home: string, stop: string | null) => string> = {
+  fr: (h, s) => `À domicile : ${h}${s ? `, en stop-desk : ${s}` : ''}.`,
+  ar: (h, s) => `للدار: ${h}${s ? `، لنقطة الاستلام (stop-desk): ${s}` : ''}.`,
+  arabizi: (h, s) => `L dar: ${h}${s ? `, f stop-desk: ${s}` : ''}.`,
+  en: (h, s) => `Home delivery: ${h}${s ? `, stop-desk: ${s}` : ''}.`,
+};
+const FREE_HOME: Record<Loc, string> = { fr: 'gratuite', ar: 'مجانية', arabizi: 'batel', en: 'free' };
+/**
+ * journey retest R14-2 (18/11): the question « home or stop-desk? » always carries both fees — F1b T2 « Sétif, El Eulma » ⇒ « préférez-vous
+ * être livré à domicile … ou au stop-desk ? » with no fee at all (no quote_delivery that turn: the server runs it, see ai-run). The fee
+ * sentence of this turn's quote goes right before the question when the reply gives neither fee; one fee given is completed by
+ * `withBothFees`. No quote, or a reply that asks no mode ⇒ unchanged.
+ */
+export const withModeFees = (reply: string, quotes: readonly QuoteFact[], lang: AiLanguage | string | undefined): string => {
+  const q = quotes.find((x) => !x.isStopdesk);
+  const i = modeQuestionAt(reply);
+  if (!q || i < 0) return reply;
+  const nums = numbersIn(foldGuard(reply));
+  if ((q.fee > 0 && nums.includes(q.fee)) || (q.stopdeskFee !== null && nums.includes(q.stopdeskFee))) return reply;
+  const loc = locOf(lang);
+  const cur = loc === 'ar' ? 'دج' : 'DA';
+  const home = q.free || q.fee === 0 ? FREE_HOME[loc] : `${q.fee} ${cur}`;
+  const parts = splitSentences(reply);
+  const line = MODE_FEES[loc](home, q.stopdeskFee !== null && q.stopdeskFee > 0 ? `${q.stopdeskFee} ${cur}` : null);
+  return [...parts.slice(0, i).map((p, k) => (k === i - 1 && !/\s$/u.test(p) ? `${p} ` : p)), `${line} `, ...parts.slice(i)].join('').replace(/[ \t]+\n/g, '\n').trim();
+};
+
+const HANDOFF_LINE: Record<Loc, string> = {
+  fr: "Merci pour votre message : l'équipe de la boutique va vous répondre.",
+  ar: 'شكرا على رسالتك، فريق المحل راح يجاوبك.',
+  arabizi: "Saha 3la la question, l'équipe ta3 lboutique rah tjawbek.",
+  en: "Thanks for your message: the shop's team will answer you.",
+};
+/**
+ * journey retest R14-4 (18/11): the AI's sentence of a turn handed to the team when the model wrote none — W1 « prix de gros pour 50
+ * pièces du hijab soie ? » got only the system line. One short sentence in the customer's language: the team will answer.
+ */
+export const handoffLine = (lang: AiLanguage | string | undefined): string => HANDOFF_LINE[locOf(lang)];
+
+const SUBSTITUTE: Record<Loc, (gone: string, instead: string, many: boolean) => string> = {
+  // journey retest R14-4 (18/11): « ce récapitulatif est pour Coffret cadeau Aïd » had no article — « le produit … » fits every name
+  fr: (g, i, many) => `Le produit ${g} n'est pas disponible pour le moment : à la place, ce récapitulatif est pour ${many ? 'les produits' : 'le produit'} ${i}.`,
   ar: (g, i) => `${g} ماهوش متوفر درك، هذا الملخص فيه ${i} في بلاصتو.`,
   arabizi: (g, i) => `${g} makach drok, had récap fih ${i} f blastou.`,
   en: (g, i) => `${g} is not available right now: this summary is for ${i} instead.`,
@@ -256,7 +325,7 @@ export const substitutionLine = (recapItems: readonly { name?: unknown }[], hist
   for (const line of history.split(/\n+/).map((l) => l.trim()).filter(Boolean).reverse()) {
     if (productNamedIn(line, inRecap)) return null;
     const asked = productNamedIn(line, gone);
-    if (asked) return productNamedIn(reply, [asked]) ? null : SUBSTITUTE[locOf(lang)](asked.name, items.join(', '));
+    if (asked) return productNamedIn(reply, [asked]) ? null : SUBSTITUTE[locOf(lang)](asked.name, items.join(', '), items.length > 1);
   }
   return null;
 };
