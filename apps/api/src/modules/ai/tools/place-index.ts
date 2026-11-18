@@ -4,6 +4,7 @@
 import { prisma } from '@djaber/db';
 import { matchWilaya, placeFold } from './tool-registry';
 import { articleless, foldText } from './wilaya-aliases';
+import { offCatalogueWords, productWanted, teamOnlyRequest } from '../product-named';
 
 export type PlaceWilaya = { id: number; code: string; nameFr: string; nameAr: string };
 export type PlaceCommune = { wilayaId: number; nameFr: string; nameAr: string };
@@ -50,7 +51,18 @@ export const wilayaIn = (idx: PlaceIndex, text: string): PlaceWilaya | null => {
   return c ? (idx.wilayas.find((x) => x.id === c.wilayaId) ?? null) : null;
 };
 /** Words that go with a place name and name no street (« wilaya de », « commune », « centre », « ana f », « je suis à »). */
-const PLACE_ONLY_FILLERS = new Set(['wilaya', 'commune', 'daira', 'baladiya', 'de', 'du', 'des', 'd', 'la', 'le', 'l', 'a', 'au', 'en', 'w', 'f', 'fi', 'el', 'al', 'centre', 'center', 'ville', 'city', 'et', 'and', 'ana', 'je', 'suis', 'j', 'habite', 'nseken', 'saken', 'sakna', 'men', 'mn', 'from', 'in', 'i', 'live', 'at', 'chez', 'moi', 'pour', 'svp', 'stp', 'please', 'merci', 'ولايه', 'بلديه', 'في', 'ب', 'و', 'من', 'انا', 'نسكن', 'ساكن', 'ساكنه', 'وسط', 'مدينه', 'المدينه'].map((w) => foldText(w)));
+// journey retest R17-1 (18/11): and a greeting with it (« Bonjour, j'habite à Sétif, El Eulma », « slm, ana f Bab Ezzouar », « السلام عليكم، انا من سطيف »)
+const PLACE_ONLY_FILLERS = new Set(['wilaya', 'commune', 'daira', 'baladiya', 'de', 'du', 'des', 'd', 'la', 'le', 'l', 'a', 'au', 'en', 'w', 'f', 'fi', 'el', 'al', 'centre', 'center', 'ville', 'city', 'et', 'and', 'ana', 'je', 'suis', 'j', 'habite', 'nseken', 'saken', 'sakna', 'men', 'mn', 'from', 'in', 'i', 'live', 'at', 'chez', 'moi', 'pour', 'svp', 'stp', 'please', 'merci', 'ولايه', 'بلديه', 'في', 'ب', 'و', 'من', 'انا', 'نسكن', 'ساكن', 'ساكنه', 'وسط', 'مدينه', 'المدينه', 'bonjour', 'bonsoir', 'salut', 'salam', 'slm', 'salem', 'hello', 'hi', 'cc', 'coucou', 'السلام', 'عليكم', 'سلام', 'مرحبا', 'اهلا'].map((w) => foldText(w)));
+/**
+ * journey retest R17-1 (18/11): the text without the wilaya / commune names it holds (folded, `placeFold`) — what is left may name a
+ * product (`offCatalogueWords`): « Bonjour, j'habite à Sétif, El Eulma » ⇒ « bonjour j habite a » (no product word).
+ */
+export const withoutPlaceNames = (idx: PlaceIndex, text: string): string => {
+  let w = ` ${placeFold(text)} `;
+  const names = [...new Set([...idx.wilayas.flatMap((x) => [placeFold(x.nameFr), placeFold(x.nameAr)]), ...idx.communes.flatMap((c) => [c.key, c.bare])])].filter((n) => n.length >= 3).sort((a, b) => b.length - a.length);
+  for (const n of names) if (w.includes(` ${n} `)) w = w.split(` ${n} `).join(' ');
+  return w.trim();
+};
 /**
  * journey retest R8-4 (17/11): the message only names a wilaya and / or a commune (« Sétif, El Eulma », « ana f Bab Ezzouar »)
  * — no street, building, landmark or other word. On such a message with no address yet, create_order can only be refused.
@@ -61,6 +73,23 @@ export const placeOnlyMessage = (idx: PlaceIndex, text: string): boolean => {
   const names = [...new Set([...idx.wilayas.flatMap((x) => [placeFold(x.nameFr), placeFold(x.nameAr)]), ...idx.communes.map((c) => c.key)])].filter((n) => n.length >= 3).sort((a, b) => b.length - a.length);
   for (const n of names) if (w.includes(` ${n} `)) w = w.split(` ${n} `).join(' ');
   return w.trim().split(/\s+/).filter((x) => x && !PLACE_ONLY_FILLERS.has(x)).length === 0;
+};
+/**
+ * journey retest R17-1 (18/11): the words of the customer's message that may name a product the shop lacks (`offCatalogueWords`), the
+ * wilaya / commune names taken out. Undefined when there is nothing to decide (a request only the team can quote, a product wanted or
+ * asked for — the judge's other rules answer it — or no word at all) and when the lists cannot be read (the judge then reads the message
+ * without them).
+ */
+export const offCatalogueWordsOf = async (text: string): Promise<string[] | undefined> => {
+  if (teamOnlyRequest(text) || productWanted(text)) return undefined;
+  const plain = offCatalogueWords(text);
+  if (!plain.length) return plain;
+  try {
+    const idx = await placeIndex();
+    return offCatalogueWords(text, (t) => withoutPlaceNames(idx, t));
+  } catch {
+    return undefined;
+  }
 };
 /**
  * R7-4: one of the customer's messages names a wilaya (or a commune of one), or writes « wilaya 16 » — each message on its own

@@ -87,7 +87,9 @@ describe('R15-1 (Minor) — a place given with no quote yet: the reply carries t
   it('the wilaya already quoted in an earlier turn, no place in the message, a fee already given, a not-served wilaya ⇒ nothing added', async () => {
     const before = await run(F5_T1, [], F5_T1_REPLY, { earlierToolResults: [ALGER] });
     expect(before.execute).not.toHaveBeenCalled();
-    expect(before.r.output.reply).not.toMatch(/400 DA|4900 DA/u);
+    // journey retest R17-1: no fee added (quoted earlier), the product the message names still gets its price before the address question
+    expect(before.r.output.reply).not.toMatch(/400 DA/u);
+    expect(before.r.output.reply).toContain('Robe kabyle brodée (M) b 4900 DA. Wach howa');
     const noPlace = await run('Amina Saadi', ['nheb la robe kabyle taille M'], 'Saha Amina, a3tini numéro ta3ek ?');
     expect(noPlace.execute).not.toHaveBeenCalled();
     const given = await run(F5_T1, [], 'Robe kabyle brodée (M) b 4900 DA, tawsil l Bab Ezzouar 400 DA. Wach howa l’adresse ta3ek ?');

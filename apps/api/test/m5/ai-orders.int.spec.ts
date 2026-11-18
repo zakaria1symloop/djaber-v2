@@ -186,9 +186,16 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     expect(lastResult(moved.runs)).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recap: { address: 'Cité des 200 logements, Bt 9' } }); // R11-4: « street » — the recap adds « , Bab Ezzouar, Alger »
     await resetAi();
     fakeAi(app).script('reply', { toolCalls: [createCall(s, { address: 'Cité des 200 logements, Bt 9, Bab Ezzouar', items: [{ productId: s.robe.id, quantity: 2 }] })] }, { reply: 'Nouveau récapitulatif.', intent: 'SALE' });
-    const more = await turn(s, sender, 'oui');
+    const more = await turn(s, sender, 'oui, mais j’en veux 2');
     expect(lastResult(more.runs)).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recap: { subtotal: 9000 } });
     expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(0);
+    // journey retest R17-2 (18/11): a plain « oui » to the recap shown places exactly that recap — the model's call with another quantity
+    // (nobody asked for 3) runs with the recap's stored order
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [createCall(s, { address: 'Cité des 200 logements, Bt 9, Bab Ezzouar', items: [{ productId: s.robe.id, quantity: 3 }] })] }, { reply: 'Commande enregistrée.', intent: 'SALE' });
+    const yes = await turn(s, sender, 'oui');
+    expect(lastResult(yes.runs)).toMatchObject({ ok: true, subtotal: 9000 });
+    expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(1);
   });
 
   it('journey retest R4-3 (Critical): « oui » to a product the AI suggested with the customer details ⇒ CONFIRMATION_REQUIRED + the server recap, no order; the « oui » to that recap places it', async () => {

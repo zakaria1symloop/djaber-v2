@@ -105,6 +105,36 @@ export const bareYes = (text: string, shown: string): boolean => {
 };
 
 const tokensOf = (...texts: (string | null | undefined)[]) => new Set(texts.flatMap((t) => norm(t).split(' ')).filter((w) => w.length >= 3 || /\d/.test(w)));
+/** journey retest R8-1 / R17-2: the `create_order` arguments of the order a server recap stands for (its stored `draftOrder`). */
+export const storedOrderArgs = (o: DraftOrder, phoneConfirmed = false): Record<string, unknown> => ({
+  clientName: o.clientName,
+  clientPhone: o.clientPhone,
+  ...(o.secondPhone ? { secondPhone: o.secondPhone } : {}),
+  wilayaId: o.wilayaId,
+  ...(o.communeName ? { communeName: o.communeName } : {}),
+  ...(o.address ? { address: o.address } : {}),
+  isStopdesk: o.isStopdesk,
+  ...(o.stopdeskId ? { stopdeskId: o.stopdeskId } : {}),
+  ...(o.notes ? { notes: o.notes } : {}),
+  items: o.items.map((i) => ({ productId: i.productId, ...(i.variantId ? { variantId: i.variantId } : {}), quantity: i.quantity })),
+  ...(o.replacesOrder ? { replacesOrder: o.replacesOrder } : {}),
+  customerConfirmed: true,
+  ...(phoneConfirmed ? { phoneConfirmed: true } : {}),
+});
+/**
+ * journey retest R17-2 (18/11, Major): the customer's message is a plain yes (« oui », « ih », « ايه », « yes », « 👍 », no change, no
+ * question) to the server recap that waits — the latest fresh recap of an earlier turn, with its stored order, no order placed since —
+ * and the AI's last message was that recap (`recapShownLast`: its request to answer yes). Returns the `create_order` arguments of exactly
+ * that recap's order (the server places it, whatever the model does on that turn: N5 T3 « oui » to the substitute's recap got a new
+ * confirm question and no order); null otherwise.
+ */
+export const recapYesArgs = (history: OrderCallHistory | undefined, customerText: string | undefined, recapShownLast: boolean, now = Date.now()): Record<string, unknown> | null => {
+  if (!recapShownLast || !customerText?.trim() || /[?؟]/u.test(customerText)) return null;
+  const latest = latestRecap(history, now);
+  if (!latest?.order || !recapPending(history, now) || !bareYes(customerText, latest.shown)) return null;
+  if (orderedBefore(history, latest.draft, now, latest.core ?? undefined)) return null;
+  return storedOrderArgs(latest.order, phoneCheckAsked(history, latest.order.clientPhone, now));
+};
 /**
  * journey 16/11 J03-10: the confirming call words the name / commune / address differently from the recap. It is a real
  * change (⇒ a new recap) only when the new words are the customer's own words of THIS message (« oui, mais livrez à la villa

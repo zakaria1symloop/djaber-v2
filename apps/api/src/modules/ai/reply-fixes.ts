@@ -195,6 +195,10 @@ const ARABIZI_FOR: [RegExp, (m: string, ...g: string[]) => string][] = [
   }],
   [/(?<![\p{L}])disponibles?(?=\s+b\s+\d)/giu, () => 'kayen'],
   [/(?<![\p{L}])en(?=\s+(?:X{0,3}L|X{0,3}S|M)(?![\p{L}\p{N}]))/gu, () => 'f'],
+  // journey retest R17-5 (18/11): French left inside arabizi — F9 T1 « Sétif : 650 DA à domicile, wela 350 DA f stop-desk », P2 T1 « …,
+  // parfaite l l3rass w lmounasabat »
+  [/(?<![\p{L}])[àa]\s+domicile(?![\p{L}])/giu, () => 'l dar'],
+  [/(?<![\p{L}])(parfaite?)s?(?=\s+l\s)/giu, (m, w: string) => `${m[0] === 'P' ? 'M' : 'm'}${/e$/iu.test(w) ? 'liha' : 'lih'}`],
 ];
 export const withArabiziWords = (reply: string, lang: AiLanguage | string | undefined): string =>
   lang === 'arabizi' ? ARABIZI_FOR.reduce((t, [re, to]) => t.replace(re, to as (m: string, ...g: string[]) => string), reply) : reply;
@@ -620,7 +624,17 @@ export const teamSaid = (reply: string): boolean => TEAM_SAID.test(foldGuard(rep
  * A question offering to book / register a product for the customer (« تحب نحجزلك واحد؟ », « واش تحب نسجلو لك؟ », « Souhaitez-vous le
  * commander ? », « je vous le réserve ? », « n7ajzlek wa7ed ? »), folded. « Voulez-vous le prendre ? » (a substitute offered) is no such one.
  */
-const BOOKING_ASK = /(?<![\p{L}])(?:je\s+vous\s+(?:le|la|les|en)\s+(?:reserve|mets\s+de\s+cote|garde)|(?:voulez|souhaitez|desirez)\s+vous\s+(?:le|la|les|l|en)\s+(?:commander|reserver)|on\s+vous\s+(?:le|la|les)\s+reserve|shall\s+i\s+(?:book|reserve|order)|(?:should|can)\s+i\s+(?:book|reserve)|n7a?jz(?:ou)?(?:ha|hou)?l(?:ek|ak|ik)|nsa?jj?l(?:ou|o)?(?:ha|hou)?l(?:ek|ak|ik)|نحجز(?:و|ها|هو)?\s*ل(?:ك|كم)|نحجزلك|نحجزلكم|نحجزهالك|نسجلو\s*لك|نسجلولك|نسجلهالك|نسجلهولك|تحب\s+نحجز|تحب\s+نسجل(?:و)?\s+لك)(?![\p{L}])/u;
+// journey retest R17-4 (18/11): the family in Arabic script, arabizi and French — « واش تحب نسجلوه ليك؟ » (N21 T1), « تحب نجهزلك واحد ؟ » (A1
+// T1): « (واش) تحب / حاب » + a first-person verb of booking / registering / preparing (نحجز, نسجل, نجهز, نوجد, نحضر), or that verb with « لك /
+// ليك » attached or after it; arabizi « t7ebb nsajjlouh lik », « nwajdlek wa7ed ? »; French « je vous le prépare ? », « voulez-vous que je
+// vous le réserve / prépare ? »
+const BOOKING_ASK = /(?<![\p{L}])(?:je\s+vous\s+(?:le|la|les|en)\s+(?:reserve|mets\s+de\s+cote|garde|prepare)|on\s+vous\s+(?:le|la|les)\s+(?:reserve|prepare)|(?:voulez|souhaitez|desirez)\s+vous\s+(?:le|la|les|l|en)\s+(?:commander|reserver)|(?:voulez|souhaitez|desirez)\s+vous\s+que\s+(?:je|j|on)\s+(?:vous\s+)?(?:le|la|les|l|en)\s+(?:reserve|prepare|mette|garde|enregistre|commande)|shall\s+i\s+(?:book|reserve|order|prepare)|(?:should|can)\s+i\s+(?:book|reserve|prepare)|n7a?jz(?:ou)?(?:ha|hou)?l(?:ek|ak|ik)|nsa?jj?l(?:ou|o)?(?:ha|hou)?l(?:ek|ak|ik)|n(?:jahz|jehz|wajd|wejd|wajjed|7add?r|hadd?r)(?:ou|o)?(?:ha|hou)?l(?:ek|ak|ik)|t7ebb?\s+n(?:7a?jz|sa?jj?l|jahz|jehz|waj?jd|7add?r|hadd?r)\S*|نحجز(?:و|ها|هو)?\s*ل(?:ك|كم)|نحجزلك|نحجزلكم|نحجزهالك|نسجلو\s*لك|نسجلولك|نسجلهالك|نسجلهولك|(?:تحب|تحبي|حاب|حابه|بغيت)\s+(?:\S+\s+)?ن(?:حجز|سجل|جهز|وجد|حضر)\S*|ن(?:حجز|سجل|جهز|وجد|حضر)\S*\s+(?:لك|ليك|لكم)|ن(?:حجز|سجل|جهز|وجد|حضر)\S*(?:لك|ليك|لكم))(?![\p{L}])/u;
+/**
+ * journey retest R17-4 (18/11): a clause saying the product is being booked / prepared / noted for the customer before any recap — F1b T1
+ * « …, et on le prépare pour vous. », A1 T2 « صحيت أمينة، تسجل عندي حجاب الحرير (Hijab soie) بكمية 1. » (« it is registered with me »),
+ * arabizi « tsajjel 3andi », « sajjeltlek ». Folded text. « … est noté pour vous » (accepted since R13, it carries the price) stays.
+ */
+const BOOKING_SAID = /(?<![\p{L}])(?:(?:et\s+)?(?:on|je|nous)\s+(?:vous\s+)?(?:le|la|les|l)\s+(?:prepare|preparons|reserve|reservons|mets\s+de\s+cote|garde|gardons|enregistre)(?:\s+(?:pour\s+vous|tout\s+de\s+suite|de\s+suite))?|e?ts[ae]jj?l\S*\s+3andi|sa?jj?elt(?:ou|o)?(?:ha|hou)?l(?:ek|ak|ik)|(?:ا?ت)?سجل\S*\s+عندي|سجلت(?:ه|ها|هو)?(?:لك|ليك)|حجزت(?:ه|ها|هو)?(?:لك|ليك)|جهزت(?:ه|ها|هو)?(?:لك|ليك))(?![\p{L}])/u;
 /** The reply says a product is not there (« en rupture », « pas disponible », « makach », « ماكانش », « out of stock »), folded. */
 const NOT_THERE = /(?<![\p{L}])(?:rupture|indisponible|epuise|pas\s+(?:encore\s+)?disponible|plus\s+disponible|out\s+of\s+stock|not\s+available|makach|makanch|ma\s*3andnach|ماكانش|ماكاش|ما\s*عندناش|ماعندناش|متوفرش|ماهوش\s+متوفر|نفد)(?![\p{L}])/u;
 /** The opening of the sentence after the dropped offer that only made sense after it (« Si oui, », « و », « Ila ih, », « If so, »). */
@@ -631,12 +645,38 @@ const IF_SO = /^\s*(?:si\s+oui\s*,?\s*|si\s+c['’]est\s+le\s+cas\s*,?\s*|if\s+s
  * commander ? Si oui, dites-moi votre nom pour commencer. ») is dropped; the next missing field — the name, no phone being given yet — is
  * asked instead, unless the reply already asks one.
  */
-export const withoutBookingOffer = (reply: string, customerText: string | undefined, phoneGiven: boolean, lang: AiLanguage | string | undefined): string => {
+/** An order field asked in the sentence (folded): the name, the phone, the wilaya, the address. */
+const FIELD_ASKED = /(?<![\p{L}])(?:سميتك|اسمك|رقم|الهاتف|هاتفك|ولاي[هة]|بلدي[هة]|العنوان|عنوانك|nom|name|smitek|wilaya|adresse|address|telephone|numero|ra9m)(?![\p{L}])/u;
+/** journey retest R17-4: the reply without its clauses saying the product is booked / prepared / noted for the customer (`BOOKING_SAID`). */
+export const withoutBookingSaid = (reply: string): string => {
+  const parts = splitSentences(reply);
+  let changed = false;
+  const kept = parts.flatMap((s) => {
+    if (/[?؟]/u.test(s) || !BOOKING_SAID.test(foldGuard(s).replace(/['’-]/g, ' '))) return [s];
+    const end = /([.!…]*\s*)$/u.exec(s)?.[1] ?? '';
+    const body = s.slice(0, s.length - end.length);
+    const clauses = body.split(/(\s*[,،:;؛]\s*)/u);
+    const out: string[] = [];
+    for (let k = 0; k < clauses.length; k += 2) if (!BOOKING_SAID.test(foldGuard(clauses[k]!).replace(/['’-]/g, ' '))) out.push(clauses[k]!);
+    if (out.length === Math.ceil(clauses.length / 2)) return [s];
+    changed = true;
+    const text = out.map((c) => c.trim()).filter(Boolean).join(/[،]/u.test(body) ? '، ' : ', ');
+    return text ? [`${text}${end.trim() ? end.replace(/^\s*/u, '') : '. '}`] : [];
+  });
+  return changed ? kept.join('').replace(/[ \t]+\n/g, '\n').trim() : reply;
+};
+export const withoutBookingOffer = (reply: string, customerText: string | undefined, phoneGiven: boolean, lang: AiLanguage | string | undefined, o: { history?: string; orderedBefore?: boolean } = {}): string => {
+  // journey retest R17-4 (18/11): a clause saying the product is booked / prepared / noted for the customer goes too, whatever was given —
+  // only while the customer wants a product (this message or an earlier one) and no order of theirs exists (« on vous la prépare » then
+  // speaks of a real order); a product out of stock: left alone (a substitute offered)
+  const wanted = !!customerText && (productWanted(customerText) || (!!o.history && productWanted(o.history)));
+  if (wanted && !o.orderedBefore && !NOT_THERE.test(foldGuard(reply))) reply = withoutBookingSaid(reply);
   // (a phone given already: the order details are being taken, the recap comes next — nothing to replace; a product out of stock: the
   // question offers another product, a real question — R5 / R6 N5c « Voulez-vous que je vous le réserve ? » for the Coffret)
   if (!customerText || phoneGiven || !productWanted(customerText) || NOT_THERE.test(foldGuard(reply))) return reply;
   const parts = splitSentences(reply);
-  const at = parts.map((s, i) => (/[?؟]/u.test(s) && BOOKING_ASK.test(foldGuard(s).replace(/['’-]/g, ' ')) ? i : -1)).filter((i) => i >= 0);
+  // (journey retest R17-4: a question that asks a field with its purpose — « واش سميتك باش نسجلوها لك؟ », the R16-4 form — is left alone)
+  const at = parts.map((s, i) => (/[?؟]/u.test(s) && BOOKING_ASK.test(foldGuard(s).replace(/['’-]/g, ' ')) && !FIELD_ASKED.test(foldGuard(s)) ? i : -1)).filter((i) => i >= 0);
   if (!at.length) return reply;
   let lead = false;
   const kept = parts.flatMap((s, i) => {
@@ -667,3 +707,29 @@ export const withOneStopdeskOffer = (reply: string): string => {
 };
 /** journey retest R16-4 (18/11): two spaces or more between words (C2 « smahli 3lik  3la had lmochkil ») — one. */
 export const withSingleSpaces = (reply: string): string => reply.replace(/(?<=\S)[ \t]{2,}(?=\S)/gu, ' ');
+
+// --- journey retest R17-5 (18/11): offers that do not answer the question -------------------------------------------------------------
+/** A closing question offering to show the shop's products (« T7ebb nwarrik wach kayen 3andna ? », « T7ebb nchouf wach men produit ? »,
+ * « Souhaitez-vous voir nos produits ? », « تحب نوريلك واش كاين عندنا ؟ », « Would you like to see our products? »), folded. */
+const PRODUCT_OFFER_ASK =
+  /(?<![\p{L}])(?:t7ebb?\s+n(?:warr?ik|chouf|chouflek)\S*|(?:souhaitez|voulez|aimeriez|desirez)\s+vous\s+(?:que\s+je\s+vous\s+(?:montre|presente|propose)|voir|decouvrir|jeter)|(?:puis|peux)\s+je\s+vous\s+(?:montrer|presenter|proposer)|would\s+you\s+like\s+(?:to\s+see|me\s+to\s+show)|(?:can|shall)\s+i\s+show\s+you|(?:تحب|حاب|حابه)\s+(?:ن?شوف|نوري|نوريلك|تشوف)\S*)(?![\p{L}])/u;
+/** What such an offer is about: the products, what the shop has (folded). */
+const PRODUCT_OFFER_WHAT = /(?<![\p{L}])(?:l?produits?|articles?|catalogue|collection|kayen|3andna|7aja|haja|hadja|products?|items?|نوريلك|كاين|عندنا|المنتوجات|المنتجات|سلع[هة]|حاج[هة])(?![\p{L}])/u;
+/** An offer of something else (« nqder nwarrik hadja okhra li twasslek », « je peux vous proposer autre chose », « نوريلك حاجة أخرى »), folded. */
+const ELSE_OFFER = /(?<![\p{L}])(?:nwarr?ik|nchouflek|nqd?er\s+nwarr?ik|propos\S*|montr\S*|present\S*|show|offer|suggest|نوريلك|نقترح|نعرضلك)(?![\p{L}])[^.!?؟\n]*(?<![\p{L}])(?:okhra|okhrin|autre|autres|another|other|else|اخرى|أخرى|اخر|آخر|خلاف)(?![\p{L}])/u;
+/**
+ * journey retest R17-5 (18/11): a delivery-only question (no product wanted or named) gets its fees, not a closing offer of the products
+ * — F9 / F9b « … Illizi : ma nwasslouch l Illizi f had lwaqt. T7ebb nchouf wach men produit ? » / « T7ebb nwarrik wach kayen 3andna ? »;
+ * and when nothing of this turn's quotes is delivered (every wilaya asked is not served) no « something else that reaches you » — N16 « Ila
+ * t7ebb, nqder nwarrik lek hadja okhra li twasslek f wilaya ta3ek. » for Illizi. Such a sentence goes when the reply keeps another one.
+ */
+export const withoutUnrelatedOffer = (reply: string, customerText: string | undefined, o: { deliveryOnly: boolean; nothingServed: boolean }): string => {
+  if (!customerText || (!o.deliveryOnly && !o.nothingServed)) return reply;
+  const parts = splitSentences(reply);
+  const kept = parts.filter((s) => {
+    const f = foldGuard(s).replace(/['’-]/g, ' ');
+    if (o.deliveryOnly && /[?؟]/u.test(s) && PRODUCT_OFFER_ASK.test(f) && PRODUCT_OFFER_WHAT.test(f)) return false;
+    return !(o.nothingServed && ELSE_OFFER.test(f));
+  });
+  return kept.length === parts.length || !kept.some((s) => /[\p{L}\p{N}]/u.test(s)) ? reply : kept.join('').replace(/[ \t]+\n/g, '\n').trim();
+};

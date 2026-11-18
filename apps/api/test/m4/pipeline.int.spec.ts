@@ -274,7 +274,7 @@ describe('FL-01 — reply turn', () => {
     );
     // journey 16/11 J05-9: the phone is in the customer's message (an unknown phone is asked for before the product check);
     // journey retest R2-4: so is the commune (a wilaya the customer never named is asked for first too)
-    const t = await turn(s, newSender(), { text: 'je veux la veste, Amine Benali 0555123456, Bab Ezzouar' });
+    const t = await turn(s, newSender(), { text: 'je veux la veste, Amine Benali 0555123456, Bab Ezzouar, Cité des 200 logements' });
     const system = fakeAi(app).callsOf('reply')[0]!.system;
     expect(system).not.toContain('Veste archivée');
     expect(system).not.toContain('Veste inactive');
@@ -358,7 +358,7 @@ describe('tools', () => {
       { reply: 'Je transmets votre commande à un conseiller.', status: 'OK', intent: 'SALE' },
     );
     const sender = newSender();
-    const details = await turn(s, sender, { text: 'Amine Benali, 0555 12 34 56, Bab Ezzouar' });
+    const details = await turn(s, sender, { text: 'Amine Benali, 0555 12 34 56, Bab Ezzouar, Cité des 200 logements' });
     const r0 = details.runs[0]!.toolCalls.sort((a, b) => a.executedAt!.getTime() - b.executedAt!.getTime()).map((c) => c.result as any);
     expect(r0[0]).toEqual({ ok: false, error: { code: 'VALIDATION', field: 'clientPhone', example: '0555123456' } });
     expect(r0.filter((x) => x.hint === 'order_limit')).toEqual([{ ok: false, hint: 'order_limit', maxQty: 3, maxAmount: null }]);
@@ -395,7 +395,7 @@ describe('tools', () => {
     const sender = newSender();
     // full-test 15/11 AI-CHAT-01: the recap is shown in an earlier turn
     fakeAi(app).script('reply', { toolCalls: [call] }, { reply: 'Récapitulatif … Vous confirmez ?', intent: 'SALE' });
-    await turn(s, sender, { text: 'Amine Benali, 0555123456, Bab Ezzouar' });
+    await turn(s, sender, { text: 'Amine Benali, 0555123456, Bab Ezzouar, Cité des 200 logements' });
     await resetAi();
     const debitsBefore = (await debits(s.owner.workspaceId)).length;
     const { conversation } = await receive(app, s.page, sender, { text: 'oui je confirme' });
@@ -439,7 +439,7 @@ describe('tools', () => {
     const other = newSender();
     await resetAi();
     fakeAi(app).script('reply', { toolCalls: [call] }, { reply: 'Récapitulatif … Vous confirmez ?', intent: 'SALE' });
-    await turn(s, other, { text: 'Amine Benali, 0555123456, Bab Ezzouar' });
+    await turn(s, other, { text: 'Amine Benali, 0555123456, Bab Ezzouar, Cité des 200 logements' });
     await resetAi();
     fakeAi(app).script('reply', { toolCalls: [call] }, { reply: 'Votre commande CMD-1042 est déjà enregistrée.', intent: 'SALE' });
     const dup = await turn(s, other, { text: 'oui je confirme' });

@@ -17,16 +17,16 @@ import type { BuiltPrompt } from './prompt/prompt-builder';
 import { AI_GATEWAY, AiProviderError, type AiGateway, type AiMessage, type AiToolCallRequest, type AiToolDef, type AiUsage } from './provider/ai.gateway';
 import { RoutingService, type RoutedModel } from './routing.service';
 import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
-import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
+import { absentFields, canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
 import { allowedHandoffReasons, establishedReasons, fieldOnlyMessage, handoffReason, handoffRefusedInstruction, judgeHandoff, messageHandoffReasons, orderDetailsMessage, placeCandidate, type HandoffRefusal } from './handoff-judge';
 import { productNamedIn, productWanted, productWords } from './product-named';
-import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, orderClaimsIn, quoteFacts, stripMarkdown, withToolResults, type CataloguePrice, type CatalogueStock, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
-import { asksDelivery, asksSomething, blockedOrderText, confirmRequest, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, withoutRecapClaims } from './tools/order-confirmation-text';
-import { cancelAsked, confirmation, phonesIn, recapPending } from './tools/order-confirmation';
+import { AUTO_FIX_RULES, checkReply, enforceReply, feeSentence, guardInstruction, orderClaimsIn, owedQuotes, quoteFacts, stripMarkdown, withToolResults, type CataloguePrice, type CatalogueStock, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
+import { asksDelivery, asksSomething, blockedOrderText, confirmRequest, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, serverRecapAsked, withoutRecapClaims } from './tools/order-confirmation-text';
+import { cancelAsked, confirmation, phonesIn, placedNumbers, recapPending, recapYesArgs } from './tools/order-confirmation';
 import { matchWilaya, namedVariant } from './tools/tool-registry';
-import { placeIndex, placeNamedIn, placeOnlyMessage, wilayaIn, type PlaceIndex } from './tools/place-index';
+import { offCatalogueWordsOf, placeIndex, placeNamedIn, placeOnlyMessage, wilayaIn, withoutPlaceNames, type PlaceIndex } from './tools/place-index';
 import { contextOf } from '../messaging/messaging.presenter';
-import { asksAddress, fillerMessage, handoffKind, handoffReply, handoffSystemLineShown, modeQuestionAt, noPhotoReply, noPhotoSaid, openingSaid, photoAsked, substitutionLine, withArabicCurrency, withArabicWords, withArabiziWords, withAskedPrice, withBothFees, withModeFees, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutQuickReply, withoutStrayYes, withPlaceFacts, withAskedFacts, withoutBookingOffer, withOneStopdeskOffer, withoutRefusals, withSingleSpaces, teamSaid, teamOnlyKind, type PlaceProduct } from './reply-fixes';
+import { asksAddress, fillerMessage, handoffKind, handoffReply, handoffSystemLineShown, modeQuestionAt, noPhotoReply, noPhotoSaid, openingSaid, photoAsked, substitutionLine, withArabicCurrency, withArabicWords, withArabiziWords, withAskedPrice, withBothFees, withModeFees, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutQuickReply, withoutStrayYes, withPlaceFacts, withAskedFacts, withoutBookingOffer, withOneStopdeskOffer, withoutRefusals, withSingleSpaces, withoutUnrelatedOffer, teamSaid, teamOnlyKind, type PlaceProduct } from './reply-fixes';
 import { serverTextLanguage, systemLocale } from './language';
 import { foldText } from './tools/wilaya-aliases';
 import { foldGuard, splitSentences } from './reply-guard';
@@ -85,6 +85,31 @@ export const noAddressYet = (ctx: Pick<ToolRunContext, 'customerHistory' | 'orde
     return (h.name ?? 'create_order') === 'create_order' && (r?.ok === true || r?.error?.code === 'CONFIRMATION_REQUIRED');
   }) &&
   !ADDRESS_HINT.test(ctx.customerHistory.normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC').toLowerCase());
+/**
+ * journey retest R17-6 (18/11): a digit is left in the message once its phone numbers (10 digits, 8-digit numbers typed short, +213, Arabic
+ * digits) are taken out — a street number, a building, « 2 tapis ». Without one (and with no address word, `noAddressYet`), the message
+ * cannot hold a street address: create_order is not offered (PF1 T2 « Je voudrais le sac à main cuir marron. Karim Haddad 0770112233 »).
+ */
+export const digitsBeyondPhones = (text: string): boolean =>
+  /\d/u.test(
+    text
+      .replace(/[٠-٩]/gu, (d) => String(d.charCodeAt(0) - 0x0660))
+      .replace(/[۰-۹]/gu, (d) => String(d.charCodeAt(0) - 0x06f0))
+      .replace(/(?<!\d)(?:(?:\+|00)213\s*)?0?[5-7](?:[\s.-]?\d){6,8}(?!\d)/gu, ' '),
+  );
+/**
+ * journey retest R17-2 (18/11): the latest customer message naming a product of the CATALOGUE names one that is out of stock — the product
+ * the customer « takes » (N5 T2 « Bon finalement je le prends » after T1 « le parfum oud c'est combien ? ») is not orderable: every order
+ * field may be given, the substitute was never accepted, so no « call create_order directly » note.
+ */
+export const takesOutOfStock = (history: string, catalogue: readonly CataloguePrice[], unavailableNames: readonly string[]): boolean => {
+  if (!catalogue.length || !unavailableNames.length) return false;
+  for (const line of history.split(/\n+/).map((l) => l.trim()).filter(Boolean).reverse()) {
+    const p = productNamedIn(line, catalogue);
+    if (p) return unavailableNames.includes(p.name);
+  }
+  return false;
+};
 /** journey retest R7-2: the product ids of a search_products / get_product result. */
 const productIdsOf = (result: unknown): string[] => {
   const r = result as { products?: { id?: unknown }[]; id?: unknown } | null;
@@ -418,10 +443,10 @@ export const RECAP_COMPUTES_RESULT = { ok: true, deferred: true, instruction: 'E
 export const RECAP_READY_NOTE =
   'EVERY ORDER FIELD SEEMS GIVEN: create_order computes the delivery fee and checks the stock itself — call it directly for the recap, with no quote_delivery or check_availability before it (unless the customer asks about delivery).';
 /** journey retest R1-1: the result given back for a call to a tool this step did not offer (it is not run). */
-export const unavailableTool = (name: string, fieldOnly: boolean, noPhone = false, noPlace = false, noStreet = false) => ({
+export const unavailableTool = (name: string, fieldOnly: boolean, noPhone = false, noPlace = false, noStreet = false, noAddress = false) => ({
   ok: false,
   error: { code: 'TOOL_NOT_AVAILABLE', tool: name },
-  instruction: `${name} cannot be used now${fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : canonicalTool(name) === 'create_order' && noPhone ? ': the customer has not given a phone number yet — ask for the next missing field (never a recap)' : canonicalTool(name) === 'create_order' && noPlace ? ': the customer has not named their wilaya yet — ask for it (never a default wilaya, never a recap)' : canonicalTool(name) === 'create_order' && noStreet ? ': the customer named only the wilaya / commune — ask for the street address (rue, cité, building, landmark) or offer the stop-desk (never a recap)' : canonicalTool(name) === 'create_order' ? ': it already answered in this turn — follow that answer (ask the missing field, or let the recap / confirmation go)' : canonicalTool(name) === 'cancel_order' ? ': the customer did not ask to cancel anything — answer their message (lookup_order answers a question about an order; take the order otherwise)' : canonicalTool(name) === 'lookup_order' ? ': the customer only gave a name, a place or a yes to the recap — record it and ask the next missing field (or let the recap / confirmation go)' : canonicalTool(name) === 'add_faq_candidate' ? ': the customer asked no question in this message — never file a note or a question they did not ask' : ''}. Answer the customer now with the JSON object.`,
+  instruction: `${name} cannot be used now${fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : canonicalTool(name) === 'create_order' && noPhone ? ': the customer has not given a phone number yet — ask for the next missing field (never a recap)' : canonicalTool(name) === 'create_order' && noPlace ? ': the customer has not named their wilaya yet — ask for it (never a default wilaya, never a recap)' : canonicalTool(name) === 'create_order' && noStreet ? ': the customer named only the wilaya / commune — ask for the street address (rue, cité, building, landmark) or offer the stop-desk (never a recap)' : canonicalTool(name) === 'create_order' && noAddress ? ': the customer has not given the street address (rue, cité, building, landmark) nor chosen the stop-desk yet — ask for it in one short question (never a recap)' : canonicalTool(name) === 'create_order' ? ': it already answered in this turn — follow that answer (ask the missing field, or let the recap / confirmation go)' : canonicalTool(name) === 'cancel_order' ? ': the customer did not ask to cancel anything — answer their message (lookup_order answers a question about an order; take the order otherwise)' : canonicalTool(name) === 'lookup_order' ? ': the customer only gave a name, a place or a yes to the recap — record it and ask the next missing field (or let the recap / confirmation go)' : canonicalTool(name) === 'add_faq_candidate' ? ': the customer asked no question in this message — never file a note or a question they did not ask' : ''}. Answer the customer now with the JSON object.`,
 });
 /**
  * journey retest R2-4: a `create_order` answer after which the tool is not offered again in the same turn — the recap was
@@ -591,9 +616,11 @@ export class AiRunService implements OnModuleInit {
     const phoneSoFar = req.toolCtx.customerHistory !== undefined && phonesIn(req.toolCtx.customerHistory).size > 0;
     let fieldOnly = fieldOnlyMessage(req.toolCtx.customerText, !!req.toolCtx.ordering || phoneSoFar);
     const short = (req.toolCtx.customerText ?? '').trim();
+    // journey retest R17-1 (18/11): a greeting with the place (« Bonjour, j'habite à Sétif, El Eulma ») is a place message too
+    let candidatePlaces: PlaceIndex | null = null;
     if (!fieldOnly && placeCandidate(short)) {
-      const idx = await placeIndex().catch(() => null);
-      fieldOnly = !!idx && placeOnlyMessage(idx, short);
+      candidatePlaces = await placeIndex().catch(() => null);
+      fieldOnly = !!candidatePlaces && placeOnlyMessage(candidatePlaces, short);
     }
     // journey retest R7-4: nor on a message that gives the order's details with a phone and asks nothing of the team (N5 T2
     // `handoff_to_human { off_catalogue, evidence « none » }` next to the recap) — `status = HANDOFF` stays judged
@@ -604,7 +631,9 @@ export class AiRunService implements OnModuleInit {
     // journey retest R11-2 / R11-3 (17/11): and only the reasons this message can carry (`off_catalogue` was accepted on « vous avez des
     // lunettes de soleil ? » + full order details; `customer_request` probes on « Sétif, El Eulma », « 05559876 ») — none ⇒ no tool
     // journey retest R13-1 (18/11): nor `off_catalogue` on a message that wants a product or names one of the CATALOGUE
-    const reasons = messageHandoffReasons(allowedHandoffReasons(req.toolCtx.agent, req.toolCtx.unclearStreak ?? 0, req.toolCtx.customerText), req.toolCtx.customerText, (t) => phonesIn(t).size > 0, req.guard?.catalogueNames);
+    // journey retest R17-1 (18/11): nor `off_catalogue` on a message with no product word (a greeting, a place, a name, a field)
+    const placeOut = candidatePlaces ? (t: string) => withoutPlaceNames(candidatePlaces!, t) : undefined;
+    const reasons = messageHandoffReasons(allowedHandoffReasons(req.toolCtx.agent, req.toolCtx.unclearStreak ?? 0, req.toolCtx.customerText), req.toolCtx.customerText, (t) => phonesIn(t).size > 0, req.guard?.catalogueNames, placeOut);
     // journey retest R5-6: no create_order while the customer has given no phone number (every such call is refused) — the
     // probes `create_order {}` / placeholder values came on such turns; a complete order message carries its phone and keeps it
     const noPhone = !(await this.phoneGiven(req.toolCtx));
@@ -639,11 +668,26 @@ export class AiRunService implements OnModuleInit {
     // journey retest R12-3 (17/11): nor on a « oui » to that recap (F6 T3, F3 T4: `create_order` ⇒ TEST-n, then `lookup_order {}` ⇒
     // no order) — the yes places the order, nothing is to be looked up; a question or a change in the message keeps it
     const confirmingYes = pendingBefore && said !== undefined && confirmation(said) === 'yes' && !asksSomething(said) && !ORDER_WORD_ASK.test(foldGuard(said));
+    // journey retest R17-2 (18/11, Major): a plain yes to the server recap the AI's last message showed places exactly that recap's order,
+    // server-side, whatever the model does on this turn (N5 T3 « oui » to the substitute's recap ⇒ « … confirmez-vous la commande du Coffret
+    // … ? Si oui, je vous envoie le récapitulatif officiel », no create_order): its stored arguments (null when the message is no such yes)
+    const lastAi = [...req.prompt.messages].reverse().find((m) => m.role === 'assistant');
+    const yesOrder = recapYesArgs(req.toolCtx.orderHistory, said, serverRecapAsked(typeof lastAi?.content === 'string' ? lastAi.content : null));
     // journey retest R16-3 (18/11): every order field is known — the message gives the order's details (or changes a recap that waits):
     // create_order computes the fee and checks the stock (N14 T1 / N1 T2 quoted and checked before the recap call)
-    const recapReady = !noPhone && !noAddress && (orderDetails || (pendingBefore && !confirmingYes && said !== undefined && !asksSomething(said)));
+    // journey retest R17-2 (18/11): not when the product the customer takes is out of stock — N5 T2 « Bon finalement je le prends » after
+    // T1's out-of-stock Parfum Oud: told to call create_order directly, the model sent the substitute's recap at once, never asked whether
+    // the customer wanted the substitute, and asked that at T3 instead of placing the « oui » (R14–R16: the substitute offered first)
+    const takesUnavailable = !!said && !!req.guard?.unavailableNames?.length && takesOutOfStock(req.toolCtx.customerHistory ?? said, req.guard?.cataloguePrices ?? [], req.guard.unavailableNames);
+    const recapReady = !noPhone && !noAddress && !takesUnavailable && (orderDetails || (pendingBefore && !confirmingYes && said !== undefined && !asksSomething(said)));
+    // journey retest R17-6 (18/11): with no street address / stop-desk word in any customer message yet (and no recap shown), create_order
+    // is not offered on a message that cannot hold an address either — no digit left once its phone numbers are taken out (PF1 T2 « Je
+    // voudrais le sac à main cuir marron. Karim Haddad 0770112233 » ⇒ `create_order` without an address, VALIDATION address)
+    // (a phone typed in the conversation, not one of a client record, and no KNOWN CUSTOMER address in the prompt: a returning customer's
+    // address may be on record)
+    const noAddressHere = noAddress && phoneSoFar && said !== undefined && !digitsBeyondPhones(said) && !/KNOWN CUSTOMER[^\n]*address=/u.test(req.prompt.system);
     const withheld = (name: string) =>
-      (name === 'handoff_to_human' && (noHandoff || !reasons.length)) || (name === 'create_order' && (noPhone || noPlace || noStreet)) || (name === 'cancel_order' && noCancel) || (name === 'lookup_order' && (noLookup || confirmingYes)) || (name === 'add_faq_candidate' && noFaq);
+      (name === 'handoff_to_human' && (noHandoff || !reasons.length)) || (name === 'create_order' && (noPhone || noPlace || noStreet || noAddressHere)) || (name === 'cancel_order' && noCancel) || (name === 'lookup_order' && (noLookup || confirmingYes)) || (name === 'add_faq_candidate' && noFaq);
     const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !withheld(d.name)).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
     // journey retest R1-1: the model still called the withheld tool (the prompt describes it) and the SDK refused the whole
     // step — 5 of 59 turns of a shop with handoff rules ended in 503. The note says it is not available for this message
@@ -681,7 +725,9 @@ export class AiRunService implements OnModuleInit {
      */
     const knownAnswer = (call: AiToolCallRequest, stepCalls: readonly AiToolCallRequest[]): Record<string, unknown> | null => {
       const search = canonicalTool(call.name) === 'search_products';
-      const known = (search ? (searchAnswered(call.args?.query, executed, req.guard?.catalogueNames) ?? (fieldOnly ? catalogueAnswered(call.args?.query, req.guard?.catalogueNames) : null)) : null) ?? recapAnswered(call, executed) ?? lookupAnswered(call, executed, req.guard?.catalogueIds, stepCalls, catalogueLookup) ?? quoteAnswered(call, [...executed, ...reused]);
+      // journey retest R17-6 (18/11): nor, on a message giving the order's details, a search for one product the CATALOGUE lists (N5 T2
+      // `search_products {«Parfum Oud 50 ml»}` + `{«Coffret cadeau Aïd»}` before the recap call, 10.0 s — both listed with their stock)
+      const known = (search ? (searchAnswered(call.args?.query, executed, req.guard?.catalogueNames) ?? (fieldOnly || orderDetails ? catalogueAnswered(call.args?.query, req.guard?.catalogueNames) : null)) : null) ?? recapAnswered(call, executed) ?? lookupAnswered(call, executed, req.guard?.catalogueIds, stepCalls, catalogueLookup) ?? quoteAnswered(call, [...executed, ...reused]);
       if (known) return known;
       const earlier = earlierQuoteAnswered(call, knownQuotes);
       if (earlier) {
@@ -693,6 +739,42 @@ export class AiRunService implements OnModuleInit {
     };
     const seen = new Map<string, number>();
     const answered = new Map<string, unknown>();
+    /**
+     * journey retest R17-6 (18/11): a create_order sent with no address and no stop-desk while the customer's messages give no address yet
+     * (PF1 T2) — answered as the tool would (VALIDATION address), not run; null for any other call.
+     */
+    let addressRefused = false;
+    const addressLess = (call: AiToolCallRequest): Record<string, unknown> | null => {
+      if (canonicalTool(call.name) !== 'create_order' || !noAddress || yesOrder) return null;
+      const a = call.args ?? {};
+      if ((typeof a.address === 'string' && a.address.trim()) || a.isStopdesk === true || a.isStopdesk === 'true') return null;
+      // (only when the address is the one field missing in the call: any other absent field goes to the tool, which names them all)
+      const absent = absentFields(a, req.toolCtx.agent);
+      if (absent.some((f) => f !== 'address' && f !== 'communeName')) return null;
+      return { ok: false, error: { code: 'VALIDATION', field: 'address', missing: true, fields: absent.length ? absent : ['address'], example: 'Cité 200 logements, Bt 4, Bab Ezzouar' }, say: 'Not done: the customer has not given the address yet. Ask for the street address (rue, cité, building, landmark) or offer the stop-desk in one short question and do not call create_order again in this turn.' };
+    };
+    /** journey retest R17-2: the model's create_order on a plain yes to the recap shown carries that recap's stored order. */
+    const yesCall = (call: AiToolCallRequest): AiToolCallRequest =>
+      yesOrder && canonicalTool(call.name) === 'create_order' ? { ...call, args: { ...yesOrder, ...(call.args?.phoneConfirmed === true ? { phoneConfirmed: true } : {}) } } : call;
+    /**
+     * journey retest R17-2 (18/11, Major): the model answered a plain yes to the recap shown with no create_order (N5 T3: a new confirm
+     * question) — the server places that recap's stored order itself (a tool call of this run, like its own quotes); the confirmation it
+     * writes replaces the model's text. Null when there is nothing to place (no such yes, a create_order of this turn already ran, a
+     * hand-off forced by a tool).
+     */
+    const placeYes = async (): Promise<{ call: AiToolCallRequest; done: ExecutedTool } | null> => {
+      if (!yesOrder || forcedHandoff || executed.some((t) => canonicalTool(t.name) === 'create_order')) return null;
+      const call: AiToolCallRequest = { id: 'server-yes', name: 'create_order', args: yesOrder };
+      const hash = toolCallId(call.name, call.args, 0);
+      const ordinal = seen.get(hash) ?? 0;
+      seen.set(hash, ordinal + 1);
+      const done = await this.toolCall(req, call, ordinal, executed);
+      executed.push(done);
+      answered.set(sameCallKey(call.name, call.args), done.result);
+      orderClosed ||= orderClosedBy(call.name, done.result);
+      forcedHandoff ??= this.tools.forcedHandoff(call.name, call.args, done.result);
+      return { call, done };
+    };
     const system = [req.prompt.system, ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noStreet ? [NO_STREET_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : []), ...(knownNote ? [knownNote] : []), ...(recapReady ? [RECAP_READY_NOTE] : [])].join('\n\n');
     // journey retest R7-5: run once, when the answer to a delivery question comes without any quote_delivery of the turn
     let serverQuoted = false;
@@ -725,6 +807,15 @@ export class AiRunService implements OnModuleInit {
     // journey retest R1-6 / R1-7: a recap create_order returned this turn is sent as the server wrote it (catalogue names,
     // delivery mode, name, phone, address) — the model's own recap was cut short or translated the product names
     const recapNow = () => pendingRecap(executed.map((t) => ({ name: canonicalTool(t.name), result: t.result })));
+    /**
+     * journey retest R17-1 (18/11): a hand-off turn whose quote_delivery answered a place the customer named keeps that fee — PF1 T1 quoted
+     * Sétif (650 / 350) and the hand-off text replaced it all. The fee sentence of every owed wilaya the text lacks goes first.
+     */
+    const withHandoffFees = (text: string): string => {
+      const quotes = quoteFacts(executed.filter((t) => t !== modeQuote && t !== placeQuote).map((t) => ({ name: canonicalTool(t.name), result: t.result })));
+      const owed = quotes.length ? owedQuotes(text, quotes, req.toolCtx.customerText) : [];
+      return owed.length ? `${owed.map((q) => feeSentence(q, textLang, req.guard?.shopLocale)).join(' ')} ${text}`.trim() : text;
+    };
     const confirmedText = (output: AiReplyOutput): AiReplyOutput => {
       const text = confirmationNow();
       if (text) return { ...output, reply: text };
@@ -749,14 +840,14 @@ export class AiRunService implements OnModuleInit {
         // journey retest R16-2 (18/11): a model refusal (« Je ne peux pas vous donner de prix de gros ici. ») is never the hand-off's text
         let said = person ? '' : withoutRefusals(withoutRecapClaims(plain.reply)).trim();
         if (ooh) said = withoutQuickReply(said);
-        if (!said) return { ...plain, reply: handoffReply(reason, textLang, { outOfHours: ooh, customerText }) };
+        if (!said) return { ...plain, reply: withHandoffFees(handoffReply(reason, textLang, { outOfHours: ooh, customerText })) };
         const shown = handoffSystemLineShown(textLang, ooh, systemLocale(textLang, req.guard?.shopLocale ?? 'fr', (req.toolCtx.agent as { defaultLanguage?: string | null } | undefined)?.defaultLanguage ?? null));
         // journey retest R16-2: a hand-off the model made with its own handoff_to_human call, or a request only the team can answer (wholesale,
         // a custom order, a partnership), always carries the reason's sentence — W1 got the model's refusal and a « pour info » price, nothing on
         // the team — unless the model's own words already say the team takes it over
         const ownCall = executed.some((t) => canonicalTool(t.name) === 'handoff_to_human');
         const always = (ownCall || !!teamOnlyKind(customerText)) && !teamSaid(said);
-        return { ...plain, reply: (shown && !always) || (ooh && openingSaid(said)) ? said : `${said} ${handoffReply(reason, textLang, { outOfHours: ooh, tail: true, customerText })}` };
+        return { ...plain, reply: withHandoffFees((shown && !always) || (ooh && openingSaid(said)) ? said : `${said} ${handoffReply(reason, textLang, { outOfHours: ooh, tail: true, customerText })}`) };
       }
       const recap = recapNow();
       if (!recap) {
@@ -776,12 +867,26 @@ export class AiRunService implements OnModuleInit {
         text = withArabicWords(withModeFees(withBothFees(text, quotesNow, textLang), quotesNow, textLang), textLang);
         // journey retest R15-1 (18/11): a place given with no quote of it yet ⇒ the product's price and both fees (the server's quote)
         if (placeQuote) text = withPlaceFacts(text, quoteFacts([{ name: 'quote_delivery', result: placeQuote.result }]), placeProduct, textLang);
+        // journey retest R17-1 (18/11): the place quoted in an earlier turn (no server quote now) — the product this message names still gets
+        // its price before the address / « home or stop-desk? » question (PF1 T2 « … à domicile à El Eulma (650 DA) ou en stop-desk (350 DA) ? »,
+        // no 6 900 DA)
+        else if ((asksAddress(text) || modeQuestionAt(text) >= 0) && ![...executed, ...reused].some((t) => canonicalTool(t.name) === 'quote_delivery' && (t.result as { error?: { code?: unknown } } | null)?.error?.code === 'WILAYA_NOT_SERVED')) {
+          const product = this.placeProductOf(req, output);
+          if (product) text = withPlaceFacts(text, [], product, textLang);
+        }
         // journey retest R15-4 (18/11): the asked price of an out-of-stock product is given with « pas disponible » (N5 T1)
         const gone = new Set(req.guard?.unavailableNames ?? []);
         text = withAskedPrice(text, req.toolCtx.customerText, (req.guard?.cataloguePrices ?? []).filter((p) => gone.has(p.name)), textLang);
         // journey retest R16-4 (18/11): the stop-desk offered once; no question that sounds like a booking before any recap (« تحب نحجزلك
         // واحد؟ ») — the next missing field instead
-        text = withoutBookingOffer(withOneStopdeskOffer(text), req.toolCtx.customerText, phoneSoFar, textLang);
+        // journey retest R17-4 (18/11): the family in Arabic script / arabizi / French, and a clause saying it is booked / prepared / noted
+        text = withoutBookingOffer(withOneStopdeskOffer(text), req.toolCtx.customerText, phoneSoFar, textLang, { history: req.toolCtx.customerHistory, orderedBefore: placedNumbers(req.toolCtx.orderHistory).length > 0 });
+        // journey retest R17-5 (18/11): a delivery-only question gets no closing offer of the products (F9), nothing deliverable no « something
+        // else that reaches you » (N16 Illizi)
+        const quoteResults = [...executed, ...reused].filter((t) => canonicalTool(t.name) === 'quote_delivery').map((t) => t.result as { ok?: unknown } | null);
+        const saidNow = req.toolCtx.customerText ?? '';
+        const deliveryOnly = asksDelivery(saidNow) && !productWanted(saidNow) && !productNamedIn(saidNow, req.guard?.cataloguePrices ?? []);
+        text = withoutUnrelatedOffer(text, req.toolCtx.customerText, { deliveryOnly, nothingServed: quoteResults.length > 0 && quoteResults.every((r) => r?.ok !== true) });
         return { ...plain, reply: withPhotoAnswer(output, text) };
       }
       // journey retest R12-4: the lead-in kept before the server recap gets the same narrow wording fixes (N3 T2 « Livraison à domicile »)
@@ -869,7 +974,7 @@ export class AiRunService implements OnModuleInit {
       const sent = answer ? [...(answer.productCards ?? []), ...(answer.productPhotos ?? []), ...(f.galleries ?? [])] : null;
       const photoSent = sent ? sent.some((id) => !(f.noPhoto ?? []).includes(id)) : undefined;
       // journey retest R8-1 / R8-2: a tool that really failed; a create_order refused this turn (no recap shown) and the field it asked
-      const refusal = refusedOrder(executed);
+      const refusal = refusedOrder(executed) ?? (addressRefused ? { field: 'address', code: 'VALIDATION', argsOnly: false } : null);
       const systemFailure = executed.some((t) => SYSTEM_FAILURES.has(String((t.result as { error?: { code?: unknown } } | null)?.error?.code ?? '')));
       // journey retest R10-2: no recap waiting at all (none this turn, none of an earlier turn still open, no order placed now) — a
       // request to confirm confirms nothing; after a refusal of the product itself, « noté » is a false claim
@@ -877,7 +982,7 @@ export class AiRunService implements OnModuleInit {
       // journey retest R12-2 (17/11): a recap waits (a bare « c'est noté » to the « oui » is an order claim); the customer's orders
       // were looked up this turn (their status may be told)
       const orderLookedUp = executed.some((t) => canonicalTool(t.name) === 'lookup_order' && ((t.result as { orders?: unknown[] } | null)?.orders?.length ?? 0) > 0);
-      return { ...f, ...(notServed.length ? { notServed } : {}), ...(pendingBefore ? { recapWaiting: true } : {}), ...(orderLookedUp ? { orderLookedUp: true } : {}), ...(quotes.length ? { quotes } : {}), ...(fields ? { customerFields: fields } : {}), ...(photoSent !== undefined ? { photoSent } : {}), ...(systemFailure ? { systemFailure } : {}), ...(refusal ? { orderRefused: true, ...(refusal.field ? { missingField: refusal.field } : {}), ...(PRODUCT_REFUSALS.has(refusal.code) ? { productRefused: true } : {}) } : {}), ...(noRecapPending ? { noRecapPending } : {}) };
+      return { ...f, ...(req.toolCtx.customerHistory ? { customerHistory: req.toolCtx.customerHistory } : {}), ...(notServed.length ? { notServed } : {}), ...(pendingBefore ? { recapWaiting: true } : {}), ...(orderLookedUp ? { orderLookedUp: true } : {}), ...(quotes.length ? { quotes } : {}), ...(fields ? { customerFields: fields } : {}), ...(photoSent !== undefined ? { photoSent } : {}), ...(systemFailure ? { systemFailure } : {}), ...(refusal ? { orderRefused: true, ...(refusal.field ? { missingField: refusal.field } : {}), ...(PRODUCT_REFUSALS.has(refusal.code) ? { productRefused: true } : {}) } : {}), ...(noRecapPending ? { noRecapPending } : {}) };
     };
     /** The guard's last word: offending sentences dropped / greeting stripped / the safe sentence (never a handoff). */
     const enforce = (base: AiReplyOutput, text: string, violations: GuardViolation[], first: GuardViolation[], retried: boolean, extra: { salvaged?: boolean }): TurnResult => {
@@ -910,6 +1015,16 @@ export class AiRunService implements OnModuleInit {
         return 'retry';
       }
       return enforce(output, output.reply, violations, violations, false, extra);
+    };
+    /**
+     * journey retest R17-2: the model's output stayed unreadable while the customer said a plain yes to the recap shown — the stored order
+     * is still placed and its confirmation sent (status OK). A provider failure or the time running out is left as it was: the job's retry
+     * replays the stored tool results (AT-AI-05), and the same yes places the order on that retry.
+     */
+    const placedOnFailure = async (): Promise<TurnResult | null> => {
+      if (!yesOrder || !model) return null;
+      if (!confirmationNow()) await placeYes().catch(() => null);
+      return confirmationNow() ? ok({ reply: '', status: 'OK', intent: 'SALE', productCards: [], recommendations: [], confidence: 1 }) : null;
     };
     // journey retest R11-5: one more step than the loop's own when the plain-text step is asked
     for (let step = 0; step < MAX_STEPS + 1 + (plainAsked ? 1 : 0); step++) {
@@ -969,16 +1084,26 @@ export class AiRunService implements OnModuleInit {
             messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: placeSearchResult(place) });
             continue;
           }
-          const ordinal = seen.get(hash) ?? 0;
-          seen.set(hash, ordinal + 1);
-          const done = await this.toolCall(req, call, ordinal, executed);
+          // journey retest R17-6: a create_order with no address (nor the stop-desk) while the customer gave none is not run
+          const noStreetCall = addressLess(call);
+          if (noStreetCall) {
+            addressRefused = true;
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: noStreetCall });
+            continue;
+          }
+          // journey retest R17-2: on a plain yes to the recap shown, the model's create_order places that recap's stored order
+          const run = yesCall(call);
+          const runHash = run === call ? hash : toolCallId(run.name, run.args, 0);
+          const ordinal = seen.get(runHash) ?? 0;
+          seen.set(runHash, ordinal + 1);
+          const done = await this.toolCall(req, run, ordinal, executed);
           executed.push(done);
           answered.set(key, done.result);
-          orderClosed ||= orderClosedBy(call.name, done.result);
+          orderClosed ||= orderClosedBy(run.name, done.result);
           messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: done.result });
-          forcedHandoff ??= this.tools.forcedHandoff(call.name, call.args, done.result);
+          forcedHandoff ??= this.tools.forcedHandoff(run.name, run.args, done.result);
         }
-        messages.push({ role: 'user', content: stray.map((c) => `[tool result ${c.name}] ${JSON.stringify(unavailableTool(c.name, noHandoff, noPhone, noPlace, noStreet))}`).join('\n') });
+        messages.push({ role: 'user', content: stray.map((c) => `[tool result ${c.name}] ${JSON.stringify(unavailableTool(c.name, noHandoff, noPhone, noPlace, noStreet, noAddressHere))}`).join('\n') });
         continue;
       }
       if (res.value.toolCalls.length && offerTools) {
@@ -1007,14 +1132,24 @@ export class AiRunService implements OnModuleInit {
             messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: placeSearchResult(place) });
             continue;
           }
-          const ordinal = seen.get(hash) ?? 0;
-          seen.set(hash, ordinal + 1);
-          const done = await this.toolCall(req, call, ordinal, executed);
+          // journey retest R17-6: a create_order with no address (nor the stop-desk) while the customer gave none is not run
+          const noStreetCall = addressLess(call);
+          if (noStreetCall) {
+            addressRefused = true;
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: noStreetCall });
+            continue;
+          }
+          // journey retest R17-2: on a plain yes to the recap shown, the model's create_order places that recap's stored order
+          const run = yesCall(call);
+          const runHash = run === call ? hash : toolCallId(run.name, run.args, 0);
+          const ordinal = seen.get(runHash) ?? 0;
+          seen.set(runHash, ordinal + 1);
+          const done = await this.toolCall(req, run, ordinal, executed);
           executed.push(done);
           answered.set(key, done.result);
-          orderClosed ||= orderClosedBy(call.name, done.result);
+          orderClosed ||= orderClosedBy(run.name, done.result);
           messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: done.result });
-          forcedHandoff ??= this.tools.forcedHandoff(call.name, call.args, done.result);
+          forcedHandoff ??= this.tools.forcedHandoff(run.name, run.args, done.result);
         }
         continue;
       }
@@ -1034,6 +1169,19 @@ export class AiRunService implements OnModuleInit {
         return null;
       };
       if (parsed.ok) {
+        // journey retest R17-2 (18/11, Major): a plain yes to the recap shown, answered with no create_order (N5 T3 « … confirmez-vous la
+        // commande du Coffret cadeau Aïd (24990 DA) ? Si oui, je vous envoie le récapitulatif officiel à valider. ») — the server places that
+        // recap's stored order now; its confirmation replaces the model's text. A refusal of the order (stock, product) goes back to the
+        // model, which answers it in the same turn; a blocked customer gets the server's sentence.
+        const yes = await placeYes();
+        if (yes && !confirmationNow() && !forcedHandoff && step < MAX_STEPS) {
+          messages.push({ role: 'assistant', content: '', toolCalls: [yes.call] }, { role: 'tool', toolCallId: yes.call.id, name: yes.call.name, result: yes.done.result });
+          continue;
+        }
+        if (confirmationNow() && parsed.value.status === 'HANDOFF' && !forcedHandoff) {
+          const { statusDetail: _dropped, evidence: _evidence, ...kept } = parsed.value;
+          parsed.value = { ...kept, status: 'OK' };
+        }
         // journey retest R7-5 (17/11): « Vous livrez à Blida ? » answered from the delivery policy text alone (« Oui, on livre à
         // Blida … en 2 à 5 jours ») — the server runs quote_delivery for the wilaya the question names, so the guard's fee_missing
         // rule applies to this answer (one corrective turn, then the fee sentence) as when the model called it
@@ -1044,7 +1192,7 @@ export class AiRunService implements OnModuleInit {
           // create_order refused for the address) carries both fees — F1b T2 « Sétif, El Eulma » ⇒ « … à domicile … ou au stop-desk ? »
           // with no fee and no quote_delivery: the server quotes the wilaya the customer named (that quote is no delivery question:
           // it is kept out of the guard's fee rule) and `withModeFees` writes the fees before the question
-          if (![...executed, ...reused].some((t) => canonicalTool(t.name) === 'quote_delivery') && (modeQuestionAt(parsed.value.reply) >= 0 || refusedOrder(executed)?.field === 'address')) {
+          if (![...executed, ...reused].some((t) => canonicalTool(t.name) === 'quote_delivery') && (modeQuestionAt(parsed.value.reply) >= 0 || refusedOrder(executed)?.field === 'address' || addressRefused)) {
             modeQuote = await this.modeQuote(req, executed, seen, answered, knownQuotes);
             if (modeQuote) parsed.value.reply = withModeFees(parsed.value.reply, quoteFacts([{ name: 'quote_delivery', result: modeQuote.result }]), textLang);
           }
@@ -1071,7 +1219,7 @@ export class AiRunService implements OnModuleInit {
         // N18 T2) — and, when the customer said yes to a recap that waits and create_order was not called, it is called now
         const canAskAgain = !confirmAsked && !!req.guard && parsed.value.status !== 'HANDOFF' && !forcedHandoff && step < MAX_STEPS && !recapNow() && !confirmationNow() && !orderClosed && defs.some((d) => d.name === 'create_order') && toolRounds < (fieldOnly ? 2 : MAX_STEPS - 1);
         const claims = canAskAgain ? orderClaimsIn(splitSentences(parsed.value.reply), factsNow(parsed.value)).length > 0 : false;
-        if (canAskAgain && !pendingBefore && (refusedOrder(executed)?.argsOnly ?? true) && (claims || splitSentences(parsed.value.reply).some(confirmRequest))) {
+        if (canAskAgain && !pendingBefore && (refusedOrder(executed)?.argsOnly ?? !addressRefused) && (claims || splitSentences(parsed.value.reply).some(confirmRequest))) {
           confirmAsked = true;
           messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: CONFIRM_WITHOUT_RECAP_NOTE });
           continue;
@@ -1089,7 +1237,9 @@ export class AiRunService implements OnModuleInit {
         // journey retest R13-1 (18/11): `off_catalogue` is checked against the shop's catalogue (the server's own check) as on the tool
         const judged = out.status === 'HANDOFF' && !forcedHandoff && ctx.customerText !== undefined;
         const soldNamed = judged && handoffReason(out.statusDetail) === 'off_catalogue' && typeof this.tools.soldProductNamed === 'function' ? await this.tools.soldProductNamed(ctx.agent, ctx.customerText!) : null;
-        const verdict = judged ? judgeHandoff({ reason: out.statusDetail, evidence: out.evidence, customerText: ctx.customerText!, shopRules: ctx.agent.humanHandoffRules, keywords: ctx.agent.handoffKeywords, unclearStreak: ctx.unclearStreak, established: establishedReasons(executed.map((t) => t.result)), soldNamed }) : null;
+        // journey retest R17-1 (18/11): and only with product words once the place names are taken out (PF1 T1, as on the tool)
+        const productWordsLeft = judged && !soldNamed && handoffReason(out.statusDetail) === 'off_catalogue' ? await offCatalogueWordsOf(ctx.customerText!) : undefined;
+        const verdict = judged ? judgeHandoff({ reason: out.statusDetail, evidence: out.evidence, customerText: ctx.customerText!, shopRules: ctx.agent.humanHandoffRules, keywords: ctx.agent.handoffKeywords, unclearStreak: ctx.unclearStreak, established: establishedReasons(executed.map((t) => t.result)), soldNamed, ...(productWordsLeft ? { productWordsLeft } : {}) }) : null;
         if (verdict && !verdict.ok) {
           handoffRefused = verdict.why;
           if (!handoffAsked && step < MAX_STEPS) {
@@ -1114,7 +1264,11 @@ export class AiRunService implements OnModuleInit {
         // conversation handed to the team in silence (F-6 only when there is nothing to send)
         const salvaged = salvageReply(firstAnswer) ?? salvageReply(res.value.text);
         // §4.3: no corrective turn after a format retry — the guard's last word applies at once
-        if (salvaged) return guarded(salvaged, { salvaged: true }, false) as TurnResult;
+        if (salvaged) {
+          // journey retest R17-2: a plain yes to the recap shown places its stored order (the confirmation replaces the text)
+          await placeYes();
+          return guarded(salvaged, { salvaged: true }, false) as TurnResult;
+        }
         // journey retest R11-5 (17/11): still nothing to send (F8 T1 `malformed_output:schema:reply` ⇒ 503 « L'IA n'a pas répondu »)
         // ⇒ one last step asking for the message as plain text (no tool: nothing runs twice), sent like a salvaged answer
         if (!plainAsked && req.deadline - Date.now() > 1000) {
@@ -1122,7 +1276,7 @@ export class AiRunService implements OnModuleInit {
           messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: PLAIN_TEXT_REMINDER });
           continue;
         }
-        return { ok: false, kind: 'format', error: `malformed_output:${parsed.reason}`, tools: executed, usage, model, usedFallback };
+        return (await placedOnFailure()) ?? { ok: false, kind: 'format', error: `malformed_output:${parsed.reason}`, tools: executed, usage, model, usedFallback };
       }
       firstAnswer = res.value.text;
       // §4.1: one retry with the format reminder. It leaves the older conversation out (tester report 22/10: in a long
@@ -1133,7 +1287,7 @@ export class AiRunService implements OnModuleInit {
       messages.splice(0, Math.max(0, req.prompt.messages.length - 1 - FORMAT_RETRY_HISTORY));
       messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: FORMAT_REMINDER });
     }
-    return { ok: false, kind: 'format', error: 'malformed_output:steps', tools: executed, usage, model, usedFallback };
+    return (await placedOnFailure()) ?? { ok: false, kind: 'format', error: 'malformed_output:steps', tools: executed, usage, model, usedFallback };
   }
 
   /**

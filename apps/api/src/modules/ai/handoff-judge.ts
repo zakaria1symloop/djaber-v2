@@ -13,14 +13,14 @@ import { containsWord, foldText } from '../catalog/moderation-prescreen.service'
 import { isGreetingOnly } from '../messaging/greeting';
 import { UNCLEAR_STREAK_HANDOFF } from './ai.constants';
 import { confirmation } from './tools/order-confirmation';
-import { productNamedIn, productWanted, teamOnlyRequest } from './product-named';
+import { offCatalogueWords, productNamedIn, productWanted, teamOnlyRequest } from './product-named';
 
 /** Set by the server (tool results, counters, safety): the model's word is not needed. */
 const SERVER_REASONS = new Set(['order_limits', 'risky_client', 'blocked_word', 'orders_unavailable', 'outside_window', 'ai_error', 'abuse_guard', 'credits_exhausted', 'quota_exceeded']);
 /** Rule ids of the prompt and older names the model may still write. */
 const ALIASES: Record<string, string> = { human_request: 'customer_request', human: 'customer_request', anger: 'angry', over_limits: 'order_limits', order_limit: 'order_limits', off_topic: 'off_catalogue', '3_unclear': 'unclear_streak' };
 
-export type HandoffRefusal = 'greeting' | 'no_evidence' | 'evidence_not_in_message' | 'no_shop_rule' | 'keyword_absent' | 'not_unclear' | 'reason_mismatch' | 'server_reason' | 'not_sold' | 'in_catalogue';
+export type HandoffRefusal = 'greeting' | 'no_evidence' | 'evidence_not_in_message' | 'no_shop_rule' | 'keyword_absent' | 'not_unclear' | 'reason_mismatch' | 'server_reason' | 'not_sold' | 'in_catalogue' | 'no_product';
 
 /**
  * journey retest R4-1 (17/11): the server reasons a tool result of THIS turn established — `create_order` above a limit
@@ -82,6 +82,11 @@ export type HandoffInput = {
    * found it (`productNamedIn` over the agent's scope) — null / absent when none
    */
   soldNamed?: string | null;
+  /**
+   * journey retest R17-1: the words of the customer's message that may name a product, place names taken out (`offCatalogueWords` with
+   * the place lists) — absent: read from the message without the place lists
+   */
+  productWordsLeft?: readonly string[];
 };
 
 export function judgeHandoff(i: HandoffInput): HandoffVerdict {
@@ -111,6 +116,9 @@ export function judgeHandoff(i: HandoffInput): HandoffVerdict {
   if (reason === 'off_catalogue' && !teamOnlyRequest(text)) {
     if (i.soldNamed) return { ok: false, reason, why: 'in_catalogue' };
     if (productWanted(evidence) || productWanted(text)) return { ok: false, reason, why: 'not_sold' };
+    // journey retest R17-1 (18/11, Major): off_catalogue needs product words the catalogue has no product for — a greeting, a place, a
+    // name, an order field is never one (PF1 T1 « Bonjour, j'habite à Sétif, El Eulma » accepted with that evidence: the fees were lost)
+    if (fieldOnlyMessage(text, false) || !(i.productWordsLeft ?? offCatalogueWords(text)).length) return { ok: false, reason, why: 'no_product' };
   }
   if (!reasonFits(reason, evidence, text)) return { ok: false, reason, why: 'reason_mismatch' };
   return { ok: true, reason };
@@ -241,6 +249,8 @@ export function handoffRefusedInstruction(why: HandoffRefusal, product?: string 
     not_sold:
       "a product the shop does not sell is answered by you, never handed off: say plainly that the shop does not sell it (« nous ne vendons pas de … pour le moment »), then offer what the CATALOGUE lists in stock; when the customer also gave their details, take the order as usual once they choose a product (status OK)",
     in_catalogue: `the customer's words name a product the shop sells${product ? ` (« ${product} »)` : ''}: answer it from the CATALOGUE (price, the variants in stock) and take the order as usual — a product of the shop is never a handoff (status OK)`,
+    no_product:
+      "the customer's message names no product at all (a greeting, the place where they live, their name or another order detail): it is never an off_catalogue handoff — answer it: for a place give the delivery fees (quote_delivery: home and stop-desk), then ask which product they would like (status OK)",
   };
   return `${HANDOFF_REFUSED_MARK}: ${cause[why]}. Keep the conversation and answer the customer's current message now, in their language (status OK; UNKNOWN when you have no answer — say you will check with the team and call add_faq_candidate; UNCLEAR when you did not understand). Hand off only when the customer's current message itself matches a rule, quoting their words in "evidence". Answer with the JSON object only.`;
 }
@@ -274,7 +284,7 @@ export function orderDetailsMessage(text: string | undefined, validPhone: (t: st
  * soleil ? Je suis Yacine Mansouri 0555987654, Blida, … » got `off_catalogue` accepted (the R7 rule skipped it for its « ? »). No
  * reason left ⇒ the tool is not offered; `status = HANDOFF` stays judged.
  */
-export function messageHandoffReasons(reasons: string[], customerText: string | undefined, validPhone: (t: string) => boolean, catalogueNames?: readonly string[]): string[] {
+export function messageHandoffReasons(reasons: string[], customerText: string | undefined, validPhone: (t: string) => boolean, catalogueNames?: readonly string[], placeOut?: (t: string) => string): string[] {
   if (customerText === undefined) return reasons;
   const t = customerText.trim();
   const f = foldText(t).replace(/[’‘`]/g, "'");
@@ -287,7 +297,9 @@ export function messageHandoffReasons(reasons: string[], customerText: string | 
     if (r === 'customer_request') return ASKS_TEAM.test(f) || ORDER_CHANGE.test(f);
     if (r === 'refund') return ASKS_REFUND.test(f);
     // journey retest R14-3 (18/11): nor on a question about an order already made (N11 T3 « وين راهي الطلبية تاعي؟ … »: lookup_order answers)
-    if (r === 'off_catalogue') return !details && !productAsk(t, t) && !wantsProduct && !orderStatusAsk(t);
+    // journey retest R17-1 (18/11): nor on a message with no word that may name a product — a greeting, a place (`placeOut`: the names
+    // taken out when the lists were read), a name, an order field (PF1 T1 « Bonjour, j'habite à Sétif, El Eulma » ⇒ off_catalogue accepted)
+    if (r === 'off_catalogue') return !details && !productAsk(t, t) && !wantsProduct && !orderStatusAsk(t) && (team || (!fieldOnlyMessage(t, false) && offCatalogueWords(t, placeOut).length > 0));
     // journey retest R14-3: `complaint` needs words of a complaint, `angry` words / marks of anger (N9 T1 `complaint` probe on a photo
     // request, N11 T3 on a tracking question)
     if (r === 'complaint') return !details && complaintIn(t);
@@ -314,7 +326,10 @@ export function nameOnlyMessage(text: string | undefined): boolean {
 }
 
 /** Small words that go with a place name (« ana f Bab Ezzouar », « wilaya de Sétif », « Alger centre »). */
-const PLACE_SMALL_WORDS = new Set(['de', 'du', 'des', 'd', 'la', 'le', 'l', 'a', 'à', 'au', 'en', 'w', 'f', 'fi', 'el', 'al', 'et', 'ana', 'je', 'suis', 'wilaya', 'commune', 'centre', 'ville', 'men', 'mn', 'from', 'in']);
+// journey retest R17-1 (18/11): and a greeting, « j'habite » (PF1 T1 « Bonjour, j'habite à Sétif, El Eulma » got `handoff_to_human`)
+const PLACE_SMALL_WORDS = new Set(['de', 'du', 'des', 'd', 'la', 'le', 'l', 'a', 'à', 'au', 'en', 'w', 'f', 'fi', 'el', 'al', 'et', 'ana', 'je', 'suis', 'wilaya', 'commune', 'centre', 'ville', 'men', 'mn', 'from', 'in', 'j', 'habite', 'nseken', 'saken', 'sakna', 'i', 'live', 'bonjour', 'bonsoir', 'salut', 'salam', 'slm', 'salem', 'hello', 'hi', 'cc', 'coucou']);
+/** Arabic-script greeting / « I live in » words of a short place message (taken out before the name / order-word test). */
+const PLACE_SMALL_AR = /(?<![؀-ۿ])(?:السلام|عليكم|سلام|مرحبا|أهلا|اهلا|انا|أنا|ساكن|ساكنة|نسكن|في|من)(?![؀-ۿ])/gu;
 /**
  * journey retest R11-3: a short message that may only name a place (« Sétif, El Eulma », « البليدة، بوفاريك ») — capitalised Latin
  * words (and the small words of a place), or Arabic-script words that are no order / question / greeting word. Only such a message
@@ -323,10 +338,14 @@ const PLACE_SMALL_WORDS = new Set(['de', 'du', 'des', 'd', 'la', 'le', 'l', 'a',
 export function placeCandidate(text: string | undefined): boolean {
   const t = (text ?? '').trim().replace(/[.!]+$/u, '');
   if (!t || t.length > 80 || /[?؟\d]/.test(t)) return false;
-  const w = t.split(/[\s,،]+/u).filter(Boolean);
-  if (!w.length || w.length > 6) return false;
-  if (w.every((x) => /^[؀-ۿ]+$/u.test(x))) return !NOT_A_NAME_AR.test(t);
-  return w.some((x) => /^\p{Lu}/u.test(x)) && w.every((x) => /^\p{Lu}[\p{L}'’-]*$/u.test(x) || PLACE_SMALL_WORDS.has(x.toLowerCase()));
+  const w = t.split(/[\s,،'’]+/u).filter(Boolean);
+  if (!w.length || w.length > 8) return false;
+  if (w.every((x) => /^[؀-ۿ]+$/u.test(x))) {
+    const rest = t.replace(PLACE_SMALL_AR, ' ').trim();
+    return !!rest && !NOT_A_NAME_AR.test(rest);
+  }
+  const named = w.filter((x) => !PLACE_SMALL_WORDS.has(x.toLowerCase()));
+  return named.length > 0 && named.length <= 6 && named.every((x) => /^\p{Lu}[\p{L}'’-]*$/u.test(x));
 }
 
 /**

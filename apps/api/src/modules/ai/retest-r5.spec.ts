@@ -49,9 +49,13 @@ describe('R5-1 — an out-of-stock product is never offered as an alternative', 
     expect(checkReply('3andna sac à main cuir, montre connectée, parfum Oud w coffret cadeau Aïd. Wach men wahed t7ebb tchouf ?', facts('slm, ach kayen ?')).map((x) => x.rule)).toContain('unavailable_offer');
     expect(checkReply('3andna sac à main cuir, montre connectée, coffret cadeau Aïd w retouche couture. Wach men wahed t7ebb tchouf ?', facts('slm, ach kayen ?')).map((x) => x.rule)).not.toContain('unavailable_offer');
   });
-  it('a product sold beyond its stock, a service or an in-stock name sharing a word is never flagged', () => {
-    const list = [product('Montre', 9000, 0), product('Montre connectée', 15_900, 3), product('Tapis de prière', 2800, 0, true)];
-    expect(checkReply('Je peux vous proposer notre montre connectée (15900 DA) ou le tapis de prière (2800 DA).', facts('vous avez des lunettes ?', list)).map((x) => x.rule)).not.toContain('unavailable_offer');
+  it('a service or an in-stock name sharing a word is never flagged; a product at stock 0 sold beyond it only when the customer asked for it (R17-3)', () => {
+    const list = [product('Montre', 9000, 0), product('Montre connectée', 15_900, 3), product('Tapis de prière', 2800, 0, true), product('Retouche', 800, null)];
+    expect(checkReply('Je peux vous proposer notre montre connectée (15900 DA) ou une retouche (800 DA).', facts('vous avez des lunettes ?', list)).map((x) => x.rule)).not.toContain('unavailable_offer');
+    // journey retest R17-3 (18/11): stock 0, sold beyond it — no alternative; asked for (now or earlier) — answered
+    expect(checkReply('Je peux vous proposer notre montre connectée (15900 DA) ou le tapis de prière (2800 DA).', facts('vous avez des lunettes ?', list)).map((x) => x.rule)).toContain('unavailable_offer');
+    expect(checkReply('Le tapis de prière est à 2800 DA.', facts('le tapis de prière c’est combien ?', list)).map((x) => x.rule)).not.toContain('unavailable_offer');
+    expect(checkReply('Le tapis de prière est à 2800 DA.', { ...facts('Karim 0770112233', list), customerHistory: 'je veux le tapis de prière' }).map((x) => x.rule)).not.toContain('unavailable_offer');
     // no stock field at all (older callers): nothing is checked
     expect(buildGuardFacts({ lang: 'fr', products: [{ name: 'Parfum Oud 50 ml', sku: 'P', price: 1, oldPrice: null, hasVariants: false, variants: [], also: [], description: null }], shopTexts: [], freeDeliveryThreshold: null, agentName: null, shopName: 'S', customerText: 'x', answeredBefore: false, freshStart: true }).unavailable).toBeUndefined();
   });

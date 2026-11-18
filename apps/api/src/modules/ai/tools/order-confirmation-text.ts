@@ -127,6 +127,11 @@ const R: Record<Loc, { comma: string; head: string; home: (place: string) => str
   arabizi: { comma: ', ', head: 'Hada récap ta3 la commande:', home: (p) => `Tawsil l dar${p ? ` (${p})` : ''}`, stop: (p) => `Tawsil l stop-desk${p ? ` (${p})` : ''}`, free: 'batel', total: (v) => `Total: ${v}, tkhalles ki tewsel.`, name: 'Smitek', phone: 'Numéro', phone2: 'Numéro lokhra', address: 'Adresse', replaces: (n) => `Hadi t3awed la commande ${n}.`, beyond: T.arabizi.beyond, ask: 'Ktebli « ih » bach nconfirmi la commande, wela goulli wach nbeddlou.', cur: 'DA', sep: ': ' },
   en: { comma: ', ', head: 'Here is your order summary:', home: (p) => `Home delivery${p ? ` (${p})` : ''}`, stop: (p) => `Stop-desk delivery${p ? ` (${p})` : ''}`, free: 'free', total: (v) => `Total: ${v}, cash on delivery.`, name: 'Name', phone: 'Phone', phone2: 'Second phone', address: 'Address', replaces: (n) => `It will replace order ${n}.`, beyond: T.en.beyond, ask: 'Reply « yes » to confirm the order, or tell me what to change.', cur: 'DA', sep: ': ' },
 };
+/**
+ * journey retest R17-2 (18/11): the text holds the server recap's request to answer yes (« Répondez « oui » pour confirmer la commande, … »,
+ * « Ktebli « ih » … », « جاوبني « إيه » … », « Reply « yes » … ») — the AI's message was a server recap.
+ */
+export const serverRecapAsked = (text: string | null | undefined): boolean => !!text && Object.values(R).some((r) => text.includes(r.ask));
 // journey retest R12-1: compatibility forms (full-width, presentation forms) decomposed and the tatweel dropped too (punctuation kept)
 const folded = (t: string) => t.normalize('NFKD').replace(/[\u0300-\u036f\u0640]/g, '').toLowerCase();
 /** « Cité 20 Août, villa 3 » + « Boufarik » + « Blida »: the commune / wilaya are added when the address does not name them. */
@@ -461,8 +466,10 @@ const ORDER_CLAIM: RegExp[] = [
   /(?<![\p{L}])(?:j['’]?\s*ai|on\s+a|nous\s+avons|je\s+vous\s+ai|je\s+t['’]\s*ai)\s+(?:bien\s+|d[eé]j[aà]\s+)?(?:enregistr|not|pass|valid|confirm|pris|lanc|transmis|envoy)\S*\s+(?:\S+\s+){0,2}?(?:la\s+|votre\s+|ta\s+)?commande/u,
   /(?<![\p{L}])je\s+(?:vous\s+|te\s+)?(?:confirme|valide|enregistre|passe|lance)\s+(?:\S+\s+)?(?:votre|ta|la)\s+commande/u,
   /(?<![\p{L}])(?:i['’]?ve|i\s+have|we['’]?ve|we\s+have)\s+(?:just\s+|already\s+)?(?:placed|registered|noted|booked|recorded|confirmed|submitted)\s+(?:\S+\s+)?order/u,
-  /(?<![\p{L}])(?:sajj?el|sejj?el|sjjel|sajj?alt|sajj?elt|confirmit)\S*\s+(?:\S+\s+){0,2}?(?:la\s+|l['’]?\s*)?(?:commande|komand)/u,
-  /(?:(?<![\p{L}])سجل\S*|(?<![\p{L}])تم\s+(?:ال)?(?:تسجيل|تأكيد|تاكيد|تا\u0654كيد)|(?<![\p{L}])(?:أ|ا|ا\u0654)كد(?:ت|نا)\S*|(?<![\p{L}])ثبت(?:ت|نا)\S*)\s+(?:\S+\s+){0,2}?(?:ال)?(?:طلب\S*|كوموند\S*)/u,
+  // journey retest R17-4 (18/11): the passive before the order too (« tsajlet la commande », « etsajlet la commande »)
+  /(?<![\p{L}])(?:sajj?el|sejj?el|sjjel|sajj?alt|sajj?elt|confirmit|e?ts[ae]jj?l)\S*\s+(?:\S+\s+){0,2}?(?:la\s+|l['’]?\s*)?(?:commande|komand)/u,
+  // journey retest R17-4 (18/11): « تسجلت الطلب », « اتسجلت الطلبية » (A3 T1, before any recap) — the passive before the order
+  /(?:(?<![\p{L}])(?:ا?ت)?سجل\S*|(?<![\p{L}])تم\s+(?:ال)?(?:تسجيل|تأكيد|تاكيد|تا\u0654كيد)|(?<![\p{L}])(?:أ|ا|ا\u0654)كد(?:ت|نا)\S*|(?<![\p{L}])ثبت(?:ت|نا)\S*)\s+(?:\S+\s+){0,2}?(?:ال)?(?:طلب\S*|كوموند\S*)/u,
 ];
 /** « c'est noté », « bien noté », « tsajlet », « noted », « سجلت » with nothing named: an order claim when it answers the customer's yes. */
 const BARE_CLAIM =
@@ -485,7 +492,10 @@ export const orderClaim = (sentence: string, o: { customerYes?: boolean; placed?
   if (/[?؟]/.test(sentence)) return false;
   const lower = sentence.toLowerCase();
   if ((o.placed ?? []).some((n) => n && lower.includes(n.toLowerCase()))) return false;
-  return bothForms(sentence).some((v) => !CLAIM_NEGATION.test(v) && !CLAIM_LATER.test(v) && (ORDER_CLAIM.some((re) => re.test(v)) || (!!o.customerYes && !FIELD_WORD.test(v) && !DETAILS_WORD.test(v) && BARE_CLAIM.test(v))));
+  // journey retest R17-4 (18/11): a negation or a future counts in the clause of the claim only — A3 T1 « أهلا سميرة، تسجلت الطلب: زوج … يعني
+  // 5600 دج قبل التوصيل. » (« before delivery » in the next clause hid the claim)
+  const claimIn = (v: string) => !CLAIM_NEGATION.test(v) && !CLAIM_LATER.test(v) && (ORDER_CLAIM.some((re) => re.test(v)) || (!!o.customerYes && !FIELD_WORD.test(v) && !DETAILS_WORD.test(v) && BARE_CLAIM.test(v)));
+  return bothForms(sentence).some((v) => claimIn(v) || v.split(/[،:;؛]/u).some((c) => c.trim() && claimIn(c)));
 };
 /** A word naming the order (any language). */
 const ORDER_NOUN = /command|order|achat|طلبي|الطلب|كوموند|komand/u;

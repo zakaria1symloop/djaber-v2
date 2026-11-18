@@ -17,7 +17,7 @@ import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
 import { articleless, fold, foldText, WILAYA_ALIASES } from './wilaya-aliases';
 import { handoffReason, handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
-import { asksCancel, bareYes, cancelWordsIn, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, simulatedOrders, type DraftOrder, type OrderCallHistory } from './order-confirmation';
+import { storedOrderArgs, asksCancel, bareYes, cancelWordsIn, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, simulatedOrders, type DraftOrder, type OrderCallHistory } from './order-confirmation';
 import { asksSomething, withoutPlaceSegments } from './order-confirmation-text';
 
 export type ToolName = 'search_products' | 'get_product' | 'check_availability' | 'quote_delivery' | 'create_order' | 'cancel_order' | 'lookup_order' | 'handoff_to_human' | 'add_faq_candidate' | 'create_payment_link';
@@ -521,6 +521,8 @@ const fixedVariant = (p: CatalogueProduct, variantId: string | null): CatalogueP
 };
 const normQuestion = (q: string) => fold(q).replace(/\s+/g, ' ').slice(0, 200);
 const seqOf = (s: string) => 1000 + ([...s].reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) >>> 0, 7) % 9000);
+/** journey retest R17-1: `offCatalogueWordsOf` of the place index (imported when needed: the place index imports this file). */
+const offCatalogueWordsOf = async (text: string): Promise<string[] | undefined> => (await import('./place-index')).offCatalogueWordsOf(text);
 
 @Injectable()
 export class ToolRegistry {
@@ -603,8 +605,11 @@ export class ToolRegistry {
     if (ctx.customerText !== undefined) {
       // journey retest R13-1 (18/11): an off_catalogue handoff is accepted only when the server's own catalogue check finds no product
       // of the shop named in the customer's message (F1 T1 « Je voudrais le sac à main cuir marron » ⇒ handed off, Marron in stock)
-      const soldNamed = handoffReason(reason) === 'off_catalogue' ? await this.soldProductNamed(ctx.agent, ctx.customerText) : null;
-      const v = judgeHandoff({ reason, evidence: typeof args.evidence === 'string' ? args.evidence : null, customerText: ctx.customerText, shopRules: ctx.agent.humanHandoffRules, keywords: ctx.agent.handoffKeywords, unclearStreak: ctx.unclearStreak, established: ctx.established, soldNamed });
+      const offCatalogue = handoffReason(reason) === 'off_catalogue';
+      const soldNamed = offCatalogue ? await this.soldProductNamed(ctx.agent, ctx.customerText) : null;
+      // journey retest R17-1 (18/11): and only when the message has product words once the place names are taken out (PF1 T1)
+      const productWordsLeft = offCatalogue && !soldNamed ? await offCatalogueWordsOf(ctx.customerText) : undefined;
+      const v = judgeHandoff({ reason, evidence: typeof args.evidence === 'string' ? args.evidence : null, customerText: ctx.customerText, shopRules: ctx.agent.humanHandoffRules, keywords: ctx.agent.handoffKeywords, unclearStreak: ctx.unclearStreak, established: ctx.established, soldNamed, ...(productWordsLeft ? { productWordsLeft } : {}) });
       return v.ok ? { ok: true } : refuse(handoffRefusedInstruction(v.why, soldNamed), v.why);
     }
     const known = (HANDOFF_REASONS as readonly string[]).includes(reason) && reason !== 'other';
@@ -1032,22 +1037,7 @@ export class ToolRegistry {
     if (!latest?.order || !bareYes(ctx.customerText, latest.shown)) return null;
     if (orderedBefore(ctx.orderHistory, latest.draft, Date.now(), latest.core ?? undefined)) return null;
     if ((ctx.orderHistory ?? []).some((h) => (h.name ?? 'create_order') === 'create_order' && (h.result as { ok?: unknown } | null)?.ok === true && h.at.getTime() > latest.at.getTime())) return null;
-    const o = latest.order;
-    return {
-      clientName: o.clientName,
-      clientPhone: o.clientPhone,
-      ...(o.secondPhone ? { secondPhone: o.secondPhone } : {}),
-      wilayaId: o.wilayaId,
-      ...(o.communeName ? { communeName: o.communeName } : {}),
-      ...(o.address ? { address: o.address } : {}),
-      isStopdesk: o.isStopdesk,
-      ...(o.stopdeskId ? { stopdeskId: o.stopdeskId } : {}),
-      ...(o.notes ? { notes: o.notes } : {}),
-      items: o.items.map((i) => ({ productId: i.productId, ...(i.variantId ? { variantId: i.variantId } : {}), quantity: i.quantity })),
-      ...(o.replacesOrder ? { replacesOrder: o.replacesOrder } : {}),
-      customerConfirmed: true,
-      ...(args.phoneConfirmed === true ? { phoneConfirmed: true } : {}),
-    };
+    return storedOrderArgs(latest.order, args.phoneConfirmed === true);
   }
 
   /**

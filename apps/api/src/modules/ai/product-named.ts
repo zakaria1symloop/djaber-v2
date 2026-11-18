@@ -40,6 +40,30 @@ export const productWords = (text: string): string[] =>
     .filter((w) => w.length >= 3 && !/^\d+$/u.test(w) && !NAME_FILLERS.has(w))
     .map(stem);
 
+/**
+ * Words that name no product the shop could lack: greetings, « I live in / I am », a name intro, delivery / address / order-field words
+ * (folded, every script) — with NAME_FILLERS and the place names, what `offCatalogueWords` leaves out.
+ */
+const NOT_PRODUCT = new Set(
+  [
+    'bonjour', 'bjr', 'bonsoir', 'bsr', 'salut', 'slt', 'coucou', 'hello', 'hey', 'salem', 'salamou', 'assalam', 'alikoum', 'alaykoum', 'ahla', 'ahlan', 'marhba', 'marhaba', 'sbah', 'khir', 'lkhir', 'labas', 'khouya', 'khoya', 'khti', 'madame', 'monsieur',
+    'habite', 'habitons', 'habitez', 'suis', 'sommes', 'reside', 'vis', 'live', 'living', 'from', 'ana', 'nseken', 'nskon', 'saken', 'sakna', 'sakin', 'appelle', 'nom', 'name', 'smiti', 'smitek', 'ismi', 'esmi',
+    'livrer', 'livrez', 'livraison', 'livre', 'livrees', 'deliver', 'delivery', 'tawsil', 'twasslou', 'nwasslou', 'domicile', 'stop', 'desk', 'adresse', 'address', 'cite', 'rue', 'bloc', 'quartier', 'logements', 'villa', 'wilaya', 'commune', 'centre', 'ville',
+    'telephone', 'numero', 'phone', 'tel', 'merci', 'thanks', 'ok', 'daccord', 'parfait', 'super', 'bien', 'aussi', 'chez', 'ici', 'vers', 'region',
+    'مرحبا', 'اهلا', 'اهلين', 'صباح', 'مساء', 'الخير', 'انا', 'ساكن', 'ساكنه', 'نسكن', 'اسمي', 'سميتي', 'التوصيل', 'توصلو', 'ولايه', 'بلديه', 'حي', 'شارع', 'العنوان', 'رقم', 'الهاتف', 'شكرا', 'صحيت', 'خويا', 'اختي',
+  ].map((w) => stem(articleless(foldText(w)))),
+);
+/**
+ * journey retest R17-1 (18/11, Major): the words of a customer text that may name a product (`productWords`) once the place names
+ * (`placeOut`: the wilaya / commune names taken out, see place-index), greetings, « j'habite / je suis / ana f », the customer's name
+ * after its intro and the delivery / address / field words are left out. Empty ⇒ the text names no product the shop could lack: it is
+ * never an `off_catalogue` hand-off — PF1 T1 « Bonjour, j'habite à Sétif, El Eulma » was handed to the team as off_catalogue.
+ */
+export const offCatalogueWords = (text: string, placeOut?: (t: string) => string): string[] => {
+  const noName = foldText(text).replace(/(?<![\p{L}])(?:je\s+m\s?appelle|moi\s+c\s?est|mon\s+nom\s+(?:est|c\s?est)|my\s+name\s+is|je\s+suis|smiti|esmi|ismi|اسمي|سميتي)(?:\s+[\p{L}]+){1,3}/gu, ' ');
+  return productWords(placeOut ? placeOut(noName) : noName).filter((w) => !NOT_PRODUCT.has(w));
+};
+
 export type NamedProduct = { id: string; name: string; keywords?: readonly string[] | null };
 /**
  * journey retest R13-1 (18/11): the first of these products the text names — the first word of its name (« sac » of « Sac à main

@@ -103,6 +103,15 @@ export type GuardFacts = {
   unavailableNames?: string[];
   /** journey retest R5-1: the folded names of the other catalogue products (an in-stock « Montre connectée » hides « montre ») */
   available?: string[];
+  /**
+   * journey retest R17-3 (18/11): the folded names of the catalogue products at stock 0 that are sold beyond their stock — orderable when
+   * the customer asks for them, never offered as an alternative (N7 « Montre connectée » listed twice for « lunettes de soleil ? »)
+   */
+  zeroStock?: string[];
+  /** their catalogue names (the corrective instruction) */
+  zeroStockNames?: string[];
+  /** journey retest R17-3: every customer message of the conversation (a product they asked for earlier is no offer) */
+  customerHistory?: string;
   /** journey retest R6-2: ids of the products known to have no photo (catalogue / tool imageUrl null) */
   noPhoto?: string[];
   /** journey retest R6-2: this answer sends a photo (a card or a gallery of a product not known to have none); unset ⇒ not checked */
@@ -540,7 +549,7 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   // journey retest R16-1 (18/11): the fee of EVERY quoted wilaya (F9: Sétif given, the Oran stop-desk quote left out)
   if (facts.quotes?.length && owedQuotes(reply, facts.quotes, facts.customerText).length) out.push({ rule: 'fee_missing', sentence: 0 });
   // journey retest R5-1: an out-of-stock product is never offered (N7: « … ou notre parfum Oud 50 ml » to « lunettes de soleil ? »)
-  if (facts.unavailable?.length) for (const i of unavailableOffers(parts, facts)) out.push({ rule: 'unavailable_offer', sentence: i });
+  if (facts.unavailable?.length || facts.zeroStock?.length) for (const i of unavailableOffers(parts, facts)) out.push({ rule: 'unavailable_offer', sentence: i });
   // journey retest R6-2: photos announced while none is sent (N9 « Hak tsawer ta3 la robe kabyle brodée », the product has none)
   if (facts.photoSent === false) parts.forEach((s, i) => {
     if (photoClaim(s)) out.push({ rule: 'photo_claim', sentence: i });
@@ -600,11 +609,14 @@ const nameKeys = (name: string): string[] => {
  * sentence before), when the customer's message does not name that product — an offer or a suggestion of it. The names of the
  * other products are taken out first (« montre » of an in-stock « Montre connectée »).
  */
-export const unavailableOffers = (parts: string[], facts: Pick<GuardFacts, 'unavailable' | 'available' | 'customerText'>): number[] => {
+export const unavailableOffers = (parts: string[], facts: Pick<GuardFacts, 'unavailable' | 'available' | 'customerText' | 'zeroStock' | 'customerHistory'>): number[] => {
   const asked = ` ${plainWords(facts.customerText ?? '')} `;
-  const keys = (facts.unavailable ?? []).filter((k) => !asked.includes(` ${k} `) && !asked.includes(` ${k.split(' ')[0]} `));
+  const notAsked = (k: string, said: string) => !said.includes(` ${k} `) && !said.includes(` ${k.split(' ')[0]} `);
+  // journey retest R17-3 (18/11): a product at stock 0 sold beyond its stock is no offer only when the customer asked for it (now or earlier)
+  const ever = ` ${plainWords([facts.customerHistory ?? '', facts.customerText ?? ''].join(' '))} `;
+  const keys = [...(facts.unavailable ?? []).filter((k) => notAsked(k, asked)), ...(facts.zeroStock ?? []).filter((k) => notAsked(k, ever))];
   if (!keys.length) return [];
-  const others = [...(facts.available ?? [])].sort((a, b) => b.length - a.length);
+  const others = [...(facts.available ?? [])].filter((o) => !(facts.zeroStock ?? []).includes(o)).sort((a, b) => b.length - a.length);
   const out: number[] = [];
   parts.forEach((s, i) => {
     let t = ` ${plainWords(s)} `;
@@ -707,7 +719,10 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
   }
   if (rules.includes('unavailable_offer')) {
     const names = uniq(facts.unavailableNames ?? []);
-    lines.push(`- OUT OF STOCK: ${names.join(', ') || 'a product you named'} ${names.length > 1 ? 'are' : 'is'} out of stock: never offer, suggest or list it — offer only products that are in stock. Name it only when the customer asks about it, and then say it is out of stock.`);
+    const zero = uniq(facts.zeroStockNames ?? []);
+    if (names.length || !zero.length) lines.push(`- OUT OF STOCK: ${names.join(', ') || 'a product you named'} ${names.length > 1 ? 'are' : 'is'} out of stock: never offer, suggest or list it — offer only products that are in stock. Name it only when the customer asks about it, and then say it is out of stock.`);
+    // journey retest R17-3 (18/11)
+    if (zero.length) lines.push(`- NOT IN STOCK NOW: ${zero.join(', ')} ${zero.length > 1 ? 'are' : 'is'} at stock 0 (orderable only when the customer asks for it, with a longer delay): never offer, suggest or list it as an alternative — offer only products that are in stock.`);
   }
   if (rules.includes('photo_claim'))
     lines.push('- NO PHOTO IS SENT with this answer: never say « voici les photos », « here are the pictures », « hak tsawer », « هاهي التصاور ». When the product has no photo (PHOTO:none, imageUrl null), say the shop has no photo of it for now (« ma 3andnach tsawer ta3ou f had lwaqt », « ما عندناش تصاور تاعو درك », « nous n\'avons pas encore de photo de ce produit ») and describe it in words.');
@@ -1009,6 +1024,9 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
   const out = i.products.filter((p) => typeof p.stock === 'number' && p.stock <= 0 && !p.sellOutOfStock);
   const unavailable = [...new Set(out.flatMap((p) => nameKeys(p.name)))];
   const available = [...new Set(i.products.filter((p) => !out.includes(p)).map((p) => nameKeys(p.name)[0]).filter((k): k is string => !!k))];
+  // journey retest R17-3 (18/11): stock 0 but sold beyond it — orderable when asked for, never an alternative
+  const zero = i.products.filter((p) => typeof p.stock === 'number' && p.stock <= 0 && p.sellOutOfStock);
+  const zeroStock = [...new Set(zero.flatMap((p) => nameKeys(p.name)))];
   // journey retest R4-2: a name typed in Arabic script (« سمير بن علي ») is no Arabic message — an Arabic reply to a French customer is a switch
   // journey retest R9-1: nor a Latin name next to Arabic-script words (« Samir Benali 0661234567، قسنطينة … ») a Latin message
   // journey retest R14-1: nor the words of an address / a field label (« taille S, …, rue des frères Bouadou n 5 ») a French message
@@ -1032,7 +1050,8 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
     customerGreets: greetingAt(i.customerText) > 0,
     priceList,
     customerText: i.customerText,
-    ...(unavailable.length ? { unavailable, unavailableNames: out.map((p) => p.name), available } : {}),
+    ...(unavailable.length || zeroStock.length ? { unavailable, unavailableNames: out.map((p) => p.name), available } : {}),
+    ...(zeroStock.length ? { zeroStock, zeroStockNames: zero.map((p) => p.name) } : {}),
     ...(noPhoto.length ? { noPhoto } : {}),
     ...(i.galleries?.length ? { galleries: i.galleries } : {}),
     ...(i.products.length ? { catalogueNames: i.products.map((p) => foldGuard([p.name, ...p.variants.map((v) => v.name)].join(' '))) } : {}),

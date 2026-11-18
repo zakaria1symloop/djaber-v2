@@ -89,7 +89,8 @@ describe('R16-1 (Minor) — asked facts survive the guard: every quoted wilaya k
     expect(plain(r.output.reply)).toContain('Tawsil l Sétif: 650 DA l dar, 350 DA f stop-desk.');
     expect(plain(r.output.reply)).toContain('Tawsil l Oran: 400 DA f stop-desk.');
     expect(r.output.reply).toMatch(/Illizi/u);
-    expect(r.output.reply).toMatch(/T7ebb nwarrik wach kayen 3andna \?$/u);
+    // journey retest R17-5: a delivery-only question gets no closing offer of the products (« T7ebb nwarrik wach kayen 3andna ? » goes)
+    expect(r.output.reply).not.toMatch(/nwarrik|kayen 3andna/u);
     expect(r.output.reply).not.toMatch(/wallah|produit|dyal|bghiti/u);
     expect(moroccanIn(r.output.reply) || wrongDarijaIn(r.output.reply)).toBe(false);
   });
