@@ -293,7 +293,8 @@ describe('R14-4 (Cosmetic) — wording', () => {
     const r = await service(gateway, { defsFor: async () => [TOOL_DEFS.handoff_to_human], execute: jest.fn(), soldProductNamed: async () => 'Hijab soie' }).turn(turnReq(text, [], { guard: facts(text) }));
     if (!r.ok) throw new Error('turn failed');
     expect(r.output.status).toBe('HANDOFF');
-    expect(r.output.reply).toBe("Merci pour votre message : l'équipe de la boutique va vous répondre.");
+    // journey retest R16-2: a wholesale request gets its own sentence
+    expect(r.output.reply).toBe("Pour le prix de gros, l'équipe de la boutique va vous répondre.");
     expect(handoffLine('ar')).toBe('شكرا على رسالتك، فريق المحل راح يجاوبك.');
     expect(handoffLine('arabizi')).toContain("l'équipe ta3 lboutique");
   });

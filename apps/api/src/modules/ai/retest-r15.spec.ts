@@ -107,7 +107,8 @@ describe('R15-1 (Minor) — a place given with no quote yet: the reply carries t
     const free = quoteFacts([{ name: 'quote_delivery', result: { ...ALGER, fee: 0, free: true, stopdeskAvailable: false, stopdeskFee: null } }]);
     expect(withPlaceFacts('Quelle est votre adresse ?', free, null, 'fr')).toBe('Livraison à domicile : gratuite. Quelle est votre adresse ?');
     // R12 F5 T1: the address question and its stop-desk alternative stay together, the fees before them; a street word quoted back asks nothing
-    expect(withPlaceFacts("Salam Amina ! Wach howa l'adresse ta3ek f Bab Ezzouar (rue, cité) ? Wela t7ebb nwasslouha f stop-desk ?", q, null, 'arabizi')).toBe("Salam Amina ! Tawsil: 400 DA l dar, wela 250 DA f stop-desk ila t7ebb. Wach howa l'adresse ta3ek f Bab Ezzouar (rue, cité) ? Wela t7ebb nwasslouha f stop-desk ?");
+    // (journey retest R16-4: the reply offers the stop-desk itself ⇒ the fees only, the stop-desk offered once)
+    expect(withPlaceFacts("Salam Amina ! Wach howa l'adresse ta3ek f Bab Ezzouar (rue, cité) ? Wela t7ebb nwasslouha f stop-desk ?", q, null, 'arabizi')).toBe("Salam Amina ! L dar: 400 DA, f stop-desk: 250 DA. Wach howa l'adresse ta3ek f Bab Ezzouar (rue, cité) ? Wela t7ebb nwasslouha f stop-desk ?");
     const mode = 'Vous préférez être livré à domicile ou en stop-desk ?';
     expect(withPlaceFacts(mode, q, null, 'fr')).toBe(mode);
     expect(withPlaceFacts('Le prix est de 4900 DA, livraison 400 DA. Votre adresse ?', q, robe, 'fr')).toBe('Le prix est de 4900 DA, livraison 400 DA. Votre adresse ?');
@@ -167,8 +168,9 @@ describe('R15-2 (Cosmetic) — one hand-off sentence per reason, in the customer
     expect(handoffSystemLineShown('fr', false, 'fr')).toBe(true);
   });
 
-  it('W1 (wholesale) keeps the R14 sentence; every reason × language × hours is one short sentence, arabizi in Latin letters, no Moroccan form', async () => {
-    expect(await handed(W1, { reply: '', statusDetail: 'off_catalogue', evidence: 'prix de gros' }, { lang: 'fr' })).toBe("Merci pour votre message : l'équipe de la boutique va vous répondre.");
+  it('W1 (wholesale) gets the wholesale sentence (R16-2), any other team request the R14 one; every reason × language × hours is one short sentence, arabizi in Latin letters, no Moroccan form', async () => {
+    expect(await handed(W1, { reply: '', statusDetail: 'off_catalogue', evidence: 'prix de gros' }, { lang: 'fr' })).toBe("Pour le prix de gros, l'équipe de la boutique va vous répondre.");
+    expect(handoffReply('other', 'fr')).toBe("Merci pour votre message : l'équipe de la boutique va vous répondre.");
     for (const reason of ['customer_request', 'keyword', 'refund', 'complaint', 'angry', 'off_catalogue', 'other', 'order_limits'])
       for (const lang of ['fr', 'ar', 'arabizi', 'en'] as const)
         for (const outOfHours of [false, true]) {
@@ -178,7 +180,7 @@ describe('R15-2 (Cosmetic) — one hand-off sentence per reason, in the customer
           if (lang === 'ar') expect([s, moroccanIn(s) || wrongDarijaIn(s)]).toEqual([s, false]);
           if (outOfHours) expect([s, /vite|shortly|right away|(?<!as )soon(?! as)|قريب/u.test(s)]).toEqual([s, false]);
         }
-    expect(['customer_request', 'keyword', 'refund', 'complaint', 'angry', 'off_catalogue', 'other'].map(handoffKind)).toEqual(['person', 'person', 'refund', 'complaint', 'complaint', 'team', 'team']);
+    expect(['customer_request', 'keyword', 'refund', 'complaint', 'angry', 'off_catalogue', 'other'].map((r) => handoffKind(r))).toEqual(['person', 'person', 'refund', 'complaint', 'complaint', 'team', 'team']);
     expect(withoutQuickReply('Désolé. Un conseiller vous répondra très vite.')).toBe('Désolé.');
   });
 });

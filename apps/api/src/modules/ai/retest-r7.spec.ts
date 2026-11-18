@@ -2,7 +2,7 @@
 // recap line said twice (R7-1), a photo request on a product without a photo left unanswered (R7-2), odd wording and filler
 // answers (R7-3), tool probes (R7-4), « Vous livrez à Blida ? » without the fee (R7-5).
 import { prisma } from '@djaber/db';
-import { AiRunService, NO_PLACE_NOTE, NO_STREET_NOTE, ORDER_DETAILS_NOTE, unavailableTool, type TurnRequest } from './ai-run.service';
+import { AiRunService, NO_PLACE_NOTE, NO_STREET_NOTE, ORDER_DETAILS_NOTE, RECAP_READY_NOTE, unavailableTool, type TurnRequest } from './ai-run.service';
 import { nearestId } from './catalogue.service';
 import { orderDetailsMessage } from './handoff-judge';
 import { fixMoroccan, wrongDarijaIn } from './language';
@@ -208,7 +208,8 @@ describe('R7-4 — fewer probe calls', () => {
     const text = 'Bon finalement je le prends. Karim Haddad 0770112233, Oran, Bir El Djir, cité 1000 logements bloc 4';
     await new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never).turn(turnReq(text, `Bonjour, le parfum oud c'est combien ?\n${text}`));
     expect((gateway.calls[0]!.tools ?? []).map((d) => d.name)).toEqual(['create_order']);
-    expect(gateway.calls[0]!.system).toBe(`S\n\n${ORDER_DETAILS_NOTE}`);
+    // journey retest R16-3: every field is given — create_order computes the fee and the stock (no quote / check before it)
+    expect(gateway.calls[0]!.system).toBe(`S\n\n${ORDER_DETAILS_NOTE}\n\n${RECAP_READY_NOTE}`);
   });
   it('a place is named by a wilaya, a commune of one or « wilaya 16 » (F1b T1 names none)', () => {
     const idx = buildPlaceIndex(WILAYAS, COMMUNES);

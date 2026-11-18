@@ -20,13 +20,13 @@ import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } f
 import { canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
 import { allowedHandoffReasons, establishedReasons, fieldOnlyMessage, handoffReason, handoffRefusedInstruction, judgeHandoff, messageHandoffReasons, orderDetailsMessage, placeCandidate, type HandoffRefusal } from './handoff-judge';
 import { productNamedIn, productWanted, productWords } from './product-named';
-import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, orderClaimsIn, quoteFacts, stripMarkdown, withToolResults, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
+import { AUTO_FIX_RULES, checkReply, enforceReply, guardInstruction, orderClaimsIn, quoteFacts, stripMarkdown, withToolResults, type CataloguePrice, type CatalogueStock, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
 import { asksDelivery, asksSomething, blockedOrderText, confirmRequest, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, withoutRecapClaims } from './tools/order-confirmation-text';
 import { cancelAsked, confirmation, phonesIn, recapPending } from './tools/order-confirmation';
 import { matchWilaya, namedVariant } from './tools/tool-registry';
 import { placeIndex, placeNamedIn, placeOnlyMessage, wilayaIn, type PlaceIndex } from './tools/place-index';
 import { contextOf } from '../messaging/messaging.presenter';
-import { asksAddress, fillerMessage, handoffKind, handoffReply, handoffSystemLineShown, modeQuestionAt, noPhotoReply, noPhotoSaid, openingSaid, photoAsked, substitutionLine, withArabicCurrency, withArabicWords, withArabiziWords, withAskedPrice, withBothFees, withModeFees, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutQuickReply, withoutStrayYes, withPlaceFacts, type PlaceProduct } from './reply-fixes';
+import { asksAddress, fillerMessage, handoffKind, handoffReply, handoffSystemLineShown, modeQuestionAt, noPhotoReply, noPhotoSaid, openingSaid, photoAsked, substitutionLine, withArabicCurrency, withArabicWords, withArabiziWords, withAskedPrice, withBothFees, withModeFees, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutQuickReply, withoutStrayYes, withPlaceFacts, withAskedFacts, withoutBookingOffer, withOneStopdeskOffer, withoutRefusals, withSingleSpaces, teamSaid, teamOnlyKind, type PlaceProduct } from './reply-fixes';
 import { serverTextLanguage, systemLocale } from './language';
 import { foldText } from './tools/wilaya-aliases';
 import { foldGuard, splitSentences } from './reply-guard';
@@ -123,7 +123,7 @@ const PRODUCT_REFUSALS = new Set(['ORDER_INSUFFICIENT_STOCK', 'PRODUCT_NOT_AVAIL
 export const YES_WITHOUT_ORDER_NOTE =
   'THE ORDER IS NOT CREATED YET: the customer said yes to the recap shown earlier, but create_order was not called — call create_order now with the details of that recap and customerConfirmed true; the server creates the order and sends the confirmation. Never say the order is registered, placed or noted yourself.';
 export const CONFIRM_WITHOUT_RECAP_NOTE =
-  'NO RECAP YET: your reply asks the customer to confirm, or says the order is registered / noted, but no recap was shown and no order was created — the customer only ever confirms the recap create_order returns. If the customer has accepted a product and every order field is known (name, phone, wilaya, address or stop-desk), call create_order now: the server shows the recap. Otherwise ask the one missing field, or ask whether they want the product (« Voulez-vous le … ? »). Never ask « pour confirmer … ? », « tu confirmes ? » or for a « oui » yourself.';
+  'NO RECAP YET: your reply asks the customer to confirm, or says the order is registered / noted, but no recap was shown and no order was created — the customer only ever confirms the recap create_order returns. If the customer has accepted a product and every order field is known (name, phone, wilaya, address or stop-desk), call create_order now: the server shows the recap. Otherwise ask the one missing field (when the customer already wants the product: the next field, their name first — never offer to book, reserve or register it for them), or ask whether they want the product (« Voulez-vous le … ? »). Never ask « pour confirmer … ? », « tu confirmes ? » or for a « oui » yourself.';
 /** Words of a message about an order of the customer (a status, a tracking number): lookup_order stays offered on it. */
 const ORDER_WORD = /command|order|colis|livraison|tracking|suivi|طلبي|الطلب|كوموند|komand|كولي|coli|wsel|wslat|wselt|وصلت|وين/u;
 /** journey retest R12-3: words of a question about an order already made (its status, its parcel) — a yes with them may look it up. */
@@ -281,6 +281,142 @@ export const quoteAnswered = (call: Pick<AiToolCallRequest, 'name' | 'args'>, ex
   }
   return null;
 };
+/** The wilaya id (served or not) of a quote_delivery answer; null when it is no quote. */
+const quoteWilaya = (result: unknown): number | null => {
+  const r = result as { ok?: unknown; wilayaId?: unknown; error?: { code?: unknown; wilayaId?: unknown } } | null;
+  const id = r?.ok === true ? r.wilayaId : r?.error?.code === 'WILAYA_NOT_SERVED' ? r.error.wilayaId : null;
+  return typeof id === 'number' ? id : null;
+};
+/**
+ * journey retest R16-3 (18/11): a quote_delivery for a wilaya an EARLIER turn of the conversation already quoted, while the shop's delivery
+ * settings have not changed since (`known`: those answers, latest first, already checked by `validEarlierQuotes`) — PF1 T2 `quote_delivery
+ * {wilayaId 19}` one message after T1's `quote_delivery {Sétif}` (same 650 / 350). Answered from it without running: a home quote from an
+ * earlier home quote (the free threshold applied to this call's subtotal), a stop-desk quote from a quote's stop-desk fee, any quote of a
+ * wilaya not served. Null when the call asks anything else (another wilaya, a home fee only a free quote knew).
+ */
+export const earlierQuoteAnswered = (call: Pick<AiToolCallRequest, 'name' | 'args'>, known: readonly unknown[]): Record<string, unknown> | null => {
+  if (canonicalTool(call.name) !== 'quote_delivery' || !known.length) return null;
+  const id = call.args?.wilayaId === undefined || call.args.wilayaId === null || call.args.wilayaId === '' ? null : Number(call.args.wilayaId);
+  const name = typeof call.args?.wilayaName === 'string' && call.args.wilayaName.trim() ? foldText(call.args.wilayaName) : null;
+  if (id === null && !name) return null;
+  const stopdesk = call.args?.isStopdesk === true || call.args?.isStopdesk === 'true';
+  const subtotal = call.args?.subtotal === undefined || call.args.subtotal === null ? undefined : Number(call.args.subtotal);
+  const note = { repeated: true, fromEarlierTurn: true, instruction: "quote_delivery already answered for this wilaya earlier in this conversation and the shop's delivery settings have not changed: this is its answer — use it." };
+  for (const v of known) {
+    const r = v as { ok?: unknown; wilayaId?: unknown; wilayaName?: unknown; wilayaNameAr?: unknown; isStopdesk?: unknown; fee?: unknown; free?: unknown; freeFrom?: unknown; stopdeskAvailable?: unknown; stopdeskFee?: unknown; error?: { code?: unknown; wilayaName?: unknown; homeAvailable?: unknown } } | null;
+    const wid = quoteWilaya(r);
+    const names = [r?.ok === true ? r.wilayaName : r?.error?.wilayaName, r?.wilayaNameAr].filter((x): x is string => typeof x === 'string').map(foldText);
+    if (wid === null || !((id !== null && Number.isFinite(id) && wid === id) || (name && names.includes(name)))) continue;
+    if (r?.ok !== true) {
+      if (r?.error?.homeAvailable !== true || stopdesk) return { ...(r as object), ...note };
+      continue;
+    }
+    if (stopdesk) {
+      if (r.isStopdesk === true && typeof r.fee === 'number') return { ...(r as object), ...note };
+      if (r.stopdeskAvailable === true && typeof r.stopdeskFee === 'number') return { ...(r as object), isStopdesk: true, fee: r.stopdeskFee, free: false, ...note };
+      if (r.stopdeskAvailable === false) return { ok: false, error: { code: 'WILAYA_NOT_SERVED', wilayaId: wid, wilayaName: r.wilayaName, stopdeskAvailable: false, homeAvailable: true }, ...note };
+      continue;
+    }
+    if (r.isStopdesk === true || r.free === true || typeof r.fee !== 'number') continue;
+    const freeFrom = typeof r.freeFrom === 'number' ? r.freeFrom : null;
+    const free = freeFrom !== null && subtotal !== undefined && Number.isFinite(subtotal) && subtotal >= freeFrom;
+    return { ...(r as object), isStopdesk: false, fee: free ? 0 : r.fee, free, ...note };
+  }
+  return null;
+};
+/** journey retest R16-3: the quotes of earlier turns that stay valid, given the shop's delivery rules now (its rows for those wilayas). */
+export const validEarlierQuotes = (
+  earlier: readonly { result: unknown; at: string | null }[],
+  rules: readonly { wilayaId: number; updatedAt: Date; freeAbove: number | null; isActive: boolean }[],
+  shopFreeThreshold: number | null,
+): unknown[] =>
+  earlier
+    .filter((e) => {
+      const at = e.at ? Date.parse(e.at) : NaN;
+      const id = quoteWilaya(e.result);
+      if (!Number.isFinite(at) || id === null) return false;
+      const rule = rules.find((x) => x.wilayaId === id);
+      const r = e.result as { ok?: unknown; freeFrom?: unknown; error?: { homeAvailable?: unknown } } | null;
+      // a rule changed after the quote (fee, stop-desk, threshold, served or not) ⇒ the quote is not reused
+      if (rule && rule.updatedAt.getTime() > at) return false;
+      if (r?.ok === true) return !!rule && rule.isActive && (typeof r.freeFrom === 'number' ? r.freeFrom : null) === (rule.freeAbove ?? shopFreeThreshold ?? null);
+      // not served at all: still no active rule; home only: the rule is still there
+      return r?.error?.homeAvailable === true ? !!rule && rule.isActive : !rule || !rule.isActive;
+    })
+    .map((e) => e.result);
+/** journey retest R16-3: the system note listing the delivery quotes of earlier turns that stay valid (no new quote_delivery for them). */
+export const knownQuotesNote = (known: readonly unknown[]): string | null => {
+  const seen = new Set<number>();
+  const lines: string[] = [];
+  for (const v of known) {
+    const id = quoteWilaya(v);
+    if (id === null || seen.has(id)) continue;
+    seen.add(id);
+    const r = v as { ok?: unknown; wilayaName?: unknown; isStopdesk?: unknown; fee?: unknown; free?: unknown; stopdeskAvailable?: unknown; stopdeskFee?: unknown; error?: { wilayaName?: unknown; homeAvailable?: unknown } };
+    const name = String((r.ok === true ? r.wilayaName : r.error?.wilayaName) ?? id);
+    if (r.ok !== true) lines.push(`${name}: ${r.error?.homeAvailable === true ? 'home delivery only (no stop-desk)' : 'not served'}`);
+    else if (r.isStopdesk === true) lines.push(`${name}: stop-desk ${r.fee} DA`);
+    else if (r.free !== true) lines.push(`${name}: home ${r.fee} DA${r.stopdeskAvailable === true && typeof r.stopdeskFee === 'number' ? `, stop-desk ${r.stopdeskFee} DA` : ', no stop-desk'}`);
+    if (lines.length >= 4) break;
+  }
+  return lines.length ? `DELIVERY ALREADY QUOTED in this conversation (the shop's delivery settings have not changed — no new quote_delivery is needed for these wilayas): ${lines.join('; ')}.` : null;
+};
+/**
+ * journey retest R16-3 (18/11): a search_products that an EARLIER turn of the conversation already made (same query, whatever its
+ * limit / case / accents) and whose products the prompt's CATALOGUE lists — N5 T2 `search_products {parfum}` again after T1's. Not run:
+ * the CATALOGUE gives their current price, variants and stock. Null when the earlier search found nothing or a product is no longer
+ * listed (it runs).
+ */
+export const earlierSearchAnswered = (call: Pick<AiToolCallRequest, 'name' | 'args'>, earlier: readonly { args: Record<string, unknown>; products: { id: string; name: string }[] }[] | undefined, listed: readonly string[] | undefined): Record<string, unknown> | null => {
+  if (canonicalTool(call.name) !== 'search_products' || !earlier?.length || !listed?.length) return null;
+  const key = sameCallKey(call.name, call.args);
+  const hit = earlier.find((e) => sameCallKey('search_products', e.args) === key);
+  if (!hit?.products.length || !hit.products.every((p) => listed.includes(p.id))) return null;
+  return { products: hit.products, repeated: true, fromEarlierTurn: true, instruction: 'The same search was made earlier in this conversation: these products are listed in the CATALOGUE above with their current price, variants and stock — answer from it, no new search.' };
+};
+/**
+ * journey retest R16-3 (18/11): a search_products on a message that only asks about delivery, for words no customer message of the
+ * conversation holds — F9 « ch7al tawsil l Setif ? w l Oran stop desk ? w Illizi ? » ⇒ `search_products {«Retouche couture»}` (a service
+ * nobody asked about, which fed the « T7ebb nwarrik produit … ? » closing). Not run. Null when the message wants or names a product.
+ */
+export const strayDeliverySearch = (call: Pick<AiToolCallRequest, 'name' | 'args'>, customerText: string | undefined, customerHistory: string | undefined, catalogue?: readonly CataloguePrice[]): Record<string, unknown> | null => {
+  const query = call.args?.query;
+  if (canonicalTool(call.name) !== 'search_products' || typeof query !== 'string' || !customerText || !asksDelivery(customerText) || productWanted(customerText)) return null;
+  if (catalogue?.length && productNamedIn(customerText, catalogue)) return null;
+  const words = productWords(query);
+  const said = new Set(productWords(customerHistory ?? customerText));
+  if (!words.length || words.some((w) => said.has(w))) return null;
+  return { products: [], notAsked: true, instruction: 'The customer asked only about delivery: no product search is needed — answer their delivery question (with quote_delivery), nothing else.' };
+};
+/**
+ * journey retest R16-3 (18/11): a check_availability the prompt's CATALOGUE already answers — the free stock of the product (or of the
+ * variant named) covers the quantity, the product is not tracked, or it is sold beyond its stock (N1 T2 `check_availability {qty 1}` of the
+ * Marron bag before the recap call: create_order checks the stock itself). Not run. Null when the stock is short (the tool says how) or
+ * the product / variant is not listed.
+ */
+export const catalogueAvailability = (call: Pick<AiToolCallRequest, 'name' | 'args'>, stock: readonly CatalogueStock[] | undefined): Record<string, unknown> | null => {
+  if (canonicalTool(call.name) !== 'check_availability' || !stock?.length) return null;
+  const id = call.args?.productId;
+  const p = typeof id === 'string' ? stock.find((x) => x.id === id) : undefined;
+  if (!p) return null;
+  const qty = call.args?.quantity === undefined || call.args.quantity === null ? 1 : Number(call.args.quantity);
+  if (!Number.isInteger(qty) || qty < 1) return null;
+  const vid = typeof call.args?.variantId === 'string' && call.args.variantId ? call.args.variantId : null;
+  const v = vid ? p.variants.find((x) => x.id === vid) : undefined;
+  if (vid ? !v : p.variants.length > 0) return null;
+  const free = p.stock === null ? null : v ? v.stock : p.stock;
+  if (free !== null && !p.sell && qty > free) return null;
+  return { ok: true, productId: id, ...(vid ? { variantId: vid } : {}), quantity: qty, available: true, fromCatalogue: true, instruction: 'In stock, as the CATALOGUE above says: no availability check is needed — answer the customer now (create_order checks the stock again when it is called).' };
+};
+/**
+ * journey retest R16-3 (18/11): a quote_delivery made while every order field is known (`recapReady`: the message gives the order's
+ * details, or changes a recap that waits) and the customer asks nothing about delivery — N14 T1 `quote_delivery {Blida}` before the recap
+ * call, N1 T2 `quote_delivery {Oran}`: create_order computes the fee (home or stop-desk, free threshold) and the recap shows it. Not run.
+ */
+export const RECAP_COMPUTES_RESULT = { ok: true, deferred: true, instruction: 'Every order field is known: call create_order now — it computes the delivery fee (home or stop-desk, free threshold) and checks the stock itself, and the recap shows them. No quote is needed.' };
+/** journey retest R16-3: told to the model when every order field is known (create_order computes the fee and checks the stock). */
+export const RECAP_READY_NOTE =
+  'EVERY ORDER FIELD SEEMS GIVEN: create_order computes the delivery fee and checks the stock itself — call it directly for the recap, with no quote_delivery or check_availability before it (unless the customer asks about delivery).';
 /** journey retest R1-1: the result given back for a call to a tool this step did not offer (it is not run). */
 export const unavailableTool = (name: string, fieldOnly: boolean, noPhone = false, noPlace = false, noStreet = false) => ({
   ok: false,
@@ -503,6 +639,9 @@ export class AiRunService implements OnModuleInit {
     // journey retest R12-3 (17/11): nor on a « oui » to that recap (F6 T3, F3 T4: `create_order` ⇒ TEST-n, then `lookup_order {}` ⇒
     // no order) — the yes places the order, nothing is to be looked up; a question or a change in the message keeps it
     const confirmingYes = pendingBefore && said !== undefined && confirmation(said) === 'yes' && !asksSomething(said) && !ORDER_WORD_ASK.test(foldGuard(said));
+    // journey retest R16-3 (18/11): every order field is known — the message gives the order's details (or changes a recap that waits):
+    // create_order computes the fee and checks the stock (N14 T1 / N1 T2 quoted and checked before the recap call)
+    const recapReady = !noPhone && !noAddress && (orderDetails || (pendingBefore && !confirmingYes && said !== undefined && !asksSomething(said)));
     const withheld = (name: string) =>
       (name === 'handoff_to_human' && (noHandoff || !reasons.length)) || (name === 'create_order' && (noPhone || noPlace || noStreet)) || (name === 'cancel_order' && noCancel) || (name === 'lookup_order' && (noLookup || confirmingYes)) || (name === 'add_faq_candidate' && noFaq);
     const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !withheld(d.name)).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
@@ -511,6 +650,11 @@ export class AiRunService implements OnModuleInit {
     // (after the cached start of the system prompt, so the cache is kept).
     // journey retest R5-6: and, without a phone, that create_order is not available (same place: the cache prefix is kept)
     const executed: ExecutedTool[] = [];
+    // journey retest R16-3 (18/11): the delivery quotes of earlier turns that stay valid (the shop's delivery rules unchanged since), and
+    // the ones of them this turn used instead of a new quote_delivery (they count as this turn's quotes: the reply gives their fee)
+    const knownQuotes = await this.knownQuotes(req);
+    const reused: ExecutedTool[] = [];
+    const knownNote = knownQuotesNote(knownQuotes);
     // journey retest R9-1 (17/11): the one language of every server-written text of this turn (recap, confirmation, blocked
     // sentence, delivery answer, « no photo » sentence) — the turn's, a `mixed` turn taking the shop's locale, never French by default
     const textLang = serverTextLanguage(req.guard?.lang, req.guard?.shopLocale);
@@ -530,9 +674,26 @@ export class AiRunService implements OnModuleInit {
     // journey retest R15-3 (18/11): a get_product of a product the prompt's CATALOGUE lists is answered from it — not on a photo request
     // (its pictures come with get_product)
     const catalogueLookup = !photoAsked(req.toolCtx.customerText ?? '');
+    /**
+     * The answer of a call this turn (or an earlier one) already has — not run. journey retest R10-3 / R11-3 / R13-4 / R14-3 / R15-3 (searches,
+     * lookups, quotes of this turn); journey retest R16-3 (18/11): a quote of an earlier turn still valid, a quote while every order field is
+     * known, a check_availability the CATALOGUE answers, a search an earlier turn made, a product search on a delivery-only question.
+     */
+    const knownAnswer = (call: AiToolCallRequest, stepCalls: readonly AiToolCallRequest[]): Record<string, unknown> | null => {
+      const search = canonicalTool(call.name) === 'search_products';
+      const known = (search ? (searchAnswered(call.args?.query, executed, req.guard?.catalogueNames) ?? (fieldOnly ? catalogueAnswered(call.args?.query, req.guard?.catalogueNames) : null)) : null) ?? recapAnswered(call, executed) ?? lookupAnswered(call, executed, req.guard?.catalogueIds, stepCalls, catalogueLookup) ?? quoteAnswered(call, [...executed, ...reused]);
+      if (known) return known;
+      const earlier = earlierQuoteAnswered(call, knownQuotes);
+      if (earlier) {
+        reused.push({ callId: `earlier-quote:${reused.length}`, name: 'quote_delivery', args: call.args, result: earlier, simulated: false, replayed: true });
+        return earlier;
+      }
+      if (recapReady && canonicalTool(call.name) === 'quote_delivery' && !asksDelivery(said ?? '')) return RECAP_COMPUTES_RESULT;
+      return catalogueAvailability(call, req.guard?.catalogueStock) ?? (search ? (earlierSearchAnswered(call, req.guard?.earlierSearches, req.guard?.catalogueIds) ?? strayDeliverySearch(call, said, req.toolCtx.customerHistory, req.guard?.cataloguePrices)) : null);
+    };
     const seen = new Map<string, number>();
     const answered = new Map<string, unknown>();
-    const system = [req.prompt.system, ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noStreet ? [NO_STREET_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : [])].join('\n\n');
+    const system = [req.prompt.system, ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noStreet ? [NO_STREET_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : []), ...(knownNote ? [knownNote] : []), ...(recapReady ? [RECAP_READY_NOTE] : [])].join('\n\n');
     // journey retest R7-5: run once, when the answer to a delivery question comes without any quote_delivery of the turn
     let serverQuoted = false;
     // journey retest R14-2: the server's quote for the fees of a « home or stop-desk? » question (not a delivery question)
@@ -564,7 +725,7 @@ export class AiRunService implements OnModuleInit {
     // journey retest R1-6 / R1-7: a recap create_order returned this turn is sent as the server wrote it (catalogue names,
     // delivery mode, name, phone, address) — the model's own recap was cut short or translated the product names
     const recapNow = () => pendingRecap(executed.map((t) => ({ name: canonicalTool(t.name), result: t.result })));
-    const confirmed = (output: AiReplyOutput): AiReplyOutput => {
+    const confirmedText = (output: AiReplyOutput): AiReplyOutput => {
       const text = confirmationNow();
       if (text) return { ...output, reply: text };
       // journey retest R2-6: Messenger shows « **Djellaba homme** » as typed — the reply goes out as plain text
@@ -583,12 +744,19 @@ export class AiRunService implements OnModuleInit {
         // arabizi turn whose system texts are in Arabic script) the model's own sentence is followed by what the team does.
         const reason = forcedHandoff ?? handoffReason(output.statusDetail);
         const ooh = !!req.guard?.outOfHours;
+        const customerText = req.toolCtx.customerText;
         const person = handoffKind(reason) === 'person' && executed.every((t) => canonicalTool(t.name) === 'handoff_to_human');
-        let said = person ? '' : withoutRecapClaims(plain.reply).trim();
+        // journey retest R16-2 (18/11): a model refusal (« Je ne peux pas vous donner de prix de gros ici. ») is never the hand-off's text
+        let said = person ? '' : withoutRefusals(withoutRecapClaims(plain.reply)).trim();
         if (ooh) said = withoutQuickReply(said);
-        if (!said) return { ...plain, reply: handoffReply(reason, textLang, { outOfHours: ooh }) };
+        if (!said) return { ...plain, reply: handoffReply(reason, textLang, { outOfHours: ooh, customerText }) };
         const shown = handoffSystemLineShown(textLang, ooh, systemLocale(textLang, req.guard?.shopLocale ?? 'fr', (req.toolCtx.agent as { defaultLanguage?: string | null } | undefined)?.defaultLanguage ?? null));
-        return { ...plain, reply: shown || (ooh && openingSaid(said)) ? said : `${said} ${handoffReply(reason, textLang, { outOfHours: ooh, tail: true })}` };
+        // journey retest R16-2: a hand-off the model made with its own handoff_to_human call, or a request only the team can answer (wholesale,
+        // a custom order, a partnership), always carries the reason's sentence — W1 got the model's refusal and a « pour info » price, nothing on
+        // the team — unless the model's own words already say the team takes it over
+        const ownCall = executed.some((t) => canonicalTool(t.name) === 'handoff_to_human');
+        const always = (ownCall || !!teamOnlyKind(customerText)) && !teamSaid(said);
+        return { ...plain, reply: (shown && !always) || (ooh && openingSaid(said)) ? said : `${said} ${handoffReply(reason, textLang, { outOfHours: ooh, tail: true, customerText })}` };
       }
       const recap = recapNow();
       if (!recap) {
@@ -604,12 +772,16 @@ export class AiRunService implements OnModuleInit {
         // journey retest R13-6 (18/11): a fee answer gives home AND stop-desk when this turn's quote gave both (F1b T2); « taille unique »,
         // « نعم » in an Arabic-script answer (N18 T1, A2 T1)
         // journey retest R14-2 (18/11): and « home or stop-desk? » carries both fees (the server's quote when the model made none)
-        text = withArabicWords(withModeFees(withBothFees(text, quoteFacts(calls), textLang), quoteFacts(calls), textLang), textLang);
+        const quotesNow = quoteFacts([...executed, ...reused].map((t) => ({ name: canonicalTool(t.name), result: t.result })));
+        text = withArabicWords(withModeFees(withBothFees(text, quotesNow, textLang), quotesNow, textLang), textLang);
         // journey retest R15-1 (18/11): a place given with no quote of it yet ⇒ the product's price and both fees (the server's quote)
         if (placeQuote) text = withPlaceFacts(text, quoteFacts([{ name: 'quote_delivery', result: placeQuote.result }]), placeProduct, textLang);
         // journey retest R15-4 (18/11): the asked price of an out-of-stock product is given with « pas disponible » (N5 T1)
         const gone = new Set(req.guard?.unavailableNames ?? []);
         text = withAskedPrice(text, req.toolCtx.customerText, (req.guard?.cataloguePrices ?? []).filter((p) => gone.has(p.name)), textLang);
+        // journey retest R16-4 (18/11): the stop-desk offered once; no question that sounds like a booking before any recap (« تحب نحجزلك
+        // واحد؟ ») — the next missing field instead
+        text = withoutBookingOffer(withOneStopdeskOffer(text), req.toolCtx.customerText, phoneSoFar, textLang);
         return { ...plain, reply: withPhotoAnswer(output, text) };
       }
       // journey retest R12-4: the lead-in kept before the server recap gets the same narrow wording fixes (N3 T2 « Livraison à domicile »)
@@ -620,6 +792,11 @@ export class AiRunService implements OnModuleInit {
       // « je le prends » ⇒ the Coffret's recap, the Parfum Oud out of stock)
       const swap = substitutionLine(recap.items, req.toolCtx.customerHistory ?? req.toolCtx.customerText ?? '', req.guard?.unavailableNames ?? [], r.text, textLang);
       return { ...plain, reply: withPhotoAnswer(output, [swap, answer, r.text].filter(Boolean).join('\n\n')) };
+    };
+    // journey retest R16-4 (18/11): one space between words, whatever wrote the text (C2 « smahli 3lik  3la had lmochkil »)
+    const confirmed = (output: AiReplyOutput): AiReplyOutput => {
+      const done = confirmedText(output);
+      return { ...done, reply: withSingleSpaces(done.reply) };
     };
     /**
      * journey retest R7-2: a photo request answered with no photo sent and no word about it, while every product of the answer
@@ -670,7 +847,21 @@ export class AiRunService implements OnModuleInit {
     // journey 16/11 J03-2: this turn's quote_delivery answers — the reply must give the fee (not checked on a handoff answer)
     const factsNow = (answer?: Pick<AiReplyOutput, 'status' | 'customer'> & Partial<Pick<AiReplyOutput, 'productCards' | 'productPhotos'>>) => {
       const f = withToolResults(req.guard!, executed.map((t) => t.result));
-      const quotes = answer?.status === 'HANDOFF' || forcedHandoff ? [] : quoteFacts(executed.filter((t) => t !== modeQuote).map((t) => ({ name: canonicalTool(t.name), result: t.result })));
+      // journey retest R16-3: a quote of an earlier turn reused this turn owes its fee only when the customer asks about delivery (or names
+      // that wilaya: `owedQuotes`) — the model re-quoting a wilaya on its own (PF1 T2) asks the reply for nothing new
+      const saidFolded = foldGuard(said ?? '');
+      const reusedAsked = asksDelivery(said ?? '')
+        ? reused
+        : reused.filter((t) => {
+            const r = t.result as { wilayaName?: unknown; wilayaNameAr?: unknown } | null;
+            return [r?.wilayaName, r?.wilayaNameAr].some((w) => typeof w === 'string' && !!w && saidFolded.includes(foldGuard(w)));
+          });
+      const quotes = answer?.status === 'HANDOFF' || forcedHandoff ? [] : quoteFacts([...executed.filter((t) => t !== modeQuote), ...reusedAsked].map((t) => ({ name: canonicalTool(t.name), result: t.result })));
+      // journey retest R16-1 (18/11): the wilayas this turn's quotes gave as not served at all (a dropped « ma nwasslouch l Illizi » comes back)
+      const notServed = answer?.status === 'HANDOFF' || forcedHandoff ? [] : [...new Set([...executed, ...reused].flatMap((t) => {
+        const e = (t.result as { error?: { code?: unknown; wilayaName?: unknown; homeAvailable?: unknown } } | null)?.error;
+        return canonicalTool(t.name) === 'quote_delivery' && e?.code === 'WILAYA_NOT_SERVED' && e.homeAvailable !== true && typeof e.wilayaName === 'string' ? [e.wilayaName] : [];
+      }))];
       // journey retest R2-3: the fields the answer reports as given — the guard checks the reply does not deny them
       const c = answer?.customer;
       const fields = c ? { ...(c.name ? { name: c.name } : {}), ...(c.phone ? { phone: c.phone } : {}), ...(c.wilaya ? { wilaya: c.wilaya } : {}), ...(c.commune ? { commune: c.commune } : {}), ...(c.address ? { address: c.address } : {}) } : undefined;
@@ -686,12 +877,15 @@ export class AiRunService implements OnModuleInit {
       // journey retest R12-2 (17/11): a recap waits (a bare « c'est noté » to the « oui » is an order claim); the customer's orders
       // were looked up this turn (their status may be told)
       const orderLookedUp = executed.some((t) => canonicalTool(t.name) === 'lookup_order' && ((t.result as { orders?: unknown[] } | null)?.orders?.length ?? 0) > 0);
-      return { ...f, ...(pendingBefore ? { recapWaiting: true } : {}), ...(orderLookedUp ? { orderLookedUp: true } : {}), ...(quotes.length ? { quotes } : {}), ...(fields ? { customerFields: fields } : {}), ...(photoSent !== undefined ? { photoSent } : {}), ...(systemFailure ? { systemFailure } : {}), ...(refusal ? { orderRefused: true, ...(refusal.field ? { missingField: refusal.field } : {}), ...(PRODUCT_REFUSALS.has(refusal.code) ? { productRefused: true } : {}) } : {}), ...(noRecapPending ? { noRecapPending } : {}) };
+      return { ...f, ...(notServed.length ? { notServed } : {}), ...(pendingBefore ? { recapWaiting: true } : {}), ...(orderLookedUp ? { orderLookedUp: true } : {}), ...(quotes.length ? { quotes } : {}), ...(fields ? { customerFields: fields } : {}), ...(photoSent !== undefined ? { photoSent } : {}), ...(systemFailure ? { systemFailure } : {}), ...(refusal ? { orderRefused: true, ...(refusal.field ? { missingField: refusal.field } : {}), ...(PRODUCT_REFUSALS.has(refusal.code) ? { productRefused: true } : {}) } : {}), ...(noRecapPending ? { noRecapPending } : {}) };
     };
     /** The guard's last word: offending sentences dropped / greeting stripped / the safe sentence (never a handoff). */
     const enforce = (base: AiReplyOutput, text: string, violations: GuardViolation[], first: GuardViolation[], retried: boolean, extra: { salvaged?: boolean }): TurnResult => {
-      const e = enforceReply(text, violations, factsNow(base), { hasCards: base.productCards.length > 0 });
-      return ok({ ...base, reply: e.reply }, { ...extra, guard: { violations: slim(first), retried, remaining: slim(violations), action: e.action } });
+      const f = factsNow(base);
+      const e = enforceReply(text, violations, f, { hasCards: base.productCards.length > 0 });
+      // journey retest R16-1 (18/11): a price / stock answer / not-served wilaya the customer asked for, dropped with a sentence, comes back
+      const reply = e.action === 'safe_sentence' || base.status === 'HANDOFF' || forcedHandoff ? e.reply : withAskedFacts(e.reply, base.reply, f, textLang);
+      return ok({ ...base, reply }, { ...extra, guard: { violations: slim(first), retried, remaining: slim(violations), action: e.action } });
     };
     /** The corrective turn could not run (provider failure, time): the first answer is enforced rather than lost. */
     const guardFallback = () => (guardFirst ? enforce(guardFirst.output, guardFirst.output.reply, guardFirst.violations, guardFirst.violations, true, guardFirst.extra) : null);
@@ -765,7 +959,7 @@ export class AiRunService implements OnModuleInit {
           // journey retest R13-4: nor one for a product the recap create_order returned in this turn already holds (A3 T2, F6 T1)
           // journey retest R14-3: nor a get_product / check_availability this turn's search already answers (N9 T1, N5 T1, F1d T1, N25 T2)
           // journey retest R15-3: nor a get_product of a CATALOGUE product (N4 T1), nor a second quote of a wilaya quoted this turn (F1b T2, N16 T1)
-          const known = (canonicalTool(call.name) === 'search_products' ? (searchAnswered(call.args?.query, executed, req.guard?.catalogueNames) ?? (fieldOnly ? catalogueAnswered(call.args?.query, req.guard?.catalogueNames) : null)) : null) ?? recapAnswered(call, executed) ?? lookupAnswered(call, executed, req.guard?.catalogueIds, runnable, catalogueLookup) ?? quoteAnswered(call, executed);
+          const known = knownAnswer(call, runnable);
           if (known) {
             messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: known });
             continue;
@@ -803,7 +997,7 @@ export class AiRunService implements OnModuleInit {
           // journey retest R13-4: nor one for a product the recap create_order returned in this turn already holds (A3 T2, F6 T1)
           // journey retest R14-3: nor a get_product / check_availability this turn's search already answers (N9 T1, N5 T1, F1d T1, N25 T2)
           // journey retest R15-3: nor a get_product of a CATALOGUE product (N4 T1), nor a second quote of a wilaya quoted this turn (F1b T2, N16 T1)
-          const known = (canonicalTool(call.name) === 'search_products' ? (searchAnswered(call.args?.query, executed, req.guard?.catalogueNames) ?? (fieldOnly ? catalogueAnswered(call.args?.query, req.guard?.catalogueNames) : null)) : null) ?? recapAnswered(call, executed) ?? lookupAnswered(call, executed, req.guard?.catalogueIds, calls, catalogueLookup) ?? quoteAnswered(call, executed);
+          const known = knownAnswer(call, calls);
           if (known) {
             messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: known });
             continue;
@@ -831,7 +1025,7 @@ export class AiRunService implements OnModuleInit {
         const rewritten = (parsed.ok ? parsed.value.reply : (salvageReply(res.value.text)?.reply ?? '')).trim();
         if (!rewritten) return enforce(first, first.reply, violations, violations, true, extra);
         const again = checkReply(rewritten, factsNow(first));
-        if (!again.length) return ok({ ...first, reply: rewritten }, { ...extra, guard: { violations: slim(violations), retried: true, remaining: [], action: 'rewritten' } });
+        if (!again.length) return ok({ ...first, reply: first.status === 'HANDOFF' || forcedHandoff ? rewritten : withAskedFacts(rewritten, first.reply, factsNow(first), textLang) }, { ...extra, guard: { violations: slim(violations), retried: true, remaining: [], action: 'rewritten' } });
         return enforce(first, rewritten, again, violations, true, extra);
       }
       const retryOrDone = (r: TurnResult | 'retry'): TurnResult | null => {
@@ -845,20 +1039,20 @@ export class AiRunService implements OnModuleInit {
         // rule applies to this answer (one corrective turn, then the fee sentence) as when the model called it
         if (!serverQuoted && parsed.value.status !== 'HANDOFF' && !forcedHandoff && !recapNow() && !confirmationNow()) {
           serverQuoted = true;
-          await this.deliveryQuote(req, executed, seen, answered);
+          await this.deliveryQuote(req, executed, seen, answered, knownQuotes, reused);
           // journey retest R14-2 (18/11): the question « home or stop-desk? » (the model's, or the server's address question after a
           // create_order refused for the address) carries both fees — F1b T2 « Sétif, El Eulma » ⇒ « … à domicile … ou au stop-desk ? »
           // with no fee and no quote_delivery: the server quotes the wilaya the customer named (that quote is no delivery question:
           // it is kept out of the guard's fee rule) and `withModeFees` writes the fees before the question
-          if (!executed.some((t) => canonicalTool(t.name) === 'quote_delivery') && (modeQuestionAt(parsed.value.reply) >= 0 || refusedOrder(executed)?.field === 'address')) {
-            modeQuote = await this.modeQuote(req, executed, seen, answered);
+          if (![...executed, ...reused].some((t) => canonicalTool(t.name) === 'quote_delivery') && (modeQuestionAt(parsed.value.reply) >= 0 || refusedOrder(executed)?.field === 'address')) {
+            modeQuote = await this.modeQuote(req, executed, seen, answered, knownQuotes);
             if (modeQuote) parsed.value.reply = withModeFees(parsed.value.reply, quoteFacts([{ name: 'quote_delivery', result: modeQuote.result }]), textLang);
           }
           // journey retest R15-1 (18/11): the customer named a place this message (F5 T1 « …, wilaya Alger, Bab Ezzouar ») and no quote of
           // it exists yet in the conversation — the model asked the street with no price, no fee and no stop-desk: the server quotes that
           // wilaya (kept out of the guard's fee rule, as R14-2's) and the reply carries the product's price and both fees. Only when the
           // reply asks the address or the message names a catalogue product (an order is being taken), never on a not-served wilaya.
-          if (!executed.some((t) => canonicalTool(t.name) === 'quote_delivery')) {
+          if (![...executed, ...reused].some((t) => canonicalTool(t.name) === 'quote_delivery')) {
             const product = this.placeProductOf(req, parsed.value);
             const quoted = product || asksAddress(parsed.value.reply) ? await this.placeQuote(req, executed, seen, answered) : null;
             if (quoted && (quoted.result as { ok?: unknown } | null)?.ok === true) {
@@ -943,6 +1137,22 @@ export class AiRunService implements OnModuleInit {
   }
 
   /**
+   * journey retest R16-3 (18/11): the quote_delivery answers of earlier turns that stay valid — no delivery rule of their wilaya changed
+   * since (fee, stop-desk, free threshold, served or not) and the shop's own threshold is the one they used. Unreadable ⇒ none.
+   */
+  private async knownQuotes(req: TurnRequest): Promise<unknown[]> {
+    const earlier = req.guard?.earlierQuotes ?? [];
+    if (!earlier.length) return [];
+    const ids = [...new Set(earlier.map((e) => quoteWilaya(e.result)).filter((x): x is number => x !== null))];
+    try {
+      const rules = await prisma.deliveryFeeRule.findMany({ where: { wilayaId: { in: ids } }, select: { wilayaId: true, updatedAt: true, freeAbove: true, isActive: true } });
+      return validEarlierQuotes(earlier, rules, req.guard?.shopFreeThreshold ?? null);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * journey retest R7-4: the customer has named a wilaya (or a commune of one, « wilaya 16 ») in their messages, or one is known
    * of them — the conversation's recorded details, their client record or an earlier order. Unsure (no messages, a read error) ⇒ true.
    */
@@ -970,9 +1180,9 @@ export class AiRunService implements OnModuleInit {
    * with no quote_delivery of this turn ⇒ the server runs it for that wilaya (stored like any tool call of the run). A turn that
    * already called quote_delivery, or a message naming no wilaya, runs nothing.
    */
-  private async deliveryQuote(req: TurnRequest, executed: ExecutedTool[], seen: Map<string, number>, answered: Map<string, unknown>): Promise<void> {
+  private async deliveryQuote(req: TurnRequest, executed: ExecutedTool[], seen: Map<string, number>, answered: Map<string, unknown>, known: readonly unknown[] = [], reused: ExecutedTool[] = []): Promise<void> {
     const text = req.toolCtx.customerText ?? '';
-    if (!req.guard || !asksDelivery(text) || executed.some((t) => canonicalTool(t.name) === 'quote_delivery')) return;
+    if (!req.guard || !asksDelivery(text) || [...executed, ...reused].some((t) => canonicalTool(t.name) === 'quote_delivery')) return;
     let wilaya: { id: number } | null = null;
     try {
       wilaya = matchWilaya((await placeIndex()).wilayas, text);
@@ -981,6 +1191,12 @@ export class AiRunService implements OnModuleInit {
     }
     if (!wilaya) return;
     const call: AiToolCallRequest = { id: 'server-quote', name: 'quote_delivery', args: { wilayaId: wilaya.id } };
+    // journey retest R16-3 (18/11): a quote of an earlier turn still valid answers it (nothing runs)
+    const earlier = earlierQuoteAnswered(call, known);
+    if (earlier) {
+      reused.push({ callId: 'earlier-quote:server', name: call.name, args: call.args, result: earlier, simulated: false, replayed: true });
+      return;
+    }
     const hash = toolCallId(call.name, call.args, 0);
     const ordinal = seen.get(hash) ?? 0;
     seen.set(hash, ordinal + 1);
@@ -994,7 +1210,7 @@ export class AiRunService implements OnModuleInit {
    * latest earlier message naming a wilaya or a commune of one), so that « home or stop-desk? » gives both fees. Null when no wilaya
    * is named or the lists cannot be read.
    */
-  private async modeQuote(req: TurnRequest, executed: ExecutedTool[], seen: Map<string, number>, answered: Map<string, unknown>): Promise<ExecutedTool | null> {
+  private async modeQuote(req: TurnRequest, executed: ExecutedTool[], seen: Map<string, number>, answered: Map<string, unknown>, known: readonly unknown[] = []): Promise<ExecutedTool | null> {
     const lines = [...(req.toolCtx.customerHistory ?? '').split(/\n+/), req.toolCtx.customerText ?? ''].map((l) => l.trim()).filter(Boolean).reverse();
     let wilaya: { id: number } | null = null;
     try {
@@ -1005,6 +1221,9 @@ export class AiRunService implements OnModuleInit {
     }
     if (!wilaya) return null;
     const call: AiToolCallRequest = { id: 'server-mode-quote', name: 'quote_delivery', args: { wilayaId: wilaya.id } };
+    // journey retest R16-3 (18/11): a quote of an earlier turn still valid gives the fees (nothing runs)
+    const earlier = earlierQuoteAnswered(call, known);
+    if (earlier) return { callId: 'earlier-quote:mode', name: call.name, args: call.args, result: earlier, simulated: false, replayed: true };
     const hash = toolCallId(call.name, call.args, 0);
     const ordinal = seen.get(hash) ?? 0;
     seen.set(hash, ordinal + 1);

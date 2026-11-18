@@ -291,8 +291,8 @@ export class ReplyProcessor implements OnModuleInit {
     const prompt = PromptBuilder.build(turnCtx.prompt, history.messages, lead ? `${lead}\n${batchText}` : batchText, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });
     // §4.3 reply guard: the facts of this turn — the prompt's catalogue and shop texts, the fees / totals the tools gave in the
     // earlier turns of the conversation, whether the AI already answered this visit (the NEW_VISIT / RESUMED notes of the history)
-    const earlier = await prisma.aiToolCall.findMany({ where: { executedAt: { not: null }, aiRun: { conversationId: conv.id, id: { not: run.id } } }, orderBy: { executedAt: 'desc' }, take: GUARD_EARLIER_TOOL_CALLS, select: { result: true } });
-    const guard = guardFactsOf(turnCtx.prompt, { customerText: batch.plain, answeredBefore: history.messages.some((m) => m.author === 'ai' || m.author === 'human'), freshStart: history.newVisit || history.resumed, earlierToolResults: earlier.map((c) => c.result), galleries: photosTapped(batch) });
+    const earlier = await prisma.aiToolCall.findMany({ where: { executedAt: { not: null }, aiRun: { conversationId: conv.id, id: { not: run.id } } }, orderBy: { executedAt: 'desc' }, take: GUARD_EARLIER_TOOL_CALLS, select: { result: true, name: true, args: true, executedAt: true } });
+    const guard = guardFactsOf(turnCtx.prompt, { customerText: batch.plain, answeredBefore: history.messages.some((m) => m.author === 'ai' || m.author === 'human'), freshStart: history.newVisit || history.resumed, earlierToolResults: earlier.map((c) => c.result), earlierToolCalls: earlier.map((c) => ({ name: c.name, args: c.args, result: c.result, at: c.executedAt })), galleries: photosTapped(batch) });
 
     // full-test 15/11 AI-CHAT-01: create_order needs a recap of an earlier turn and a phone the customer typed
     const [orderHistory, customerRows] = await Promise.all([

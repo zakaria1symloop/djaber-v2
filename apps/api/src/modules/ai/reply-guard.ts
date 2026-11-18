@@ -133,12 +133,24 @@ export type GuardFacts = {
   quotedWilayas?: number[];
   /** journey retest R15-1 / R15-4: the price of each catalogue product of the prompt (and of its variants) */
   cataloguePrices?: CataloguePrice[];
+  /** journey retest R16-1: the wilayas THIS turn's quote_delivery gave as not served at all (their names) */
+  notServed?: string[];
+  /** journey retest R16-3: the quote_delivery answers of earlier turns of the conversation (latest first), with when they were made */
+  earlierQuotes?: { result: unknown; at: string | null }[];
+  /** journey retest R16-3: the search_products of earlier turns (latest first): their arguments and the products found */
+  earlierSearches?: { args: Record<string, unknown>; products: { id: string; name: string }[] }[];
+  /** journey retest R16-3: the free stock of each catalogue product of the prompt and of its variants (null: not tracked) */
+  catalogueStock?: CatalogueStock[];
+  /** journey retest R16-3: the shop's own free-delivery threshold (a wilaya rule without its own uses it) */
+  shopFreeThreshold?: number | null;
 };
+/** journey retest R16-3: a catalogue product's free stock (null: not tracked) and its variants', sold beyond stock or not. */
+export type CatalogueStock = { id: string; stock: number | null; sell: boolean; variants: { id: string; stock: number }[] };
 /** journey retest R15-1 / R15-4: a catalogue product's price and its variants' prices. */
 export type CataloguePrice = { id: string; name: string; price: number; variants: { id: string; name: string; price: number }[] };
 export type OrderField = 'name' | 'phone' | 'wilaya' | 'commune' | 'address';
 /** What a successful quote_delivery answered: the reply must give one of its fees (or say it is free). */
-export type QuoteFact = { wilaya: string; isStopdesk: boolean; fee: number; free: boolean; stopdeskFee: number | null };
+export type QuoteFact = { wilaya: string; isStopdesk: boolean; fee: number; free: boolean; stopdeskFee: number | null; /** journey retest R16-1: its Arabic name */ wilayaAr?: string };
 
 // --- text helpers -------------------------------------------------------------------------------------------------------------
 /** Lower case, Latin accents and Arabic vowel marks removed, hamza / tā' marbūṭa folded, Arabic-Indic digits → Latin. */
@@ -398,15 +410,38 @@ export const selfNames = (sentence: string, facts: Pick<GuardFacts, 'agentName' 
 /** journey 16/11 J03-2: the quote_delivery answers of this turn (`tools` with their canonical names). */
 export const quoteFacts = (tools: { name: string; result: unknown }[]): QuoteFact[] =>
   tools.flatMap((t) => {
-    const r = t.result as { ok?: unknown; fee?: unknown; free?: unknown; wilayaName?: unknown; isStopdesk?: unknown; stopdeskFee?: unknown; stopdeskAvailable?: unknown } | null;
+    const r = t.result as { ok?: unknown; fee?: unknown; free?: unknown; wilayaName?: unknown; wilayaNameAr?: unknown; isStopdesk?: unknown; stopdeskFee?: unknown; stopdeskAvailable?: unknown } | null;
     if (t.name !== 'quote_delivery' || r?.ok !== true || typeof r.fee !== 'number') return [];
-    return [{ wilaya: typeof r.wilayaName === 'string' ? r.wilayaName : '', isStopdesk: r.isStopdesk === true, fee: r.fee, free: r.free === true, stopdeskFee: typeof r.stopdeskFee === 'number' && r.stopdeskAvailable !== false ? r.stopdeskFee : null }];
+    return [{ wilaya: typeof r.wilayaName === 'string' ? r.wilayaName : '', isStopdesk: r.isStopdesk === true, fee: r.fee, free: r.free === true, stopdeskFee: typeof r.stopdeskFee === 'number' && r.stopdeskAvailable !== false ? r.stopdeskFee : null, ...(typeof r.wilayaNameAr === 'string' ? { wilayaAr: r.wilayaNameAr } : {}) }];
   });
 /** The reply gives a fee of one of the quotes (the number with or without « DA », Arabic digits too) or says the delivery is free. */
 export const feeGiven = (reply: string, quotes: QuoteFact[]): boolean => {
   const folded = foldGuard(reply);
   const nums = new Set(numbersIn(folded));
   return quotes.some((q) => [q.isStopdesk ? null : q.fee, q.isStopdesk ? q.fee : q.stopdeskFee].some((f) => f !== null && f > 0 && nums.has(f)) || ((q.free || q.fee === 0) && FREE_WORDS.test(folded)));
+};
+/**
+ * journey retest R16-1 (18/11): the quoted wilayas whose fee the reply does not give — one fact per wilaya (its home quote when there is
+ * one: it carries the stop-desk fee too). F9 « ch7al tawsil l Setif ? w l Oran stop desk ? w Illizi ? »: three quotes, the reply gave
+ * Sétif only — « one fee of any quote » let the Oran stop-desk answer go missing.
+ */
+export const missingQuotes = (reply: string, quotes: readonly QuoteFact[]): QuoteFact[] => {
+  const byWilaya = new Map<string, QuoteFact[]>();
+  for (const q of quotes) {
+    const k = foldGuard(q.wilaya);
+    byWilaya.set(k, [...(byWilaya.get(k) ?? []), q]);
+  }
+  return [...byWilaya.values()].filter((qs) => !feeGiven(reply, qs)).map((qs) => qs.find((q) => !q.isStopdesk) ?? qs[0]!);
+};
+/**
+ * journey retest R16-1: the quotes whose fee the reply owes — every wilaya the customer's message names (F9: Sétif and Oran), else, when it
+ * names none, one fee of any quote (the J03-2 rule: a quote the model made on its own of a wilaya asked earlier needs no fee of its own).
+ */
+export const owedQuotes = (reply: string, quotes: readonly QuoteFact[], customerText: string | undefined): QuoteFact[] => {
+  const said = ` ${foldGuard(customerText ?? '').replace(/[^\p{L}\p{N}]+/gu, ' ')} `;
+  const named = quotes.filter((q) => [q.wilaya, q.wilayaAr].some((w) => !!w && said.includes(foldGuard(w).replace(/[^\p{L}\p{N}]+/gu, ' ').trim())));
+  if (named.length) return missingQuotes(reply, named);
+  return quotes.length && !feeGiven(reply, [...quotes]) ? missingQuotes(reply, quotes).slice(0, 1) : [];
 };
 
 // --- contradicting the customer (journey retest R2-3) ---------------------------------------------------------------------------
@@ -502,7 +537,8 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
     if (FALSE_CONFESSION.test(foldGuard(s))) out.push({ rule: 'false_confession', sentence: i });
   });
   // journey 16/11 J03-2: the fee the tool returned this turn is the answer — never dropped for a « merci pour ta patience »
-  if (facts.quotes?.length && !feeGiven(reply, facts.quotes)) out.push({ rule: 'fee_missing', sentence: 0 });
+  // journey retest R16-1 (18/11): the fee of EVERY quoted wilaya (F9: Sétif given, the Oran stop-desk quote left out)
+  if (facts.quotes?.length && owedQuotes(reply, facts.quotes, facts.customerText).length) out.push({ rule: 'fee_missing', sentence: 0 });
   // journey retest R5-1: an out-of-stock product is never offered (N7: « … ou notre parfum Oud 50 ml » to « lunettes de soleil ? »)
   if (facts.unavailable?.length) for (const i of unavailableOffers(parts, facts)) out.push({ rule: 'unavailable_offer', sentence: i });
   // journey retest R6-2: photos announced while none is sent (N9 « Hak tsawer ta3 la robe kabyle brodée », the product has none)
@@ -618,7 +654,7 @@ export const inventedProblem = (sentence: string): boolean => INVENTED_PROBLEM.t
 /** journey retest R8-2: what the corrective instruction calls each field create_order asked for. */
 const FIELD_NAMES: Record<string, string> = { items: 'the product', clientName: 'their name (as they write it)', clientPhone: 'their phone number', wilayaId: 'their wilaya', communeName: 'their commune', address: 'their street address (or offer the stop-desk)', secondPhone: 'a second phone number', notes: 'the note' };
 /** journey retest R8-2: the server's question for that field when nothing of the reply is left (no corrective turn fixed it). */
-const FIELD_QUESTIONS: Record<string, Record<'fr' | 'en' | 'ar' | 'arabizi', string>> = {
+export const FIELD_QUESTIONS: Record<string, Record<'fr' | 'en' | 'ar' | 'arabizi', string>> = {
   items: { fr: 'Quel produit souhaitez-vous commander ?', en: 'Which product would you like to order?', ar: 'واش من منتوج تحب تطلب ؟', arabizi: 'Wach men produit t7ebb ?' },
   clientName: { fr: 'Quel est votre nom ?', en: 'What is your name?', ar: 'واش سميتك ؟', arabizi: 'Wach smitek ?' },
   clientPhone: { fr: 'Quel est votre numéro de téléphone ? (ex : 0555123456)', en: 'What is your phone number? (e.g. 0555123456)', ar: 'عطيني رقم الهاتف تاعك (مثال: 0555123456)', arabizi: 'A3tini numéro ta3ek (ex: 0555123456)' },
@@ -682,7 +718,7 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
       facts.productRefused
         ? "- NOTHING IS ORDERED OR NOTED: create_order refused the product (out of stock / not available). Never say « noté », « enregistré », « c'est pris » or ask to confirm: say plainly in one sentence that this product cannot be ordered now, then ask in one question whether they want an in-stock product instead (name it)."
         : !facts.orderRefused && facts.noRecapPending
-          ? '- NO RECAP HAS BEEN SHOWN for this order: never ask the customer to confirm it yourself (« pour confirmer … ? », « tu confirmes ? », « répondez oui ») — they confirm the recap create_order shows. Ask the one missing field, or ask whether they want the product (« Voulez-vous le … ? »).'
+          ? `- NO RECAP HAS BEEN SHOWN for this order: never ask the customer to confirm it yourself (« pour confirmer … ? », « tu confirmes ? », « répondez oui ») — they confirm the recap create_order shows. ${productWanted(facts.customerText ?? '') ? 'The customer already wants the product: ask the next missing order field (their name first) in one short question — never offer to book, reserve or register it for them (« تحب نحجزلك ؟ », « نسجلو لك ؟ », « je vous le réserve ? »).' : 'Ask the one missing field, or ask whether they want the product (« Voulez-vous le … ? »).'}`
           : `- NO RECAP WAS SHOWN in this turn (create_order did not return one): never ask the customer to confirm the order or to answer « oui » again, and never say a recap is coming. ${facts.missingField ? `Ask for ${FIELD_NAMES[facts.missingField] ?? facts.missingField} in one short question, in the customer's language.` : "Answer the customer's message in one short sentence and ask what is still missing, if anything — never a request to confirm, never a word about a technical refusal."}`,
     );
   if (rules.includes('order_claim')) {
@@ -692,7 +728,7 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
     );
   }
   if (rules.includes('fee_missing'))
-    lines.push(`- DELIVERY FEE: quote_delivery answered ${(facts.quotes ?? []).map(quoteText).join('; ')}. Give that fee in the reply (home and stop-desk when both are known), in the customer's language: it is the answer to their question.`);
+    lines.push(`- DELIVERY FEE: quote_delivery answered ${(facts.quotes ?? []).map(quoteText).join('; ')}. Give ${(facts.quotes ?? []).length > 1 ? "each wilaya's fee" : 'that fee'} in the reply (home and stop-desk when both are known), in the customer's language: it is the answer to their question.`);
   return lines.join('\n');
 }
 
@@ -795,10 +831,13 @@ export function enforceReply(reply: string, violations: GuardViolation[], facts:
   // journey retest R1-4: Moroccan words the corrective turn kept are replaced by the Algerian ones
   if (violations.some((v) => v.rule === 'moroccan_darija')) text = fixMoroccan(text);
   // journey 16/11 J03-2: the fee the corrective turn still left out is added from the tool's answer
-  const quote = violations.some((v) => v.rule === 'fee_missing') ? facts.quotes?.[0] : undefined;
-  if (quote) {
+  // journey retest R16-1 (18/11): the fee of every quoted wilaya the text left — the corrective turn dropped them all and only the first
+  // quote came back (F9: Sétif, the Oran stop-desk 400 DA lost), and a sentence dropped for another rule may have carried one: asked
+  // facts survive the guard (whatever rule dropped them)
+  const missing = facts.quotes?.length ? owedQuotes(text, facts.quotes, facts.customerText) : [];
+  if (missing.length) {
     // journey retest R7-5: after an opening « Bonsoir ! », not before it
-    const fee = feeSentence(quote, facts.lang, facts.shopLocale);
+    const fee = missing.map((q) => feeSentence(q, facts.lang, facts.shopLocale)).join(' ');
     const lead = splitSentences(text);
     text = lead.length > 1 && !stripGreeting(lead[0]!, facts.agentName).trim() ? `${lead[0]!.trim()} ${fee} ${lead.slice(1).join('').trim()}` : `${fee}${text ? ` ${text}` : ''}`;
   }
@@ -893,6 +932,11 @@ export type GuardFactsInput = {
   freshStart: boolean;
   /** results of the tool calls of earlier turns of the conversation (fees, totals already given) */
   earlierToolResults?: unknown[];
+  /**
+   * journey retest R16-3: the same earlier tool calls with their tool name, arguments and execution time (latest first) — the quotes
+   * and searches of earlier turns are reused while still valid
+   */
+  earlierToolCalls?: { name: string; args?: unknown; result: unknown; at?: Date | string | null }[];
   /** journey retest R6-2: products whose gallery the platform sends this turn anyway (« Plus de photos » tapped) */
   galleries?: string[];
   /** journey retest R15-2: the shop is outside its opening hours */
@@ -911,6 +955,24 @@ export const quotedWilayasIn = (results: readonly unknown[]): number[] => {
     else if (r?.error?.code === 'WILAYA_NOT_SERVED' && typeof r.error.wilayaId === 'number') out.add(r.error.wilayaId);
   }
   return [...out];
+};
+
+/**
+ * journey retest R16-3 (18/11): the quote_delivery answers (served or not) and the search_products of earlier turns, latest first, from
+ * the earlier tool calls — PF1 T2 quoted Sétif again one message after T1's quote, N5 T2 searched « parfum » again after T1's search.
+ */
+export const earlierLookups = (calls: readonly { name: string; args?: unknown; result: unknown; at?: Date | string | null }[]): { quotes: NonNullable<GuardFacts['earlierQuotes']>; searches: NonNullable<GuardFacts['earlierSearches']> } => {
+  const quotes: NonNullable<GuardFacts['earlierQuotes']> = [];
+  const searches: NonNullable<GuardFacts['earlierSearches']> = [];
+  for (const c of calls) {
+    const name = TOOL_ALIASES[c.name] ?? c.name;
+    const at = c.at instanceof Date ? c.at.toISOString() : typeof c.at === 'string' ? c.at : null;
+    if (name === 'quote_delivery' && quotedWilayasIn([c.result]).length) quotes.push({ result: c.result, at });
+    const r = c.result as { products?: { id?: unknown; name?: unknown }[] } | null;
+    if (name === 'search_products' && c.args && typeof c.args === 'object' && !Array.isArray(c.args) && Array.isArray(r?.products))
+      searches.push({ args: c.args as Record<string, unknown>, products: r.products.filter((p) => typeof p?.id === 'string' && typeof p.name === 'string').map((p) => ({ id: p.id as string, name: p.name as string })) });
+  }
+  return { quotes, searches };
 };
 
 export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
@@ -980,6 +1042,14 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
   };
   const quoted = quotedWilayasIn(i.earlierToolResults ?? []);
   if (quoted.length) base.quotedWilayas = quoted;
+  // journey retest R16-3 (18/11): what the earlier turns already looked up (a quote stays valid while the shop's delivery settings do not
+  // change — ai-run checks it), the catalogue's free stock (a check_availability it answers is not run)
+  const earlier = earlierLookups(i.earlierToolCalls ?? []);
+  if (earlier.quotes.length) base.earlierQuotes = earlier.quotes;
+  if (earlier.searches.length) base.earlierSearches = earlier.searches;
+  if (i.products.some((p) => p.id && p.stock !== undefined))
+    base.catalogueStock = i.products.filter((p) => p.id && p.stock !== undefined).map((p) => ({ id: p.id!, stock: p.stock ?? null, sell: !!p.sellOutOfStock, variants: p.variants.map((v) => ({ id: (v as { id?: string }).id ?? '', stock: Number((v as { stock?: number }).stock ?? 0) })) }));
+  if (earlier.quotes.length) base.shopFreeThreshold = i.freeDeliveryThreshold;
   return i.earlierToolResults?.length ? withToolResults(base, i.earlierToolResults) : base;
 }
 

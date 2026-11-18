@@ -179,7 +179,8 @@ describe('R9-2 — fewer probe calls', () => {
     const illizi = await go('Illizi');
     expect(illizi).toMatchObject({ runs: 0, tools: 0, answer: placeSearchResult('Illizi') });
     expect((await go('El Khroub')).runs).toBe(0);
-    expect((await go('robe kabyle')).runs).toBe(1);
+    // journey retest R16-3: a product nobody asked about, on a delivery-only question, is not searched either (F9 « Retouche couture »)
+    expect((await go('robe kabyle')).runs).toBe(0);
     // a product of the shop named like a place is searched
     expect((await go('Illizi', ['parfum illizi'])).runs).toBe(1);
   });

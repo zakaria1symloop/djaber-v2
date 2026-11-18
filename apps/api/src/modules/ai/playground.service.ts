@@ -273,8 +273,8 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       const turnCtx = await this.context.load(agent, { text: said, lastProductIds: matched, lang, chosen });
       const prompt = PromptBuilder.build(turnCtx.prompt, history, lines.join('\n') || said, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });
       // §4.3: the same reply guard as the live replies (the earlier turns of the session give their fees / totals)
-      const earlier = await prisma.aiToolCall.findMany({ where: { executedAt: { not: null }, aiRun: { agentId: agent.id, batchKey: d.sessionId, id: { not: run.id } } }, orderBy: { executedAt: 'desc' }, take: GUARD_EARLIER_TOOL_CALLS, select: { result: true } });
-      const guard = guardFactsOf(turnCtx.prompt, { customerText: said, answeredBefore: history.some((m) => m.author === 'ai'), freshStart: false, earlierToolResults: earlier.map((c) => c.result) });
+      const earlier = await prisma.aiToolCall.findMany({ where: { executedAt: { not: null }, aiRun: { agentId: agent.id, batchKey: d.sessionId, id: { not: run.id } } }, orderBy: { executedAt: 'desc' }, take: GUARD_EARLIER_TOOL_CALLS, select: { result: true, name: true, args: true, executedAt: true } });
+      const guard = guardFactsOf(turnCtx.prompt, { customerText: said, answeredBefore: history.some((m) => m.author === 'ai'), freshStart: false, earlierToolResults: earlier.map((c) => c.result), earlierToolCalls: earlier.map((c) => ({ name: c.name, args: c.args, result: c.result, at: c.executedAt })) });
 
       const orderHistory = await orderHistoryOf({ agentId: agent.id, batchKey: d.sessionId, id: { not: run.id } });
       const result = await this.runs.turn({
