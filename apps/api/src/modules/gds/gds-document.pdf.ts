@@ -32,7 +32,9 @@ export const money = (n: number) => formatSlipAmount(n);
  * full-test 15/11 SALES-CASH-20: the embedded fonts have no emoji / dingbats — pdfkit printed « ? » for « ✓ » and « 😀 ».
  * Those signs are left out (letters of every script, digits and punctuation stay).
  */
-const NO_GLYPH = /\p{Extended_Pictographic}|[\u2600-\u27BF\u2B00-\u2BFF\uFE0E\uFE0F\u200D\u20E3]|[\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}]/gu;
+// Joiners, variation selectors, the keycap mark and skin-tone modifiers are alternatives, not class members
+// (a class holding combining marks trips eslint no-misleading-character-class).
+const NO_GLYPH = /\p{Extended_Pictographic}|\p{Emoji_Modifier}|\p{Regional_Indicator}|[\u2600-\u27BF\u2B00-\u2BFF]|\uFE0E|\uFE0F|\u200D|\u20E3/gu;
 export const printable = (text: string): string => (text ? text.replace(NO_GLYPH, '').replace(/[ \t]{2,}/g, ' ').trim() : text);
 export const dateLabel = (iso: string) => formatSlipDate(iso);
 

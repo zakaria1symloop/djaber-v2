@@ -69,9 +69,13 @@ export const work = async (app: TestApp, workspaceIds: string[], o: { tolerate?:
   return ran;
 };
 
-/** WS events written to the outbox for a room, oldest first. */
+/**
+ * WS events written to the outbox for a room, oldest first. Always read events through this helper when the order matters
+ * (`.at(-1)` = the latest): a `findMany` without `orderBy` returns heap order, which stops being insertion order once
+ * earlier tests have updated / vacuumed outbox rows (the AT-BIL-04 flake, full suite 18/11).
+ */
 export const wsOf = async (room: string, event: string) => {
-  const rows = await db.outbox.findMany({ where: { topic: 'ws' }, orderBy: { createdAt: 'asc' } });
+  const rows = await db.outbox.findMany({ where: { topic: 'ws' }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
   return rows.map((r) => r.payload as { room: string; event: string; payload: any }).filter((p) => p.room === room && p.event === event);
 };
 

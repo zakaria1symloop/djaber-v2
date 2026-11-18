@@ -8,7 +8,7 @@ import { HistorySyncService } from '../../src/modules/messaging/history-sync.ser
 import { anonymous, asOperator, asOwner, type Actor } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
 import { createProduct, image, jobOf, upload } from '../support/m2';
-import { connectedPage, fakeMeta, forbidNetwork, work } from '../support/m3';
+import { connectedPage, fakeMeta, forbidNetwork, work, wsOf } from '../support/m3';
 import { closeOutbox, balanceOf, db, fakeAi, feeRule, inTenant, ledger, linkedAgent, setCredits } from '../support/m4';
 
 let app: TestApp;
@@ -567,7 +567,7 @@ describe('create from photo and credits reads', () => {
     expect((await owner.get('/credits/ledger?bucket=pack').expect(200)).body.meta.total).toBe(0);
     expect((await owner.get('/credits/ledger?from=2020-01-01&to=2020-01-02').expect(200)).body.meta.total).toBe(0);
     await owner.get('/credits/ledger?action=nope').expect(422);
-    const events = (await db.outbox.findMany({ where: { topic: 'ws' } })).map((r) => r.payload as any).filter((p) => p.room === `ws:${owner.workspaceId}` && p.event === 'credits.updated');
+    const events = await wsOf(`ws:${owner.workspaceId}`, 'credits.updated');
     expect(events.at(-1)!.payload).toEqual({ planUsed: 0, planLimit: 5250, packBalance: 0, exhausted: false });
     // M9 (AT-PCK-04 formula): every message pays the text credit, photo / voice conversations add their cost
     expect((await owner.get('/credits/calculator?conversations=100&photoPct=10&voicePct=5&msgsPerConv=6').expect(200)).body.data).toMatchObject({ conversations: 100, textTurns: 600, imageTurns: 10, voiceTurns: 5, credits: 600 + 50 + 15, estimatedCostDzd: 599 });

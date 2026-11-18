@@ -12,7 +12,7 @@ import { ConversationService } from '../../src/modules/messaging/conversation.se
 import { asOwner, type Actor } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
 import { createProduct, image, upload, drain } from '../support/m2';
-import { connectedPage, delivery, fakeMeta, forbidNetwork, newSender, postWebhook, receive, reply, work } from '../support/m3';
+import { connectedPage, delivery, fakeMeta, forbidNetwork, newSender, postWebhook, receive, reply, work, wsOf } from '../support/m3';
 import { closeOutbox, withLimits, aiMessages, answer, balanceOf, db, fakeAi, feeRule, inTenant, ledger, linkedAgent, outMessages, replyJob, runReply, runsOf, setCredits, textRoute } from '../support/m4';
 
 let app: TestApp;
@@ -1100,7 +1100,8 @@ describe('providers, credits', () => {
     // limit (5) instead of counting as « used »; usage is what the AI consumed, measured against that limit
     expect(b.total).toBe(5);
     await turn(s, newSender(), { text: 'Bonjour, la robe satin ?' });
-    const events = (await db.outbox.findMany({ where: { topic: 'ws' } })).map((r) => r.payload as any).filter((p) => p.room === `ws:${s.owner.workspaceId}` && p.event === 'credits.updated');
+    // the grant of setCredits emitted a first `credits.updated` (planUsed 0): the latest one is the debit of the turn
+    const events = await wsOf(`ws:${s.owner.workspaceId}`, 'credits.updated');
     expect(events.at(-1)!.payload).toMatchObject({ planUsed: 1, planLimit: 5, packBalance: 0, exhausted: false });
     // 80 %: 4 of 5 used ⇒ one `credits_80` notification for the period
     for (let i = 0; i < 3; i++) await turn(s, newSender(), { text: 'Bonjour, la robe satin ?' });

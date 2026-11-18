@@ -73,7 +73,8 @@ export class RatesService implements OnModuleInit {
           throw e;
         }
         if (!desks.length) continue;
-        const communes = await prisma.commune.findMany({ where: { wilayaId: { in: wilayasOfCourierCode(w) } }, select: { id: true, nameFr: true } });
+        // ordered: a centre whose commune name matches none falls back to the first commune of the wilaya — the same one every sync
+        const communes = await prisma.commune.findMany({ where: { wilayaId: { in: wilayasOfCourierCode(w) } }, select: { id: true, nameFr: true }, orderBy: { id: 'asc' } });
         const byName = new Map(communes.map((c) => [norm(c.nameFr), c.id]));
         for (const d of desks) {
           const communeId = byName.get(norm(d.communeName)) ?? communes[0]?.id;

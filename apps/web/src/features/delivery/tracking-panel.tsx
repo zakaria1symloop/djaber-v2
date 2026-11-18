@@ -5,7 +5,7 @@
 // Annulée / Livrée ✓ (COD encaissé) / Retournée (stock réintégré). Opened from a row (`?sheet=<shipmentId>`).
 import { formatDate, formatMoney, formatPhoneDz, renderStoredText, type AppLocale } from '@djaber/shared';
 import { ActionsMenu, Banner, Button, Ltr, Pill, SideSheet, Skeleton, StatusPill, toast, TrackingSyncBar, TrackingTimeline, type SheetNav, type SyncState, type TrackingStep } from '@djaber/ui';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { QueryError } from '@/components/global-states';
 import { newestFirst, shortName } from '@/features/orders/logic';
 import { useCountdown } from '@/lib/countdown';
@@ -29,22 +29,25 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
   useEffect(() => setSync(null), [shipmentId]);
   // full-test DELIVERY-03: the stored courier error of a parcel in progress is the sync state (« Suivi introuvable chez le
   // transporteur », refused credentials) — on opening, and when a queued refresh lands — never « À jour »
-  const storedSync = (x: Pick<Shipment, 'status' | 'lastError'> | null): { state: SyncState; message: string } | null => {
+  const storedSync = useCallback((x: Pick<Shipment, 'status' | 'lastError'> | null): { state: SyncState; message: string } | null => {
     if (!x?.lastError || !(['sent', 'picked_up', 'in_transit', 'out_for_delivery', 'stale'] as string[]).includes(x.status)) return null;
     const code = x.lastError;
     if (code === 'TRACKING_NOT_FOUND') return { state: 'not_found', message: t('error.TRACKING_NOT_FOUND') };
     if (code === 'COURIER_UNAVAILABLE') return { state: 'unavailable', message: t('tracking.sync.unavailable') };
     if (code === 'COURIER_CREDENTIALS_INVALID') return { state: 'unavailable', message: t('error.COURIER_CREDENTIALS_INVALID', { message: '' }) };
     return null;
-  };
+  }, [t]);
+  // the latest shipment, read when the 30 s fallback fires (a refetch must not restart the poll / the fallback timer)
+  const latest = useRef(s);
+  latest.current = s;
   // the refresh is queued (202): "Actualisation…" until the courier answer lands (WS `shipment.updated`, polled too)
   useEffect(() => {
     if (sync?.state !== 'syncing' || !sync.since) return;
-    if (s?.lastSyncedAt && Date.parse(s.lastSyncedAt) >= sync.since - 2_000) return setSync({ ...(storedSync(s) ?? { state: 'fresh', message: t('tracking.sync.fresh') }), until: sync.until });
+    if (s?.lastSyncedAt && Date.parse(s.lastSyncedAt) >= sync.since - 2_000) return setSync({ ...(storedSync(latest.current) ?? { state: 'fresh', message: t('tracking.sync.fresh') }), until: sync.until });
     const poll = setInterval(() => void q.refetch(), 2_000);
-    const stop = setTimeout(() => setSync({ ...(storedSync(s) ?? { state: 'fresh', message: t('tracking.sync.requested') }), until: sync.until }), 30_000);
+    const stop = setTimeout(() => setSync({ ...(storedSync(latest.current) ?? { state: 'fresh', message: t('tracking.sync.requested') }), until: sync.until }), 30_000);
     return () => (clearInterval(poll), clearTimeout(stop));
-  }, [sync, s?.lastSyncedAt, q, t]);
+  }, [sync, s?.lastSyncedAt, q, t, storedSync]);
   const until = sync?.until ?? (s?.syncAvailableAt ? Date.parse(s.syncAvailableAt) : null);
   const wait = useCountdown(until && until > Date.now() ? until : null);
 

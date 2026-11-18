@@ -39,6 +39,10 @@ const DRIVER = process.env.EVAL_DRIVER === 'live' ? 'live' : 'fake';
 const ROOT = join(__dirname, 'fixtures');
 const GROUPS = ['darija', 'arabizi', 'fr', 'en', 'mixed', 'vision', 'voice'];
 const PASS_THRESHOLD = 0.95;
+/** An amount in DA as the customer reads it: digit groups separated by a space, U+00A0 or U+202F (`formatMoney`). */
+const AMOUNT = /(\d(?:[\d \u00A0\u202F]*\d)?)\s*(DA|دج)/g;
+/** « 6 200 » ⇒ « 6200 » (any space between two digits), so a fixture writes amounts without separators. */
+const joinDigits = (text: string) => text.replace(/(\d)[ \u00A0\u202F](?=\d)/g, '$1');
 const fixtures = GROUPS.flatMap((group) =>
   readdirSync(join(ROOT, group))
     .filter((f) => f.endsWith('.json'))
@@ -151,13 +155,15 @@ describe(`AI evals (${DRIVER})`, () => {
     if (want.intent && turn.intent.toUpperCase() !== want.intent) failures.push(`intent ${turn.intent} ≠ ${want.intent}`);
     if (want.toolCalls && JSON.stringify(tools) !== JSON.stringify(want.toolCalls)) failures.push(`tools [${tools}] ≠ [${want.toolCalls}]`);
     if (want.cards && JSON.stringify([...cards].sort()) !== JSON.stringify([...want.cards].sort()) && !(want.cards.length && want.cards.every((c) => cards.includes(c)))) failures.push(`cards [${cards}] ≠ [${want.cards}]`);
-    for (const s of want.replyContains ?? []) if (!turn.reply.includes(s)) failures.push(`reply misses "${s}"`);
+    // amounts reach the customer formatted by the server (`formatMoney`: « 6 200 DA », U+00A0 / U+202F between the digit
+    // groups, CLAUDE.md rule 11): « 6200 » in a fixture matches « 6 200 »
+    for (const s of want.replyContains ?? []) if (!joinDigits(turn.reply).includes(joinDigits(s))) failures.push(`reply misses "${s}"`);
     if (want.creditsInProd !== undefined && turn.creditsInProd !== want.creditsInProd) failures.push(`credits ${turn.creditsInProd} ≠ ${want.creditsInProd}`);
     if (want.noPriceInReply && /\d{3,}\s*(DA|دج)/.test(turn.reply)) failures.push('a price was stated for an unconfirmed product');
     // grounding: only catalogue products in the cards, only catalogue prices / grid fees in the text
     if (want.noProductOutsideCatalogue) {
       if (cards.some((c) => c.startsWith('UNKNOWN:'))) failures.push('a card points outside the catalogue');
-      const prices = [...turn.reply.matchAll(/(\d[\d ]{2,})\s*(DA|دج)/g)].map((m) => m[1]!.replace(/\s/g, ''));
+      const prices = [...turn.reply.matchAll(AMOUNT)].map((m) => m[1]!.replace(/\s/g, '')).filter((p) => p.length >= 3);
       const invented = prices.filter((p) => !catalogueNumbers.has(p));
       if (invented.length) failures.push(`invented amount ${invented.join(', ')}`);
     }

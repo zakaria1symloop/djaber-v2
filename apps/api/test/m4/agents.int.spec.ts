@@ -4,7 +4,7 @@ import { asAdmin, asOperator, asOwner, type Actor } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
 import { RedisService } from '../../src/core/redis/redis.provider';
 import { createProduct } from '../support/m2';
-import { connect, connectedPage, forbidNetwork, newSender, receive } from '../support/m3';
+import { connect, connectedPage, forbidNetwork, newSender, receive, wsOf } from '../support/m3';
 import { answer, closeOutbox, db, fakeAi, linkedAgent, textRoute, withLimits } from '../support/m4';
 
 let app: TestApp;
@@ -120,9 +120,8 @@ describe('presets and wizard', () => {
     const versions = (await owner.get(`/agents/${a.id}/versions`).expect(200)).body.data;
     expect(versions.map((v: any) => v.version)).toEqual([5, 4, 3, 2, 1]);
     expect(versions[0]).toMatchObject({ isCurrent: true, source: 'wizard', createdBy: { id: owner.userId } });
-    const ws = (await db.outbox.findMany({ where: { topic: 'ws' } })).map((r) => r.payload as any).filter((p) => p.room === `ws:${owner.workspaceId}`);
-    expect(ws.filter((p) => p.event === 'agent.version_created').map((p) => p.payload.version).sort()).toEqual([1, 2, 3, 4, 5]);
-    expect(ws.filter((p) => p.event === 'agent.updated').at(-1)!.payload.agent).toMatchObject({ id: a.id, status: 'draft', pendingInsights: 0 });
+    expect((await wsOf(`ws:${owner.workspaceId}`, 'agent.version_created')).map((p) => p.payload.version).sort()).toEqual([1, 2, 3, 4, 5]);
+    expect((await wsOf(`ws:${owner.workspaceId}`, 'agent.updated')).at(-1)!.payload.agent).toMatchObject({ id: a.id, status: 'draft', pendingInsights: 0 });
   });
 
   it('AGT-03 versions: detail, diff and restore (the restored configuration is a new version)', async () => {
