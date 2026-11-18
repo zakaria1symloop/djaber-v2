@@ -14,7 +14,7 @@ import { errorMessage } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { agentsApi } from '../api';
 import type { PlaygroundMessage } from '../contracts';
-import { cardPriceText, confidenceLabel, SYSTEM_BEFORE_REPLY, type TurnView } from '../logic';
+import { cardPriceText, confidenceLabel, SYSTEM_BEFORE_REPLY, turnIntentLabel, turnStatusLabel, type TurnView } from '../logic';
 import { uuid } from '@/lib/uuid';
 import { resendWhileStalled, TurnStalledError } from './resend';
 
@@ -42,7 +42,10 @@ const rememberHourly = (used: number) => {
   lastHourly = { used, at: Date.now() };
 };
 
-export function usePlayground(transport: ChatTransport) {
+/** journey re-run J04r-6 / AI-CHAT-11: reads the workspace's test turns of the hour when the playground opens (`GET /agents/:id/test/usage`). */
+export type UsageReader = () => Promise<{ used: number; retryAfter: number | null }>;
+
+export function usePlayground(transport: ChatTransport, o: { usage?: UsageReader } = {}) {
   const t = useT();
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [typing, setTyping] = useState(false);
@@ -57,6 +60,25 @@ export function usePlayground(transport: ChatTransport) {
   const entriesRef = useRef(entries);
   entriesRef.current = entries;
   const wait = useCountdown(blockedUntil);
+  // journey re-run J04r-6 / AI-CHAT-11 (18/11): the header said « 0 tour cette heure » on every opening (57 / 60 used) until the first
+  // answer — the server's count is read once on opening; at the limit the composer waits for the rest of the hour at once
+  const usageRef = useRef(o.usage);
+  usageRef.current = o.usage;
+  useEffect(() => {
+    let live = true;
+    usageRef
+      .current?.()
+      .then((u) => {
+        if (!live) return;
+        setHourly((h) => (h === null || u.used > h ? u.used : h));
+        rememberHourly(u.used);
+        if (u.retryAfter && u.retryAfter > 0) setBlockedUntil(Date.now() + u.retryAfter * 1000);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const send = useCallback(
     async (input: ChatInput, opts: { retry?: boolean } = {}) => {
@@ -194,9 +216,9 @@ export function PlaygroundThread({ pg, agentName, empty, showTools = true, class
                 author="ai"
                 meta={
                   showTools ? (
-                    <Ltr>
-                      {agentName} · {turn.status} · {turn.intent} · {confidenceLabel(turn.confidence, locale)}
-                    </Ltr>
+                    <>
+                      {agentName} · {turnStatusLabel(t, turn.status)} · {turnIntentLabel(t, turn.intent)} · <Ltr>{confidenceLabel(turn.confidence, locale)}</Ltr>
+                    </>
                   ) : (
                     `${agentName} · ${clock(e.at, locale)}`
                   )

@@ -58,6 +58,7 @@ export function useComboboxList({
   onSelect,
   onOpen,
   onClose,
+  onTabAway,
   isDisabled,
 }: {
   /** number of results shown */
@@ -67,6 +68,8 @@ export function useComboboxList({
   /** ↓ on a closed list */
   onOpen?: () => void;
   onClose: () => void;
+  /** Tab with the list open: closes the list without clearing anything (nothing by default) */
+  onTabAway?: () => void;
   isDisabled?: (index: number) => boolean;
 }) {
   const listId = React.useId();
@@ -88,6 +91,11 @@ export function useComboboxList({
     } else if (e.key === 'Escape' && open) {
       e.preventDefault();
       onClose();
+    } else if (e.key === 'Tab' && open) {
+      // journey re-run J14r-2 (18/11): Tab leaves the search for the next control with the list closed first — with the list of an empty search
+      // open, the focus went to the scrolling list, the list closed under it and the sheet's trap put it on the sheet itself (a loop
+      // ✕ → search → container). Nothing is cleared: the default Tab move goes on.
+      onTabAway?.();
     }
   };
   const optionId = (i: number) => `${listId}-${i}`;
@@ -266,7 +274,8 @@ export function OrderLineRow({
           </div>
         ) : null}
       </div>
-      <div className="w-24 shrink-0 max-sm:order-2 sm:w-28">{price}</div>
+      {/* journey re-run J14r-3: « 12 500 DA » fits at 390 px (the 96 px box showed « 12 50 ») */}
+      <div className="w-32 shrink-0 max-sm:order-2">{price}</div>
       <div className="shrink-0 max-sm:order-2">{quantity}</div>
       <div className="shrink-0 text-end text-[14px] font-semibold tabular-nums max-sm:order-2 max-sm:ms-auto sm:w-24">{total}</div>
       {onRemove ? (

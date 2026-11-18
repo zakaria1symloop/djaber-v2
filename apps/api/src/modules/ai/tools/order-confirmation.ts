@@ -166,10 +166,48 @@ export const phoneCheckAsked = (history: OrderCallHistory | undefined, phone: st
 
 const ARABIC_DIGITS = /[٠-٩۰-۹]/g;
 const latinDigits = (s: string) => s.replace(ARABIC_DIGITS, (d) => String((d.charCodeAt(0) - (d >= '۰' ? 0x06f0 : 0x0660)) % 10));
-/** The Algerian phone numbers written in a text (spaces, dots, dashes, +213 and Arabic digits allowed). */
+const PHONE_WHOLE = /^(?:\+213|00213|0)?[5-7]\d{8}$/;
+/**
+ * The Algerian phone numbers written in a text (spaces, dots, dashes, +213 and Arabic digits allowed).
+ * journey re-run J04r-1 (18/11, Blocker): a number is made of WHOLE digit groups of one line — the customer's messages are joined with
+ * line breaks, and every whitespace between two digits used to be dropped: « 0698765⏎0698765432 » (a wrong number, then the right one in the
+ * next message) read as « 0698765069 », so the right number was never « known » and every create_order was refused. Groups are separated
+ * by one or two spaces / dots / dashes / slashes on the same line; a group is never cut (« 06612345678 », 11 digits, holds no phone).
+ */
 export const phonesIn = (text: string): Set<string> => {
-  const flat = latinDigits(text).replace(/(?<=\d)[\s.\-/]+(?=\d)/g, '');
-  return new Set([...flat.matchAll(/(?:\+213|00213|0)?[5-7]\d{8}/g)].map((m) => normalizePhoneDz(m[0])));
+  const out = new Set<string>();
+  for (const run of latinDigits(text).matchAll(/\+?\d+(?:[ \t\u00a0\u202f.\-/]{1,2}\d+)*/g)) {
+    const groups = run[0].split(/[ \t\u00a0\u202f.\-/]+/).filter(Boolean);
+    for (let i = 0; i < groups.length; i++) {
+      let joined = '';
+      for (let j = i; j < groups.length; j++) {
+        joined += groups[j];
+        if (joined.replace(/^\+/, '').length > 14) break;
+        if (PHONE_WHOLE.test(joined)) {
+          out.add(normalizePhoneDz(joined));
+          i = j;
+          break;
+        }
+      }
+    }
+  }
+  return out;
+};
+/** A message line giving one more number (« et aussi 0770… », « deuxième numéro ») — its phone is a second phone, not a correction. */
+const ANOTHER_PHONE = /(?<![\p{L}])(?:aussi|autre|deuxieme|2eme|second|seconde|egalement|also|another|other|kamen|kaman|zada|zadan|زاده|زادة|كمان|ثاني|الثاني|اخر|آخر|و?رقم\s+ثاني)(?![\p{L}])/u;
+/**
+ * journey re-run J04r-1 (18/11): the phone of the customer's latest message giving exactly one valid number (« 0698765 » then
+ * « 0698765432 » ⇒ 0698765432), unless that message adds a second number — the last valid phone the customer gave wins. Null when none.
+ */
+export const latestPhone = (history: string): string | null => {
+  const lines = history.split(/\n+/);
+  for (let k = lines.length - 1; k >= 0; k--) {
+    const phones = [...phonesIn(lines[k]!)];
+    if (!phones.length) continue;
+    if (phones.length !== 1 || ANOTHER_PHONE.test(norm(lines[k]!))) return null;
+    return phones[0]!;
+  }
+  return null;
 };
 
 /** Values a model writes when it has no name: never a customer's name. */
@@ -235,6 +273,72 @@ export const simulatedOrders = (history: OrderCallHistory | undefined): { number
     .filter((h) => isCreate(h) && (h.result as Placed | null)?.ok === true && (h.result as Placed).simulated === true && typeof (h.result as Placed).number === 'string')
     .map((h) => ({ number: String((h.result as Placed).number), total: Number((h.result as Placed).total ?? 0) || 0, at: h.at }))
     .filter((o) => !gone.has(o.number.toLowerCase()));
+};
+
+/** The order number a `cancel_order` answer cancelled (live `{ cancelled: { number } }`, playground `{ cancelled: "TEST-n" }`), else null. */
+export const cancelledNumber = (result: unknown): string | null => {
+  const r = result as { ok?: unknown; cancelled?: unknown } | null;
+  if (r?.ok !== true) return null;
+  if (typeof r.cancelled === 'string') return r.cancelled;
+  const n = (r.cancelled as { number?: unknown } | null | undefined)?.number;
+  return typeof n === 'string' ? n : null;
+};
+/**
+ * journey re-run J04r-2 (18/11, Major): the playground's TEST-n orders with their state — the cancelled / replaced ones too. `lookup_order`
+ * returned nothing after a cancellation (« elle est bien annulée ? » ⇒ `{orders: []}`, then `cancel_order` ⇒ NO_OPEN_ORDER), and the model
+ * wrote « je ne peux pas confirmer que la commande est annulée … ma réponse précédente était trop rapide ».
+ */
+export const simulatedOrderStates = (history: OrderCallHistory | undefined): { number: string; total: number; at: Date; status: 'new' | 'cancelled'; replacedBy?: string }[] => {
+  const cancelled = new Set<string>();
+  const replacedBy = new Map<string, string>();
+  for (const h of history ?? []) {
+    const r = h.result as (Placed & { cancelled?: unknown }) | null;
+    if (!r?.simulated) continue;
+    const c = !isCreate(h) ? cancelledNumber(r) : null;
+    if (c) cancelled.add(c.toLowerCase());
+    const replaced = r.replaced && typeof r.replaced === 'object' ? (r.replaced as { number?: unknown }).number : null;
+    if (isCreate(h) && r.ok === true && typeof replaced === 'string' && typeof r.number === 'string') replacedBy.set(replaced.toLowerCase(), r.number);
+  }
+  return (history ?? [])
+    .filter((h) => isCreate(h) && (h.result as Placed | null)?.ok === true && (h.result as Placed).simulated === true && typeof (h.result as Placed).number === 'string')
+    .map((h) => {
+      const number = String((h.result as Placed).number);
+      const by = replacedBy.get(number.toLowerCase());
+      return { number, total: Number((h.result as Placed).total ?? 0) || 0, at: h.at, status: cancelled.has(number.toLowerCase()) || by ? ('cancelled' as const) : ('new' as const), ...(by ? { replacedBy: by } : {}) };
+    });
+};
+/**
+ * journey re-run J04r-2: the order the customer's latest cancellation of this conversation cancelled — when no order was placed after
+ * it (a later order is the one being talked about). Null when none.
+ */
+export const lastCancelled = (history: OrderCallHistory | undefined): string | null => {
+  const rows = [...(history ?? [])].sort((a, b) => a.at.getTime() - b.at.getTime());
+  let last: string | null = null;
+  for (const h of rows) {
+    if (isCreate(h)) {
+      if ((h.result as Placed | null)?.ok === true) last = null;
+      continue;
+    }
+    last = cancelledNumber(h.result) ?? last;
+  }
+  return last;
+};
+/** journey re-run J04r-2: this order number was cancelled (or replaced) earlier in the conversation — the number as written there, else null. */
+export const cancelledBefore = (history: OrderCallHistory | undefined, number: string): string | null => {
+  const n = number.trim().toLowerCase();
+  for (const h of history ?? []) {
+    const c = !isCreate(h) ? cancelledNumber(h.result) : null;
+    if (c && c.toLowerCase() === n) return c;
+    const replaced = isCreate(h) && (h.result as Placed | null)?.ok === true ? ((h.result as Placed).replaced as { number?: unknown } | null | undefined)?.number : null;
+    if (typeof replaced === 'string' && replaced.toLowerCase() === n) return replaced;
+  }
+  return null;
+};
+/** « elle est bien annulée ? », « c'est annulé ? », « is it cancelled? », « tbatlet ? », « تلغات ؟ » — a question on a cancellation done. */
+const CANCELLED_WORD = /(?<![\p{L}])(?:annule|annulee|annules|annulees|cancelled|canceled|mbatla|mbatel|mbatlin|tbatlet|tbatlat|tbatel|tetbatel|batlet|batlouha|tlghat|tel3at|ملغيه|ملغاه|ملغيين|تلغات|اتلغات|تلغت|انلغت|تبطلت|اتبطلت|بطلتوها|لغيتوها|الغيتوها)(?![\p{L}])/u;
+export const cancelledAsked = (text: string): boolean => {
+  const n = norm(text);
+  return CANCELLED_WORD.test(n) && /[?؟]|(?<![\p{L}])(?:bien|vraiment|sur|sure|really|s7i7|bessa7|بصح|صح|اكيد|akid)(?![\p{L}])/u.test(`${text} ${n}`) && n.split(' ').length <= 10;
 };
 
 const CANCEL_WORDS = /annul|cancel|batel|btel|ألغ|الغ|بطل|باطل|نلغ/;

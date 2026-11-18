@@ -26,6 +26,8 @@ import {
   SourceBadge,
   toast,
   type Column,
+  onRadioGroupKeyDown,
+  radioTabIndex,
 } from '@djaber/ui';
 import { Paperclip } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -305,8 +307,9 @@ function CashLedger() {
                 { key: 'today', label: t('gds.period.today'), on: sel.kind === 'day' && sel.day === today, set: { day: null, period: null, from: null, to: null } },
                 { key: 'yesterday', label: t('common.yesterday'), on: sel.kind === 'day' && sel.day === addDays(today, -1), set: { day: addDays(today, -1), period: null, from: null, to: null } },
                 ...CASH_PERIODS.map((p) => ({ key: p, label: t(`gds.period.${p}`), on: sel.kind === 'period' && sel.period === p, set: { day: null, period: p, from: null, to: null } })),
-              ].map((o) => (
-                <button key={o.key} type="button" role="radio" aria-checked={o.on} data-period={o.key} onClick={() => list.setFilters(o.set)} className={cn('h-7 rounded-[6px] border px-2.5 text-[12px]', o.on ? 'border-white bg-white text-black' : 'border-line-edge text-text-secondary hover:text-text-primary')}>
+              ].map((o, i, all) => (
+                // journey re-run J14r-4: one Tab stop, the arrows move (Space / Enter choose)
+                <button key={o.key} type="button" role="radio" aria-checked={o.on} tabIndex={radioTabIndex(i, all.findIndex((x) => x.on))} onKeyDown={(e) => onRadioGroupKeyDown(e, { select: false })} data-period={o.key} onClick={() => list.setFilters(o.set)} className={cn('h-7 rounded-[6px] border px-2.5 text-[12px]', o.on ? 'border-white bg-white text-black' : 'border-line-edge text-text-secondary hover:text-text-primary')}>
                   {o.label}
                 </button>
               ))}

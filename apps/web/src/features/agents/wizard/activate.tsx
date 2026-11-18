@@ -213,7 +213,7 @@ function EmbeddedPlayground({ agent, open, scenario, onClose }: { agent: Agent; 
 function EmbeddedBody({ agent, scenario }: { agent: Agent; scenario: TestScenarioKey | null }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const transport = useCallback(agentTransport(agent.id), [agent.id]);
-  const pg = usePlayground(transport);
+  const pg = usePlayground(transport, { usage: () => agentsApi.testUsage(agent.id) });
   const { send } = pg;
   useEffect(() => {
     if (scenario) void send({ text: '', scenario });

@@ -354,7 +354,7 @@ describe('tools', () => {
     fakeAi(app).script(
       'reply',
       { toolCalls: [{ name: 'create_order', args: { ...base, clientPhone: '12345' } }] },
-      { toolCalls: [{ name: 'create_order', args: { ...base, clientPhone: '0555 12 34 56', customerConfirmed: false } }, { name: 'create_order', args: { ...base, clientPhone: '0555 12 34 56', items: [{ productId: s.robe.id, quantity: 4 }] } }, { name: 'create_order', args: { ...base, clientPhone: '0555 12 34 56', address: 'court' } }] },
+      { toolCalls: [{ name: 'create_order', args: { ...base, clientPhone: '0555 12 34 56', customerConfirmed: false } }, { name: 'create_order', args: { ...base, clientPhone: '0555 12 34 56', address: 'court' } }] },
       { toolCalls: [{ name: 'create_order', args: { ...base, clientPhone: '0555 12 34 56' } }] },
       { reply: 'Je transmets votre commande à un conseiller.', status: 'OK', intent: 'SALE' },
     );
@@ -362,12 +362,12 @@ describe('tools', () => {
     const details = await turn(s, sender, { text: 'Amine Benali, 0555 12 34 56, Bab Ezzouar, Cité des 200 logements' });
     const r0 = details.runs[0]!.toolCalls.sort((a, b) => a.executedAt!.getTime() - b.executedAt!.getTime()).map((c) => c.result as any);
     expect(r0[0]).toEqual({ ok: false, error: { code: 'VALIDATION', field: 'clientPhone', example: '0555123456' } });
-    expect(r0.filter((x) => x.hint === 'order_limit')).toEqual([{ ok: false, hint: 'order_limit', maxQty: 3, maxAmount: null }]);
+    // (journey re-run J03r-1: the order limit is now a server hand-off that ends the turn — checked on its own conversation below)
     expect(r0.filter((x) => x.error?.field === 'address')).toHaveLength(1);
     // full-test 15/11 AI-CHAT-01: a valid cart is never ordered in the turn that prepares it — the server's recap comes back;
     // journey retest R2-4: once it came back, create_order is not offered again in the turn (the 3rd step's call is not run)
     expect(r0.filter((x) => x.error?.code === 'CONFIRMATION_REQUIRED')).toHaveLength(1);
-    expect(r0).toHaveLength(4);
+    expect(r0).toHaveLength(3);
     expect(r0.find((x) => x.error?.code === 'CONFIRMATION_REQUIRED')).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft: expect.any(String) }, recap: { subtotal: 4500, deliveryFee: 400, total: 4900, clientPhone: '0555123456', wilaya: expect.any(String), items: [{ name: 'Robe satin bordeaux', quantity: 1, unitPrice: 4500 }] } });
     expect(create).not.toHaveBeenCalled();
     await resetAi();
@@ -384,6 +384,15 @@ describe('tools', () => {
     expect(t.runs.at(-1)).toMatchObject({ status: 'ok', creditsCharged: 1 });
     expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(1);
     expect((await debits(s.owner.workspaceId)).map((d) => [d.action, d.credits])).toEqual([['text_reply', -1], ['text_reply', -1]]);
+    // limits (journey re-run J03r-1): 4 robes with max 3 ⇒ `order_limit` (which limit, the quantity) and the server's hand-off — no order,
+    // no second create_order with a lower quantity, the limit sentence
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args: { ...base, clientPhone: '0555 12 34 56', items: [{ productId: s.robe.id, quantity: 4 }] } }, { name: 'create_order', args: { ...base, clientPhone: '0555 12 34 56', items: [{ productId: s.robe.id, quantity: 3 }] } }] }, { reply: 'Voici le récapitulatif …', intent: 'SALE' });
+    const over = await turn(s, newSender(), { text: 'Amine Benali, 0555 12 34 56, Bab Ezzouar, Cité des 200 logements' });
+    const ro = over.runs.at(-1)!.toolCalls.map((c) => c.result as any);
+    expect(ro).toEqual([{ ok: false, hint: 'order_limit', limit: 'quantity', maxQty: 3, maxAmount: null, quantity: 4, total: 18_400, say: expect.any(String) }]);
+    expect(over.conversation.status).toBe('needs_human');
+    expect(create).toHaveBeenCalledTimes(1);
     create.mockRestore();
   });
 

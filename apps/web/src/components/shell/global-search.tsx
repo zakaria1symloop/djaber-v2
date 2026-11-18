@@ -102,7 +102,7 @@ export function GlobalSearch() {
         />
       </label>
       {open && text.trim().length >= 2 ? (
-        <div id="global-search-results" role="listbox" className="absolute inset-x-0 top-11 z-50 max-h-[70vh] overflow-y-auto rounded-card border border-line-edge bg-ink-raised py-1 shadow-lg">
+        <div id="global-search-results" role="listbox" tabIndex={-1} className="absolute inset-x-0 top-11 z-50 max-h-[70vh] overflow-y-auto rounded-card border border-line-edge bg-ink-raised py-1 shadow-lg">
           {hits.length === 0 ? (
             <p className="px-3 py-2 ts-label-meta text-text-muted">{loading ? t('common.loading') : t('search.global.none')}</p>
           ) : (

@@ -4,7 +4,7 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import * as React from 'react';
-import { isInnerEscape, useReturnFocus } from './overlays';
+import { isInnerEscape, useFocusInside, useReturnFocus } from './overlays';
 import { Button, cn } from './primitives';
 
 export type SheetNav = { onPrev?: () => void; onNext?: () => void; position?: string; prevLabel: string; nextLabel: string };
@@ -55,11 +55,14 @@ export function SideSheet({
     }
   };
   const returnFocus = useReturnFocus(open);
+  // journey re-run J14r-1: a sheet opened from a closing menu / popover takes the focus back inside
+  const box = useFocusInside<HTMLDivElement>(open);
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/40" />
         <DialogPrimitive.Content
+          ref={box}
           onCloseAutoFocus={returnFocus}
           onEscapeKeyDown={(e) => isInnerEscape(e) && e.preventDefault()}
           onKeyDown={onKeyDown}

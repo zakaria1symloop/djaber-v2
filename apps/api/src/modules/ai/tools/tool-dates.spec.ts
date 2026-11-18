@@ -66,6 +66,7 @@ describe('lookup_order / cancel_order give the model Algiers times', () => {
     jest.spyOn(prisma.order, 'findMany').mockResolvedValue([{ id: 'o1', number: 'CMD-2', total: 3000, status: 'new', orderedAt }] as never);
     jest.spyOn(prisma.order, 'findFirst').mockResolvedValue(null as never);
     const out = await reg.execute('cancel_order', {}, ctx);
-    expect(out).toEqual({ ok: true, candidates: [{ number: 'CMD-2', total: 3000, status: 'new', orderedAt: '2026-11-11 00:38 (Algeria time)' }] });
+    // journey re-run J04r-2: the candidates answer says nothing is cancelled yet (`say`)
+    expect(out).toEqual({ ok: true, candidates: [{ number: 'CMD-2', total: 3000, status: 'new', orderedAt: '2026-11-11 00:38 (Algeria time)' }], say: expect.stringContaining('Nothing is cancelled yet') });
   });
 });

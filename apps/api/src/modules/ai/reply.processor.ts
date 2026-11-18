@@ -300,7 +300,8 @@ export class ReplyProcessor implements OnModuleInit {
       prisma.message.findMany({ where: { conversationId: conv.id, author: 'customer' }, orderBy: { createdAt: 'desc' }, take: 200, select: { text: true, transcript: true } }),
     ]);
     // oldest first, as in the playground (journey retest R4-6: a later message choosing one of two phones counts after them)
-    const customerHistory = [...customerRows].reverse().map((m) => [m.text ?? '', m.transcript ?? ''].join(' ')).join('\n');
+    // journey re-run J04r-1 (18/11): a message's text and its voice transcript are two lines too — no number runs from one into the other
+    const customerHistory = [...customerRows].reverse().map((m) => [m.text ?? '', m.transcript ?? ''].filter((x) => x.trim()).join('\n')).join('\n');
 
     // --- model loop ------------------------------------------------------------------------------------------------------------
     const turn = await this.runs.turn({

@@ -5,6 +5,7 @@
 import { Check } from 'lucide-react';
 import * as React from 'react';
 import { cn } from './primitives';
+import { onRadioGroupKeyDown } from './radio-keys';
 
 /* ---------- Metric tile of the client sheet: "COMMANDES 3", "DA DÉPENSÉS 14 700", "RETOURS 0 %" ---------- */
 export function MetricTile({ label, value, tone, className, ...rest }: { label: string; value: React.ReactNode; tone?: 'danger' | 'warning' | 'success'; className?: string } & React.HTMLAttributes<HTMLDivElement>) {
@@ -70,6 +71,8 @@ export function MergeCard({ name, meta, badge, kept, onSelect, selectLabel }: { 
       role="radio"
       aria-checked={kept}
       aria-label={selectLabel ? `${selectLabel} · ${name}` : name}
+      // journey re-run J14r-4: the arrows move between the two cards and choose
+      onKeyDown={(e) => onRadioGroupKeyDown(e)}
       onClick={onSelect}
       disabled={!onSelect}
       className={cn('flex min-w-0 flex-1 flex-col gap-1.5 rounded-card border bg-ink-surface px-3 py-2.5 text-start transition-colors', kept ? 'border-accent-money' : 'border-line-edge hover:border-line-lit', !onSelect && 'cursor-default')}

@@ -3,7 +3,7 @@
 // submit hook (server error inline inside the open dialog, content preserved, 409 → conflict), the footer, the
 // vertical radio list and the context line "#CMD-1042 · Nouvelle · Amina B. · 9 400 DA".
 import { formatMoney } from '@djaber/shared';
-import { Button, cn } from '@djaber/ui';
+import { Button, cn, onRadioGroupKeyDown, radioTabIndex } from '@djaber/ui';
 import { useEffect, useRef, useState } from 'react';
 import { closedDayOf } from '@/components/closed-day-hint';
 import { ApiError } from '@/lib/api';
@@ -85,7 +85,7 @@ export function DialogFooter({ onClose, busy, onSubmit, label, danger, disabled,
 export function RadioList<V extends string>({ label, value, onChange, options, disabled }: { label: string; value: V | null; onChange: (v: V) => void; options: { value: V; label: string; description?: string; tone?: 'danger' }[]; disabled?: boolean }) {
   return (
     <div role="radiogroup" aria-label={label} className="flex flex-col gap-0.5">
-      {options.map((o) => {
+      {options.map((o, i) => {
         const on = o.value === value;
         return (
           <button
@@ -93,6 +93,10 @@ export function RadioList<V extends string>({ label, value, onChange, options, d
             type="button"
             role="radio"
             aria-checked={on}
+            // journey re-run J14r-4 (18/11): one Tab stop for the group, the arrows move and choose (WAI-ARIA radio group) — « دخول / خروج »
+            // of the Caisse manual row was two Tab stops and ↑ ↓ did nothing
+            tabIndex={radioTabIndex(i, options.findIndex((x) => x.value === value))}
+            onKeyDown={(e) => onRadioGroupKeyDown(e)}
             disabled={disabled}
             data-value={o.value}
             onClick={() => onChange(o.value)}

@@ -271,7 +271,7 @@ export function TagInput({
         <span key={tag} data-tag={tag} title={tag} className="inline-flex h-6 min-w-0 max-w-full items-center gap-1 rounded-[4px] border border-line-edge bg-ink-raised ps-2 pe-1 text-[12px]">
           <bdi className="min-w-0 truncate">{tag}</bdi>
           {disabled ? null : (
-            <button type="button" aria-label={removeLabel(tag)} onClick={() => onChange(value.filter((v) => v !== tag))} className="flex size-4 shrink-0 items-center justify-center text-text-muted hover:text-text-primary">
+            <button type="button" aria-label={removeLabel(tag)} onClick={() => onChange(value.filter((v) => v !== tag))} className="-my-1 -me-1.5 flex size-6 shrink-0 items-center justify-center rounded-[4px] text-text-muted hover:text-text-primary">
               <X className="size-3" aria-hidden />
             </button>
           )}

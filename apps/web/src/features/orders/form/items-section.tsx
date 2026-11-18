@@ -132,6 +132,8 @@ export function ItemsSection({ lines, onChange, errors, locked, priceLocked = fa
           <ul
             id={list.listId}
             role="listbox"
+            // journey re-run J14r-2: a scrolling list is never a Tab stop (Chrome makes scrollers focusable)
+            tabIndex={-1}
             aria-label={t('orderForm.items.results')}
             className="max-h-72 divide-y divide-line-hairline overflow-y-auto rounded-card border border-line-edge bg-ink-surface"
             data-testid="product-results"

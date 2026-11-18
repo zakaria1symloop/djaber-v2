@@ -5,6 +5,7 @@
 import { formatMoney, getMessages, PRODUCT_CARDS_MAX, type AppLocale, type MessageCardView } from '@djaber/shared';
 import type { prisma, Tx } from '@djaber/db';
 import { approvedFields, approvedImages, approvedVariants } from '../catalog/approved-content';
+import { reservedQuantities } from '../catalog/stock.service';
 
 export type CardButton = { title: string; payload: string };
 export type CardElement = { title: string; subtitle?: string; imageUrl?: string; buttons: CardButton[] };
@@ -77,8 +78,18 @@ export async function productCards(db: Tx | typeof prisma, productIds: string[],
   if (!wanted.length) return [];
   const rows = await (db as Tx).product.findMany({
     where: { id: { in: wanted }, deletedAt: null, isActive: true },
-    select: { id: true, name: true, description: true, price: true, oldPrice: true, hasVariants: true, moderationStatus: true, approvedSnapshot: true, variants: { where: { deletedAt: null, isActive: true }, select: { id: true, name: true, price: true }, orderBy: { createdAt: 'asc' } } },
+    select: { id: true, name: true, description: true, price: true, oldPrice: true, hasVariants: true, trackStock: true, sellOutOfStock: true, moderationStatus: true, approvedSnapshot: true, variants: { where: { deletedAt: null, isActive: true }, select: { id: true, name: true, price: true, stock: true }, orderBy: { createdAt: 'asc' } } },
   });
+  // journey re-run J03r-4 (18/11): a sold-out variant is not offered on the card — « S · M · L · XL » with L at 0 next to the AI's « la L
+  // est épuisée ». Sold out = stock tracked, no sale beyond stock, and nothing left once the unconfirmed orders' share is held (the AI
+  // catalogue's own count). The price range is the offered variants'; a product whose every variant is sold out lists none.
+  let held = new Map<string, number>();
+  try {
+    held = await reservedQuantities(db, rows.filter((r) => r.trackStock && r.hasVariants).map((r) => r.id));
+  } catch {
+    // no tenant context (or a read failure): the stock as stored
+  }
+  const soldOut = (p: (typeof rows)[number], v: { id: string; stock: number }) => p.trackStock && !p.sellOutOfStock && v.stock - (held.get(`${p.id}:${v.id}`) ?? 0) <= 0;
   const images = await (db as Tx).productImage.findMany({ where: { productId: { in: rows.map((p) => p.id) } }, orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }], select: { productId: true, url: true } });
   const imagesOf = (p: (typeof rows)[number]) => {
     const own = images.filter((i) => i.productId === p.id);
@@ -87,9 +98,12 @@ export async function productCards(db: Tx | typeof prisma, productIds: string[],
   const byId = new Map(rows.map((p) => [p.id, o.ai ? { ...p, ...approvedFields(p), variants: approvedVariants(p, p.variants) } : p]));
   const base = (p: NonNullable<ReturnType<typeof byId.get>>): Omit<MessageCardView, 'imageUrl'> => {
     if (!p.hasVariants || !p.variants.length) return { productId: p.id, name: p.name, price: p.price, ...(p.oldPrice && p.oldPrice > p.price ? { oldPrice: p.oldPrice } : {}) };
-    const prices = p.variants.map((v) => v.price);
+    const row = rows.find((r) => r.id === p.id)!;
+    const stockOf = new Map(row.variants.map((v) => [v.id, v.stock]));
+    const offered = p.variants.filter((v) => !soldOut(row, { id: v.id, stock: stockOf.get(v.id) ?? 0 }));
+    const prices = (offered.length ? offered : p.variants).map((v) => v.price);
     const [min, max] = [Math.min(...prices), Math.max(...prices)];
-    return { productId: p.id, name: p.name, price: min, ...(max !== min ? { priceMax: max } : {}), variants: p.variants.map((v) => v.name).slice(0, 8).join(' · ') };
+    return { productId: p.id, name: p.name, price: min, ...(max !== min ? { priceMax: max } : {}), ...(offered.length ? { variants: offered.map((v) => v.name).slice(0, 8).join(' · ') } : {}) };
   };
   if (o.gallery) {
     const p = byId.get(wanted[0]!);

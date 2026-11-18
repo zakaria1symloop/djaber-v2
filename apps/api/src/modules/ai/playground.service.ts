@@ -27,7 +27,7 @@ import { canonicalTool } from './tools/tool-registry';
 import { guardFactsOf } from './reply-guard';
 import { handoffSystemLineShown } from './reply-fixes';
 import { productCards } from '../messaging/product-card';
-import { SCENARIOS, type ScenarioCheck } from './prompt/scenarios';
+import { SCENARIO_QUANTITY, SCENARIOS, type ScenarioCheck } from './prompt/scenarios';
 import { AiProviderError } from './provider/ai.gateway';
 import { TranscriptionService } from './transcription.service';
 import { TurnContextService } from './turn-context.service';
@@ -97,6 +97,19 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       throw new AppException('PLAYGROUND_RATE_LIMITED', { retryAfter: ttl > 0 ? ttl : 3600 });
     }
     return n;
+  }
+  /**
+   * journey re-run J03r AI-CHAT-11 / J04r-6 (18/11): the workspace's test turns of this hour before any turn of the dialog — the header said
+   * « 0 tour cette heure » on every opening (57 / 60 used) and the merchant learnt the limit from a 429. `retryAfter`: the seconds left in
+   * the hour once the limit is reached (null below it).
+   */
+  async usage(agentId: string): Promise<{ used: number; limit: number; retryAfter: number | null }> {
+    const agent = await prisma.agent.findFirst({ where: { id: agentId, deletedAt: null }, select: { id: true } });
+    if (!agent) throw notFound();
+    const key = `rl:playground:${TenantContext.workspaceId()}`;
+    const used = Math.min(PLAYGROUND_TURNS_PER_HOUR, Math.max(0, Number(await this.redis.client.get(key)) || 0));
+    const ttl = used >= PLAYGROUND_TURNS_PER_HOUR ? await this.redis.client.ttl(key) : -1;
+    return { used, limit: PLAYGROUND_TURNS_PER_HOUR, retryAfter: used >= PLAYGROUND_TURNS_PER_HOUR ? (ttl > 0 ? ttl : 3600) : null };
   }
   /** journey retest R1-1: a turn the AI did not answer (provider failure, no answer in time) is given back to the hour's budget. */
   async uncountTurn(subject: string): Promise<number> {
@@ -414,7 +427,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  static check(key: TestScenarioKey, turn: PlaygroundTurnDto, inScope: Set<string>): { pass: boolean; failed: ScenarioCheck[] } {
+  static check(key: TestScenarioKey, turn: PlaygroundTurnDto, inScope: Set<string>, limits: { maxQty?: number | null } = {}): { pass: boolean; failed: ScenarioCheck[] } {
     const s = SCENARIOS[key];
     // full-test 15/11 AI-CHAT-06 / proposal 12: the reply's language must be the customer's — the reply guard's own check
     // (`language_switch`: arabizi answered in French fails; a reply too short to tell, or mixed, passes)
@@ -427,7 +440,10 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       no_invented_product: turn.cards.every((c) => inScope.has(c.productId)),
       handoff_on_complaint: !s.expect.handoff || turn.status === 'HANDOFF',
       order_created_simulated: created.every((t) => t.simulated),
-      limits_respected: created.length === 0,
+      // journey re-run J03r-2 (18/11): no order AND, when the scenario's quantity is above the agent's « Quantité max par commande », the
+      // turn handed to the team for the limit (04-ai-pipeline rule 32) — « Ensuite, je vérifierai si on peut vous fournir 500 pièces »
+      // passed on « no order created », which a first message with no name / phone can never fail
+      limits_respected: created.length === 0 && (!SCENARIO_QUANTITY[key] || limits.maxQty === null || limits.maxQty === undefined || SCENARIO_QUANTITY[key]! <= limits.maxQty || (turn.status === 'HANDOFF' && turn.statusDetail === 'order_limits')),
     };
     const failed = s.expect.checks.filter((c) => !results[c]);
     return { pass: failed.length === 0, failed };
@@ -453,7 +469,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
           try {
             const turn = await this.turn(agent, { workspaceId: agent.workspaceId, agentId, userId: job.createdById, sessionId: `scenario:${jobId}:${key}`, turnId: randomUUID(), messages: [], scenario: key, kind: 'test_scenario' });
             aiRunId = turn.turnId;
-            const c = PlaygroundService.check(key, turn, inScope);
+            const c = PlaygroundService.check(key, turn, inScope, { maxQty: agent.maxQtyPerOrder });
             status = c.pass ? 'pass' : 'fail';
             // full-test 15/11 AGENTS-02: codes the wizard translates (« failed:replied » was printed as is)
             summary = c.pass ? (turn.reply.trim() ? turn.reply.slice(0, 200) : turn.status === 'HANDOFF' ? 'handoff' : null) : `failed:${c.failed.join(',')}`;

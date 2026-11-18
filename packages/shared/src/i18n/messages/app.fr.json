@@ -1028,7 +1028,7 @@
  "agents.handoff.editMessage": "Modifier dans Messages système",
  "agents.handoff.keywords": "MOTS-CLÉS DE TRANSFERT",
  "agents.handoff.keywords.hint": "Entrée ou virgule pour ajouter · {max} max",
- "agents.handoff.keywords.placeholder": "avocat, arnaque, police…",
+ "agents.handoff.keywords.placeholder": "ex. avocat, arnaque, police…",
  "agents.handoff.keywords.remove": "Retirer {tag}",
  "agents.handoff.message": "MESSAGE DE TRANSFERT",
  "agents.handoff.messageEmpty": "Aucun message configuré.",
@@ -1036,7 +1036,7 @@
  "agents.handoff.rule.3_unclear": "3 messages incompréhensibles d'affilée",
  "agents.handoff.rule.anger": "Le client est en colère (ton détecté)",
  "agents.handoff.rule.human_request": "Le client demande un humain, un remboursement ou dépose une réclamation",
- "agents.handoff.rule.keyword": "Mot-clé personnalisé : « avocat », « arnaque », « police »",
+ "agents.handoff.rule.keyword": "Mot-clé personnalisé : un des mots-clés que vous ajoutez ci-dessous",
  "agents.handoff.rule.off_topic": "Question hors catalogue / hors règles",
  "agents.handoff.rule.over_limits": "Commande > montant max ou > quantité max",
  "agents.handoff.rule.risky_client": "Client marqué « bloqué » ou « risque » dans Clients",
@@ -1319,7 +1319,7 @@
  "agents.scenario.full.voice": "Note vocale : « Bonjour, je voudrais connaître le prix »",
  "agents.scenario.off_catalog": "Hors sujet",
  "agents.scenario.photo": "Photo d'un produit",
- "agents.scenario.qty_limit": "Commande de 12 unités",
+ "agents.scenario.qty_limit": "Grosse quantité (500 pièces)",
  "agents.scenario.refund": "Remboursement",
  "agents.scenario.voice": "Note vocale",
  "agents.search.placeholder": "Nom ou description…",
@@ -6887,5 +6887,9 @@
  "reports.empty.inactive_customers": "Aucun client sans commande depuis {days} jours.",
  "analytics.delta.pts": "pts",
  "analytics.orders.bySourceLine": "{orders, plural, other {{ordersN} cmd}} · {delivered, plural, one {{deliveredN} livrée} other {{deliveredN} livrées}} : {revenue} DA",
- "notification.value.exportKind.report": "Export du rapport « {report} »"
+ "notification.value.exportKind.report": "Export du rapport « {report} »",
+ "agents.turnStatus.ok": "Répondu",
+ "agents.turnStatus.unclear": "Message peu clair",
+ "agents.turnStatus.unknown": "Question sans réponse",
+ "agents.turnStatus.handoff": "Transmis à l'équipe"
 }

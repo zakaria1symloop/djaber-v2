@@ -92,6 +92,8 @@ export function ProductPicker({
     onSelect: (i) => void pick(rows[i]!),
     onOpen: () => setDismissed(false),
     onClose: () => (setQ(''), setDismissed(true)),
+    // journey re-run J14r-2: Tab from the open list (empty search) goes on to the lines / discount / client
+    onTabAway: () => setDismissed(true),
     isDisabled: (i) => busy || !!refuse?.(rows[i]!),
   });
 
@@ -129,7 +131,7 @@ export function ProductPicker({
         />
       </div>
       {open ? (
-        <ul id={list.listId} role="listbox" aria-label={t('orderForm.items.results')} className="max-h-72 divide-y divide-line-hairline overflow-y-auto rounded-card border border-line-edge bg-ink-surface" data-testid="gds-product-results">
+        <ul id={list.listId} role="listbox" tabIndex={-1} aria-label={t('orderForm.items.results')} className="max-h-72 divide-y divide-line-hairline overflow-y-auto rounded-card border border-line-edge bg-ink-surface" data-testid="gds-product-results">
           {results.isPending ? <li role="option" aria-disabled="true" aria-selected={false} className="px-3 py-2.5 text-[13px] text-text-muted">{t('common.loading')}</li> : null}
           {!results.isPending && rows.length === 0 ? <li role="option" aria-disabled="true" aria-selected={false} className="px-3 py-2.5 text-[13px] text-text-muted">{t('orderForm.items.noResults')}</li> : null}
           {rows.map((p, i) => {

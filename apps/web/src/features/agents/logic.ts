@@ -497,6 +497,18 @@ export const secondsLabel = (ms: number | null | undefined, locale: string): str
   const s = (Math.round(ms / 100) / 10).toFixed(1);
   return `${locale === 'en' ? s : s.replace('.', ',')} s`;
 };
+/**
+ * journey re-run J03r-5 (18/11): the words of a turn's status and intent — « OK · SALE · 0,90 » / « HANDOFF · COMPLAINT » were printed as
+ * codes under every AI bubble and in the inspector (UX-059). An unknown value keeps its code.
+ */
+export const turnStatusLabel = (t: { (key: string): string; has(key: string): boolean }, status: string): string => {
+  const key = `agents.turnStatus.${status.toLowerCase()}`;
+  return t.has(key) ? t(key) : status;
+};
+export const turnIntentLabel = (t: { (key: string): string; has(key: string): boolean }, intent: string): string => {
+  const key = `analytics.intent.${intent.toLowerCase()}`;
+  return t.has(key) ? t(key) : intent;
+};
 export const statusTone = (status: string): 'success' | 'warning' | 'danger' | 'info' => {
   const s = status.toUpperCase();
   return s === 'OK' ? 'success' : s === 'HANDOFF' ? 'warning' : s === 'UNCLEAR' || s === 'UNKNOWN' ? 'info' : 'danger';

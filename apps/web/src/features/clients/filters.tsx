@@ -3,7 +3,7 @@
 // (bar: search · Source ⌄ · Étiquettes ⌄ · Période · Filtres) and "CLI-03 — Clients — filter panel + row menu (model:
 // Client)". Every value lives in the URL (`useListState`).
 import { formatDate, formatMoney, formatNumber, type AppLocale } from '@djaber/shared';
-import { ActiveFilters, Button, FilterCheckList, InlineAdd, FilterChips, FilterDateRange, FilterDropdown, FilterGroup, FilterPanel, FilterRange, SearchInput, type FilterOption } from '@djaber/ui';
+import { ActiveFilters, Button, FilterCheckList, InlineAdd, FilterChips, onRadioGroupKeyDown, radioTabIndex, FilterDateRange, FilterDropdown, FilterGroup, FilterPanel, FilterRange, SearchInput, type FilterOption } from '@djaber/ui';
 import { Archive, CalendarDays, PhoneCall, SlidersHorizontal } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useChannels } from '@/features/channels/api';
@@ -227,7 +227,7 @@ export function ClientsFilterPanel({ open, onClose, list, tags, total }: { open:
       </FilterGroup>
       <FilterGroup label={t('clients.filter.sort')} source="sort">
         <div role="radiogroup" aria-label={t('clients.filter.sort')} className="flex flex-wrap gap-1.5">
-          {CLIENT_SORTS.map((k) => {
+          {CLIENT_SORTS.map((k, i, all) => {
             const on = sort.key === k;
             return (
               <button
@@ -235,6 +235,9 @@ export function ClientsFilterPanel({ open, onClose, list, tags, total }: { open:
                 type="button"
                 role="radio"
                 aria-checked={on}
+                // journey re-run J14r-4: one Tab stop, the arrows move (Space / Enter choose: a click on the chosen one flips the order)
+                tabIndex={radioTabIndex(i, all.indexOf(sort.key as never))}
+                onKeyDown={(e) => onRadioGroupKeyDown(e, { select: false })}
                 onClick={() => list.set({ sort: formatSort({ key: k, dir: on && sort.dir === 'desc' ? 'asc' : 'desc' }) })}
                 className={`inline-flex h-7 items-center gap-1 rounded-[6px] border px-2.5 ts-label-meta ${on ? 'border-line-lit bg-ink-raised-high text-text-primary' : 'border-line-edge text-text-secondary hover:text-text-primary'}`}
               >

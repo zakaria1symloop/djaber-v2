@@ -266,6 +266,12 @@ export class AgentsController {
     res.setHeader('Server-Timing', serverTiming(r));
     return r.turn;
   }
+  // journey re-run J04r-6 / AI-CHAT-11: the hour's test turns of the workspace, read when the playground opens
+  @Get(':id/test/usage')
+  @RequirePermission('agents.test')
+  testUsage(@Id() id: string) {
+    return this.playground.usage(id);
+  }
   @Post(':id/test/flag')
   @HttpCode(200)
   @RequirePermission('agents.test')

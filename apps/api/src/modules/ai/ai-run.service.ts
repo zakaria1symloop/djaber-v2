@@ -22,12 +22,14 @@ import { allowedHandoffReasons, complaintIn, establishedReasons, HANDOFF_REFUSED
 import { offCatalogueWords, productNamedIn, productWanted, productWords } from './product-named';
 import { AUTO_FIX_RULES, checkReply, enforceReply, feeSentence, FIELD_QUESTIONS, guardInstruction, numbersIn, orderClaimsIn, owedQuotes, quoteFacts, stripMarkdown, withToolResults, type CataloguePrice, type CatalogueStock, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
 import { asksDelivery, asksSomething, blockedOrderText, confirmRequest, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, serverRecapAsked, withoutRecapClaims } from './tools/order-confirmation-text';
-import { asksCancel, cancelAsked, confirmation, phonesIn, placedNumbers, recapPending, recapYesArgs } from './tools/order-confirmation';
+import { asksCancel, cancelAsked, cancelledAsked, cancelledNumber, confirmation, lastCancelled, phonesIn, placedNumbers, recapPending, recapYesArgs } from './tools/order-confirmation';
 import { matchWilaya, namedVariant } from './tools/tool-registry';
 import { offCatalogueWordsOf, placeIndex, placeNamedIn, placeOnlyMessage, wilayaIn, withoutPlaceNames, type PlaceIndex } from './tools/place-index';
 import { contextOf } from '../messaging/messaging.presenter';
-import { asksAddress, fillerMessage, handoffKind, handoffReply, handoffSystemLineShown, modeQuestionAt, noPhotoReply, noPhotoSaid, openingSaid, photoAsked, substitutionLine, withArabicCurrency, withArabicWords, withArabiziWords, withAskedPrice, withBothFees, withModeFees, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutQuickReply, withoutStrayYes, withPlaceFacts, withAskedFacts, withoutBookingOffer, withOneStopdeskOffer, withoutRefusals, withSingleSpaces, withoutUnrelatedOffer, teamSaid, teamOnlyKind, withNotServed, withoutNotedSteps, withoutOrderStepAsk, withCustomerScriptName, choiceQuestion, withSpacedAmounts, withoutNotedOpening, withoutFalseApology, withPendingProductWording, withThanksFirst, withoutRepeatedNotServed, type PlaceProduct } from './reply-fixes';
+import { asksAddress, fillerMessage, handoffKind, handoffReply, handoffSystemLineShown, limitHandoffReply, cancelledReply, cancelClaimed, cancelQuestion, modeQuestionAt, noPhotoReply, noPhotoSaid, openingSaid, photoAsked, substitutionLine, withArabicCurrency, withArabicWords, withArabiziWords, withAskedPrice, withBothFees, withModeFees, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutQuickReply, withoutStrayYes, withPlaceFacts, withAskedFacts, withoutBookingOffer, withOneStopdeskOffer, withoutRefusals, withSingleSpaces, withoutUnrelatedOffer, teamSaid, teamOnlyKind, withNotServed, withoutNotedSteps, withoutOrderStepAsk, withCustomerScriptName, choiceQuestion, withSpacedAmounts, withoutNotedOpening, withoutFalseApology, withPendingProductWording, withThanksFirst, withoutRepeatedNotServed, type PlaceProduct } from './reply-fixes';
 import { bareYes as bareYesWords, serverTextLanguage, systemLocale } from './language';
+import { orderLimitOf, quantityAbove, type OrderLimit } from './order-limit';
+import { msaRegister, MSA_NOTE, withMsaWording } from './msa';
 import { foldText } from './tools/wilaya-aliases';
 import { foldGuard, splitSentences } from './reply-guard';
 
@@ -95,7 +97,8 @@ export const digitsBeyondPhones = (text: string): boolean =>
     text
       .replace(/[٠-٩]/gu, (d) => String(d.charCodeAt(0) - 0x0660))
       .replace(/[۰-۹]/gu, (d) => String(d.charCodeAt(0) - 0x06f0))
-      .replace(/(?<!\d)(?:(?:\+|00)213\s*)?0?[5-7](?:[\s.-]?\d){6,8}(?!\d)/gu, ' '),
+      // journey re-run J04r-1: a number never runs across a line break (the messages of a batch are joined with « \n »)
+      .replace(/(?<!\d)(?:(?:\+|00)213[ \t]*)?0?[5-7](?:[ \t.-]?\d){6,8}(?!\d)/gu, ' '),
   );
 /**
  * journey retest R17-2 (18/11): the latest customer message naming a product of the CATALOGUE names one that is out of stock — the product
@@ -592,8 +595,9 @@ export const unavailableTool = (name: string, fieldOnly: boolean, noPhone = fals
  */
 export const orderClosedBy = (name: string, result: unknown): boolean => {
   if (canonicalTool(name) !== 'create_order') return false;
-  const r = result as { ok?: unknown; error?: { code?: unknown; missing?: unknown } } | null;
-  if (r?.ok === true) return true;
+  const r = result as { ok?: unknown; hint?: unknown; error?: { code?: unknown; missing?: unknown } } | null;
+  // journey re-run J03r-1 (18/11): nor after the order limit — no second call with a lower quantity (LIM T1 « 6 » ⇒ `{5}` ⇒ a recap of 5)
+  if (r?.ok === true || r?.hint === 'order_limit') return true;
   const code = r?.error?.code;
   return code === 'CONFIRMATION_REQUIRED' || code === 'ORDER_ALREADY_PLACED' || code === 'CONFIRMATION_REFUSED' || code === 'CUSTOMER_BLOCKED' || (code === 'VALIDATION' && r?.error?.missing === true);
 };
@@ -986,7 +990,9 @@ export class AiRunService implements OnModuleInit {
       forcedHandoff ??= this.tools.forcedHandoff(call.name, call.args, done.result);
       return { call, done };
     };
-    const system = [req.prompt.system, ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noStreet ? [NO_STREET_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : []), ...(knownNote ? [knownNote] : []), ...(recapReady ? [RECAP_READY_NOTE] : []), ...(takesGone ? [takesUnavailableNote(takesGone)] : []), ...(substituteTaken ? [takesSubstituteNote(substituteTaken)] : [])].join('\n\n');
+    // journey re-run J04r-4 (18/11): the customer writes Modern Standard Arabic (no darija word in their Arabic-script messages)
+    const msa = req.guard?.lang === 'ar' && msaRegister(req.toolCtx.customerHistory ?? req.toolCtx.customerText);
+    const system = [req.prompt.system, ...(msa ? [MSA_NOTE] : []), ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noStreet ? [NO_STREET_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : []), ...(knownNote ? [knownNote] : []), ...(recapReady ? [RECAP_READY_NOTE] : []), ...(takesGone ? [takesUnavailableNote(takesGone)] : []), ...(substituteTaken ? [takesSubstituteNote(substituteTaken)] : [])].join('\n\n');
     // journey retest R7-5: run once, when the answer to a delivery question comes without any quote_delivery of the turn
     let serverQuoted = false;
     // journey retest R14-2: the server's quote for the fees of a « home or stop-desk? » question (not a delivery question)
@@ -1004,6 +1010,9 @@ export class AiRunService implements OnModuleInit {
     let repaired = false;
     let firstAnswer = '';
     let forcedHandoff: string | null = null;
+    // journey re-run J03r-1 (18/11, Major): the quantity above « Quantité max par commande » the customer's message asks for (handed off
+    // before any model call); the limit a create_order of this turn reported comes from its answer (`limitNow`)
+    let messageLimit: OrderLimit | null = null;
     let toolRounds = 0;
     let handoffAsked = false;
     let confirmAsked = false;
@@ -1031,6 +1040,13 @@ export class AiRunService implements OnModuleInit {
       const owed = quotes.length ? owedQuotes(text, quotes, req.toolCtx.customerText) : [];
       return owed.length ? `${owed.map((q) => feeSentence(q, textLang, req.guard?.shopLocale)).join(' ')} ${text}`.trim() : text;
     };
+    const limitNow = (): OrderLimit | null => {
+      for (const t of executed) if (canonicalTool(t.name) === 'create_order') {
+        const l = orderLimitOf(t.result);
+        if (l) return l;
+      }
+      return messageLimit;
+    };
     const confirmedText = (output: AiReplyOutput): AiReplyOutput => {
       const text = confirmationNow();
       if (text) return { ...output, reply: text };
@@ -1050,6 +1066,10 @@ export class AiRunService implements OnModuleInit {
         // arabizi turn whose system texts are in Arabic script) the model's own sentence is followed by what the team does.
         const reason = forcedHandoff ?? handoffReason(output.statusDetail);
         const ooh = !!req.guard?.outOfHours;
+        // journey re-run J03r-1 (18/11, Major): the order limit gets the server's sentence naming the limit — never the model's text, which
+        // offered the maximum (« combien de paires souhaitez-vous, jusqu'à 5 ? »)
+        const limit = reason === 'order_limits' ? limitNow() : null;
+        if (limit) return { ...plain, reply: limitHandoffReply(limit, textLang, { outOfHours: ooh }) };
         const customerText = req.toolCtx.customerText;
         const person = handoffKind(reason) === 'person' && executed.every((t) => canonicalTool(t.name) === 'handoff_to_human');
         // journey retest R16-2 (18/11): a model refusal (« Je ne peux pas vous donner de prix de gros ici. ») is never the hand-off's text
@@ -1065,6 +1085,13 @@ export class AiRunService implements OnModuleInit {
         return { ...plain, reply: withHandoffFees((shown && !always) || (ooh && openingSaid(said)) ? said : `${said} ${handoffReply(reason, textLang, { outOfHours: ooh, tail: true, customerText })}`) };
       }
       const recap = recapNow();
+      // journey re-run J04r-2 (18/11): a cancellation is said only when the server made it — C1 T13 `cancel_order {}` ⇒ `{ ok, candidates }`
+      // (nothing cancelled) and the reply « La commande TEST-1525 … est annulée »: the server's question replaces that text
+      const cancelCalls = executed.filter((t) => canonicalTool(t.name) === 'cancel_order');
+      if (!recap && cancelCalls.length && !cancelCalls.some((t) => cancelledNumber(t.result) || (t.result as { alreadyCancelled?: unknown } | null)?.alreadyCancelled) && !lastCancelled(req.toolCtx.orderHistory) && cancelClaimed(plain.reply)) {
+        const open = cancelCalls.flatMap((t) => ((t.result as { candidates?: { number?: unknown }[] } | null)?.candidates ?? []).map((c) => c?.number)).filter((n): n is string => typeof n === 'string');
+        return { ...plain, reply: cancelQuestion([...new Set(open)], textLang) };
+      }
       if (!recap) {
         // journey retest R7-3: « ? » / « ... » gets the pending question, not « Oui, je suis là ! » / « Vous êtes toujours là ? »
         let text = fillerMessage(req.toolCtx.customerText) ? withoutPresenceTalk(plain.reply) : plain.reply;
@@ -1107,7 +1134,7 @@ export class AiRunService implements OnModuleInit {
         // « … للدار: 450 دج، لنقطة الاستلام (stop-desk): 300 دج. تحب نوصلوها للدار ولا في ستوب ديسك؟ » (Djellaba homme 7 500 دج never said), N3 T1 « Parfait
         // Samira, 2 tapis de prière …, c'est noté ! Dans quelle wilaya êtes-vous ? » (2 800 DA never said)
         if (!placeNotServed && ![...executed, ...reused].some((t) => canonicalTool(t.name) === 'quote_delivery' && (t.result as { error?: { code?: unknown } } | null)?.error?.code === 'WILAYA_NOT_SERVED'))
-          for (const product of this.saleProductsOf(req, output, text)) text = withPlaceFacts(text, [], product, textLang);
+          for (const product of this.saleProductsOf(req, output, text, [...new Set(executed.filter((t) => ['search_products', 'get_product', 'check_availability'].includes(canonicalTool(t.name))).flatMap((t) => productIdsOf(t.result)))])) text = withPlaceFacts(text, [], product, textLang);
         // journey retest R15-4 (18/11): the asked price of an out-of-stock product is given with « pas disponible » (N5 T1)
         const gone = new Set(req.guard?.unavailableNames ?? []);
         text = withAskedPrice(text, req.toolCtx.customerText, (req.guard?.cataloguePrices ?? []).filter((p) => gone.has(p.name)), textLang);
@@ -1153,7 +1180,9 @@ export class AiRunService implements OnModuleInit {
     // journey retest R20-4 (18/11): and every amount as `formatMoney` writes it, the model's too (« 6900 DA » ⇒ « 6 900 DA »)
     const confirmed = (output: AiReplyOutput): AiReplyOutput => {
       const done = confirmedText(output);
-      return { ...done, reply: withSpacedAmounts(withSingleSpaces(done.reply)) };
+      // journey re-run J04r-4 (18/11): an MSA customer gets MSA wording — the server's sentences and the darija words left in the reply
+      const reply = withSpacedAmounts(withSingleSpaces(done.reply));
+      return { ...done, reply: msa && textLang === 'ar' ? withMsaWording(reply) : reply };
     };
     /**
      * journey retest R7-2: a photo request answered with no photo sent and no word about it, while every product of the answer
@@ -1332,6 +1361,37 @@ export class AiRunService implements OnModuleInit {
     // journey retest R19-1 (18/11): a plain yes to the server recap the AI's last message showed — the server places that recap's stored order
     // before any model call and its confirmation is the reply: no model call at all (R19: 2–3 calls, 3.5–8.4 s for each « oui »). A refusal
     // of the order (stock, product) is answered by the model in the same turn; no route to name the run's model ⇒ the model loop as before.
+    /** journey re-run J03r-1: the answer of a turn handed to the team for the order limit (its text is the server's limit sentence). */
+    const limitOutput = (): AiReplyOutput => ({ reply: '', status: 'HANDOFF', statusDetail: 'order_limits', intent: 'SALE', productCards: [], recommendations: [], confidence: 1 });
+    // journey re-run J03r-1 (18/11, Major): a message asking for more pieces than « Quantité max par commande » (« Je veux 6 tapis de prière … »,
+    // « 500 pièces de votre premier produit ») is handed to the team before any model call, with the sentence naming the limit — the model
+    // cut the quantity to the maximum and sent a recap of 5, or asked « jusqu'à 5 ? ». The number must count pieces or be followed by a
+    // product of the shop (the catalogue's own check): an address number, a size, a price or a phone never counts.
+    const maxQty = req.toolCtx.agent.maxQtyPerOrder ?? null;
+    // (not on a request only the team can quote — « prix de gros pour 50 pièces » keeps its wholesale sentence, R16-2)
+    const overQty = said !== undefined && maxQty !== null && !teamOnlyKind(said)
+      ? await quantityAbove(said, maxQty, async (words) => !!productNamedIn(words, req.guard?.cataloguePrices ?? []) || (typeof this.tools.soldProductNamed === 'function' && !!(await this.tools.soldProductNamed(req.toolCtx.agent, words).catch(() => null))))
+      : null;
+    if (overQty !== null && maxQty !== null && !forcedHandoff) {
+      forcedHandoff = 'order_limits';
+      messageLimit = { kind: 'quantity', value: maxQty };
+      const m = await this.serverModel();
+      if (m) {
+        model = m;
+        return ok(limitOutput());
+      }
+    }
+    // journey re-run J04r-2 (18/11, Major): « elle est bien annulée ? » right after the cancellation the server made — its answer, with no model
+    // call (C6 T11 / R1 T6: `lookup_order {}` ⇒ nothing, `cancel_order` ⇒ NO_OPEN_ORDER, then « je ne peux pas confirmer … ma réponse
+    // précédente était trop rapide … je vais vérifier avec l'équipe »)
+    const cancelledNow = said !== undefined && !forcedHandoff && cancelledAsked(said) ? lastCancelled(req.toolCtx.orderHistory) : null;
+    if (cancelledNow) {
+      const m = await this.serverModel();
+      if (m) {
+        model = m;
+        return ok({ ...serverOutput(cancelledReply(cancelledNow, textLang)), intent: 'TRACKING' });
+      }
+    }
     if (yesOrder && !forcedHandoff) {
       const m = await this.serverModel();
       if (m) {
@@ -1431,6 +1491,11 @@ export class AiRunService implements OnModuleInit {
             messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: placeSearchResult(place) });
             continue;
           }
+          // journey re-run J03r-1 (18/11): once the order limit was hit this turn, no create_order runs again (the model re-sent `{5}` for « 6 »)
+          if (forcedHandoff === 'order_limits' && canonicalTool(call.name) === 'create_order') {
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: repeatedCall(executed.find((t) => canonicalTool(t.name) === 'create_order' && orderLimitOf(t.result))?.result ?? { ok: false, hint: 'order_limit' }) });
+            continue;
+          }
           // journey retest R17-6: a create_order with no address (nor the stop-desk) while the customer gave none is not run
           const noStreetCall = addressLess(call);
           if (noStreetCall) {
@@ -1458,6 +1523,8 @@ export class AiRunService implements OnModuleInit {
         // the call is a create_order this message cannot make yet (a missing wilaya / street) on a message that asks nothing: the field's
         // question, with the price and the fees the server adds (PG2 T2 5.1 s + 4.3 s, PG1b T2, N4 T3 — a second model call for that question)
         infoRound(runnable, ranBefore);
+        // journey re-run J03r-1: the order limit was hit — the turn is the team's, with the limit sentence and no further model call
+        if (forcedHandoff === 'order_limits') return ok(limitOutput());
         if (serverDone()) {
           await recapQuote();
           return ok(serverOutput());
@@ -1523,6 +1590,11 @@ export class AiRunService implements OnModuleInit {
             messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: placeSearchResult(place) });
             continue;
           }
+          // journey re-run J03r-1 (18/11): once the order limit was hit this turn, no create_order runs again (the model re-sent `{5}` for « 6 »)
+          if (forcedHandoff === 'order_limits' && canonicalTool(call.name) === 'create_order') {
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: repeatedCall(executed.find((t) => canonicalTool(t.name) === 'create_order' && orderLimitOf(t.result))?.result ?? { ok: false, hint: 'order_limit' }) });
+            continue;
+          }
           // journey retest R17-6: a create_order with no address (nor the stop-desk) while the customer gave none is not run
           const noStreetCall = addressLess(call);
           if (noStreetCall) {
@@ -1546,6 +1618,8 @@ export class AiRunService implements OnModuleInit {
           forcedHandoff ??= this.tools.forcedHandoff(run.name, run.args, done.result);
         }
         infoRound(calls, ranBefore);
+        // journey re-run J03r-1: the order limit was hit — the turn is the team's, with the limit sentence and no further model call
+        if (forcedHandoff === 'order_limits') return ok(limitOutput());
         // journey retest R19-1 (18/11): the order placed, or the recap with nothing else asked — the reply is the server's: no model call
         if (serverDone()) {
           await recapQuote();
@@ -1851,7 +1925,10 @@ export class AiRunService implements OnModuleInit {
    * variant named (or the one price of all variants) gives. Not an out-of-stock product, nor one at stock 0 the customer did not name,
    * nor one whose price this reply or an earlier AI message of the conversation already gives.
    */
-  private saleProductsOf(req: TurnRequest, output: AiReplyOutput, text: string): PlaceProduct[] {
+  // journey re-run J04r-3 (18/11): `looked` — the products this turn's search / get_product returned. One product of the CATALOGUE found for a
+  // message wanting a product is the product being sold, also when the message names it in words the catalogue name lacks (« عندكم الساعة
+  // الذكية؟ نحب نطلبها » ⇒ Montre connectée, orderable beyond stock: « التوصيل ممكن يطول شوية. واش سميتك ؟ », no name, no price)
+  private saleProductsOf(req: TurnRequest, output: AiReplyOutput, text: string, looked: readonly string[] = []): PlaceProduct[] {
     const prices = req.guard?.cataloguePrices ?? [];
     const said = req.toolCtx.customerText ?? '';
     if (!prices.length || !said.trim() || fillerMessage(said)) return [];
@@ -1862,7 +1939,8 @@ export class AiRunService implements OnModuleInit {
     const cards = [...new Set(output.productCards ?? [])];
     // (the product the message names, unless the reply speaks of others only — its cards show another product, or it names another one,
     // and never this one)
-    const named = productNamedIn(said, prices);
+    const lookedUp = looked.length === 1 && (productWanted(said) || asksSomething(said)) ? (prices.find((p) => p.id === looked[0]) ?? null) : null;
+    const named = productNamedIn(said, prices) ?? lookedUp;
     const other = productNamedIn(text, prices.filter((p) => p !== named));
     const asked = named && ((cards.length && !cards.includes(named.id)) || other) && !productNamedIn(text, [named]) ? null : named;
     // (a reply naming three products or more lists the catalogue or alternatives — « Kayen bezzaf : basket, djellaba homme, … »: no price

@@ -251,7 +251,7 @@ export function ActiveFilters({ items, clearLabel, onClear, removeLabel, label }
         <li key={f.key} className="inline-flex h-6 items-center gap-1.5 rounded-[4px] border border-line-edge bg-ink-surface px-2 ts-label-meta uppercase text-text-primary">
           <span>{f.label}</span>
           {f.onRemove ? (
-            <button type="button" aria-label={removeLabel(f.label)} onClick={f.onRemove} className="text-text-muted hover:text-text-primary">
+            <button type="button" aria-label={removeLabel(f.label)} onClick={f.onRemove} className="-me-2 flex size-6 shrink-0 items-center justify-center rounded-[4px] text-text-muted hover:text-text-primary">
               <X className="size-3" aria-hidden />
             </button>
           ) : null}

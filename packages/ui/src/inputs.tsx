@@ -307,7 +307,7 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
           data-refused={flash || undefined}
           {...rest}
           aria-invalid={(!allowNegative && value.startsWith('-')) || rest['aria-invalid'] || undefined}
-          className={cn('tabular-nums transition-shadow', suffix && 'pe-12', (flash || (!allowNegative && value.startsWith('-'))) && 'ring-2 ring-accent-alert', className)}
+          className={cn('tabular-nums transition-shadow', suffix && (suffix.length <= 2 ? 'pe-9' : 'pe-12'), (flash || (!allowNegative && value.startsWith('-'))) && 'ring-2 ring-accent-alert', className)}
         />
         {suffix ? (
           <span aria-hidden className="pointer-events-none absolute inset-y-0 end-3 flex items-center ts-label-micro text-text-muted">
@@ -360,7 +360,7 @@ export function QtyStepper({
   // once for the totals, and the field shows it when it loses focus — « erase then type 5 » is 5, not 15
   const [draft, setDraft] = React.useState<string | null>(null);
   const notice = useFieldNotice();
-  const btn = 'flex size-7 items-center justify-center text-text-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40';
+  const btn = 'flex size-7 items-center justify-center rounded-[4px] text-text-secondary outline-none hover:text-text-primary focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-inbound disabled:cursor-not-allowed disabled:opacity-40';
   return (
     <div dir="ltr" title={disabledReason} className={cn('relative inline-flex h-8 items-center rounded-card border border-line-edge bg-ink-surface', className)}>
       <button type="button" aria-label={labels.decrease} className={btn} disabled={off || value <= min} onClick={() => onChange(Math.max(min, value - 1))}>
@@ -387,7 +387,8 @@ export function QtyStepper({
           setDraft(null);
         }}
         className={cn(
-          'h-full w-10 bg-transparent text-center text-[13px] font-semibold tabular-nums focus:outline-none disabled:opacity-60',
+          // journey re-run J14r-6: the focused quantity shows the ring every other field shows (it had only the caret)
+          'h-full w-10 rounded-[4px] bg-transparent text-center text-[13px] font-semibold tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-inbound disabled:opacity-60',
           tone === 'warning' && 'text-accent-starred',
           tone === 'danger' && 'text-accent-alert',
         )}
@@ -594,7 +595,7 @@ export function Combobox({
             }}
             className="mb-1 h-9 w-full rounded-[6px] border border-line-hairline bg-ink-surface px-2.5 text-[13px] placeholder:text-text-muted focus:border-line-lit focus:outline-none"
           />
-          <ul id={listId} role="listbox" className="max-h-60 overflow-y-auto">
+          <ul id={listId} role="listbox" tabIndex={-1} className="max-h-60 overflow-y-auto">
             {rows.length === 0 ? <li className="px-2.5 py-2 text-[13px] text-text-muted">{loading ? '…' : emptyLabel}</li> : null}
             {rows.map((o, i) => (
               <li

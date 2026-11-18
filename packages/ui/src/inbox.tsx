@@ -591,7 +591,7 @@ export function Composer(p: ComposerProps) {
       ) : null}
       <div className="relative">
         {open ? (
-          <div id={popId} role="listbox" aria-label={p.slash!.heading} className="absolute inset-x-0 bottom-full z-20 mb-2 max-h-64 overflow-y-auto rounded-card border border-line-edge bg-ink-raised p-1 shadow-xl">
+          <div id={popId} role="listbox" tabIndex={-1} aria-label={p.slash!.heading} className="absolute inset-x-0 bottom-full z-20 mb-2 max-h-64 overflow-y-auto rounded-card border border-line-edge bg-ink-raised p-1 shadow-xl">
             <div className="px-2.5 py-1.5 ts-label-micro text-text-muted">{p.slash!.heading}</div>
             {items.length === 0 ? (
               <div className="px-2.5 py-2 ts-label-meta text-text-muted">{p.slash!.emptyLabel}</div>

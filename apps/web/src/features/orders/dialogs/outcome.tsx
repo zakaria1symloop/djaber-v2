@@ -2,7 +2,7 @@
 // Call outcome fields (Figma ORD-07 step 2 "RÉSULTAT DE L'APPEL", DLG "Résultat de l'appel"): one `CallResult` value
 // (each answer = one `OrderCall` row, 12 §20), the callback time when "Rappeler plus tard", the note.
 import { formatDate, type AppLocale } from '@djaber/shared';
-import { cn, Field, Input, RadioCards, Textarea } from '@djaber/ui';
+import { cn, Field, Input, onRadioGroupKeyDown, radioTabIndex, RadioCards, Textarea } from '@djaber/ui';
 import { useState } from 'react';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { CALL_RESULTS, type CallResult } from '../contracts';
@@ -22,12 +22,15 @@ export function CallbackPicker({ value, onChange, invalid, idPrefix = 'cb' }: { 
   return (
     <div className="flex flex-col gap-2">
       <div role="radiogroup" aria-label={t('orders.callback.when')} className="flex flex-wrap gap-2">
-        {presets.map((p) => (
+        {presets.map((p, i) => (
           <button
             key={p.key}
             type="button"
             role="radio"
             aria-checked={chosen === p.key && !custom}
+            // journey re-run J14r-4: one Tab stop, the arrows move and choose
+            tabIndex={radioTabIndex(i, custom || (!!value && !chosen) ? presets.length : presets.findIndex((x) => x.key === chosen))}
+            onKeyDown={(e) => onRadioGroupKeyDown(e)}
             data-preset={p.key}
             onClick={() => {
               setCustom(false);
@@ -38,7 +41,7 @@ export function CallbackPicker({ value, onChange, invalid, idPrefix = 'cb' }: { 
             {t(`orders.callback.preset.${p.key}`, { time: algiersTime(p.at) })}
           </button>
         ))}
-        <button type="button" role="radio" aria-checked={custom || (!!value && !chosen)} onClick={() => setCustom(true)} className={chip(custom || (!!value && !chosen))}>
+        <button type="button" role="radio" aria-checked={custom || (!!value && !chosen)} tabIndex={radioTabIndex(presets.length, custom || (!!value && !chosen) ? presets.length : presets.findIndex((x) => x.key === chosen))} onKeyDown={(e) => onRadioGroupKeyDown(e)} onClick={() => setCustom(true)} className={chip(custom || (!!value && !chosen))}>
           {t('orders.callback.preset.custom')}
         </button>
       </div>

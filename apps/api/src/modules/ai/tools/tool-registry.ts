@@ -17,7 +17,7 @@ import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
 import { articleless, fold, foldText, WILAYA_ALIASES } from './wilaya-aliases';
 import { handoffReason, handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
-import { storedOrderArgs, asksCancel, bareYes, cancelWordsIn, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, phonesIn, placedNumbers, simulatedOrders, type DraftOrder, type OrderCallHistory } from './order-confirmation';
+import { storedOrderArgs, asksCancel, bareYes, cancelWordsIn, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, latestPhone, phonesIn, placedNumbers, simulatedOrders, simulatedOrderStates, lastCancelled, cancelledBefore, type DraftOrder, type OrderCallHistory } from './order-confirmation';
 import { asksSomething, withoutPlaceSegments } from './order-confirmation-text';
 
 export type ToolName = 'search_products' | 'get_product' | 'check_availability' | 'quote_delivery' | 'create_order' | 'cancel_order' | 'lookup_order' | 'handoff_to_human' | 'add_faq_candidate' | 'create_payment_link';
@@ -561,6 +561,8 @@ export class ToolRegistry {
     // 04 §13 / 04-ai-pipeline §4.2: a blocked customer, or a risky one with RISKY_CLIENT_POLICY=handoff, goes to the team
     if (r?.hint === 'risky_client' || r?.error?.code === 'CUSTOMER_BLOCKED') return 'risky_client';
     if (r?.hint === 'handoff') return r.error?.code === 'ORDERS_UNAVAILABLE' ? 'orders_unavailable' : 'other';
+    // 04-ai-pipeline §4.3 rule 32 / journey re-run J03r-1: an order above MAX_QTY / MAX_AMOUNT is never created and goes to the team
+    if (r?.hint === 'order_limit') return 'order_limits';
     return null;
   }
 
@@ -615,7 +617,7 @@ export class ToolRegistry {
     const known = (HANDOFF_REASONS as readonly string[]).includes(reason) && reason !== 'other';
     if (known || (ctx.agent.humanHandoffRules ?? '').trim()) return { ok: true };
     return refuse(
-      'No handoff rule applies: keep the conversation and answer now. A question you have no answer to ⇒ status=UNKNOWN, call add_faq_candidate and say briefly you will check with the team. A stock problem (ORDER_INSUFFICIENT_STOCK, out of stock) ⇒ offer the quantity available, the other variants or a similar product. Hand off only for a listed rule (customer_request, refund, complaint, angry, unclear_streak, off_catalogue, order_limits, risky_client, keyword).',
+      'No handoff rule applies: keep the conversation and answer now. A question you have no answer to ⇒ status=UNKNOWN, call add_faq_candidate and say briefly you will check with the team. A stock problem (ORDER_INSUFFICIENT_STOCK, out of stock) ⇒ offer the quantity available, the other variants or a similar product (an order above the shop order limit is not a stock problem: it goes to the team). Hand off only for a listed rule (customer_request, refund, complaint, angry, unclear_streak, off_catalogue, order_limits, risky_client, keyword).',
     );
   }
 
@@ -762,7 +764,8 @@ export class ToolRegistry {
     const asked: Prisma.OrderWhereInput[] = [...byPhone(phone ? [phone] : []), ...(tracking ? [{ shipments: { some: { trackingNumber: { equals: tracking, mode: 'insensitive' as const } } } }] : [])];
     const who: Prisma.OrderWhereInput[] = asked.length ? asked : [...(ctx.clientId ? [{ clientId: ctx.clientId }] : []), ...byPhone(own)];
     // full-test 15/11 AI-CHAT-16: the playground sees the TEST-n orders of its session (status new, not shipped)
-    const simulated = ctx.dryRun && !phone && !tracking ? simulatedOrders(ctx.orderHistory).filter((o) => !number || o.number.toLowerCase() === number.toLowerCase()).map((o) => ({ number: o.number, status: 'new', deliveryStatus: 'not_sent', courier: null, trackingNumber: null, trackingUrl: null, lastEvent: null, total: o.total, orderedAt: aiDateTime(o.at), simulated: true })) : [];
+    // journey re-run J04r-2 (18/11): with the cancelled / replaced ones and their status (« elle est bien annulée ? » found nothing)
+    const simulated = ctx.dryRun && !phone && !tracking ? simulatedOrderStates(ctx.orderHistory).filter((o) => !number || o.number.toLowerCase() === number.toLowerCase()).map((o) => ({ number: o.number, status: o.status, deliveryStatus: 'not_sent', courier: null, trackingNumber: null, trackingUrl: null, lastEvent: null, total: o.total, orderedAt: aiDateTime(o.at), ...(o.replacedBy ? { replacedBy: o.replacedBy } : {}), simulated: true })) : [];
     if (simulated.length) return { orders: simulated };
     if (!who.length) return { orders: [] };
     const old = new Date(Date.now() - 30 * 86_400_000);
@@ -862,7 +865,11 @@ export class ToolRegistry {
     // full-test 15/11 AI-CHAT-01: never an invented value (« Client », 0555000000) — ask the customer
     const ask = (field: string) => fail({ ok: false, error: { code: 'VALIDATION', field, missing: true, example: EXAMPLES[field] }, say: 'ask the customer for this value (one question); never invent it' });
     if (isPlaceholderName(d.clientName)) return ask('clientName');
-    const phone = normalizePhoneDz(d.clientPhone);
+    let phone = normalizePhoneDz(d.clientPhone);
+    // journey re-run J04r-1 (18/11, Blocker): the last valid phone the customer gave wins — « 0661234567 » then « non, c'est 0770998877 »
+    // ⇒ 0770998877 whatever number the model copied (a later message adding a second number keeps the first one as the main phone)
+    const lastPhone = ctx.customerHistory !== undefined ? latestPhone(ctx.customerHistory) : null;
+    if (lastPhone && isPhoneDz(phone) && lastPhone !== phone && (!d.secondPhone || normalizePhoneDz(d.secondPhone) !== lastPhone) && known?.has(phone)) phone = lastPhone;
     // journey 16/11 J05-9: a number the customer never wrote (« 0500000000 », « 0000000000 » before any phone was given) is
     // asked for first, before the address and the other checks — the model used to get a format error and guess again
     if (!isPhoneDz(phone)) return fail(known && known.size === 0 ? { ok: false, error: { code: 'VALIDATION', field: 'clientPhone', missing: true, example: EXAMPLES.clientPhone }, say: 'ask the customer for this value (one question); never invent it' } : invalid('clientPhone', EXAMPLES.clientPhone));
@@ -962,8 +969,12 @@ export class ToolRegistry {
     const quote = await this.quote({ wilayaId: d.wilayaId, isStopdesk: d.isStopdesk, subtotal });
     if (quote.ok === false) return fail(quote);
     const deliveryFee = Number(quote.fee ?? 0);
-    // no order, no error code: the model must hand off with statusDetail=order_limits
-    if ((maxQty !== null && quantity > maxQty) || (maxAmount !== null && subtotal + deliveryFee > maxAmount)) return fail({ ok: false, hint: 'order_limit', maxQty, maxAmount });
+    // no order, no error code: the turn is handed to the team (statusDetail=order_limits)
+    // journey re-run J03r-1 (18/11, Major): the server hands off itself (`forcedHandoff`) — the model re-sent the call with the maximum
+    // (« 6 tapis » ⇒ `create_order {5}` ⇒ a recap of 5) instead of handing off; which limit was hit is named for the limit sentence
+    const overQty = maxQty !== null && quantity > maxQty;
+    if (overQty || (maxAmount !== null && subtotal + deliveryFee > maxAmount))
+      return fail({ ok: false, hint: 'order_limit', limit: overQty ? 'quantity' : 'amount', maxQty, maxAmount, quantity, total: subtotal + deliveryFee, say: 'Above the shop order limit: nothing is ordered and no other quantity is offered — the conversation goes to the team.' });
     // journey retest R11-4 (17/11): the address is stored (and shown) without the commune / wilaya it starts or ends with — the recap
     // adds them back as « street, commune, wilaya » (N21 T4 « البليدة، بوفاريك، حي الورود رقم 12 » was shown and stored wilaya first)
     const communeRow = place && d.communeName ? place.communes.find((c) => samePlace(c.nameFr, d.communeName!) || samePlace(c.nameAr, d.communeName!)) : undefined;
@@ -1143,13 +1154,26 @@ export class ToolRegistry {
     // `cancel_order {}` on a tracking question ⇒ « ok, candidates ») — refused precisely, nothing is looked up
     if (!number && ctx.customerText !== undefined && !cancelWordsIn(ctx.customerText, ctx.customerHistory)) return { ok: false, error: { code: 'CANCEL_NOT_ASKED' }, say: 'Nothing is cancelled: the customer did not ask to cancel an order. cancel_order is only for a cancellation they ask for — an order status question is answered with lookup_order. Answer their message now.' };
     // full-test 15/11 AI-CHAT-16: the playground cancels its own TEST-n orders (nothing is written)
+    // journey re-run J04r-2 (18/11): an order already cancelled is said so (« elle est bien annulée ? » ⇒ NO_OPEN_ORDER, then « je ne peux pas
+    // confirmer que la commande est annulée ») — the asked number, or the latest cancellation when no order is open any more
+    const already = (open: number) => {
+      const done = lastCancelled(ctx.orderHistory);
+      const asked = number ? cancelledBefore(ctx.orderHistory, number) : null;
+      const n = asked ?? (!number && !open ? done : null);
+      return n ? ({ ok: true, alreadyCancelled: n, ...(ctx.dryRun ? { simulated: true } : {}), say: `Order ${n} is already cancelled: say so in one short sentence (never a doubt, never « the team will check »).` } as ToolResult) : null;
+    };
+    // journey re-run J04r-2: « annulez la commande s'il vous plaît » with one open order is the customer's confirmation — C1 T13 `cancel_order {}`
+    // ⇒ `{ ok, candidates }` (nothing cancelled) and the reply « La commande TEST-1525 … est annulée »
+    const saidCancel = ctx.customerText !== undefined && asksCancel(ctx.customerText) && confirmation(ctx.customerText) !== 'no' && !/[?؟]/u.test(ctx.customerText);
     if (ctx.dryRun) {
       const mine = simulatedOrders(ctx.orderHistory);
+      const was = already(mine.length);
+      if (was && (!number || !mine.some((o) => o.number.toLowerCase() === number))) return was;
       if (mine.length) {
         const target = number ? mine.find((o) => o.number.toLowerCase() === number) : mine.length === 1 ? mine[0] : undefined;
         const candidates = mine.map((o) => ({ number: o.number, total: o.total, status: 'new', orderedAt: aiDateTime(o.at) }));
         if (number && !target) return { ok: false, error: { code: 'ORDER_NOT_CANCELLABLE' } };
-        if (!target || args.customerConfirmed !== true) return { ok: true, candidates, simulated: true };
+        if (!target || (args.customerConfirmed !== true && !saidCancel)) return { ok: true, candidates, simulated: true, say: 'Nothing is cancelled yet: never say it is cancelled. Ask which order (or to confirm) in one short question.' };
         if (await this.placedThisRun(ctx)) return { ok: false, error: { code: 'ORDER_JUST_CREATED', number: target.number }, say: "This order was just created at the customer's request: keep it. Cancel only if the customer asks in a later message." };
         if (ctx.customerText !== undefined && !asksCancel(ctx.customerText)) return { ok: true, candidates, simulated: true, say: 'Nothing is cancelled: the customer did not ask to cancel this order in their message. Keep it; to cancel, they must say so (« annuler »).' };
         return { ok: true, cancelled: target.number, simulated: true };
@@ -1163,13 +1187,15 @@ export class ToolRegistry {
     const confirmed = await prisma.order.findFirst({ where: { clientId: ctx.clientId, status: { in: ['confirmed', 'preparing'] }, deliveryStatus: 'not_sent', ...(number ? { number: { equals: number, mode: 'insensitive' } } : {}) }, select: { number: true } });
     if (confirmed && (!candidates.length || (number && !candidates.some((c) => c.number.toLowerCase() === number)))) return { ok: false, error: { code: 'ORDER_CONFIRMED_BY_SELLER', number: confirmed.number }, hint: 'handoff' };
     if (!candidates.length) {
+      const was = already(0);
+      if (was) return was;
       const any = number ? await prisma.order.findFirst({ where: { clientId: ctx.clientId, number: { equals: number, mode: 'insensitive' } }, select: { id: true } }) : await prisma.order.findFirst({ where: { clientId: ctx.clientId, status: { notIn: ['cancelled', 'returned', 'delivered'] } }, select: { id: true } });
       return { ok: false, error: { code: any ? 'ORDER_NOT_CANCELLABLE' : 'NO_OPEN_ORDER' } };
     }
     const target = number ? candidates.find((c) => c.number.toLowerCase() === number) : candidates.length === 1 ? candidates[0] : undefined;
     if (number && !target) return { ok: false, error: { code: 'ORDER_NOT_CANCELLABLE' } };
     // never cancels without the customer's confirmation, and never in the playground
-    if (!target || args.customerConfirmed !== true || ctx.dryRun) return { ok: true, candidates: publicList, ...(ctx.dryRun ? { simulated: true } : {}) };
+    if (!target || (args.customerConfirmed !== true && !saidCancel) || ctx.dryRun) return { ok: true, candidates: publicList, ...(ctx.dryRun ? { simulated: true } : {}), say: 'Nothing is cancelled yet: never say it is cancelled. Ask which order (or to confirm) in one short question.' };
     // full-test 15/11 AI-CHAT-02: never the order this very turn created, and only on the customer's own words of this turn
     const createdNow = (await prisma.aiToolCall.findMany({ where: { aiRunId: ctx.runId, name: 'create_order', executedAt: { not: null } }, select: { result: true } })).some((c) => (c.result as { ok?: unknown } | null)?.ok === true);
     if (createdNow) return { ok: false, error: { code: 'ORDER_JUST_CREATED', number: target.number }, say: "This order was just created at the customer's request: keep it. Cancel only if the customer asks in a later message." };

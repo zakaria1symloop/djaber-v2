@@ -100,9 +100,16 @@ describe('playground (AGT-07)', () => {
     expect(limited.body.error.code).toBe('PLAYGROUND_RATE_LIMITED');
     // full-test 15/11 AI-CHAT-11: the wait is the rest of the hour (the page counted down 1:00)
     expect(limited.body.error.params.retryAfter).toBeGreaterThan(3000);
+    // journey re-run J04r-6 / AI-CHAT-11: the hour's count read when the playground opens (nothing counted by the read); cross-shop 404
+    expect((await owner.get(`/agents/${agent.id}/test/usage`).expect(200)).body.data).toEqual({ used: 60, limit: 60, retryAfter: expect.any(Number) });
+    expect((await owner.get(`/agents/${agent.id}/test/usage`).expect(200)).body.data.used).toBe(60);
+    const stranger = await asOwner(app);
+    await stranger.get(`/agents/${agent.id}/test/usage`).expect(404);
+    await anonymous(app).get(`/agents/${agent.id}/test/usage`).expect(401);
     expect((await balanceOf(app, owner.workspaceId)).planUsed).toBe(0);
     // provider down ⇒ 503 AI_PROVIDER_ERROR, the run is closed as an error
     await app.app.get(RedisService).client.del(`rl:playground:${owner.workspaceId}`);
+    expect((await owner.get(`/agents/${agent.id}/test/usage`).expect(200)).body.data).toEqual({ used: 0, limit: 60, retryAfter: null });
     fakeAi(app).reset();
     fakeAi(app).script('reply', { error: 'provider_error' }, { error: 'timeout' });
     expect((await test(owner, agent.id, { sessionId: 'down', ...say('Bonjour') }).expect(503)).body.error.code).toBe('AI_PROVIDER_ERROR');

@@ -63,6 +63,9 @@ html:root[dir='rtl'] {
 /* Arabic has no monospace companion: labels use Changa without letter-spacing */
 html:root[dir='rtl'] { --font-mono: var(--f-changa), system-ui, sans-serif; }
 html[dir='rtl'] :is(.ts-label-section, .ts-label-meta, .ts-label-micro) { letter-spacing: 0; font-size: 11px; }
+/* journey re-run J14r-7 a (18/11): Arabic has no capitals — the label styles' upper case only changed the Latin names inside them
+   (« تم التسليم … · QA J14R P. », the payment line, the inventory tile): Latin words keep the case they are written in */
+html[dir='rtl'] :is(.ts-label-section, .ts-label-micro) { text-transform: none; }
 
 /*
  * full-test 15/11 MOBILE-A11Y-02 (WCAG 2.4.7): the keyboard focus ring is the design system's blue everywhere. The

@@ -89,6 +89,7 @@ export const agentsApi = {
     return api<{ created: AgentFaq[]; skipped: number }>(`/agents/${id}/faq/import`, { method: 'POST', formData: fd });
   },
   test: (id: string, b: PlaygroundBody, o: { signal?: AbortSignal } = {}) => api<PlaygroundTurn>(`/agents/${id}/test`, { method: 'POST', body: b, signal: o.signal }),
+  testUsage: (id: string) => api<{ used: number; limit: number; retryAfter: number | null }>(`/agents/${id}/test/usage`),
   flagTurn: (id: string, b: { turnId: string; note?: string }) => api<null>(`/agents/${id}/test/flag`, { method: 'POST', body: b }),
   exportTest: (id: string, sessionId: string) => api<Record<string, unknown>>(`/agents/${id}/test/export`, { query: { sessionId } }),
   testLink: (id: string) => api<TestLink>(`/agents/${id}/test-links`, { method: 'POST', body: { expiresInHours: 24 } }),

@@ -84,8 +84,16 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const capped = await shop({ maxQtyPerOrder: 10 });
     const h2 = await createProduct(capped.owner, { name: 'Hijab soie', price: 1500, stock: 40 });
     fakeAi(app).script('reply', { toolCalls: [createCall(capped, { items: [{ productId: h2.id, quantity: 12 }] })] }, { reply: 'Je transmets.', status: 'HANDOFF', statusDetail: 'order_limits', intent: 'SALE' });
-    const refused = await turn(capped, newSender(), 'Amine Benali, 0555 12 34 56, Bab Ezzouar, Cité des 200 logements, 12 pièces');
-    expect(lastResult(refused.runs)).toEqual({ ok: false, hint: 'order_limit', maxQty: 10, maxAmount: null });
+    // journey re-run J03r-1: the server hands off on the tool's answer (no second create_order, no model call after it)
+    const refused = await turn(capped, newSender(), 'Amine Benali, 0555 12 34 56, Bab Ezzouar, Cité des 200 logements');
+    expect(lastResult(refused.runs)).toMatchObject({ ok: false, hint: 'order_limit', limit: 'quantity', maxQty: 10, maxAmount: null, quantity: 12 });
+    expect(refused.conversation.status).toBe('needs_human');
+    expect(await db.order.count({ where: { workspaceId: capped.owner.workspaceId } })).toBe(0);
+    // …and on a message asking more pieces than the maximum, before any model call
+    await resetAi();
+    const direct = await turn(capped, newSender(), 'Amine Benali, 0555 12 34 56, Bab Ezzouar, Cité des 200 logements, 12 pièces');
+    expect(direct.runs.at(-1)!.toolCalls).toHaveLength(0);
+    expect(direct.conversation.status).toBe('needs_human');
     expect(await db.order.count({ where: { workspaceId: capped.owner.workspaceId } })).toBe(0);
   });
 

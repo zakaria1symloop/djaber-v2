@@ -15,7 +15,7 @@ import { agentsApi, useAgentsRefresh, useReadiness } from '../api';
 import type { Agent } from '../contracts';
 import { SCENARIO_KEYS } from '../contracts';
 import { INSTRUCTION_MAX } from '../insights/resolve-dialog';
-import { confidenceLabel, pendingCatalogue, secondsLabel, statusTone, turnView, type TurnView } from '../logic';
+import { confidenceLabel, pendingCatalogue, secondsLabel, statusTone, turnIntentLabel, turnStatusLabel, turnView, type TurnView } from '../logic';
 import { ModelBadge } from '../ui';
 import { downloadJson } from '../use-agent-actions';
 import { PlaygroundComposer, PlaygroundThread, usePlayground, type ChatTransport, type Playground as Pg } from './chat';
@@ -32,8 +32,8 @@ export const agentTransport =
 
 export function inspectorRows(t: ReturnType<typeof useT>, locale: string, turn: TurnView): InspectorRow[] {
   return [
-    { key: 'status', label: t('agents.inspector.status'), value: <Ltr>{turn.status}</Ltr>, tone: statusTone(turn.status) },
-    { key: 'intent', label: t('agents.inspector.intent'), value: <Ltr>{t('agents.inspector.intentValue', { intent: turn.intent, confidence: confidenceLabel(turn.confidence, locale) })}</Ltr> },
+    { key: 'status', label: t('agents.inspector.status'), value: turnStatusLabel(t, turn.status), tone: statusTone(turn.status) },
+    { key: 'intent', label: t('agents.inspector.intent'), value: t('agents.inspector.intentValue', { intent: turnIntentLabel(t, turn.intent), confidence: confidenceLabel(turn.confidence, locale) }) },
     { key: 'model', label: t('agents.inspector.model'), value: turn.model ? <Ltr>{turn.model}</Ltr> : t('agents.model.readOnly') },
     { key: 'tokens', label: t('agents.inspector.tokens'), value: <Ltr>{t('agents.inspector.tokensValue', { input: formatNumber(turn.tokens.input), output: formatNumber(turn.tokens.output) })}</Ltr> },
     { key: 'latency', label: t('agents.inspector.latency'), value: <Ltr>{secondsLabel(turn.latencyMs, locale)}</Ltr> },
@@ -195,7 +195,7 @@ export function AgentPlayground({ agent, initialScenario }: { agent: Agent; init
   const { can } = useSession();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const transport = useCallback(agentTransport(agent.id), [agent.id]);
-  const pg = usePlayground(transport);
+  const pg = usePlayground(transport, { usage: () => agentsApi.testUsage(agent.id) });
   const [exporting, setExporting] = useState(false);
   const { send } = pg;
   useEffect(() => {

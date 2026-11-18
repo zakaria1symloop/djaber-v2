@@ -206,7 +206,7 @@ function TicketView({ ticket, label, fill }: { ticket: AdminTicketDto; label: st
                 data-testid="ticket-composer"
               />
               {suggestions.length ? (
-                <ul role="listbox" aria-label={t('adminSupport.canned.title')} className="absolute inset-x-0 bottom-full z-20 mb-1 max-h-56 overflow-auto rounded-card border border-line-edge bg-ink-raised p-1 shadow-xl" data-testid="canned-suggestions">
+                <ul role="listbox" tabIndex={-1} aria-label={t('adminSupport.canned.title')} className="absolute inset-x-0 bottom-full z-20 mb-1 max-h-56 overflow-auto rounded-card border border-line-edge bg-ink-raised p-1 shadow-xl" data-testid="canned-suggestions">
                   {suggestions.map((c) => (
                     <li key={c.id} role="option" aria-selected={false}>
                       <button type="button" onClick={() => pickCanned(c)} className="flex w-full flex-col rounded-[6px] px-2.5 py-1.5 text-start hover:bg-ink-raised-high">

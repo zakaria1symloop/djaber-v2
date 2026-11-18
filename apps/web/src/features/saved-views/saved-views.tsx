@@ -220,7 +220,7 @@ function SaveViewDialog({ dialog, page, list, spec, columnKeys, onClose }: { dia
       >
         {formError ? <FormAlert>{formError}</FormAlert> : null}
         <Field label={t('savedViews.save.name')} htmlFor="saved-view-name" error={nameError} required>
-          <Input id="saved-view-name" value={name} maxLength={60} autoFocus onChange={(e) => setName(e.target.value)} placeholder={t('savedViews.save.placeholder')} />
+          <Input id="saved-view-name" value={name} maxLength={60} autoFocus aria-invalid={!!nameError || undefined} onChange={(e) => setName(e.target.value)} placeholder={t('savedViews.save.placeholder')} />
         </Field>
         {dialog.mode === 'create' ? (
           <label className="flex items-center gap-2 text-[13px]">

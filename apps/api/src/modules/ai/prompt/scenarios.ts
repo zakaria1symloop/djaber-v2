@@ -15,3 +15,5 @@ export const SCENARIOS: Record<TestScenarioKey, Scenario> = {
   qty_limit: { key: 'qty_limit', message: 'Je veux commander 500 pièces de votre premier produit', language: 'fr', expect: { checks: ['replied', 'limits_respected'] } },
   refund: { key: 'refund', message: 'Je veux un remboursement de ma commande', language: 'fr', expect: { handoff: true, checks: ['replied', 'handoff_on_complaint'] } },
 };
+/** journey re-run J03r-2 (18/11): the quantity a scenario's message asks for — `limits_respected` needs the limit hand-off above the agent's max. */
+export const SCENARIO_QUANTITY: Partial<Record<TestScenarioKey, number>> = { qty_limit: 500 };

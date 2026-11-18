@@ -90,7 +90,8 @@ export function HomeKpiTile({ label, value, unit, sub, className, ...rest }: { l
         <span className="ts-numeral-l tabular-nums">{value}</span>
         {unit ? <span className="ts-label-micro text-text-muted">{unit}</span> : null}
       </div>
-      {sub ? <div className="mt-1 truncate ts-label-micro text-text-muted">{sub}</div> : null}
+      {/* journey re-run J14r-7 c: the caption wraps on a phone (« دون احتساب 36 قطعة بلا سـ… » was cut: the reason could not be read) */}
+      {sub ? <div className="mt-1 ts-label-micro text-text-muted [overflow-wrap:anywhere]">{sub}</div> : null}
     </Card>
   );
 }

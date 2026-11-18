@@ -5,6 +5,7 @@
 import { Check, CheckCircle2, Clock, HelpCircle, Loader2, TimerOff, XCircle } from 'lucide-react';
 import * as React from 'react';
 import { Card, cn } from './primitives';
+import { onRadioGroupKeyDown } from './radio-keys';
 
 /* ---------- Plan card (BIL-01 "PLANS") ---------- */
 export function PlanCard({
@@ -182,6 +183,8 @@ export function PackCard({
       role="radio"
       aria-checked={selected}
       disabled={disabled}
+      // journey re-run J14r-4: the arrows move between the cards of the group and choose
+      onKeyDown={(e) => onRadioGroupKeyDown(e)}
       onClick={onSelect}
       className={cn(
         'flex w-full flex-col gap-2 rounded-card border bg-ink-surface p-3 text-start transition-colors disabled:cursor-not-allowed disabled:opacity-50',

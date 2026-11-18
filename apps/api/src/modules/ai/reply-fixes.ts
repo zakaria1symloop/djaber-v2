@@ -443,6 +443,74 @@ export const handoffReply = (reason: string | null | undefined, lang: AiLanguage
   const sep = loc === 'ar' ? '، ' : kind === 'person' && !o.outOfHours ? ', ' : loc === 'fr' ? ' : ' : ', ';
   return `${HANDOFF_LEAD[loc][kind]}${sep}${team}.`;
 };
+/**
+ * journey re-run J03r-1 (18/11, Major): the AI's sentence of a turn handed to the team for the order limit — it says the limit, so the
+ * customer knows why (« Une commande ne peut pas dépasser 5 pièces : je transmets votre demande à l'équipe de la boutique, qui va vous
+ * répondre. »), never an offer of the maximum. Out of hours it says the team answers at the opening. In the customer's language and script.
+ */
+export const limitHandoffReply = (limit: { kind: 'quantity' | 'amount'; value: number }, lang: AiLanguage | string | undefined, o: { outOfHours?: boolean } = {}): string => {
+  const loc = locOf(lang);
+  const n = limit.value;
+  const what =
+    limit.kind === 'amount'
+      ? amountText(n, lang)
+      : loc === 'fr'
+        ? `${n} ${n === 1 ? 'pièce' : 'pièces'}`
+        : loc === 'ar'
+          ? `${n} ${n >= 3 && n <= 10 ? 'حبات' : 'حبة'}`
+          : loc === 'arabizi'
+            ? `${n} ${n === 1 ? 'pièce' : 'pièces'}`
+            : `${n} ${n === 1 ? 'piece' : 'pieces'}`;
+  const ooh = !!o.outOfHours;
+  switch (loc) {
+    case 'ar':
+      return `الطلبية الوحدة ما تفوتش ${what}، راني نبعث طلبك لفريق المحل${ooh ? '، ماهوش متوفر درك وراح يجاوبك كي نفتحو' : ' وراح يجاوبك'}.`;
+    case 'arabizi':
+      return `La commande wa7da ma tfoutch ${what}, rani nba3at talab ta3ek l l'équipe ta3 lboutique${ooh ? ", ma kanetch dork w rah tjawbek ki n7ellou" : ' w rah tjawbek'}.`;
+    case 'en':
+      return `One order can't go above ${what}: I'm passing your request to the shop's team${ooh ? ', who is away right now and will answer you as soon as the shop opens' : ', who will answer you'}.`;
+    default:
+      return `Une commande ne peut pas dépasser ${what} : je transmets votre demande à l'équipe de la boutique${ooh ? ", absente pour le moment, qui vous répondra dès l'ouverture" : ', qui va vous répondre'}.`;
+  }
+};
+/** journey re-run J04r-2 (18/11): the answer to « elle est bien annulée ? » after the cancellation the server made — never a doubt. */
+export const cancelledReply = (number: string, lang: AiLanguage | string | undefined): string => {
+  switch (locOf(lang)) {
+    case 'ar':
+      return `إيه، الطلبية ${number} راهي ملغية.`;
+    case 'arabizi':
+      return `Ih, la commande ${number} rahi mbatla.`;
+    case 'en':
+      return `Yes, order ${number} is cancelled.`;
+    default:
+      return `Oui, la commande ${number} est bien annulée.`;
+  }
+};
+/** A sentence saying an order is (or was just) cancelled — « est annulée », « a été annulée », « j'ai annulé », « تلغات », « rahi mbatla ». */
+const CANCEL_CLAIM = /(?<![\p{L}])(?:(?:est|a\s+ete|a\s+bien\s+ete|bien|c\s+est|j\s+ai|je\s+l\s+ai|on\s+a|vient\s+d\s+etre|sont)\s+(?:bien\s+)?annule\w*|annulation\s+(?:est\s+)?(?:faite|effectuee|confirmee|enregistree)|(?:is|was|has\s+been|have\s+been|i\s+have|i\s+ve|i)\s+(?:now\s+)?cancell?ed|tbatlet|tbatlat|rahi\s+mbatla|rahi\s+mbatel|تلغات|اتلغات|تلغت|انلغت|راهي\s+ملغيه|راهي\s+ملغاه|الغيتها|لغيتها|تم\s+الغاء|تم\s+إلغاء)(?![\p{L}])/u;
+const CLAIM_NEGATION = /(?<![\p{L}])(?:pas|ne|n|jamais|not|never|no|ma|machi|mazal|ماشي|مازال|ما|لم|ليست|غير)(?![\p{L}])/u;
+/** journey re-run J04r-2: the reply says an order is cancelled (with no negation in that sentence). */
+export const cancelClaimed = (reply: string): boolean => splitSentences(reply).some((s) => {
+  const f = foldGuard(s).replace(/[^\p{L}\p{N}]+/gu, ' ');
+  return CANCEL_CLAIM.test(f) && !CLAIM_NEGATION.test(f.replace(CANCEL_CLAIM, ' '));
+});
+/** journey re-run J04r-2: nothing was cancelled this turn — the question that asks which open order to cancel (or to confirm the one). */
+export const cancelQuestion = (numbers: readonly string[], lang: AiLanguage | string | undefined): string => {
+  const loc = locOf(lang);
+  if (!numbers.length) return loc === 'ar' ? 'ما لقيت حتى طلبية مفتوحة باش نلغيها.' : loc === 'arabizi' ? 'Ma lqit hatta commande ma7loula bach nbatlha.' : loc === 'en' ? "I can't find an open order to cancel." : 'Je ne trouve aucune commande en cours à annuler.';
+  const one = numbers.length === 1 ? numbers[0]! : null;
+  const list = numbers.join(loc === 'ar' ? ' ولا ' : loc === 'arabizi' ? ' wela ' : loc === 'en' ? ' or ' : ' ou ');
+  switch (loc) {
+    case 'ar':
+      return one ? `تحب نلغيو الطلبية ${one} ؟` : `أي طلبية تحب نلغيو: ${list} ؟`;
+    case 'arabizi':
+      return one ? `T7ebb nbatlou la commande ${one} ?` : `Ama commande t7ebb nbatlou: ${list} ?`;
+    case 'en':
+      return one ? `Would you like me to cancel order ${one}?` : `Which order would you like to cancel: ${list}?`;
+    default:
+      return one ? `Voulez-vous que j'annule la commande ${one} ?` : `Quelle commande voulez-vous annuler : ${list} ?`;
+  }
+};
 /** A sentence promising a quick answer (« très vite », « rapidement », « bientôt », « shortly », « قريبا », « dghya »), folded. */
 const QUICK_REPLY = /(?<![\p{L}])(?:tres\s+vite|vite|rapidement|au\s+plus\s+vite|bientot|sous\s+peu|tout\s+de\s+suite|immediatement|dans\s+(?:les|quelques)\s+(?:minutes|instants)|shortly|soon|right\s+away|asap|qriban|9riban|dghya|قريبا|حالا|دغيا|فيسع|فالحين)(?![\p{L}])/u;
 /** The sentence already tells when the team answers out of hours (« dès l'ouverture », « demain », « ki n7ellou », « كي نفتحو »). */

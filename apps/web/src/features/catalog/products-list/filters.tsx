@@ -16,6 +16,8 @@ import {
   SearchInput,
   SegmentedControl,
   type FilterOption,
+  onRadioGroupKeyDown,
+  radioTabIndex,
 } from '@djaber/ui';
 import { LayoutGrid, List, SlidersHorizontal, TriangleAlert } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -210,7 +212,7 @@ export function ProductsFilterPanel({ open, onClose, list, categories, total, ad
       </FilterGroup>
       <FilterGroup label={t('products.filter.sort')} source="sort=…">
         <div role="radiogroup" aria-label={t('products.filter.sort')} className="flex flex-wrap gap-1.5">
-          {PRODUCT_SORTS.filter((k) => advanced || k !== 'cost').map((k) => {
+          {PRODUCT_SORTS.filter((k) => advanced || k !== 'cost').map((k, i, all) => {
             const on = sort.key === k;
             return (
               <button
@@ -218,6 +220,9 @@ export function ProductsFilterPanel({ open, onClose, list, categories, total, ad
                 type="button"
                 role="radio"
                 aria-checked={on}
+                // journey re-run J14r-4: one Tab stop, the arrows move (Space / Enter choose: a click on the chosen one flips the order)
+                tabIndex={radioTabIndex(i, all.indexOf(sort.key as never))}
+                onKeyDown={(e) => onRadioGroupKeyDown(e, { select: false })}
                 onClick={() => list.set({ sort: formatSort({ key: k, dir: on && sort.dir === 'asc' ? 'desc' : 'asc' }) })}
                 className={`inline-flex h-7 items-center gap-1 rounded-[6px] border px-2.5 ts-label-meta ${on ? 'border-line-lit bg-ink-raised-high text-text-primary' : 'border-line-edge text-text-secondary hover:text-text-primary'}`}
               >

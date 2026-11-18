@@ -55,7 +55,11 @@ export function returnFocusTo(el: HTMLElement | null) {
   let last: HTMLElement | null = null;
   const apply = () => {
     last = focusTarget(el, key);
-    last?.focus({ preventScroll: last !== el });
+    // journey re-run J14r-5 (18/11): a control standing in for the opener is scrolled into view (« استرداد » after « تسجيل دفعة » was focused
+    // at y 860 of an 844 px screen); only the page's main region keeps the scroll where it is
+    const main = !!last && last.id === 'main';
+    last?.focus({ preventScroll: true });
+    if (last && !main) last.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   };
   apply();
   let n = 0;
@@ -66,6 +70,29 @@ export function returnFocusTo(el: HTMLElement | null) {
     // the member moved on, or 2 s passed: stop watching
     if (n >= 13 || (now && now !== document.body && now !== last)) window.clearInterval(timer);
   }, 150);
+}
+
+const FIELD = 'input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled])';
+/**
+ * journey re-run J14r-1 (18/11, Major): a dialog / sheet opened while a popover or a menu closes (« Enregistrer la vue courante… »,
+ * « Renommer… » of the « Vues » panel) lost the focus to the popover's trigger behind the overlay — typed letters went nowhere and Tab
+ * walked the page behind the modal. While it opens (0.5 s), a focus outside the box is brought back to its first field (else its first
+ * control); a focus already inside (the ✕, an autoFocus field) is left as it is. Radix's trap then keeps it inside.
+ */
+export function useFocusInside<T extends HTMLElement>(open: boolean) {
+  const ref = React.useRef<T | null>(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const fix = () => {
+      const box = ref.current;
+      if (!box || !box.isConnected || box.contains(document.activeElement)) return;
+      const target = [...box.querySelectorAll<HTMLElement>(FIELD)].find(canFocus) ?? [...box.querySelectorAll<HTMLElement>(TABBABLE)].find(canFocus) ?? box;
+      target.focus({ preventScroll: true });
+    };
+    const timers = [0, 60, 200, 500].map((ms) => window.setTimeout(fix, ms));
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [open]);
+  return ref;
 }
 
 /**
@@ -101,11 +128,13 @@ export function Dialog({
   hideClose?: boolean;
 }) {
   const returnFocus = useReturnFocus(open);
+  const box = useFocusInside<HTMLDivElement>(open);
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/70" />
         <DialogPrimitive.Content
+          ref={box}
           onCloseAutoFocus={returnFocus}
           onEscapeKeyDown={(e) => (hideClose || isInnerEscape(e)) && e.preventDefault()}
           onInteractOutside={hideClose ? (e) => e.preventDefault() : undefined}

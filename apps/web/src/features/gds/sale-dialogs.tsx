@@ -372,7 +372,7 @@ export function ClientPicker({ value, onPick, id = 'client-picker' }: { value: C
     <div className="flex flex-col gap-2">
       <PickerSearch id={id} value={q} onChange={setQ} placeholder={t('sales.client.search')} label={t('sales.client.search')} active={open} combobox={list.comboboxProps} onKeyDown={list.onKeyDown} />
       {open ? (
-        <ul id={list.listId} role="listbox" aria-label={t('sales.client.search')} className="max-h-56 divide-y divide-line-hairline overflow-y-auto rounded-card border border-line-edge bg-ink-surface" data-testid="client-results">
+        <ul id={list.listId} role="listbox" tabIndex={-1} aria-label={t('sales.client.search')} className="max-h-56 divide-y divide-line-hairline overflow-y-auto rounded-card border border-line-edge bg-ink-surface" data-testid="client-results">
           {search.isPending ? <li role="option" aria-disabled="true" aria-selected={false} className="px-3 py-2 text-[13px] text-text-muted">{t('common.loading')}</li> : null}
           {!search.isPending && rows.length === 0 ? <li role="option" aria-disabled="true" aria-selected={false} className="px-3 py-2 text-[13px] text-text-muted">{t('sales.client.none')}</li> : null}
           {rows.map((c, i) => (

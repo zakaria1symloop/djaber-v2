@@ -65,16 +65,30 @@ export function SavedViewsMenu({
   const [open, setOpen] = React.useState(false);
   const current = views?.find((v) => v.current);
   // a menu item that opens a dialog closes the panel first (focus goes back to the chip, not to a closed popover)
+  // journey re-run J14r-1 (18/11, Major): the item's action runs once the panel gave the focus back to the chip — run in the same render,
+  // the dialog it opens mounted first and the panel's close then moved the focus to the chip behind the overlay (typing went nowhere,
+  // Tab walked the page behind the modal). The dialog now opens with the focus in its first field and gives it back to the chip on close.
+  const pending = React.useRef<(() => void) | null>(null);
+  const runPending = () => {
+    const fn = pending.current;
+    pending.current = null;
+    if (fn) window.setTimeout(fn, 0);
+  };
   const close = (fn?: () => void) => () => {
+    pending.current = fn ?? null;
     setOpen(false);
-    fn?.();
+    // (the panel's close always restores the focus; this only covers a close that never reaches it)
+    if (fn) window.setTimeout(() => pending.current === fn && runPending(), 150);
   };
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <Button className={cn(current ? 'border-line-lit' : '')} data-testid="saved-views-trigger">
           <Bookmark className="size-3.5" aria-hidden />
-          <span className="max-w-40 truncate">{current ? current.name : labels.trigger}</span>
+          {/* journey re-run J14r-7 (d): a long name cut with « … » can be read whole (title) */}
+          <span className="max-w-40 truncate" title={current ? current.name : undefined}>
+            {current ? current.name : labels.trigger}
+          </span>
           <ChevronDown className="size-3.5" aria-hidden />
         </Button>
       </Popover.Trigger>
@@ -84,6 +98,7 @@ export function SavedViewsMenu({
           sideOffset={6}
           collisionPadding={8}
           aria-label={labels.title}
+          onCloseAutoFocus={runPending}
           className="z-50 flex max-h-[var(--radix-popover-content-available-height)] w-[420px] max-w-[calc(100vw-1rem)] flex-col gap-2.5 overflow-y-auto rounded-card border border-line-edge bg-ink-raised px-[18px] py-3.5 shadow-xl"
           data-testid="saved-views-panel"
         >
@@ -113,7 +128,9 @@ export function SavedViewsMenu({
                     aria-current={v.current ? 'true' : undefined}
                     className={cn('min-w-0 flex-1 rounded-[4px] text-start text-[13px] outline-none focus-visible:ring-1 focus-visible:ring-line-lit', v.current ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary')}
                   >
-                    <span className="block truncate">{v.name}</span>
+                    <span className="block truncate" title={v.name}>
+                      {v.name}
+                    </span>
                     {v.meta ? <span className="block truncate ts-label-micro text-text-muted">{v.meta}</span> : null}
                   </button>
                   {v.isShared ? <Pill className="shrink-0 rounded-[4px]">{labels.sharedPill}</Pill> : null}

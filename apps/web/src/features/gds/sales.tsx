@@ -468,7 +468,7 @@ function NewSaleSheet({ draftId, onClose, blockedBy }: { draftId: string | null;
                     <span className="flex-1" />
                     <QtyStepper value={l.quantity} onChange={(q) => patch(i, { quantity: q })} min={1} max={100000} labels={{ decrease: t('gds.qty.decrease'), increase: t('gds.qty.increase'), value: t('common.quantity') }} tone={l.trackStock && stock !== null && l.quantity > stock ? 'danger' : undefined} />
                     <MoneyInput aria-label={t('sales.form.priceFor', { name: l.name })} value={l.unitPrice} onValueChange={(x) => patch(i, { unitPrice: x })} className="!h-8 w-28 text-end" currency="" />
-                    <button type="button" aria-label={t('orderForm.items.remove', { name: l.name })} onClick={() => (setLines((x) => x.filter((_, j) => j !== i)), focusSoon('#sale-product'))} className="p-1 text-text-muted hover:text-text-primary">
+                    <button type="button" aria-label={t('orderForm.items.remove', { name: l.name })} onClick={() => (setLines((x) => x.filter((_, j) => j !== i)), focusSoon('#sale-product'))} className="flex size-7 shrink-0 items-center justify-center rounded-[4px] text-text-muted hover:text-text-primary">
                       <X className="size-3.5" aria-hidden />
                     </button>
                   </div>
@@ -533,7 +533,7 @@ function NewSaleSheet({ draftId, onClose, blockedBy }: { draftId: string | null;
           )}
         </Field>
         {!client ? (
-          <button type="button" className="-mt-2 w-fit ts-label-micro text-text-muted hover:text-text-primary" onClick={() => setNewClient((x) => ({ ...x, open: !x.open }))}>
+          <button type="button" className="-mt-2 inline-flex min-h-6 w-fit items-center ts-label-micro text-text-muted hover:text-text-primary" onClick={() => setNewClient((x) => ({ ...x, open: !x.open }))}>
             {newClient.open ? t('sales.form.pickExisting') : t('sales.form.newClientHint')}
           </button>
         ) : null}

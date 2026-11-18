@@ -278,6 +278,9 @@ type AgentReadinessDto = { ready: boolean; checks: { key: string; ok: boolean; l
 // Journey retest R10-1: `POST /agents/:id/test` and `POST /agent-test/:token/messages` take an optional `turnKey` ([A-Za-z0-9-]{8,64}):
 // the same key sent again (the page re-asks when no answer came) returns the same turn — never a second run, counted once — and every
 // answer carries the header `Server-Timing: queue;dur=<ms>, total;dur=<ms>[, replay]`.
+// Journey re-run J04r-6 / AI-CHAT-11 (18/11): `GET /agents/:id/test/usage` (`agents.test`) → `{ used, limit, retryAfter }` — the workspace's
+// test turns of this hour (playground + shared links), read when the playground opens; `retryAfter` = seconds left in the hour once
+// `used = limit`, else null. Nothing is counted by this read.
 // `AgentReadinessCheck` + `total?` (policies n / 4); `POST /agents/bulk/pause|resume` per-item message for « not active / not paused ».
 type PlaygroundTurnDto = { reply: string; status: 'OK'|'UNCLEAR'|'UNKNOWN'|'HANDOFF'; intent: AiIntent; confidence: number; model: string; tokens: { input: number; output: number }; latencyMs: number; toolCalls: { name: string; args: unknown; result: unknown; simulated: boolean }[]; cards: ProductRef[]; creditsInProd: number; language: string; promptPreview: string[] };
 type AgentInsightDto = { id: string; type: 'unclear'|'unknown_topic'|'handoff'|'error'; customerMessage: string; aiResponse: string | null; detail: string | null; conversationId: string; messageId: string | null; status: 'pending'|'resolved'|'dismissed'; topicKey: string | null; occurrences: number; channel: ChannelRef; createdAt: string };
