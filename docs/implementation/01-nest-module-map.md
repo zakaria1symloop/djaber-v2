@@ -168,7 +168,7 @@ express.raw (only /webhooks/*)  →  Helmet / CORS  →  RequestIdMiddleware  �
 | `reports.schedule` | ● | ● | — | `POST\|DELETE /reports/:key/schedule` (plan feature `scheduled_reports`) |
 | `analytics.read` | ● | ● | ● | `GET /dashboard/home`, `GET /analytics/overview`, the 8 tab endpoints |
 | `notifications.own` | ● | ● | ● | own notifications, read/read-all, `GET\|PUT /notification-preferences`, `PATCH /me/prefs` |
-| `views.share` | ● | ● | — | `POST /me/saved-views/:id/share` (own saved views need no key) |
+| `views.share` | ● | ● | — | `POST /me/saved-views/:id/share { isShared? }` (own saved views: `workspace.read`, every member) |
 | `members.read` | ● | ● | ● | `GET /workspace/members` |
 | `members.write` | ● | — | — | `PATCH\|DELETE /workspace/members/:id`, invitations create/resend/revoke |
 | `workspace.settings` | ● | ● | — | `PATCH /workspace`, onboarding, quick replies (+ order), `PUT /workspace/system-messages`, stock mode |

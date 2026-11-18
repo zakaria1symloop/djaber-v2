@@ -29,6 +29,7 @@ import {
 } from '@djaber/ui';
 import { Paperclip } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { SavedViews } from '@/features/saved-views/saved-views';
 import { AppPage } from '@/components/app-page';
 import { ListEmpty, ListFilteredEmpty, ListLoading, OfflineBanner, QueryError } from '@/components/global-states';
 import { ListPagination } from '@/features/catalog/ui';
@@ -322,6 +323,7 @@ function CashLedger() {
             {t('cash.count', { count: total, period: selLabel })}
           </span>
         ) : null}
+        <SavedViews page="cash" list={list} spec={CASH_SPEC} columnKeys={columns.map((c) => c.key)} />
       </div>
       <ActiveFilters items={chips} label={t('list.activeFilters')} clearLabel={t('action.clearAll')} onClear={chips.length > 1 ? clearPanel : undefined} removeLabel={(label) => t('list.removeFilter', { label })} />
 

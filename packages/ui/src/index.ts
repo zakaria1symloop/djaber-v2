@@ -31,3 +31,4 @@ export * from './admin-moderation';
 export * from './admin-core';
 export * from './integrations';
 export * from './public';
+export * from './saved-views';

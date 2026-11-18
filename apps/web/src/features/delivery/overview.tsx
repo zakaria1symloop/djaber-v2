@@ -35,6 +35,7 @@ import {
 import { PackageCheck, SlidersHorizontal, Truck } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { SavedViews } from '@/features/saved-views/saved-views';
 import { ListFilteredEmpty, ListLoading, OfflineBanner, QueryError } from '@/components/global-states';
 import { ListPagination } from '@/features/catalog/ui';
 import { useOffline } from '@/features/orders/offline';
@@ -382,6 +383,7 @@ export function DeliveryOverviewPage() {
           <SlidersHorizontal className="size-4" aria-hidden />
           {panelFiltered ? t('action.filtersCount', { count: panelFilterCount(s) }) : t('action.filters')}
         </Button>
+        <SavedViews page="delivery" list={list} spec={DELIVERY_LIST} columnKeys={columns.map((c) => c.key)} />
       </div>
       <DeliveryActiveFilters list={list} />
 

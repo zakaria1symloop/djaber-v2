@@ -49,9 +49,10 @@ import { PlatformSettingsModule } from './modules/admin-ops/settings/settings.mo
 import { AdminCoreModule } from './modules/admin-core/admin-core.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { PublicSiteModule } from './modules/public-site/public-site.module';
+import { SavedViewsModule } from './modules/saved-views/saved-views.module';
 
 /** Feature modules are appended here milestone after milestone (00-build-order). */
-export const FEATURE_MODULES = [PlatformPublicModule, AccountModule, UploadsModule, WorkspaceModule, AuthModule, NotificationsModule, JobsModule, CreditsModule, AiCoreModule, CatalogModule, MetaModule, ChannelsModule, MessagingModule, DeliveryModule, ClientsModule, OrdersModule, ShippingModule, BillingModule, AiModule, AgentsModule, DashboardModule, RecommendationsModule, GdsModule, AnalyticsModule, ReportsModule, AdminModerationModule, SupportModule, AdminSafetyModule, PlatformSettingsModule, AdminHealthModule, AdminCoreModule, IntegrationsModule, PublicSiteModule];
+export const FEATURE_MODULES = [PlatformPublicModule, AccountModule, UploadsModule, WorkspaceModule, AuthModule, NotificationsModule, JobsModule, CreditsModule, AiCoreModule, CatalogModule, MetaModule, ChannelsModule, MessagingModule, DeliveryModule, ClientsModule, OrdersModule, ShippingModule, BillingModule, AiModule, AgentsModule, DashboardModule, RecommendationsModule, GdsModule, AnalyticsModule, ReportsModule, AdminModerationModule, SupportModule, AdminSafetyModule, PlatformSettingsModule, AdminHealthModule, AdminCoreModule, IntegrationsModule, PublicSiteModule, SavedViewsModule];
 
 @Module({
   imports: [CoreModule, ...FEATURE_MODULES],

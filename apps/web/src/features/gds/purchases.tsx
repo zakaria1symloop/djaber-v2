@@ -6,6 +6,7 @@
 import { formatDate, formatMoney, formatNumber, type AppLocale } from '@djaber/shared';
 import { ActionsMenu, ActiveFilters, Button, buttonClass, Card, cn, DataTable, FilterCheckList, FilterChips, FilterDropdown, FilterToggle, KpiTile, Ltr, SearchInput, type Column } from '@djaber/ui';
 import { useMemo } from 'react';
+import { SavedViews } from '@/features/saved-views/saved-views';
 import { AppPage } from '@/components/app-page';
 import { ListEmpty, ListFilteredEmpty, ListLoading, OfflineBanner, QueryError } from '@/components/global-states';
 import { ListPagination } from '@/features/catalog/ui';
@@ -160,6 +161,7 @@ function PurchasesList() {
             {t('purchases.count', { count: total })}
           </span>
         ) : null}
+        <SavedViews page="purchases" list={list} spec={PURCHASES_SPEC} columnKeys={columns.map((c) => c.key)} />
       </div>
       <ActiveFilters items={chips} label={t('list.activeFilters')} clearLabel={t('action.clearAll')} onClear={chips.length > 1 ? list.clear : undefined} removeLabel={(label) => t('list.removeFilter', { label })} />
 

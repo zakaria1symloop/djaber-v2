@@ -7,6 +7,7 @@ import { formatMoney, formatNumber } from '@djaber/shared';
 import { ActionsMenu, Button, Card, cn, DataTable, Ltr, TableViewMenu, TagChips, type Column } from '@djaber/ui';
 import { Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { SavedViews } from '@/features/saved-views/saved-views';
 import { AppPage } from '@/components/app-page';
 import { ListFilteredEmpty, ListLoading, QueryError } from '@/components/global-states';
 import { JobParamBanner } from '@/components/job-param-banner';
@@ -105,6 +106,7 @@ export default function ClientsPage() {
         <div className="min-w-0 flex-1">
           <ClientsFilterBar list={list} tags={tags} onOpenPanel={() => setPanel(true)} />
         </div>
+        <SavedViews page="clients" list={list} spec={CLIENTS_LIST} columnKeys={columns.map((c) => c.key)} />
         <TableViewMenu
           label={t('list.view')}
           density={list.density}

@@ -7,6 +7,7 @@ import { ActionsMenu, ActiveFilters, BulkBar, Button, buttonClass, Card, Checkbo
 import { formatNumber } from '@djaber/shared';
 import { Bot } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { SavedViews } from '@/features/saved-views/saved-views';
 import { AppPage } from '@/components/app-page';
 import { insightDetail } from './insight-detail';
 import { ListFilteredEmpty, QueryError } from '@/components/global-states';
@@ -209,6 +210,7 @@ export function AgentsList() {
             {t('agents.select')}
           </Button>
         ) : null}
+        <SavedViews page="agents" list={list} spec={AGENTS_SPEC} />
       </div>
       {chips.length ? <ActiveFilters items={chips} label={t('action.filters')} clearLabel={t('action.clearAll')} onClear={list.clear} removeLabel={(l) => t('agents.filter.remove', { label: l })} /> : null}
 

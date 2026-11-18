@@ -187,7 +187,7 @@ type MeDto = {
   deletionScheduledAt: string | null;
 };
 type UserPrefs = { listDensity: 'compact'|'comfortable'; soundOnMessage: boolean; dismissedAnnouncementIds: string[]; reportFavorites: string[] };
-type SavedViewDto = { id: string; page: SavedViewPage; name: string; filters: Record<string, unknown>; sort: string | null; columns: string[]; density: 'compact'|'comfortable'|null; isDefault: boolean; isShared: boolean; sharedBy: UserRef | null };
+type SavedViewDto = { id: string; page: SavedViewPage; name: string; filters: Record<string, unknown>; sort: string | null; columns: string[]; density: 'compact'|'comfortable'|null; isDefault: boolean; isShared: boolean; sharedBy: UserRef | null; readOnly: boolean /* shared by another member: apply / duplicate only */; sharedWith: number /* members other than the author who see a shared view (delete confirmation count, 04 §24); 0 when not shared */; createdAt: string; updatedAt: string };   // GET /me/saved-views?page · POST · PATCH|DELETE /:id · POST /:id/share { isShared? } (LST-03)
 type DeletionRequestDto = { id: string; status: 'pending_confirmation'|'grace'|'blocked'|'anonymised'|'cancelled'; requestedAt: string; scheduledAt: string | null; blockedReason: 'ACCOUNT_OWNS_WORKSPACE'|'WORKSPACE_HAS_DEBT'|null; exportUrl: string | null };
 type DeviceDto = { token: string; platform: 'android'|'ios'|'web'; appVersion: string; deviceName: string | null; locale: Locale; lastSeenAt: string };   // POST /me/devices (≤ 20 per user, DEVICE_LIMIT {max: 20}; upsert on token) · DELETE /me/devices/:token
 type LegalPendingDto = { key: 'terms'|'privacy'|'account_deletion'|'content_rules'; version: number; url: string }[];   // GET /legal/pending · POST /legal/accept { key, version } → 204

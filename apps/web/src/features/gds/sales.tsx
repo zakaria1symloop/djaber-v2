@@ -38,6 +38,7 @@ import {
 import { X } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { SavedViews } from '@/features/saved-views/saved-views';
 import { AppPage } from '@/components/app-page';
 import { LeaveGuardDialog, ListEmpty, ListFilteredEmpty, ListLoading, OfflineBanner, QueryError } from '@/components/global-states';
 import { ListPagination } from '@/features/catalog/ui';
@@ -204,6 +205,7 @@ function SalesList({ creating }: { creating?: boolean }) {
             {t('sales.count', { count: total })}
           </span>
         ) : null}
+        <SavedViews page="sales" list={list} spec={SALES_SPEC} columnKeys={columns.map((c) => c.key)} />
       </div>
       <ActiveFilters items={chips} label={t('list.activeFilters')} clearLabel={t('action.clearAll')} onClear={chips.length > 1 ? list.clear : undefined} removeLabel={(label) => t('list.removeFilter', { label })} />
 

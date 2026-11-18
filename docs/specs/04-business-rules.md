@@ -332,7 +332,7 @@ Banner "HORS FENÊTRE 24 H" appears when `lastCustomerMessageAt < now − 24 h`;
 
 | Rule | |
 |---|---|
-| `SavedView` name unique per (user, page) (`SAVED_VIEW_NAME_TAKEN`); `isDefault` unique per (user, page); a shared view is owned by its author — others may clone, not edit (`SAVED_VIEW_SHARED_READONLY`); deleting a shared view removes it for everyone (confirmation shows the count). |
+| `SavedView` name unique per (user, page) (`SAVED_VIEW_NAME_TAKEN`, 409 inline on the name; compared without case or extra spaces, accents kept); `isDefault` unique per (user, page) (setting one clears the other; the default of the author only — never applied for the members a view is shared with); a shared view is owned by its author — others may clone, not edit (`SAVED_VIEW_SHARED_READONLY` on rename / default / share / delete); only the author shares or stops sharing (`sharedById` = the author, cleared when unshared); a private view of another member or a view of another workspace = 404; deleting a shared view removes it for everyone (confirmation shows the count = `sharedWith`, the workspace members other than the author). |
 | `User.prefs { listDensity: compact|comfortable, columns: {page: []}, reportFavorites: [] }` — client-settable, no validation beyond enum. |
 | Deep-link resolution order: parse `NotificationType` → target template (03 §15, the single source of web paths) → check the object belongs to a workspace the user is a member of → switch `X-Workspace-Id` when needed → open with filters; failures: 404 page (object) / 403 page (membership). Mobile uses `djaber://` + identical path. |
 

@@ -265,7 +265,7 @@ type FilterBarProps = {
   quick: FilterField[];                                                      // inline dropdown chips (Source ⌄, Confirmation ⌄, Wilaya ⌄, Période ⌄)
   panel: FilterField[];                                                      // "Filtres (n)" side panel
   modelSourceLabels?: Record<string, string>;                                // Label/Micro under each group (Figma mechanics)
-  savedViews?: { views: SavedView[]; current?: string; onSave(name): void; onSelect(id): void };
+  savedViews?: { views: SavedView[]; current?: string; onSave(name): void; onSelect(id): void };   // built as <SavedViews page list spec columnKeys/> (apps/web/src/features/saved-views) next to the bar, panel = SavedViewsMenu of @djaber/ui (LST-03, 2026-11-18)
 };
 ```
 State lives only in the URL via `useUrlFilters(schema)` (zod schema per page → typed object; `?page`, `?sort`, `?tab`, `?density`). Active chips rendered with × and "Effacer tout".

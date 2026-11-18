@@ -11,7 +11,7 @@ Needs owner: PUBLIC-02 (legal texts are CMS content), AGENTS-06 (archive the pla
 
 Batch 2 (16/11, 4 fix agents — per-ID reports kept in `.local/qa/fix/*-report.md`): every other ID of the 18 areas is fixed,
 except:
-- **Not fixed:** ORDERS-22 (saved views: a missing feature, carry-over), PUBLIC-04 (split of the i18n catalogue per route
+- **Not fixed:** PUBLIC-04 (split of the i18n catalogue per route
   group — needs a visual check of every public page), AGENTS-08 / AI-CHAT-11 partly (see agents-report).
 - **Needs owner / live data:** PUBLIC-02 (legal texts), HELP-02 (help guides), PUBLIC-08 (« test » guide and incidents),
   PUBLIC-09 (free plan name « Gratuit » + trialDays), AGENTS-06 (archive the test presets), DELIVERY-09 (cached rates and fake
@@ -19,3 +19,7 @@ except:
 - **Decisions to confirm:** ROLES-05 (operators read / export stock movements — spec aligned on the code), ROLES-07 (Admin may buy
   credit packs — spec aligned on the code).
 - AI proposals 2–13 implemented except proposal 7 history markers and the two new step-5 scenarios of proposal 12 (schema enum).
+
+18/11 (saved views): **ORDERS-22 fixed** — `GET|POST|PATCH|DELETE /me/saved-views` + `POST /me/saved-views/:id/share`, the
+`?view=<id>` expansion of every list of 05 §16, and the « Vues ⌄ » panel (REF « Vues enregistrées ») on orders, products,
+clients, delivery, movements, agents, purchases, sales and cash (inbox, channels, notifications: no URL list state yet).

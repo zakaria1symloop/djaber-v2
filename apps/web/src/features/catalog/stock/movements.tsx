@@ -7,6 +7,7 @@ import { formatDate, formatDateTime, formatNumber } from '@djaber/shared';
 import { ActionsMenu, ActiveFilters, Button, buttonClass, Card, cn, DataTable, EmptyState, KpiTile, KpiTileSkeleton, Ltr, SearchInput, TableViewMenu, toast, type Column } from '@djaber/ui';
 import { ArrowLeftRight, ArrowUpRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { SavedViews } from '@/features/saved-views/saved-views';
 import { AppPage } from '@/components/app-page';
 import { ListEmpty, ListFilteredEmpty, ListLoading, QueryError } from '@/components/global-states';
 import { Link, useRouter } from '@/i18n/navigation';
@@ -191,6 +192,7 @@ function Journal() {
         <Button onClick={() => setPanel(true)} className={cn(list.activeCount > 0 && 'border-line-lit')} data-testid="open-filters">
           {list.activeCount > 0 ? t('action.filtersCount', { count: list.activeCount }) : t('action.filters')}
         </Button>
+        <SavedViews page="movements" list={list} spec={MOVEMENTS_SPEC} columnKeys={columns.map((c) => c.key)} />
         <TableViewMenu
           label={t('movements.view.label')}
           density={list.density}

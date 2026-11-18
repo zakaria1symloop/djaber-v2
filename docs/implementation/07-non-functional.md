@@ -50,8 +50,8 @@ Legend: O Owner · A Admin · P Operator · K API key (scope) · — none. `R` =
 | `GET /reports*`, `POST|DELETE /reports/:key/schedule` | `reports.read` | ● | ● | — | `analytics:read` (json only) |
 | `GET /analytics/*`, `/dashboard/home` | `analytics.read` | ● | ● | ● | `analytics:read` |
 | `/notifications*`, `/notification-preferences` | `notifications.own` | ● | ● | ● | — |
-| `GET /me/saved-views`, `POST|PATCH|DELETE /me/saved-views/:id` (own views) | `views.own` | ● | ● | ● | — |
-| `PATCH /me/saved-views/:id { isShared }` | `views.share` | ● | ● | — | — |
+| `GET /me/saved-views`, `POST /me/saved-views`, `PATCH|DELETE /me/saved-views/:id` (own views; a view shared by another member ⇒ 403 `SAVED_VIEW_SHARED_READONLY`) | `workspace.read` | ● | ● | ● | — |
+| `POST /me/saved-views/:id/share { isShared? }` | `views.share` | ● | ● | — | — |
 | `GET /plans`, `GET /credit-packs` | `@Public()` | ● | ● | ● | — |
 | `GET /credits`, `GET /credits/ledger` | `billing.read_credits` | ● | ● | ● | — |
 | `GET /billing/*` (subscription, invoices, checkout preview, return) | `billing.read` | ● | ● | — | — |

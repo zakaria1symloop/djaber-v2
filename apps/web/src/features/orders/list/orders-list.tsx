@@ -23,6 +23,7 @@ import { algiersDay, algiersTime, decimalLabel, itemsSummary, sourceSplit } from
 import { useOffline } from '../offline';
 import { ClientCell, ConfirmationPill, DeliveryPill, OrderStatusPill, RiskPill, SourceCell } from '../ui';
 import { useOrderActions } from '../use-order-actions';
+import { SavedViews } from '@/features/saved-views/saved-views';
 import { ExportOrdersDialog, OrdersBulkBar } from './bulk';
 import { OrdersActiveFilters, OrdersFilterBar, OrdersFilterPanel } from './filters';
 import { ORDER_TABS, ORDERS_LIST, ordersQuery, tabCountsQuery } from './spec';
@@ -216,6 +217,8 @@ export function OrdersList() {
         <div className="min-w-0 flex-1">
           <OrdersFilterBar list={list} onOpenPanel={() => setPanel(true)} />
         </div>
+        {/* LST-03 (full-test ORDERS-22): saved views — filters + tab + sort + columns + density */}
+        <SavedViews page="orders" list={list} spec={ORDERS_LIST} columnKeys={columns.map((c) => c.key)} />
         <TableViewMenu
           label={t('list.view')}
           density={list.density}

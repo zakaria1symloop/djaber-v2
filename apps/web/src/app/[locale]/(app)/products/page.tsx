@@ -9,6 +9,7 @@ import { ActionsMenu, Banner, Button, buttonClass, Card, cn, DataTable, Ltr, Tab
 import { useMutation } from '@tanstack/react-query';
 import { Package } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { SavedViews } from '@/features/saved-views/saved-views';
 import { AppPage } from '@/components/app-page';
 import { ListFilteredEmpty, ListLoading, QueryError } from '@/components/global-states';
 import { AdjustStockDialog } from '@/features/catalog/adjust-stock-dialog';
@@ -267,6 +268,7 @@ export default function ProductsPage() {
         <div className="min-w-0 flex-1">
           <ProductsFilterBar list={list} categories={categoryOptions} lowStockCount={o ? o.lowStockCount + o.outOfStockCount : null} onOpenPanel={() => setPanel(true)} />
         </div>
+        <SavedViews page="products" list={list} spec={PRODUCTS_LIST} columnKeys={columns.map((c) => c.key)} />
         <TableViewMenu
           label={t('list.view')}
           density={list.density}

@@ -22,3 +22,4 @@ export * from './admin';
 export * from './integrations';
 export * from './public-pages';
 export * from './handoff';
+export * from './saved-views';
