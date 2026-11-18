@@ -44,7 +44,7 @@ describe('AiRunService.turn — reply guard', () => {
     const { gateway, svc, req } = setup();
     gateway.script('reply', { reply: 'La robe est à 4500 DA.', intent: 'SALE', productCards: ['p1'] });
     const t = await svc.turn(req(facts()));
-    expect(t).toMatchObject({ ok: true, output: { reply: 'La robe est à 4500 DA.' } });
+    expect(t).toMatchObject({ ok: true, output: { reply: 'La robe est à 4\u00a0500\u00a0DA.' } });
     expect((t as { guard?: unknown }).guard).toBeUndefined();
     expect(gateway.calls).toHaveLength(1);
   });
@@ -53,7 +53,7 @@ describe('AiRunService.turn — reply guard', () => {
     const { gateway, svc, req } = setup();
     gateway.script('reply', { reply: 'Bonjour ! La robe est à 3900 DA.', intent: 'SALE', productCards: ['p1'] }, { reply: 'La robe est à 4500 DA.', status: 'HANDOFF', statusDetail: 'customer_request', intent: 'OTHER', productCards: [] });
     const t = await svc.turn(req(facts()));
-    expect(t).toMatchObject({ ok: true, output: { reply: 'La robe est à 4500 DA.', status: 'OK', intent: 'SALE', productCards: ['p1'] }, guard: { retried: true, action: 'rewritten', remaining: [] } });
+    expect(t).toMatchObject({ ok: true, output: { reply: 'La robe est à 4\u00a0500\u00a0DA.', status: 'OK', intent: 'SALE', productCards: ['p1'] }, guard: { retried: true, action: 'rewritten', remaining: [] } });
     const g = (t as { guard: { violations: { rule: string; value?: number }[] } }).guard;
     expect(g.violations).toEqual([{ rule: 'unknown_amount', value: 3900 }, { rule: 'repeat_greeting' }]);
     expect(gateway.calls).toHaveLength(2);
@@ -108,14 +108,14 @@ describe('AiRunService.turn — reply guard', () => {
     gateway.script('reply', call, { toolCalls: [{ name: 'quote_delivery', args: { wilayaName: 'Blida' } }] }, { toolCalls: [{ name: 'quote_delivery', args: { wilayaName: 'Oran' } }] }, { reply: 'Bonjour ! La robe est à 4500 DA.', intent: 'SALE' });
     const r = req(facts());
     const t = await svc.turn({ ...r, deadline: Date.now() + 5_000 });
-    expect(t).toMatchObject({ ok: true, output: { reply: 'La robe est à 4500 DA.' }, guard: { retried: false, action: 'stripped' } });
+    expect(t).toMatchObject({ ok: true, output: { reply: 'La robe est à 4\u00a0500\u00a0DA.' }, guard: { retried: false, action: 'stripped' } });
   });
 
   it('without facts (guard off) the reply is untouched', async () => {
     const { gateway, svc, req } = setup();
     gateway.script('reply', { reply: 'Il en reste 2, à 3900 DA.', intent: 'SALE' });
     const t = await svc.turn(req(undefined));
-    expect(t).toMatchObject({ ok: true, output: { reply: 'Il en reste 2, à 3900 DA.' } });
+    expect(t).toMatchObject({ ok: true, output: { reply: 'Il en reste 2, à 3\u00a0900\u00a0DA.' } });
     expect(gateway.calls).toHaveLength(1);
   });
 
@@ -123,7 +123,7 @@ describe('AiRunService.turn — reply guard', () => {
     const { gateway, svc, req } = setup();
     gateway.script('reply', { reply: 'Bonjour ! La robe est à 4500 DA.', intent: 'SALE' });
     const t = await svc.turn(req(facts()));
-    expect(t).toMatchObject({ ok: true, output: { reply: 'La robe est à 4500 DA.' }, guard: { retried: true, action: 'rewritten' } });
+    expect(t).toMatchObject({ ok: true, output: { reply: 'La robe est à 4\u00a0500\u00a0DA.' }, guard: { retried: true, action: 'rewritten' } });
   });
 
   it('full-test 15/11 proposal 4: once create_order placed an order, the customer gets the server confirmation (the model text is never checked nor sent)', async () => {

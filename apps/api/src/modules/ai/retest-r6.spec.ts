@@ -99,7 +99,7 @@ describe('R6-1 — before the server recap only a thank-you lead-in or an answer
     };
     const f5 = { clientName: 'Amina Saadi', address: 'rue des frères Bouadou n 5', wilaya: 'Alger', communeName: 'Bab Ezzouar' };
     expect(await run('rue des frères Bouadou n 5', 'Merci Amina, j\'ai bien noté votre adresse. Pouvez-vous confirmer la commande en répondant oui ?', f5)).toBe(orderRecapText(recapOf(f5), 'fr'));
-    expect(await run('vous livrez à Bab Ezzouar ? rue des frères Bouadou n 5', 'Oui, on livre à Bab Ezzouar. Pouvez-vous confirmer la commande en répondant oui ?', f5)).toBe(`Oui, on livre à Bab Ezzouar.\n\n${orderRecapText(recapOf(f5), 'fr')}`);
+    expect(await run('vous livrez à Bab Ezzouar ? rue des frères Bouadou n 5', 'Oui, on livre à Bab Ezzouar. Pouvez-vous confirmer la commande en répondant oui ?', f5)).toBe(`Oui, on livre à Bab Ezzouar. À domicile : 450\u00a0DA.\n\n${orderRecapText(recapOf(f5), 'fr')}`);
   });
   it('a handoff answer drops the R6 wordings too', () => {
     expect(withoutRecapClaims('Un conseiller vous répond. Pouvez-vous confirmer la commande en répondant oui ?')).toBe('Un conseiller vous répond.');

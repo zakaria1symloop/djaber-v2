@@ -6,7 +6,7 @@ import { prisma } from '@djaber/db';
 import { AiRunService, catalogueAvailability, earlierQuoteAnswered, earlierSearchAnswered, knownQuotesNote, RECAP_COMPUTES_RESULT, strayDeliverySearch, validEarlierQuotes, type TurnRequest } from './ai-run.service';
 import { moroccanIn, wrongDarijaIn } from './language';
 import { FakeAiGateway } from './provider/fake-ai.gateway';
-import { handoffReply, teamOnlyKind, withArabiziWords, withAskedFacts, withOneStopdeskOffer, withoutBookingOffer, withoutRefusals, withSingleSpaces } from './reply-fixes';
+import { handoffReply, teamOnlyKind, withArabiziWords, withAskedFacts, withOneStopdeskOffer, withoutBookingOffer, withoutRefusals, withSingleSpaces, withSpacedAmounts } from './reply-fixes';
 import { buildGuardFacts, checkReply, earlierLookups, enforceReply, guardInstruction, missingQuotes, owedQuotes, quoteFacts } from './reply-guard';
 import type { RoutedModel } from './routing.service';
 import { resetPlaceIndex } from './tools/place-index';
@@ -154,7 +154,7 @@ describe('R16-2 (Cosmetic) — the model’s own handoff_to_human gets the per-r
     const { r, execute } = await byTool(W1, "Je ne peux pas vous donner de prix de gros ici. Pour info, le hijab soie est à 1500 DA l'unité (au lieu de 2000 DA).", 'off_catalogue');
     expect(execute).toHaveBeenCalledTimes(1);
     expect(r.forcedHandoff).toBe('off_catalogue');
-    expect(r.output.reply).toBe("Pour info, le hijab soie est à 1500 DA l'unité (au lieu de 2000 DA). Pour le prix de gros, l'équipe de la boutique va vous répondre.");
+    expect(r.output.reply).toBe("Pour info, le hijab soie est à 1\u00a0500\u00a0DA l'unité (au lieu de 2\u00a0000\u00a0DA). Pour le prix de gros, l'équipe de la boutique va vous répondre.");
   });
 
   it('only a refusal ⇒ the wholesale sentence alone; arabizi / Arabic script / out of hours; a model text naming the team is kept', async () => {
@@ -241,7 +241,8 @@ describe('R16-3 (Minor) — no lookup whose answer the conversation already has'
     expect(pf1.gateway.calls[0]!.system).toContain('DELIVERY ALREADY QUOTED in this conversation');
     // the customer asked nothing about delivery: the model's own re-quote owes no fee (no corrective turn)
     expect(pf1.gateway.calls).toHaveLength(2);
-    expect(pf1.r.output.reply).toBe(reply);
+    // (journey retest R20-4: every amount as formatMoney writes it)
+    expect(pf1.r.output.reply).toBe(withSpacedAmounts(reply));
     // « ch7al tawsil l Setif ? » again: the reused quote is this turn's answer — its fee is owed
     const asked = await run('w ch7al tawsil l Setif ?', 'Saha, ana hna.');
     expect(asked.execute).not.toHaveBeenCalled();

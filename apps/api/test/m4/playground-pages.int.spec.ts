@@ -38,7 +38,7 @@ describe('playground (AGT-07)', () => {
     const sent = fakeMeta(app).callsOf('send').length;
     const turn = (await test(owner, agent.id, { sessionId: 's-1', ...say('Bonjour, combien la robe satin ?') }).expect(200)).body.data;
     expect(turn).toMatchObject({ sessionId: 's-1', status: 'OK', intent: 'sale', model: 'GPT-4o mini', modelDetail: { id: 'gpt-4o-mini', temperature: 0.6, maxTokens: 1200 }, creditsInProd: 1, language: 'fr', statusDetail: null });
-    expect(turn.reply).toContain('Robe satin bordeaux — 4500 DA');
+    expect(turn.reply).toContain('Robe satin bordeaux — 4\u00a0500\u00a0DA');
     expect(turn.toolCalls).toEqual([{ name: 'search_products', args: { query: expect.any(String), limit: 5 }, result: { products: [expect.objectContaining({ id: robe.id, price: 4500 })] }, simulated: false }]);
     expect(turn.cards).toEqual([{ productId: robe.id, name: 'Robe satin bordeaux', price: 4500, imageUrl: null, variantLabel: null }]); // real product data
     expect(turn.tokens.input).toBeGreaterThan(0);
@@ -233,7 +233,7 @@ describe('playground (AGT-07)', () => {
       { reply: "Désolé, nous n'avons pas de lunettes de soleil pour le moment. Je peux vous proposer notre tapis de prière (2800 DA), si cela vous intéresse.", intent: 'SALE' },
     );
     const n7 = (await test(owner, agent.id, { sessionId: 'r5-n7', ...say('Bonjour, vous avez des lunettes de soleil ? Je suis Yacine Mansouri 0555987654, Blida, Boufarik, cité 20 août villa 3') }).expect(200)).body.data;
-    expect(n7.reply).toBe("Désolé, nous n'avons pas de lunettes de soleil pour le moment. Je peux vous proposer notre tapis de prière (2800 DA), si cela vous intéresse.");
+    expect(n7.reply).toBe("Désolé, nous n'avons pas de lunettes de soleil pour le moment. Je peux vous proposer notre tapis de prière (2\u00a0800\u00a0DA), si cela vous intéresse.");
     expect(String((fakeAi(app).callsOf('reply')[1]!.messages.at(-1) as { content: unknown }).content)).toContain('Parfum Oud 50 ml is out of stock');
   });
 
@@ -362,7 +362,7 @@ describe('playground (AGT-07)', () => {
     expect((await visitor.get(`/agent-test/${token}`).expect(200)).body.data).toEqual({ agentName: 'Lina', avatarUrl: null, expiresAt: link.expiresAt });
     const reply = (await visitor.post(`/agent-test/${token}/messages`, { text: 'Bonjour, combien la robe satin ?' }).expect(200)).body.data;
     expect(Object.keys(reply).sort()).toEqual(['cards', 'reply', 'systemMessages']);
-    expect(reply.reply).toContain('4500 DA');
+    expect(reply.reply).toContain('4\u00a0500\u00a0DA');
     expect(reply.cards).toHaveLength(1);
     expect(await db.aiRun.count({ where: { agentId: agent.id, kind: 'test' } })).toBe(1);
     expect((await db.agentTestLink.findFirstOrThrow({ where: { agentId: agent.id } })).usedCount).toBe(1);

@@ -6,7 +6,7 @@ import { AiRunService, CONFIRM_WITHOUT_RECAP_NOTE, noLookupFor, searchAnswered, 
 import { fixMoroccan, wrongDarijaIn } from './language';
 import { PlaygroundService, REPLAY_TTL_S, serverTiming } from './playground.service';
 import { FakeAiGateway } from './provider/fake-ai.gateway';
-import { withArabiziWords, withoutNameInPriceSlot } from './reply-fixes';
+import { withArabiziWords, withoutNameInPriceSlot, withSpacedAmounts } from './reply-fixes';
 import { buildGuardFacts, checkReply, guardInstruction } from './reply-guard';
 import type { RoutedModel } from './routing.service';
 import { cancelAsked, recapPending, type OrderCallHistory } from './tools/order-confirmation';
@@ -213,7 +213,7 @@ describe('R10-2 (Minor) — N5: no request to confirm without a server recap, no
     const r = await new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never).turn(turnReq(text, ['Bonjour, le parfum oud c’est combien ?'], { guard: facts(text, { products: CATALOGUE }) }));
     if (!r.ok) throw new Error('turn failed');
     expect(JSON.stringify(gateway.calls[2]!.messages.at(-1))).toContain('NOTHING IS ORDERED OR NOTED');
-    expect(r.output.reply).toBe(fixed);
+    expect(r.output.reply).toBe(withSpacedAmounts(fixed)); // (journey retest R20-4: every amount as formatMoney writes it)
   });
 
   it('N20 T4 turn: a question after a recap still waiting ⇒ the « ktebli ih » pointing at it goes out, no second model round', async () => {
@@ -326,7 +326,7 @@ describe('R10-4 (Cosmetic) — catalogue words in their own script, no name in t
       return r.ok ? r.output.reply : null;
     };
     expect(await run('Hiya robe kabyle brodée bil yed, mais b tissu khfif. Wach men taille t7ebb ?', 'arabizi')).toBe('Hiya robe kabyle brodée bil yed, bessah b tissu khfif. Wach men taille t7ebb ?');
-    expect(await run('عندنا حجاب حرير ناعم، بسعر Hijab soie — 1500 دج. تحب نسجلولك واحد منه؟', 'ar')).toBe('عندنا حجاب حرير ناعم، بسعر 1500 دج. تحب نسجلولك واحد منه؟');
+    expect(await run('عندنا حجاب حرير ناعم، بسعر Hijab soie — 1500 دج. تحب نسجلولك واحد منه؟', 'ar')).toBe('عندنا حجاب حرير ناعم، بسعر 1\u00a0500\u00a0دج. تحب نسجلولك واحد منه؟');
   });
 
   it('N9 T1 arabizi: « mais » ⇒ « bessah », « Les tailles disponibles » ⇒ « Les tailles li kaynin »; French replies untouched', () => {

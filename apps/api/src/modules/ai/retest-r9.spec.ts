@@ -284,7 +284,7 @@ describe('R9-3 — odd wording', () => {
       gateway.script('reply', { reply: F3, intent: 'SALE' });
       const tools = { defsFor: async () => [], forcedHandoff: () => null, execute: jest.fn() } as unknown as ToolRegistry;
       const r = await new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never).turn(turnReq(F3_C, []));
-      expect(r.ok && r.output.reply).toBe('Tapis de prière disponible, zoudj b 2800 DA l wa7ed (molletonné, 120 x 70 cm). Wach smitek ?');
+      expect(r.ok && r.output.reply).toBe('Tapis de prière disponible, zoudj b 2\u00a0800\u00a0DA l wa7ed (molletonné, 120 x 70 cm). Wach smitek ?');
     });
   });
 });

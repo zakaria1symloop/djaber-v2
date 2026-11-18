@@ -94,7 +94,7 @@ describe('R15-1 (Minor) — a place given with no quote yet: the reply carries t
     const noPlace = await run('Amina Saadi', ['nheb la robe kabyle taille M'], 'Saha Amina, a3tini numéro ta3ek ?');
     expect(noPlace.execute).not.toHaveBeenCalled();
     const given = await run(F5_T1, [], 'Robe kabyle brodée (M) b 4900 DA, tawsil l Bab Ezzouar 400 DA. Wach howa l’adresse ta3ek ?');
-    expect(given.r.output.reply).toBe('Robe kabyle brodée (M) b 4900 DA, tawsil l Bab Ezzouar 400 DA. Wela f stop-desk b 250\u00a0DA. Wach howa l’adresse ta3ek ?');
+    expect(given.r.output.reply).toBe('Robe kabyle brodée (M) b 4\u00a0900\u00a0DA, tawsil l Bab Ezzouar 400 DA. Wela f stop-desk b 250\u00a0DA. Wach howa l’adresse ta3ek ?');
     const illizi = await run('slm, nheb la robe kabyle taille M, ana f Illizi', [], 'Wach howa l’adresse ta3ek ?');
     expect(illizi.execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 33, subtotal: 4900 }, expect.anything());
     // journey retest R18-1 (18/11): a not-served wilaya named with no quote of it yet ⇒ « we don't deliver there »

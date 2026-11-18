@@ -219,8 +219,9 @@ describe('R19-1 (Minor) — a tool not offered costs no extra model call when th
     const said = 'twasslou l Blida ? Nadia Kaci 0661234568, Boufarik, cité 20 août villa 3, 1 hijab soie';
     const { r, gateway } = await turnOf(said, 'arabizi', [{ toolCalls: [CALL] }, { reply: 'Ih !', intent: 'SALE' }], { order: recap });
     expect(gateway.calls).toHaveLength(1);
-    expect(r.output.reply.startsWith('Ih, nwasslou l Blida.\n\nHada récap')).toBe(true);
-    expect(deliveryAnswer([{ name: 'create_order', result: recap }], 'vous livrez à Boufarik ?', 'fr')).toBe('Oui, on livre à Boufarik.');
+    // (journey retest R20-2: with both fees — the server quotes the recap's wilaya, no model call)
+    expect(r.output.reply.startsWith('Ih, nwasslou l Blida, f 2 l 5 ayam. L dar: 450\u00a0DA, f stop-desk: 300\u00a0DA.\n\nHada récap')).toBe(true);
+    expect(deliveryAnswer([{ name: 'create_order', result: recap }], 'vous livrez à Boufarik ?', 'fr')).toBe('Oui, on livre à Boufarik. À domicile : 450\u00a0DA.');
   });
 
   it('a recap while the message asks something else (or asks for a person) still gets the model’s answer', async () => {

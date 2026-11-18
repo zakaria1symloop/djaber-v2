@@ -841,8 +841,10 @@ const ORDER_NOUN = /(?<![\p{L}])(?:commande|order|طلبي[هة]|الطلبي[ه
  * 4900 DA », F1b T2 « c'est noté : Sétif, El Eulma », PF1 T2 « j'ai bien noté votre nom, votre numéro et El Eulma à Sétif », N5 T2 « j'ai bien noté
  * Oran, Bir El Djir, … » (the R18-4 rule read a whole clause « c'est noté » only). As written (accents, apostrophes), case-insensitive.
  */
-const NOTED_LEAD = /^(?:c['’]?\s?est\s+(?:bien\s+)?not[ée]e?|(?:tout\s+est\s+)?bien\s+not[ée]e?|j['’]\s?ai\s+(?:bien\s+)?(?:not[ée]|enregistr[ée])|on\s+a\s+(?:bien\s+)?not[ée]|nous\s+avons\s+(?:bien\s+)?not[ée])\s*:?\s*(?=\S)/iu;
+const NOTED_LEAD = /^(?:je\s+(?:vous\s+)?(?:note|prends\s+note\s+d[eu]s?)(?!\s+(?:que|qu['’]))(?=\s)|c['’]?\s?est\s+(?:bien\s+)?not[ée]e?|(?:tout\s+est\s+)?bien\s+not[ée]e?|j['’]\s?ai\s+(?:bien\s+)?(?:not[ée]|enregistr[ée])|on\s+a\s+(?:bien\s+)?not[ée]|nous\s+avons\s+(?:bien\s+)?not[ée])\s*:?\s*(?=\S)/iu;
 // (journey retest R19-3: « votre nom, votre numéro », « vos coordonnées » echo a field too)
+// (journey retest R20-4 (18/11): « je note … » — PF1 T2 « Merci Karim, je note le sac à main cuir Marron (1 pièce, 6900 DA) pour El Eulma. »; « je
+// note que … » stays)
 const FIELD_WORDS = new Set(['wilaya', 'commune', 'baladiya', 'numero', 'telephone', 'votre', 'vos', 'nom', 'prenom', 'adresse', 'coordonnees', 'informations', 'pour', 'dans', 'chez', 'avec', 'piece', 'pieces', 'smitek', 'ta3ek', 'ولايه', 'بلديه', 'الولايه', 'البلديه', 'الرقم', 'رقم', 'الهاتف', 'الاسم', 'تاعك', 'سميتك'].map((w) => foldGuard(w)));
 const THANK_WORD = /(?<![\p{L}])(?:merci|thanks|thank|saha|sahit|choukran|chokran|شكرا|صحيت|يعطيك|تشرفنا|بارك)(?![\p{L}])/u;
 /** A price in a clause: an amount with its currency (« 1500 DA », « 2800 دج »). */
@@ -968,4 +970,95 @@ const withCustomerScriptRun = (reply: string, history: string): string => {
     const own = customerOwnName(run, history);
     return own && own.split(/\s+/).length === run.split(/\s+/).length ? `${lead}${own}` : match;
   });
+};
+
+// --- journey retest R20 (18/11, docs/audit/journeys-2026-11-16/journeys/R20-ai-orders.md) ---------------------------------------------
+const CHOICE_ASK: Record<Loc, (names: string) => string> = {
+  fr: (n) => `Lequel préférez-vous : ${n} ?`,
+  ar: (n) => `واش من واحد تحب: ${n} ؟`,
+  arabizi: (n) => `Wach men wa7ed t7ebb: ${n} ?`,
+  en: (n) => `Which one would you like: ${n}?`,
+};
+const CHOICE_OR: Record<Loc, string> = { fr: 'ou', ar: 'ولا', arabizi: 'wela', en: 'or' };
+/**
+ * journey retest R20-3 (18/11): a plain « oui » to a question offering two products or more (N5 T2 « … voulez-vous plutôt le Hijab soie à 1500 DA
+ * ou la Robe kabyle brodée (à partir de 4900 DA) ? ») chooses none — T3 and T4 « oui » got the same question back with the out-of-stock sentence a
+ * 2nd and a 3rd time. The server asks once, short, which one (the catalogue names, in the question's order), and nothing else.
+ */
+export const choiceQuestion = (names: readonly string[], lang: AiLanguage | string | undefined): string => {
+  const loc = locOf(lang);
+  const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} ${CHOICE_OR[loc]} ${names[names.length - 1]}` : (names[0] ?? '');
+  return CHOICE_ASK[loc](list);
+};
+
+/**
+ * journey retest R20-4 (18/11): every amount of the reply as `formatMoney` writes it (rule 11) — the model's « 6900 DA » (PF1 T2, F1 T1, N7 T1),
+ * « 4900 DA » (F5, P2, N9, N5), « 24990 DA » (N5b), « 12500 DA » (N7), « 7500 دج » are « 6 900 DA », « 7 500 دج » (the server's amounts were since
+ * R19-3). Only a run of 4 to 9 digits written right before its currency (« DA », « DZD », « دج »), never a phone number, an order number
+ * (« TEST-6293 »), a street number, a date or an amount already spaced (« 6 900 DA »).
+ */
+const RAW_AMOUNT = /(?<![\p{L}\p{N}.,\-/\u00a0\u202f])(\d{4,9})[ \t\u00a0\u202f]*(DA|DZD|دج)(?![\p{L}\p{N}])/gu;
+export const withSpacedAmounts = (reply: string): string =>
+  reply.replace(RAW_AMOUNT, (_m: string, digits: string, cur: string) => formatMoney(Number(digits)).replace(/DA$/u, cur));
+
+/**
+ * journey retest R20-4 (18/11): « Vos coordonnées sont bien notées : voulez-vous plutôt … ? » (N5 T2) — the « noted » opening of a sentence goes, the
+ * question it opens stays (the R19-3 rule left every sentence with a « ? » alone).
+ */
+const NOTED_OPENING = /^(\s*)(?:(?:toutes\s+)?(?:vos|votre|tes|ton|les)\s+(?:coordonn[ée]es|informations|infos|d[ée]tails|donn[ée]es)\s+(?:sont|est|ont\s+[ée]t[ée]|a\s+[ée]t[ée])\s+(?:bien\s+)?(?:not[ée]e?s?|enregistr[ée]e?s?|re[çc]ue?s?)|c['’]?\s?est\s+(?:bien\s+)?not[ée]e?|j['’]\s?ai\s+(?:bien\s+)?not[ée]\s+vos\s+coordonn[ée]es)\s*[:,.!]\s*(?=\S)/iu;
+export const withoutNotedOpening = (reply: string): string => {
+  let changed = false;
+  const parts = splitSentences(reply).map((s) => {
+    // (a sentence asking nothing is `withoutNotedSteps`' — « C'est noté, Karim ! » ⇒ « Merci, Karim ! »)
+    const m = /[?؟]/u.test(s) ? NOTED_OPENING.exec(s) : null;
+    if (!m) return s;
+    changed = true;
+    const rest = s.slice(m[0].length);
+    return `${m[1]}${rest.charAt(0).toLocaleUpperCase()}${rest.slice(1)}`;
+  });
+  return changed ? parts.join('').trim() : reply;
+};
+
+/**
+ * journey retest R20-4 (18/11): a short thank-you sentence placed between the facts and the question (N7 T1 « … et une Basket Runner (12500 DA).
+ * Merci Yacine. Lequel vous intéresse ? ») goes first — the thanks before the facts, the question last. Only a sentence of four words at most
+ * that opens with the thanks and asks nothing, right before the reply's closing question.
+ */
+const THANKS_OPENING = /^(?:merci|thanks|thank\s+you|saha|sahit|ya3tik\s+saha|شكرا|صحيت|يعطيك\s+الصحة)(?![\p{L}])/iu;
+export const withThanksFirst = (reply: string): string => {
+  const parts = splitSentences(reply);
+  const i = parts.findIndex((s, k) => k > 0 && k + 1 < parts.length && THANKS_OPENING.test(s.trim()) && !/[?؟]/u.test(s) && (s.match(/[\p{L}\p{N}]+/gu) ?? []).length <= 4 && /[?؟]/u.test(parts[k + 1]!));
+  if (i < 0) return reply;
+  const thanks = parts[i]!.trim();
+  const rest = [...parts.slice(0, i), ...parts.slice(i + 1)];
+  // (after an opening greeting of its own: « Bonjour ! Merci Yacine. … »)
+  const at = OPENING_GREETING.test(rest[0]!) && (rest[0]!.match(/[\p{L}\p{N}]+/gu) ?? []).length <= 3 ? 1 : 0;
+  return [...rest.slice(0, at).map((p) => (/\s$/u.test(p) ? p : `${p} `)), `${thanks} `, ...rest.slice(at)].join('').replace(/[ \t]+\n/g, '\n').trim();
+};
+
+/**
+ * journey retest R20-4 (18/11): one « we don't deliver there » per sentence — N16 « Lmes7a, ma nwasslouch l Illizi f had lwaqt, ma kanch wasl l had
+ * wilaya, ma l dar wala f stop-desk. » (the second clause repeats the first): a later clause saying it again goes.
+ */
+const NOT_DELIVERED = /(?<![\p{L}])(?:ma\s*n?wass?lou?(?:ch|ech)|ma\s*kan(?:ch|ech)\s+(?:wasl|tawsil|twasil|livraison)|makach\s+(?:wasl|tawsil|livraison)|ما\s*نوصلوش|ما\s*كانش\s+(?:ال)?توصيل|ne\s+livr\w*\s+pas|pas\s+de\s+livraison|(?:don\s?t|do\s+not)\s+deliver|no\s+delivery)(?![\p{L}])/u;
+export const withoutRepeatedNotServed = (reply: string): string => {
+  let changed = false;
+  const parts = splitSentences(reply).map((s) => {
+    // (the sentence's own end — « . », « ! », the space after it — stays when its last clause goes: R3 F9 T3 « …, wallah makach livraison lhom. »)
+    const end = /[\s.!…?؟]*$/u.exec(s)?.[0] ?? '';
+    const clauses = s.slice(0, s.length - end.length).split(/(\s*[,،]\s*)/u);
+    let seen = false;
+    const out: string[] = [];
+    for (let k = 0; k < clauses.length; k += 2) {
+      const hit = NOT_DELIVERED.test(foldGuard(clauses[k]!).replace(/['’]/gu, ' '));
+      if (hit && seen) {
+        changed = true;
+        continue;
+      }
+      seen ||= hit;
+      out.push(...(out.length ? [clauses[k - 1] ?? ', '] : []), clauses[k]!);
+    }
+    return `${out.join('')}${end}`;
+  });
+  return changed ? parts.join('').replace(/[ \t]+\n/g, '\n').trim() : reply;
 };

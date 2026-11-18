@@ -73,7 +73,7 @@ describe('FL-01 — reply turn', () => {
     // welcome (first reply of the thread) → AI text → product cards, in that order, all sent by the fake Meta adapter
     expect(out.map((m) => [m.author, m.type, m.deliveryStatus])).toEqual([['system', 'text', 'sent'], ['ai', 'text', 'sent'], ['ai', 'product_cards', 'sent']]);
     expect(out[0]!.text).toBe(fr['customer.welcome']!.replace('{shop}', (await db.workspace.findUniqueOrThrow({ where: { id: s.owner.workspaceId } })).name));
-    expect(out[1]!.text).toContain('Robe satin bordeaux — 4500 DA');
+    expect(out[1]!.text).toContain('Robe satin bordeaux — 4\u00a0500\u00a0DA');
     expect((out[2]!.payload as any).cards.map((c: any) => c.productId)).toEqual([s.robe.id]);
     // welcome, reply, then the card as a generic template with its « Commander » button (PV 09/11)
     expect(sends(sender).map((c) => c.args.message.kind)).toEqual(['text', 'text', 'generic']);
@@ -174,7 +174,7 @@ describe('FL-01 — reply turn', () => {
     const ok = await turn(s, newSender(), { text: 'prix robe ?' });
     expect(ok.outcome).toBe('sent');
     expect(fakeAi(app).callsOf('reply')[1]!.messages.at(-1)).toMatchObject({ role: 'user', content: FORMAT_REMINDER });
-    expect(ok.out.find((m) => m.author === 'ai')!.text).toBe('La robe est à 4500 DA.');
+    expect(ok.out.find((m) => m.author === 'ai')!.text).toBe('La robe est à 4\u00a0500\u00a0DA.');
 
     // tester report 26/10: an object right in substance but not to the letter is read as it is (no retry, no handoff)
     await resetAi();
@@ -184,14 +184,14 @@ describe('FL-01 — reply turn', () => {
     expect(fakeAi(app).callsOf('reply')).toHaveLength(1);
     expect(loose.runs[0]).toMatchObject({ status: 'ok', intent: 'info' });
     expect(Number(loose.runs[0]!.confidence)).toBe(0.8);
-    expect(loose.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('La robe est à 4500 DA.');
+    expect(loose.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('La robe est à 4\u00a0500\u00a0DA.');
 
     // prose twice: the first answer is a plain message to the customer ⇒ it is sent (flag `format_salvaged`)
     await resetAi();
     fakeAi(app).script('reply', { text: 'La robe est à 4500 DA, livraison 48 h.' }, { text: 'Désolé, voici la réponse : la robe est à 4500 DA.' });
     const prose = await turn(s, newSender(), { text: 'prix robe ?' });
     expect(prose.outcome).toBe('sent');
-    expect(prose.out.find((m) => m.author === 'ai')!.text).toBe('La robe est à 4500 DA, livraison 48 h.');
+    expect(prose.out.find((m) => m.author === 'ai')!.text).toBe('La robe est à 4\u00a0500\u00a0DA, livraison 48 h.');
     expect(prose.runs[0]!.flags).toContain('format_salvaged');
     expect(prose.conversation).toMatchObject({ status: 'active', aiPaused: false });
 
@@ -224,7 +224,7 @@ describe('FL-01 — reply turn', () => {
     const back = await turn(s, sender, { text: 'prix robe ?' });
     expect(back.conversation).toMatchObject({ status: 'active', aiPaused: false });
     expect((back.conversation.context as any).aiUnavailable).toBeNull();
-    expect(back.out.at(-1)).toMatchObject({ author: 'ai', text: 'La robe est à 4500 DA.' });
+    expect(back.out.at(-1)).toMatchObject({ author: 'ai', text: 'La robe est à 4\u00a0500\u00a0DA.' });
   });
 
   it('tester report 22/10 / full-test 15/11 AI-CHAT-02: in a long thread the format-reminder retry keeps only the last 8 messages (and offers no tool), so the answer still goes out', async () => {
@@ -248,7 +248,7 @@ describe('FL-01 — reply turn', () => {
     expect(retry!.messages[9]).toMatchObject({ role: 'assistant', content: 'La robe est à 4500 DA.' });
     expect(retry!.messages[10]).toMatchObject({ role: 'user', content: FORMAT_REMINDER });
     expect(retry!.tools).toBeUndefined();
-    expect(t.out.at(-1)).toMatchObject({ author: 'ai', text: 'La robe est à 4500 DA.' });
+    expect(t.out.at(-1)).toMatchObject({ author: 'ai', text: 'La robe est à 4\u00a0500\u00a0DA.' });
     expect(t.conversation).toMatchObject({ status: 'active', aiPaused: false });
   });
 
@@ -257,7 +257,7 @@ describe('FL-01 — reply turn', () => {
     fakeAi(app).script('reply', { reply: '⭐ Robe satin bordeaux à 4500 DA — disponible en stock', intent: 'SALE', productCards: [s.robe.id, s.sac.id] });
     const t = await turn(s, newSender(), { text: 'la robe ?' });
     expect(fakeAi(app).callsOf('reply')[0]!.system).toContain('When presenting a product use this template: ⭐ {name} à {price} DA — {stock} en stock');
-    expect(t.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('⭐ Robe satin bordeaux à 4500 DA — disponible en stock');
+    expect(t.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('⭐ Robe satin bordeaux à 4\u00a0500\u00a0DA — disponible en stock');
     expect((t.out.find((m) => m.type === 'product_cards')!.payload as any).cards.map((c: any) => c.name)).toEqual(['Robe satin bordeaux', 'Sac cuir noir']);
   });
 
@@ -761,7 +761,7 @@ describe('handoff, insights, safety', () => {
     expect(calls).toHaveLength(2);
     expect(calls[1]!.tools).toBeUndefined();
     expect(String((calls[1]!.messages.at(-1) as { content?: unknown }).content)).toContain(GUARD_MARK);
-    expect(t.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('La robe est à 4500 DA.');
+    expect(t.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('La robe est à 4\u00a0500\u00a0DA.');
     expect(t.out.some((m) => m.type === 'product_cards')).toBe(true);
     expect(t.runs[0]!.flags).toContain('guard_rewritten');
     expect((t.runs[0]!.meta as any).guard).toEqual({ violations: [{ rule: 'unknown_amount', value: 3900 }], retried: true, remaining: [], action: 'rewritten' });

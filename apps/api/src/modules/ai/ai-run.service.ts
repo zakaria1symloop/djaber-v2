@@ -17,7 +17,7 @@ import type { BuiltPrompt } from './prompt/prompt-builder';
 import { AI_GATEWAY, AiProviderError, type AiGateway, type AiMessage, type AiToolCallRequest, type AiToolDef, type AiUsage } from './provider/ai.gateway';
 import { RoutingService, type RoutedModel } from './routing.service';
 import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
-import { absentFields, canonicalTool, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
+import { absentFields, canonicalTool, TOOL_DEFS, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
 import { allowedHandoffReasons, complaintIn, establishedReasons, HANDOFF_REFUSED_MARK, productAsk, fieldOnlyMessage, handoffReason, handoffRefusedInstruction, judgeHandoff, messageHandoffReasons, orderDetailsMessage, orderStatusAsk, placeCandidate, type HandoffRefusal } from './handoff-judge';
 import { offCatalogueWords, productNamedIn, productWanted, productWords } from './product-named';
 import { AUTO_FIX_RULES, checkReply, enforceReply, feeSentence, FIELD_QUESTIONS, guardInstruction, numbersIn, orderClaimsIn, owedQuotes, quoteFacts, stripMarkdown, withToolResults, type CataloguePrice, type CatalogueStock, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
@@ -26,8 +26,8 @@ import { asksCancel, cancelAsked, confirmation, phonesIn, placedNumbers, recapPe
 import { matchWilaya, namedVariant } from './tools/tool-registry';
 import { offCatalogueWordsOf, placeIndex, placeNamedIn, placeOnlyMessage, wilayaIn, withoutPlaceNames, type PlaceIndex } from './tools/place-index';
 import { contextOf } from '../messaging/messaging.presenter';
-import { asksAddress, fillerMessage, handoffKind, handoffReply, handoffSystemLineShown, modeQuestionAt, noPhotoReply, noPhotoSaid, openingSaid, photoAsked, substitutionLine, withArabicCurrency, withArabicWords, withArabiziWords, withAskedPrice, withBothFees, withModeFees, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutQuickReply, withoutStrayYes, withPlaceFacts, withAskedFacts, withoutBookingOffer, withOneStopdeskOffer, withoutRefusals, withSingleSpaces, withoutUnrelatedOffer, teamSaid, teamOnlyKind, withNotServed, withoutNotedSteps, withoutOrderStepAsk, withCustomerScriptName, type PlaceProduct } from './reply-fixes';
-import { serverTextLanguage, systemLocale } from './language';
+import { asksAddress, fillerMessage, handoffKind, handoffReply, handoffSystemLineShown, modeQuestionAt, noPhotoReply, noPhotoSaid, openingSaid, photoAsked, substitutionLine, withArabicCurrency, withArabicWords, withArabiziWords, withAskedPrice, withBothFees, withModeFees, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutQuickReply, withoutStrayYes, withPlaceFacts, withAskedFacts, withoutBookingOffer, withOneStopdeskOffer, withoutRefusals, withSingleSpaces, withoutUnrelatedOffer, teamSaid, teamOnlyKind, withNotServed, withoutNotedSteps, withoutOrderStepAsk, withCustomerScriptName, choiceQuestion, withSpacedAmounts, withoutNotedOpening, withThanksFirst, withoutRepeatedNotServed, type PlaceProduct } from './reply-fixes';
+import { bareYes as bareYesWords, serverTextLanguage, systemLocale } from './language';
 import { foldText } from './tools/wilaya-aliases';
 import { foldGuard, splitSentences } from './reply-guard';
 
@@ -133,6 +133,51 @@ export const takenName = (history: string, catalogue: readonly CataloguePrice[])
  */
 export const takesUnavailableNote = (name: string): string =>
   `THE PRODUCT THE CUSTOMER TAKES IS OUT OF STOCK: « ${name} » cannot be ordered, so create_order is not available in this turn and no tool is needed (the CATALOGUE gives the stock and the prices). Say in one short sentence that it is not available, then ask whether they want the in-stock product you offered (or one in stock from the CATALOGUE) instead — « Voulez-vous le … à la place ? » — never « je vous confirme », never offer to reserve or book it. Their details are kept for the recap.`;
+/** journey retest R20-1: the tools that only read the catalogue (a product, its stock). */
+const INFO_TOOLS = new Set(['search_products', 'get_product', 'check_availability']);
+/** journey retest R20-1 (18/11): a search whose query is a placeholder, no words of a customer (A3 T1 `search_products {«noop», limit 1}`, run). */
+const PLACEHOLDER_QUERY = /^(?:no[\s_-]?op|dummy|test|none|null|nil|nothing|placeholder|n\/?a|x+|[.\-_*?]+)$/iu;
+export const placeholderCall = (call: Pick<AiToolCallRequest, 'name' | 'args'>): boolean =>
+  canonicalTool(call.name) === 'search_products' && (typeof call.args?.query !== 'string' || PLACEHOLDER_QUERY.test(call.args.query.trim()));
+/** journey retest R20-3: the words of a question asking which one (« lequel / laquelle », « wach men », « واش من », « which »), folded. */
+const WHICH_ONE = /(?<![\p{L}])(?:lequel|laquelle|lesquels|lesquelles|quel\s+produit|wach\s+men|wachmen|achmen|which|واش\s+من|اشمن|أي\s+واحد)(?![\p{L}])/u;
+const EITHER_OR = /(?<![\p{L}])(?:ou|or|wela|wla|walla|wala|ولا|او|أو|والا)(?![\p{L}])/u;
+/**
+ * journey retest R20-3 (18/11): the in-stock CATALOGUE products the AI's last message offers in its closing question, in the order it names them —
+ * N5 T2 « … voulez-vous plutôt le Hijab soie à 1500 DA ou la Robe kabyle brodée (à partir de 4900 DA) ? » ⇒ [Hijab soie, Robe kabyle brodée];
+ * N5b « Voulez-vous plutôt le Coffret cadeau Aïd à 24990 DA ? » ⇒ [Coffret cadeau Aïd]. Two or more need « ou / wela / ولا / or » in that question;
+ * a « Lequel vous intéresse ? » naming none reads the sentence before it (N7 T1). Empty when the question offers no product.
+ */
+export const offeredInQuestion = (lastAi: string | null | undefined, catalogue: readonly CataloguePrice[], unavailable: readonly string[]): CataloguePrice[] => {
+  if (!lastAi?.trim()) return [];
+  const parts = splitSentences(lastAi);
+  const k = parts.map((p) => /[?؟]/u.test(p)).lastIndexOf(true);
+  if (k < 0 || k < parts.length - 1) return [];
+  const gone = new Set(unavailable);
+  const named = (text: string) => {
+    const said = productWords(text);
+    return catalogue
+      .filter((p) => !gone.has(p.name) && !!productNamedIn(text, [p]))
+      .map((p) => ({ p, at: said.indexOf(productWords(p.name)[0] ?? '') }))
+      .sort((a, b) => (a.at < 0 ? 1e9 : a.at) - (b.at < 0 ? 1e9 : b.at))
+      .map((x) => x.p);
+  };
+  const question = parts[k]!;
+  let found = named(question);
+  let alt = EITHER_OR.test(foldGuard(question));
+  if (!found.length && WHICH_ONE.test(foldGuard(question)) && k > 0) {
+    const before = parts.slice(Math.max(0, k - 2), k).join(' ');
+    found = named(before);
+    alt = found.length >= 2;
+  }
+  return found.length >= 2 && !alt ? [] : found.length > 4 ? [] : found;
+};
+/**
+ * journey retest R20-3 (18/11): the customer said yes to the one in-stock product the AI offered instead of the out-of-stock one they took (N5b T2
+ * « Voulez-vous plutôt le Coffret cadeau Aïd à 24990 DA ? » ⇒ « oui »): that product is the order's now.
+ */
+export const takesSubstituteNote = (name: string): string =>
+  `THE CUSTOMER ACCEPTS « ${name} »: their « yes » answers your last question, which offered it instead of the out-of-stock product — it is the product of the order now. Call create_order with it and the fields the customer already gave (the platform shows the recap), or ask the one field still missing. Never ask again which product, never repeat that the other one is out of stock.`;
 /** journey retest R7-2: the product ids of a search_products / get_product result. */
 const productIdsOf = (result: unknown): string[] => {
   const r = result as { products?: { id?: unknown }[]; id?: unknown } | null;
@@ -538,7 +583,7 @@ export const RECAP_READY_NOTE =
 export const unavailableTool = (name: string, fieldOnly: boolean, noPhone = false, noPlace = false, noStreet = false, noAddress = false, gone: string | null = null) => ({
   ok: false,
   error: { code: 'TOOL_NOT_AVAILABLE', tool: name },
-  instruction: `${name} cannot be used now${fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : canonicalTool(name) === 'create_order' && gone ? `: « ${gone} » is out of stock — say so and ask whether they want the in-stock product instead (never a recap)` : canonicalTool(name) === 'create_order' && noPhone ? ': the customer has not given a phone number yet — ask for the next missing field (never a recap)' : canonicalTool(name) === 'create_order' && noPlace ? ': the customer has not named their wilaya yet — ask for it (never a default wilaya, never a recap)' : canonicalTool(name) === 'create_order' && noStreet ? ': the customer named only the wilaya / commune — ask for the street address (rue, cité, building, landmark) or offer the stop-desk (never a recap)' : canonicalTool(name) === 'create_order' && noAddress ? ': the customer has not given the street address (rue, cité, building, landmark) nor chosen the stop-desk yet — ask for it in one short question (never a recap)' : canonicalTool(name) === 'create_order' ? ': it already answered in this turn — follow that answer (ask the missing field, or let the recap / confirmation go)' : canonicalTool(name) === 'cancel_order' ? ': the customer did not ask to cancel anything — answer their message (lookup_order answers a question about an order; take the order otherwise)' : canonicalTool(name) === 'lookup_order' ? ': the customer only gave a name, a place or a yes to the recap — record it and ask the next missing field (or let the recap / confirmation go)' : canonicalTool(name) === 'add_faq_candidate' ? ': the customer asked no question in this message — never file a note or a question they did not ask' : ''}. Answer the customer now with the JSON object.`,
+  instruction: `${name} cannot be used now${INFO_TOOLS.has(canonicalTool(name)) ? ': everything about these products (description, price, variants, stock) is in the CATALOGUE and in the results above — answer the customer now, with no tool' : fieldOnly && canonicalTool(name) === 'handoff_to_human' ? ': the customer only gave an order field (or a yes) — record it, keep the conversation and ask the next missing field (or show the recap)' : canonicalTool(name) === 'create_order' && gone ? `: « ${gone} » is out of stock — say so and ask whether they want the in-stock product instead (never a recap)` : canonicalTool(name) === 'create_order' && noPhone ? ': the customer has not given a phone number yet — ask for the next missing field (never a recap)' : canonicalTool(name) === 'create_order' && noPlace ? ': the customer has not named their wilaya yet — ask for it (never a default wilaya, never a recap)' : canonicalTool(name) === 'create_order' && noStreet ? ': the customer named only the wilaya / commune — ask for the street address (rue, cité, building, landmark) or offer the stop-desk (never a recap)' : canonicalTool(name) === 'create_order' && noAddress ? ': the customer has not given the street address (rue, cité, building, landmark) nor chosen the stop-desk yet — ask for it in one short question (never a recap)' : canonicalTool(name) === 'create_order' ? ': it already answered in this turn — follow that answer (ask the missing field, or let the recap / confirmation go)' : canonicalTool(name) === 'cancel_order' ? ': the customer did not ask to cancel anything — answer their message (lookup_order answers a question about an order; take the order otherwise)' : canonicalTool(name) === 'lookup_order' ? ': the customer only gave a name, a place or a yes to the recap — record it and ask the next missing field (or let the recap / confirmation go)' : canonicalTool(name) === 'add_faq_candidate' ? ': the customer asked no question in this message — never file a note or a question they did not ask' : ''}. Answer the customer now with the JSON object.`,
 });
 /**
  * journey retest R2-4: a `create_order` answer after which the tool is not offered again in the same turn — the recap was
@@ -844,6 +889,14 @@ export class AiRunService implements OnModuleInit {
     // offered (4 model calls, 17.1 s: get_product, search_products, then `create_order` for the Parfum Oud without commune nor address ⇒
     // VALIDATION) and the model is told to ask whether the customer wants the in-stock product instead (its « oui » gives that recap)
     const takesGone = takesUnavailable && orderDetails && !pendingBefore ? takenName(req.toolCtx.customerHistory ?? said ?? '', req.guard?.cataloguePrices ?? []) : null;
+    // journey retest R20-3 (18/11): a plain yes (no question, no change) to the AI's last question offering products — two or more ⇒ the server
+    // asks which one, with no model call (N5 T3 / T4 « oui » to « … le Hijab soie … ou la Robe kabyle brodée … ? » got that question again, with
+    // the out-of-stock sentence a 2nd and a 3rd time); the one in-stock product offered instead of the out-of-stock one taken ⇒ it is taken
+    const lastAiText = typeof lastAi?.content === 'string' ? lastAi.content : null;
+    const plainYesNow = said !== undefined && !/[?؟]/u.test(said) && confirmation(said) === 'yes' && (bareYesWords(said) || !/[\p{L}\p{N}]/u.test(said));
+    const offeredNow = !yesOrder && plainYesNow && !serverRecapAsked(lastAiText) && req.guard ? offeredInQuestion(lastAiText, req.guard.cataloguePrices ?? [], req.guard.unavailableNames ?? []) : [];
+    const choiceNames = offeredNow.length >= 2 ? offeredNow.map((p) => p.name) : null;
+    const substituteTaken = offeredNow.length === 1 && takesUnavailable ? offeredNow[0]!.name : null;
     const withheld = (name: string) =>
       (name === 'handoff_to_human' && (noHandoff || !reasons.length)) || (name === 'create_order' && (noPhone || noPlace || noStreet || noAddressHere || !!takesGone)) || (name === 'cancel_order' && noCancel) || (name === 'lookup_order' && (noLookup || confirmingYes)) || (name === 'add_faq_candidate' && noFaq);
     const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !withheld(d.name)).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
@@ -933,7 +986,7 @@ export class AiRunService implements OnModuleInit {
       forcedHandoff ??= this.tools.forcedHandoff(call.name, call.args, done.result);
       return { call, done };
     };
-    const system = [req.prompt.system, ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noStreet ? [NO_STREET_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : []), ...(knownNote ? [knownNote] : []), ...(recapReady ? [RECAP_READY_NOTE] : []), ...(takesGone ? [takesUnavailableNote(takesGone)] : [])].join('\n\n');
+    const system = [req.prompt.system, ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noStreet ? [NO_STREET_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : []), ...(knownNote ? [knownNote] : []), ...(recapReady ? [RECAP_READY_NOTE] : []), ...(takesGone ? [takesUnavailableNote(takesGone)] : []), ...(substituteTaken ? [takesSubstituteNote(substituteTaken)] : [])].join('\n\n');
     // journey retest R7-5: run once, when the answer to a delivery question comes without any quote_delivery of the turn
     let serverQuoted = false;
     // journey retest R14-2: the server's quote for the fees of a « home or stop-desk? » question (not a delivery question)
@@ -1032,6 +1085,20 @@ export class AiRunService implements OnModuleInit {
         // journey retest R18-1 (18/11): a place named with no quote of it yet that is not served ⇒ « we don't deliver there »
         if (placeNotServed) text = withNotServed(text, placeNotServed, textLang);
         else if (placeQuote) text = withPlaceFacts(text, quoteFacts([{ name: 'quote_delivery', result: placeQuote.result }]), placeProduct, textLang, { homeOnly: streetGiven });
+        // journey retest R20-2 (18/11): a quote run in this turn always reaches the reply unless the reply already states its fees — F5r T1
+        // (shared link): the server's R14-2 quote of the first draft's « l'adresse … wela t7ebb stop-desk ? » (400 / 250, written before that
+        // question) was lost when the guard's language rewrite split the question in two (« … ? Wela t7ebb stop-desk ? »: no mode question
+        // left, no fee rule for a server quote) — « Robe kabyle brodée taille M disponible, 4900 DA. Wach l'adresse … ? », no fee
+        // (a delivery question gets both fees even after a street was given; a quote the model made is owed as the guard owes it — the
+        // wilaya the message names, else one fee of any: R1 F9 T2 « w l Oran stop desk ch7al ? » owes nothing of a re-quoted Sétif)
+        if (!placeNotServed) {
+          const runQuotes = executed.filter((t) => canonicalTool(t.name) === 'quote_delivery' && t !== placeQuote);
+          const owed = new Set(owedQuotes(text, quoteFacts(runQuotes.filter((t) => t !== modeQuote).map((t) => ({ name: 'quote_delivery', result: t.result }))), said).map((q) => foldGuard(q.wilaya)));
+          for (const t of runQuotes) {
+            const q = quoteFacts([{ name: 'quote_delivery', result: t.result }]);
+            if (q.length && (t === modeQuote || owed.has(foldGuard(q[0]!.wilaya)))) text = withPlaceFacts(text, q, null, textLang, { homeOnly: streetGiven && !asksDelivery(said ?? '') });
+          }
+        }
         // journey retest R17-1 (18/11): the place quoted in an earlier turn (no server quote now) — the product this message names still gets
         // its price before the address / « home or stop-desk? » question (PF1 T2 « … à domicile à El Eulma (650 DA) ou en stop-desk (350 DA) ? »,
         // no 6 900 DA)
@@ -1053,8 +1120,12 @@ export class AiRunService implements OnModuleInit {
         // (N4 T2 « je note le nom : Samir Ben Ali » for « سمير بن علي »)
         // journey retest R19-3 (18/11): nor « c'est noté : … » / « j'ai bien noté … » (F5, F1b, PF1, N5), nor a substitute question worded as an order
         // step (N5 « Voulez-vous que je vous le réserve ? », « je vous confirme : c'est bien … ? »)
-        if (!pendingBefore && !placedNumbers(req.toolCtx.orderHistory).length) text = withoutOrderStepAsk(withoutNotedSteps(text, req.toolCtx.customerHistory ?? req.toolCtx.customerText), textLang);
+        // journey retest R20-4 (18/11): nor « je note … » (PF1 T2), nor « Vos coordonnées sont bien notées : » opening a question (N5 T2)
+        if (!pendingBefore && !placedNumbers(req.toolCtx.orderHistory).length) text = withoutNotedOpening(withoutOrderStepAsk(withoutNotedSteps(text, req.toolCtx.customerHistory ?? req.toolCtx.customerText), textLang));
         text = withCustomerScriptName(text, req.toolCtx.customerHistory ?? req.toolCtx.customerText ?? '');
+        // journey retest R20-4 (18/11): the thanks first, the question last (N7 T1 « … (12500 DA). Merci Yacine. Lequel vous intéresse ? »); one « we
+        // don't deliver there » per sentence (N16 « …, ma nwasslouch l Illizi f had lwaqt, ma kanch wasl l had wilaya, … »)
+        text = withoutRepeatedNotServed(withThanksFirst(text));
         // journey retest R17-5 (18/11): a delivery-only question gets no closing offer of the products (F9), nothing deliverable no « something
         // else that reaches you » (N16 Illizi)
         const quoteResults = [...executed, ...reused].filter((t) => canonicalTool(t.name) === 'quote_delivery').map((t) => t.result as { ok?: unknown } | null);
@@ -1066,16 +1137,18 @@ export class AiRunService implements OnModuleInit {
       // journey retest R12-4: the lead-in kept before the server recap gets the same narrow wording fixes (N3 T2 « Livraison à domicile »)
       const r = recapReply(withArabicCurrency(withArabiziWords(plain.reply, textLang)), recap, textLang, req.toolCtx.customerText);
       // journey retest R5-5: « twasslou l Constantine ? » is answered in words when no sentence of the model goes before the recap
-      const answer = r.kept === 'server' ? deliveryAnswer(calls, req.toolCtx.customerText ?? '', textLang) : null;
+      // journey retest R20-2 (18/11): with the home and stop-desk fees (this turn's quote, or an earlier turn's reused)
+      const answer = r.kept === 'server' ? deliveryAnswer([...reused.map((t) => ({ name: canonicalTool(t.name), result: t.result })), ...calls], req.toolCtx.customerText ?? '', textLang) : null;
       // journey retest R13-5 (18/11): a recap of another product than the out-of-stock one the customer asked for says so first (N5 T2
       // « je le prends » ⇒ the Coffret's recap, the Parfum Oud out of stock)
       const swap = substitutionLine(recap.items, req.toolCtx.customerHistory ?? req.toolCtx.customerText ?? '', req.guard?.unavailableNames ?? [], r.text, textLang);
       return { ...plain, reply: withPhotoAnswer(output, [swap, answer, r.text].filter(Boolean).join('\n\n')) };
     };
     // journey retest R16-4 (18/11): one space between words, whatever wrote the text (C2 « smahli 3lik  3la had lmochkil »)
+    // journey retest R20-4 (18/11): and every amount as `formatMoney` writes it, the model's too (« 6900 DA » ⇒ « 6 900 DA »)
     const confirmed = (output: AiReplyOutput): AiReplyOutput => {
       const done = confirmedText(output);
-      return { ...done, reply: withSingleSpaces(done.reply) };
+      return { ...done, reply: withSpacedAmounts(withSingleSpaces(done.reply)) };
     };
     /**
      * journey retest R7-2: a photo request answered with no photo sent and no word about it, while every product of the answer
@@ -1218,6 +1291,31 @@ export class AiRunService implements OnModuleInit {
       if (!asksSomething(t)) return true;
       return asksDelivery(t) && (t.match(/[?؟]/gu) ?? []).length <= 1 && !!deliveryAnswer(calls, t, textLang);
     };
+    /**
+     * journey retest R20-2 (18/11): a delivery question answered with this turn's recap gets both fees — when no quote of the recap's wilaya was
+     * made (nor one of an earlier turn reused), the server quotes it (no model call; an earlier turn's still valid quote is reused): the recap
+     * gives the fee of its own mode only (R6 F5 « vous livrez à Bab Ezzouar ? » ⇒ the stop-desk fee unknown).
+     */
+    const recapQuote = async (): Promise<void> => {
+      if (!recapNow() || said === undefined || !asksDelivery(said)) return;
+      const wilayaId = Number([...executed].reverse().find((t) => canonicalTool(t.name) === 'create_order')?.args?.wilayaId);
+      if (!Number.isInteger(wilayaId) || wilayaId <= 0) return;
+      const quoted = [...executed, ...reused].some((t) => canonicalTool(t.name) === 'quote_delivery' && (t.result as { ok?: unknown } | null)?.ok === true && (Number((t.result as { wilayaId?: unknown }).wilayaId) === wilayaId || Number(t.args?.wilayaId) === wilayaId));
+      if (quoted) return;
+      const call: AiToolCallRequest = { id: 'server-recap-quote', name: 'quote_delivery', args: { wilayaId } };
+      const earlier = earlierQuoteAnswered(call, knownQuotes);
+      if (earlier) {
+        reused.push({ callId: 'earlier-quote:recap', name: call.name, args: call.args, result: earlier, simulated: false, replayed: true });
+        return;
+      }
+      const hash = toolCallId(call.name, call.args, 0);
+      const ordinal = seen.get(hash) ?? 0;
+      seen.set(hash, ordinal + 1);
+      const done = await this.toolCall(req, call, ordinal, executed).catch(() => null);
+      if (!done) return;
+      executed.push(done);
+      answered.set(sameCallKey(call.name, call.args), done.result);
+    };
     /** journey retest R19-1: the answer of a turn the server ends alone — status OK, the order's details from the turn's create_order. */
     const serverOutput = (reply = ''): AiReplyOutput => {
       const a = [...executed].reverse().find((t) => canonicalTool(t.name) === 'create_order')?.args ?? {};
@@ -1238,6 +1336,28 @@ export class AiRunService implements OnModuleInit {
         if (yes) messages.push({ role: 'assistant', content: '', toolCalls: [yes.call] }, { role: 'tool', toolCallId: yes.call.id, name: yes.call.name, result: yes.done.result });
       }
     }
+    // journey retest R20-3 (18/11): a plain yes to a question offering two products or more — one short « which one? », no model call
+    if (choiceNames && !forcedHandoff) {
+      const m = await this.serverModel();
+      if (m) {
+        model = m;
+        return ok(serverOutput(choiceQuestion(choiceNames, textLang)));
+      }
+    }
+    // journey retest R20-1 (18/11): a round whose calls were all product / stock lookups answered from what the turn already has (nothing ran) —
+    // the next steps offer no lookup tool (N5 T1: `search_products` ran, then `get_product` ×2 of the product it returned, a model call each,
+    // 11.5 s; A3 T1 `check_availability`, then two searches); and once this turn's searches returned only products the CATALOGUE lists (no photo
+    // asked), get_product is not offered (it could only repeat them)
+    let infoDone = false;
+    const searchedListed = (): boolean => {
+      const listed = req.guard?.catalogueIds ?? [];
+      if (!catalogueLookup || !listed.length) return false;
+      const searches = executed.filter((t) => canonicalTool(t.name) === 'search_products');
+      return searches.length > 0 && searches.every((t) => productIdsOf(t.result).every((id) => listed.includes(id)));
+    };
+    const infoRound = (calls: readonly AiToolCallRequest[], ranBefore: number) => {
+      if (executed.length === ranBefore && calls.length > 0 && calls.every((c) => INFO_TOOLS.has(canonicalTool(c.name)))) infoDone = true;
+    };
     // journey retest R11-5: one more step than the loop's own when the plain-text step is asked
     for (let step = 0; step < MAX_STEPS + 1 + (plainAsked ? 1 : 0); step++) {
       const left = req.deadline - Date.now();
@@ -1249,7 +1369,7 @@ export class AiRunService implements OnModuleInit {
       // journey retest R12-3 (17/11): once create_order placed the order in this turn, lookup_order is not offered either (F6 T3, F3 T4
       // looked up the order they had just placed: `{orders: []}`)
       const placedNow = orderClosed && !!confirmationNow();
-      const stepDefs = orderClosed ? defs.filter((d) => d.name !== 'create_order' && !(placedNow && d.name === 'lookup_order')) : defs;
+      const stepDefs = (orderClosed ? defs.filter((d) => d.name !== 'create_order' && !(placedNow && d.name === 'lookup_order')) : defs).filter((d) => !(infoDone && INFO_TOOLS.has(d.name)) && !(d.name === 'get_product' && searchedListed()));
       let res;
       if (steps.length) steps[steps.length - 1]!.next = AiRunService.nextReason(messages[messages.length - 1]);
       const stepStart = Date.now();
@@ -1271,7 +1391,8 @@ export class AiRunService implements OnModuleInit {
 
       // journey retest R1-1: a call to a tool this step did not offer is never run — the model is told and answers
       const offered = new Set(stepDefs.map((d) => d.name));
-      const stray = offerTools ? [...(res.value.rejectedToolCalls ?? []), ...res.value.toolCalls.filter((c) => !offered.has(canonicalTool(c.name)))] : [];
+      // journey retest R20-1 (18/11): a search for a placeholder (A3 T1 `search_products {«noop»}`, run) is a call to no tool either
+      const stray = offerTools ? [...(res.value.rejectedToolCalls ?? []), ...res.value.toolCalls.filter((c) => !offered.has(canonicalTool(c.name)) || placeholderCall(c))] : [];
       if (stray.length) steps[steps.length - 1]!.stray = stray.map((c) => canonicalTool(c.name));
       // journey retest R19-1 (18/11): the reply a stray step answers with itself — its own readable text, else (a create_order this message
       // cannot make yet, a message asking nothing) the server's question for the field that is missing
@@ -1279,7 +1400,8 @@ export class AiRunService implements OnModuleInit {
       let serverWrote = false;
       if (stray.length) {
         toolRounds++;
-        const runnable = res.value.toolCalls.filter((c) => offered.has(canonicalTool(c.name)));
+        const runnable = res.value.toolCalls.filter((c) => offered.has(canonicalTool(c.name)) && !placeholderCall(c));
+        const ranBefore = executed.length;
         if (runnable.length) messages.push({ role: 'assistant', content: res.value.text ?? '', toolCalls: runnable });
         else messages.push({ role: 'assistant', content: [res.value.text, ...stray.map((c) => `[tool call ${c.name} ${JSON.stringify(c.args ?? {})}]`)].filter(Boolean).join('\n') });
         for (const call of runnable) {
@@ -1330,16 +1452,37 @@ export class AiRunService implements OnModuleInit {
         // server's already (an order placed, a recap with nothing else asked: `serverDone`), or the step's own text is a readable answer, or
         // the call is a create_order this message cannot make yet (a missing wilaya / street) on a message that asks nothing: the field's
         // question, with the price and the fees the server adds (PG2 T2 5.1 s + 4.3 s, PG1b T2, N4 T3 — a second model call for that question)
-        if (serverDone()) return ok(serverOutput());
+        infoRound(runnable, ranBefore);
+        if (serverDone()) {
+          await recapQuote();
+          return ok(serverOutput());
+        }
         const own = runnable.length ? null : parseReplyOutput(res.value.text ?? '');
+        // journey retest R20-1 (18/11): a call to a tool that does not exist (« dummy », « noop » — PG2 T2 13.5 s: the call, then the answer, then a
+        // guard retry; N21 T3, F1b T2) is answered by the server in this same step like R19's create_order one — the field still missing, once a
+        // phone was given (the name is asked before it), on a message asking nothing
+        let madeUp = !own?.ok && !runnable.length && stray.every((c) => !(canonicalTool(c.name) in TOOL_DEFS) || placeholderCall(c));
+        // (a message wanting a product: only when the server knows which one, in stock — its card and its price go with the question; the
+        // catalogue's own check reads the product's keywords, « جلابة » for « Djellaba homme »)
+        let wanted: string | null = null;
+        if (madeUp && said !== undefined && req.guard) {
+          const prices = req.guard.cataloguePrices ?? [];
+          wanted = productNamedIn(said, prices)?.id ?? null;
+          if (!wanted && productWanted(said) && typeof this.tools.soldProductNamed === 'function') {
+            const name = await this.tools.soldProductNamed(req.toolCtx.agent, said).catch(() => null);
+            wanted = prices.find((p) => p.name === name)?.id ?? null;
+          }
+          const gone0 = new Set(req.guard.unavailableNames ?? []);
+          if (productWanted(said) && !prices.some((p) => p.id === wanted && !gone0.has(p.name))) madeUp = false;
+        }
         if (own?.ok) serverReply = own.value;
-        else if (!runnable.length && stray.every((c) => canonicalTool(c.name) === 'create_order') && !noPhone && !takesGone && (noPlace || noStreet || noAddressHere) && said !== undefined && !asksSomething(said) && !photoAsked(said) && req.guard && stray.some((c) => nameWritten(c.args?.clientName, req.toolCtx.customerHistory ?? said))) {
+        else if (!runnable.length && (madeUp || (stray.every((c) => canonicalTool(c.name) === 'create_order') && stray.some((c) => nameWritten(c.args?.clientName, req.toolCtx.customerHistory ?? said ?? '')))) && !noPhone && !takesGone && (noPlace || noStreet || noAddressHere) && said !== undefined && !asksSomething(said) && !photoAsked(said) && req.guard) {
           // (the product of the call's items, else the one the message names, is shown as its card — the price line follows it)
           const prices = req.guard.cataloguePrices ?? [];
           const gone = new Set(req.guard.unavailableNames ?? []);
           const asked = stray.flatMap((c) => (Array.isArray(c.args?.items) ? (c.args.items as { productId?: unknown }[]).map((i) => i?.productId) : [])).filter((id): id is string => typeof id === 'string');
-          const named = productNamedIn(said, prices);
-          const card = [...new Set([...asked, ...(named ? [named.id] : [])])].filter((id) => prices.some((p) => p.id === id && !gone.has(p.name))).slice(0, 1);
+          const named = wanted ?? productNamedIn(said, prices)?.id;
+          const card = [...new Set([...asked, ...(named ? [named] : [])])].filter((id) => prices.some((p) => p.id === id && !gone.has(p.name))).slice(0, 1);
           serverWrote = true;
           serverReply = { reply: FIELD_QUESTIONS[noPlace ? 'wilayaId' : 'address']![textLang], status: 'OK', intent: 'SALE', productCards: card, recommendations: [], confidence: 1 };
         }
@@ -1352,6 +1495,7 @@ export class AiRunService implements OnModuleInit {
         toolRounds++;
         const calls = res.value.toolCalls;
         messages.push({ role: 'assistant', content: res.value.text ?? '', toolCalls: calls });
+        const ranBefore = executed.length;
         for (const call of calls) {
           const hash = toolCallId(call.name, call.args, 0);
           const key = sameCallKey(call.name, call.args);
@@ -1396,8 +1540,12 @@ export class AiRunService implements OnModuleInit {
           messages.push({ role: 'tool', toolCallId: call.id, name: call.name, result: done.result });
           forcedHandoff ??= this.tools.forcedHandoff(run.name, run.args, done.result);
         }
+        infoRound(calls, ranBefore);
         // journey retest R19-1 (18/11): the order placed, or the recap with nothing else asked — the reply is the server's: no model call
-        if (serverDone()) return ok(serverOutput());
+        if (serverDone()) {
+          await recapQuote();
+          return ok(serverOutput());
+        }
         continue;
       }
       const parsed: ReturnType<typeof parseReplyOutput> = serverReply ? { ok: true, value: serverReply } : parseReplyOutput(res.value.text);
@@ -1416,6 +1564,8 @@ export class AiRunService implements OnModuleInit {
         return null;
       };
       if (parsed.ok) {
+        // journey retest R20-2: a delivery question answered with this turn's recap gets both fees
+        await recapQuote();
         // journey retest R17-2 (18/11, Major): a plain yes to the recap shown, answered with no create_order (N5 T3 « … confirmez-vous la
         // commande du Coffret cadeau Aïd (24990 DA) ? Si oui, je vous envoie le récapitulatif officiel à valider. ») — the server places that
         // recap's stored order now; its confirmation replaces the model's text. A refusal of the order (stock, product) goes back to the

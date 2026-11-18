@@ -10,7 +10,7 @@ import { deliverySection } from './prompt/sections/orders';
 import { identitySection } from './prompt/sections/identity';
 import { languageSection } from './prompt/sections/contract';
 import { FakeAiGateway } from './provider/fake-ai.gateway';
-import { fillerMessage, noPhotoReply, noPhotoSaid, photoAsked, withoutPresenceTalk } from './reply-fixes';
+import { fillerMessage, noPhotoReply, noPhotoSaid, photoAsked, withoutPresenceTalk, withSpacedAmounts } from './reply-fixes';
 import { buildGuardFacts, checkReply, enforceReply, quoteFacts } from './reply-guard';
 import type { RoutedModel } from './routing.service';
 import { orderRecapText, pendingRecap, recapLeadIn, recapReply, repeatsRecapLine } from './tools/order-confirmation-text';
@@ -117,7 +117,8 @@ describe('R7-2 — a photo request for a product without a photo is answered « 
     const rewrite = 'Robe kabyle brodée bil yed, b qmach khfif. Kayen f taille S w M b 4900 DA. Wach men taille t7ebb ?';
     const a = await run(N9_C, ['robe'], draft, rewrite);
     expect(a.calls).toBe(2);
-    expect(a.reply).toBe(`Ma 3andnach tsawer ta3ou f had lwaqt. ${rewrite}`);
+    // (journey retest R20-4: every amount as formatMoney writes it)
+    expect(a.reply).toBe(withSpacedAmounts(`Ma 3andnach tsawer ta3ou f had lwaqt. ${rewrite}`));
   });
   it('the turn: the reply says it already, a product with a photo is sent, or no photo was asked ⇒ nothing added', async () => {
     const said = 'Ma 3andnach tsawer ta3ha f had lwaqt. Robe brodée bil yed, b qmach khfif.';
@@ -162,8 +163,8 @@ describe('R7-3 — odd wording; a filler message gets the pending question only'
       const r = await new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never).turn(turnReq(customerText, `Bonjour, je veux 1 hijab soie\n${customerText}`));
       return r.ok ? r.output.reply : '';
     };
-    expect(await go('?')).toBe('Pour commander votre Hijab soie à 1500 DA, quel est votre nom ?');
-    expect(await go('vous êtes là ?')).toBe(reply);
+    expect(await go('?')).toBe('Pour commander votre Hijab soie à 1\u00a0500\u00a0DA, quel est votre nom ?');
+    expect(await go('vous êtes là ?')).toBe(withSpacedAmounts(reply));
   });
   it('the prompt: filler rule, « Wach men taille t7ebb ? », « درك » / « كي تخرج الطلبية »', () => {
     expect(identitySection({ agent: { displayName: null, name: 'A', personality: 'friendly' }, workspace: { name: 'B', systemMessages: {} }, lang: 'fr', locale: 'fr', firstReply: false } as never)).toContain('A message with only « ? », « ... », « … » or an emoji while you wait for an answer is a nudge');

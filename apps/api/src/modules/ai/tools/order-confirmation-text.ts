@@ -2,6 +2,7 @@
 // `create_order` result — number, items, delivery fee, total, delay, cash on delivery — in the customer's language, so
 // the model can no longer confirm with wrong figures, « correct » itself (« commande enregistrée par erreur »,
 // « coordonnées inventées ») or deny the order it just placed (AI-CHAT-02). Pure.
+import { formatMoney } from '@djaber/shared';
 import { serverTextLanguage, type AiLanguage } from '../language';
 import { articleless, foldText } from './wilaya-aliases';
 
@@ -599,7 +600,7 @@ const ANSWER: Record<Loc, (place: string, eta: [string, string] | null) => strin
 /**
  * journey retest R5-5: when the server recap goes out with no sentence of the model before it and the customer's message asked
  * whether the shop delivers to the recap's wilaya / commune (N3 T3: « twasslou l Constantine ? » got the recap only), the
- * answer in words — the fee is on the recap's delivery line, the delay from this turn's quote_delivery when it gave one.
+ * answer in words — the delay from this turn's quote_delivery when it gave one, then (R20-2) the home and stop-desk fees.
  * Null otherwise.
  */
 export const deliveryAnswer = (calls: { name: string; result: unknown }[], customerText: string, lang: AiLanguage | string | undefined): string | null => {
@@ -617,5 +618,32 @@ export const deliveryAnswer = (calls: { name: string; result: unknown }[], custo
   const wilaya = loc === 'ar' ? recap.wilayaAr || recap.wilaya : recap.wilaya;
   const commune = loc === 'ar' ? recap.communeAr || recap.communeName : recap.communeName;
   const place = !named(recap.wilaya) && !named(recap.wilayaAr) && (named(recap.communeName) || named(recap.communeAr)) ? commune : wilaya;
-  return place ? ANSWER[loc](place, m ? [m[1]!, m[2]!] : null) : null;
+  if (!place) return null;
+  // journey retest R20-2 (18/11): the answer carries the fees — home and stop-desk (R3-2 / R5-5 / R7-5 / R14-2): N3 T2 « Ih, nwasslou l Constantine,
+  // f 2 l 5 ayam. » + the recap (home 700 DA on its line only, stop-desk 450 DA never said; R19 « … : 700 DA l dar, wela 450 DA f stop-desk. »)
+  const fees = feesOf(recap, calls);
+  return `${ANSWER[loc](place, m ? [m[1]!, m[2]!] : null)}${fees ? ` ${DELIVERY_FEES[loc](fees.home === 0 ? FREE_HOME_WORD[loc] : fees.home !== null ? amountOf(fees.home, loc) : null, fees.stop !== null ? amountOf(fees.stop, loc) : null)}` : ''}`;
+};
+/** journey retest R20-2: an amount as `formatMoney` writes it (« 12 500 DA », « دج » in Arabic script). */
+const amountOf = (n: number, loc: Loc): string => (loc === 'ar' ? formatMoney(n).replace(/DA$/u, 'دج') : formatMoney(n));
+const FREE_HOME_WORD: Record<Loc, string> = { fr: 'gratuite', ar: 'مجانية', arabizi: 'batel', en: 'free' };
+const DELIVERY_FEES: Record<Loc, (home: string | null, stop: string | null) => string> = {
+  fr: (h, s) => [h ? `À domicile : ${h}` : '', s ? `en stop-desk : ${s}` : ''].filter(Boolean).join(', ').replace(/^e/u, 'E') + '.',
+  ar: (h, s) => [h ? `للدار: ${h}` : '', s ? `لنقطة الاستلام (stop-desk): ${s}` : ''].filter(Boolean).join('، ') + '.',
+  arabizi: (h, s) => [h ? `L dar: ${h}` : '', s ? `f stop-desk: ${s}` : ''].filter(Boolean).join(', ').replace(/^f/u, 'F') + '.',
+  en: (h, s) => [h ? `Home delivery: ${h}` : '', s ? `stop-desk: ${s}` : ''].filter(Boolean).join(', ').replace(/^s/u, 'S') + '.',
+};
+/**
+ * journey retest R20-2: the home and stop-desk fees of the recap's wilaya — this turn's quote_delivery of it (a quote of an earlier turn reused
+ * is passed in `calls` too), the recap's own fee for its mode (the free threshold applied). Null when nothing gives a fee.
+ */
+const feesOf = (recap: Recap, calls: { name: string; result: unknown }[]): { home: number | null; stop: number | null } | null => {
+  const same = (n: unknown) => typeof n === 'string' && !!n.trim() && [recap.wilaya, recap.wilayaAr].some((w) => !!w && wordsOf(w) === wordsOf(n));
+  type Q = { ok?: unknown; fee?: unknown; free?: unknown; isStopdesk?: unknown; stopdeskFee?: unknown; stopdeskAvailable?: unknown; wilayaName?: unknown; wilayaNameAr?: unknown };
+  const quotes = calls.filter((c) => c.name === 'quote_delivery').map((c) => c.result as Q | null).filter((q): q is Q => q?.ok === true && typeof q.fee === 'number' && (same(q.wilayaName) || same(q.wilayaNameAr)));
+  const home = quotes.find((q) => q.isStopdesk !== true);
+  const stopQuote = quotes.find((q) => q.isStopdesk === true);
+  const homeFee = recap.isStopdesk ? (home ? (home.free === true ? 0 : (home.fee as number)) : null) : recap.deliveryFee;
+  const stopFee = recap.isStopdesk ? recap.deliveryFee : stopQuote ? (stopQuote.fee as number) : home && typeof home.stopdeskFee === 'number' && home.stopdeskAvailable !== false && home.stopdeskFee > 0 ? home.stopdeskFee : null;
+  return homeFee === null && stopFee === null ? null : { home: homeFee, stop: stopFee };
 };

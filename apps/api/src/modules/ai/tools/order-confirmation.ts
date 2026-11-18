@@ -101,8 +101,19 @@ const CONFIRM_FILLERS = new Set(
 export const bareYes = (text: string, shown: string): boolean => {
   if (confirmation(text) !== 'yes') return false;
   const recap = tokensOf(shown);
-  return [...tokensOf(text)].every((w) => recap.has(w) || CONFIRM_FILLERS.has(w) || YES.includes(w));
+  const tokens = [...tokensOf(text)];
+  // journey retest R20-1: a « I take it » verb with a number names a quantity (« oui je prends 2 »): a change, not a bare yes
+  if (tokens.some((w) => TAKE_VERBS.has(w)) && /\d/u.test(text)) return false;
+  return tokens.every((w) => recap.has(w) || CONFIRM_FILLERS.has(w) || TAKE_VERBS.has(w) || YES.includes(w));
 };
+/**
+ * journey retest R20-1 (18/11): « I take it » with a yes — F3 T5 « ih ndirha » (« yes, I'll take it ») to the recap shown went to the model (1 call,
+ * 2.8 s) while the 20 other yes forms of the round were placed by the server: « ih / wah / ok ndirha », « ايه نديرها », « oui je prends (le / la) »,
+ * « yes I take it » (folded; words of 1–2 letters are not read).
+ */
+const TAKE_VERBS = new Set(
+  ['ndirha', 'ndiroha', 'ndirouha', 'ndirhoum', 'ndiha', 'nddiha', 'naddiha', 'nakhodha', 'nakhdha', 'nakhedha', 'nechriha', 'nchriha', 'nchrih', 'nadiha', 'نديرها', 'نديروها', 'نديها', 'ناديها', 'ناخذها', 'ناخدها', 'نشريها', 'نشريه', 'prends', 'prend', 'prenons', 'take', 'takes', 'ill'].map((w) => norm(w)),
+);
 
 const tokensOf = (...texts: (string | null | undefined)[]) => new Set(texts.flatMap((t) => norm(t).split(' ')).filter((w) => w.length >= 3 || /\d/.test(w)));
 /** journey retest R8-1 / R17-2: the `create_order` arguments of the order a server recap stands for (its stored `draftOrder`). */
