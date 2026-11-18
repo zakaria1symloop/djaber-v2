@@ -26,7 +26,7 @@ import { asksCancel, cancelAsked, confirmation, phonesIn, placedNumbers, recapPe
 import { matchWilaya, namedVariant } from './tools/tool-registry';
 import { offCatalogueWordsOf, placeIndex, placeNamedIn, placeOnlyMessage, wilayaIn, withoutPlaceNames, type PlaceIndex } from './tools/place-index';
 import { contextOf } from '../messaging/messaging.presenter';
-import { asksAddress, fillerMessage, handoffKind, handoffReply, handoffSystemLineShown, modeQuestionAt, noPhotoReply, noPhotoSaid, openingSaid, photoAsked, substitutionLine, withArabicCurrency, withArabicWords, withArabiziWords, withAskedPrice, withBothFees, withModeFees, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutQuickReply, withoutStrayYes, withPlaceFacts, withAskedFacts, withoutBookingOffer, withOneStopdeskOffer, withoutRefusals, withSingleSpaces, withoutUnrelatedOffer, teamSaid, teamOnlyKind, withNotServed, withoutNotedSteps, withoutOrderStepAsk, withCustomerScriptName, choiceQuestion, withSpacedAmounts, withoutNotedOpening, withThanksFirst, withoutRepeatedNotServed, type PlaceProduct } from './reply-fixes';
+import { asksAddress, fillerMessage, handoffKind, handoffReply, handoffSystemLineShown, modeQuestionAt, noPhotoReply, noPhotoSaid, openingSaid, photoAsked, substitutionLine, withArabicCurrency, withArabicWords, withArabiziWords, withAskedPrice, withBothFees, withModeFees, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutQuickReply, withoutStrayYes, withPlaceFacts, withAskedFacts, withoutBookingOffer, withOneStopdeskOffer, withoutRefusals, withSingleSpaces, withoutUnrelatedOffer, teamSaid, teamOnlyKind, withNotServed, withoutNotedSteps, withoutOrderStepAsk, withCustomerScriptName, choiceQuestion, withSpacedAmounts, withoutNotedOpening, withoutFalseApology, withThanksFirst, withoutRepeatedNotServed, type PlaceProduct } from './reply-fixes';
 import { bareYes as bareYesWords, serverTextLanguage, systemLocale } from './language';
 import { foldText } from './tools/wilaya-aliases';
 import { foldGuard, splitSentences } from './reply-guard';
@@ -1123,6 +1123,9 @@ export class AiRunService implements OnModuleInit {
         // journey retest R20-4 (18/11): nor « je note … » (PF1 T2), nor « Vos coordonnées sont bien notées : » opening a question (N5 T2)
         if (!pendingBefore && !placedNumbers(req.toolCtx.orderHistory).length) text = withoutNotedOpening(withoutOrderStepAsk(withoutNotedSteps(text, req.toolCtx.customerHistory ?? req.toolCtx.customerText), textLang));
         text = withCustomerScriptName(text, req.toolCtx.customerHistory ?? req.toolCtx.customerText ?? '');
+        // journey J05r-9 (18/11): no apology « pour la confusion » when the customer pointed at no mistake (« Merci Nadia, je m'excuse pour la
+        // confusion. » to « oui c'est bon je confirme »)
+        text = withoutFalseApology(text, req.toolCtx.customerText);
         // journey retest R20-4 (18/11): the thanks first, the question last (N7 T1 « … (12500 DA). Merci Yacine. Lequel vous intéresse ? »); one « we
         // don't deliver there » per sentence (N16 « …, ma nwasslouch l Illizi f had lwaqt, ma kanch wasl l had wilaya, … »)
         text = withoutRepeatedNotServed(withThanksFirst(text));

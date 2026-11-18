@@ -636,7 +636,7 @@ Every enum value of `prisma-schema.prisma` has a key `enum.<Model>.<field>.<valu
 |---|---|---|---|
 | notification.filter.all | Toutes | | |
 | notification.filter.unread | Non lues {count} | | |
-| notification.filter.aiOrders | Commandes IA | | |
+| notification.filter.aiOrders | Commandes | | |
 | notification.filter.needsHuman | À traiter | | |
 | notification.filter.aiIssues | Problèmes IA | | |
 | notification.filter.stock | Stock | | |
@@ -693,6 +693,8 @@ One `notification.<slug>.title` key per value of the Prisma enum `NotificationTy
 | notification.job.finished.title | Tâche terminée : {label} | | |
 | notification.job.finished.import.title | Import terminé : {imported} produits importés, {skipped} lignes ignorées | | |
 | notification.job.finished.import.body | Téléchargez le rapport d'erreurs pour corriger les {skipped} lignes. | | |
+| notification.job.finished.orderImport.title | Import terminé · commandes importées : {imported} · lignes ignorées : {skipped} | انتهى الاستيراد · الطلبات المستوردة: {imported} · الأسطر المتجاهَلة: {skipped} | Import finished · orders imported: {imported} · rows skipped: {skipped} |
+| notification.job.finished.orderImport.body | Téléchargez le rapport d'erreurs pour corriger les lignes ignorées ({skipped}). | نزّل تقرير الأخطاء لتصحيح الأسطر ({skipped}). | Download the error report to fix the skipped rows ({skipped}). |
 | notification.order.callback_due.title | Rappel : appeler {client} pour #{number} | | |
 | notification.order.status_changed.title | Commande #{number} : {from} → {to} | | |
 | notification.order.assigned.title | Commande #{number} vous est assignée | | |

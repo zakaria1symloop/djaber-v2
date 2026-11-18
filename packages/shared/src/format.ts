@@ -43,14 +43,17 @@ const parts = (d: Date) => {
 /** `YYYY-MM-DD` of an instant in Africa/Algiers (a date-only field filled from a stored UTC instant). */
 export const algiersDayOf = (d: Date | string) => new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d));
 
-/** `11 oct. 2026` (Africa/Algiers) */
+/** `11 oct. 2026` (Africa/Algiers). Journey J05r-5: a value that is not a date gives '' — a formatter never throws (an
+ * `Invalid time value` RangeError used to take the whole page down). */
 export const formatDate = (d: Date | string, locale: 'fr' | 'ar' | 'en' = 'fr') => {
+  if (Number.isNaN(new Date(d).getTime())) return '';
   const p = parts(new Date(d));
   return `${p.day} ${MONTHS[locale][Number(p.month) - 1]} ${p.year}`;
 };
 
 /** `11 oct. 2026 14:05` (Africa/Algiers) */
 export const formatDateTime = (d: Date | string, locale: 'fr' | 'ar' | 'en' = 'fr') => {
+  if (Number.isNaN(new Date(d).getTime())) return '';
   const p = parts(new Date(d));
   return `${formatDate(d, locale)} ${p.hour}:${p.minute}`;
 };

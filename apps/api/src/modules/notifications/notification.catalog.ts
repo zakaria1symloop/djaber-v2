@@ -215,7 +215,11 @@ export const NOTIFICATION_PARAMS: Record<NotificationType, readonly string[]> = 
 
 /** Template variants of a type: `job.finished.import` when an import job reports its counts. */
 export const NOTIFICATION_VARIANTS: Partial<Record<NotificationType, { suffix: string; params: readonly string[]; when: (d: Data) => boolean; example?: Data }[]>> = {
-  job_finished: [{ suffix: 'import', params: ['imported', 'skipped'], when: (d) => d.kind === 'import' && d.imported !== undefined && d.skipped !== undefined }],
+  // journey J05r-4: an ORDER import says « commandes importées » (it read « produits importés », the catalogue text)
+  job_finished: [
+    { suffix: 'orderImport', params: ['imported', 'skipped'], when: (d) => d.kind === 'import' && s(d.name).startsWith('order-import') && d.imported !== undefined && d.skipped !== undefined, example: { kind: 'import', name: 'order-import-commit', imported: 1, skipped: 1 } },
+    { suffix: 'import', params: ['imported', 'skipped'], when: (d) => d.kind === 'import' && d.imported !== undefined && d.skipped !== undefined },
+  ],
   // full-test 15/11 HELP-08: a status change of a ticket says what happened (it read « Réponse du support » with no reply)
   support_reply: [
     { suffix: 'resolved', params: ['status'], when: (d) => d.status === 'resolved', example: { status: 'resolved' } },

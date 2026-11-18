@@ -101,7 +101,7 @@ One scenario per rule; IDs `AT-<area>-nn`. Columns: scenario (Given / When / The
 | AT-ORD-04 | Call "picked_up" without address ⇒ dialog blocked `ORDER_ADDRESS_REQUIRED`; with address ⇒ confirmed | 04 §1.6 | E |
 | AT-ORD-05 | Cancel after partial payment ⇒ amountPaid 0, auto cash rows removed, manual rows kept | 04 §3 | I |
 | AT-ORD-06 | Returned ⇒ stock restored only after "return received"; cash income removed; expense `shipping` = returnPrice | 04 §3, D27 | I |
-| AT-ORD-07 | Delete delivered ⇒ `ORDER_DELETE_DELIVERED`; delete shipped with manual shipment ⇒ rollback then deleted; with an active courier parcel ⇒ `409 DELIVERY_ORDER_ALREADY_SENT` | ORD-08, 04 §9 | I |
+| AT-ORD-07 | Delete delivered ⇒ `ORDER_DELETE_DELIVERED`; delete shipped with a manual (own-delivery) parcel ⇒ `409 DELIVERY_ORDER_ALREADY_SENT`, stock stays out (journey J05r-6, 04 §9 wins); marked returned first ⇒ deleted, nothing restocked twice; with an active courier parcel ⇒ `409 DELIVERY_ORDER_ALREADY_SENT` | ORD-08, 04 §9 | I |
 | AT-ORD-08 | Two users change status simultaneously ⇒ one 409; no double side-effects | 04 §11 | I |
 | AT-ORD-09 | Fee: wilaya 16 home 400, stop-desk 250; threshold 5000 and subtotal 6000 ⇒ 0; inactive wilaya ⇒ `WILAYA_NOT_SERVED`; Admin override saved | 04 §4, DLV-01/02 | U/I |
 | AT-ORD-10 | Revenue figures: sale 1000 + delivered order 2000 + pending order 500 ⇒ Revenue 3000, Pipeline 500, AI revenue only AI orders — identical in home, analytics, reports | 04 §4 | I |

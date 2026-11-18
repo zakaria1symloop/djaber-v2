@@ -343,7 +343,7 @@ describe('status machine and effects (04 §1.2, §3)', () => {
     expect((await owner.get(`/orders/${b.id}`).expect(200)).body.data).toMatchObject({ total: 8300, amountPaid: 1200 });
   });
 
-  it('AT-ORD-07 delete: delivered ⇒ ORDER_DELETE_DELIVERED; shipped (manual parcel) ⇒ rollback then deleted; live courier parcel ⇒ DELIVERY_ORDER_ALREADY_SENT; audited', async () => {
+  it('AT-ORD-07 delete: delivered ⇒ ORDER_DELETE_DELIVERED; shipped (manual parcel) ⇒ DELIVERY_ORDER_ALREADY_SENT, stock stays out (J05r-6), returned then deleted; live courier parcel ⇒ DELIVERY_ORDER_ALREADY_SENT; audited', async () => {
     const owner = await shop();
     const op = await asOperator(app, owner.workspaceId);
     const a = await newOrder(owner);
@@ -354,6 +354,12 @@ describe('status machine and effects (04 §1.2, §3)', () => {
     expect(await productStock(b.product.id)).toBe(9);
     expect((await op.delete(`/orders/${b.order.id}`).expect(403)).body.error.code).toBe('FORBIDDEN'); // AT-AUTH-09 on the real route
     expect((await owner.delete(`/orders/${b.order.id}?confirmNumber=CMD-9999`).expect(422)).body.error.fields).toEqual({ confirmNumber: 'validation.invalid' });
+    // journey J05r-6: the parcel is with the merchant's delivery person — refused, nothing goes back to stock
+    expect((await owner.delete(`/orders/${b.order.id}?confirmNumber=${b.order.number}`).expect(409)).body.error.code).toBe('DELIVERY_ORDER_ALREADY_SENT');
+    expect((await owner.get(`/orders/${b.order.id}`).expect(200)).body.data.actions.find((x: any) => x.key === 'delete')).toMatchObject({ enabled: false, reasonCode: 'DELIVERY_ORDER_ALREADY_SENT' });
+    expect(await productStock(b.product.id)).toBe(9);
+    // the way out: « Marquer retournée » (restock), then the delete (a returned order already settled its stock)
+    await owner.post(`/orders/${b.order.id}/return`, { reason: 'refused', restoreStock: true }).expect(200);
     await owner.delete(`/orders/${b.order.id}?confirmNumber=${b.order.number}`).expect(200);
     expect(await productStock(b.product.id)).toBe(10);
     expect(await cashOf(b.order.id)).toHaveLength(0);
@@ -435,6 +441,12 @@ describe('calls, callback, address, assignment, payments (04 §1.3, §1.4, §21)
     const set = await owner.post(`/orders/${order.id}/callback`, { at, note: 'après 16 h' }).expect(200);
     expect(set.body.data).toMatchObject({ confirmationStatus: 'callback', callbackAt: at });
     expect(set.body.data.actions.find((a: any) => a.key === 'callback')).toMatchObject({ enabled: true, shortcut: 'R' });
+    // journey J05r-5: the « Rappel » history line keeps the ISO instant in every language (a server-formatted Arabic date
+    // crashed the Arabic page)
+    for (const lang of ['ar', 'fr']) {
+      const page = await owner.get(`/orders/${order.id}`).set('Accept-Language', lang).expect(200);
+      expect(page.body.data.history.filter((h: any) => h.field === 'callbackAt').map((h: any) => h.to)).toEqual([at]);
+    }
     // time passes: the scheduler emits once per (order, callbackAt)
     await db.order.update({ where: { id: order.id }, data: { callbackAt: new Date(Date.now() - 1000) } });
     const { OrderWorkflowService } = await import('../../src/modules/orders/order-workflow.service');

@@ -1,7 +1,7 @@
 // api-contract §2, §3.7 — read models of an order (list row, detail, WS summary) and the `Actions ⌄` descriptors
 // (D42: current-state items, first = primary, forbidden ones greyed with their reason; a transition the state machine
 // refuses is left out — UX-060; LST-01 shortcuts).
-import { isNotOffered, ORDER_READ_ONLY_STATUSES, renderStoredTextIn, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, textIn, type ActionDescriptor, type AddressView, type ClientRefView, type OrderListItemView, type OrderStatusName, type OrderSummary, type OrderUserRef, type OrderView, type SourceBadge } from '@djaber/shared';
+import { cashDisplayMethod, isNotOffered, ORDER_READ_ONLY_STATUSES, renderStoredTextIn, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, textIn, type ActionDescriptor, type AddressView, type CashMethodName, type ClientRefView, type OrderListItemView, type OrderStatusName, type OrderSummary, type OrderUserRef, type OrderView, type SourceBadge } from '@djaber/shared';
 import { TenantContext, type Order, type Prisma } from '@djaber/db';
 import { can, type MerchantPermission } from '../../core/rbac/permission-matrix';
 import { thumbUrlOf } from '../catalog/product-image.util';
@@ -160,7 +160,8 @@ export const orderActions = (o: Pick<Order, 'status' | 'deliveryStatus' | 'payme
     act('change_status', 'orders.write', { reason: readOnly || !allowedTargets(state, role).length ? 'ORDER_TERMINAL' : null }),
     // no « Delete » hint on « Annuler » next to « Supprimer » (full-test ORDERS-24)
     act('cancel', 'orders.write', { reason: t('cancelled') }),
-    act('delete', 'orders.money', { reason: o.status === 'delivered' ? 'ORDER_DELETE_DELIVERED' : state.courierParcel ? 'DELIVERY_ORDER_ALREADY_SENT' : null }),
+    // journey J05r-6: any active parcel, the merchant's own delivery included (04 §9)
+    act('delete', 'orders.money', { reason: o.status === 'delivered' ? 'ORDER_DELETE_DELIVERED' : activeShipment ? 'DELIVERY_ORDER_ALREADY_SENT' : null }),
     // M9 (PAY-02 / PAY-03, P2): online payment link and recorded refund — UX-060: the reason fits the order (nothing paid,
     // fully paid, refunded); « Paiement verrouillé (commande clôturée) » only for a closed order
     act('payment_link', 'orders.money', { reason: !ctx.onlinePayment ? 'FEATURE_DISABLED' : paymentLinkRefusal(o) }),
@@ -250,7 +251,7 @@ const ACTOR_KEYS: Record<string, string> = { ai: 'actor.label.ai', system: 'acto
 const actorName = (type: string, locale: string): string => (type === 'api' || type === 'api_key' ? 'API' : ACTOR_KEYS[type] ? (textIn(ACTOR_KEYS[type]!, locale) ?? '') : '');
 
 export type DetailExtras = {
-  payments: { id: string; amount: number; method: OrderView['paymentMethod']; reference: string | null; note: string | null; paidAt: Date; createdBy: OrderUserRef | null }[];
+  payments: { id: string; amount: number; method: OrderView['paymentMethod']; reference: string | null; note: string | null; paidAt: Date; createdBy: OrderUserRef | null; cashTransaction?: { category: string; method: string; description: string | null } | null }[];
   actorNames: Map<string, string>;
   feeExplanation: string;
   /** UX-049: name (+ address) of the order's relay point */
@@ -310,7 +311,8 @@ export const presentOrder = (o: OrderDetailRow, extras: DetailExtras, ctx: Prese
     notes: o.notes,
     cancelReason: o.cancelReason,
     cancelNote: renderStoredTextIn(o.cancelNote, ctx.locale),
-    payments: extras.payments.map((p) => ({ id: p.id, amount: p.amount, method: p.method, reference: p.reference, note: p.note, paidAt: p.paidAt.toISOString(), createdBy: p.createdBy })),
+    // journey J05r-2: the cash collected at delivery reads « COD » here as in the Caisse and the reports (same rule)
+    payments: extras.payments.map((p) => ({ id: p.id, amount: p.amount, method: p.method, reference: p.reference, note: p.note, paidAt: p.paidAt.toISOString(), createdBy: p.createdBy, collectedAtDelivery: !!p.cashTransaction && cashDisplayMethod(p.cashTransaction.category, p.cashTransaction.method as CashMethodName, p.cashTransaction.description) === 'cod' })),
     paymentLink: link ? { id: link.id, url: link.checkoutUrl, status: link.status === 'pending' && !link.checkoutUrl ? 'creating' : link.status, expiresAt: link.expiresAt?.toISOString() ?? null, amount: link.amount } : null,
     calls: o.calls.map((c) => ({ id: c.id, user: c.user, result: c.result, callbackAt: c.callbackAt?.toISOString() ?? null, notes: c.notes, calledAt: c.calledAt.toISOString() })),
     history: o.history.map((h) => ({

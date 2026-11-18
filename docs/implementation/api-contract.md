@@ -334,7 +334,7 @@ type OrderDto = OrderListItemDto & {
   notes: string | null; cancelReason: string | null; cancelNote: string | null;
   payments: PaymentEntryDto[]; paymentLink: { url: string; status: string; expiresAt: string } | null;
   calls: { id: string; user: UserRef; result: CallResult; callbackAt: string | null; notes: string | null; calledAt: string }[];
-  history: { at: string; effectiveAt: string | null; actor: { type: string; name: string }; field: string; from: string | null; to: string; reason: string | null }[];
+  history: { at: string; effectiveAt: string | null; actor: { type: string; name: string }; field: string; from: string | null; to: string; reason: string | null }[]; // journey J05r-5: a date value (`callbackAt`) is always the ISO instant, never a localized text — the clients format it; `assigneeId` values are the member's name
   shipments: ShipmentDto[]; orderNotes: { id: string; author: UserRef; body: string; createdAt: string }[]; sheetsSynced: boolean;
   confirmedAt: string | null; shippedAt: string | null; deliveredAt: string | null; cancelledAt: string | null; version: number;
 };
@@ -347,7 +347,7 @@ type CreateOrderDto = {
 };
 type OrderStatusChangeDto = { to: OrderStatus; reason?: string; note?: string; effectiveAt?: string; amountCollected?: Money; restoreStock?: boolean; returnFee?: Money; notifyCustomer?: boolean; version: number };
 type CallLogDto = { result: CallResult; callbackAt?: string; notes?: string };
-type PaymentEntryDto = { id: string; amount: Money; method: PaymentMethod; reference: string | null; note: string | null; paidAt: string; createdBy: UserRef };
+type PaymentEntryDto = { id: string; amount: Money; method: PaymentMethod; reference: string | null; note: string | null; paidAt: string; createdBy: UserRef; collectedAtDelivery?: boolean /* order payments, journey J05r-2: the cash collected at the door when the order was delivered — shown « COD » as in the Caisse and the reports (`cashDisplayMethod`); a deposit stays « Espèces » */ };
 type OrderStatsDto = { total: number; toConfirm: number; noAnswer: number; uncalledOver2h: number; confirmedNotSent: number; inTransit: number; staleOver5d: number; delivered30d: number; deliveredPct30d: number; returns: number; revenue30d: Money; sourceMix: { ai: number; manual: number; mobile: number; api: number; import: number } }; // [FIG ORD-05 v2 KPIs]
 type ExportOrdersDto = { scope: 'selection'|'filter'|'all'; ids?: string[]; format: 'csv'|'xlsx'|'pdf'; columns: 'standard'|'all'; includeItems?: boolean; courierFormat?: 'zrexpress' };
 ```

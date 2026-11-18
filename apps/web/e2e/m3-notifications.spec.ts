@@ -28,7 +28,7 @@ test('NTF-01 empty state: "Vous êtes à jour ✓", server count 0, "Tout marque
   await expect(page.getByTestId('read-all')).toBeDisabled();
   // the 13 chips of the frame
   const chips = page.getByRole('group', { name: 'Filtrer les notifications' });
-  for (const label of ['Toutes', 'Non lues 0', 'Commandes IA', 'À traiter', 'Problèmes IA', 'Stock', 'Colis', 'Paiements', 'Pages', 'Crédits & plan', 'Membres', 'Intégrations', 'Tâches']) {
+  for (const label of ['Toutes', 'Non lues 0', 'Commandes', 'À traiter', 'Problèmes IA', 'Stock', 'Colis', 'Paiements', 'Pages', 'Crédits & plan', 'Membres', 'Intégrations', 'Tâches']) {
     await expect(chips.getByRole('button', { name: label, exact: true })).toBeVisible();
   }
   // one row as in the frame: the chips never wrap (the row scrolls sideways when the window is narrower)

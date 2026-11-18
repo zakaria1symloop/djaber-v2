@@ -4,7 +4,7 @@
 import * as Popover from '@radix-ui/react-popover';
 import { Check, ChevronDown, Minus, Plus, Search, X } from 'lucide-react';
 import * as React from 'react';
-import { parseIntegerInput } from './number-parse';
+import { integerDraftAfter, integerFieldText, parseIntegerInput } from './number-parse';
 import { onRadioGroupKeyDown, radioTabIndex } from './radio-keys';
 import { cn, Input } from './primitives';
 
@@ -132,7 +132,8 @@ const group = (digits: string) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
  * Full-test 15/11 (ORDERS-01, PRODUCTS-01, DELIVERY-01, STOCK-02, SETTINGS-09, SALES-CASH-07): what is typed is read by
  * `parseIntegerInput` — « 2 500,00 » is 2500 (the decimal part shows while typing and goes when the field loses focus, never
  * glued to the integer); a minus sign, a letter or one digit too many is refused (the field keeps its value) instead of being
- * stripped. `allowNegative`: a leading « - » is accepted (value « -12 »).
+ * stripped. `allowNegative`: a leading « - » is accepted (value « -12 »). Journey J05r-1: an emptied field shows nothing until
+ * it loses focus, whatever number the screen keeps for '' (it showed « 0 » with the caret before it: 500 became 5 000).
  */
 export type NumberInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> & {
   /** the integer as text: digits, with a leading « - » only when `allowNegative` ('' = empty) */
@@ -149,9 +150,23 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
   const inner = React.useRef<HTMLInputElement | null>(null);
   // number of digits before the caret after the last keystroke: the caret is put back there once the value is regrouped
   const caret = React.useRef<number | null>(null);
+  const caretAfterMinus = React.useRef(false);
   // the decimal part being typed (« ,5 »): shown, never part of the value, dropped on blur
   const [fraction, setFraction] = React.useState('');
-  const shown = group(value) + fraction;
+  // journey J05r-1: an emptied field stays empty while it has focus, even when the screen turns '' into 0 (`integerDraftAfter`)
+  const [blank, setBlank] = React.useState(false);
+  const blankOf = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!blank) {
+      blankOf.current = null;
+      return;
+    }
+    // the first value after the emptying keystroke is the screen's own reading of '' (« 0 » or ''); any later change comes
+    // from outside the field (reset, server answer) and is shown
+    if (blankOf.current === null) blankOf.current = value;
+    else if (value !== blankOf.current) setBlank(false);
+  }, [blank, value]);
+  const shown = integerFieldText(group(value), { fraction, blank });
   // journey J07 / J05: a refused key (minus, letter, one digit too many) or a dropped decimal part is shown by a short red
   // ring (it was silent); the caret of a refused key is put back in the same render (a requestAnimationFrame could land
   // after the next key when typing fast)
@@ -172,7 +187,9 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
   React.useLayoutEffect(() => {
     const el = inner.current;
     if (!el || caret.current === null || document.activeElement !== el) return;
-    let pos = 0;
+    // journey J06r-2: the digits are counted after a leading « - » — the caret was put back in front of it (« |- »), so every
+    // next digit gave « 5- » and was refused
+    let pos = caretAfterMinus.current && shown.startsWith('-') ? 1 : 0;
     // journey J01-1: a caret in the decimal part (« 12,| ») goes to the end — it was put back before the comma, so the next
     // digit landed in the integer part (« 12,5 » typed key by key became 125)
     if (caret.current === Number.POSITIVE_INFINITY) pos = shown.length;
@@ -194,10 +211,10 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
         onChange={(e) => {
           const raw = e.target.value;
           const at = e.target.selectionStart ?? raw.length;
-          // journeys J05 / J07 / J08: a minus is kept even where negatives are not allowed — refusing only the « - » key let
-          // « -100 » become +100 (a −5 DA free-delivery threshold saved as 5). The field shows it as invalid and the form /
-          // the server refuse the negative amount with their own message
-          const r = parseIntegerInput(raw, { allowNegative: true, maxDigits, caret: at });
+          // journey J06r-2 (18/11): where negatives are not allowed the « - » is refused like a letter (red flash, the value is
+          // unchanged — it used to be kept as an invalid value: the caret froze before it and a closing count « -1 000 » was read
+          // as +1 000); where they are allowed it is typed like a digit. A lone « - » is never a number (`integerOf` ⇒ null)
+          const r = parseIntegerInput(raw, { allowNegative, maxDigits, caret: at });
           if (!r.ok) {
             // refused keystroke: the value stays, the caret goes back where it was, the field flashes
             back.current = Math.max(0, at - (raw.length - shown.length));
@@ -207,13 +224,17 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
           // the caret is in (or right after) the decimal part when it is past the separator of the typed text
           const sep = Math.max(raw.lastIndexOf(','), raw.lastIndexOf('.'));
           caret.current = r.fraction && sep >= 0 && at > sep ? Number.POSITIVE_INFINITY : r.caretDigits;
-          setFraction(r.fraction);
+          caretAfterMinus.current = raw.slice(0, at).includes('-');
+          const draft = integerDraftAfter(r);
+          setFraction(draft.fraction);
+          setBlank(draft.blank);
           if (r.value !== value) onValueChange(r.value);
         }}
         onBlur={(e) => {
           // a decimal part with a non-zero digit is dropped: the merchant sees it happen
           if (/[1-9]/.test(fraction)) setRefused((n) => n + 1);
           setFraction('');
+          setBlank(false);
           if (value === '-') onValueChange('');
           onBlur?.(e);
         }}

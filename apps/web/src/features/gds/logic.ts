@@ -194,7 +194,11 @@ export const daysSinceIso = (iso: string, now = Date.now()) => Math.floor((now -
 export const unitsLabel = (u: { ordered: number; received: number }) => `${u.received}/${u.ordered}`;
 
 /** Theoretical vs counted: the gap of the close dialog (counted − theoretical); a note is required when ≠ 0. */
-export const closingGap = (theoretical: number, counted: string) => (counted.trim() === '' ? null : int(counted) * (counted.trim().startsWith('-') ? -1 : 1) - theoretical);
+// journey J06r-2: the counted amount is read once, with its sign (« -1 000 » was negated twice into +1 000); a lone « - » is no number
+export const closingGap = (theoretical: number, counted: string) => {
+  const n = integerOf(counted.replace(/[\s\u00a0\u202f]/g, ''));
+  return n === null ? null : n - theoretical;
+};
 
 /* ---------- cash row date (manual / correction dialog) ---------- */
 /**

@@ -94,7 +94,7 @@ function TargetMargin({ workspace, editable }: { workspace: WorkspaceDto; editab
   const [value, setValue] = useState(String(workspace.targetMarginPct));
   const [error, setError] = useState<string | null>(null);
   const n = value.trim() === '' ? null : Number(value);
-  // journey J12-2: « -5 » (kept by the NumberInput as an invalid value) is out of range, never sent
+  // journey J12-2: « -5 » (the NumberInput refuses a typed « - » since J06r-2; kept as a guard) is out of range, never sent
   const invalid = n === null || !Number.isInteger(n) || n < 0 || n > 100;
   const dirty = n !== workspace.targetMarginPct;
   const save = async () => {

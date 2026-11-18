@@ -555,7 +555,7 @@
  "notification.credits.removed.title": "{credits} credits removed by Djaber",
  "notification.customer.auto_blocked.title": "Customer {client} blocked automatically ({rule})",
  "notification.filter.aiIssues": "AI issues",
- "notification.filter.aiOrders": "AI orders",
+ "notification.filter.aiOrders": "Orders",
  "notification.filter.all": "All",
  "notification.filter.channels": "Pages",
  "notification.filter.credits": "Credits & plan",
@@ -721,5 +721,7 @@
  "validation.quantity_max": "Quantity too high (10 000 000 maximum)",
  "dialog.archiveProduct.title": "Archive “{name}”?",
  "validation.unknownVariable": "Unknown variable: {names} — use {allowed}.",
- "notification.shipment.returned.done.title": "Order returned #{number}"
+ "notification.shipment.returned.done.title": "Order returned #{number}",
+ "notification.job.finished.orderImport.title": "Import finished · orders imported: {imported} · rows skipped: {skipped}",
+ "notification.job.finished.orderImport.body": "Download the error report to fix the skipped rows ({skipped})."
 }

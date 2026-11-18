@@ -8,9 +8,18 @@ import { ORDER_READ_ONLY_STATUSES } from './contracts';
 const ALGIERS_OFFSET = '+01:00';
 /** `YYYY-MM-DD` of an instant in Africa/Algiers. */
 export const algiersDay = (d: Date): string => new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
-/** `16:00` in Africa/Algiers. */
-export const algiersTime = (iso: string | Date): string =>
-  new Intl.DateTimeFormat('en-GB', { timeZone: TIMEZONE, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(typeof iso === 'string' ? new Date(iso) : iso);
+/**
+ * Journey J05r-5: an ISO instant (`2026-11-18T13:38:00.000Z`, with `Z` or an offset). Only these are read as dates — a
+ * localized text (« 18 نوفمبر، 02:38 م ») is never handed to `new Date()` (Invalid Date made `Intl.format` throw and the whole
+ * Arabic order page crash).
+ */
+export const isIsoInstant = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/.test(v) && !Number.isNaN(Date.parse(v));
+/** `16:00` in Africa/Algiers ('' for anything that is not an instant — never throws). */
+export const algiersTime = (iso: string | Date): string => {
+  const d = typeof iso === 'string' ? (isIsoInstant(iso) ? new Date(iso) : null) : iso;
+  if (!d || Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-GB', { timeZone: TIMEZONE, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
+};
 const shiftDay = (day: string, delta: number): string => {
   const d = new Date(`${day}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + delta);
@@ -135,7 +144,7 @@ export function historyParams(o: Pick<Order, 'calls' | 'history'>, h: Pick<Order
   const attempts = Math.max(1, side === 'from' && h.from === 'no_answer' && h.to === 'no_answer' ? unanswered - 1 : unanswered);
   const set: { at: number; callbackAt: string }[] = [
     ...o.calls.filter((c) => c.callbackAt && Date.parse(c.calledAt) <= until).map((c) => ({ at: Date.parse(c.calledAt), callbackAt: c.callbackAt! })),
-    ...o.history.filter((x) => x.field === 'callbackAt' && x.to && Date.parse(x.at) <= until).map((x) => ({ at: Date.parse(x.at), callbackAt: x.to })),
+    ...o.history.filter((x) => x.field === 'callbackAt' && isIsoInstant(x.to) && Date.parse(x.at) <= until).map((x) => ({ at: Date.parse(x.at), callbackAt: x.to! })),
   ].sort((a, b) => a.at - b.at);
   const last = set[set.length - 1];
   return { attempts, time: last ? algiersTime(last.callbackAt) : '' };

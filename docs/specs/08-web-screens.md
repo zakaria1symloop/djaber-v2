@@ -145,7 +145,7 @@ The Figma "Web V2" page (124 frames, sections 00 → 14) is **ahead** of §4; th
 
 ### 7.2 Shell, Home, Notifications (section 01)
 - `ANA-01b — Home & Notifications — states catalogue`: skeleton; "À faire" card variants (COLIS, STOCK, PAGE, INSIGHT, CONVERSATION, RAPPEL, TÂCHE; Waiting / Handled); Home banners (credits exhausted, plan expires in n d, plan expired, reconnect, pending Meta, resume onboarding step n/6); page-card badges (ACTIF, EN ATTENTE META, RECONNEXION REQUISE, EN PAUSE (PLAN), 0 page card); notification type filter (multi-select by `NotificationType`, "Non lues" toggle, "Tout marquer lu"); empty "Vous êtes à jour ✓".
-- `NTF-01 — Notifications — list`: family tabs (Toutes · Non lues n · Commandes IA · À traiter · Problèmes IA · Stock · Colis · Paiements · Pages · Crédits & plan · Membres · Intégrations · Tâches), rows with family label, title, body, slug, age, "Ouvrir ›", "Charger les 20 suivantes", "Préférences".
+- `NTF-01 — Notifications — list`: family tabs (Toutes · Non lues n · Commandes (journey J05r-7: the family holds every order notification, not only AI orders) · À traiter · Problèmes IA · Stock · Colis · Paiements · Pages · Crédits & plan · Membres · Intégrations · Tâches), rows with family label, title, body, slug, age, "Ouvrir ›", "Charger les 20 suivantes", "Préférences".
 - Top bar adds the "?" help panel (D46); user menu: Profil · Langue · Créer un espace (invited-only user, D30) · Plateforme (users with a `PlatformRole`) · Déconnexion · Déconnecter tous les appareils; workspace switcher when ≥ 2 memberships (`AUTH — States catalogue`).
 
 ### 7.3 Inbox & queue (section 02 + DLG Inbox)

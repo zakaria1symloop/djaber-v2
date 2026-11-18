@@ -4,6 +4,8 @@ import type { BulkResponse, OrderListItem } from './contracts';
 import { activeChips, ORDERS_LIST, ordersQuery, periodOf, tabCountsQuery } from './list/spec';
 import {
   historyParams,
+  algiersTime,
+  isIsoInstant,
   draftChanged,
   orderAnchor,
   actorKind,
@@ -241,5 +243,23 @@ describe('journey 16/11 J05-2 — history counts of their own moment', () => {
     expect(historyParams(o, h('2026-11-16T16:15:00.000Z', 'no_answer', 'callback'), 'to').time).toBe('18:15');
     expect(historyParams(o, h('2026-11-16T16:20:00.000Z', 'callback', 'confirmed'), 'from').time).toBe('18:15');
     expect(historyParams(o, h('2026-11-16T16:00:00.000Z', 'pending', 'no_answer'), 'to').time).toBe('');
+  });
+});
+
+describe('journey J05r-5 — a localized date is never parsed', () => {
+  it('isIsoInstant accepts the API instants only', () => {
+    expect(isIsoInstant('2026-11-18T13:38:00.000Z')).toBe(true);
+    expect(isIsoInstant('2026-11-18T14:38:00+01:00')).toBe(true);
+    for (const v of ['18 نوفمبر، 02:38 م', '18 nov., 14:38', '2026-11-18', '', null, undefined]) expect(isIsoInstant(v)).toBe(false);
+  });
+  it('algiersTime never throws', () => {
+    expect(algiersTime('18 نوفمبر، 02:38 م')).toBe('');
+    expect(algiersTime(new Date(Number.NaN))).toBe('');
+    expect(algiersTime('2026-11-18T13:38:00.000Z')).toBe('14:38');
+  });
+  it('a « Rappel » line written as text by an older server is skipped, not read as a date', () => {
+    const o = { calls: [], history: [{ id: 'h', field: 'callbackAt', from: null, to: '18 نوفمبر، 02:38 م', at: '2026-11-18T12:38:00.000Z' }] as never };
+    expect(() => historyParams(o, { at: '2026-11-18T12:40:00.000Z', from: 'pending', to: 'callback' }, 'to')).not.toThrow();
+    expect(historyParams(o, { at: '2026-11-18T12:40:00.000Z', from: 'pending', to: 'callback' }, 'to').time).toBe('');
   });
 });

@@ -1,7 +1,7 @@
 'use client';
 // Blocks of the order page (Figma "ORD-06 — Order page — new"): CLIENTE (inline contact edit), ARTICLES (+ totals,
 // quantity edit while editable), PAIEMENT, HISTORIQUE, APPELS, NOTES INTERNES (LIVRAISON: features/delivery/order-block).
-import { formatDate, formatMoney, formatPhoneDz, type AppLocale } from '@djaber/shared';
+import { formatDate, formatDateTime, formatMoney, formatPhoneDz, type AppLocale } from '@djaber/shared';
 import { Button, DetailRows, Field, FormAlert, IconButton, Input, Ltr, MoneyInput, MonoChip, OrderBlock, OrderTimeline, PhoneInput, QtyStepper, StatusPill, Textarea, TotalsRows, Tooltip, type TimelineItem } from '@djaber/ui';
 import { ExternalLink, Trash2 } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -14,7 +14,7 @@ import { formatPhoneOnBlur, phonePreview, phonePreviewLine } from '@/lib/phone';
 import { relativeTime } from '@/lib/time';
 import { ORDER_ACTION } from '../action-keys';
 import type { Order, OrderItem } from '../contracts';
-import { actorKind, algiersTime, historyParams, historyReason, historyValue, newestFirst, shortName } from '../logic';
+import { actorKind, algiersTime, historyParams, historyReason, historyValue, isIsoInstant, isReadOnly, newestFirst, shortName } from '../logic';
 import { CallResultPill, PaymentPill, RiskPill } from '../ui';
 
 const linkClass = 'text-[13px] text-text-secondary hover:text-text-primary disabled:opacity-45';
@@ -392,13 +392,14 @@ export function PaymentBlock({ order, onRecord, onLink, onRefund }: { order: Ord
         </Button>
       ) : null}
       {record.present && !record.enabled && record.reason ? <p className="ts-label-micro !normal-case text-text-muted">{record.reason}</p> : null}
-      <p className="ts-label-micro !normal-case text-text-muted">{t('orders.page.codNote')}</p>
+      {/* journey J05r-10: the COD rule is said while there is something left to collect at the door */}
+      {!isReadOnly(order.status) && order.remaining > 0 ? <p className="ts-label-micro !normal-case text-text-muted">{t('orders.page.codNote')}</p> : null}
       {order.payments.length ? (
         <ul className="divide-y divide-line-hairline border-t border-line-hairline" aria-label={t('orders.page.payments')}>
           {newestFirst(order.payments, (p) => p.paidAt).map((p) => (
             <li key={p.id} className="flex items-center justify-between gap-3 py-2 text-[13px]">
               <span>
-                {t(`orders.payment.method.${p.method}`)}
+                {t(p.collectedAtDelivery ? 'orders.payment.method.cod' : `orders.payment.method.${p.method}`)}
                 {p.reference ? <span className="text-text-muted"> · {p.reference}</span> : null}
                 <span className="block ts-label-micro text-text-muted">
                   {formatDate(p.paidAt, locale)} · {shortName(p.createdBy)}
@@ -415,6 +416,7 @@ export function PaymentBlock({ order, onRecord, onLink, onRefund }: { order: Ord
 
 /* ---------- HISTORIQUE ---------- */
 const MONEY_FIELDS = new Set(['amountPaid', 'deliveryFee', 'total', 'discount', 'subtotal']);
+const DATE_FIELDS = new Set(['callbackAt']);
 export function HistoryBlock({ order }: { order: Order }) {
   const t = useT();
   const locale = useLocaleCode() as AppLocale;
@@ -433,7 +435,10 @@ export function HistoryBlock({ order }: { order: Order }) {
     const arrow = locale === 'ar' ? ' ← ' : ' → ';
     const shown = (side: 'from' | 'to') => {
       const v = h[side];
-      return MONEY_FIELDS.has(h.field) && v !== null && /^-?\d+$/.test(v) ? formatMoney(Number(v)) : value(h, side);
+      if (MONEY_FIELDS.has(h.field) && v !== null && /^-?\d+$/.test(v)) return formatMoney(Number(v));
+      // journey J05r-5: a date value comes as an ISO instant and is written here in the viewer's language
+      if (DATE_FIELDS.has(h.field) && isIsoInstant(v)) return formatDateTime(v, locale);
+      return value(h, side);
     };
     const text = h.field === 'created' ? t('orders.history.created') : `${t.has(fieldKey) ? t(fieldKey) : h.field} : ${h.from ? `${shown('from')}${arrow}` : ''}${shown('to')}`;
     return {

@@ -46,6 +46,12 @@ describe('notification catalogue', () => {
     expect(title).not.toBe(renderNotification(type, sample(NOTIFICATION_PARAMS[type]), locale).title); // the variant text, not the generic one
   });
 
+  it('journey J05r-4: an order import says « commandes importées », a product import « produits importés »', () => {
+    const counts = { kind: 'import', label: 'x', imported: 1, skipped: 1 };
+    expect(renderNotification('job_finished', { ...counts, name: 'order-import-commit' }, 'fr').title).toBe('Import terminé · commandes importées : 1 · lignes ignorées : 1');
+    expect(renderNotification('job_finished', { ...counts, name: 'product-import-commit' }, 'fr').title).toContain('produits importés');
+  });
+
   it('a parameter missing at runtime renders as an empty string and is reported with the type — never `{name}`', () => {
     const missing: [string, string][] = [];
     const out = renderNotification('stock_low', { stock: 3 }, 'fr', (t, p) => missing.push([t, p]));

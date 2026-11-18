@@ -1,6 +1,6 @@
 // Full-test 15/11 ORDERS-01 / PRODUCTS-01 / DELIVERY-01 / STOCK-02 / SETTINGS-09 / SALES-CASH-07: the one reading of an integer field.
 import { describe, expect, it } from 'vitest';
-import { integerOf, parseIntegerInput as parse } from '../../../../packages/ui/src/number-parse';
+import { integerDraftAfter, integerFieldText, integerOf, parseIntegerInput as parse } from '../../../../packages/ui/src/number-parse';
 
 const value = (raw: string, o: Parameters<typeof parse>[1] = {}) => {
   const r = parse(raw, o);
@@ -64,5 +64,30 @@ describe('parseIntegerInput', () => {
     expect(integerOf('-3')).toBe(-3);
     expect(integerOf('')).toBeNull();
     expect(integerOf('-')).toBeNull();
+  });
+  it('journey J05r-1: an emptied field stays empty while typing, even when the screen turns it into 0', () => {
+    // a screen that keeps a number (« amountOf('') = 0 ») — the order-page money edit
+    const screen = (v: string) => String(/^\d+$/.test(v) ? Number(v) : 0);
+    const group = (d: string) => d.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    let value = '600';
+    let draft = { fraction: '', blank: false };
+    const type = (raw: string) => {
+      const r = parse(raw);
+      if (!r.ok) return;
+      draft = integerDraftAfter(r);
+      value = screen(r.value);
+    };
+    const shown = () => integerFieldText(group(value), draft);
+    type('60');
+    type('6');
+    type('');
+    expect(value).toBe('0');
+    expect(shown()).toBe('');
+    type('5');
+    type('50');
+    type('500');
+    expect(shown()).toBe('500');
+    expect(value).toBe('500');
+    expect(integerFieldText('1 100', integerDraftAfter({ value: '1100', fraction: ',0' }))).toBe('1 100,0');
   });
 });

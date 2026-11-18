@@ -450,7 +450,9 @@ export type OrderItemView = {
    *  when the product is sold beyond its stock (« Accepter les commandes en rupture » — journey J02-6) */
   stockWarning: 'last_unit' | 'insufficient' | 'backorder' | null;
 };
-export type PaymentEntryView = { id: string; amount: number; method: PaymentMethodName; reference: string | null; note: string | null; paidAt: string; createdBy: OrderUserRef | null };
+/** `collectedAtDelivery` (order payments, journey J05r-2): the cash collected at the door when the order was delivered — shown
+ * « COD » as in the Caisse and the reports (`cashDisplayMethod`); a deposit stays « Espèces ». */
+export type PaymentEntryView = { id: string; amount: number; method: PaymentMethodName; reference: string | null; note: string | null; paidAt: string; createdBy: OrderUserRef | null; collectedAtDelivery?: boolean };
 export type OrderCallView = { id: string; user: OrderUserRef; result: CallResultName; callbackAt: string | null; notes: string | null; calledAt: string };
 export type OrderHistoryView = { id: string; at: string; effectiveAt: string | null; actor: { type: string; id: string | null; name: string }; field: string; from: string | null; to: string; reason: string | null };
 export type OrderNoteView = { id: string; author: OrderUserRef; body: string; createdAt: string };

@@ -62,3 +62,13 @@ export function parseIntegerInput(raw: string, opts: { allowNegative?: boolean; 
 
 /** The integer of a parsed value (`''` and `'-'` ⇒ null). */
 export const integerOf = (value: string): number | null => (/^-?\d+$/.test(value) ? Number(value) : null);
+
+/**
+ * Journey J05r-1: what an integer field shows while it has focus. A field the merchant empties stays empty until it loses
+ * focus, even when the screen keeps a number (`'' → 0`): it used to show « 0 » at once with the caret before it, so typing
+ * 500 gave « 5 000 ». `blank` is set by a keystroke that leaves nothing (no digit, no decimal part) and cleared by the next
+ * digit, by the blur, or when the value is changed from outside the field.
+ */
+export type IntegerDraft = { fraction: string; blank: boolean };
+export const integerDraftAfter = (r: { value: string; fraction: string }): IntegerDraft => ({ fraction: r.fraction, blank: r.value === '' && r.fraction === '' });
+export const integerFieldText = (grouped: string, draft: IntegerDraft): string => (draft.blank ? '' : grouped + draft.fraction);

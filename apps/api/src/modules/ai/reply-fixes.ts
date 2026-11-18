@@ -834,6 +834,9 @@ export const withNotServed = (reply: string, wilaya: { fr: string; ar?: string }
  */
 const NOTED_VERB = /^(?:tsajj?el|tsajj?elt|sajj?elt|sajj?elna|tsajj?lou|tsajj?lat|سجلت|سجلنا|تسجل|تسجلت|تسجلو|اتسجل|اتسجلت)(?![\p{L}])\s*:?\s*/u;
 const NOTED_FR = /^(?:c\s?est\s+(?:bien\s+)?note(?:e)?|(?:tout\s+est\s+)?bien\s+note(?:e)?|note|c\s?est\s+enregistre(?:e)?)$/u;
+// journey J05r-9 (18/11): « l'adresse est bien notée » / « votre numéro est enregistré » — a field said to be kept, before any recap (the
+// shop's products still waited for review: nothing was kept anywhere). Folded, as a whole clause, like `NOTED_FR`.
+const NOTED_FIELD = /^(?:l|la|le|les|votre|vos|ton|ta|tes|your)\s+(?:adresse|numero(?:\s+de\s+telephone)?|telephone|nom(?:\s+complet)?|prenom|coordonnees|informations|infos|details|wilaya|commune|address|phone(?:\s+number)?|name)\s+(?:est|sont|a\s+ete|ont\s+ete|is|are|has\s+been|have\s+been)\s+(?:bien\s+|well\s+)?(?:notee?s?|enregistree?s?|recue?s?|gardee?s?|noted|saved|recorded|received|kept)$/u;
 const ORDER_NOUN = /(?<![\p{L}])(?:commande|order|طلبي[هة]|الطلبي[هة]|الطلب|طلب|lacommande|kommand)(?![\p{L}])/u;
 /** Words that name an order field (folded): with the customer's own words, a clause of them only echoes a field. */
 /**
@@ -874,7 +877,7 @@ export const withoutNotedSteps = (reply: string, history?: string): string => {
       // (after a noted field with no price: the clauses that only echo the customer's fields go with it; a « شكرا سمير » stays)
       if (drop && echo(c)) continue;
       drop = false;
-      if (NOTED_FR.test(f)) {
+      if (NOTED_FR.test(f) || NOTED_FIELD.test(f)) {
         mine = true;
         // (« C'est noté, Karim ! » ⇒ « Merci, Karim ! »: the sentence's opening is kept as a thank-you)
         if (k === 0 && clauses.length > 1 && /^\p{Lu}/u.test(c.trim())) out.push(c.replace(/\S.*$/u, 'Merci'));
@@ -1017,6 +1020,35 @@ export const withoutNotedOpening = (reply: string): string => {
     return `${m[1]}${rest.charAt(0).toLocaleUpperCase()}${rest.slice(1)}`;
   });
   return changed ? parts.join('').trim() : reply;
+};
+
+/**
+ * journey J05r-9 (18/11): « Merci Nadia, je m'excuse pour la confusion. » to a plain « oui c'est bon je confirme » — an apology for a confusion,
+ * a misunderstanding or an error nobody made (the R-rounds family of the false « correction »). The apology goes, the rest of its clause and
+ * sentence stay; it is kept when the customer's message points at a mistake (« c'est faux », « erreur », « ghalta », « غلط »).
+ */
+const FALSE_APOLOGY = /(?:je\s+(?:m['’]\s?excuse|vous\s+(?:prie\s+de\s+m['’]\s?excuser|pr[ée]sente\s+(?:toutes\s+)?mes\s+excuses))|(?:toutes\s+)?(?:mes|nos)\s+excuses|excusez[-\s]moi|d[ée]sol[ée]e?s?|pardon|sorry|(?:i\s+|we\s+)?apologi[sz]e|my\s+apologies|نعتذر|أعتذر|اعتذر|آسف|اسف|متأسف|sma7(?:li|lna|ni))\s+(?:pour|de|for|about|على|عن|3la)\s+(?:(?:la|le|ce|cette|toute\s+la|l['’]|the|any|this|that)\s*)?(?:confusion|malentendu|m[ée]prise|erreur|mix-?up|misunderstanding|mistake|الالتباس|اللبس|الخلط|الخطأ|lghalta|ghalta)(?![\p{L}])\s*[:\-–—]?\s*/iu;
+const MISTAKE_SAID = /(?<![\p{L}])(?:erreur|errone\p{L}*|faux|fausse|tromp\p{L}*|confus\p{L}*|malentendu|c['’]?\s?est\s+pas|ce\s+n['’]est\s+pas|wrong|mistake|mix-?up|ghalta|ghalat|ghlat|غلط|غلطة|خطأ)(?![\p{L}])/iu;
+export const withoutFalseApology = (reply: string, customerText?: string): string => {
+  if (customerText && MISTAKE_SAID.test(customerText)) return reply;
+  let changed = false;
+  const parts = splitSentences(reply).flatMap((s) => {
+    if (!FALSE_APOLOGY.test(s)) return [s];
+    const end = /([.!?؟…]*\s*)$/u.exec(s)?.[1] ?? '';
+    const body = s.slice(0, s.length - end.length);
+    const kept = body
+      .split(/\s*[,،;؛]\s*/u)
+      .map((c) => c.replace(FALSE_APOLOGY, '').trim())
+      .filter((c) => /[\p{L}\p{N}]/u.test(c));
+    changed = true;
+    if (!kept.length) return [];
+    const text = kept.join(/[،]/u.test(body) ? '، ' : ', ');
+    const first = text.charAt(0).toLocaleUpperCase() + text.slice(1);
+    return [`${first}${end.trim() ? end.replace(/^\s*/u, '') : '. '}`];
+  });
+  if (!changed) return reply;
+  const text = parts.join('').replace(/[ \t]+\n/g, '\n').trim();
+  return /[\p{L}\p{N}]/u.test(text) ? text : reply;
 };
 
 /**

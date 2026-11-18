@@ -291,4 +291,31 @@ describe('attachments and help center', () => {
     const owner = await asOwner(app);
     expect((await owner.get('/help/articles').expect(200)).body.data.map((a: any) => a.key)).toContain(k);
   });
+
+  it('journey J01r-3: the help-guide data migration corrects the first seeded text only, and a second run changes nothing', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const sql = readFileSync(join(__dirname, '../../../../packages/db/prisma/migrations/20261118120000_help_guides_wizard_stock/migration.sql'), 'utf8');
+    const statements = sql.split(/;\n/).map((x) => x.replace(/^(--[^\n]*\n)+/, '').trim()).filter(Boolean);
+    expect(statements).toHaveLength(6);
+    const admin = await db.user.findFirstOrThrow({ where: { platformRole: 'super_admin' } });
+    const OLD_AGENT = 'L’assistant de création vous guide en 5 étapes : identité, catalogue, politiques, horaires et activation. Testez-le dans le bac à sable avant de l’activer.';
+    const OLD_STOCK_EN = 'Every confirmed order reserves stock; adjustments and counts are logged in Movements. Set a minimum stock to get an alert.';
+    const row = async (key: string, locale: 'fr' | 'ar' | 'en', body: string) => {
+      const entry = await db.cmsEntry.upsert({ where: { key }, update: {}, create: { key, type: 'help', category: 'ai_agent', status: 'published', currentVersion: 1, createdById: admin.id } });
+      await db.cmsEntryLocale.upsert({ where: { entryId_locale: { entryId: entry.id, locale } }, update: { body }, create: { entryId: entry.id, locale, title: key, body, status: 'published', updatedById: admin.id } });
+    };
+    const body = async (key: string, locale: 'fr' | 'ar' | 'en') => (await db.cmsEntryLocale.findFirstOrThrow({ where: { entry: { key }, locale } })).body;
+    await row('help-ai-agent', 'fr', OLD_AGENT);
+    await row('help-stock', 'en', OLD_STOCK_EN);
+    await row('help-stock', 'fr', 'Texte modifié par un admin.');
+    for (const st of statements) await db.$executeRawUnsafe(st);
+    expect(await body('help-ai-agent', 'fr')).toContain('Identité, Connaissances, Comportement, Canaux, puis Test & activation');
+    expect(await body('help-ai-agent', 'fr')).toContain('bac à essai');
+    expect(await body('help-stock', 'en')).toMatch(/^A new order reserves the stock/);
+    expect(await body('help-stock', 'fr')).toBe('Texte modifié par un admin.'); // an admin edit is kept
+    const before = await db.cmsEntryLocale.findMany({ where: { entry: { key: { in: ['help-ai-agent', 'help-stock'] } } }, orderBy: { id: 'asc' }, select: { id: true, body: true, updatedAt: true } });
+    for (const st of statements) await db.$executeRawUnsafe(st);
+    expect(await db.cmsEntryLocale.findMany({ where: { entry: { key: { in: ['help-ai-agent', 'help-stock'] } } }, orderBy: { id: 'asc' }, select: { id: true, body: true, updatedAt: true } })).toEqual(before);
+  });
 });

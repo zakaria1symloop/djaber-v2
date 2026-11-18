@@ -788,8 +788,8 @@ export class AgentService implements OnModuleInit {
     const label = (key: string) => this.i18n.t(locale, agentTextKey(`readiness.${key}`));
     const checks: AgentReadinessDto['checks'] = [
       // journey 16/11 J04-1 (04 §12: a new product waits for a moderator): with nothing validated yet the row says what the
-      // agent answers meanwhile — « Produits actifs · 0 » read as an empty catalogue
-      { key: 'catalog', ok: products > 0, label: products === 0 && pendingModeration > 0 ? this.i18n.t(locale, agentTextKey('readiness.catalogPending'), { count: pendingModeration }) : label('catalog'), count: products, link: products === 0 && pendingModeration > 0 ? '/products?moderationStatus=pending' : '/products', blocking: false },
+      // agent answers meanwhile — « Produits actifs · 0 » read as an empty catalogue; journey J01r-1: a singular for one product
+      { key: 'catalog', ok: products > 0, label: products === 0 && pendingModeration > 0 ? this.i18n.t(locale, agentTextKey(pendingModeration === 1 ? 'readiness.catalogPendingOne' : 'readiness.catalogPending'), { count: pendingModeration }) : label('catalog'), count: products, link: products === 0 && pendingModeration > 0 ? '/products?moderationStatus=pending' : '/products', blocking: false },
       { key: 'productsWithoutPhoto', ok: withoutPhoto === 0, label: label('productsWithoutPhoto'), count: withoutPhoto, link: '/products', blocking: false },
       { key: 'feeGrid', ok: fees > 0, label: label('feeGrid'), count: fees, link: '/delivery/fees', blocking: false },
       { key: 'policies', ok: ['delivery', 'payment', 'returns'].every((k) => (policies[k] ?? '').trim().length > 0), label: label('policies'), count: ['delivery', 'payment', 'returns', 'hours'].filter((k) => (policies[k] ?? '').trim()).length, total: 4, blocking: false },

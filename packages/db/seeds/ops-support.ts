@@ -1,6 +1,8 @@
 // M10 (D38, D46) — reference data of the support area: the 5 canned replies of HELP-05 and the help center articles
 // (`CmsEntry(type=help)`, one per HELP-01 category, fr / ar / en). Idempotent: existing rows are left untouched (edited in
-// `/admin/support/canned-replies` and the CMS).
+// `/admin/support/canned-replies` and the CMS). Journey J01r-3 (18/11): the « agent » and « stock » guides follow the real
+// wizard steps and the 04 stock rule; rows already seeded with the first text are corrected by the data migration
+// `20261118120000_help_guides_wizard_stock` (run by `migrate:deploy`, only where the text was never edited).
 import { rawPrisma as db } from '../src/client';
 
 type L = { fr: string; ar: string; en: string };
@@ -88,9 +90,9 @@ const ARTICLES: { key: string; category: string; pages: string[]; title: L; body
     pages: ['agents', 'inbox'],
     title: l('Configurer votre agent IA', 'إعداد وكيل الذكاء الاصطناعي', 'Set up your AI agent'),
     body: l(
-      'L’assistant de création vous guide en 5 étapes : identité, catalogue, politiques, horaires et activation. Testez-le dans le bac à sable avant de l’activer.',
-      'يرشدك معالج الإنشاء في 5 خطوات: الهوية، الكتالوج، السياسات، الأوقات والتفعيل. جرّبه في بيئة الاختبار قبل تفعيله.',
-      'The creation wizard guides you in 5 steps: identity, catalogue, policies, hours and activation. Try it in the playground before turning it on.',
+      'L’assistant de création vous guide en 5 étapes : Identité, Connaissances, Comportement, Canaux, puis Test & activation. À la dernière étape, testez votre agent dans le bac à essai (« Tester moi-même ») avant de l’activer : les tests ne consomment pas de crédits et ne touchent ni vos clients ni vos commandes.',
+      'يرشدك معالج الإنشاء في 5 خطوات: الهوية، المعارف، السلوك، القنوات، ثم الاختبار والتفعيل. في الخطوة الأخيرة جرّب وكيلك في ساحة التجربة (« أختبر بنفسي ») قبل تفعيله: لا تستهلك الاختبارات أي رصيد ولا تمسّ زبائنك ولا طلباتك.',
+      'The creation wizard guides you in 5 steps: Identity, Knowledge, Behaviour, Channels, then Test & activation. At the last step, try your agent in the playground (“Test myself”) before turning it on: tests use no credits and never reach your customers or your orders.',
     ),
   },
   {
@@ -110,9 +112,9 @@ const ARTICLES: { key: string; category: string; pages: string[]; title: L; body
     pages: ['products', 'stock', 'movements'],
     title: l('Gérer votre stock', 'إدارة مخزونك', 'Manage your stock'),
     body: l(
-      'Chaque commande confirmée réserve le stock ; les ajustements et inventaires sont tracés dans Mouvements. Fixez un stock minimum pour recevoir une alerte.',
-      'كل طلب مؤكد يحجز المخزون؛ وتُسجَّل التعديلات والجرد في الحركات. حدد حدًا أدنى للمخزون لتلقي تنبيه.',
-      'Every confirmed order reserves stock; adjustments and counts are logged in Movements. Set a minimum stock to get an alert.',
+      'Une nouvelle commande réserve le stock (« Réservé » sur la fiche produit) ; quand vous la confirmez, les unités sortent du stock (mouvement « sortie »). Les ajustements et inventaires sont tracés dans Mouvements. Fixez un stock minimum pour recevoir une alerte.',
+      'يحجز كل طلب جديد المخزون (« محجوز » في بطاقة المنتج)؛ وعند تأكيده تخرج الوحدات من المخزون (حركة « خروج »). وتُسجَّل التعديلات والجرد في الحركات. حدد حدًا أدنى للمخزون لتلقي تنبيه.',
+      'A new order reserves the stock (“Reserved” on the product page); when you confirm it, the units leave the stock (an “out” movement). Adjustments and counts are logged in Movements. Set a minimum stock to get an alert.',
     ),
   },
   {

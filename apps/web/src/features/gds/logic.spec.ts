@@ -165,6 +165,10 @@ describe('cash selection — pills, table and KPIs share the same parameters (09
   it('closing gap (counted − theoretical) and the unclosed days line', () => {
     expect(closingGap(76350, '76 000')).toBe(-350);
     expect(closingGap(76350, '')).toBeNull();
+    // journey J06r-2: the sign is read once, a lone « - » is no number
+    expect(closingGap(-17050, '-1000')).toBe(16050);
+    expect(closingGap(-17050, '-')).toBeNull();
+    expect(closingGap(-17050, '1 000')).toBe(18050);
     expect(daysList(['2026-10-02', '2026-10-03', '2026-10-04'], () => 'oct.')).toBe('02, 03, 04 oct.');
     expect(daysList(['2026-09-30', '2026-10-01'], (d) => (d.slice(5, 7) === '09' ? 'sept.' : 'oct.'))).toBe('30 sept., 01 oct.');
   });

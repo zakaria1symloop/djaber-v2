@@ -133,7 +133,7 @@ export class OrderService implements OnModuleInit {
     const userIds = [...new Set([...o.history.filter((h) => h.actorType === 'user' && h.actorId).map((h) => h.actorId!), ...assigned])];
     const agentIds = [...new Set(o.history.filter((h) => h.actorType === 'ai' && h.actorId).map((h) => h.actorId!))];
     const [payments, users, agents, ctx, rule, ws] = await Promise.all([
-      prisma.paymentEntry.findMany({ where: { sourceType: 'order', sourceId: id }, orderBy: [{ paidAt: 'desc' }, { id: 'desc' }], include: { createdBy: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } } } }),
+      prisma.paymentEntry.findMany({ where: { sourceType: 'order', sourceId: id }, orderBy: [{ paidAt: 'desc' }, { id: 'desc' }], include: { createdBy: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } }, cashTransaction: { select: { category: true, method: true, description: true } } } }),
       userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, firstName: true, lastName: true } }) : [],
       agentIds.length ? prisma.agent.findMany({ where: { id: { in: agentIds } }, select: { id: true, name: true } }) : [],
       this.presentCtx(locale),
@@ -153,10 +153,11 @@ export class OrderService implements OnModuleInit {
     // the « Actualiser » wait of the order's parcels (UX-056 leftovers: same countdown as the tracking panel and the list)
     const [desks, historyText, waits] = await Promise.all([stopdeskLabels([o.isStopdesk ? o.stopdeskId : null]), this.addressHistory(o.history, ctx.locale), syncAvailability(this.redis, o.shipments.map((s) => s.id))]);
     ctx.syncAvailableAt = (shipmentId) => waits.get(shipmentId) ?? null;
-    // full-test 15/11 ORDERS-03: a member's name for « Assignation », an Algiers date for « Rappel » (it was a UTC ISO string)
-    const when = new Intl.DateTimeFormat(ctx.locale === 'ar' ? 'ar-DZ-u-nu-latn' : ctx.locale === 'en' ? 'en-GB' : 'fr-FR', { timeZone: 'Africa/Algiers', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-    const readable = (field: string, v: string | null) => (!v ? v : field === 'assigneeId' ? (actorNames.get(v) ?? v) : field === 'callbackAt' && !Number.isNaN(Date.parse(v)) ? when.format(new Date(v)) : v);
-    for (const h of o.history) if ((h.field === 'assigneeId' || h.field === 'callbackAt') && !historyText.has(h.id)) historyText.set(h.id, { from: readable(h.field, h.from), to: readable(h.field, h.to) });
+    // full-test 15/11 ORDERS-03: a member's name for « Assignation ». Journey J05r-5: a « Rappel » line keeps its ISO instant
+    // (the clients format it in the viewer's language — a server-formatted « 18 نوفمبر، 02:38 م » crashed the Arabic page);
+    // no history value is ever a localized date
+    const readable = (v: string | null) => (v ? (actorNames.get(v) ?? v) : v);
+    for (const h of o.history) if (h.field === 'assigneeId' && !historyText.has(h.id)) historyText.set(h.id, { from: readable(h.from), to: readable(h.to) });
     const stopdeskName = o.isStopdesk && o.stopdeskId ? stopdeskText(desks.get(o.stopdeskId)) : null;
     return presentOrder(o, { payments, actorNames, feeExplanation: explanation, stopdeskName, historyText }, ctx);
   }
@@ -544,8 +545,11 @@ export class OrderService implements OnModuleInit {
       const o = await this.lock(tx, id);
       if (confirmNumber !== undefined && confirmNumber !== o.number) throw new AppException('VALIDATION_ERROR', {}, { confirmNumber: 'validation.invalid' });
       if (o.status === 'delivered') throw new AppException('ORDER_DELETE_DELIVERED');
+      // 04 §9 « active parcel ⇒ DELIVERY_ORDER_ALREADY_SENT », self-delivery included (journey J05r-6: a parcel handed to the
+      // merchant's own delivery person was deleted and its units came back to stock while they were out). The merchant marks
+      // it returned first (a shipped order cannot be cancelled), then deletes it
       const active = this.activeShipment(o);
-      if (active && active.provider !== 'manual') throw new AppException('DELIVERY_ORDER_ALREADY_SENT');
+      if (active) throw new AppException('DELIVERY_ORDER_ALREADY_SENT');
       // a returned order already settled its stock (restocked or written off as a loss)
       if (o.status !== 'returned') await this.effects.syncStock(tx, o, [], 'order_cancelled', actor.id);
       await this.effects.removeOrderCash(tx, id);
@@ -605,6 +609,7 @@ export class OrderService implements OnModuleInit {
         ],
       };
     }
+    const desks = await stopdeskLabels(rows.map((r) => (r.isStopdesk ? r.stopdeskId : null)));
     const standard = [
       { header: h.number, value: (r: R) => r.number },
       { header: h.date, value: (r: R) => exportDateTime(r.orderedAt) },
@@ -616,7 +621,8 @@ export class OrderService implements OnModuleInit {
       { header: h.phone, value: (r: R) => r.clientPhone },
       { header: h.wilaya, value: wilaya },
       { header: h.commune, value: commune },
-      { header: h.address, value: (r: R) => (r.isStopdesk ? `${h.stopdesk} ${r.stopdeskId ?? ''}`.trim() : (r.address ?? '')) },
+      // journey J05r-10: « Stop-desk » + the relay point's name, as on the screens (it read « Point relais <id> »)
+      { header: h.address, value: (r: R) => (r.isStopdesk ? `${h.stopdesk} ${(r.stopdeskId ? stopdeskText(desks.get(r.stopdeskId)) : null) ?? r.stopdeskId ?? ''}`.trim() : (r.address ?? '')) },
       { header: h.items, value: (r: R) => (r.line ? `${r.line.productName}${r.line.variantName ? ` · ${r.line.variantName}` : ''} × ${r.line.quantity} × ${r.line.unitPrice}` : r.items.map((i) => `${i.productName}${i.variantName ? ` · ${i.variantName}` : ''} × ${i.quantity} × ${i.unitPrice}`).join(' ; ')) },
       { header: h.subtotal, value: (r: R) => r.subtotal },
       { header: h.discount, value: (r: R) => r.discount },
@@ -649,11 +655,12 @@ export class OrderService implements OnModuleInit {
       columns === 'all'
         ? [
             { header: h.phone2, value: (r: R) => r.clientPhone2 ?? '' },
-            { header: h.payment, value: (r: R) => r.paymentStatus },
+            // journey J05r-8: merchant words, as the standard columns (it wrote « unpaid », « normal », « unreachable »)
+            { header: h.payment, value: (r: R) => exportLabel(locale, 'enum.Order.paymentStatus', r.paymentStatus) },
             { header: h.calls, value: (r: R) => r.callAttempts },
-            { header: h.risk, value: (r: R) => r.riskLevel },
+            { header: h.risk, value: (r: R) => exportLabel(locale, 'enum.Client.riskLevel', r.riskLevel) },
             { header: h.notes, value: (r: R) => r.notes ?? '' },
-            { header: h.cancelReason, value: (r: R) => r.cancelReason ?? '' },
+            { header: h.cancelReason, value: (r: R) => exportLabel(locale, 'enum.Order.cancelReason', r.cancelReason) },
           ]
         : [];
     return { sheetName: h.sheet, fileName: `commandes-${algiersDay()}`, rows: flat, columns: [...standard, ...extra] };
@@ -661,7 +668,7 @@ export class OrderService implements OnModuleInit {
 }
 
 const EXPORT_HEADERS = {
-  fr: { sheet: 'Commandes', number: 'N°', date: 'Date', time: 'Heure', channel: 'Canal', source: 'Source', client: 'Client', phone: 'Téléphone', phone2: 'Téléphone 2', wilaya: 'Wilaya', commune: 'Commune', address: 'Adresse / point relais', stopdesk: 'Point relais', items: 'Articles (nom × qté × prix)', subtotal: 'Sous-total', discount: 'Remise', deliveryFee: 'Livraison', total: 'Total', paid: 'Payé', remaining: 'Reste', paymentMethod: 'Mode de paiement', status: 'Statut', confirmation: 'Confirmation', delivery: 'Livraison (statut)', courier: 'Transporteur', tracking: 'Suivi', payment: 'Paiement', calls: 'Appels', risk: 'Risque', notes: 'Notes', cancelReason: "Motif d'annulation" },
+  fr: { sheet: 'Commandes', number: 'N°', date: 'Date', time: 'Heure', channel: 'Canal', source: 'Source', client: 'Client', phone: 'Téléphone', phone2: 'Téléphone 2', wilaya: 'Wilaya', commune: 'Commune', address: 'Adresse / stop-desk', stopdesk: 'Stop-desk', items: 'Articles (nom × qté × prix)', subtotal: 'Sous-total', discount: 'Remise', deliveryFee: 'Livraison', total: 'Total', paid: 'Payé', remaining: 'Reste', paymentMethod: 'Mode de paiement', status: 'Statut', confirmation: 'Confirmation', delivery: 'Livraison (statut)', courier: 'Transporteur', tracking: 'Suivi', payment: 'Paiement', calls: 'Appels', risk: 'Risque', notes: 'Notes', cancelReason: "Motif d'annulation" },
   en: { sheet: 'Orders', number: 'No.', date: 'Date', time: 'Time', channel: 'Channel', source: 'Source', client: 'Client', phone: 'Phone', phone2: 'Phone 2', wilaya: 'Wilaya', commune: 'Commune', address: 'Address / stop-desk', stopdesk: 'Stop-desk', items: 'Items (name × qty × price)', subtotal: 'Subtotal', discount: 'Discount', deliveryFee: 'Delivery fee', total: 'Total', paid: 'Paid', remaining: 'Remaining', paymentMethod: 'Payment method', status: 'Status', confirmation: 'Confirmation', delivery: 'Delivery status', courier: 'Courier', tracking: 'Tracking', payment: 'Payment', calls: 'Calls', risk: 'Risk', notes: 'Notes', cancelReason: 'Cancel reason' },
-  ar: { sheet: 'الطلبات', number: 'الرقم', date: 'التاريخ', time: 'الوقت', channel: 'القناة', source: 'المصدر', client: 'العميل', phone: 'الهاتف', phone2: 'الهاتف 2', wilaya: 'الولاية', commune: 'البلدية', address: 'العنوان / نقطة الاستلام', stopdesk: 'نقطة الاستلام', items: 'المنتجات (الاسم × الكمية × السعر)', subtotal: 'المجموع الفرعي', discount: 'الخصم', deliveryFee: 'التوصيل', total: 'المجموع', paid: 'المدفوع', remaining: 'المتبقي', paymentMethod: 'طريقة الدفع', status: 'الحالة', confirmation: 'التأكيد', delivery: 'حالة التوصيل', courier: 'الناقل', tracking: 'التتبع', payment: 'الدفع', calls: 'المكالمات', risk: 'الخطر', notes: 'ملاحظات', cancelReason: 'سبب الإلغاء' },
+  ar: { sheet: 'الطلبات', number: 'الرقم', date: 'التاريخ', time: 'الوقت', channel: 'القناة', source: 'المصدر', client: 'العميل', phone: 'الهاتف', phone2: 'الهاتف 2', wilaya: 'الولاية', commune: 'البلدية', address: 'العنوان / مكتب الاستلام', stopdesk: 'مكتب الاستلام', items: 'المنتجات (الاسم × الكمية × السعر)', subtotal: 'المجموع الفرعي', discount: 'الخصم', deliveryFee: 'التوصيل', total: 'المجموع', paid: 'المدفوع', remaining: 'المتبقي', paymentMethod: 'طريقة الدفع', status: 'الحالة', confirmation: 'التأكيد', delivery: 'حالة التوصيل', courier: 'الناقل', tracking: 'التتبع', payment: 'الدفع', calls: 'المكالمات', risk: 'الخطر', notes: 'ملاحظات', cancelReason: 'سبب الإلغاء' },
 } as const;

@@ -3,7 +3,7 @@
 // Programmer un rappel · Annuler la commande · Changer le statut · Marquer livrée manuellement · Marquer retournée ·
 // Supprimer la commande (typed number) · Enregistrer un paiement · Assigner (one or many) · Marquer expédiée (manuel).
 // "Envoyer au transporteur" (DLV-05) lives in `features/delivery/send-dialog.tsx`. Server errors render inline in the open dialog; the content is preserved.
-import { formatMoney } from '@djaber/shared';
+import { ACTIVE_SHIPMENT_STATUSES, formatMoney } from '@djaber/shared';
 import { Checkbox, CodeInput, Dialog, Field, FormAlert, Input, MoneyInput, Pill, Select, Textarea, toast } from '@djaber/ui';
 import { useState } from 'react';
 import { ConflictDialog } from '@/components/global-states';
@@ -324,7 +324,8 @@ export function DeliverDialog({ order, open, onClose, onDone }: Props) {
       open={open}
       onOpenChange={(o) => !o && !s.busy && onClose()}
       title={t('dialog.markDelivered.title')}
-      description={t('orders.deliver.context', { number: order.number })}
+      // journey J05r-10: « le transporteur ne remonte pas le statut » only when a courier carries the parcel
+      description={t(order.shipments.some((x) => x.provider !== 'manual' && ACTIVE_SHIPMENT_STATUSES.includes(x.status)) ? 'orders.deliver.context' : 'orders.deliver.contextSelf', { number: order.number })}
       closeLabel={t('action.close')}
       size="md"
       footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('orders.deliver.submit')} />}
