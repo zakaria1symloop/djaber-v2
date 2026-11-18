@@ -4,7 +4,7 @@ import { Ban, FileQuestion, Lock, PauseCircle, SearchX, Square, TriangleAlert, W
 import * as React from 'react';
 import { Button, buttonClass, Card, cn, type Tone } from './primitives';
 
-export type StateAction = { label: string; onClick?: () => void; href?: string; variant?: 'primary' | 'secondary'; disabled?: boolean };
+export type StateAction = { label: string; onClick?: () => void; href?: string; variant?: 'primary' | 'secondary'; disabled?: boolean; /** shown on a greyed action (journey J07r-2) */ disabledReason?: string };
 
 function ActionButton({ action }: { action: StateAction }) {
   // a link stays a link (styled as a button): no button nested in an anchor
@@ -16,7 +16,7 @@ function ActionButton({ action }: { action: StateAction }) {
     );
   }
   return (
-    <Button variant={action.variant ?? 'primary'} onClick={action.onClick} disabled={action.disabled}>
+    <Button variant={action.variant ?? 'primary'} onClick={action.onClick} disabled={action.disabled || !!action.disabledReason} disabledReason={action.disabledReason}>
       {action.label}
     </Button>
   );

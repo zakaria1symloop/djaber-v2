@@ -109,7 +109,7 @@ export default function ProductsPage() {
           <span className="truncate text-[14px] font-medium">{r.name}</span>
           {r.archived || !r.isActive ? <ProductStatePill product={r} /> : null}
         </div>
-        {r.hasVariants || !r.trackStock ? <div className="truncate ts-label-meta text-text-muted">{r.trackStock ? (r.variantSummary ?? t('products.list.variants')) : t('products.list.serviceLine')}</div> : null}
+        {r.hasVariants || !r.trackStock ? <div className="truncate ts-label-meta text-text-muted">{r.trackStock ? r.variantSummary ? <bdi>{r.variantSummary}</bdi> : t('products.list.variants') : t('products.list.serviceLine')}</div> : null}
       </div>
     </div>
   );
@@ -118,9 +118,10 @@ export default function ProductsPage() {
   const priceCell = (r: ProductListItem, className?: string) => {
     const range = priceRangeOf(r);
     return range.min !== range.max ? (
-      <span className="whitespace-nowrap" data-price-range>
+      // journey J02r-4: one left-to-right island — in Arabic the range read « 4 800 DA – 4 500 DA »
+      <bdi dir="ltr" className="whitespace-nowrap" data-price-range>
         <Money value={range.min} className={className} /> – <Money value={range.max} className={className} />
-      </span>
+      </bdi>
     ) : (
       <Money value={range.min} className={className} />
     );
@@ -320,6 +321,14 @@ export default function ProductsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[14px] font-medium">{r.name}</div>
                       <Ltr className="ts-label-meta text-text-muted">{r.sku}</Ltr>
+                      {/* journey J02r-2: the grid card carries the state pills of the table and the phone card (MASQUÉ /
+                          ARCHIVÉ, the validation state while the moderation columns are shown) */}
+                      {r.archived || !r.isActive || (reviewing && r.moderation && r.moderation.status !== 'approved') ? (
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5" data-testid="grid-pills">
+                          {r.archived || !r.isActive ? <ProductStatePill product={r} /> : null}
+                          {reviewing && r.moderation && r.moderation.status !== 'approved' ? <ModerationPill status={r.moderation.status} /> : null}
+                        </div>
+                      ) : null}
                     </div>
                   </Link>
                   <div className="flex items-center gap-2">

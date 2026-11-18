@@ -10,7 +10,7 @@ import { OutboxService } from '../../core/outbox/outbox.service';
 import { StockService } from '../catalog/stock.service';
 import { ClientAggregatesService } from '../clients/client-aggregates.service';
 import { stockDeltas, stockKey, type StockLine } from '../orders/order-rules';
-import { clearPayments, recomputePaid, writePayment, writeRefund } from './cash-rows';
+import { clearPayments, recomputePaid, rewritePaymentMethod, writePayment, writeRefund } from './cash-rows';
 
 @Injectable()
 export class SaleEffects {
@@ -70,6 +70,11 @@ export class SaleEffects {
     if (!entries.length) byMethod.set(sale.paymentMethod, sale.amountPaid);
     const description = storedText('stored.cash.saleRefund', { number: sale.number, reason });
     for (const [method, amount] of byMethod) await writeRefund(tx, this.outbox, { sourceId: sale.id, number: sale.number, amount, method, description });
+  }
+
+  /** « Modifier le paiement » (journey J06r-1): the payments taken with the sale's mode and their cash rows follow the new mode. */
+  changeMethod(tx: Tx, sale: Pick<Sale, 'id' | 'paymentMethod'>, method: PaymentMethod) {
+    return rewritePaymentMethod(tx, this.outbox, 'sale', sale.id, sale.paymentMethod, method);
   }
 
   recomputePaid(tx: Tx, sale: Pick<Sale, 'id' | 'total'>) {

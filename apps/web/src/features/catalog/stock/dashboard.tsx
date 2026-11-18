@@ -16,7 +16,7 @@ import { AdjustStockDialog, type AdjustTarget } from '../adjust-stock-dialog';
 import { useLowStock, useStockOverview } from '../api';
 import type { LowStockItem, StockMovement } from '../contracts';
 import { MovementTypePill, Num, useMovementReason } from '../ui';
-import { actorName, formatSigned, movementTimeLabel, quantityTone, referenceKind, signedQuantity, withoutYear } from './logic';
+import { actorName, formatSigned, movementTimeLabel, noteBeyondReference, quantityTone, referenceKind, signedQuantity, withoutYear } from './logic';
 
 type Adjust = { product: AdjustTarget | null; variantId: string | null };
 
@@ -213,8 +213,8 @@ function RecentMovement({ movement: m, locale }: { movement: StockMovement; loca
   const when = movementTimeLabel(m.createdAt);
   const kind = referenceKind(m.reference?.type);
   const reference = m.reversalOf ? t('movements.reversalOf', { date: formatDate(m.reversalOf.createdAt, locale) }) : !m.reference ? null : kind === 'number' ? `#${m.reference.label}` : kind === 'name' ? m.reference.label : null;
-  // full-test 15/11 STOCK-14: a note that only repeats the reference (« CMD-1024 ») is not said twice
-  const note = m.note && m.reference?.label && m.note.replace(/^#/, '').trim() === m.reference.label ? null : m.note;
+  // full-test 15/11 STOCK-14 / J07r-5: the reference is not said twice (« CMD-1024 », « INV-1 · … »)
+  const note = noteBeyondReference(m.note, m.reference?.label);
   const line = [m.reason ? reason(m.reason) : null, reference, note, actorName(m.actor) ?? t('movements.system')].filter((x): x is string => !!x);
   return (
     <li className="flex items-center gap-3 px-4 py-3" data-movement={m.id}>

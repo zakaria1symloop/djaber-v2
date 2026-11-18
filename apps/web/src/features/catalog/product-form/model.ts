@@ -182,7 +182,8 @@ export const productFormSchema = (mode: 'create' | 'edit') =>
         else if (list.some((k) => k.length > KEYWORD_MAX_LENGTH)) ctx.addIssue({ code: 'custom', message: 'validation.length' });
       }),
       description: z.string().refine((s) => s.trim().length <= DESCRIPTION_MAX, 'validation.length'),
-      price: digits(productPrice, true),
+      // required unless the product is sold by variant (superRefine below, journey J02r-1)
+      price: digits(productPrice),
       oldPrice: digits(productPrice),
       costPrice: digits(productCost),
       trackStock: z.boolean(),
@@ -197,8 +198,11 @@ export const productFormSchema = (mode: 'create' | 'edit') =>
     })
     .superRefine((v, ctx) => {
       if (mode === 'create' && v.trackStock && v.variants.length === 0 && v.stock === '') ctx.addIssue({ code: 'custom', path: ['stock'], message: 'validation.required' });
+      // journey J02r-1: a product sold by variant has no base / old price field (its variants carry the prices)
+      const byVariant = v.trackStock && v.variants.length > 0;
+      if (!byVariant && v.price === '') ctx.addIssue({ code: 'custom', path: ['price'], message: 'validation.required' });
       // full-test 15/11 PRODUCTS-09: the struck-through « before » price is above the selling price (04 §12)
-      if (v.oldPrice !== '' && v.price !== '' && Number(v.oldPrice) <= Number(v.price)) ctx.addIssue({ code: 'custom', path: ['oldPrice'], message: 'validation.old_price' });
+      if (!byVariant && v.oldPrice !== '' && v.price !== '' && Number(v.oldPrice) <= Number(v.price)) ctx.addIssue({ code: 'custom', path: ['oldPrice'], message: 'validation.old_price' });
       const names = new Set<string>();
       v.variants.forEach((row, i) => {
         const k = row.name.trim().toLowerCase();
@@ -236,13 +240,15 @@ export function variantUpdatePayload(base: VariantRow, row: VariantRow, o: { adv
 /** `POST /products` body (`CreateProductSchema`, strict). The cost travels in advanced mode only. */
 export function toCreatePayload(v: ProductFormValues, o: { advanced: boolean }): CreateProductInput {
   const withVariants = v.trackStock && v.variants.length > 0;
-  const out: CreateProductInput = { name: v.name.trim(), price: int(v.price) ?? 0, trackStock: v.trackStock, isActive: v.isActive };
+  // journey J02r-1: sold by variant without a base price typed ⇒ the base price is the lowest variant price (never shown)
+  const lowest = withVariants ? Math.min(...v.variants.map((r) => int(r.price) ?? Number.MAX_SAFE_INTEGER)) : null;
+  const out: CreateProductInput = { name: v.name.trim(), price: int(v.price) ?? (lowest !== null && lowest < Number.MAX_SAFE_INTEGER ? lowest : 0), trackStock: v.trackStock, isActive: v.isActive };
   if (v.trackStock && v.sellOutOfStock) out.sellOutOfStock = true;
   if (v.sku.trim()) out.sku = v.sku.trim();
   if (v.description.trim()) out.description = v.description.trim();
   if (v.categoryId) out.categoryId = v.categoryId;
   if (v.unitId) out.unitId = v.unitId;
-  if (v.oldPrice !== '') out.oldPrice = int(v.oldPrice);
+  if (v.oldPrice !== '' && !withVariants) out.oldPrice = int(v.oldPrice);
   if (o.advanced && v.costPrice !== '') out.costPrice = int(v.costPrice);
   if (v.weightGrams !== '') out.weightGrams = int(v.weightGrams);
   const keywords = parseKeywords(v.keywords);

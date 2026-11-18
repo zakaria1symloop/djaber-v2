@@ -51,7 +51,8 @@ export function StockSection({ form, rows, values, mode, product, advanced, lock
   const atLimit = variants.length >= VARIANTS_MAX;
   const limitReason = atLimit ? t('error.VARIANT_LIMIT') : undefined;
   const addRow = () => {
-    const row = emptyVariantRow({ price: values.price, costPrice: advanced ? values.costPrice : '' });
+    // journey J02r-1: once sold by variant, the base price is no longer shown — a new row starts from the last variant's price
+    const row = emptyVariantRow({ price: variants.at(-1)?.price ?? values.price, costPrice: advanced ? values.costPrice : '' });
     rows.append(row, { shouldFocus: false });
     onToggle(row.key, true);
   };

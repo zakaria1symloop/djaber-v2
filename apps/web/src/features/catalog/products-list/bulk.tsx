@@ -11,6 +11,7 @@ import { Link } from '@/i18n/navigation';
 import { errorMessage } from '@/lib/forms';
 import { useT } from '@/lib/i18n';
 import { downloadUrl, jobFileName, trackJob } from '@/lib/jobs';
+import { priceRangeOf } from '@/lib/money';
 import { useSession } from '@/lib/session';
 import { catalogApi, useCatalogRefresh, useCategories } from '../api';
 import { flattenCategories, type BulkResponse, type ProductListItem } from '../contracts';
@@ -247,9 +248,20 @@ function BulkPriceDialog(p: DialogProps & { rows: ProductListItem[]; advanced: b
   const title = t('dialog.bulkPrice.title');
   const b = useBulk((ids) => catalogApi.bulkPrice({ ids, ...input }), p, title);
   // local preview with the shared formula (the server applies the same one)
-  const preview = parsed.success ? p.rows.map((r) => ({ row: r, next: computeBulkPrice(r.price, input) })) : [];
+  // journey J02r-1: a product with variants is sold at its variants' prices — the preview quotes their range (moved only when
+  // « appliquer aux variantes » is ticked), never the base price no screen shows
+  const preview = parsed.success
+    ? p.rows.map((r) => {
+        const range = priceRangeOf(r);
+        const byVariant = r.hasVariants && !!r.priceRange;
+        const moves = !byVariant || applyToVariants;
+        const next = { min: moves ? computeBulkPrice(range.min, input) : range.min, max: moves ? computeBulkPrice(range.max, input) : range.max };
+        return { row: r, from: range, to: next, next: next.min, byVariant };
+      })
+    : [];
   const invalidPrices = preview.filter((x) => x.next <= 0).length;
-  const belowCost = p.advanced ? preview.filter((x) => x.row.costPrice !== null && x.next > 0 && x.next < x.row.costPrice).length : 0;
+  const belowCost = p.advanced ? preview.filter((x) => !x.byVariant && x.row.costPrice !== null && x.next > 0 && x.next < x.row.costPrice).length : 0;
+  const rangeText = (r: { min: number; max: number }) => (r.min === r.max ? formatNumber(r.min) : `${formatNumber(r.min)} – ${formatNumber(r.max)}`);
   return (
     <Dialog
       open={p.open}
@@ -296,7 +308,7 @@ function BulkPriceDialog(p: DialogProps & { rows: ProductListItem[]; advanced: b
             {preview.slice(0, 3).map((x, i) => (
               <span key={x.row.id}>
                 {i ? ' · ' : ''}
-                {x.row.name} <Ltr>{`${formatNumber(x.row.price)} → ${formatNumber(x.next)}`}</Ltr>
+                <bdi>{x.row.name}</bdi> <Ltr>{`${rangeText(x.from)} → ${rangeText(x.to)}`}</Ltr>
               </span>
             ))}
             {preview.length > 3 ? ` · … (${preview.length})` : ''}

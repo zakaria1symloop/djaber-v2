@@ -13,7 +13,7 @@ import { useOffline } from '@/features/orders/offline';
 import { Link, useRouter } from '@/i18n/navigation';
 import { actionState } from '@/lib/actions';
 import { useBack } from '@/lib/back';
-import { iso } from '@/lib/format-message';
+import { iso, qtyLabel } from '@/lib/format-message';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSale } from './api';
 import { ActionButton } from './purchase-dialogs';
@@ -105,7 +105,7 @@ function SaleDetail({ id }: { id: string }) {
                 <span className="text-text-secondary">{[s.customerName ?? t('sales.walkIn'), s.customerPhone ? formatPhoneDz(s.customerPhone) : null].filter(Boolean).join(' · ')}</span>
               ),
             },
-            { key: 'items', label: t('common.items'), value: [s.items.map((i) => iso(`${i.productName}${i.variantName ? ` ${i.variantName}` : ''} ×${i.quantity}`)).join(' · '), s.discount ? `${t('common.discount').toLowerCase()} ${formatMoney(s.discount)}` : null].filter(Boolean).join(' · ') },
+            { key: 'items', label: t('common.items'), value: [s.items.map((i) => qtyLabel(`${i.productName}${i.variantName ? ` ${i.variantName}` : ''}`, i.quantity)).join(' · '), s.discount ? `${t('common.discount').toLowerCase()} ${formatMoney(s.discount)}` : null].filter(Boolean).join(' · ') },
             {
               key: 'payments',
               label: t('sales.page.payments'),

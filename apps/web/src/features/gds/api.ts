@@ -314,6 +314,8 @@ export function useGdsEvents() {
     void qc.invalidateQueries({ queryKey: gdsKeys.cash(ws) });
     void qc.invalidateQueries({ queryKey: gdsKeys.sales(ws) });
     void qc.invalidateQueries({ queryKey: gdsKeys.purchases(ws) });
+    // revenue / cash tiles of the Home (J02r-3 / J07r-3 family)
+    void qc.invalidateQueries({ queryKey: [ws, 'dashboard'] });
   });
   useWsEvent<{ id?: string }>('inventory.updated', (p) => {
     void qc.invalidateQueries({ queryKey: gdsKeys.inventories(ws) });

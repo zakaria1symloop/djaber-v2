@@ -21,7 +21,7 @@ import { isOwnChange } from '@/lib/origin';
 import { conflictOf } from '@/lib/conflict';
 import { errorMessage, fieldError, useLeaveGuard } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
-import { digitsToInt, marginPct, pctText } from '@/lib/money';
+import { digitsToInt, marginPct, pctText, priceText } from '@/lib/money';
 import { useSession, useWorkspaceId } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
 import { AdjustStockDialog } from '../adjust-stock-dialog';
@@ -399,10 +399,14 @@ export function ProductForm(props: Props) {
 
   /* ---------- derived display ---------- */
   const rejected = useMemo(() => (product?.moderation?.status === 'rejected' ? rejectedFieldSet(product.moderationDetail?.rejectedFields) : new Set<RejectedField>()), [product]);
+  // journey J02r-1: a product with variants is sold at its variants' prices only (PRODUCTS-03) — the base price and the old
+  // price are not edited here (no screen shows them); the cost stays, as the cost of the variants without one of their own
+  const byVariant = values.trackStock && values.variants.length > 0;
+  const variantPrices = byVariant ? values.variants.filter((r) => r.isActive).map((r) => digitsToInt(r.price)).filter((x): x is number => x !== null) : [];
   const price = digitsToInt(values.price);
   const cost = advanced ? digitsToInt(values.costPrice) : (product?.costPrice ?? null);
-  const margin = price !== null && cost !== null && price < cost ? marginPct(price, cost) : null;
-  const belowCost = margin !== null || (serverBelowCost && !changes.some((c) => c.kind === 'field' && (c.field === 'price' || c.field === 'costPrice')));
+  const margin = !byVariant && price !== null && cost !== null && price < cost ? marginPct(price, cost) : null;
+  const belowCost = margin !== null || (!byVariant && serverBelowCost && !changes.some((c) => c.kind === 'field' && (c.field === 'price' || c.field === 'costPrice')));
   const mark = (f: RejectedField | AiFillField) =>
     rejected.has(f as RejectedField) ? (
       <span className="ts-label-micro text-accent-alert" data-rejected={f}>
@@ -534,7 +538,14 @@ export function ProductForm(props: Props) {
           </Section>
 
           <Section title={t('products.form.price.title')} name="price">
-            <div className={cn('grid gap-4', advanced ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
+            <div className={cn('grid gap-4', byVariant ? (advanced ? 'sm:grid-cols-2' : 'sm:grid-cols-1') : advanced ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
+              {byVariant ? (
+                <Field label={t('products.form.price.selling')} hint={t('products.form.price.byVariant')}>
+                  <div className="flex h-9 items-center rounded-[6px] border border-line-hairline px-3 text-[13px] text-text-secondary" data-testid="form-price-range">
+                    {variantPrices.length ? <Ltr className="tabular-nums">{priceText({ price: 0, priceRange: { min: Math.min(...variantPrices), max: Math.max(...variantPrices) } })}</Ltr> : <span className="text-text-muted">—</span>}
+                  </div>
+                </Field>
+              ) : (
               <Field label={t('products.form.price.selling')} htmlFor="price" required error={err('price')}>
                 <Controller
                   control={form.control}
@@ -543,6 +554,8 @@ export function ProductForm(props: Props) {
                 />
                 {mark('price')}
               </Field>
+              )}
+              {byVariant ? null : (
               <Field label={t('products.form.price.old')} htmlFor="oldPrice" error={err('oldPrice')}>
                 <Controller
                   control={form.control}
@@ -550,8 +563,9 @@ export function ProductForm(props: Props) {
                   render={({ field }) => <MoneyInput id="oldPrice" ref={field.ref} value={field.value} onValueChange={field.onChange} onBlur={field.onBlur} disabled={locked} aria-invalid={!!errors.oldPrice} />}
                 />
               </Field>
+              )}
               {advanced ? (
-                <Field label={t('products.form.price.cost')} htmlFor="costPrice" error={err('costPrice')}>
+                <Field label={t('products.form.price.cost')} htmlFor="costPrice" error={err('costPrice')} hint={byVariant ? t('products.form.price.costByVariant') : undefined}>
                   <Controller
                     control={form.control}
                     name="costPrice"

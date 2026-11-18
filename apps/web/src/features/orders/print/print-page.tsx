@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 import { AppPage } from '@/components/app-page';
 import { QueryError } from '@/components/global-states';
 import { formatMessage, useLocaleCode, useT } from '@/lib/i18n';
+import { qtyLabel } from '@/lib/format-message';
 import { downloadUrl } from '@/lib/jobs';
 import { useSession } from '@/lib/session';
 import { ordersApi, useOrder } from '../api';
@@ -48,7 +49,7 @@ export function slipProps(o: Order, shop: string | Shop, lang: Lang, withPrices:
     heading: tr('orders.print.heading', { number: o.number, date: formatDateTime(o.orderedAt, lang) }),
     client: tr('orders.print.client', { name: o.clientName, phone }),
     address,
-    lines: o.items.map((i) => ({ key: i.id, label: `${i.productName}${i.variantName ? ` · ${i.variantName}` : ''} ×${i.quantity}`, amount: withPrices ? formatMoney(i.total) : undefined })),
+    lines: o.items.map((i) => ({ key: i.id, label: qtyLabel(`${i.productName}${i.variantName ? ` · ${i.variantName}` : ''}`, i.quantity), amount: withPrices ? formatMoney(i.total) : undefined })),
     extra: withPrices
       ? [
           ...(o.discount ? [{ key: 'discount', label: tr('common.discount'), amount: `− ${formatMoney(o.discount)}` }] : []),

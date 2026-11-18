@@ -65,7 +65,7 @@ export const catalogueSection = (c: PromptContext): string => {
   // journey 16/11 J04-1: a new shop whose products still wait for Djaber's review is not a shop « with no product »; journey J05r-9:
   // nothing is « bien noté » meanwhile, no apology « pour la confusion »
   const empty = catalogue.awaitingReview
-    ? ["(no product available yet: the shop's products are being checked before they go online. Never say the shop sells nothing or has no products: say its products will be online very soon, answer the other questions (delivery, payment, opening hours) and invite the customer to come back; do not invent any product, price or stock, and take no order. Nothing the customer gives (name, phone, address) is kept meanwhile: never say it is noted or registered, and never apologise for a confusion nobody made)"]
+    ? ["(no product available yet: the shop's products are being checked before they go online. Never say the shop sells nothing or has no products: say its products will be online very soon, answer the other questions (delivery, payment, opening hours) and invite the customer to come back; do not invent any product, price or stock, and take no order. Nothing the customer gives (name, phone, address) is kept meanwhile: never say it is noted or registered, and never apologise for a confusion nobody made. A product the customer names may be one of those being checked: never say it is not part of the shop's products or not sold — say it is not online yet)"]
     : ['(no product available: do not invent any)'];
   return [head, ...(catalogue.count === 0 ? empty : blocks), ...rules].join('\n');
 };

@@ -7,6 +7,7 @@
 import { formatMoney } from '@djaber/shared';
 import { Dialog, Field, FormAlert, Input, Ltr, MoneyInput, Select, toast } from '@djaber/ui';
 import { useState } from 'react';
+import { ClosedDayHint } from '@/components/closed-day-hint';
 import { useCloseGuard, useTypedFlag } from '@/components/close-guard';
 import { algiersDay } from '@/features/catalog/stock/logic';
 import { DialogFooter, RadioList, useDialogSubmit, useOnOpen } from '@/features/orders/dialogs/common';
@@ -102,7 +103,7 @@ export function ManualEntryDialog({ mode, onClose, defaultDay }: { mode: ManualM
       setUploading(false);
     }
   };
-  const closedError = s.error?.includes('CASH_DAY_CLOSED');
+  const closedError = s.closedDay !== null;
   const title = mode?.kind === 'edit' ? t('cash.manual.editTitle') : mode?.kind === 'correct' ? t('cash.manual.correctTitle') : t('cash.manual.title');
   const guard = useCloseGuard(typed.dirty || !!proof, title, onClose);
   return (
@@ -176,7 +177,12 @@ export function ManualEntryDialog({ mode, onClose, defaultDay }: { mode: ManualM
             {t('cash.proof.current')}
           </a>
         ) : null}
-        {s.error ? <FormAlert>{closedError ? t('error.CASH_DAY_CLOSED', { date: dayLabel(day) }) : s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {closedError ? t('error.CASH_DAY_CLOSED', { date: dayLabel(s.closedDay || day) }) : s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
     {guard.element}
@@ -252,7 +258,12 @@ export function CloseDayDialog({ day, theoretical, onClose }: { day: string | nu
         <Field label={t('cash.close.note')} htmlFor="cc-note" error={touched && noteMissing ? (note.trim() ? t('validation.min_length', { min: 2 }) : t('validation.required')) : s.fieldError('note')}>
           <Input id="cc-note" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder={t('cash.close.notePlaceholder')} />
         </Field>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -293,7 +304,12 @@ export function ReopenDayDialog({ day, onClose }: { day: string | null; onClose:
         <Field label={t('common.reasonRequired')} htmlFor="cr-reason" error={touched && reason.trim().length < 3 ? (reason.trim() ? t('validation.min_length', { min: 3 }) : t('validation.required')) : s.fieldError('reason')}>
           <Input id="cr-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
         </Field>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );

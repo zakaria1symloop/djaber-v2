@@ -79,8 +79,10 @@ export function useMovementFilters(list: ListController, fallbackProductName?: s
   if (productId) chip('productId', t('movements.filter.product'), productName, { productId: null, variantId: null });
   if (variantId) chip('variantId', t('movements.filter.variant'), variantName, { variantId: null });
   if (reasons.length) chip('reason', t('movements.filter.reason'), labels(reasons, reasonOptions), { reason: null });
-  if (refTypes.length) chip('refType', t('movements.filter.reference'), labels(refTypes, refTypeOptions), { refType: null, refId: null });
-  if (filterText(s, 'refId')) chip('refId', t('movements.filter.reference'), refLabel ? `#${refLabel}` : t('movements.filter.oneDocument'), { refId: null }); // J07-11: « #ACH-1001 »
+  // journey J07r-5: one document (« #ACH-1001 », from its page) is one chip — not « Référence : Achat » next to it
+  const oneDoc = !!filterText(s, 'refId');
+  if (refTypes.length && !(oneDoc && refTypes.length === 1)) chip('refType', t('movements.filter.reference'), labels(refTypes, refTypeOptions), { refType: null, refId: null });
+  if (oneDoc) chip('refId', t('movements.filter.reference'), refLabel ? `#${refLabel}` : t('movements.filter.oneDocument'), refTypes.length === 1 ? { refId: null, refType: null } : { refId: null }); // J07-11: « #ACH-1001 »
   if (periodLabel) chip('period', t('movements.filter.period'), periodLabel, { from: null, to: null });
   if (createdById) chip('createdById', t('movements.filter.by'), labels([createdById], memberOptions), { createdById: null });
   if (minQty || maxQty) chip('qty', t('movements.filter.quantity'), `${minQty ? formatNumber(Number(minQty)) : '…'} – ${maxQty ? formatNumber(Number(maxQty)) : '…'}`, { minQty: null, maxQty: null });

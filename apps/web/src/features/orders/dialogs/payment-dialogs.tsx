@@ -11,6 +11,7 @@ import { Button, Checkbox, Dialog, EstimateBox, Field, FormAlert, Input, Ltr, Mo
 import { useQuery } from '@tanstack/react-query';
 import { Copy } from 'lucide-react';
 import { useState } from 'react';
+import { ClosedDayHint } from '@/components/closed-day-hint';
 import { digitsToInt, moneyDigits } from '@/lib/money';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useWorkspaceId } from '@/lib/session';
@@ -134,7 +135,12 @@ export function PaymentLinkDialog({ order, open, onClose, onDone }: Props) {
             </span>
           </label>
         ) : null}
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -210,7 +216,12 @@ export function RefundDialog({ order, open, onClose, onDone }: Props) {
           </Select>
         </Field>
         <p className="ts-label-micro !normal-case text-text-muted">{t('orders.refund.info')}</p>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );

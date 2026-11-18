@@ -111,7 +111,8 @@ export const REPORT_DEFINITIONS: Record<ReportKey, ReportDefinition> = {
     kpis: [k('revenue', 'money', { figure: 'revenue' }), k('netRevenue', 'money', { figure: 'net_revenue' }), k('salesCount', 'count'), k('deliveredOrders', 'count'), k('avgBasket', 'money')],
     chart: { type: 'line', x: 'day', y: ['revenue'] },
     filters: [],
-    defaultSort: 'day',
+    // journey J06r-5e: newest day first — oldest first put 25 empty days on page 1 and today's sales on page 2
+    defaultSort: '-day',
   },
   // full-test 15/11 ANALYTICS-03: line amounts before document discounts / without delivery fees — not the named figure
   // « Revenus » of 04 §4 (it showed 23 692 next to 19 722 for the same days)

@@ -68,6 +68,10 @@ describe('sales (GDS-07)', () => {
     // the same phone is found, not duplicated
     const again = await sale(owner, { client: { name: 'Amina B.', phone: '0555123456' }, items: [{ productId: p.id, quantity: 1 }], amountPaid: 5000 });
     expect(again.client.id).toBe(s.client.id);
+    // journey J06r-5b: the amount handed over is kept (the ticket prints it and the change); what is paid stays the total
+    const change = await sale(owner, { items: [{ productId: p.id, quantity: 1 }], amountPaid: 7000 });
+    expect(change).toMatchObject({ total: 5000, amountPaid: 5000, amountReceived: 7000, paymentStatus: 'paid' });
+    expect(s.amountReceived).toBe(3000);
   });
 
   it('AT-GDS-12 finishing a draft with a new client typed in the sheet (PATCH `client { name, phone }`) ⇒ client found or created, partial accepted', async () => {

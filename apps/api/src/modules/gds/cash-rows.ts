@@ -91,6 +91,25 @@ export async function clearPayments(tx: Tx, outbox: OutboxService, sourceType: '
   return entries.length;
 }
 
+/**
+ * « Modifier le paiement » of a validated sale (journey J06r-1): the mode picked is the mode of the money taken, so the
+ * payment entries recorded with the sale's mode (`from`) and their locked cash rows are rewritten to `to` — amounts and
+ * dates unchanged (the theoretical cash, the Paiements report and the ticket follow). A row of a closed day is never
+ * rewritten: `409 CASH_DAY_CLOSED {date}` (reopen the day first). Entries taken with another mode (« Encaisser le reste »
+ * in CCP) keep theirs. Returns the number of entries rewritten.
+ */
+export async function rewritePaymentMethod(tx: Tx, outbox: OutboxService, sourceType: 'sale' | 'purchase', sourceId: string, from: PaymentMethod, to: PaymentMethod) {
+  if (from === to) return 0;
+  const entries = await tx.paymentEntry.findMany({ where: { sourceType, sourceId, method: from }, select: { id: true, cashTransactionId: true } });
+  if (!entries.length) return 0;
+  const cashIds = entries.map((e) => e.cashTransactionId).filter((x): x is string => !!x);
+  await assertRowsOpen(tx, cashIds);
+  await tx.paymentEntry.updateMany({ where: { id: { in: entries.map((e) => e.id) } }, data: { method: to } });
+  if (cashIds.length) await tx.cashTransaction.updateMany({ where: { id: { in: cashIds }, isAutomatic: true }, data: { method: CASH_METHOD[to] } });
+  await outbox.ws(tx, `ws:${TenantContext.workspaceId()}`, 'cash.updated', { day: algiersDay() }, `cash.updated:method:${sourceType}:${sourceId}:${Date.now()}`);
+  return entries.length;
+}
+
 /** Locked `refund` expense row of a cancelled sale whose money is given back (04 §20 "refund row if money was taken"). */
 export async function writeRefund(tx: Tx, outbox: OutboxService, p: { sourceId: string; number: string; amount: number; method: PaymentMethod; description: string }) {
   if (p.amount <= 0) return null;

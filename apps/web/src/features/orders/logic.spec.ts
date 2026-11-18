@@ -106,8 +106,8 @@ describe('pills', () => {
     expect(sourceDetail({ source: 'import', importFileName: 'CSV', importedAt: '2026-10-04T10:00:00Z' }, o)).toBe('CSV · 04 oct.');
   });
   it('items summary', () => {
-    expect(itemsSummary([{ name: 'Parfum Oud', variant: null, qty: 2 }])).toEqual({ first: 'Parfum Oud ×2', more: 0 });
-    expect(itemsSummary([{ name: 'Parfum Oud', variant: null, qty: 2 }, { name: 'Sac', variant: null, qty: 1 }])).toEqual({ first: 'Parfum Oud ×2', more: 1 });
+    expect(itemsSummary([{ name: 'Parfum Oud', variant: null, qty: 2 }])).toEqual({ first: '\u2068Parfum Oud\u2069 \u2066×2\u2069', more: 0 });
+    expect(itemsSummary([{ name: 'Parfum Oud', variant: null, qty: 2 }, { name: 'Sac', variant: null, qty: 1 }])).toEqual({ first: '\u2068Parfum Oud\u2069 \u2066×2\u2069', more: 1 });
     expect(itemsSummary([])).toEqual({ first: '', more: 0 });
   });
 });

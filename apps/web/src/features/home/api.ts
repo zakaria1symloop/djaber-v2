@@ -14,11 +14,13 @@ export const homeKeys = {
 
 export const useHome = (enabled = true) => {
   const ws = useWorkspaceId();
-  return useQuery({ queryKey: homeKeys.home(ws), queryFn: homeApi.home, enabled: !!ws && enabled, staleTime: 30_000 });
+  // journeys J02r-3 / J07r-3: every visit reads the server again (the cached figures show meanwhile) — a stock, sale or
+  // order write made while the Home was not mounted never leaves it 30 s behind the other screens
+  return useQuery({ queryKey: homeKeys.home(ws), queryFn: homeApi.home, enabled: !!ws && enabled, staleTime: 30_000, refetchOnMount: 'always' });
 };
 
 /** WS events that change a figure of the home page. */
-export const HOME_EVENTS = ['order.created', 'order.updated', 'order.deleted', 'conversation.updated', 'notification.created', 'channel.updated', 'credits.updated', 'product.updated', 'agent.updated'] as const;
+export const HOME_EVENTS = ['order.created', 'order.updated', 'order.deleted', 'conversation.updated', 'notification.created', 'channel.updated', 'credits.updated', 'product.updated', 'agent.updated', 'cash.updated', 'inventory.updated'] as const;
 
 /** Mounted by the home page: one refetch of the dashboard per burst of events. */
 export function useHomeEvents() {
@@ -34,4 +36,6 @@ export function useHomeEvents() {
   useWsEvent(HOME_EVENTS[6], refresh);
   useWsEvent(HOME_EVENTS[7], refresh);
   useWsEvent(HOME_EVENTS[8], refresh);
+  useWsEvent(HOME_EVENTS[9], refresh);
+  useWsEvent(HOME_EVENTS[10], refresh);
 }

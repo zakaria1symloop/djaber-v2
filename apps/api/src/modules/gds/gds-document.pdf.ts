@@ -136,18 +136,18 @@ export const GDS_LABELS: Record<GdsLang, Record<string, string>> = {
     purchase: 'Bon de commande fournisseur', sale: 'Ticket de vente', inventory: "Feuille d'inventaire", supplier: 'Fournisseur', date: 'Date', expected: 'Livraison prévue',
     invoice: 'Facture fournisseur', status: 'Statut', product: 'Produit', variant: 'Variante', qty: 'Qté', received: 'Reçu', unitCost: 'Coût unit.', unitPrice: 'Prix unit.',
     total: 'Total', subtotal: 'Sous-total', tax: 'Taxe', shipping: 'Frais de port', discount: 'Remise', paid: 'Payé', remaining: 'Reste dû', client: 'Client', seller: 'Vendeur',
-    payment: 'Paiement', sku: 'SKU', expectedQty: 'Attendu', counted: 'Compté', scope: 'Périmètre', startedAt: 'Commencé le', note: 'Note', walkIn: 'Passage',
+    payment: 'Paiement', sku: 'SKU', expectedQty: 'Attendu', counted: 'Compté', scope: 'Périmètre', startedAt: 'Commencé le', note: 'Note', walkIn: 'Passage', amountReceived: 'Montant reçu', change: 'Rendu',
   },
   ar: {
     purchase: 'وصل طلب مورّد', sale: 'وصل البيع', inventory: 'ورقة الجرد', supplier: 'المورّد', date: 'التاريخ', expected: 'التسليم المتوقع',
     invoice: 'فاتورة المورّد', status: 'الحالة', product: 'المنتج', variant: 'المتغيّر', qty: 'الكمية', received: 'المستلم', unitCost: 'تكلفة الوحدة', unitPrice: 'سعر الوحدة',
     total: 'المجموع', subtotal: 'المجموع الفرعي', tax: 'الضريبة', shipping: 'مصاريف الشحن', discount: 'التخفيض', paid: 'المدفوع', remaining: 'المتبقي', client: 'الزبون', seller: 'البائع',
-    payment: 'الدفع', sku: 'SKU', expectedQty: 'المتوقع', counted: 'المعدود', scope: 'النطاق', startedAt: 'بدأ في', note: 'ملاحظة', walkIn: 'زبون عابر',
+    payment: 'الدفع', sku: 'SKU', expectedQty: 'المتوقع', counted: 'المعدود', scope: 'النطاق', startedAt: 'بدأ في', note: 'ملاحظة', walkIn: 'زبون عابر', amountReceived: 'المبلغ المستلم', change: 'الباقي المُرجَع',
   },
   en: {
     purchase: 'Purchase order', sale: 'Sales receipt', inventory: 'Inventory count sheet', supplier: 'Supplier', date: 'Date', expected: 'Expected delivery',
     invoice: 'Supplier invoice', status: 'Status', product: 'Product', variant: 'Variant', qty: 'Qty', received: 'Received', unitCost: 'Unit cost', unitPrice: 'Unit price',
     total: 'Total', subtotal: 'Subtotal', tax: 'Tax', shipping: 'Shipping', discount: 'Discount', paid: 'Paid', remaining: 'Remaining', client: 'Client', seller: 'Seller',
-    payment: 'Payment', sku: 'SKU', expectedQty: 'Expected', counted: 'Counted', scope: 'Scope', startedAt: 'Started', note: 'Note', walkIn: 'Walk-in',
+    payment: 'Payment', sku: 'SKU', expectedQty: 'Expected', counted: 'Counted', scope: 'Scope', startedAt: 'Started', note: 'Note', walkIn: 'Walk-in', amountReceived: 'Amount received', change: 'Change',
   },
 };

@@ -1052,6 +1052,19 @@ export const withoutFalseApology = (reply: string, customerText?: string): strin
 };
 
 /**
+ * journey J02r-6 (18/11): while the shop's products still wait for Djaber's review, a product the customer names may well be one of
+ * them — the reply never says it « ne fait pas partie de nos produits » (the shop does sell it): it says it is not online yet
+ * (« Désolé, les chaussures sport Atlas ne font pas partie de nos produits pour le moment » ⇒ « … ne sont pas encore en ligne »).
+ * Only while the catalogue is awaiting review (ai-run), fr / en wording.
+ */
+const NOT_OURS_FR = /\b(ne\s+)?(fait|font)\s+pas\s+partie\s+de\s+(?:nos|notre)\s+(?:produits|articles|catalogue|gamme|offre)(?:\s+(?:pour\s+le\s+moment|pour\s+l['’]instant|actuellement))?/giu;
+const NOT_OURS_EN = /\b(is|are)\s+not\s+(?:part\s+of|among|in)\s+our\s+(?:products|range|catalog(?:ue)?|items)(?:\s+(?:for\s+now|at\s+the\s+moment|right\s+now))?/giu;
+export const withPendingProductWording = (reply: string): string =>
+  reply
+    .replace(NOT_OURS_FR, (_m, _ne: string | undefined, verb: string) => (verb.toLowerCase() === 'font' ? 'ne sont pas encore en ligne' : "n'est pas encore en ligne"))
+    .replace(NOT_OURS_EN, (_m, verb: string) => `${verb} not online yet`);
+
+/**
  * journey retest R20-4 (18/11): a short thank-you sentence placed between the facts and the question (N7 T1 « … et une Basket Runner (12500 DA).
  * Merci Yacine. Lequel vous intéresse ? ») goes first — the thanks before the facts, the question last. Only a sentence of four words at most
  * that opens with the thanks and asks nothing, right before the reply's closing question.

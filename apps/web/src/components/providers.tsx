@@ -1,7 +1,8 @@
 'use client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ToastRegion } from '@djaber/ui';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { formatNumber } from '@djaber/shared';
+import { NumberInputTextsProvider, ToastRegion, type NumberInputTexts } from '@djaber/ui';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, apiSession } from '@/lib/api';
 import { MessagesProvider, useT } from '@/lib/i18n';
 import { SessionProvider } from '@/lib/session';
@@ -9,6 +10,19 @@ import { SessionProvider } from '@/lib/session';
 function Toasts() {
   const t = useT();
   return <ToastRegion label={t('nav.notifications')} closeLabel={t('action.close')} />;
+}
+
+/** Journeys J02r-5 / J07r-4: what an integer field says under itself when it refuses a key or drops a decimal part. */
+function NumberTexts({ children }: { children: ReactNode }) {
+  const t = useT();
+  const texts = useMemo<NumberInputTexts>(
+    () => ({
+      refused: (reason, o) => (reason === 'minus' ? t('input.notice.minus') : reason === 'digits' ? t('input.notice.digits', { max: formatNumber(o.maxDigits) }) : t('input.notice.char')),
+      decimalDropped: (fraction) => t('input.notice.decimal', { fraction }),
+    }),
+    [t],
+  );
+  return <NumberInputTextsProvider value={texts}>{children}</NumberInputTextsProvider>;
 }
 
 export function Providers({ locale, messages, children }: { locale: string; messages: Record<string, string>; children: ReactNode }) {
@@ -41,7 +55,9 @@ export function Providers({ locale, messages, children }: { locale: string; mess
   return (
     <MessagesProvider locale={locale} messages={messages}>
       <QueryClientProvider client={client}>
-        <SessionProvider>{children}</SessionProvider>
+        <SessionProvider>
+          <NumberTexts>{children}</NumberTexts>
+        </SessionProvider>
         <Toasts />
       </QueryClientProvider>
     </MessagesProvider>

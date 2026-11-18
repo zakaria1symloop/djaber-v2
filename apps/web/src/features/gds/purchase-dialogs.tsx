@@ -4,10 +4,11 @@
 // reçues restent en stock"; Supprimer: brouillon seulement; Marquer payé: montant ≤ solde · mode · date · ligne caisse;
 // Paiement verrouillé; Sur-réception accepted with a warning; Produit non suivi refused). The menu items come from the
 // server descriptors (`actions`), greyed with their code.
-import { formatMoney, formatNumber } from '@djaber/shared';
+import { formatMoney, formatNumber, purchaseTotalAfterReceipt } from '@djaber/shared';
 import { Button, CodeInput, ConfirmDialog, Dialog, Field, focusSoon, FormAlert, Input, Ltr, MoneyInput, NumberInput, Pill, Select, toast, type MenuAction } from '@djaber/ui';
 import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
+import { ClosedDayHint } from '@/components/closed-day-hint';
 import { useCloseGuard, useTypedFlag } from '@/components/close-guard';
 import { algiersDay } from '@/features/catalog/stock/logic';
 import { DialogFooter, refusal, useDialogSubmit, useOnOpen } from '@/features/orders/dialogs/common';
@@ -179,8 +180,18 @@ export function ReceiveDialog({ purchaseId, onClose }: { purchaseId: string | nu
   const sum = receiveSummary(ls.map((l) => ({ ordered: l.ordered, alreadyReceived: l.already, now: int(l.now), added: l.added })));
   const missingVariant = ls.some((l) => l.added && l.hasVariants && !l.variantId);
   const pay = digitsToInt(payNow) ?? 0;
-  // a draft owes nothing yet but is owed in full once received (STOCK-08: never « solde dû après : 0 DA » on a draft)
-  const owed = p ? (p.status === 'draft' ? Math.max(0, p.total - p.amountPaid) : p.remaining) : 0;
+  // journey J07r-1: what is owed once THIS receipt is written — the costs typed here, the over-received units and the lines
+  // added count (the server caps `paymentNow` on the same total, `purchaseTotalAfterReceipt`); a draft is owed in full
+  // once received (STOCK-08: never « solde dû après : 0 DA » on a draft)
+  const owed = p
+    ? Math.max(
+        0,
+        purchaseTotalAfterReceipt(p, {
+          items: ls.filter((l) => !l.added && l.id).map((l) => ({ id: l.id!, receivedQty: int(l.now), unitCost: int(l.cost) })),
+          newItems: ls.filter((l) => l.added).map((l) => ({ receivedQty: int(l.now), unitCost: int(l.cost) })),
+        }) - p.amountPaid,
+      )
+    : 0;
   const remainingAfter = Math.max(0, owed - pay);
   // the field already says "au-delà du reste dû": the submit is blocked the same way
   const overPay = !!p && pay > owed;
@@ -354,7 +365,12 @@ export function ReceiveDialog({ purchaseId, onClose }: { purchaseId: string | nu
             {missingVariant ? <FormAlert tone="warning">{t('error.VARIANT_REQUIRED')}</FormAlert> : null}
           </>
         ) : null}
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
     {guard.element}
@@ -401,7 +417,12 @@ export function CancelPurchaseDialog({ purchaseId, onClose }: { purchaseId: stri
         <Field label={t('common.noteOptional')} htmlFor="pc-reason" error={s.fieldError('reason')}>
           <Input id="pc-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder={t('purchases.cancel.reasonPlaceholder')} />
         </Field>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -494,7 +515,12 @@ export function PurchasePaymentDialog({ purchaseId, onClose }: { purchaseId: str
             <CodeInput id="pp-ref" value={reference} maxLength={120} onChange={(e) => setReference(e.target.value)} />
           </Field>
         </div>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );

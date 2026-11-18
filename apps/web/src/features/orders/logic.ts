@@ -3,6 +3,7 @@
 import { TIMEZONE } from '@djaber/shared';
 import type { BulkResponse, ConfirmationStatus, DeliveryStatus, Order, OrderHistoryRow, OrderListItem, OrderStats, OrderStatus, ShipmentStatus, SourceBadge } from './contracts';
 import { ORDER_READ_ONLY_STATUSES } from './contracts';
+import { qtyLabel } from '@/lib/format-message';
 
 /* ---------- time (Africa/Algiers, UTC+1 all year) ---------- */
 const ALGIERS_OFFSET = '+01:00';
@@ -108,7 +109,9 @@ export const decimalLabel = (n: number, locale: string): string => (locale === '
 export function itemsSummary(items: OrderListItem['items']): { first: string; more: number } {
   const first = items[0];
   if (!first) return { first: '', more: 0 };
-  const label = `${first.name}${first.variant ? ` ${first.variant}` : ''}${first.qty > 1 ? ` ×${first.qty}` : ''}`;
+  // journey J06r-4: name and quantity isolated apart (a mixed Latin / Arabic name kept « ×2 » inside its Arabic run)
+  const name = `${first.name}${first.variant ? ` ${first.variant}` : ''}`;
+  const label = first.qty > 1 ? qtyLabel(name, first.qty) : name;
   return { first: label, more: Math.max(0, items.length - 1) };
 }
 

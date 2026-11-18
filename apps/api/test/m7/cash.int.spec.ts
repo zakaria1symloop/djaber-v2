@@ -168,6 +168,34 @@ describe('day closing (CSH-01/02, 04 §20)', () => {
     expect(late).toMatchObject({ paymentStatus: 'paid' });
     await owner.post(`/sales/${partial.id}/payments`, { amount: 300, method: 'cash' }).set(idem()).expect(200);
   });
+
+  it('journey J06r-1: « Modifier le paiement » moves the money taken with the sale mode — payment entries, cash rows, theoretical cash, ticket methods — keeps a payment taken with another mode, and is refused on a closed day', async () => {
+    const owner = await advancedShop(app, { fees: true });
+    const today = algiersDay();
+    const p = await product(owner, { price: 1000, stock: 20 });
+    const theoretical = async () => (await owner.get(`/cash/stats?day=${today}`).expect(200)).body.data.day.theoreticalCash as number;
+    const card = await sale(owner, { items: [{ productId: p.id, quantity: 2 }], paymentMethod: 'card', amountPaid: 2000 });
+    expect(await theoretical()).toBe(0);
+    const changed = (await owner.patch(`/sales/${card.id}`, { paymentMethod: 'cash', notes: null }).expect(200)).body.data;
+    expect(changed.paymentMethod).toBe('cash');
+    expect(changed.payments.map((x: any) => [x.amount, x.method])).toEqual([[2000, 'cash']]);
+    const rows = await db.cashTransaction.findMany({ where: { workspaceId: owner.workspaceId, reference: card.number } });
+    expect(rows.map((r) => [r.amount, r.method, r.isAutomatic])).toEqual([[2000, 'cash', true]]);
+    expect(await theoretical()).toBe(2000);
+    // mixed: a deposit in cash + the rest in CCP ⇒ only the cash payment follows the new mode
+    const mixed = await sale(owner, { client: { name: 'Sara B.', phone: '0555 66 06 09' }, items: [{ productId: p.id, quantity: 3 }], paymentMethod: 'cash', amountPaid: 1000 });
+    await owner.post(`/sales/${mixed.id}/payments`, { amount: 2000, method: 'ccp' }).set(idem()).expect(200);
+    const moved = (await owner.patch(`/sales/${mixed.id}`, { paymentMethod: 'transfer' }).expect(200)).body.data;
+    expect(moved.payments.map((x: any) => [x.amount, x.method]).sort()).toEqual([[1000, 'transfer'], [2000, 'ccp']]);
+    expect(await theoretical()).toBe(2000);
+    // closed day: refused, nothing changes
+    await owner.post('/cash/close', { day: today, countedBalance: 2000 }).set(idem()).expect(200);
+    expect((await owner.patch(`/sales/${card.id}`, { paymentMethod: 'ccp' }).expect(409)).body.error).toMatchObject({ code: 'CASH_DAY_CLOSED', params: { date: today } });
+    const after = (await owner.get(`/sales/${card.id}`).expect(200)).body.data;
+    expect([after.paymentMethod, after.payments[0].method]).toEqual(['cash', 'cash']);
+    // the note alone is still accepted on a closed day (no money moves)
+    expect((await owner.patch(`/sales/${card.id}`, { notes: 'client fidèle' }).expect(200)).body.data.notes).toBe('client fidèle');
+  });
 });
 
 describe('09 §4 regression: period selection ↔ table ↔ KPIs', () => {

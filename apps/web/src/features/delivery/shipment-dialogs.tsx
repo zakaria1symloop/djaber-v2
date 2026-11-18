@@ -7,6 +7,7 @@
 import { formatMoney } from '@djaber/shared';
 import { Checkbox, Dialog, Field, FormAlert, Input, MoneyInput, RadioCards, toast } from '@djaber/ui';
 import { useState } from 'react';
+import { ClosedDayHint } from '@/components/closed-day-hint';
 import { DialogFooter, RadioList, useDialogSubmit, useOnOpen } from '@/features/orders/dialogs/common';
 import { effectiveDateError, isoToLocalInput, localInputToIso } from '@/features/orders/logic';
 import { ORDER_BACKDATE_MAX_DAYS } from '@/features/orders/contracts';
@@ -67,7 +68,12 @@ export function CancelParcelDialog({ parcel, open, onClose, onDone }: Props) {
             { value: 'cancelled', label: t('parcel.cancel.cancelOrder') },
           ]}
         />
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -102,7 +108,12 @@ export function ChangeCourierDialog({ parcel, open, onClose, onDone }: Props) {
       <div className="flex flex-col gap-3" data-testid="change-courier-dialog">
         {couriers.data && !others.length ? <FormAlert tone="info">{t('parcel.changeCourier.none')}</FormAlert> : null}
         {others.length ? <RadioCards label={t('common.courier')} columns={2} value={to} onChange={setTo} options={others.map((c) => ({ value: c.id, label: c.displayName, description: t(`couriers.provider.${c.provider}`) }))} /> : null}
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -146,7 +157,12 @@ export function MarkFailedDialog({ parcel, open, onClose, onDone }: Props) {
         <Field label={t('common.noteOptional')} htmlFor="mf-note">
           <Input id="mf-note" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} />
         </Field>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -180,7 +196,12 @@ export function RetryDeliveryDialog({ parcel, open, onClose, onDone }: Props) {
         <Field label={t('parcel.retryDelivery.message')} htmlFor="rd-note" hint={t('parcel.retryDelivery.hint')}>
           <Input id="rd-note" value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} />
         </Field>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -235,7 +256,12 @@ export function ParcelDeliveredDialog({ parcel, open, onClose, onDone }: Props) 
         </Field>
         {/* journey J08-12 #1: « (payé : …) » had no value — what was already paid (total − COD) + what is cashed now */}
         <p className="rounded-card border border-line-edge px-3 py-2 ts-label-micro !normal-case text-text-muted">{t('orders.deliver.effects', { amount: formatMoney(collected ?? parcel.codAmount), paid: formatMoney(Math.max(0, parcel.total - parcel.codAmount) + (collected ?? parcel.codAmount)) })}</p>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -291,7 +317,12 @@ export function ParcelReturnedDialog({ parcel, open, onClose, onDone }: Props) {
         <Field label={t('common.noteOptional')} htmlFor="ret-note">
           <Input id="ret-note" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} />
         </Field>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );

@@ -1,6 +1,6 @@
 // Stock dashboard / movements logic (GDS-01, GDS-05): Algiers days, time label, signed quantity, period presets, references.
 import { describe, expect, it } from 'vitest';
-import { activePeriod, actorName, addDays, algiersDay, formatSigned, movementTimeLabel, periodRange, quantityTone, referenceHref, referenceKind, signedQuantity, withoutYear } from './logic';
+import { activePeriod, actorName, addDays, algiersDay, formatSigned, movementTimeLabel, noteBeyondReference, periodRange, quantityTone, referenceHref, referenceKind, signedQuantity, withoutYear } from './logic';
 
 describe('Algiers days', () => {
   it('uses Africa/Algiers (UTC+1), not UTC', () => {
@@ -84,6 +84,12 @@ describe('references and actors', () => {
   it('classifies reference labels', () => {
     expect(['order', 'sale', 'purchase', 'inventory'].map(referenceKind)).toEqual(['number', 'number', 'number', 'number']);
     expect(referenceKind('variant')).toBe('name');
+    // journey J07r-5: « Inventaire · #INV-1 · INV-1 · 2 pulls M abîmés » — the reference is said once
+    expect(noteBeyondReference('INV-1 · 2 pulls M abîmés', 'INV-1')).toBe('2 pulls M abîmés');
+    expect(noteBeyondReference('#CMD-1024', 'CMD-1024')).toBeNull();
+    expect(noteBeyondReference('INV-1', 'INV-1')).toBeNull();
+    expect(noteBeyondReference('Casse', 'INV-1')).toBe('Casse');
+    expect(noteBeyondReference('Casse', null)).toBe('Casse');
     expect(['manual', 'import', undefined].map(referenceKind)).toEqual(['type', 'type', 'type']);
   });
   it('names the actor, null for the system', () => {

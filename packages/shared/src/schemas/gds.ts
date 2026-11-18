@@ -84,6 +84,46 @@ export const weightedAverageCost = (stockBefore: number, costBefore: number | nu
   if (costBefore === null || stock + receivedQty <= 0) return unitCost;
   return Math.floor((stock * (costBefore ?? 0) + receivedQty * unitCost) / (stock + receivedQty) + 0.5);
 };
+/**
+ * 04 §20 one purchase line received now at `unitCost` (journeys 16/11 J07-1): a line that already holds units received
+ * at another cost keeps them at their cost and the rest of the line (at least the units received now) moves to a new
+ * line at the new cost; otherwise the line is re-priced and its quantity raised to what was received (over-receipt).
+ * The ONE rule of the server receipt and of the receipt dialog's « solde dû après » (journey J07r-1).
+ */
+export type ReceiptLineState = { quantity: number; receivedQty: number; unitCost: number; total: number };
+export function receiptLinePlan(line: { quantity: number; receivedQty: number; unitCost: number }, receivedNow: number, unitCost: number): { line: ReceiptLineState; split: ReceiptLineState | null } {
+  if (line.receivedQty > 0 && unitCost !== line.unitCost) {
+    const rest = Math.max(line.quantity - line.receivedQty, receivedNow);
+    return {
+      line: { quantity: line.receivedQty, receivedQty: line.receivedQty, unitCost: line.unitCost, total: line.receivedQty * line.unitCost },
+      split: { quantity: rest, receivedQty: receivedNow, unitCost, total: rest * unitCost },
+    };
+  }
+  const receivedQty = line.receivedQty + receivedNow;
+  const quantity = Math.max(line.quantity, receivedQty);
+  return { line: { quantity, receivedQty, unitCost, total: quantity * unitCost }, split: null };
+}
+/**
+ * What the purchase costs once this receipt is written (lines + tax + shipping): typed costs, over-received units and
+ * lines added at the receipt included — the base of the payment cap at the receipt (`paymentNow ≤ total − amountPaid`).
+ */
+export function purchaseTotalAfterReceipt(
+  p: { items: readonly (ReceiptLineState & { id: string })[]; tax: number; shippingCost: number },
+  receipt: { items: readonly { id: string; receivedQty: number; unitCost?: number }[]; newItems?: readonly { receivedQty: number; unitCost: number }[] },
+): number {
+  let subtotal = 0;
+  for (const line of p.items) {
+    const r = receipt.items.find((x) => x.id === line.id);
+    if (!r || r.receivedQty <= 0) {
+      subtotal += line.total;
+      continue;
+    }
+    const plan = receiptLinePlan(line, r.receivedQty, r.unitCost ?? line.unitCost);
+    subtotal += plan.line.total + (plan.split?.total ?? 0);
+  }
+  for (const n of receipt.newItems ?? []) if (n.receivedQty > 0) subtotal += n.receivedQty * n.unitCost;
+  return subtotal + p.tax + p.shippingCost;
+}
 /** 04 §19: |difference| / max(expected, 1), in whole percent (truncated: AT-INV-02 "3 → 1 (66 %)"). */
 export const inventoryVariancePct = (expected: number, counted: number): number => Math.floor((Math.abs(counted - expected) * 100) / Math.max(expected, 1));
 /** 04 §19: a variance above 10 % (exact ratio, not the displayed percent) needs a note. */
@@ -527,6 +567,8 @@ export type SaleView = Omit<SaleListItemView, 'items'> & {
   customerPhone: string | null;
   /** full-test 15/11 SALES-CASH-02: a draft's amount typed as received (null: not a draft / not typed) */
   draftAmountReceived: number | null;
+  /** journey J06r-5b: amount typed as received when the sale was validated (the ticket prints it and the change) */
+  amountReceived: number | null;
   items: SaleItemView[];
   subtotal: number;
   discount: number;

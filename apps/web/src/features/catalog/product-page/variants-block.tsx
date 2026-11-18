@@ -115,10 +115,11 @@ function VariantRow({ productId, variant: v, advanced, editable, onAdjust, colum
         <td className={cell}>
           {editable && !editing ? (
             <button type="button" className="text-start hover:underline" aria-label={t('products.page.variants.edit', { name: v.name })} onClick={(e) => (e.stopPropagation(), setEditing(true))}>
-              {v.name}
+              <bdi>{v.name}</bdi>
             </button>
           ) : (
-            v.name
+            // journey J02r-4: « 40 · Noir » read « Noir · 40 » in Arabic — the name is its own isolate
+            <bdi>{v.name}</bdi>
           )}
           {v.isActive ? null : (
             <Pill className="ms-2 rounded-[4px]">{t('enum.Product.state.hidden')}</Pill>
@@ -198,7 +199,8 @@ export function VariantsBlock({ product, advanced, canWrite, onAdjust }: { produ
           </tbody>
         </table>
       </div>
-      <Note>{t(canWrite ? 'products.page.variants.hint' : 'products.page.variants.hintReadOnly')}</Note>
+      {/* journey J07r-5: simple mode has no cost column — its hint names only what can be edited */}
+      <Note>{t(canWrite ? (advanced ? 'products.page.variants.hint' : 'products.page.variants.hintSimple') : 'products.page.variants.hintReadOnly')}</Note>
       <GenerateVariantsDialog open={generate} onClose={() => setGenerate(false)} productId={product.id} productName={product.name} existing={variants} defaultPrice={product.price} />
     </Block>
   );

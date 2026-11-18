@@ -3349,6 +3349,8 @@ model Sale {
   amountPaid    Int              @default(0)
   /// full-test 15/11 SALES-CASH-01/-02: amount typed as received on a draft (no cash until validated)
   draftAmountReceived Int?
+  /// journey J06r-5b: amount typed as received at validation (≥ amountPaid; the change = amountReceived − amountPaid)
+  amountReceived Int?
   paymentMethod PaymentMethod    @default(cash)
   paymentStatus GdsPaymentStatus @default(unpaid)
   notes         String?

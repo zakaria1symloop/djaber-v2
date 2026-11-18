@@ -160,6 +160,7 @@ export class SaleService {
       ...head,
       customerPhone: s.client ? null : s.customerPhone,
       draftAmountReceived: s.status === 'draft' ? s.draftAmountReceived : null,
+      amountReceived: s.status === 'draft' ? null : s.amountReceived,
       items: s.items.map((i) => ({
         id: i.id,
         product: productRef(i.product),
@@ -235,7 +236,8 @@ export class SaleService {
     await this.effects.syncStock(tx, sale, lines.map((l) => ({ productId: l.productId, variantId: l.variantId, quantity: l.quantity, trackStock: l.trackStock })));
     const paid = Math.min(amountPaid, sale.total);
     if (paid > 0) await this.effects.addPayment(tx, sale, { amount: paid, method: sale.paymentMethod, paidAt: sale.soldAt, description: storedText(paid < sale.total ? 'stored.cash.saleDeposit' : 'stored.cash.sale', { number: sale.number }) });
-    await tx.sale.update({ where: { id: sale.id }, data: { status: 'completed', draftAmountReceived: null, ...(await this.effects.recomputePaid(tx, sale)) } });
+    // journey J06r-5b: the amount typed as received is kept for the ticket (« Montant reçu 7 000 DA · Rendu 700 DA »)
+    await tx.sale.update({ where: { id: sale.id }, data: { status: 'completed', draftAmountReceived: null, amountReceived: Math.max(0, amountPaid), ...(await this.effects.recomputePaid(tx, sale)) } });
     await this.effects.recomputeClient(tx, sale.clientId);
   }
 
@@ -286,6 +288,8 @@ export class SaleService {
       if (s.status === 'completed') {
         const locked = input.items !== undefined || input.discount !== undefined || input.tax !== undefined || input.clientId !== undefined || !!input.client || input.amountPaid !== undefined || input.soldAt !== undefined;
         if (locked) throw new AppException('SALE_IMMUTABLE');
+        // journey J06r-1: the mode is the mode of the money taken — its payments and cash rows follow (closed day ⇒ 409)
+        if (input.paymentMethod && input.paymentMethod !== s.paymentMethod) await this.effects.changeMethod(tx, s, input.paymentMethod);
         await tx.sale.update({ where: { id }, data: { ...(input.notes !== undefined ? { notes: input.notes } : {}), ...(input.paymentMethod ? { paymentMethod: input.paymentMethod } : {}) } });
         return;
       }
@@ -411,12 +415,16 @@ export class SaleService {
         rows: s.items.map((i) => [i.variantName ? `${i.productName} · ${i.variantName}` : i.productName, String(i.quantity), money(i.unitPrice), money(i.total)]),
         totals: [
           { label: t.subtotal!, value: money(s.subtotal) },
-          ...(s.discount ? [{ label: t.discount!, value: `-${money(s.discount)}` }] : []),
+          // journey J06r-5b: a minus sign, never the hyphen « -700 DA » — the en dash, as the PDF's Latin font (WinAnsi)
+          // has no « − » (it would print « ? »)
+          ...(s.discount ? [{ label: t.discount!, value: `– ${money(s.discount)}` }] : []),
           ...(s.tax ? [{ label: t.tax!, value: money(s.tax) }] : []),
           { label: t.total!, value: money(s.total), bold: true },
           { label: t.paid!, value: money(s.amountPaid) },
           // journeys 16/11 J06-10g: the ticket says how it was paid (« Espèces », « 1 000 DA Espèces + 3 400 DA CCP / BaridiMob »)
           ...(s.amountPaid > 0 ? [{ label: t.payment!, value: receiptMethods(s, l) }] : []),
+          // journey J06r-5b (J06-10g): what the customer handed over and the change given back
+          ...(s.amountReceived !== null && s.amountReceived > s.amountPaid ? [{ label: t.amountReceived!, value: money(s.amountReceived) }, { label: t.change!, value: money(s.amountReceived - s.amountPaid) }] : []),
           ...(s.remaining ? [{ label: t.remaining!, value: money(s.remaining) }] : []),
         ],
         note: s.notes,

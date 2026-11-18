@@ -4,7 +4,7 @@
 import * as Popover from '@radix-ui/react-popover';
 import { Check, ChevronDown, Minus, Plus, Search, X } from 'lucide-react';
 import * as React from 'react';
-import { integerDraftAfter, integerFieldText, parseIntegerInput } from './number-parse';
+import { integerDraftAfter, integerFieldText, parseIntegerInput, type IntegerRefusal } from './number-parse';
 import { onRadioGroupKeyDown, radioTabIndex } from './radio-keys';
 import { cn, Input } from './primitives';
 
@@ -127,6 +127,35 @@ export const UrlInput = React.forwardRef<HTMLInputElement, Omit<React.InputHTMLA
 
 const group = (digits: string) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 
+/**
+ * Journeys J02r-5 / J07r-4 (18/11): the words an integer field shows under itself when it refuses a key (a minus where
+ * negatives are not allowed, a letter, one digit too many) or drops a decimal part on blur — the red flash alone was missed
+ * (« 1000000000 » became 100 000 000 DA without a word, « 2,5 » became 2). The app gives the texts once (its language);
+ * without a provider the field only flashes.
+ */
+export type NumberInputTexts = { refused: (reason: IntegerRefusal, o: { maxDigits: number }) => string; decimalDropped: (fraction: string) => string };
+const NumberInputTextsContext = React.createContext<NumberInputTexts | null>(null);
+export function NumberInputTextsProvider({ value, children }: { value: NumberInputTexts; children: React.ReactNode }) {
+  return <NumberInputTextsContext.Provider value={value}>{children}</NumberInputTextsContext.Provider>;
+}
+/** The notice of a refused key / dropped decimal: shown for a few seconds under the field, read by screen readers. */
+function useFieldNotice() {
+  const texts = React.useContext(NumberInputTextsContext);
+  const [notice, setNotice] = React.useState<{ text: string; n: number } | null>(null);
+  React.useEffect(() => {
+    if (!notice) return;
+    const id = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(id);
+  }, [notice]);
+  const say = (text: string | undefined) => (text ? setNotice((x) => ({ text, n: (x?.n ?? 0) + 1 })) : undefined);
+  const element = notice ? (
+    <span role="status" aria-live="polite" data-field-notice className="pointer-events-none absolute start-0 top-full z-10 mt-0.5 max-w-[16rem] rounded-[4px] bg-ink-raised px-1.5 py-0.5 text-[11px] leading-4 text-accent-alert shadow-sm">
+      {notice.text}
+    </span>
+  ) : null;
+  return { texts, say, clear: () => setNotice(null), element };
+}
+
 /*
  * ---------- Integer field: grouped by thousands while typing, optional suffix (DA, %, unités) ----------
  * Full-test 15/11 (ORDERS-01, PRODUCTS-01, DELIVERY-01, STOCK-02, SETTINGS-09, SALES-CASH-07): what is typed is read by
@@ -148,6 +177,7 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
   ref,
 ) {
   const inner = React.useRef<HTMLInputElement | null>(null);
+  const notice = useFieldNotice();
   // number of digits before the caret after the last keystroke: the caret is put back there once the value is regrouped
   const caret = React.useRef<number | null>(null);
   const caretAfterMinus = React.useRef(false);
@@ -219,8 +249,10 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
             // refused keystroke: the value stays, the caret goes back where it was, the field flashes
             back.current = Math.max(0, at - (raw.length - shown.length));
             setRefused((n) => n + 1);
+            notice.say(notice.texts?.refused(r.reason, { maxDigits }));
             return;
           }
+          notice.clear();
           // the caret is in (or right after) the decimal part when it is past the separator of the typed text
           const sep = Math.max(raw.lastIndexOf(','), raw.lastIndexOf('.'));
           caret.current = r.fraction && sep >= 0 && at > sep ? Number.POSITIVE_INFINITY : r.caretDigits;
@@ -231,8 +263,11 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
           if (r.value !== value) onValueChange(r.value);
         }}
         onBlur={(e) => {
-          // a decimal part with a non-zero digit is dropped: the merchant sees it happen
-          if (/[1-9]/.test(fraction)) setRefused((n) => n + 1);
+          // a decimal part with a non-zero digit is dropped: the merchant sees it happen, and reads it (J07r-4)
+          if (/[1-9]/.test(fraction)) {
+            setRefused((n) => n + 1);
+            notice.say(notice.texts?.decimalDropped(fraction));
+          }
           setFraction('');
           setBlank(false);
           if (value === '-') onValueChange('');
@@ -248,16 +283,21 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
           {suffix}
         </span>
       ) : null}
+      {notice.element}
     </div>
   );
 });
 
-/** Integer DZD amount (`12 500 DA`). */
+/**
+ * Integer DZD amount (`12 500 DA`). Journey J02r-5: 10 digits are taken (amounts are capped at 100 000 000 DA by the
+ * schemas), so one zero too many gets the range message « Montant trop élevé (100 000 000 DA maximum) » — it was cut
+ * silently to 100 000 000 DA, a valid but wrong price.
+ */
 export const MoneyInput = React.forwardRef<HTMLInputElement, Omit<NumberInputProps, 'suffix'> & { currency?: string }>(function MoneyInput(
-  { currency = 'DA', ...rest },
+  { currency = 'DA', maxDigits = 10, ...rest },
   ref,
 ) {
-  return <NumberInput ref={ref} suffix={currency} {...rest} />;
+  return <NumberInput ref={ref} suffix={currency} maxDigits={maxDigits} {...rest} />;
 });
 
 /* ---------- Quantity stepper (− n +): quick-edit sheet, adjust dialogs ---------- */
@@ -287,9 +327,10 @@ export function QtyStepper({
   // stays empty, « 2.5 » shows « 2.5 » but counts 2, never 25; « -3 » is refused); the value is clamped to min / max at
   // once for the totals, and the field shows it when it loses focus — « erase then type 5 » is 5, not 15
   const [draft, setDraft] = React.useState<string | null>(null);
+  const notice = useFieldNotice();
   const btn = 'flex size-7 items-center justify-center text-text-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40';
   return (
-    <div dir="ltr" title={disabledReason} className={cn('inline-flex h-8 items-center rounded-card border border-line-edge bg-ink-surface', className)}>
+    <div dir="ltr" title={disabledReason} className={cn('relative inline-flex h-8 items-center rounded-card border border-line-edge bg-ink-surface', className)}>
       <button type="button" aria-label={labels.decrease} className={btn} disabled={off || value <= min} onClick={() => onChange(Math.max(min, value - 1))}>
         <Minus className="size-3.5" aria-hidden />
       </button>
@@ -299,14 +340,20 @@ export function QtyStepper({
         disabled={off}
         value={draft ?? String(value)}
         onChange={(e) => {
-          const r = parseIntegerInput(e.target.value, { allowNegative: min < 0, maxDigits: String(Math.abs(max)).length });
-          if (!r.ok) return;
+          const maxDigits = String(Math.abs(max)).length;
+          const r = parseIntegerInput(e.target.value, { allowNegative: min < 0, maxDigits });
+          // journey J07r-4: « -3 » gave 3 without a word — the refused key is said under the field
+          if (!r.ok) return void notice.say(notice.texts?.refused(r.reason, { maxDigits }));
+          notice.clear();
           setDraft(r.value + r.fraction);
           const n = r.value === '' || r.value === '-' ? min : Number(r.value);
           const next = Math.min(max, Math.max(min, n));
           if (next !== value) onChange(next);
         }}
-        onBlur={() => setDraft(null)}
+        onBlur={() => {
+          if (draft && /[.,]\d*[1-9]/.test(draft)) notice.say(notice.texts?.decimalDropped(draft.slice(Math.max(draft.lastIndexOf(','), draft.lastIndexOf('.')))));
+          setDraft(null);
+        }}
         className={cn(
           'h-full w-10 bg-transparent text-center text-[13px] font-semibold tabular-nums focus:outline-none disabled:opacity-60',
           tone === 'warning' && 'text-accent-starred',
@@ -316,6 +363,7 @@ export function QtyStepper({
       <button type="button" aria-label={labels.increase} className={btn} disabled={off || value >= max} onClick={() => onChange(Math.min(max, value + 1))}>
         <Plus className="size-3.5" aria-hidden />
       </button>
+      {notice.element}
     </div>
   );
 }

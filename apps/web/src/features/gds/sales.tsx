@@ -43,12 +43,13 @@ import { AppPage } from '@/components/app-page';
 import { LeaveGuardDialog, ListEmpty, ListFilteredEmpty, ListLoading, OfflineBanner, QueryError } from '@/components/global-states';
 import { ListPagination } from '@/features/catalog/ui';
 import type { ClientListItem } from '@/features/clients/contracts';
+import { ClosedDayHint, closedDayOf } from '@/components/closed-day-hint';
 import { refusal } from '@/features/orders/dialogs/common';
 import { useOffline } from '@/features/orders/offline';
 import { useMembers } from '@/features/workspace/api';
 import { Link, useRouter } from '@/i18n/navigation';
 import { ApiError } from '@/lib/api';
-import { iso } from '@/lib/format-message';
+import { iso, qtyLabel } from '@/lib/format-message';
 import { useLeaveGuard } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { filterList, filterText, type ListSpec } from '@/lib/list-state';
@@ -124,7 +125,8 @@ function SalesList({ creating }: { creating?: boolean }) {
       hideBelow: 'lg',
       className: 'max-w-[240px]',
       // journeys 16/11 J06-9 / J14-7: each line « name ×qty » is one isolate, so « ×1 » stays after its name in Arabic
-      cell: (r) => <span className="block truncate">{r.items.map((i) => iso(`${i.name}${i.variant ? ` ${i.variant}` : ''} ×${i.qty}`)).join(' · ')}</span>,
+      // journey J06r-4: name and « ×qty » are two isolates (`qtyLabel`): a mixed Latin / Arabic name kept « ×2 » in its Arabic run
+      cell: (r) => <span className="block truncate">{r.items.map((i) => qtyLabel(`${i.name}${i.variant ? ` ${i.variant}` : ''}`, i.qty)).join(' · ')}</span>,
     },
     { key: 'total', header: t('common.total'), sortKey: 'total', align: 'end', cell: (r) => <Ltr className="whitespace-nowrap tabular-nums">{formatMoney(r.total)}</Ltr> },
     { key: 'paid', header: t('sales.col.paid'), align: 'end', hideBelow: 'lg', cell: (r) => (r.status === 'cancelled' ? <span className="text-text-muted">—</span> : <Ltr className="whitespace-nowrap tabular-nums">{formatMoney(r.amountPaid)}</Ltr>) },
@@ -219,7 +221,7 @@ function SalesList({ creating }: { creating?: boolean }) {
         list.filtered ? (
           <ListFilteredEmpty entity={t('sales.entity')} filters={[s.q.trim(), ...chips.map((c) => c.label)].filter(Boolean).join(' · ')} onClear={list.clear} />
         ) : (
-          <ListEmpty title={t('sales.empty.title')} description={t('sales.empty.description')} action={canWrite && !offline ? { label: t('sales.new'), onClick: () => router.push('/sales/new') } : undefined} />
+          <ListEmpty title={t('sales.empty.title')} description={t('sales.empty.description')} action={canWrite ? { label: t('sales.new'), onClick: () => router.push('/sales/new'), disabledReason: offline ? t('banner.offline') : blockedBy ? t('sales.blockedByInventory', { number: blockedBy.number }) : undefined } : undefined} />
         )
       ) : (
         <DataTable<SaleRow>
@@ -298,6 +300,8 @@ function NewSaleSheet({ draftId, onClose, blockedBy }: { draftId: string | null;
   const [received, setReceived] = useState<string | null>(null);
   const [busy, setBusy] = useState<'draft' | 'completed' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // journey J06r-3: a sale refused on a closed day says how to reopen it, and that a draft is still accepted
+  const [closedDay, setClosedDay] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
   const key = useRef(uuid());
   const loaded = useRef<string | null>(null);
@@ -352,6 +356,7 @@ function NewSaleSheet({ draftId, onClose, blockedBy }: { draftId: string | null;
 
   const save = async (status: 'draft' | 'completed') => {
     setError(null);
+    setClosedDay(null);
     setFields({});
     if (live.discountOver) return;
     if (!lines.length || missingVariant || (status === 'completed' && partialBlocked)) {
@@ -382,8 +387,16 @@ function NewSaleSheet({ draftId, onClose, blockedBy }: { draftId: string | null;
       if (status === 'completed') router.push(`/sales/${sale.id}`);
       else onClose();
     } catch (e) {
-      setError(refusal(e, t));
-      if (e instanceof ApiError) setFields(e.body.fields ?? {});
+      const lineFields = e instanceof ApiError ? Object.keys(e.body.fields ?? {}).filter((k) => k.startsWith('items.')) : [];
+      if (e instanceof ApiError && e.code === 'SALE_INSUFFICIENT_STOCK' && lineFields.length) {
+        // journey J06r-5d: one cause, one message — « Stock insuffisant pour … (8). » under its line (it also said
+        // « Quantité invalide » there)
+        setFields(Object.fromEntries(lineFields.map((k) => [k, refusal(e, t)])));
+      } else {
+        setError(refusal(e, t));
+        setClosedDay(closedDayOf(e));
+        if (e instanceof ApiError) setFields(e.body.fields ?? {});
+      }
     } finally {
       setBusy(null);
     }
@@ -424,6 +437,15 @@ function NewSaleSheet({ draftId, onClose, blockedBy }: { draftId: string | null;
       }
     >
       <div className="flex flex-col gap-4" data-testid="new-sale-sheet">
+        {/* journey J07r-2: the block is said in the sheet, not only in the greyed button's hover title */}
+        {blockedBy ? (
+          <FormAlert tone="warning">
+            {t('sales.blockedByInventory', { number: blockedBy.number })}{' '}
+            <Link href={`/inventory/${blockedBy.id}`} className="underline">
+              {t('sales.blockedByInventoryOpen')}
+            </Link>
+          </FormAlert>
+        ) : null}
         <ProductPicker id="sale-product" onPick={(p) => setLines((x) => (!p.hasVariants && x.some((l) => l.productId === p.id) ? x.map((l) => (l.productId === p.id ? { ...l, quantity: l.quantity + 1 } : l)) : [...x, lineOf(p)]))} placeholder={t('sales.form.search')} />
         {lines.length ? (
           <ul className="divide-y divide-line-hairline rounded-card border border-line-edge" data-testid="sale-lines">
@@ -537,7 +559,12 @@ function NewSaleSheet({ draftId, onClose, blockedBy }: { draftId: string | null;
             {t('sales.form.partialNote')}
           </p>
         ) : null}
-        {error ? <FormAlert>{error}</FormAlert> : null}
+        {error ? (
+          <FormAlert>
+            {error}
+            <ClosedDayHint day={closedDay} draft />
+          </FormAlert>
+        ) : null}
         <p className="ts-label-micro !normal-case text-text-muted">{t('sales.form.footnote', { count: lines.length })}</p>
       </div>
     </SideSheet>

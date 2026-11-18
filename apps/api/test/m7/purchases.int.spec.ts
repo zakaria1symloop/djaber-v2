@@ -210,6 +210,11 @@ describe('purchases (GDS-06, 04 §20)', () => {
     const ach2 = await purchase(owner, { items: [{ productId: tapis.id, quantity: 4, unitCost: 4000 }], status: 'pending' });
     const r2 = await receive(owner, ach2.id, { items: [{ id: ach2.items[0].id, receivedQty: 1, unitCost: 4100 }] }).expect(200);
     expect(r2.body.data.items.map((i: any) => [i.quantity, i.receivedQty, i.unitCost, i.total])).toEqual([[4, 1, 4100, 16400]]);
+    // journey J07r-1: the payment at the receipt is capped on what the purchase costs once received (the new cost counts)
+    const ach3 = await purchase(owner, { items: [{ productId: pull.id, quantity: 1, unitCost: 1000 }], status: 'pending' });
+    expect((await receive(owner, ach3.id, { items: [{ id: ach3.items[0].id, receivedQty: 1, unitCost: 1500 }], paymentNow: { amount: 1501, method: 'cash' } }).expect(422)).body.error.fields).toEqual({ 'paymentNow.amount': 'validation.range' });
+    const paidAtReceipt = (await receive(owner, ach3.id, { items: [{ id: ach3.items[0].id, receivedQty: 1, unitCost: 1500 }], paymentNow: { amount: 1500, method: 'cash' } }).expect(200)).body.data;
+    expect(paidAtReceipt).toMatchObject({ status: 'received', total: 1500, amountPaid: 1500, remaining: 0 });
     // the duplicate is the ordered purchase again: one Tapis line of 5 at the latest cost
     const copy = (await owner.post(`/purchases/${ach.id}/duplicate`).expect(201)).body.data;
     expect(copy.items.filter((i: any) => i.product.id === tapis.id).map((i: any) => [i.quantity, i.unitCost])).toEqual([[5, 4200]]);

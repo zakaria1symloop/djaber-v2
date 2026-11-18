@@ -5,6 +5,7 @@
 import { formatMoney } from '@djaber/shared';
 import { Button, cn } from '@djaber/ui';
 import { useEffect, useRef, useState } from 'react';
+import { closedDayOf } from '@/components/closed-day-hint';
 import { ApiError } from '@/lib/api';
 import { conflictOf } from '@/lib/conflict';
 import { errorMessage } from '@/lib/forms';
@@ -28,9 +29,12 @@ export function useDialogSubmit<T>(run: (key: string) => Promise<T>) {
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [conflict, setConflict] = useState<ReturnType<typeof conflictOf<Order>>>(null);
+  // journey J06r-3: the day of a `CASH_DAY_CLOSED` refusal — the dialog shows how to reopen it (`<ClosedDayHint>`)
+  const [closedDay, setClosedDay] = useState<string | null>(null);
   const submit = async (): Promise<T | undefined> => {
     setBusy(true);
     setError(null);
+    setClosedDay(null);
     setFields({});
     try {
       const r = await run(key.current);
@@ -41,6 +45,7 @@ export function useDialogSubmit<T>(run: (key: string) => Promise<T>) {
       if (c) setConflict(c);
       else {
         setError(refusal(e, t));
+        setClosedDay(closedDayOf(e));
         if (e instanceof ApiError) setFields(e.body.fields ?? {});
       }
       return undefined;
@@ -49,7 +54,7 @@ export function useDialogSubmit<T>(run: (key: string) => Promise<T>) {
     }
   };
   const fieldError = (name: string, limits?: Record<string, string | number>) => (fields[name] ? (t.has(fields[name]!) ? t(fields[name]!, { max: '', min: '', ...limits }) : fields[name]) : undefined);
-  return { submit, busy, error, setError, fieldError, conflict, clearConflict: () => setConflict(null) };
+  return { submit, busy, error, setError, closedDay, fieldError, conflict, clearConflict: () => setConflict(null) };
 }
 
 /** Resets a dialog's local state each time it opens on an order. */

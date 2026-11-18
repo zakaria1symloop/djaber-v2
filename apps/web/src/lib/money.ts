@@ -51,7 +51,8 @@ export const priceRangeOf = (p: { price: number; hasVariants?: boolean; priceRan
 };
 export const priceText = (p: Parameters<typeof priceRangeOf>[0]): string => {
   const r = priceRangeOf(p);
-  return r.min === r.max ? formatMoney(r.min) : `${formatMoney(r.min)} – ${formatMoney(r.max)}`;
+  // journey J02r-4: the range is one left-to-right island (LRI … PDI) — in Arabic it read « 4 800 DA – 4 500 DA »
+  return r.min === r.max ? formatMoney(r.min) : `\u2066${formatMoney(r.min)} – ${formatMoney(r.max)}\u2069`;
 };
 
 /** `55,6 %` / `−6,1 %` (true minus, decimal comma). */

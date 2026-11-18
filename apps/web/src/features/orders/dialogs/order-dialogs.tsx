@@ -6,6 +6,7 @@
 import { ACTIVE_SHIPMENT_STATUSES, formatMoney } from '@djaber/shared';
 import { Checkbox, CodeInput, Dialog, Field, FormAlert, Input, MoneyInput, Pill, Select, Textarea, toast } from '@djaber/ui';
 import { useState } from 'react';
+import { ClosedDayHint } from '@/components/closed-day-hint';
 import { ConflictDialog } from '@/components/global-states';
 import { useMembers } from '@/features/workspace/api';
 import { digitsToInt, moneyDigits } from '@/lib/money';
@@ -169,7 +170,12 @@ export function CancelOrderDialog({ order, open, onClose, onDone }: Props) {
             {!order.conversationId ? <span className="block ts-label-meta text-text-muted">{t('gaps.orders.notify.noConversation')}</span> : null}
           </span>
         </label>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -285,7 +291,12 @@ export function ChangeStatusDialog({ order, open, onClose, onDone, targets, onRe
             <Input id="st-when" type="datetime-local" value={when} max={isoToLocalInput(new Date())} onChange={(e) => setWhen(e.target.value)} className="[color-scheme:dark]" placeholder={t('common.today')} />
           </Field>
         )}
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
       <VersionConflict s={s} onReload={onReload} />
     </Dialog>
@@ -341,7 +352,12 @@ export function DeliverDialog({ order, open, onClose, onDone }: Props) {
           <Input id="dl-day" type="datetime-local" value={day} max={isoToLocalInput(new Date())} onChange={(e) => setDay(e.target.value)} className="[color-scheme:dark]" />
         </Field>
         <p className="rounded-card border border-line-edge px-3 py-2 ts-label-micro !normal-case text-text-muted">{t('orders.deliver.effects', { amount: formatMoney(collected ?? order.remaining), paid: formatMoney(order.total - order.remaining + (collected ?? order.remaining)) })}</p>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -409,7 +425,12 @@ export function ReturnDialog({ order, open, onClose, onDone }: Props) {
         <Field label={t('common.noteOptional')} htmlFor="rt-note">
           <Input id="rt-note" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} />
         </Field>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -450,7 +471,12 @@ export function DeleteOrderDialog({ order, open, onClose, onDone }: Props) {
           <CodeInput id="del-typed" value={typed} placeholder={expected} onChange={(e) => setTyped(e.target.value)} />
         </Field>
         <p className="ts-label-micro !normal-case text-text-muted">{t('orders.delete.note')}</p>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -515,7 +541,12 @@ export function PaymentDialog({ order, open, onClose, onDone }: Props) {
         <Field label={t('common.note')} htmlFor="pay-note">
           <Textarea id="pay-note" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} className="min-h-14" />
         </Field>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -574,7 +605,12 @@ export function AssignDialog({ open, ids, current, onClose, onDone }: { open: bo
           <Checkbox checked={notify} onChange={(e) => setNotify(e.target.checked)} disabled={who === 'none'} />
           {t('orders.assign.notify')}
         </label>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -607,7 +643,12 @@ export function ShipManualDialog({ order, open, onClose, onDone }: Props) {
         <Field label={t('orders.ship.tracking')} htmlFor="ship-tracking" hint={t('orders.ship.hint')}>
           <CodeInput id="ship-tracking" value={tracking} maxLength={80} onChange={(e) => setTracking(e.target.value)} />
         </Field>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );

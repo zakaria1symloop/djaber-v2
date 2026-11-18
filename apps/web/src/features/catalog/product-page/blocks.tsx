@@ -220,7 +220,8 @@ export function PricingBlock({ product, advanced, canEdit = false }: { product: 
       <Rows>
         <Row label={t('products.page.pricing.price')} testId="pricing-price">
           {range ? (
-            <>
+            // journey J02r-4: the range is one left-to-right island (« 4 800 DA – 4 500 DA » in Arabic otherwise)
+            <bdi dir="ltr">
               <Money value={range.min} />
               {range.max !== range.min ? (
                 <>
@@ -228,7 +229,7 @@ export function PricingBlock({ product, advanced, canEdit = false }: { product: 
                   <Money value={range.max} />
                 </>
               ) : null}
-            </>
+            </bdi>
           ) : (
             <Money value={product.price} />
           )}
@@ -243,7 +244,7 @@ export function PricingBlock({ product, advanced, canEdit = false }: { product: 
           <>
             <Row label={t('products.page.pricing.weightedCost')} testId="pricing-cost">
               {costRange ? (
-                <>
+                <bdi dir="ltr">
                   <Money value={costRange.min} />
                   {costRange.max !== costRange.min ? (
                     <>
@@ -251,7 +252,7 @@ export function PricingBlock({ product, advanced, canEdit = false }: { product: 
                       <Money value={costRange.max} />
                     </>
                   ) : null}
-                </>
+                </bdi>
               ) : (
                 <Money value={p?.weightedCost} />
               )}

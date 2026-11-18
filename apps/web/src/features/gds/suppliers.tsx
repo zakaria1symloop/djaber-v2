@@ -43,6 +43,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { ArrowUpRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { ClosedDayHint } from '@/components/closed-day-hint';
 import { AppPage } from '@/components/app-page';
 import { ListEmpty, ListFilteredEmpty, ListLoading, OfflineBanner, QueryError } from '@/components/global-states';
 import { ListPagination } from '@/features/catalog/ui';
@@ -565,7 +566,12 @@ export function SupplierDialog({ open, supplier, onClose, onCreated }: { open: b
         <Field label={t('suppliers.dialog.notes')} htmlFor="sup-notes" error={s.fieldError('notes')}>
           <Textarea id="sup-notes" value={f.notes} maxLength={2000} onChange={(e) => set('notes')(e.target.value)} className="min-h-14" />
         </Field>
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -652,7 +658,12 @@ export function SupplierPaymentDialog({ supplier, onClose, purchaseId }: { suppl
           <CodeInput id="sp-ref" value={reference} maxLength={120} onChange={(e) => setReference(e.target.value)} />
         </Field>
         {first ? <p className="ts-label-micro !normal-case text-text-muted">{t('suppliers.payment.note', { number: `#${first.number}` })}</p> : null}
-        {s.error ? <FormAlert>{s.error}</FormAlert> : null}
+        {s.error ? (
+          <FormAlert>
+            {s.error}
+            <ClosedDayHint day={s.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );

@@ -5,7 +5,7 @@
 // pills ↔ table in sync, `to` = end of day). Day closing: theoretical cash vs counted, correction row, day locked;
 // reopen (Admin+, audited) reverses the correction with a new correction row.
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { CASH_EDIT_WINDOW_HOURS, cashDisplayMethod, renderStoredTextIn, storedText, type CashDaysQuery, type CashDayView, type CashQuery, type CashStatsQuery, type CashStatsView, type CashTransactionView, type CloseCashInput, type CreateCashEntryInput, type ReopenCashInput, type UpdateCashEntryInput } from '@djaber/shared';
+import { CASH_EDIT_WINDOW_HOURS, type ActionDescriptor, cashDisplayMethod, renderStoredTextIn, storedText, type CashDaysQuery, type CashDayView, type CashQuery, type CashStatsQuery, type CashStatsView, type CashTransactionView, type CloseCashInput, type CreateCashEntryInput, type ReopenCashInput, type UpdateCashEntryInput } from '@djaber/shared';
 import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { prisma, Prisma, TenantContext, type CashClosing, type CashTransaction, type Tx } from '@djaber/db';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
@@ -151,11 +151,13 @@ export class CashService implements OnModuleInit {
     }
     const expired = Date.now() - r.createdAt.getTime() > CASH_EDIT_WINDOW_HOURS * HOUR_MS;
     const reasonCode = closed ? 'CASH_DAY_CLOSED' : expired ? 'CASH_ENTRY_EDIT_WINDOW_EXPIRED' : undefined;
+    // journey J06r-5a: « Journée du clôturée. » — the reason carries the day of the row ({date})
+    const withDate = (d: ActionDescriptor): ActionDescriptor => (d.reasonCode === 'CASH_DAY_CLOSED' ? { ...d, reasonParams: { date: algiersDay(r.date) } } : d);
     return [
       ...(r.correctsTransactionId ? [action('open_reference', 'gds.read')] : []),
       ...proof,
-      action('edit', 'gds.write', { reasonCode, primary: !reasonCode }),
-      action('delete', 'gds.write', { reasonCode }),
+      withDate(action('edit', 'gds.write', { reasonCode, primary: !reasonCode })),
+      withDate(action('delete', 'gds.write', { reasonCode })),
       action('duplicate', 'gds.write'),
     ];
   }

@@ -176,9 +176,15 @@ export function ConfirmOrderDialog({ order, open, onClose, onDone, onAddress, on
               {order.items.map((i) => (
                 <li key={i.id} className="flex items-center justify-between gap-3 px-3 py-2 text-[13px]">
                   <span className="min-w-0 truncate">
-                    {i.productName}
-                    {i.variantName ? <span className="text-text-muted"> · {i.variantName}</span> : null}
-                    <span className="text-text-muted"> ×{i.quantity}</span>
+                    {/* journey J06r-4: name and quantity isolated apart (a mixed Latin / Arabic name swallowed « ×2 ») */}
+                    <bdi>{i.productName}</bdi>
+                    {i.variantName ? (
+                      <span className="text-text-muted">
+                        {' · '}
+                        <bdi>{i.variantName}</bdi>
+                      </span>
+                    ) : null}{' '}
+                    <Ltr className="text-text-muted">{`×${i.quantity}`}</Ltr>
                   </span>
                   <Ltr className="tabular-nums">{formatMoney(i.total)}</Ltr>
                 </li>

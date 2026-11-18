@@ -136,6 +136,14 @@ describe('toCreatePayload', () => {
     expect(CreateProductSchema.safeParse(body).success).toBe(true);
     for (const v of body.variants!) expect(CreateVariantSchema.safeParse(v).success).toBe(true);
   });
+  it('journey J02r-1: a product sold by variant needs no base price; it takes the lowest variant price and no old price', () => {
+    const rows = [emptyVariantRow({ name: 'S', price: '1600' }), emptyVariantRow({ name: 'M', price: '1500' })];
+    expect(issues('create', filled({ price: '', oldPrice: '900', stock: '', variants: rows }))).toEqual({});
+    const body = toCreatePayload(filled({ price: '', oldPrice: '900', stock: '', variants: rows }), { advanced: true });
+    expect(body).toMatchObject({ price: 1500 });
+    expect(body.oldPrice).toBeUndefined();
+    expect(CreateProductSchema.safeParse(body).success).toBe(true);
+  });
 });
 
 describe('toForm / toUpdatePayload', () => {

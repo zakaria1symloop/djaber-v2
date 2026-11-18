@@ -152,6 +152,8 @@ function PurchaseForm({ purchase }: { purchase?: Purchase }) {
   f.lines.forEach((l, i) => {
     if (!l.trackStock) errs[`items.${i}.productId`] = t('error.PURCHASE_UNTRACKED_PRODUCT', { product: l.name });
     else if (l.hasVariants && !l.variantId) errs[`items.${i}.variantId`] = t('error.VARIANT_REQUIRED');
+    // journey J07r-4: an emptied cost is not saved silently at 0 DA (a free line is typed « 0 »)
+    else if (l.unitCost === '' || l.unitCost === '-') errs[`items.${i}.unitCost`] = `${l.name} : ${t('validation.required')}`;
   });
   if (totals.overpaid) errs.amountPaid = t('purchases.form.overpaid');
   // full-test 15/11 STOCK-14: the summary follows the form — it shrinks / goes away as the merchant fixes the lines
@@ -353,7 +355,6 @@ function PurchaseForm({ purchase }: { purchase?: Purchase }) {
           </div>
         </div>
         {summary || error ? <FormAlert>{summary ?? error}</FormAlert> : null}
-        <p className="ts-label-micro !normal-case text-text-muted">{t('purchases.form.legend')}</p>
       </Card>
       <SupplierDialog
         open={newSupplier}

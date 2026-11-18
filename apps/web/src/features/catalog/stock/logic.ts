@@ -77,4 +77,18 @@ export function referenceKind(type: string | undefined): 'number' | 'name' | 'ty
   return type === 'variant' ? 'name' : 'type';
 }
 
+/**
+ * The note of a movement once its reference is shown next to it (full-test 15/11 STOCK-14, journey J07r-5): a note that only
+ * repeats the reference (« CMD-1024 ») is dropped, and an inventory note « INV-1 · 2 pulls M abîmés » loses its leading
+ * « INV-1 · » (the line read « Inventaire · #INV-1 · INV-1 · … »).
+ */
+export function noteBeyondReference(note: string | null | undefined, label: string | null | undefined): string | null {
+  if (!note) return null;
+  if (!label) return note;
+  const bare = note.replace(/^#/, '').trim();
+  if (bare === label) return null;
+  for (const sep of [' · ', ' — ', ' - ', ': ']) if (bare.startsWith(`${label}${sep}`)) return bare.slice(label.length + sep.length).trim() || null;
+  return note;
+}
+
 export const actorName = (a: StockMovement['actor']): string | null => (a ? `${a.firstName} ${a.lastName}`.trim() || null : null);

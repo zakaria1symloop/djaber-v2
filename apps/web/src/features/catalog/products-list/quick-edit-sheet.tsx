@@ -143,7 +143,10 @@ function Body({ product, setStatus }: { product: Product; setStatus: (s: Status)
   };
   // the saved prices: the server margin (on the true cost, as the list and the product page); typed ones: computed here
   const unchanged = digitsToInt(values.price) === product.price && digitsToInt(values.costPrice) === product.costPrice;
-  const margin = !advanced ? null : unchanged ? product.marginPct : marginPct(digitsToInt(values.price), digitsToInt(values.costPrice));
+  // journeys J02-3 / J02r-1: a product with variants is sold at its variants' prices only — no base or old price here, and
+  // its margin is the server's (each variant on its own price)
+  const byVariant = product.hasVariants && product.variants.some((v) => v.isActive);
+  const margin = !advanced ? null : unchanged || byVariant ? product.marginPct : marginPct(digitsToInt(values.price), digitsToInt(values.costPrice));
 
   const priceField = (field: PriceField, label: string) => (
     <Field label={label} htmlFor={`quick-${field}`} error={errors[field]}>
@@ -164,9 +167,11 @@ function Body({ product, setStatus }: { product: Product; setStatus: (s: Status)
   return (
     <div className="flex flex-col gap-6">
       <SheetSection label={t('products.quick.section')} note={t('products.quick.sectionNote')}>
-        <div className={cn('grid gap-3', advanced ? 'grid-cols-3' : 'grid-cols-2')}>
-          {/* journey J02-3: a product with variants is sold at its variants' prices — the base price is not offered here */}
-          {product.hasVariants && product.variants.some((v) => v.isActive) ? (
+        <div className={cn('grid gap-3', byVariant ? (advanced ? 'grid-cols-2' : 'grid-cols-1') : advanced ? 'grid-cols-3' : 'grid-cols-2')}>
+          {/* journeys J02-3 / J02r-1: a product with variants is sold at its variants' prices — neither the base price nor
+              an old price (which no screen shows for it) is offered here; the cost stays: it is the cost of the variants
+              that have none of their own */}
+          {byVariant ? (
             <Field label={t('products.quick.price')} hint={t('products.quick.priceByVariant')}>
               <div className="flex h-9 items-center rounded-[6px] border border-line-hairline px-3 text-[13px] text-text-secondary" data-testid="quick-price-range">
                 <Ltr className="tabular-nums">{priceText(product)}</Ltr>
@@ -175,7 +180,7 @@ function Body({ product, setStatus }: { product: Product; setStatus: (s: Status)
           ) : (
             priceField('price', t('products.quick.price'))
           )}
-          {priceField('oldPrice', t('products.quick.oldPrice'))}
+          {byVariant ? null : priceField('oldPrice', t('products.quick.oldPrice'))}
           {advanced ? priceField('costPrice', t('products.quick.cost')) : null}
         </div>
         <div className="flex items-center gap-3">

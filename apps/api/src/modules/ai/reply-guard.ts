@@ -141,6 +141,8 @@ export type GuardFacts = {
   orderLookedUp?: boolean;
   /** journey retest R15-2: the shop is outside its opening hours this turn (`PromptContext.outOfHours`) */
   outOfHours?: boolean;
+  /** journey J02r-6: no product sold yet, the shop's products wait for Djaber's first review (`CatalogueSlice.awaitingReview`) */
+  awaitingReview?: boolean;
   /** journey retest R15-1: the wilayas an earlier turn of the conversation already quoted (quote_delivery, served or not) */
   quotedWilayas?: number[];
   /** journey retest R15-1 / R15-4: the price of each catalogue product of the prompt (and of its variants) */
@@ -959,6 +961,8 @@ export type GuardFactsInput = {
   galleries?: string[];
   /** journey retest R15-2: the shop is outside its opening hours */
   outOfHours?: boolean;
+  /** journey J02r-6: the shop's products wait for their first review */
+  awaitingReview?: boolean;
 };
 
 /**
@@ -1061,6 +1065,7 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
     ...(i.products.some((p) => p.id) ? { catalogueIds: i.products.map((p) => p.id).filter((id): id is string => !!id) } : {}),
     ...(i.products.some((p) => p.id) ? { cataloguePrices: i.products.filter((p) => p.id).map((p) => ({ id: p.id!, name: p.name, price: p.price, variants: p.variants.map((v) => ({ id: (v as { id?: string }).id ?? '', name: v.name, price: v.price })) })) } : {}),
     ...(i.outOfHours ? { outOfHours: true } : {}),
+    ...(i.awaitingReview ? { awaitingReview: true } : {}),
   };
   const quoted = quotedWilayasIn(i.earlierToolResults ?? []);
   if (quoted.length) base.quotedWilayas = quoted;
@@ -1092,6 +1097,7 @@ export function guardFactsOf(p: Omit<PromptContext, 'descriptionMax'>, o: Omit<G
     lang: p.lang,
     ...(p.locale === 'fr' || p.locale === 'ar' || p.locale === 'en' ? { shopLocale: p.locale } : {}),
     ...(p.outOfHours ? { outOfHours: true } : {}),
+    ...(p.catalogue.count === 0 && p.catalogue.awaitingReview ? { awaitingReview: true } : {}),
     products: p.catalogue.products,
     shopTexts,
     freeDeliveryThreshold: p.workspace.freeDeliveryThreshold,

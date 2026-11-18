@@ -8,7 +8,9 @@
 //   « -100 »                                            → -100 when the field allows negatives, else the keystroke is ignored
 //   letters (« 1e3 », « abc »), a second minus,  more digits than `maxDigits`  → ignored (the field keeps its value)
 //   Arabic-Indic digits (٠١٢…, ۰۱۲…)                     → Latin digits
-export type IntegerParse = { ok: false } | { ok: true; value: string; fraction: string; caretDigits: number };
+/** why a keystroke was refused (journey J07r-4 / J02r-5: the field says it under itself, it was a silent flash) */
+export type IntegerRefusal = 'minus' | 'digits' | 'char';
+export type IntegerParse = { ok: false; reason: IntegerRefusal } | { ok: true; value: string; fraction: string; caretDigits: number };
 
 const DIGIT_MAP: Record<string, string> = Object.fromEntries([...'٠١٢٣٤٥٦٧٨٩'].map((d, i) => [d, String(i)]).concat([...'۰۱۲۳۴۵۶۷۸۹'].map((d, i) => [d, String(i)])));
 const latin = (s: string) => s.replace(/[٠-٩۰-۹]/g, (d) => DIGIT_MAP[d] ?? d);
@@ -28,10 +30,10 @@ export function parseIntegerInput(raw: string, opts: { allowNegative?: boolean; 
   text = text.replace(SPACES, '');
   if (!text) return { ok: true, value: '', fraction: '', caretDigits: 0 };
   // only digits, separators and one leading minus
-  if (/[^\d.,-]/.test(text)) return { ok: false };
+  if (/[^\d.,-]/.test(text)) return { ok: false, reason: 'char' };
   let negative = false;
   if (text.includes('-')) {
-    if (!opts.allowNegative || !/^-[^-]*$/.test(text)) return { ok: false };
+    if (!opts.allowNegative || !/^-[^-]*$/.test(text)) return { ok: false, reason: 'minus' };
     negative = true;
     text = text.slice(1);
   }
@@ -51,11 +53,11 @@ export function parseIntegerInput(raw: string, opts: { allowNegative?: boolean; 
     }
   }
   // thousands groups: every separator left must be followed by exactly 3 digits
-  if (/[.,](?!\d{3}(?:[.,]|$))/.test(intPart)) return { ok: false };
+  if (/[.,](?!\d{3}(?:[.,]|$))/.test(intPart)) return { ok: false, reason: 'char' };
   const digits = intPart.replace(/[.,]/g, '');
   if (!digits && !fraction) return negative ? { ok: true, value: '-', fraction: '', caretDigits: 0 } : { ok: true, value: '', fraction: '', caretDigits: 0 };
   const trimmed = digits.replace(/^0+(?=\d)/, '');
-  if (trimmed.length > maxDigits) return { ok: false };
+  if (trimmed.length > maxDigits) return { ok: false, reason: 'digits' };
   const before = head.replace(/\D/g, '').length - (digits.length - trimmed.length);
   return { ok: true, value: `${negative ? '-' : ''}${trimmed || (fraction ? '0' : '')}`, fraction, caretDigits: Math.max(0, Math.min(before, trimmed.length)) };
 }

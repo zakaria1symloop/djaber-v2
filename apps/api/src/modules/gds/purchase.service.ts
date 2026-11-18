@@ -2,7 +2,7 @@
 // draft / pending / partial, receipts with over-receipt accepted and the weighted-average cost, payments (locked cash
 // rows), delete while draft / pending and unpaid, duplicate, print. Stock and cash only through PurchaseEffects.
 import { Injectable } from '@nestjs/common';
-import { deriveGdsPaymentStatus, PURCHASE_SORTS, storedText, type CancelPurchaseInput, type CreatePurchaseInput, type GdsPaymentInput, type PurchaseListItemView, type PurchasesQuery, type PurchaseStatsView, type PurchaseView, type ReceivePurchaseInput, type UpdatePurchaseInput } from '@djaber/shared';
+import { deriveGdsPaymentStatus, PURCHASE_SORTS, receiptLinePlan, storedText, type CancelPurchaseInput, type CreatePurchaseInput, type GdsPaymentInput, type PurchaseListItemView, type PurchasesQuery, type PurchaseStatsView, type PurchaseView, type ReceivePurchaseInput, type UpdatePurchaseInput } from '@djaber/shared';
 import { prisma, TenantContext, type Prisma, type Purchase, type Tx } from '@djaber/db';
 import { CounterService } from '../../core/counter/counter.service';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
@@ -356,16 +356,12 @@ export class PurchaseService {
         await this.effects.receive(tx, p, { productId: line.productId, variantId: line.variantId, unitCost }, it.receivedQty);
         const received = line.receivedQty + it.receivedQty;
         if (received > line.quantity) warnings.push({ code: 'PURCHASE_OVER_RECEIVE', params: { ordered: line.quantity, received }, field: `items.${n}.receivedQty` });
-        if (line.receivedQty > 0 && unitCost !== line.unitCost) {
-          // journeys 16/11 J07-1: the units already received keep the cost of their receipt (04 §4 Σ unitCost × qty);
-          // the rest of the line moves to a new line at the new cost, received now
-          const rest = Math.max(line.quantity - line.receivedQty, it.receivedQty);
-          await tx.purchaseItem.update({ where: { id: line.id }, data: { quantity: line.receivedQty, total: line.receivedQty * line.unitCost } });
-          await tx.purchaseItem.create({ data: { purchaseId: id, productId: line.productId, variantId: line.variantId, productName: line.productName, variantName: line.variantName, quantity: rest, receivedQty: it.receivedQty, unitCost, total: rest * unitCost } });
-        } else {
-          const quantity = Math.max(line.quantity, received);
-          await tx.purchaseItem.update({ where: { id: line.id }, data: { receivedQty: received, quantity, unitCost, total: quantity * unitCost } });
-        }
+        // journeys 16/11 J07-1: the units already received keep the cost of their receipt (04 §4 Σ unitCost × qty); the
+        // rest of the line moves to a new line at the new cost, received now — the same plan as the dialog's « solde dû
+        // après » (J07r-1, `receiptLinePlan` in @djaber/shared)
+        const plan = receiptLinePlan(line, it.receivedQty, unitCost);
+        await tx.purchaseItem.update({ where: { id: line.id }, data: plan.line });
+        if (plan.split) await tx.purchaseItem.create({ data: { purchaseId: id, productId: line.productId, variantId: line.variantId, productName: line.productName, variantName: line.variantName, ...plan.split } });
       }
       if (input.newItems?.length) {
         const lines = await resolveGdsLines(tx, input.newItems.map((i) => ({ productId: i.productId, variantId: i.variantId, quantity: i.receivedQty })), { purchase: true, field: 'newItems' });

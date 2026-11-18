@@ -7,6 +7,7 @@
 import { formatMoney, formatPhoneDz, storedText } from '@djaber/shared';
 import { Checkbox, ConfirmDialog, Dialog, Field, focusSoon, FormAlert, Input, Ltr, MoneyInput, Pill, PickerSearch, Select, Textarea, toast, useComboboxList, type MenuAction } from '@djaber/ui';
 import { useState } from 'react';
+import { ClosedDayHint } from '@/components/closed-day-hint';
 import { ApiError } from '@/lib/api';
 import type { ClientListItem } from '@/features/clients/contracts';
 import { DialogFooter, refusal, useDialogSubmit, useOnOpen } from '@/features/orders/dialogs/common';
@@ -246,7 +247,12 @@ export function CollectDialog({ saleId, onClose }: { saleId: string | null; onCl
         <Field label={t('common.note')} htmlFor="col-note">
           <Input id="col-note" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} />
         </Field>
-        {sub.error ? <FormAlert>{sub.error}</FormAlert> : null}
+        {sub.error ? (
+          <FormAlert>
+            {sub.error}
+            <ClosedDayHint day={sub.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -319,7 +325,12 @@ export function CancelSaleDialog({ saleId, onClose }: { saleId: string | null; o
             {t('sales.cancel.refund', { amount: formatMoney(s.amountPaid) })}
           </label>
         ) : null}
-        {sub.error ? <FormAlert>{sub.error}</FormAlert> : null}
+        {sub.error ? (
+          <FormAlert>
+            {sub.error}
+            <ClosedDayHint day={sub.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -404,7 +415,12 @@ export function LinkClientDialog({ saleId, number, onClose }: { saleId: string |
     >
       <div className="flex flex-col gap-4" data-testid="link-client-dialog">
         <ClientPicker id="link-client" value={client} onPick={setClient} />
-        {sub.error ? <FormAlert>{sub.error}</FormAlert> : null}
+        {sub.error ? (
+          <FormAlert>
+            {sub.error}
+            <ClosedDayHint day={sub.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -457,7 +473,12 @@ export function EditSaleDialog({ saleId, onClose }: { saleId: string | null; onC
           <Textarea id="es-notes" value={notes} maxLength={2000} disabled={!s} onChange={(e) => setNotes(e.target.value)} className="min-h-14" />
         </Field>
         <p className="ts-label-micro !normal-case text-text-muted">{t('sales.edit.immutable')}</p>
-        {sub.error ? <FormAlert>{sub.error}</FormAlert> : null}
+        {sub.error ? (
+          <FormAlert>
+            {sub.error}
+            <ClosedDayHint day={sub.closedDay} />
+          </FormAlert>
+        ) : null}
       </div>
     </Dialog>
   );

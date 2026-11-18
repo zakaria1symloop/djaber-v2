@@ -15,6 +15,14 @@ const cache = new Map<string, IntlMessageFormat>();
  * « .Karim P » (full-test 15/11 STOCK-07 / SALES-CASH-23). Invisible in every language.
  */
 export const iso = (value: string | number): string => `\u2068${value}\u2069`;
+/** A left-to-right island (LRI \u2026 PDI): numbers, ranges \u00ab 4 500 DA \u2013 4 800 DA \u00bb, \u00ab \u00d72 \u00bb keep their order in Arabic. */
+export const ltr = (value: string | number): string => `\u2066${value}\u2069`;
+/**
+ * \u00ab name \u00d7qty \u00bb of a document line (journeys J06-9 / J06r-4): the name and the quantity are two isolates, so a mixed
+ * Latin / Arabic name (\u00ab QA J06r \u0639\u0637\u0631 \u0645\u0633\u0643 \u00bb) never swallows \u00ab \u00d72 \u00bb into its Arabic run (\u00ab 2\u00d7 \u0639\u0637\u0631 \u0645\u0633\u0643 \u00bb), and the quantity
+ * follows the name in the reading direction of the page (on its right in French, on its left in Arabic).
+ */
+export const qtyLabel = (name: string, qty: number): string => `${iso(name)} ${ltr(`\u00d7${qty}`)}`;
 
 /** Marks the place of a value nobody gave (removed by `stripPlaceholders`). */
 const SLOT = String.fromCharCode(0x2063); // INVISIBLE SEPARATOR
