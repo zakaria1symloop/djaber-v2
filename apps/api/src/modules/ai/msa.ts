@@ -82,5 +82,7 @@ export const withMsaWording = (text: string): string => {
   let out = text;
   for (const [d, m] of PHRASES) out = out.split(d).join(m);
   for (const [re, m] of WORDS) out = out.replace(re, m);
-  return out;
+  // journey retest R22-4 (18/11): a term followed by the same words in brackets once « ستوب ديسك » became « نقطة الاستلام » — C4 T4 « … أو 400
+  // دج إلى نقطة الاستلام (نقطة الاستلام). »: one term
+  return out.replace(/(?<![\p{L}\p{M}])([\p{L}\p{M}]+(?:\s[\p{L}\p{M}]+){0,3})\s*\(\s*\1\s*\)/gu, '$1');
 };

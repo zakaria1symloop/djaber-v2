@@ -4,6 +4,7 @@
 // « coordonnées inventées ») or deny the order it just placed (AI-CHAT-02). Pure.
 import { formatMoney } from '@djaber/shared';
 import { serverTextLanguage, type AiLanguage } from '../language';
+import { withMsaWording } from '../msa';
 import { articleless, foldText } from './wilaya-aliases';
 
 type Line = { name?: unknown; variant?: unknown; quantity?: unknown; unitPrice?: unknown };
@@ -132,7 +133,9 @@ const R: Record<Loc, { comma: string; head: string; home: (place: string) => str
  * journey retest R17-2 (18/11): the text holds the server recap's request to answer yes (« Répondez « oui » pour confirmer la commande, … »,
  * « Ktebli « ih » … », « جاوبني « إيه » … », « Reply « yes » … ») — the AI's message was a server recap.
  */
-export const serverRecapAsked = (text: string | null | undefined): boolean => !!text && Object.values(R).some((r) => text.includes(r.ask));
+// journey retest R22-2 (18/11): and its Modern Standard Arabic wording (`withMsaWording`, J04r-4) — C4 T6 « نعم، أؤكد الطلب » to the MSA recap
+// « … أجبني بـ « نعم » لتأكيد الطلب، أو أخبرني بما يجب تغييره. » was not seen as a yes to a server recap and went to the model
+export const serverRecapAsked = (text: string | null | undefined): boolean => !!text && [...Object.values(R).map((r) => r.ask), withMsaWording(R.ar.ask)].some((ask) => text.includes(ask));
 // journey retest R12-1: compatibility forms (full-width, presentation forms) decomposed and the tatweel dropped too (punctuation kept)
 const folded = (t: string) => t.normalize('NFKD').replace(/[\u0300-\u036f\u0640]/g, '').toLowerCase();
 /** « Cité 20 Août, villa 3 » + « Boufarik » + « Blida »: the commune / wilaya are added when the address does not name them. */

@@ -91,6 +91,8 @@ const CONFIRM_FILLERS = new Set(
     'commande', 'order', 'recap', 'confirme', 'confirmer', 'confirm', 'confirmed', 'valide', 'valider', 'accord', 'daccord', 'the', 'and', 'that', 'this', 'its', 'moi', 'pour', 'vous', 'les', 'des', 'une', 'cela', 'ca', 'comme', 'ainsi', 'oui', 'ouii', 'ouiii', 'ouais', 'yes', 'yeah', 'yep', 'okay', 'oki', 'okey',
     'saha', 'sahit', 'sahitek', 'yaatik', 'ya3tik', 'saha', 'khouya', 'khoya', 'khti', 'sahbi', 'inchallah', 'nchallah', 'allah', 'barak', 'baraka', 'fik', 'mlih', 'mli7', 'wah', 'iyeh', 'ayeh', 'safi', 'hakda', 'haka', 'kima', 'kifkif', 'nconfirmi', 'confirmi', 'tamam', 'ok',
     'نعم', 'ايه', 'واه', 'صحيت', 'صحيتو', 'شكرا', 'بارك', 'الله', 'فيك', 'تمام', 'مليح', 'صافي', 'خويا', 'اختي', 'هكا', 'هكذا', 'كيما', 'موافق', 'اكد', 'ناكد', 'الطلبيه', 'الطلبية', 'الكوموند',
+    // journey retest R22-2 (18/11): the MSA yes « نعم، أؤكد الطلب » / « نعم، أوافق على الطلب » / « حسناً، أكّد طلبي »
+    'أؤكد', 'نؤكد', 'تأكيد', 'أوافق', 'نوافق', 'على', 'حسنا', 'حسناً', 'بالتأكيد', 'طبعا', 'طبعاً', 'أكيد', 'الطلب', 'طلبي', 'فضلك',
   ].map((w) => norm(w)),
 );
 /**
@@ -104,7 +106,8 @@ export const bareYes = (text: string, shown: string): boolean => {
   const tokens = [...tokensOf(text)];
   // journey retest R20-1: a « I take it » verb with a number names a quantity (« oui je prends 2 »): a change, not a bare yes
   if (tokens.some((w) => TAKE_VERBS.has(w)) && /\d/u.test(text)) return false;
-  return tokens.every((w) => recap.has(w) || CONFIRM_FILLERS.has(w) || TAKE_VERBS.has(w) || YES.includes(w));
+  // (journey retest R22-2: a filler with the Arabic article — `norm` drops it at the start of a text only: « … أؤكد الطلب » keeps « الطلب »)
+  return tokens.every((w) => recap.has(w) || CONFIRM_FILLERS.has(w) || CONFIRM_FILLERS.has(w.replace(/^ال(?=\S{2})/u, '')) || TAKE_VERBS.has(w) || YES.includes(w));
 };
 /**
  * journey retest R20-1 (18/11): « I take it » with a yes — F3 T5 « ih ndirha » (« yes, I'll take it ») to the recap shown went to the model (1 call,
@@ -221,6 +224,8 @@ const YES = [
   'oui', 'ouii', 'ouiii', 'ouai', 'ouais', 'wi', 'ok', 'okay', 'oki', 'okey', 'dac', 'daccord', 'd accord', 'confirme', 'confirmer', 'je confirme', 'confirm', 'confirmed', 'valide', 'valider', 'c bon', 'c est bon', 'cbon', 'parfait', 'pas de souci', 'pas de probleme',
   'yes', 'yep', 'yeah', 'yup', 'sure', 'go', 'wah', 'wa', 'waah', 'ih', 'iyeh', 'iyah', 'eyh', 'ey', 'ayeh', 'aywa', 'safi', 'mrigl', 'mriguel', 'mlih', 's7i7', 'sa7', '9bel', 'nconfirmi', 'confirmi', 'n3am', 'na3am', 'tamam', 'bien', 'tres bien', 'nickel', 'top', 'exact', 'exactement', 'c ca', 'c est ca', 'voila',
   'نعم', 'ايه', 'اي', 'واه', 'وه', 'صح', 'صحيح', 'موافق', 'اكد', 'ناكد', 'نوكد', 'تمام', 'مليح', 'صافي', 'اوكي', 'مريقل', 'خلاص',
+  // journey retest R22-2 (18/11): Modern Standard Arabic, as `norm` writes it (« أؤكد » ⇒ « اوكد »): C4 T6 « نعم، أؤكد الطلب » went to the model
+  'اوكد', 'اوافق', 'نوافق', 'حسنا', 'بالتاكيد', 'طبعا', 'اكيد',
 ];
 const NO = ['non', 'nn', 'no', 'nope', 'machi', 'mchi', 'mach', 'lala', 'la la', 'attend', 'attends', 'wait', 'change', 'changer', 'modifier', 'modifie', 'bedel', 'beddel', 'annule', 'annuler', 'cancel', 'erreur', 'faux', 'pas encore', 'pas maintenant', 'ماشي', 'لالا', 'بدل', 'لا', 'ألغي', 'الغي', 'انتظر', 'غالط'];
 const EMOJI_YES = /[👍👌✅✔☑🙏]/u;

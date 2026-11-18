@@ -28,7 +28,7 @@ import { offCatalogueWordsOf, placeIndex, placeNamedIn, placeOnlyMessage, wilaya
 import { contextOf } from '../messaging/messaging.presenter';
 import { asksAddress, fillerMessage, handoffKind, handoffReply, handoffSystemLineShown, limitHandoffReply, cancelledReply, cancelClaimed, cancelQuestion, modeQuestionAt, noPhotoReply, noPhotoSaid, openingSaid, photoAsked, substitutionLine, withArabicCurrency, withArabicWords, withArabiziWords, withAskedPrice, withBothFees, withModeFees, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutQuickReply, withoutStrayYes, withPlaceFacts, withAskedFacts, withoutBookingOffer, withOneStopdeskOffer, withoutRefusals, withSingleSpaces, withoutUnrelatedOffer, teamSaid, teamOnlyKind, withNotServed, withoutNotedSteps, withoutOrderStepAsk, withCustomerScriptName, choiceQuestion, withSpacedAmounts, withoutNotedOpening, withoutFalseApology, withPendingProductWording, withThanksFirst, withoutRepeatedNotServed, type PlaceProduct } from './reply-fixes';
 import { bareYes as bareYesWords, serverTextLanguage, systemLocale } from './language';
-import { orderLimitOf, quantityAbove, type OrderLimit } from './order-limit';
+import { orderLimitOf, quantityAbove, type OrderLimit, type QuantityContext } from './order-limit';
 import { msaRegister, MSA_NOTE, withMsaWording } from './msa';
 import { foldText } from './tools/wilaya-aliases';
 import { foldGuard, splitSentences } from './reply-guard';
@@ -341,6 +341,31 @@ export const searchAnswered = (query: unknown, executed: (Pick<ExecutedTool, 'na
  * whose words all name one product the prompt's CATALOGUE lists (with its ids) is not run — N21 T2 / T3 `search_products {«Hijab
  * soie»}` on « نادية قاسي » and « 0661234568 », F1b2 T2 on « Sétif, El Eulma ». Null when the query asks for something else.
  */
+/** journey retest R22-4 (18/11): the unit prices of the items of the recaps and orders an earlier turn of the conversation showed. */
+const shownUnitPrices = (history: TurnRequest['toolCtx']['orderHistory']): number[] =>
+  (history ?? []).flatMap((h) => {
+    const r = h.result as { recap?: { items?: { unitPrice?: unknown }[] }; items?: { unitPrice?: unknown }[] } | null;
+    return [...(r?.recap?.items ?? []), ...(r?.items ?? [])].map((i) => Number(i?.unitPrice)).filter((n) => Number.isInteger(n) && n > 0);
+  });
+/** journey retest R22-4 (18/11): a message about cancelling an order (« je veux annuler ? », « cancel it », « nbatlou », « ألغيلي الطلبية »), folded. */
+const CANCEL_MESSAGE = /(?<![\p{L}])(?:annul\p{L}*|cancel\p{L}*|nbatl\p{L}*|nbatel\p{L}*|batlou\p{L}*|batliha|batlha|الغي|الغيلي|الغيها|الغيو|الغيوها|نلغي|نلغيو|نلغيها|تلغي|تلغات|لغيها|لغيتها|الغاء|بالغاء|بطلوها|بطليها|نبطلو)(?![\p{L}])/u;
+/**
+ * journey retest R22-3 (18/11): the catalogue products a search / get_product answered without running names — the ids of its answer,
+ * else (a search the CATALOGUE answers: `inCatalogue`, no product list) the one catalogue product whose name holds every word of the query.
+ */
+export const knownProductIds = (call: Pick<AiToolCallRequest, 'args'>, known: unknown, prices: readonly CataloguePrice[]): string[] => {
+  const ids = productIdsOf(known);
+  if (ids.length) return ids;
+  const query = call.args?.query;
+  if ((known as { inCatalogue?: unknown } | null)?.inCatalogue !== true || typeof query !== 'string') return [];
+  const words = foldGuard(query).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2 && !SEARCH_FILLERS.has(w));
+  if (!words.length) return [];
+  const hits = prices.filter((p) => {
+    const names = new Set(foldGuard([p.name, ...p.variants.map((v) => v.name)].join(' ')).split(/[^\p{L}\p{N}]+/u));
+    return words.every((w) => names.has(w));
+  });
+  return hits.length === 1 ? [hits[0]!.id] : [];
+};
 export const catalogueAnswered = (query: unknown, catalogueNames: readonly string[] | undefined): Record<string, unknown> | null => {
   if (typeof query !== 'string' || !catalogueNames?.length) return null;
   const words = foldGuard(query).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2 && !SEARCH_FILLERS.has(w));
@@ -863,7 +888,9 @@ export class AiRunService implements OnModuleInit {
     // « Bonjour, je voudrais 2 tapis de prière. Samira Benali, 0661234567 » ⇒ `lookup_order {}`, 0 order)
     // journey retest R13-4 (18/11): nor on a message that wants a product and says nothing of an order (F3 T1 « nheb nechri zoudj tapis
     // de prière » ⇒ `lookup_order {}`, 0 order)
-    const noLookup = noLookupFor(said, fieldOnly) || (said !== undefined && (orderDetailsMessage(said, (t) => phonesIn(t).size > 0, true) || productWanted(said)) && !ORDER_WORD.test(foldGuard(said)));
+    // journey retest R22-2 (18/11): « livraison » there is the delivery of the order being given, not a parcel to track (PH1 T1 « Je veux 1 hijab
+    // soie, livraison Alger … » ⇒ `lookup_order {}`, 0 order, one more model call)
+    const noLookup = noLookupFor(said, fieldOnly) || (said !== undefined && (orderDetailsMessage(said, (t) => phonesIn(t).size > 0, true) || productWanted(said)) && !ORDER_WORD.test(foldGuard(said).replace(/(?<![\p{L}])livraisons?(?![\p{L}])/gu, ' ')));
     const noFaq = said !== undefined && !asksSomething(said);
     // journey retest R10-2: a server recap of an earlier turn waits for the customer's « oui » (a request to confirm points at it)
     const pendingBefore = recapPending(req.toolCtx.orderHistory);
@@ -939,6 +966,19 @@ export class AiRunService implements OnModuleInit {
      * known, a check_availability the CATALOGUE answers, a search an earlier turn made, a product search on a delivery-only question.
      */
     const knownAnswer = (call: AiToolCallRequest, stepCalls: readonly AiToolCallRequest[]): Record<string, unknown> | null => {
+      const known = knownAnswerOf(call, stepCalls);
+      if (known && ['search_products', 'get_product'].includes(canonicalTool(call.name))) knownLooked.push(...knownProductIds(call, known, req.guard?.cataloguePrices ?? []));
+      return known;
+    };
+    /**
+     * journey retest R22-3 (18/11): the products a search / get_product answered without running names — the price rule of R18-2 counts
+     * them as this turn's search results (A3 T1 « نحب زوج سجادات صلاة … » ⇒ `search_products {«Tapis de prière»}` answered from the
+     * CATALOGUE, so no product was « found » and « واش من ولاية … ؟ » went out with no product and no price).
+     */
+    const knownLooked: string[] = [];
+    /** journey retest R22-3: the order amounts (`subtotal`) of the model's quote_delivery calls of this turn. */
+    const quotedSubtotals = (): number[] => executed.filter((t) => canonicalTool(t.name) === 'quote_delivery').map((t) => Number(t.args?.subtotal)).filter((n) => Number.isInteger(n) && n > 0);
+    const knownAnswerOf = (call: AiToolCallRequest, stepCalls: readonly AiToolCallRequest[]): Record<string, unknown> | null => {
       const search = canonicalTool(call.name) === 'search_products';
       // journey retest R17-6 (18/11): nor, on a message giving the order's details, a search for one product the CATALOGUE lists (N5 T2
       // `search_products {«Parfum Oud 50 ml»}` + `{«Coffret cadeau Aïd»}` before the recap call, 10.0 s — both listed with their stock)
@@ -1134,7 +1174,8 @@ export class AiRunService implements OnModuleInit {
         // « … للدار: 450 دج، لنقطة الاستلام (stop-desk): 300 دج. تحب نوصلوها للدار ولا في ستوب ديسك؟ » (Djellaba homme 7 500 دج never said), N3 T1 « Parfait
         // Samira, 2 tapis de prière …, c'est noté ! Dans quelle wilaya êtes-vous ? » (2 800 DA never said)
         if (!placeNotServed && ![...executed, ...reused].some((t) => canonicalTool(t.name) === 'quote_delivery' && (t.result as { error?: { code?: unknown } } | null)?.error?.code === 'WILAYA_NOT_SERVED'))
-          for (const product of this.saleProductsOf(req, output, text, [...new Set(executed.filter((t) => ['search_products', 'get_product', 'check_availability'].includes(canonicalTool(t.name))).flatMap((t) => productIdsOf(t.result)))])) text = withPlaceFacts(text, [], product, textLang);
+          // (journey retest R22-3: with the products a search answered without running named, and the product of the model's quote of this turn)
+          for (const product of this.saleProductsOf(req, output, text, [...new Set([...executed.filter((t) => ['search_products', 'get_product', 'check_availability'].includes(canonicalTool(t.name))).flatMap((t) => productIdsOf(t.result)), ...knownLooked])], quotedSubtotals())) text = withPlaceFacts(text, [], product, textLang);
         // journey retest R15-4 (18/11): the asked price of an out-of-stock product is given with « pas disponible » (N5 T1)
         const gone = new Set(req.guard?.unavailableNames ?? []);
         text = withAskedPrice(text, req.toolCtx.customerText, (req.guard?.cataloguePrices ?? []).filter((p) => gone.has(p.name)), textLang);
@@ -1369,8 +1410,11 @@ export class AiRunService implements OnModuleInit {
     // product of the shop (the catalogue's own check): an address number, a size, a price or a phone never counts.
     const maxQty = req.toolCtx.agent.maxQtyPerOrder ?? null;
     // (not on a request only the team can quote — « prix de gros pour 50 pièces » keeps its wholesale sentence, R16-2)
+    // journey retest R22-1 (18/11, Major): and a bare quantity (« nheb 7 », « 7 », « je prends 7 ») while a product is being sold — the AI's
+    // last message names / prices it, the customer chose one, or named one (Q3 / Q3c « nheb 7 » after « Djellaba homme b 7 500 DA … T7ebb
+    // nsajjel lek wahda ? » ⇒ « Saha, nsajjel lek 7 djellaba homme »)
     const overQty = said !== undefined && maxQty !== null && !teamOnlyKind(said)
-      ? await quantityAbove(said, maxQty, async (words) => !!productNamedIn(words, req.guard?.cataloguePrices ?? []) || (typeof this.tools.soldProductNamed === 'function' && !!(await this.tools.soldProductNamed(req.toolCtx.agent, words).catch(() => null))))
+      ? await quantityAbove(said, maxQty, async (words) => !!productNamedIn(words, req.guard?.cataloguePrices ?? []) || (typeof this.tools.soldProductNamed === 'function' && !!(await this.tools.soldProductNamed(req.toolCtx.agent, words).catch(() => null))), this.quantityContext(req, lastAiText))
       : null;
     if (overQty !== null && maxQty !== null && !forcedHandoff) {
       forcedHandoff = 'order_limits';
@@ -1434,7 +1478,10 @@ export class AiRunService implements OnModuleInit {
       // journey retest R12-3 (17/11): once create_order placed the order in this turn, lookup_order is not offered either (F6 T3, F3 T4
       // looked up the order they had just placed: `{orders: []}`)
       const placedNow = orderClosed && !!confirmationNow();
-      const stepDefs = (orderClosed ? defs.filter((d) => d.name !== 'create_order' && !(placedNow && d.name === 'lookup_order')) : defs).filter((d) => !(infoDone && INFO_TOOLS.has(d.name)) && !(d.name === 'get_product' && searchedListed()));
+      // journey retest R22-2 (18/11): once a quote_delivery of this turn was refused for naming no wilaya, it is not offered again (A3 T1
+      // `quote_delivery {}` ⇒ VALIDATION, then the same call again: a 3rd model call, 2.7 s, for nothing)
+      const noWilayaQuote = executed.some((t) => canonicalTool(t.name) === 'quote_delivery' && (t.result as { error?: { code?: unknown; field?: unknown } } | null)?.error?.code === 'VALIDATION' && (t.result as { error: { field?: unknown } }).error.field === 'wilayaName');
+      const stepDefs = (orderClosed ? defs.filter((d) => d.name !== 'create_order' && !(placedNow && d.name === 'lookup_order')) : defs).filter((d) => !(infoDone && INFO_TOOLS.has(d.name)) && !(d.name === 'get_product' && searchedListed()) && !(noWilayaQuote && d.name === 'quote_delivery'));
       let res;
       if (steps.length) steps[steps.length - 1]!.next = AiRunService.nextReason(messages[messages.length - 1]);
       const stepStart = Date.now();
@@ -1925,22 +1972,53 @@ export class AiRunService implements OnModuleInit {
    * variant named (or the one price of all variants) gives. Not an out-of-stock product, nor one at stock 0 the customer did not name,
    * nor one whose price this reply or an earlier AI message of the conversation already gives.
    */
+  /**
+   * journey retest R22-1 (18/11, Major): when a bare quantity of the customer's message counts — a catalogue product is being sold (the AI's
+   * last message names it, the customer chose one, or one of their messages names one) — with the words of the catalogue's products (« nheb
+   * 7 djellabat ») and the numbers that are no quantity: the prices of that last message and of the catalogue, the numeric variant names
+   * (« 42 » of a pointure).
+   */
+  private quantityContext(req: TurnRequest, lastAi: string | null): QuantityContext {
+    const prices = req.guard?.cataloguePrices ?? [];
+    // (a search of an earlier turn that found a product counts too: the AI may name it in the customer's words, « حجاب الحرير »)
+    const selling = !!prices.length && (!!(lastAi && productNamedIn(lastAi, prices)) || !!req.toolCtx.ordering || !!productNamedIn(req.toolCtx.customerHistory ?? '', prices) || !!req.guard?.earlierSearches?.some((s) => s.products.length > 0));
+    const notQuantities = [
+      ...(lastAi ? numbersIn(foldGuard(lastAi)).filter((n) => n >= 100) : []),
+      ...prices.flatMap((p) => [p.price, ...p.variants.map((v) => v.price)]),
+      ...prices.flatMap((p) => p.variants.flatMap((v) => (v.name.match(/\d+/gu) ?? []).map(Number))),
+    ];
+    return { selling, lastAi, productWords: [...new Set(prices.flatMap((p) => productWords(p.name)))], notQuantities };
+  }
+
   // journey re-run J04r-3 (18/11): `looked` — the products this turn's search / get_product returned. One product of the CATALOGUE found for a
   // message wanting a product is the product being sold, also when the message names it in words the catalogue name lacks (« عندكم الساعة
   // الذكية؟ نحب نطلبها » ⇒ Montre connectée, orderable beyond stock: « التوصيل ممكن يطول شوية. واش سميتك ؟ », no name, no price)
-  private saleProductsOf(req: TurnRequest, output: AiReplyOutput, text: string, looked: readonly string[] = []): PlaceProduct[] {
+  // journey retest R22-3 (18/11): `subtotals` — the order amounts of this turn's quote_delivery calls (the model prices the cart it quotes)
+  private saleProductsOf(req: TurnRequest, output: AiReplyOutput, text: string, looked: readonly string[] = [], subtotals: readonly number[] = []): PlaceProduct[] {
     const prices = req.guard?.cataloguePrices ?? [];
     const said = req.toolCtx.customerText ?? '';
     if (!prices.length || !said.trim() || fillerMessage(said)) return [];
+    // journey retest R22-4 (18/11): a cancellation message gets no price line (CQ1 T3 « je veux annuler ? » ⇒ « Bien sûr. Tapis de prière : 2 800
+    // DA. Voulez-vous vraiment annuler la commande TEST-4234 … ? »)
+    if (CANCEL_MESSAGE.test(foldText(said)) || cancelledAsked(said)) return [];
     const zero = new Set(req.guard?.zeroStockNames ?? []);
     const out = new Set(req.guard?.unavailableNames ?? []);
     const earlier = req.prompt.messages.filter((m) => m.role === 'assistant').map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n');
-    const told = new Set([...numbersIn(foldGuard(earlier)), ...numbersIn(foldGuard(text))]);
+    // (journey retest R22-4: and the unit prices of the recaps / orders the conversation showed — « 2 × Tapis de prière : 5 600 DA » told 2 800)
+    const told = new Set([...numbersIn(foldGuard(earlier)), ...numbersIn(foldGuard(text)), ...shownUnitPrices(req.toolCtx.orderHistory)]);
     const cards = [...new Set(output.productCards ?? [])];
     // (the product the message names, unless the reply speaks of others only — its cards show another product, or it names another one,
     // and never this one)
-    const lookedUp = looked.length === 1 && (productWanted(said) || asksSomething(said)) ? (prices.find((p) => p.id === looked[0]) ?? null) : null;
-    const named = productNamedIn(said, prices) ?? lookedUp;
+    const wants = productWanted(said) || asksSomething(said);
+    const lookedUp = looked.length === 1 && wants ? (prices.find((p) => p.id === looked[0]) ?? null) : null;
+    // journey retest R22-3 (18/11): PH4 T1 « Hi, I want 1 prayer rug delivered at home to Blida, … » — no catalogue word, no search, the model
+    // quoted `{ wilayaName: Blida, subtotal: 2800 }` and answered with the fees only: the one product of the model's `cart`, else the one
+    // catalogue product whose price (× 1–10) is the subtotal it quoted, is the product being sold
+    const cartIds = [...new Set((output.cart?.items ?? []).map((i) => i?.productId).filter((id): id is string => typeof id === 'string'))];
+    const takes = productWanted(said);
+    const fromCart = takes && cartIds.length === 1 ? (prices.find((p) => p.id === cartIds[0]) ?? null) : null;
+    const quotedOnes = takes && subtotals.length ? prices.filter((p) => !out.has(p.name) && subtotals.some((s) => [p.price, ...p.variants.map((v) => v.price)].some((u) => u > 0 && s % u === 0 && s / u >= 1 && s / u <= 10))) : [];
+    const named = productNamedIn(said, prices) ?? lookedUp ?? fromCart ?? (quotedOnes.length === 1 ? quotedOnes[0]! : null);
     const other = productNamedIn(text, prices.filter((p) => p !== named));
     const asked = named && ((cards.length && !cards.includes(named.id)) || other) && !productNamedIn(text, [named]) ? null : named;
     // (a reply naming three products or more lists the catalogue or alternatives — « Kayen bezzaf : basket, djellaba homme, … »: no price

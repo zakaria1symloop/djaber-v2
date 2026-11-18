@@ -244,6 +244,8 @@ export const withArabicWords = (reply: string, lang: AiLanguage | string | undef
       if (/(?<![\p{L}])مقاس\p{L}*\s+(?:واحد|وحدة|وحده)(?![\p{L}])/u.test(t)) t = t.replace(/\s*\(\s*taille\s+unique\s*\)/giu, '');
       t = t.replace(/(?<![\p{L}])taille\s+unique(?![\p{L}])/giu, 'مقاس واحد');
       t = t.replace(/(?<![\p{L}])نعم(?![\p{L}])/gu, 'إيه');
+      // journey retest R22-4 (18/11): the darija yes is written « إيه » (P3 T1 « أيه، الساعة الذكية … »)
+      t = t.replace(/(?<![\p{L}])أيه(?![\p{L}])/gu, 'إيه');
       t = t.replace(/(?<![\p{L}])نوصلوها\s+لها(?![\p{L}])/gu, 'نوصلوهالك');
       // journey retest R14-4 (18/11): Standard Arabic / odd forms in darija — A3 T1 « الكمية 2 من Tapis de prière، … والمنتج متوفر », A3b T1
       // « زوج تابيس الصلاة » (« tapis » in Arabic letters)
@@ -356,6 +358,8 @@ const questionBlockStart = (parts: readonly string[], at: number): number => {
   while (k > 0 && /[?؟]/u.test(parts[k - 1]!)) k--;
   return k;
 };
+/** journey retest R22-4: a sentence about the delivery (its delay, that it may take longer), folded — the product line goes before it. */
+const DELIVERY_REMARK = /(?<![\p{L}])(?:livraison|livrer|livree|delai|delivery|deliver|delivered|tawsil|التوصيل|توصيل)(?![\p{L}])/u;
 /** journey retest R19-3: a sentence giving a delivery fee (an amount with its currency and a delivery / home / stop-desk word). */
 const feeLine = (s: string): boolean => {
   const f = foldGuard(s);
@@ -588,7 +592,9 @@ export const withPlaceFacts = (reply: string, quotes: readonly QuoteFact[], prod
   // journey retest R19-3 (18/11): before the run of questions it ends (never between two questions), and the price before a fee sentence the
   // reply already has (PF1 T2 « … À domicile : 650 DA, en stop-desk : 350 DA. Sac à main cuir (Marron) : 6900 DA. Quelle est votre adresse … ? »)
   if (at >= 0) at = questionBlockStart(parts, at);
-  const fee = product && lines[0] && !nums.includes(product.price) ? parts.findIndex(feeLine) : -1;
+  // journey retest R22-4 (18/11): and before a delivery remark of the reply (M3 T1 « التوصيل ممكن يطول شوية، تقدر تطلبها. Montre connectée ب
+  // 15 900 دج. واش سميتك؟ » — the delay said before the product it is about)
+  const fee = product && lines[0] && !nums.includes(product.price) ? parts.findIndex((p) => feeLine(p) || DELIVERY_REMARK.test(foldGuard(p))) : -1;
   if (fee >= 0 && (at < 0 || fee < at)) at = fee;
   if (at < 0) return `${reply.trim()} ${lines.join(' ')}`.trim();
   return [...parts.slice(0, at).map((p, k) => (k === at - 1 && !/\s$/u.test(p) ? `${p} ` : p)), `${lines.join(' ')} `, ...parts.slice(at)].join('').replace(/[ \t]+\n/g, '\n').trim();
