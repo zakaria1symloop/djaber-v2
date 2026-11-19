@@ -56,6 +56,7 @@ import { gdsApi, gdsKeys, useGdsRefresh, useInventories, useInventory, useInvent
 import type { Inventory, InventoryLine, InventoryRow, InventoryScope } from './contracts';
 import { inventoryTotals, variance } from './logic';
 import { AdvancedOnly, shortName, useDayLabel } from './ui';
+import { docRef } from '@/lib/format-message';
 
 export const INVENTORIES_SPEC: ListSpec = { filters: { status: 'list' }, sorts: ['startedAt', 'number'], defaultSort: '-startedAt' };
 const lineKey = (l: Pick<InventoryLine, 'productId' | 'variantId'>) => `${l.productId}:${l.variantId ?? ''}`;
@@ -211,7 +212,7 @@ function InventoriesList() {
           density={list.density}
           onRowClick={(r) => router.push(`/inventory/${r.id}`)}
           actionsLabel={t('action.actions')}
-          rowActions={(r) => <ActionsMenu label={t('action.actions')} heading={`#${r.number}`} actions={actions.menu(r)} />}
+          rowActions={(r) => <ActionsMenu label={t('action.actions')} heading={`${docRef(t, r.number)}`} actions={actions.menu(r)} />}
           card={(r) => (
             <div className="flex items-center gap-3 px-3 py-3">
               <Link href={`/inventory/${r.id}`} className="min-w-0 flex-1">
@@ -428,7 +429,7 @@ function InventoryCount({ id }: { id: string }) {
               {t('inventory.action.validate')}
             </Button>
           ) : null}
-          <ActionsMenu label={t('action.actions')} heading={`#${inv.number}`} actions={actions.menu(inv)} size="md" />
+          <ActionsMenu label={t('action.actions')} heading={`${docRef(t, inv.number)}`} actions={actions.menu(inv)} size="md" />
         </>
       }
     >

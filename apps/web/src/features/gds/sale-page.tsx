@@ -13,7 +13,7 @@ import { useOffline } from '@/features/orders/offline';
 import { Link, useRouter } from '@/i18n/navigation';
 import { actionState } from '@/lib/actions';
 import { useBack } from '@/lib/back';
-import { iso, qtyLabel } from '@/lib/format-message';
+import { iso, qtyLabel, docRef } from '@/lib/format-message';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSale } from './api';
 import { ActionButton } from './purchase-dialogs';
@@ -72,7 +72,7 @@ function SaleDetail({ id }: { id: string }) {
         <>
           <ActionButton action={off(collect)} label={t('sales.action.collect')} onClick={() => actions.open({ kind: 'collect', id: s.id, number: s.number })} variant="primary" testId="sale-collect" />
           <ActionButton action={off(link)} label={t('sales.action.linkClient')} onClick={() => actions.open({ kind: 'link', id: s.id, number: s.number })} testId="sale-link" />
-          <ActionsMenu label={t('action.actions')} heading={`#${s.number}`} actions={actions.menu(s)} size="md" />
+          <ActionsMenu label={t('action.actions')} heading={`${docRef(t, s.number)}`} actions={actions.menu(s)} size="md" />
         </>
       }
     >
@@ -185,7 +185,7 @@ function SaleDetail({ id }: { id: string }) {
                 </tr>
               ) : null}
               <tr className="font-semibold text-text-primary">
-                <td colSpan={3} className="px-4 py-2 text-end">{t('common.total')} · <Ltr>{t('gds.units', { count: units })}</Ltr></td>
+                <td colSpan={3} className="px-4 py-2 text-end">{t('common.total')} · <Ltr>{t('gds.units', { count: units, n: formatNumber(units) })}</Ltr></td>
                 <td className="px-4 py-2 text-end"><Ltr className="tabular-nums">{formatMoney(s.total)}</Ltr></td>
               </tr>
             </tfoot>

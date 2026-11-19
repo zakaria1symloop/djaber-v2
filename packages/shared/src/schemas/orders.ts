@@ -54,6 +54,15 @@ export const confirmationShown = (o: { status: string; confirmationStatus: strin
   o.confirmationStatus === 'pending' ? o.status === 'new' : o.confirmationStatus === 'callback' ? !(ORDER_READ_ONLY_STATUSES as readonly string[]).includes(o.status) : true;
 
 /**
+ * 04 §21 « reste à encaisser »: what is still to collect on an order — nothing on a cancelled / returned order (its money is
+ * settled by the cancel / return), otherwise `total − amountPaid` (never below 0). journey J08v-4: the ONE rule of every
+ * figure that says what is left to collect — order page and list, orders export (CSV / XLSX / PDF, ZR Express file), the
+ * delivery list and its CSV « Montant à encaisser », the COD of a new parcel, the AI `lookup_order`.
+ */
+export const orderRemaining = (o: { status: string; total: number; amountPaid: number }): number =>
+  (ORDER_TERMINAL_STATUSES as readonly string[]).includes(o.status) ? 0 : Math.max(0, o.total - o.amountPaid);
+
+/**
  * 04 §1.2 status matrix (+ D14 self-delivery). `shipped → confirmed` is the "Confirmée (retour arrière)" of 04 §21,
  * allowed only while the parcel has not been picked up (`Shipment.status ∈ pending|sent`) — the server checks that.
  * `delivered → returned` is Admin+ (`orders.money`). Terminal: cancelled, returned.

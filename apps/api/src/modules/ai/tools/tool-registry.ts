@@ -4,7 +4,7 @@
 // to the run: never returned by the API, not in the error catalogue. Every read is scoped to the agent's catalogue.
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import { HANDOFF_REASONS, isPhoneDz, normalizePhoneDz, WILAYA_COUNT } from '@djaber/shared';
+import { HANDOFF_REASONS, isPhoneDz, normalizePhoneDz, orderRemaining, WILAYA_COUNT } from '@djaber/shared';
 import { prisma, TenantContext, type Agent, type Prisma } from '@djaber/db';
 import { FAQ_CANDIDATE_INSIGHT_AT } from '../ai.constants';
 import { CatalogueService, nearestId, type CatalogueProduct } from '../catalogue.service';
@@ -137,7 +137,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
   lookup_order: {
     name: 'lookup_order',
     description:
-      "Where are the customer's orders: order status, delivery status, courier, tracking number, tracking link (trackingUrl) and last courier event. Without arguments: the orders of this customer (this conversation, or the phone they ordered with). An order placed by phone or from another account: give the phone number used for it, or the parcel's tracking number.",
+      "Where are the customer's orders: order status, delivery status, courier, tracking number, tracking link (trackingUrl), last courier event and, for the customer's own orders, the total and what is left to pay (leftToPay: 0 once paid, cancelled or returned). Without arguments: the orders of this customer (this conversation, or the phone they ordered with). An order placed by phone or from another account: give the phone number used for it, or the parcel's tracking number.",
     parameters: { type: 'object', additionalProperties: false, properties: { orderNumber: { type: 'string' }, phone: { type: 'string', description: 'phone number the order was placed with (05/06/07…)' }, trackingNumber: { type: 'string' } } },
   },
   handoff_to_human: {
@@ -789,7 +789,8 @@ export class ToolRegistry {
           trackingNumber: s?.trackingNumber ?? null,
           trackingUrl: s?.publicTrackingToken ? `${web}/s/${s.publicTrackingToken}` : null,
           lastEvent: e ? { at: aiDateTime(e.at), label: shipmentEventLabel(e), location: e.location ?? null } : null,
-          ...(mine ? { total: o.total } : {}),
+          // journey J08v-4: what is left to pay = the shared « reste à encaisser » of the order pages (0 once cancelled / returned)
+          ...(mine ? { total: o.total, leftToPay: orderRemaining(o) } : {}),
           orderedAt: aiDateTime(o.orderedAt),
         };
       }),

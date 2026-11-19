@@ -3,7 +3,7 @@
 // number). "Signaler ce vendeur": a `Report { type: merchant, reporterKind: end_customer }` (3 / h / IP ⇒ 429
 // ABUSE_REPORT_RATE_LIMITED); moderators handle it in M10.
 import { Injectable } from '@nestjs/common';
-import type { PublicTrackingReportInput, ShipmentStatusName, TrackingPublicView } from '@djaber/shared';
+import { parcelStatusKey, type PublicTrackingReportInput, type ShipmentStatusName, type TrackingPublicView } from '@djaber/shared';
 import { prisma, TenantContext, type Tx } from '@djaber/db';
 import { ConfigService } from '../../core/config/config.service';
 import { AppException, notFound } from '../../core/errors/app.exception';
@@ -48,7 +48,8 @@ export class PublicTrackingService {
   /** `GET /track/:publicToken`. */
   async view(token: string, locale: string): Promise<TrackingPublicView> {
     const s = await this.byToken(token);
-    const label = (st: string) => this.i18n.t(locale, `enum.Shipment.status.${st}`);
+    // journey J08v-1: the shared parcel label — a sent self-delivery reads « ENVOYÉE » as on the merchant's screens
+    const label = (st: string) => this.i18n.t(locale, parcelStatusKey(st, s.provider));
     // consecutive identical statuses collapse into the latest one
     const events: TrackingPublicView['events'] = [];
     for (const e of s.events) {

@@ -31,6 +31,22 @@ export const isOrderSendClosed = (orderStatus: string): orderStatus is OrderSend
 /** Error code of a send refused because the order is closed (11 §6), `null` while the order can still be sent. */
 export const sendClosedCode = (orderStatus: string): 'DELIVERY_ORDER_DELIVERED' | 'DELIVERY_ORDER_CANCELLED' | 'DELIVERY_ORDER_RETURNED' | null =>
   orderStatus === 'delivered' ? 'DELIVERY_ORDER_DELIVERED' : orderStatus === 'cancelled' ? 'DELIVERY_ORDER_CANCELLED' : orderStatus === 'returned' ? 'DELIVERY_ORDER_RETURNED' : null;
+/**
+ * journey J08v-1 (19/11): the i18n key of a parcel status as the merchant sees it — ONE mapping for the screens (delivery list, order
+ * block, tracking panel, orders list), the order history, the exports and the public page. A self-delivered parcel (`provider=manual`)
+ * that is `sent` is on its way with the merchant: « ENVOYÉE » (`parcel.manual.sent`), not the courier wording « CRÉÉE » (created at the
+ * courier, waiting for pickup; full-test ORDERS-23).
+ */
+export const parcelStatusKey = (status: string, provider?: string | null): string => (provider === 'manual' && status === 'sent' ? 'parcel.manual.sent' : `enum.Shipment.status.${status}`);
+/**
+ * journey J08v-1: the provider of the parcel an order had at a moment (a history line) — the last parcel created by then (a few seconds
+ * of slack: the parcel and its history line are written in one transaction), else none.
+ */
+export const parcelProviderAt = (parcels: readonly { provider: string; createdAt: string }[], at: string): string | null => {
+  const t = Date.parse(at) + 5_000;
+  const before = parcels.filter((p) => Date.parse(p.createdAt) <= t).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  return before[0]?.provider ?? null;
+};
 /** How the failure of a `failed` parcel was handled: the order was closed this way meanwhile (`null` = still to handle). */
 export const failureHandledAs = (shipmentStatus: string, orderStatus: string): OrderSendClosedStatus | null => (shipmentStatus === 'failed' && isOrderSendClosed(orderStatus) ? orderStatus : null);
 /** Statuses still polled by `sched-tracking-sync` (a failed attempt keeps being tracked: the courier re-attempts or returns). */

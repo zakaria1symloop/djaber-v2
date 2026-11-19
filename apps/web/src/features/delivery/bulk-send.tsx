@@ -19,6 +19,7 @@ import { deliveryApi, useCouriers, useDeliveryRefresh } from './api';
 import type { BulkSendResult } from './contracts';
 import { PrintLabelsDialog } from './labels';
 import { bulkRowState, courierErrorField } from './logic';
+import { docRef } from '@/lib/format-message';
 
 /** One order of the selection: `blocked` = the reason the server descriptor gives for `send_courier` (greyed). */
 export type SendTarget = { id: string; number: string; label: string; blocked?: string | null };
@@ -200,7 +201,7 @@ export function BulkSendResults({ jobId, open, title, names, courierName, onRetr
                 return (
                   <li key={r.id} className="flex items-start gap-3 px-3 py-2.5" data-result={st}>
                     <div className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px]">{names[r.id] ?? (r.orderNumber ? `#${r.orderNumber}` : r.id)}</span>
+                      <span className="block truncate text-[14px]">{names[r.id] ?? (r.orderNumber ? `${docRef(t, r.orderNumber)}` : r.id)}</span>
                       <span className={`block ts-label-micro !normal-case ${st === 'ok' ? 'text-accent-money' : st === 'failed' ? 'text-accent-alert' : 'text-accent-starred'}`}>
                         {st === 'ok'
                           ? [t('send.bulk.created'), r.data?.trackingNumber].filter(Boolean).join(' · ')

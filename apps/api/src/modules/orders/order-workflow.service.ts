@@ -13,7 +13,7 @@ import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { QueueOutbox } from '../../core/queue/queue.outbox';
 import type { CancellableOrder, OrderToolContext, ToolResult } from '../ai/tools/order-tools';
 import { withinWindow } from '../messaging/window-rules';
-import { aiCancelNote, codPlan, callPlan, checkEffectiveAt, checkTransition, isTerminal, transitionPlan } from './order-rules';
+import { aiCancelNote, codPlan, callPlan, checkEffectiveAt, checkTransition, isTerminal, remainingOf, transitionPlan } from './order-rules';
 import type { Actor } from './order-effects.service';
 export type LockedOrder = Locked;
 import { addressSnapshot, hasDeliveryAddress, stateOf } from './order.presenter';
@@ -92,7 +92,7 @@ export class OrderWorkflowService implements OnModuleInit {
       // courier parcels: ShipmentService / TrackingService own the Shipment rows and their events
     } else if (plan.shipment === 'create_manual') {
       // full-test 15/11 PUBLIC-06: a self-delivered parcel has its history from the start (the tracking page said « Pas encore d'événement »)
-      const sent = await tx.shipment.create({ data: { workspaceId: o.workspaceId, orderId: o.id, provider: 'manual', status: 'sent', trackingNumber: opt.trackingNumber ?? null, publicTrackingToken: randomBytes(12).toString('base64url'), codAmount: Math.max(0, o.total - o.amountPaid) } });
+      const sent = await tx.shipment.create({ data: { workspaceId: o.workspaceId, orderId: o.id, provider: 'manual', status: 'sent', trackingNumber: opt.trackingNumber ?? null, publicTrackingToken: randomBytes(12).toString('base64url'), codAmount: remainingOf(o) } });
       await tx.shipmentEvent.create({ data: { shipmentId: sent.id, rawStatus: 'sent', mappedStatus: 'sent', at, source: 'manual', actorId: actorUserId } });
     } else if (active && plan.shipment === 'mark_delivered') {
       // journey J08-6: the delivery is an attempt of its own unless the parcel was already out for delivery (« 2e tentative »
@@ -352,7 +352,7 @@ export class OrderWorkflowService implements OnModuleInit {
         where: { id },
         data: { wilayaId: input.wilayaId, communeId: commune?.id ?? null, communeText: commune ? null : (input.communeText ?? null), address: input.address ?? null, isStopdesk: input.isStopdesk, stopdeskId: input.stopdeskId ?? null, ...(input.phone2 !== undefined ? { clientPhone2: input.phone2 } : {}), deliveryFee, total, ...paid, version: { increment: 1 } },
       });
-      if (active && active.provider === 'manual') await tx.shipment.update({ where: { id: active.id }, data: { codAmount: Math.max(0, total - paid.amountPaid) } });
+      if (active && active.provider === 'manual') await tx.shipment.update({ where: { id: active.id }, data: { codAmount: remainingOf({ status: o.status, total, amountPaid: paid.amountPaid }) } });
       // UX-046 (10/11): the whole address before / after (wilaya, commune, home address or relay point), shown with names
       const to = { wilayaId: input.wilayaId, communeId: commune?.id ?? null, communeText: commune ? null : (input.communeText ?? null), address: input.address ?? null, isStopdesk: input.isStopdesk, stopdeskId: input.stopdeskId ?? null };
       await tx.orderStatusHistory.create({ data: { orderId: id, field: 'address', from: o.wilayaId ? addressSnapshot(o) : null, to: addressSnapshot(to), actorType: actor.type, actorId: actor.id } });

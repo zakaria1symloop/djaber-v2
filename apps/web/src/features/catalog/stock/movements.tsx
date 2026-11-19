@@ -28,6 +28,7 @@ import { ListPagination, MovementTypePill, useMovementReason } from '../ui';
 import { actorName, formatSigned, quantityTone, referenceHref, referenceKind, signedQuantity, withoutYear } from './logic';
 import { ReverseMovementDialog, SnapshotDialog } from './movement-dialogs';
 import { MovementFilterPanel, MovementQuickFilters, MOVEMENTS_SPEC, useMovementFilters } from './movement-filters';
+import { docRef } from '@/lib/format-message';
 
 const IMMUTABLE: Pick<ActionDescriptor, 'enabled' | 'reasonCode'> = { enabled: false, reasonCode: 'GDS_MOVEMENT_IMMUTABLE' };
 
@@ -295,7 +296,7 @@ function Reference({ movement: m }: { movement: StockMovement }) {
   if (!m.reference) return m.reversedAt ? <span className="text-text-muted">{t('movements.reversedOn', { date: formatDate(m.reversedAt, locale) })}</span> : <span className="text-text-muted">—</span>;
   const kind = referenceKind(m.reference.type);
   const typeKey = `movements.refType.${m.reference.type}`;
-  const label = kind === 'number' ? `#${m.reference.label}` : kind === 'name' ? m.reference.label : t.has(typeKey) ? t(typeKey) : m.reference.type;
+  const label = kind === 'number' ? `${docRef(t, m.reference.label)}` : kind === 'name' ? m.reference.label : t.has(typeKey) ? t(typeKey) : m.reference.type;
   const href = referenceHref(m);
   if (!href) return kind === 'number' ? <Ltr>{label}</Ltr> : <span>{label}</span>;
   return (

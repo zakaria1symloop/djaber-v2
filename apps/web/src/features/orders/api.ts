@@ -9,7 +9,7 @@ import { useWorkspaceId } from '@/lib/session';
 import { useWsEvent } from '@/lib/ws';
 import { ORDER_EVENTS } from './action-keys';
 import type { Client } from '@/features/clients/contracts';
-import type { CreatePaymentLinkInput, OrderPaymentLinkDto, OrderRefundInput } from '@djaber/shared';
+import { orderRemaining, type CreatePaymentLinkInput, type OrderPaymentLinkDto, type OrderRefundInput } from '@djaber/shared';
 import { invalidateFigures } from '@/lib/figures';
 import type {
   BulkItemResult,
@@ -152,10 +152,9 @@ export const patchRowFromSummary = (row: OrderListItem, s: Partial<OrderSummary>
   if (s.paymentStatus) next.paymentStatus = s.paymentStatus;
   if (s.deliveryStatus) next.deliveryStatus = s.deliveryStatus;
   if (typeof s.total === 'number') next.total = s.total;
-  if (typeof s.amountPaid === 'number') {
-    next.amountPaid = s.amountPaid;
-    next.remaining = Math.max(0, next.total - s.amountPaid);
-  }
+  if (typeof s.amountPaid === 'number') next.amountPaid = s.amountPaid;
+  // journey J08v-4: the shared « reste à encaisser » (0 once cancelled / returned), whatever field the summary changed
+  if (typeof s.amountPaid === 'number' || s.status || typeof s.total === 'number') next.remaining = orderRemaining(next);
   if (s.callbackAt !== undefined) next.callbackAt = s.callbackAt;
   if (s.riskLevel) next.riskLevel = s.riskLevel;
   if (typeof s.version === 'number') next.version = s.version;

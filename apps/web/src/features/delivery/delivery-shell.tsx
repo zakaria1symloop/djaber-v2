@@ -15,6 +15,7 @@ import { useSession } from '@/lib/session';
 import { SHIPMENT_ACTION } from './action-keys';
 import { deliveryApi, useDeliveryOverview } from './api';
 import { BulkSendDialog, type SendTarget } from './bulk-send';
+import { docRef } from '@/lib/format-message';
 
 type Tab = { key: 'overview' | 'fees' | 'couriers'; href: string; label: string; hidden?: boolean };
 
@@ -33,7 +34,7 @@ function SendConfirmed() {
       setTargets(
         page.rows.map((r) => {
           const a = actionState(r.actions, SHIPMENT_ACTION.send, t);
-          return { id: r.orderId, number: r.orderNumber, label: `#${r.orderNumber} · ${r.client.name}${r.wilaya ? ` · ${r.wilaya.name}` : ''}`, blocked: a.present && a.enabled ? null : (a.reason ?? forbiddenReason(t)) };
+          return { id: r.orderId, number: r.orderNumber, label: `${docRef(t, r.orderNumber)} · ${r.client.name}${r.wilaya ? ` · ${r.wilaya.name}` : ''}`, blocked: a.present && a.enabled ? null : (a.reason ?? forbiddenReason(t)) };
         }),
       );
     } catch (e) {

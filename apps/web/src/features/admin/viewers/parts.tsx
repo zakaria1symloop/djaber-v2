@@ -84,7 +84,7 @@ export function ConversationViewer({ id }: { id: string }) {
       </Card>
     );
   }
-  const author = (m: AdminViewerConversationDto['messages'][number]) => (m.author === 'customer' ? t('admin.viewers.author.customer') : m.author === 'ai' ? `${t('admin.viewers.author.ai')}${data.agent ? ` · ${data.agent.name.toUpperCase()}` : ''}` : m.author === 'system' ? t('admin.viewers.author.system') : m.authorLabel);
+  const author = (m: AdminViewerConversationDto['messages'][number]) => (m.author === 'customer' ? t('admin.viewers.author.customer') : m.author === 'ai' ? `${t('admin.viewers.author.ai')}${data.agent ? ` · ${data.agent.name}` : ''}` : m.author === 'system' ? t('admin.viewers.author.system') : m.authorLabel);
   return (
     <OpsPanel
       title={t('admin.viewers.thread.title', { id: data.id.slice(0, 6), workspace: data.workspace.name, platform: data.channel.platform === 'instagram' ? 'IG' : 'FB', customer: data.customer.name })}

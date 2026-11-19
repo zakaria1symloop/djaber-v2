@@ -26,6 +26,8 @@ export type OrderSlipData = {
   deliveryFee: number;
   total: number;
   amountPaid: number; // integer DZD
+  /** journey J08v-4: the « À encaisser » box = the shared `orderRemaining` (0 on a cancelled / returned order) */
+  toCollect: number;
   paymentMethod: string; // already-localized label, e.g. "Paiement à la livraison"
   notes: string | null;
   trackingUrl: string | null; // public tracking link, printed as text under the header (no QR code)
@@ -629,7 +631,7 @@ class SlipWriter {
     this.doc.save().lineWidth(1.4).rect(x0, this.y, this.width, h).stroke().restore();
     const inner = this.width - 24;
     this.drawLine(L.collect, x0 + 12, this.y + (h - 12 * LINE) / 2 + 2, inner, { size: 12, bold: true, align: this.start });
-    this.drawLine(formatSlipAmount(Math.max(0, s.total - s.amountPaid)), x0 + 12, this.y + (h - 18 * LINE) / 2 + 3, inner, {
+    this.drawLine(formatSlipAmount(s.toCollect), x0 + 12, this.y + (h - 18 * LINE) / 2 + 3, inner, {
       size: 18,
       bold: true,
       align: this.end,

@@ -65,6 +65,7 @@ import { AdvancedOnly, PaymentPill, PurchaseStatusPill, useDayLabel } from './ui
 import { emailError, emailOrNull } from '@/lib/email';
 import { fieldError } from '@/lib/forms';
 import { formatPhoneOnBlur, phoneError, phonePreviewLine } from '@/lib/phone';
+import { docRef } from '@/lib/format-message';
 
 export const SUPPLIERS_SPEC: ListSpec = {
   filters: { hasBalance: 'bool', lastPurchase: 'text', isActive: 'text' },
@@ -375,7 +376,7 @@ function SupplierSheet({
                         <span className="block truncate text-[14px] text-accent-inbound">
                           <Ltr>{`#${p.number} · ${formatMoney(p.total)}`}</Ltr>
                         </span>
-                        <span className="ts-label-micro text-text-muted">{`${day(p.purchasedAt.slice(0, 10))} · ${t('gds.units', { count: p.units.ordered })}`}</span>
+                        <span className="ts-label-micro text-text-muted">{`${day(p.purchasedAt.slice(0, 10))} · ${t('gds.units', { count: p.units.ordered, n: formatNumber(p.units.ordered) })}`}</span>
                       </span>
                       {p.status === 'received' || p.status === 'cancelled' ? (
                         p.remaining > 0 ? (
@@ -614,7 +615,7 @@ export function SupplierPaymentDialog({ supplier, onClose, purchaseId }: { suppl
     if (err) return;
     const r = await s.submit();
     if (!r) return;
-    toast(t('suppliers.payment.done', { amount: formatMoney(value!), numbers: r.allocations.map((a) => `#${a.number}`).join(', ') }));
+    toast(t('suppliers.payment.done', { amount: formatMoney(value!), numbers: r.allocations.map((a) => `${docRef(t, a.number)}`).join(', ') }));
     await refresh();
     onClose();
   };
@@ -649,7 +650,7 @@ export function SupplierPaymentDialog({ supplier, onClose, purchaseId }: { suppl
             <option value="">{t('suppliers.payment.oldest')}</option>
             {dueRows.map((p) => (
               <option key={p.id} value={p.id}>
-                {`#${p.number} (${formatMoney(p.remaining)})`}
+                {`${docRef(t, p.number)} (${formatMoney(p.remaining)})`}
               </option>
             ))}
           </Select>
@@ -657,7 +658,7 @@ export function SupplierPaymentDialog({ supplier, onClose, purchaseId }: { suppl
         <Field label={t('suppliers.payment.reference')} htmlFor="sp-ref">
           <CodeInput id="sp-ref" value={reference} maxLength={120} onChange={(e) => setReference(e.target.value)} />
         </Field>
-        {first ? <p className="ts-label-micro !normal-case text-text-muted">{t('suppliers.payment.note', { number: `#${first.number}` })}</p> : null}
+        {first ? <p className="ts-label-micro !normal-case text-text-muted">{t('suppliers.payment.note', { number: `${docRef(t, first.number)}` })}</p> : null}
         {s.error ? (
           <FormAlert>
             {s.error}

@@ -217,8 +217,8 @@ export function ReceiveDialog({ purchaseId, onClose }: { purchaseId: string | nu
     const over = r.warnings.filter((w) => w.code === 'PURCHASE_OVER_RECEIVE');
     toast(
       over.length
-        ? { tone: 'warning', message: `${t('purchases.receive.done', { number: r.purchase.number, count: sum.units })} · ${t('error.PURCHASE_OVER_RECEIVE', { ordered: String(over[0]!.params?.ordered ?? ''), received: String(over[0]!.params?.received ?? '') })}` }
-        : t('purchases.receive.done', { number: r.purchase.number, count: sum.units }),
+        ? { tone: 'warning', message: `${t('purchases.receive.done', { number: r.purchase.number, count: sum.units, n: formatNumber(sum.units) })} · ${t('error.PURCHASE_OVER_RECEIVE', { ordered: String(over[0]!.params?.ordered ?? ''), received: String(over[0]!.params?.received ?? '') })}` }
+        : t('purchases.receive.done', { number: r.purchase.number, count: sum.units, n: formatNumber(sum.units) }),
     );
     await refresh();
     onClose();
@@ -257,7 +257,7 @@ export function ReceiveDialog({ purchaseId, onClose }: { purchaseId: string | nu
           onClose={guard.requestClose}
           busy={s.busy}
           onSubmit={() => void submit()}
-          label={t('purchases.receive.submit', { count: sum.units })}
+          label={t('purchases.receive.submit', { count: sum.units, n: formatNumber(sum.units) })}
           disabled={!p || sum.units <= 0 || missingVariant || overPay}
           note={p ? t('purchases.receive.note', { count: sum.movements, number: p.number }) : undefined}
         />
@@ -411,7 +411,7 @@ export function CancelPurchaseDialog({ purchaseId, onClose }: { purchaseId: stri
         {loadError ? <FormAlert>{loadError}</FormAlert> : null}
         {p ? (
           <p className="text-[13px] text-text-secondary">
-            {received > 0 ? t('purchases.cancel.partialOwed', { count: received, value: iso(formatNumber(partialCancelOwed(p).value)), remaining: iso(formatNumber(partialCancelOwed(p).remaining)) }) : t('purchases.cancel.none')}
+            {received > 0 ? t('purchases.cancel.partialOwed', { count: received, n: formatNumber(received), value: iso(formatNumber(partialCancelOwed(p).value)), remaining: iso(formatNumber(partialCancelOwed(p).remaining)) }) : t('purchases.cancel.none')}
           </p>
         ) : null}
         <Field label={t('common.noteOptional')} htmlFor="pc-reason" error={s.fieldError('reason')}>

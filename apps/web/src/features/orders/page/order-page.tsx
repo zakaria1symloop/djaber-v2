@@ -12,7 +12,7 @@ import { Link, useRouter } from '@/i18n/navigation';
 import { actionState } from '@/lib/actions';
 import { conflictOf } from '@/lib/conflict';
 import { useLeaveGuard } from '@/lib/forms';
-import { iso } from '@/lib/format-message';
+import { iso, docRef } from '@/lib/format-message';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
@@ -60,7 +60,7 @@ export function OrderPage({ id }: { id: string }) {
   const [conflict, setConflict] = useState<{ part: 'contact' | 'items'; c: NonNullable<ReturnType<typeof conflictOf<Order>>> } | null>(null);
   // opening an edit is not a change: the guard arms once the draft differs from the order
   const dirty = draftChanged(contact, q.data ? contactOf(q.data) : null) || draftChanged(items, q.data ? itemsOf(q.data) : null);
-  const { guard } = useLeaveGuard(dirty, q.data ? `#${q.data.number}` : '');
+  const { guard } = useLeaveGuard(dirty, q.data ? `${docRef(t, q.data.number)}` : '');
   // `/orders/:id#delivery|#payment|#calls` (notifications, Home queue): the block is brought into view once loaded
   const loaded = !!q.data;
   const back = useBack({ href: '/orders', label: t('nav.orders') });

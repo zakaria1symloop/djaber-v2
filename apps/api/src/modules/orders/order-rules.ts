@@ -1,6 +1,6 @@
 // 04 §1.2 (+ D14, §21) status machine, §1.3 call outcomes, §1.4 payment / COD, §3 side-effect plan — pure functions,
 // no database. `OrderEffects` executes the plans; the unit tests (`order-rules.spec.ts`) cover every pair of the matrix.
-import { canTransition, derivePaymentStatus, formatMoney, ORDER_ADDRESS_REQUIRED_FOR, ORDER_BACKDATE_MAX_DAYS, ORDER_TERMINAL_STATUSES, parseStoredText, sendClosedCode, storedText, type CallResultName, type CancelReasonName, type OrderStatusName } from '@djaber/shared';
+import { canTransition, derivePaymentStatus, formatMoney, ORDER_ADDRESS_REQUIRED_FOR, ORDER_BACKDATE_MAX_DAYS, ORDER_TERMINAL_STATUSES, orderRemaining, parseStoredText, sendClosedCode, storedText, type CallResultName, type CancelReasonName, type OrderStatusName } from '@djaber/shared';
 import type { ErrorCode } from '@djaber/shared';
 
 export type Role = 'owner' | 'admin' | 'operator' | undefined;
@@ -269,8 +269,11 @@ export const itemsChange = (before: ItemSnapshot[], after: ItemSnapshot[]): { fr
 export const itemsHistoryText = (v: string | null, side: 'from' | 'to', word: (side: 'from' | 'to', name: string) => string): string | null =>
   v ? v.replace(/(^|, )([^,]+?) ×0(?=, |$)/g, (_m, sep: string, name: string) => `${sep}${word(side, name)}`) : v;
 
-/** 04 §21: what is left to collect — nothing on a cancelled / returned order (full-test ORDERS-11, journey 16/11 J05-10). */
-export const remainingOf = (o: { status: string; total: number; amountPaid: number }): number => (o.status === 'cancelled' || o.status === 'returned' ? 0 : Math.max(0, o.total - o.amountPaid));
+/**
+ * 04 §21: what is left to collect — nothing on a cancelled / returned order (full-test ORDERS-11, journey 16/11 J05-10).
+ * journey J08v-4: the shared `orderRemaining` (one rule for every screen, export and the AI).
+ */
+export const remainingOf = orderRemaining;
 
 /** 04 §4: `lineTotal = unitPrice × qty − lineDiscount`, `subtotal = Σ`, `total = subtotal − discount + tax + deliveryFee`. */
 export const orderTotals = (lines: { unitPrice: number; quantity: number; discount?: number }[], o: { discount?: number; tax?: number; deliveryFee: number }) => {

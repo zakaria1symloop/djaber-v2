@@ -11,6 +11,7 @@ import { ClosedDayHint } from '@/components/closed-day-hint';
 import { DialogFooter, RadioList, useDialogSubmit, useOnOpen } from '@/features/orders/dialogs/common';
 import { effectiveDateError, isoToLocalInput, localInputToIso } from '@/features/orders/logic';
 import { ORDER_BACKDATE_MAX_DAYS } from '@/features/orders/contracts';
+import { docRef } from '@/lib/format-message';
 import { useT } from '@/lib/i18n';
 import { digitsToInt, moneyDigits } from '@/lib/money';
 import { deliveryApi, useCouriers } from './api';
@@ -32,7 +33,8 @@ export type ParcelRef = {
 };
 type Props = { parcel: ParcelRef; open: boolean; onClose: () => void; onDone: (s?: Shipment | null) => void | Promise<void> };
 
-const context = (p: ParcelRef) => [`#${p.orderNumber}`, p.courierName, p.trackingNumber, p.clientName].filter(Boolean).join(' · ');
+// journey J14v-1: the order number isolated in Arabic (`docRef`)
+const context = (p: ParcelRef, t: { locale?: string }) => [docRef(t, p.orderNumber), p.courierName, p.trackingNumber, p.clientName].filter(Boolean).join(' · ');
 
 /* ---------- Annuler le colis ---------- */
 export function CancelParcelDialog({ parcel, open, onClose, onDone }: Props) {
@@ -52,7 +54,7 @@ export function CancelParcelDialog({ parcel, open, onClose, onDone }: Props) {
       open={open}
       onOpenChange={(o) => !o && !s.busy && onClose()}
       title={t('parcel.cancel.title')}
-      description={context(parcel)}
+      description={context(parcel, t)}
       closeLabel={t('action.close')}
       size="md"
       footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('parcel.cancel.submit')} closeLabel={t('action.keep')} danger />}
@@ -100,7 +102,7 @@ export function ChangeCourierDialog({ parcel, open, onClose, onDone }: Props) {
       open={open}
       onOpenChange={(o) => !o && !s.busy && onClose()}
       title={t('parcel.changeCourier.title')}
-      description={context(parcel)}
+      description={context(parcel, t)}
       closeLabel={t('action.close')}
       size="md"
       footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('parcel.changeCourier.submit')} disabled={!to} note={t('parcel.changeCourier.note')} />}
@@ -145,7 +147,7 @@ export function MarkFailedDialog({ parcel, open, onClose, onDone }: Props) {
       open={open}
       onOpenChange={(o) => !o && !s.busy && onClose()}
       title={t('parcel.failed.title')}
-      description={context(parcel)}
+      description={context(parcel, t)}
       closeLabel={t('action.close')}
       size="md"
       footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('parcel.failed.submit')} note={t('parcel.failed.note')} />}
@@ -186,7 +188,7 @@ export function RetryDeliveryDialog({ parcel, open, onClose, onDone }: Props) {
       open={open}
       onOpenChange={(o) => !o && !s.busy && onClose()}
       title={t('parcel.retryDelivery.title')}
-      description={context(parcel)}
+      description={context(parcel, t)}
       closeLabel={t('action.close')}
       size="md"
       footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('parcel.retryDelivery.submit')} />}
@@ -239,7 +241,7 @@ export function ParcelDeliveredDialog({ parcel, open, onClose, onDone }: Props) 
       open={open}
       onOpenChange={(o) => !o && !s.busy && onClose()}
       title={t('dialog.markDelivered.title')}
-      description={context(parcel)}
+      description={context(parcel, t)}
       closeLabel={t('action.close')}
       size="md"
       footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('orders.deliver.submit')} />}
@@ -295,7 +297,7 @@ export function ParcelReturnedDialog({ parcel, open, onClose, onDone }: Props) {
       open={open}
       onOpenChange={(o) => !o && !s.busy && onClose()}
       title={t('dialog.markReturned.title')}
-      description={context(parcel)}
+      description={context(parcel, t)}
       closeLabel={t('action.close')}
       size="md"
       footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('action.markReturned')} note={t('orders.return.note')} />}

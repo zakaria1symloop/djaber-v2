@@ -14,7 +14,7 @@ import type { ListController } from '@/lib/use-list-state';
 import { catalogApi, useCategories, useProduct } from '../api';
 import { flattenCategories, MOVEMENT_REASONS, MOVEMENT_REF_TYPES, MOVEMENT_TYPES } from '../contracts';
 import { activePeriod, PERIOD_PRESETS, periodRange, withoutYear, type PeriodPreset } from './logic';
-import { rangeArrow } from '@/lib/format-message';
+import { rangeArrow, docRef } from '@/lib/format-message';
 
 /** `GET /stock/movements` parameters (06 §10). */
 export const MOVEMENTS_SPEC: ListSpec = {
@@ -83,7 +83,7 @@ export function useMovementFilters(list: ListController, fallbackProductName?: s
   // journey J07r-5: one document (« #ACH-1001 », from its page) is one chip — not « Référence : Achat » next to it
   const oneDoc = !!filterText(s, 'refId');
   if (refTypes.length && !(oneDoc && refTypes.length === 1)) chip('refType', t('movements.filter.reference'), labels(refTypes, refTypeOptions), { refType: null, refId: null });
-  if (oneDoc) chip('refId', t('movements.filter.reference'), refLabel ? `#${refLabel}` : t('movements.filter.oneDocument'), refTypes.length === 1 ? { refId: null, refType: null } : { refId: null }); // J07-11: « #ACH-1001 »
+  if (oneDoc) chip('refId', t('movements.filter.reference'), refLabel ? `${docRef(t, refLabel)}` : t('movements.filter.oneDocument'), refTypes.length === 1 ? { refId: null, refType: null } : { refId: null }); // J07-11: « #ACH-1001 »
   if (periodLabel) chip('period', t('movements.filter.period'), periodLabel, { from: null, to: null });
   if (createdById) chip('createdById', t('movements.filter.by'), labels([createdById], memberOptions), { createdById: null });
   if (minQty || maxQty) chip('qty', t('movements.filter.quantity'), `${minQty ? formatNumber(Number(minQty)) : '…'} – ${maxQty ? formatNumber(Number(maxQty)) : '…'}`, { minQty: null, maxQty: null });

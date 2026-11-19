@@ -19,6 +19,7 @@ import { useWorkspaceId } from '@/lib/session';
 import { uuid } from '@/lib/uuid';
 import { deliveryApi } from './api';
 import { LABEL_FORMAT_LIST, type LabelFormat, type LabelsResult } from './contracts';
+import { docRef } from '@/lib/format-message';
 
 /**
  * The PDF itself: embedded viewer + a plain link. The file is read once and shown from a `blob:` URL — signed storage
@@ -218,7 +219,7 @@ export function LabelJobViewer({ jobId, open, onClose, onRetry }: { jobId: strin
                 <ul className="ms-1 flex flex-col gap-0.5">
                   {result.skipped.map((s) => (
                     <li key={s.id} className="ts-label-micro !normal-case text-accent-starred">
-                      {`${s.orderNumber ? `#${s.orderNumber}` : s.id} : ${t(`error.${s.code}`)}`}
+                      {`${s.orderNumber ? `${docRef(t, s.orderNumber)}` : s.id} : ${t(`error.${s.code}`)}`}
                     </li>
                   ))}
                 </ul>

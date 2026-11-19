@@ -24,6 +24,7 @@ import { uploadWithProgress } from '@/lib/upload';
 const ATTACHMENTS_MAX = 5;
 const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 import { EscalateDialog, LinkIncidentDialog } from './support-dialogs';
+import { docRef } from '@/lib/format-message';
 
 /**
  * `fill` (full page `/admin/support/[id]`): on wide screens the thread panel takes the height left in the content area,
@@ -80,7 +81,7 @@ function TicketView({ ticket, label, fill }: { ticket: AdminTicketDto; label: st
       }
     }
   };
-  const { guard } = useLeaveGuard(text.trim().length > 0, `#${ticket.number}`);
+  const { guard } = useLeaveGuard(text.trim().length > 0, `${docRef(t, ticket.number)}`);
 
   const closed = ticket.status === 'closed';
   const resolved = ticket.status === 'resolved';
@@ -157,7 +158,7 @@ function TicketView({ ticket, label, fill }: { ticket: AdminTicketDto; label: st
       data-status={ticket.status}
       aria-label={label}
     >
-      <OpsPanel title={`#${ticket.number} — ${ticket.subject}`} data-testid="ticket-thread" className={cn(fill && 'xl:flex xl:min-h-0 xl:flex-col')} bodyClassName={cn(fill && 'xl:flex xl:min-h-0 xl:flex-1 xl:flex-col')}>
+      <OpsPanel title={`${docRef(t, ticket.number)} — ${ticket.subject}`} data-testid="ticket-thread" className={cn(fill && 'xl:flex xl:min-h-0 xl:flex-col')} bodyClassName={cn(fill && 'xl:flex xl:min-h-0 xl:flex-1 xl:flex-col')}>
         <ol ref={thread.ref} onScroll={thread.onScroll} className={cn('-mx-1 flex max-h-[60dvh] flex-col gap-3 overflow-y-auto overscroll-contain px-1', fill && 'xl:max-h-none xl:min-h-0 xl:flex-1')} data-testid="ticket-messages">
           {ticket.messages.map((m) => (
             <li

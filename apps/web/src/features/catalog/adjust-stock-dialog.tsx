@@ -123,7 +123,7 @@ export function AdjustStockDialog({
       open={open}
       onOpenChange={(o) => !o && !busy && onClose()}
       title={t('dialog.adjustStock.title')}
-      description={target ? `${target.name.toUpperCase()}${hasVariants ? ` · ${t('stock.adjust.variantProduct')}` : ''}` : undefined}
+      description={target ? `${target.name}${hasVariants ? ` · ${t('stock.adjust.variantProduct')}` : ''}` : undefined}
       closeLabel={t('action.close')}
       size="md"
       footer={

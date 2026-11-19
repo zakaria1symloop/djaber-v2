@@ -1,6 +1,6 @@
 // Delivery — pure helpers of the overview, tracking panel, couriers page, send dialog, labels and the public page
 // (unit tested in logic.spec.ts). The UI never decides a shipment transition: the server `actions` do.
-import { isOrderSendClosed, type ActionDescriptor, type OrderSendClosedStatus } from '@djaber/shared';
+import { isOrderSendClosed, parcelStatusKey, type ActionDescriptor, type OrderSendClosedStatus } from '@djaber/shared';
 import type { Tone } from '@djaber/ui';
 import { algiersTime } from '@/features/orders/logic';
 import type { BulkSendRow, ShipmentStatus } from './contracts';
@@ -64,7 +64,7 @@ export function deliveryBlockState(
  * i18n key of a parcel status pill. A self-delivered parcel (`provider=manual`, 04 §1.2) that is `sent` is on its way
  * with the merchant — « ENVOYÉE », not the courier wording « CRÉÉE » (parcel created, waiting for pickup; full-test ORDERS-23).
  */
-export const shipmentStatusKey = (s: { status: ShipmentStatus; provider?: string | null }): string => (s.provider === 'manual' && s.status === 'sent' ? 'parcel.manual.sent' : `enum.Shipment.status.${s.status}`);
+export const shipmentStatusKey = (s: { status: ShipmentStatus; provider?: string | null }): string => parcelStatusKey(s.status, s.provider); // journey J08v-1: the shared mapping
 
 /**
  * 12 §20 « Send dialog without courier » (full-test DELIVERY-04): a member who manages the couriers (`delivery.manage`)

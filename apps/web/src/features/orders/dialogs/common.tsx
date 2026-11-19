@@ -10,6 +10,7 @@ import { ApiError } from '@/lib/api';
 import { conflictOf } from '@/lib/conflict';
 import { errorMessage } from '@/lib/forms';
 import { useT, type TFunction } from '@/lib/i18n';
+import { docRef, iso, ltr } from '@/lib/format-message';
 import { uuid } from '@/lib/uuid';
 import type { Order } from '../contracts';
 
@@ -114,6 +115,9 @@ export function RadioList<V extends string>({ label, value, onChange, options, d
   );
 }
 
-/** "#CMD-1042 · Nouvelle · Amina B. · 9 400 DA" */
+/**
+ * "#CMD-1042 · Nouvelle · Amina B. · 9 400 DA" — journey J14v-1: in Arabic the number, the name and the amount are isolates (the « # » moved to
+ * the other end: « CMD-1003# · مؤكَّد · … »), as the page title and the payment / delivered dialogs
+ */
 export const orderContext = (t: TFunction, o: Pick<Order, 'number' | 'status' | 'clientName' | 'total'>): string =>
-  [`#${o.number}`, t(`enum.Order.status.${o.status}`), o.clientName, formatMoney(o.total)].join(' · ');
+  [docRef(t, o.number), t(`enum.Order.status.${o.status}`), t.locale === 'ar' ? iso(o.clientName) : o.clientName, t.locale === 'ar' ? ltr(formatMoney(o.total)) : formatMoney(o.total)].join(' · ');

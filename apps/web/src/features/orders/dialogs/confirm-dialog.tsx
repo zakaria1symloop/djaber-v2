@@ -17,6 +17,7 @@ import { addressMissing, algiersTime, confirmChecks, newestFirst, unansweredCall
 import { CallResultPill } from '../ui';
 import { useDialogSubmit, useOnOpen, type DialogBaseProps } from './common';
 import { emptyOutcome, OutcomeFields, outcomeErrors, type OutcomeValue } from './outcome';
+import { docRef } from '@/lib/format-message';
 
 type Step = 'review' | 'call' | 'result';
 
@@ -89,7 +90,7 @@ export function ConfirmOrderDialog({ order, open, onClose, onDone, onAddress, on
   const title = mode === 'log' ? t('dialog.callResult.title') : t('orders.confirm.title', { number: order.number });
   const stepIndex = step === 'review' ? 1 : step === 'call' ? 2 : 3;
   const chips: StepChip[] = (['review', 'call', 'result'] as Step[]).map((k, i) => ({ key: k, label: t(`orders.confirm.step.${k}`), state: i + 1 < stepIndex ? 'done' : i + 1 === stepIndex ? 'active' : 'upcoming' }));
-  const description = mode === 'log' ? `#${order.number} · ${order.clientName} · ${t('orders.call.attempt', { count: order.callAttempts + 1 })}` : t('orders.confirm.stepOf', { step: stepIndex, label: t(`orders.confirm.stepTitle.${step}`) });
+  const description = mode === 'log' ? `${docRef(t, order.number)} · ${order.clientName} · ${t('orders.call.attempt', { count: order.callAttempts + 1 })}` : t('orders.confirm.stepOf', { step: stepIndex, label: t(`orders.confirm.stepTitle.${step}`) });
 
   const result = fresh ?? order;
   const prepare = actionState(result.actions, ORDER_ACTION.prepare, t);

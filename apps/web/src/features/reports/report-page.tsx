@@ -496,7 +496,8 @@ function ReportKpis({ view, simple }: { view: ReportDataView; simple: boolean })
           key={k.key}
           name={k.key}
           k={{ value: k.value, unit: k.unit, previous: k.previous, deltaPct: k.deltaPct }}
-          label={`${k.unit === 'money' ? 'DA ' : ''}${t(`report.kpi.${k.key}`)}`.toLowerCase()}
+          // journey J14v-3: no case change by code (« 12 000 da المقبوض » in Arabic, where the tile's CSS capitals do nothing)
+          label={`${k.unit === 'money' ? 'DA ' : ''}${t(`report.kpi.${k.key}`)}`}
           title={k.figure ? t(`analytics.figureHelp.${k.figure}`) : undefined}
         />
       ))}

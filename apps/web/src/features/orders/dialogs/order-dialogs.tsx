@@ -19,6 +19,7 @@ import { CANCEL_REASONS, FAILURE_REASONS, ORDER_BACKDATE_MAX_DAYS, PAYMENT_METHO
 import { algiersTime, effectiveDateError, isoToLocalInput, localInputToIso, paymentError } from '../logic';
 import { DialogFooter, orderContext, RadioList, useDialogSubmit, useOnOpen, type DialogBaseProps } from './common';
 import { CallbackPicker } from './outcome';
+import { docRef } from '@/lib/format-message';
 
 type Props = DialogBaseProps & { open: boolean };
 
@@ -73,7 +74,7 @@ export function CallbackDialog({ order, open, onClose, onDone }: Props) {
       open={open}
       onOpenChange={(o) => !o && !s.busy && onClose()}
       title={t('dialog.reminder.title')}
-      description={`#${order.number} · ${order.clientName} · ${t(`enum.Order.confirmationStatus.${order.confirmationStatus}`, { attempts: order.callAttempts, time: '' })}`}
+      description={`${docRef(t, order.number)} · ${order.clientName} · ${t(`enum.Order.confirmationStatus.${order.confirmationStatus}`, { attempts: order.callAttempts, time: '' })}`}
       closeLabel={t('action.close')}
       size="md"
       footer={
@@ -245,7 +246,7 @@ export function ChangeStatusDialog({ order, open, onClose, onDone, targets, onRe
       open={open}
       onOpenChange={(o) => !o && !s.busy && onClose()}
       title={t('dialog.changeStatus.title')}
-      description={`#${order.number} · ${t(`enum.Order.status.${order.status}`)} → ?`}
+      description={`${docRef(t, order.number)} · ${t(`enum.Order.status.${order.status}`)} → ?`}
       closeLabel={t('action.close')}
       size="md"
       footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('action.apply')} disabled={!all.length} note={t('orders.status.rule')} />}
@@ -396,7 +397,7 @@ export function ReturnDialog({ order, open, onClose, onDone }: Props) {
       open={open}
       onOpenChange={(o) => !o && !s.busy && onClose()}
       title={t('dialog.markReturned.title')}
-      description={[`#${order.number}`, order.clientName, courier ? t(`enum.Courier.${courier}`) : null].filter(Boolean).join(' · ')}
+      description={[`${docRef(t, order.number)}`, order.clientName, courier ? t(`enum.Courier.${courier}`) : null].filter(Boolean).join(' · ')}
       closeLabel={t('action.close')}
       size="md"
       footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('action.markReturned')} note={t('orders.return.note')} />}

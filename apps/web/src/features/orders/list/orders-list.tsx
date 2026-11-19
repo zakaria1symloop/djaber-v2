@@ -27,6 +27,7 @@ import { SavedViews } from '@/features/saved-views/saved-views';
 import { ExportOrdersDialog, OrdersBulkBar } from './bulk';
 import { OrdersActiveFilters, OrdersFilterBar, OrdersFilterPanel } from './filters';
 import { ORDER_TABS, ORDERS_LIST, ordersQuery, tabCountsQuery } from './spec';
+import { docRef } from '@/lib/format-message';
 
 /** "10:58" today, "hier · 10:58" yesterday, "05 oct. · 10:58" before — always with the time (Africa/Algiers; PV 22/10). */
 function useOrderedAt() {
@@ -71,7 +72,7 @@ export function OrdersList() {
   useEffect(() => setSelected(new Set()), [view]);
 
   const menu = (row: OrderListItem) => (
-    <ActionsMenu label={t('action.actions')} heading={[`#${row.number}`, t(`enum.Order.status.${row.status}`), t(`enum.Order.source.${row.source.source}`).replace(/^\S+\s/, '')].join(' · ')} actions={actions.menu(row)} />
+    <ActionsMenu label={t('action.actions')} heading={[`${docRef(t, row.number)}`, t(`enum.Order.status.${row.status}`), t(`enum.Order.source.${row.source.source}`).replace(/^\S+\s/, '')].join(' · ')} actions={actions.menu(row)} />
   );
 
   const columns: Column<OrderListItem>[] = [
@@ -266,7 +267,7 @@ export function OrdersList() {
           sort={list.sort}
           onSortChange={list.setSort}
           sortLabel={(header) => t('list.sortBy', { column: header })}
-          selection={canWrite ? { selected, onChange: setSelected, allLabel: t('list.selectAll'), rowLabel: (r) => t('list.selectRow', { name: `#${r.number}` }) } : undefined}
+          selection={canWrite ? { selected, onChange: setSelected, allLabel: t('list.selectAll'), rowLabel: (r) => t('list.selectRow', { name: `${docRef(t, r.number)}` }) } : undefined}
           density={list.density}
           hiddenColumns={hidden}
           onRowClick={(r) => router.push(`/orders/${r.id}`)}

@@ -30,6 +30,7 @@ import { ProductPicker, toPicked, useProductVariants, type PickedProduct } from 
 import { SupplierDialog, supplierLabel } from './suppliers';
 import { AdvancedOnly } from './ui';
 import { forbiddenReason } from '@/lib/actions';
+import { docRef } from '@/lib/format-message';
 
 type Line = { key: string; productId: string; name: string; sku: string; trackStock: boolean; hasVariants: boolean; variants: PickedProduct['variants']; variantId: string | null; quantity: number; unitCost: string };
 type Form = { supplierId: string; expectedAt: string; invoice: string; tax: string; shipping: string; paid: string; method: CashMethod; notes: string; lines: Line[] };
@@ -122,7 +123,7 @@ function PurchaseForm({ purchase }: { purchase?: Purchase }) {
   const [newSupplier, setNewSupplier] = useState(false);
   const [dirty, setDirty] = useState(false);
   const key = useRef(uuid());
-  const { guard } = useLeaveGuard(dirty && busy === null, purchase ? `#${purchase.number}` : t('purchases.form.title'));
+  const { guard } = useLeaveGuard(dirty && busy === null, purchase ? `${docRef(t, purchase.number)}` : t('purchases.form.title'));
 
   // "Réapprovisionner" / recommendation prefill: one line of the product (variant, quantity, cost)
   const prefillId = !purchase ? params.get('productId') : null;
@@ -344,7 +345,7 @@ function PurchaseForm({ purchase }: { purchase?: Purchase }) {
 
         <div className="flex flex-wrap items-center gap-3 border-t border-line-hairline pt-4">
           <p className="ts-label-meta text-text-muted" data-testid="purchase-totals">
-            <Ltr>{t('purchases.form.totals', { total: formatMoney(totals.total), remaining: formatMoney(totals.remaining), units: formatNumber(f.lines.reduce((s, l) => s + l.quantity, 0)) })}</Ltr>
+            <Ltr>{t('purchases.form.totals', { total: formatMoney(totals.total), remaining: formatMoney(totals.remaining), unitsN: f.lines.reduce((s, l) => s + l.quantity, 0), units: formatNumber(f.lines.reduce((s, l) => s + l.quantity, 0)) })}</Ltr>
           </p>
           <div className="ms-auto flex gap-2">
             <Button variant="ghost" onClick={() => void save('draft')} loading={busy === 'draft'} disabled={busy !== null} disabledReason={blocked} data-testid="purchase-save-draft">

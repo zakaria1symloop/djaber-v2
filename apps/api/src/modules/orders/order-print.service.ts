@@ -1,6 +1,6 @@
 // ORD-09 / DLV-06 — A5 order slips (pdfkit renderer in ./print): one order on demand (`GET /orders/:id/print`, the file
 // is written under `private/` and returned as a signed URL), several as a job (`POST /orders/bulk/print` → 202).
-import { communeNameOf } from '@djaber/shared';
+import { communeNameOf, orderRemaining } from '@djaber/shared';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { prisma, TenantContext, type Job, type Tx } from '@djaber/db';
 import type { BulkOrderPrintInput, OrderPrintQuery } from '@djaber/shared';
@@ -78,6 +78,7 @@ export class OrderPrintService implements OnModuleInit {
         deliveryFee: o.deliveryFee,
         total: o.total,
         amountPaid: o.amountPaid,
+        toCollect: orderRemaining(o),
         paymentMethod: o.amountPaid > 0 && o.amountPaid >= o.total ? PAID_LABEL[lang] : (PAYMENT_LABEL[lang][o.paymentMethod] ?? o.paymentMethod),
         notes: o.notes,
         trackingUrl: o.shipments[0] ? `${web}/s/${o.shipments[0].publicTrackingToken}` : null,

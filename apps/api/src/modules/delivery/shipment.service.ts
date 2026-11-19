@@ -4,7 +4,7 @@
 // call a courier: they write the Shipment row + an outbox job in one transaction (CLAUDE.md rule 4).
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import { courierWilayaId, sendClosedCode, storedText, TRACKING_SYNC_COOLDOWN_S, type BulkSendInput, type BulkSendResult, type BulkSendRowResult, type CancelShipmentInput, type CreateShipmentInput, type MarkDeliveredInput, type MarkFailedInput, type MarkReturnedInput, type ShipmentView } from '@djaber/shared';
+import { courierWilayaId, orderRemaining, sendClosedCode, storedText, TRACKING_SYNC_COOLDOWN_S, type BulkSendInput, type BulkSendResult, type BulkSendRowResult, type CancelShipmentInput, type CreateShipmentInput, type MarkDeliveredInput, type MarkFailedInput, type MarkReturnedInput, type ShipmentView } from '@djaber/shared';
 import { prisma, TenantContext, type Job, type Prisma, type Shipment, type Tx } from '@djaber/db';
 import { ConfigService } from '../../core/config/config.service';
 import { AppException, notFound } from '../../core/errors/app.exception';
@@ -178,7 +178,7 @@ export class ShipmentService implements OnModuleInit {
     if (!hasDeliveryAddress(o)) throw new AppException('ORDER_ADDRESS_REQUIRED');
     const caps = this.adapters.get(account.provider, account.baseUrl).capabilities;
     if (o.isStopdesk && caps.stopdesks && !o.stopdeskId) throw new AppException('VALIDATION_ERROR', {}, { stopdeskId: 'validation.required' });
-    const codAmount = input.codAmount ?? Math.max(0, o.total - o.amountPaid);
+    const codAmount = input.codAmount ?? orderRemaining(o); // journey J08v-4: the shared « reste à encaisser »
     if (codAmount > o.total) throw new AppException('VALIDATION_ERROR', {}, { codAmount: 'validation.range' });
     const now = new Date();
     const cost = await this.courierCost(tx, account.id, o.wilayaId, o.isStopdesk);

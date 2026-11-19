@@ -24,6 +24,15 @@ export const iso = (value: string | number): string => `\u2068${value}\u2069`;
 /** A left-to-right island (LRI \u2026 PDI): numbers, ranges \u00ab 4 500 DA \u2013 4 800 DA \u00bb, \u00ab \u00d72 \u00bb keep their order in Arabic. */
 export const ltr = (value: string | number): string => `\u2066${value}\u2069`;
 /**
+ * journey J14v-1 (19/11): \u00ab #CMD-1003 \u00bb / \u00ab #VNT-1004 \u00bb / \u00ab #ACH-1002 \u00bb written by code into a sentence (a dialog's context line, a
+ * menu heading, a label \u00ab #CMD-1003 \u00b7 Amina \u00bb) \u2014 isolated in Arabic (the \u00ab # \u00bb stayed at the other end: \u00ab CMD-1003# \u00b7 \u0645\u0624\u0643\u064e\u0651\u062f \u00b7 \u2026 \u00bb), as
+ * the catalogue's `#{number}` (`isolateRefs`). A leading \u00ab # \u00bb of the value is not doubled.
+ */
+export const docRef = (t: { locale?: string }, number: string | number): string => {
+  const ref = `#${String(number).replace(/^#/, '')}`;
+  return t.locale === 'ar' ? iso(ref) : ref;
+};
+/**
  * \u00ab name \u00d7qty \u00bb of a document line (journeys J06-9 / J06r-4): the name and the quantity are two isolates, so a mixed
  * Latin / Arabic name (\u00ab QA J06r \u0639\u0637\u0631 \u0645\u0633\u0643 \u00bb) never swallows \u00ab \u00d72 \u00bb into its Arabic run (\u00ab 2\u00d7 \u0639\u0637\u0631 \u0645\u0633\u0643 \u00bb), and the quantity
  * follows the name in the reading direction of the page (on its right in French, on its left in Arabic).

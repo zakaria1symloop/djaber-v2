@@ -214,7 +214,7 @@ export function PricingBlock({ product, advanced, canEdit = false }: { product: 
   // journeys 16/11 J07-3: a product with variants is bought at its variants' costs (each receipt updates the variant's
   // weighted cost) — the range of those, like PRIX DE VENTE, never the base cost typed at creation
   const costRange = variantCostRange(perVariant);
-  const units = (n: number) => <Ltr className="tabular-nums">{qtyText(formatNumber(n), product.unit, (count) => t('products.page.units', { count }))}</Ltr>;
+  const units = (n: number) => <Ltr className="tabular-nums">{qtyText(formatNumber(n), product.unit, (shown) => t('products.page.units', { count: n, n: shown }))}</Ltr>;
   return (
     <Block title={t(advanced ? 'products.page.pricing.title' : 'products.page.pricing.titleSimple')} testId="block-pricing">
       <Rows>
@@ -328,7 +328,7 @@ export function StockBlock({ product, advanced }: { product: Product; advanced: 
   const locale = useLocaleCode() as Locale;
   const s = stockSummary(product);
   const d = product.stockDetail;
-  const units = (n: number) => <Ltr className="tabular-nums">{qtyText(formatNumber(n), product.unit, (count) => t('products.page.units', { count }))}</Ltr>;
+  const units = (n: number) => <Ltr className="tabular-nums">{qtyText(formatNumber(n), product.unit, (shown) => t('products.page.units', { count: n, n: shown }))}</Ltr>;
   return (
     <Block title={t('products.page.stock.title')} testId="block-stock">
       <Rows>

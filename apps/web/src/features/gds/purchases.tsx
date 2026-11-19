@@ -22,6 +22,7 @@ import { GDS_PAYMENT_STATUSES, PURCHASE_STATUSES, type PurchaseRow } from './con
 import { usePurchaseActions } from './purchase-dialogs';
 import { ListExportMenu } from './export-menu';
 import { AdvancedOnly, KpiSkeleton, PaymentPill, PeriodDropdown, PurchaseStatusPill, useDayLabel } from './ui';
+import { docRef } from '@/lib/format-message';
 
 export const PURCHASES_SPEC: ListSpec = {
   filters: { status: 'list', supplierId: 'list', paymentStatus: 'list', late: 'bool', productId: 'text', period: 'text', from: 'date', to: 'date' },
@@ -78,7 +79,7 @@ function PurchasesList() {
   const columns: Column<PurchaseRow>[] = [
     { key: 'number', header: t('purchases.col.number'), sortKey: 'number', hideable: false, cell: (r) => <Ltr className="whitespace-nowrap font-medium">{`#${r.number}`}</Ltr> },
     { key: 'supplier', header: t('purchases.col.supplier'), cell: (r) => r.supplier?.name ?? <span className="text-text-muted">—</span> },
-    { key: 'items', header: t('purchases.col.items'), hideBelow: 'lg', cell: (r) => <Ltr className="whitespace-nowrap tabular-nums">{`${formatNumber(r.itemCount)} · ${t('gds.units', { count: r.units.ordered })}`}</Ltr> },
+    { key: 'items', header: t('purchases.col.items'), hideBelow: 'lg', cell: (r) => <Ltr className="whitespace-nowrap tabular-nums">{`${formatNumber(r.itemCount)} · ${t('gds.units', { count: r.units.ordered, n: formatNumber(r.units.ordered) })}`}</Ltr> },
     { key: 'total', header: t('purchases.col.total'), sortKey: 'total', align: 'end', cell: (r) => <Ltr className="whitespace-nowrap tabular-nums">{formatMoney(r.total)}</Ltr> },
     { key: 'paid', header: t('purchases.col.paid'), align: 'end', hideBelow: 'lg', cell: (r) => (r.status === 'draft' && r.amountPaid === 0 ? <span className="text-text-muted">—</span> : <Ltr className="whitespace-nowrap tabular-nums">{formatMoney(r.amountPaid)}</Ltr>) },
     {
@@ -190,7 +191,7 @@ function PurchasesList() {
           density={list.density}
           onRowClick={(r) => router.push(`/purchases/${r.id}`)}
           actionsLabel={t('action.actions')}
-          rowActions={(r) => <ActionsMenu label={t('action.actions')} heading={`#${r.number} · ${t(`enum.Purchase.status.${r.status}`)}`} actions={actions.menu(r)} />}
+          rowActions={(r) => <ActionsMenu label={t('action.actions')} heading={`${docRef(t, r.number)} · ${t(`enum.Purchase.status.${r.status}`)}`} actions={actions.menu(r)} />}
           card={(r) => (
             <div className="flex items-center gap-3 px-3 py-3">
               <Link href={`/purchases/${r.id}`} className="min-w-0 flex-1">

@@ -19,6 +19,7 @@ import type { DeliveryRow, Shipment } from './contracts';
 import { LabelViewer } from './labels';
 import { syncUntil, waitLabel, withSyncWait } from './logic';
 import { CancelParcelDialog, ChangeCourierDialog, MarkFailedDialog, ParcelDeliveredDialog, ParcelReturnedDialog, RetryDeliveryDialog, type ParcelRef } from './shipment-dialogs';
+import { docRef } from '@/lib/format-message';
 
 type ParcelDialog = 'cancel' | 'change_courier' | 'mark_failed' | 'retry_delivery' | 'deliver' | 'return' | 'label';
 
@@ -180,7 +181,7 @@ export function useParcelActions(o: { onTrack?: (shipmentId: string) => void } =
         open={dialog?.kind === 'label'}
         shipmentId={dialog?.kind === 'label' ? dialog.parcel.id : null}
         manual={dialog?.parcel.provider === 'manual'}
-        title={dialog ? [`#${dialog.parcel.orderNumber}`, dialog.parcel.courierName, dialog.parcel.trackingNumber].filter(Boolean).join(' · ') : ''}
+        title={dialog ? [`${docRef(t, dialog.parcel.orderNumber)}`, dialog.parcel.courierName, dialog.parcel.trackingNumber].filter(Boolean).join(' · ') : ''}
         onClose={close}
       />
     </>

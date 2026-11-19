@@ -18,6 +18,7 @@ import type { LowStockItem, StockMovement } from '../contracts';
 import { MovementTypePill, Num, useMovementReason } from '../ui';
 import { actorName, formatSigned, movementTimeLabel, noteBeyondReference, quantityTone, referenceKind, signedQuantity, withoutYear } from './logic';
 import { forbiddenReason } from '@/lib/actions';
+import { docRef } from '@/lib/format-message';
 
 type Adjust = { product: AdjustTarget | null; variantId: string | null };
 
@@ -213,7 +214,7 @@ function RecentMovement({ movement: m, locale }: { movement: StockMovement; loca
   const tone = quantityTone(qty);
   const when = movementTimeLabel(m.createdAt);
   const kind = referenceKind(m.reference?.type);
-  const reference = m.reversalOf ? t('movements.reversalOf', { date: formatDate(m.reversalOf.createdAt, locale) }) : !m.reference ? null : kind === 'number' ? `#${m.reference.label}` : kind === 'name' ? m.reference.label : null;
+  const reference = m.reversalOf ? t('movements.reversalOf', { date: formatDate(m.reversalOf.createdAt, locale) }) : !m.reference ? null : kind === 'number' ? `${docRef(t, m.reference.label)}` : kind === 'name' ? m.reference.label : null;
   // full-test 15/11 STOCK-14 / J07r-5: the reference is not said twice (« CMD-1024 », « INV-1 · … »)
   const note = noteBeyondReference(m.note, m.reference?.label);
   const line = [m.reason ? reason(m.reason) : null, reference, note, actorName(m.actor) ?? t('movements.system')].filter((x): x is string => !!x);

@@ -18,7 +18,9 @@ import { useSession } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
 import { SHIPMENT_ACTION } from './action-keys';
 import { algiersClock, deliveryBlockState, shipmentStatusKey, shipmentTone, timelineOrder, waitLabel, withCourierSetup } from './logic';
+import { timelineMeta } from './tracking-panel';
 import { parcelOfShipment, type useParcelActions } from './use-parcel-actions';
+import { docRef } from '@/lib/format-message';
 
 const MAX_ATTEMPTS = 3;
 
@@ -49,7 +51,8 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
     ? timelineOrder(active.events).map((e, i) => ({
         key: `${e.at}-${i}`,
         title: [e.mappedStatus ? t(`tracking.event.${e.mappedStatus}`) : e.rawStatus, e.location].filter(Boolean).join(' · '),
-        meta: `${formatDate(e.at, locale).replace(/ \d{4}$/, '')} ${algiersClock(e.at)} · ${e.source === 'manual' || e.source === 'system' ? [t('tracking.source.djaber'), e.actor ? shortName(e.actor) : null].filter(Boolean).join(' · ') : (active.courierAccount?.displayName ?? t(`couriers.provider.${active.provider}`))}`.toUpperCase(),
+        // journey J14v-4: only the date is set in capitals (CSS); the member's / courier account's name keeps its case (« QA J14v P. »)
+        meta: timelineMeta(`${formatDate(e.at, locale).replace(/ \d{4}$/, '')} ${algiersClock(e.at)}`, e.source === 'manual' || e.source === 'system' ? [t('tracking.source.djaber'), e.actor ? shortName(e.actor) : null].filter(Boolean).join(' · ') : (active.courierAccount?.displayName ?? t(`couriers.provider.${active.provider}`))),
         tone: i === 0 ? shipmentTone(e.mappedStatus) : undefined,
       }))
     : [];
@@ -71,7 +74,7 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
           ) : (
             <DeliveryPill row={order} />
           )}
-          {menu.length ? <ActionsMenu label={t('action.actions')} heading={[`#${order.number}`, active?.trackingNumber].filter(Boolean).join(' · ')} actions={menu} /> : null}
+          {menu.length ? <ActionsMenu label={t('action.actions')} heading={[`${docRef(t, order.number)}`, active?.trackingNumber].filter(Boolean).join(' · ')} actions={menu} /> : null}
         </div>
       }
       bodyClassName="flex flex-col gap-3 p-4"

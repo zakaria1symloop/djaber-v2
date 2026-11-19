@@ -26,6 +26,7 @@ import { useDuration, userName, useWrite } from './common';
 import { isTicketTab, ticketSla, ticketTabQuery, TICKET_TABS, type TicketTab } from './logic';
 import { CannedDialog, NewTicketDialog } from './support-dialogs';
 import { TicketDetail } from './ticket-detail';
+import { docRef } from '@/lib/format-message';
 
 const SPEC: ListSpec = {
   filters: { category: 'list', planSlug: 'list', channel: 'list', priority: 'list', assigneeId: 'text', slaBreached: 'bool' },
@@ -101,7 +102,7 @@ export function SupportPage() {
   const rowActions = (r: AdminTicketDto) => (
     <ActionsMenu
       label={t('action.actions')}
-      heading={`#${r.number}`}
+      heading={`${docRef(t, r.number)}`}
       actions={withAdminReasons(toMenuActions(
         r.actions,
         {

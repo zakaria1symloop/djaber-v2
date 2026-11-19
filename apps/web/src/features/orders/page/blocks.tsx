@@ -1,7 +1,7 @@
 'use client';
 // Blocks of the order page (Figma "ORD-06 — Order page — new"): CLIENTE (inline contact edit), ARTICLES (+ totals,
 // quantity edit while editable), PAIEMENT, HISTORIQUE, APPELS, NOTES INTERNES (LIVRAISON: features/delivery/order-block).
-import { formatDate, formatDateTime, formatMoney, formatPhoneDz, isWilayaSeat, type AppLocale } from '@djaber/shared';
+import { formatDate, formatDateTime, formatMoney, formatPhoneDz, isWilayaSeat, orderRemaining, parcelProviderAt, type AppLocale } from '@djaber/shared';
 import { Button, DetailRows, Field, FormAlert, IconButton, Input, Ltr, MoneyInput, MonoChip, OrderBlock, OrderTimeline, PhoneInput, QtyStepper, StatusPill, Textarea, TotalsRows, Tooltip, type TimelineItem } from '@djaber/ui';
 import { ExternalLink, Trash2 } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -328,7 +328,7 @@ export function ItemsBlock({
             ...(order.tax ? [{ key: 'tax', label: t('orders.page.tax'), value: <Ltr>{formatMoney(order.tax)}</Ltr> }] : []),
             { key: 'total', label: t('common.total'), value: <Ltr>{formatMoney(total)}</Ltr>, strong: true },
             // journey 16/11 J05-10: the remainder of the server (0 for a cancelled / returned order, 04 §21), as the PAIEMENT block
-            { key: 'paid', label: t('orders.page.paidRemaining'), value: <Ltr>{`${formatMoney(order.amountPaid)} · ${formatMoney(editing ? Math.max(0, total - order.amountPaid) : order.remaining)}`}</Ltr> },
+            { key: 'paid', label: t('orders.page.paidRemaining'), value: <Ltr>{`${formatMoney(order.amountPaid)} · ${formatMoney(editing ? orderRemaining({ status: order.status, total, amountPaid: order.amountPaid }) : order.remaining)}`}</Ltr> },
           ]}
         />
         {editing ? (
@@ -431,7 +431,7 @@ export function HistoryBlock({ order }: { order: Order }) {
   const locale = useLocaleCode() as AppLocale;
   // journey 16/11 J05-2: the count / callback time of the line's own moment (historyParams), not today's order
   const value = (h: Order['history'][number], side: 'from' | 'to') => {
-    const r = historyValue(h.field, h[side], t.has);
+    const r = historyValue(h.field, h[side], t.has, h.field === 'deliveryStatus' ? parcelProviderAt(order.shipments ?? [], h.at) : null);
     return r.key ? t(r.key, historyParams(order, h, side)).trim() : (r.raw ?? '—');
   };
   const items: TimelineItem[] = newestFirst(order.history, (h) => h.at).map((h, i) => {

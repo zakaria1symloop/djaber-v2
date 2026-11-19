@@ -17,8 +17,20 @@ import { useShipment } from './api';
 import type { Shipment } from './contracts';
 import { algiersClock, shipmentStatusKey, shipmentTone, timelineOrder, waitLabel } from './logic';
 import { parcelOfShipment, type useParcelActions } from './use-parcel-actions';
+import { docRef } from '@/lib/format-message';
 
 const MAX_ATTEMPTS = 3;
+
+/**
+ * journey J14v-4 (19/11): the meta line of a timeline step — the date set in capitals by CSS, then who made the step (« Djaber · QA J14v P. »,
+ * a courier account's name) as written: a name is never upper-cased by code (it read « QA J14V P. »).
+ */
+export const timelineMeta = (when: string, who: string) => (
+  <>
+    <span className="uppercase">{when}</span>
+    {who ? ` · ${who}` : null}
+  </>
+);
 
 export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentId: string | null; onClose: () => void; nav?: SheetNav; parcels: ReturnType<typeof useParcelActions> }) {
   const t = useT();
@@ -71,7 +83,7 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
   };
 
   // a parcel that cannot be read shows one « Introuvable » state, not « Chargement… » next to the error (full-test DELIVERY-12)
-  const title = s ? [`#${s.orderNumber}`, s.trackingNumber].filter(Boolean).join(' · ') : q.isError ? t('state.detail.notFound.title') : t('common.loading');
+  const title = s ? [`${docRef(t, s.orderNumber)}`, s.trackingNumber].filter(Boolean).join(' · ') : q.isError ? t('state.detail.notFound.title') : t('common.loading');
   // UX-060: the greyed « Actualiser » says the live wait (« 54 s »), never `{retryAfter}`
   const syncAction = s ? actionState(s.actions, SHIPMENT_ACTION.sync, t, wait > 0 ? { params: { retryAfter: wait } } : {}) : null;
   const limited = wait > 0;
@@ -92,7 +104,8 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
         return {
           key: `${e.at}-${i}`,
           title: [e.mappedStatus ? t(`tracking.event.${e.mappedStatus}`) : e.rawStatus, e.description && e.description !== e.rawStatus ? renderStoredText(e.description, (k, p) => (t.has(k) ? t(k, p) : null)) : null, e.location].filter(Boolean).join(' · '),
-          meta: `${formatDate(e.at, locale).replace(/ \d{4}$/, '')} ${algiersClock(e.at)} · ${source}`.toUpperCase(),
+          // journey J14v-4: names keep their case (only the date in capitals, CSS)
+          meta: timelineMeta(`${formatDate(e.at, locale).replace(/ \d{4}$/, '')} ${algiersClock(e.at)}`, source),
           tone: i === 0 ? shipmentTone(e.mappedStatus) : undefined,
         };
       })

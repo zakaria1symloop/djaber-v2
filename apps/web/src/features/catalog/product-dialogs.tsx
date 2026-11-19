@@ -134,10 +134,10 @@ export function ArchiveProductDialog({ product, onClose, onDone }: { product: Ar
         />
         {mode === 'archive' && stock > 0 ? (
           <>
-            <p className="ts-label-meta text-text-muted">{t('products.delete.stockNote', { count: stock })}</p>
+            <p className="ts-label-meta text-text-muted">{t('products.delete.stockNote', { count: stock, n: formatNumber(stock) })}</p>
             <label className="flex cursor-pointer items-center gap-2.5 text-[13px]">
               <Checkbox checked={release} disabled={busy} onChange={(e) => setRelease(e.target.checked)} />
-              {t('products.delete.releaseStock', { count: stock })}
+              {t('products.delete.releaseStock', { count: stock, n: formatNumber(stock) })}
             </label>
           </>
         ) : null}

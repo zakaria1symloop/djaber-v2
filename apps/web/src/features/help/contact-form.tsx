@@ -20,6 +20,7 @@ import { useSession } from '@/lib/session';
 import { helpApi, useHelpArticles, type UploadedFile } from './api';
 import { useArticleParam } from './article-sheet';
 import { allowedCategories, buildContext, CONTEXT_KEYS, contextPayload, suggestGuide, type AutoContext } from './logic';
+import { docRef } from '@/lib/format-message';
 
 const FormSchema = CreateTicketSchema.pick({ category: true, priority: true, message: true });
 type Values = z.input<typeof FormSchema>;
@@ -105,7 +106,7 @@ export function ContactForm({ from, compact, className }: { from?: string | null
         context: contextPayload(context),
         channel: 'web',
       });
-      toast({ tone: 'success', message: t('help.contact.sent', { number: `#${r.number.replace(/^#/, '')}` }) });
+      toast({ tone: 'success', message: t('help.contact.sent', { number: `${docRef(t, r.number.replace(/^#/, ''))}` }) });
       void qc.invalidateQueries({ predicate: (q) => q.queryKey[1] === 'support-tickets' });
       form.reset(v);
       setFiles([]);

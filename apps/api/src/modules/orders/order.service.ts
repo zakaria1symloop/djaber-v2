@@ -4,7 +4,7 @@
 // Side effects (stock, cash, aggregates, outbox) only through OrderEffects (04 §3).
 import { formatSlipAmount } from './print/order-slip.pdf';
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { AI_ORDER_DUPLICATE_WINDOW_MIN, communeDisplayName, communeNameOf, confirmationShown, formatMessage, formatMoney, getMessages, isAppLocale, isReliableClient, isWilayaSeat, ORDER_READ_ONLY_STATUSES, orderRiskPill, storedText, type CreateOrderInput, type OrderDraft, type OrderListItemView, type OrdersExportQuery, type OrdersQuery, type OrderView, type UpdateOrderInput } from '@djaber/shared';
+import { AI_ORDER_DUPLICATE_WINDOW_MIN, communeDisplayName, communeNameOf, confirmationShown, parcelStatusKey, formatMessage, formatMoney, getMessages, isAppLocale, isReliableClient, isWilayaSeat, ORDER_READ_ONLY_STATUSES, orderRiskPill, storedText, type CreateOrderInput, type OrderDraft, type OrderListItemView, type OrdersExportQuery, type OrdersQuery, type OrderView, type UpdateOrderInput } from '@djaber/shared';
 import { prisma, TenantContext, type Order, type Prisma, type Tx } from '@djaber/db';
 import { AuditService } from '../../core/audit/audit.service';
 import { ConfigService } from '../../core/config/config.service';
@@ -616,7 +616,8 @@ export class OrderService implements OnModuleInit {
           { header: 'Commune', value: (r: R) => courierCommune(r) },
           { header: 'Adresse', value: (r: R) => r.address ?? '' },
           { header: 'Produit', value: (r: R) => r.items.map((i) => `${i.productName}${i.variantName ? ` ${i.variantName}` : ''} x${i.quantity}`).join(', ') },
-          { header: 'Total', value: (r: R) => r.total - r.amountPaid },
+          // journey J08v-4: COD = the shared « reste à encaisser » (0 on a cancelled / returned order)
+          { header: 'Total', value: (r: R) => remainingOf(r) },
           { header: 'Stop desk', value: (r: R) => (r.isStopdesk ? 1 : 0) },
           { header: 'Référence', value: (r: R) => r.number },
         ],
@@ -653,7 +654,8 @@ export class OrderService implements OnModuleInit {
       { header: h.status, value: (r: R) => exportLabel(locale, 'enum.Order.status', r.status) },
       // journey J05v-3: no « À APPELER » on a cancelled / returned order (shared `confirmationShown`, as the orders list)
       { header: h.confirmation, value: (r: R) => (confirmationShown(r) ? exportLabel(locale, 'enum.Order.confirmationStatus', r.confirmationStatus, { attempts: r.callAttempts, time: '' }) : '') },
-      { header: h.delivery, value: (r: R) => exportLabel(locale, ['enum.Order.deliveryStatus', 'enum.Shipment.status'], r.deliveryStatus) },
+      // journey J08v-1: a sent self-delivery reads « ENVOYÉE » as on the screens (shared `parcelStatusKey`), not « CRÉÉE »
+      { header: h.delivery, value: (r: R) => (parcelStatusKey(r.deliveryStatus, r.shipments[0]?.provider) === 'parcel.manual.sent' ? exportLabel(locale, 'parcel.manual', 'sent') : exportLabel(locale, ['enum.Order.deliveryStatus', 'enum.Shipment.status'], r.deliveryStatus)) },
       { header: h.courier, value: (r: R) => exportLabel(locale, 'couriers.provider', r.shipments[0]?.provider) },
       { header: h.tracking, value: (r: R) => r.shipments[0]?.trackingNumber ?? '' },
     ];

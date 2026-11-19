@@ -4,7 +4,7 @@ import { TenantContext, type Tx } from '@djaber/db';
 import { ProcessorRegistry } from '../../src/core/queue/processor.registry';
 import { RedisService } from '../../src/core/redis/redis.provider';
 import { ShipmentEffects } from '../../src/modules/delivery/shipment-effects.service';
-import { asAdmin, asOperator, asOwner } from '../support/actors';
+import { anonymous, asAdmin, asOperator, asOwner } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
 import { jobOf } from '../support/m2';
 import { forbidNetwork, wsOf } from '../support/m3';
@@ -594,5 +594,81 @@ describe('journey J08 — self-delivery parcels and delivery figures', () => {
     expect((await none.get('/delivery/stopdesks?provider=yalidine&wilayaId=16').expect(200)).body.data).toEqual([]);
     expect((await none.patch('/workspace', { autoSendToCourier: true }).expect(422)).body.error.code).toBe('DELIVERY_NO_COURIER');
     await none.patch('/workspace', { autoSendToCourier: false }).expect(200);
+  });
+
+  it('J08v-1 a sent self-delivery is « ENVOYÉE » on the public page and in the orders export; its history keeps the raw values (the screens read them with the parcel)', async () => {
+    const owner = await manualShop();
+    const { order } = await confirmedOrder(owner);
+    const parcel = await shipManual(owner, order);
+    const token = (await shipmentRow(parcel.id)).publicTrackingToken;
+    const pub = (await anonymous(app).get(`/track/${token}`).expect(200)).body.data;
+    expect(pub).toMatchObject({ status: 'sent', statusLabel: 'ENVOYÉE' });
+    expect(pub.events[0]).toMatchObject({ status: 'sent', label: 'ENVOYÉE' });
+    await owner.post(`/shipments/${parcel.id}/mark-failed`, { reason: 'unreachable' }).expect(200);
+    const o = await reloadOrder(owner, order.id);
+    // « Livraison : ENVOYÉE → ÉCHEC » on the order page = raw `sent → failed` + the parcel of that moment (`parcelProviderAt`, manual)
+    expect(o.history.find((h: any) => h.field === 'deliveryStatus' && h.to === 'failed')).toMatchObject({ from: 'sent' });
+    expect(o.shipments.map((s: any) => s.provider)).toEqual(['manual']);
+    const { order: moving } = await confirmedOrder(owner);
+    await shipManual(owner, moving);
+    const { default: request } = await import('supertest');
+    const { readXlsx } = await import('../../src/modules/jobs/xlsx');
+    const res = await owner.get('/orders/export?format=xlsx').set('Accept-Language', 'fr').expect(202);
+    await drain(app, owner.workspaceId);
+    const url = new URL((await jobOf(owner, res.body.data.jobId)).resultUrl);
+    const file = (await request(app.http()).get(`${url.pathname}${url.search}`).buffer(true).parse((r, cb) => {
+      const chunks: Buffer[] = [];
+      r.on('data', (c: Buffer) => chunks.push(c));
+      r.on('end', () => cb(null, Buffer.concat(chunks)));
+    }).expect(200)).body as Buffer;
+    const [head, ...rows] = readXlsx(file);
+    expect(rows.find((r) => r[head!.indexOf('N°')] === moving.number)![head!.indexOf('Livraison (statut)')]).toBe('ENVOYÉE');
+  });
+
+  it('J08v-4 « Montant à encaisser » = what the order page says is left: 0 for a returned parcel, the balance of a delivered / partly-paid one (order page, list, CSV, orders export, ZR Express file)', async () => {
+    const owner = await manualShop();
+    const { default: request } = await import('supertest');
+    const { parseCsv } = await import('../../src/modules/jobs/table-file');
+    const { readXlsx } = await import('../../src/modules/jobs/xlsx');
+    const fileOf = async (path: string) => {
+      const res = await owner.get(path).set('Accept-Language', 'fr').expect(202);
+      await drain(app, owner.workspaceId);
+      const url = new URL((await jobOf(owner, res.body.data.jobId)).resultUrl);
+      return (await request(app.http()).get(`${url.pathname}${url.search}`).buffer(true).parse((r, cb) => {
+        const chunks: Buffer[] = [];
+        r.on('data', (c: Buffer) => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      }).expect(200)).body as Buffer;
+    };
+    // returned (a deposit paid first), delivered with 250 less, in transit with a payment after sending, not sent yet
+    const { order: returned } = await confirmedOrder(owner);
+    await owner.post(`/orders/${returned.id}/payments`, { amount: 500, method: 'ccp' }).set(idem()).expect(200);
+    const pr = await shipManual(owner, returned);
+    await owner.post(`/shipments/${pr.id}/mark-failed`, { reason: 'unreachable' }).expect(200);
+    await owner.post(`/shipments/${pr.id}/mark-returned`, { reason: 'unreachable' }).set(idem()).expect(200);
+    const { order: delivered } = await confirmedOrder(owner);
+    const pd = await shipManual(owner, delivered);
+    await owner.post(`/shipments/${pd.id}/mark-delivered`, { amountCollected: delivered.total - 250, reason: 'remise livreur' }).set(idem()).expect(200);
+    const { order: moving } = await confirmedOrder(owner);
+    await shipManual(owner, moving, 'QA-J08V-4');
+    await owner.post(`/orders/${moving.id}/payments`, { amount: 1000, method: 'ccp' }).set(idem()).expect(200);
+    const { order: waiting } = await confirmedOrder(owner);
+    const expected = new Map([[returned.number, 0], [delivered.number, 250], [moving.number, moving.total - 1000], [waiting.number, waiting.total]]);
+    // the order pages
+    for (const o of [returned, delivered, moving, waiting]) expect((await reloadOrder(owner, o.id)).remaining).toBe(expected.get(o.number));
+    // the delivery list rows
+    const rows = (await owner.get('/shipments?pageSize=50').expect(200)).body.data as { orderNumber: string; remaining: number }[];
+    for (const r of rows) expect(r.remaining).toBe(expected.get(r.orderNumber));
+    expect(rows).toHaveLength(4);
+    // the delivery CSV
+    const [head, ...csv] = parseCsv((await fileOf('/delivery/export?format=csv')).toString('utf8'));
+    const cod = head!.indexOf('Montant à encaisser');
+    expect(cod).toBeGreaterThan(-1);
+    expect(new Map(csv.map((r) => [r[0], Number(r[cod])]))).toEqual(expected);
+    // the orders export (« Reste ») and the ZR Express file (COD in « Total »)
+    const [oh, ...orows] = readXlsx(await fileOf('/orders/export?format=xlsx'));
+    expect(new Map(orows.map((r) => [r[oh!.indexOf('N°')], Number(r[oh!.indexOf('Reste')])]))).toEqual(expected);
+    const [zh, ...zrows] = parseCsv((await fileOf('/orders/export?scope=all&format=csv&courierFormat=zrexpress')).toString('utf8'));
+    expect(new Map(zrows.map((r) => [r[zh!.indexOf('Référence')], Number(r[zh!.indexOf('Total')])]))).toEqual(expected);
   });
 });

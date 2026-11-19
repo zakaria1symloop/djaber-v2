@@ -53,7 +53,53 @@ export function arabicPluralProblems(messages: Record<string, string>): string[]
   return problems;
 }
 
+/**
+ * journey J14v-2 (19/11): a count written straight before a counted noun, outside any plural block — « {count} وحدة » reads « 2 وحدة »,
+ * « 5 وحدة » (« وحدتان », « 5 وحدات » expected). The nouns the app counts, singular and plural, with or without the article.
+ */
+const COUNTED_NOUNS = [
+  'وحدة', 'وحدات', 'قطعة', 'قطع', 'منتج', 'منتجات', 'طلب', 'طلبات', 'طلبية', 'طلبيات', 'عنصر', 'عناصر', 'عميل', 'عملاء', 'زبون', 'زبائن', 'رسالة', 'رسائل',
+  'محادثة', 'محادثات', 'يوم', 'أيام', 'ساعة', 'ساعات', 'دقيقة', 'دقائق', 'صورة', 'صور', 'حركة', 'حركات', 'سطر', 'أسطر', 'مادة', 'مواد', 'مرة', 'مرات',
+  'محاولة', 'محاولات', 'طرد', 'طرود', 'ولاية', 'ولايات', 'بلدية', 'بلديات', 'متغير', 'متغيرات', 'فاتورة', 'فواتير', 'عملية', 'عمليات', 'مستخدم', 'مستخدمين',
+  'عضو', 'أعضاء', 'صفحة', 'صفحات', 'رصيد', 'أرصدة', 'نقطة', 'نقاط', 'حساب', 'حسابات', 'مورد', 'موردين', 'فئة', 'فئات', 'تذكرة', 'تذاكر', 'ملف', 'ملفات',
+  'خطأ', 'أخطاء', 'تنبيه', 'تنبيهات', 'إشعار', 'إشعارات', 'وكيل', 'وكلاء', 'قناة', 'قنوات', 'أسبوع', 'أسابيع', 'شهر', 'أشهر', 'سنة', 'سنوات', 'ثانية',
+  'نتيجة', 'نتائج', 'كلمة', 'كلمات', 'حرف', 'أحرف', 'سجل', 'سجلات',
+];
+const COUNT_BEFORE_NOUN = new RegExp(`(\\{\\w+\\}|#)\\s*(?:ال)?(?:${COUNTED_NOUNS.join('|')})(?![\\u0621-\\u064A])`, 'u');
+/** The message without its plural / select blocks (nested ones included). */
+const outsideBlocks = (msg: string): string => {
+  let s = msg;
+  for (let prev = ''; prev !== s; ) {
+    prev = s;
+    s = s.replace(/\{\s*\w+\s*,\s*(?:plural|select|selectordinal)\s*,(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}/g, '');
+  }
+  return s;
+};
+export function countedNounProblems(messages: Record<string, string>): string[] {
+  return Object.entries(messages)
+    .filter(([, msg]) => typeof msg === 'string' && COUNT_BEFORE_NOUN.test(outsideBlocks(msg)))
+    .map(([key]) => key);
+}
+/**
+ * The messages written before this check that still count outside a plural block (a ratchet: a new one fails, a fixed one must leave the
+ * list). Some are not counts (« {name} المحادثة »: a member's name). Each is fixed with its call site, which must pass the count as a number.
+ */
+const BASELINE = JSON.parse(readFileSync(join(__dirname, 'arabic-plurals.baseline.json'), 'utf8')) as Record<string, string[]>;
+
 describe('Arabic plural forms (journey J13v-4)', () => {
+  it('journey J14v-2: a count before a counted noun outside a plural block is found (« {count} وحدة »), inside one it is not', () => {
+    expect(countedNounProblems({ a: '{count} وحدة', b: 'محجوز {count} وحدة (طلبات)', c: '{count, plural, one {{n} وحدة} two {وحدتان} few {{n} وحدات} many {{n} وحدةً} other {{n} وحدة}}', d: '{amount} دج', e: 'المجموع {total} · {units} وحدة' })).toEqual(['a', 'b', 'e']);
+  });
+
+  it.each(readdirSync(DIR).filter((f) => f.endsWith('.ar.json')))('%s: no new count outside a plural block (journey J14v-2 ratchet)', (file) => {
+    const messages = JSON.parse(readFileSync(join(DIR, file), 'utf8')) as Record<string, string>;
+    const found = countedNounProblems(messages);
+    const known = new Set(BASELINE[file] ?? []);
+    expect(found.filter((k) => !known.has(k))).toEqual([]);
+    // a message fixed (or removed) leaves the baseline
+    expect([...known].filter((k) => !found.includes(k))).toEqual([]);
+  });
+
   it('reads the forms of a message', () => {
     expect(pluralBlocks('{a} · {count, plural, one {# عنصر} two {عنصران} few {# عناصر} many {# عنصرًا} other {# عنصر}}')).toEqual([
       { arg: 'count', forms: { one: '# عنصر', two: 'عنصران', few: '# عناصر', many: '# عنصرًا', other: '# عنصر' } },

@@ -1,6 +1,6 @@
 // Orders — pure helpers of the list, the order page and the dialogs (unit tested in logic.spec.ts).
 // The UI never decides a status transition (04 §1: the server `actions` do); these helpers only format and derive.
-import { TIMEZONE } from '@djaber/shared';
+import { parcelStatusKey, TIMEZONE } from '@djaber/shared';
 import type { BulkResponse, ConfirmationStatus, DeliveryStatus, Order, OrderHistoryRow, OrderListItem, OrderStats, OrderStatus, ShipmentStatus, SourceBadge } from './contracts';
 import { ORDER_READ_ONLY_STATUSES } from './contracts';
 import { qtyLabel } from '@/lib/format-message';
@@ -71,7 +71,8 @@ export function deliveryPill(row: Pick<OrderListItem, 'deliveryStatus' | 'shipme
   if (row.shipment) {
     const value: ShipmentStatus = row.shipment.stale ? 'stale' : row.shipment.status;
     const provider = row.shipment.provider && row.shipment.provider !== 'manual' && (value === 'in_transit' || value === 'out_for_delivery') ? row.shipment.provider : null;
-    return { enumKey: 'Shipment.status', value, labelKey: `enum.Shipment.status.${value}`, provider };
+    // journey J08v-1: the shared parcel label (a sent self-delivery reads « ENVOYÉE », as on the delivery screens)
+    return { enumKey: 'Shipment.status', value, labelKey: parcelStatusKey(value, row.shipment.provider), provider };
   }
   const value: DeliveryStatus = row.deliveryStatus;
   const labelKey = value === 'not_sent' || value === 'pending' ? `enum.Order.deliveryStatus.${value}` : `enum.Shipment.status.${value === 'sent' ? 'sent' : value}`;
@@ -162,13 +163,18 @@ const ENUM_FIELDS: Record<string, string> = {
   paymentMethod: 'enum.Order.paymentMethod',
   cancelReason: 'enum.Order.cancelReason',
 };
-export function historyValue(field: string, value: string | null, has: (key: string) => boolean): { key: string | null; raw: string | null } {
+/**
+ * journey J08v-1: `provider` = the provider of the order's parcel at the line's moment (`parcelProviderAt`) — a delivery status reads as
+ * the parcel did on the screens (« Livraison : ENVOYÉE → ÉCHEC » for a self-delivered parcel, not « CRÉÉE → ÉCHEC »).
+ */
+export function historyValue(field: string, value: string | null, has: (key: string) => boolean, provider: string | null = null): { key: string | null; raw: string | null } {
   if (value === null || value === '') return { key: null, raw: null };
   const prefix = ENUM_FIELDS[field];
   if (prefix) {
     const key = `${prefix}.${value}`;
     if (has(key)) return { key, raw: null };
-    if (field === 'deliveryStatus' && has(`enum.Shipment.status.${value}`)) return { key: `enum.Shipment.status.${value}`, raw: null };
+    const parcel = parcelStatusKey(value, provider);
+    if (field === 'deliveryStatus' && has(parcel)) return { key: parcel, raw: null };
   }
   return { key: null, raw: value };
 }

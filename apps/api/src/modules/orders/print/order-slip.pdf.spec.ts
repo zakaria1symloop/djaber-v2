@@ -43,6 +43,7 @@ function slip(over: Partial<OrderSlipData> = {}): OrderSlipData {
     deliveryFee: 600,
     total: 10600,
     amountPaid: 0,
+    toCollect: 10600,
     paymentMethod: 'Paiement à la livraison',
     notes: 'Appeler avant de livrer.\nPas le vendredi.',
     trackingUrl: 'https://djaber.app/t/abc123XYZ',
@@ -63,6 +64,7 @@ const arabicSlip = (i: number): OrderSlipData =>
     isStopdesk: i === 2,
     stopdeskName: i === 2 ? 'Yalidine Oran Centre' : null,
     amountPaid: i === 1 ? 1000 : 0,
+    toCollect: i === 1 ? 9600 : 10600,
   });
 
 describe('order slip PDF (DLV-06 / ORD-09)', () => {

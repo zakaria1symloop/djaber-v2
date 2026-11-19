@@ -19,7 +19,7 @@ import { RoutingService, type RoutedModel } from './routing.service';
 import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
 import { absentFields, canonicalTool, TOOL_DEFS, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
 import { allowedHandoffReasons, complaintIn, establishedReasons, HANDOFF_REFUSED_MARK, productAsk, fieldOnlyMessage, handoffReason, handoffRefusedInstruction, judgeHandoff, messageHandoffReasons, orderDetailsMessage, orderStatusAsk, placeCandidate, type HandoffRefusal } from './handoff-judge';
-import { offCatalogueWords, productNamedIn, productWanted, productWords } from './product-named';
+import { offCatalogueWords, productNamedIn, productsNamedIn, productWanted, productWords } from './product-named';
 import { AUTO_FIX_RULES, checkReply, enforceReply, feeSentence, FIELD_QUESTIONS, guardInstruction, numbersIn, orderClaimsIn, owedQuotes, quoteFacts, stripMarkdown, withToolResults, type CataloguePrice, type CatalogueStock, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
 import { asksDelivery, asksSomething, blockedOrderText, confirmRequest, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, serverRecapAsked, withoutRecapClaims } from './tools/order-confirmation-text';
 import { asksCancel, cancelAsked, cancelledAsked, cancelledNumber, confirmation, lastCancelled, phonesIn, placedNumbers, recapPending, recapYesArgs } from './tools/order-confirmation';
@@ -2018,13 +2018,20 @@ export class AiRunService implements OnModuleInit {
     const takes = productWanted(said);
     const fromCart = takes && cartIds.length === 1 ? (prices.find((p) => p.id === cartIds[0]) ?? null) : null;
     const quotedOnes = takes && subtotals.length ? prices.filter((p) => !out.has(p.name) && subtotals.some((s) => [p.price, ...p.variants.map((v) => v.price)].some((u) => u > 0 && s % u === 0 && s / u >= 1 && s / u <= 10))) : [];
-    const named = productNamedIn(said, prices) ?? lookedUp ?? fromCart ?? (quotedOnes.length === 1 ? quotedOnes[0]! : null);
+    // journey J08v-2 (19/11): every product the message names — « je veux 1 tapis berbère et 1 porte-clés, en stop-desk à Alger » got the
+    // porte-clés price only (« … Porte-clés : 600 DA. … Quel est votre nom complet ? », the 9 800 DA of the tapis never said); the product the
+    // message names by the most of its words comes first (« tapis berbère » is not « Tapis de prière » through « tapis »)
+    const namedAll = productsNamedIn(said, prices);
+    const named = namedAll[0] ?? productNamedIn(said, prices) ?? lookedUp ?? fromCart ?? (quotedOnes.length === 1 ? quotedOnes[0]! : null);
     const other = productNamedIn(text, prices.filter((p) => p !== named));
     const asked = named && ((cards.length && !cards.includes(named.id)) || other) && !productNamedIn(text, [named]) ? null : named;
+    // (the other products the message names, two at most — as the reply's whole names below, a longer list is the catalogue or alternatives
+    // — unless the reply's cards show other products and the reply does not name them)
+    const alsoNamed = wants && namedAll.length <= 3 ? namedAll.filter((p) => p !== named && (!cards.length || cards.includes(p.id) || !!productNamedIn(text, [p]))) : [];
     // (a reply naming three products or more lists the catalogue or alternatives — « Kayen bezzaf : basket, djellaba homme, … »: no price
     // line for each)
     const whole = prices.filter((p) => namedWhole(text, p.name));
-    const candidates = [asked, cards.length === 1 ? prices.find((p) => p.id === cards[0]) : undefined, ...(whole.length <= 2 ? whole : [])].filter((p): p is CataloguePrice => !!p);
+    const candidates = [asked, ...alsoNamed, cards.length === 1 ? prices.find((p) => p.id === cards[0]) : undefined, ...(whole.length <= 2 ? whole : [])].filter((p): p is CataloguePrice => !!p);
     const found: PlaceProduct[] = [];
     for (const p of candidates) {
       if (found.length >= 3 || found.some((x) => x.name === p.name) || out.has(p.name) || (zero.has(p.name) && p !== asked)) continue;

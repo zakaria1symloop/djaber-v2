@@ -938,6 +938,12 @@ export const fmtDa = (n: number) => `${new Intl.NumberFormat('fr-FR', { useGroup
 export const fmtPhone = (p: string) => p.replace(/^(\d{4})(\d{2})(\d{2})(\d{2})$/, '$1 $2 $3 $4');
 export const fmtDate = (iso: string, locale: Locale) => formatInTimeZone(iso, 'Africa/Algiers', 'dd MMM yyyy', { locale: dateLocales[locale] });
 ```
+Journeys 19/11 J14v-1 / J14v-3 / J14v-4: a document number joined into a sentence by code (`` `#${o.number} · …` ``) is `docRef(t, o.number)`
+(`lib/format-message.ts`, an isolate in Arabic — the catalogue's `#{number}` is isolated by `isolateRefs`); display text is never
+upper- / lower-cased by code (`toUpperCase()` / `toLowerCase()`): capitals are CSS (`uppercase`), and they do nothing in Arabic, so
+« DA » lower-cased by code stays « da »; a member's, a product's or a courier account's name keeps its case. Arabic counts of a
+noun are ICU plurals on the number, the formatted value in its own placeholder (`{count, plural, one {{n} وحدة} two {وحدتان} few {{n}
+وحدات} many {{n} وحدةً} other {{n} وحدة}}`, `packages/shared/src/i18n/arabic-plurals.spec.ts`).
 
 ---
 

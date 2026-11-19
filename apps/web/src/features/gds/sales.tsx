@@ -49,7 +49,7 @@ import { useOffline } from '@/features/orders/offline';
 import { useMembers } from '@/features/workspace/api';
 import { Link, useRouter } from '@/i18n/navigation';
 import { ApiError } from '@/lib/api';
-import { iso, qtyLabel } from '@/lib/format-message';
+import { iso, qtyLabel, docRef } from '@/lib/format-message';
 import { useLeaveGuard } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { filterList, filterText, type ListSpec } from '@/lib/list-state';
@@ -237,7 +237,7 @@ function SalesList({ creating }: { creating?: boolean }) {
           density={list.density}
           onRowClick={(r) => (r.status === 'draft' ? router.push(`/sales/new?draft=${r.id}`) : router.push(`/sales/${r.id}`))}
           actionsLabel={t('action.actions')}
-          rowActions={(r) => <ActionsMenu label={t('action.actions')} heading={`#${r.number}`} actions={actions.menu(r)} />}
+          rowActions={(r) => <ActionsMenu label={t('action.actions')} heading={`${docRef(t, r.number)}`} actions={actions.menu(r)} />}
           card={(r) => (
             <div className="flex items-center gap-3 px-3 py-3">
               <Link href={`/sales/${r.id}`} className="min-w-0 flex-1">

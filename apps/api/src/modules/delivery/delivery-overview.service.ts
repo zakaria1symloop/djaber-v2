@@ -3,7 +3,7 @@
 // `GET /delivery/overview` (KPI tiles, tab counts, the first failures and "Sans mouvement" rows, per-courier figures —
 // also the data source of Analytics › Livraison, DLV-11). Raw SQL with the workspace filter written explicitly.
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { communeNameOf, DELIVERY_TABS, failureHandledAs, isNotOffered, ORDER_SEND_CLOSED_STATUSES, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, type ActionDescriptor, type DeliveryOverviewView, type DeliveryRowView, type DeliveryTab, type ShipmentsQuery } from '@djaber/shared';
+import { communeNameOf, DELIVERY_TABS, orderRemaining, parcelStatusKey, failureHandledAs, isNotOffered, ORDER_SEND_CLOSED_STATUSES, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, type ActionDescriptor, type DeliveryOverviewView, type DeliveryRowView, type DeliveryTab, type ShipmentsQuery } from '@djaber/shared';
 import { Prisma, prisma, TenantContext, type Shipment } from '@djaber/db';
 import { AppException } from '../../core/errors/app.exception';
 import { RedisService } from '../../core/redis/redis.provider';
@@ -73,10 +73,13 @@ export class DeliveryOverviewService implements OnModuleInit {
         { header: h.courier, value: (r: R) => r.shipment?.courierAccount?.displayName ?? (r.shipment ? providerName(r.shipment.provider, locale) : '') },
         { header: h.tracking, value: (r: R) => r.shipment?.trackingNumber ?? '' },
         // journey J08-12 #8: a sent self-delivery reads « ENVOYÉE » like on every screen (parcel.manual.sent), not « CRÉÉE »
-        { header: h.status, value: (r: R) => (r.shipment?.provider === 'manual' && r.shipment.status === 'sent' ? exportLabel(locale, 'parcel.manual', 'sent') : exportLabel(locale, ['enum.Shipment.status', 'enum.Order.deliveryStatus'], r.shipment?.status ?? 'not_sent')) },
+        // (journey J08v-1: the shared `parcelStatusKey`)
+        { header: h.status, value: (r: R) => (r.shipment && parcelStatusKey(r.shipment.status, r.shipment.provider) === 'parcel.manual.sent' ? exportLabel(locale, 'parcel.manual', 'sent') : exportLabel(locale, ['enum.Shipment.status', 'enum.Order.deliveryStatus'], r.shipment?.status ?? 'not_sent')) },
         { header: h.attempts, value: (r: R) => r.shipment?.deliveryAttempts ?? 0 },
         { header: h.failure, value: (r: R) => exportLabel(locale, 'enum.Shipment.failureReason', r.shipment?.failureReason) },
-        { header: h.cod, value: (r: R) => r.shipment?.codAmount ?? r.remaining },
+        // journey J08v-4: what is still to collect, the figure of the order pages (shared `orderRemaining`: 0 on a returned /
+        // cancelled order, the balance otherwise) — not the parcel's COD (a delivered parcel stores what was collected)
+        { header: h.cod, value: (r: R) => r.remaining },
         { header: h.total, value: (r: R) => r.total },
         { header: h.sentAt, value: (r: R) => exportDateTime(r.shipment?.createdAt) },
         { header: h.lastEventAt, value: (r: R) => exportDateTime(r.shipment?.lastEventAt) },
@@ -189,7 +192,7 @@ export class DeliveryOverviewService implements OnModuleInit {
         orderVersion: o.version,
         client: clientRefOf({ ...o.client, name: o.clientName || o.client.name }, index.has({ clientId: o.clientId, channelId: '', externalSenderId: '' }, o.client.phone ?? o.clientPhone)),
         total: o.total,
-        remaining: Math.max(0, o.total - o.amountPaid),
+        remaining: orderRemaining(o),
         wilaya: o.wilaya ? { id: o.wilaya.id, name: locale === 'ar' ? o.wilaya.nameAr : o.wilaya.nameFr } : null,
         communeName: communeNameOf(o, locale),
         isStopdesk: o.isStopdesk,

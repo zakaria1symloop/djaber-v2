@@ -147,6 +147,21 @@ describe('order page rules', () => {
     expect(actorKind({ actor: { type: 'system', name: 'x' } } as never)).toBe('system');
     expect(actorKind({ actor: { type: 'user', name: 'x' } } as never)).toBe('user');
   });
+  it('journey J08v-1: a delivery status of a self-delivered parcel reads « ENVOYÉE » in the history and the orders list, a courier one « CRÉÉE »', async () => {
+    const { parcelProviderAt } = await import('@djaber/shared');
+    const has = (k: string) => k === 'parcel.manual.sent' || k.startsWith('enum.Shipment.status.');
+    expect(historyValue('deliveryStatus', 'sent', has, 'manual')).toEqual({ key: 'parcel.manual.sent', raw: null });
+    expect(historyValue('deliveryStatus', 'sent', has, 'zrexpress')).toEqual({ key: 'enum.Shipment.status.sent', raw: null });
+    expect(historyValue('deliveryStatus', 'failed', has, 'manual')).toEqual({ key: 'enum.Shipment.status.failed', raw: null });
+    // the parcel of the line's moment: a courier parcel cancelled, then a self-delivery
+    const parcels = [{ provider: 'zrexpress', createdAt: '2026-11-19T09:00:00.000Z' }, { provider: 'manual', createdAt: '2026-11-19T10:00:00.000Z' }];
+    expect(parcelProviderAt(parcels, '2026-11-19T09:30:00.000Z')).toBe('zrexpress');
+    expect(parcelProviderAt(parcels, '2026-11-19T09:59:58.000Z')).toBe('manual'); // written in the same transaction
+    expect(parcelProviderAt(parcels, '2026-11-19T11:00:00.000Z')).toBe('manual');
+    expect(parcelProviderAt(parcels, '2026-11-19T08:00:00.000Z')).toBeNull();
+    expect(deliveryPill({ status: 'shipped', deliveryStatus: 'sent', shipment: { provider: 'manual', trackingNumber: null, status: 'sent', stale: false } }).labelKey).toBe('parcel.manual.sent');
+    expect(deliveryPill({ status: 'shipped', deliveryStatus: 'sent', shipment: { provider: 'zrexpress', trackingNumber: 'ZR-1', status: 'sent', stale: false } }).labelKey).toBe('enum.Shipment.status.sent');
+  });
   it('UX-059: history reasons in words, never a code', () => {
     const L: Record<string, string> = { 'enum.Order.cancelReason.changed_mind': 'Le client a changé d’avis', 'delivery.lastError.COURIER_VALIDATION': 'Refusée par le transporteur (données)', 'orders.history.reason.parcel_cancelled': 'colis annulé' };
     const t = Object.assign((k: string) => L[k] ?? k, { has: (k: string) => k in L });

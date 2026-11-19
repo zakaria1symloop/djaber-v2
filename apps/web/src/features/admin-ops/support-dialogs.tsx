@@ -12,6 +12,7 @@ import { api } from '@/lib/api';
 import { useT } from '@/lib/i18n';
 import { opsApi, opsKeys, useIncidents } from './api';
 import { cleanLocalized, EMPTY_LOCALIZED, LocalizedFields, useLocalized } from './common';
+import { docRef } from '@/lib/format-message';
 
 /* ---------- + Nouveau ticket ---------- */
 export function NewTicketDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (t: AdminTicketDto) => void }) {
@@ -174,7 +175,7 @@ export function LinkIncidentDialog({ ticket, onClose, onDone }: { ticket: AdminT
       open={!!ticket}
       onOpenChange={(o) => !o && onClose()}
       title={t('adminSupport.incident.title')}
-      description={ticket ? `#${ticket.number} · ${ticket.subject}` : undefined}
+      description={ticket ? `${docRef(t, ticket.number)} · ${ticket.subject}` : undefined}
       closeLabel={t('action.close')}
       footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('action.save')} />}
     >
@@ -220,7 +221,7 @@ export function EscalateDialog({ ticket, onClose, onDone }: { ticket: AdminTicke
       open={!!ticket}
       onOpenChange={(o) => !o && guard.requestClose()}
       title={t('adminSupport.escalate.title')}
-      description={ticket ? `#${ticket.number} · ${ticket.subject}` : undefined}
+      description={ticket ? `${docRef(t, ticket.number)} · ${ticket.subject}` : undefined}
       closeLabel={t('action.close')}
       footer={<DialogFooter onClose={guard.requestClose} busy={s.busy} onSubmit={() => void submit()} label={t('adminSupport.escalate.submit')} disabledReason={note.trim() ? undefined : t('adminSupport.escalate.noteRequired')} />}
     >

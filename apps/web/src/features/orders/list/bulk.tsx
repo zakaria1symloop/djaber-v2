@@ -20,6 +20,7 @@ import { PrintLabelsDialog } from '@/features/delivery/labels';
 import { actionState, forbiddenReason } from '@/lib/actions';
 import { ORDER_ACTION } from '../action-keys';
 import { mergeRetry } from '../logic';
+import { docRef } from '@/lib/format-message';
 
 type Outcome = { title: string; response: BulkResponse; retry?: (ids: string[]) => Promise<BulkResponse> };
 
@@ -262,7 +263,7 @@ export function OrdersBulkBar({
   const ids = useMemo(() => [...selected], [selected]);
   // labels of every row seen on screen: a cancelled order may leave the tab before the result dialog opens
   const seen = useRef<Record<string, string>>({});
-  for (const r of rows) seen.current[r.id] = `#${r.number} · ${r.client.name}`;
+  for (const r of rows) seen.current[r.id] = `${docRef(t, r.number)} · ${r.client.name}`;
   const forbidden = !can('orders.write') ? forbiddenReason(t) : offline ? t('banner.offline') : undefined;
 
   const finish = async (title: string, response: BulkResponse, retry?: Outcome['retry']) => {
@@ -289,7 +290,7 @@ export function OrdersBulkBar({
   const chosen = rows.filter((r) => selected.has(r.id));
   const sendTargets = chosen.map((r) => {
     const a = actionState(r.actions, ORDER_ACTION.sendToCourier, t);
-    return { id: r.id, number: r.number, label: `#${r.number} · ${r.client.name}`, blocked: a.present && a.enabled ? null : (a.reason ?? t('error.DELIVERY_ORDER_NOT_CONFIRMED')) };
+    return { id: r.id, number: r.number, label: `${docRef(t, r.number)} · ${r.client.name}`, blocked: a.present && a.enabled ? null : (a.reason ?? t('error.DELIVERY_ORDER_NOT_CONFIRMED')) };
   });
   // an action no selected order allows is greyed with its reason (12 §5 « only valid actions »; full-test ORDERS-15)
   const noneAllows = (key: string) => (chosen.length && chosen.every((r) => !actionState(r.actions, key, t).enabled) ? t('orders.bulk.noneAllowed') : undefined);
@@ -330,7 +331,7 @@ export function OrdersBulkBar({
       <BulkSendDialog open={dialog === 'send'} orders={sendTargets} onClose={() => setDialog(null)} onFinished={() => (onClear(), void refresh())} />
       <PrintLabelsDialog
         open={dialog === 'labels'}
-        orders={chosen.map((r) => ({ id: r.id, label: `#${r.number} · ${r.client.name}`, sent: !!r.shipment?.trackingNumber && r.shipment.status !== 'cancelled' }))}
+        orders={chosen.map((r) => ({ id: r.id, label: `${docRef(t, r.number)} · ${r.client.name}`, sent: !!r.shipment?.trackingNumber && r.shipment.status !== 'cancelled' }))}
         onClose={() => setDialog(null)}
       />
       <BulkCancelDialog

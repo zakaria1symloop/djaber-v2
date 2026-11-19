@@ -62,6 +62,7 @@ import { daysSince, shipmentStatusKey, withCourierSetup } from './logic';
 import { currentTab, DELIVERY_LIST, DELIVERY_TAB_LIST, deliveryChips, LAST_ERRORS, LAST_EVENTS, panelFilterCount, SHIPMENT_FILTER_STATUSES, shipmentsQuery } from './overview-spec';
 import { TrackingPanel } from './tracking-panel';
 import { ParcelActionsMenu, parcelOfRow, useParcelActions } from './use-parcel-actions';
+import { docRef } from '@/lib/format-message';
 
 const MAX_ATTEMPTS = 3;
 /** Clears the search and the panel filters; the tab stays (it is the screen, not a filter). */
@@ -135,7 +136,7 @@ export function DeliveryOverviewPage() {
   };
   const subject = (r: DeliveryRow) => ({ orderId: r.orderId, parcel: parcelOfRow(r), actions: withCourierSetup(r.actions, can('delivery.manage')), phone: r.client.phone, error: r.shipment?.error ?? null, syncAvailableAt: r.shipment?.syncAvailableAt ?? null });
   // UX-056 leftovers: « Actualiser le suivi » is greyed with the live wait here too (same `syncAvailableAt` as the panel)
-  const menu = (r: DeliveryRow) => <ParcelActionsMenu parcels={parcels} subject={subject(r)} label={t('action.actions')} heading={[`#${r.orderNumber}`, r.shipment ? t(shipmentStatusKey(r.shipment)) : t('delivery.row.notSentPill'), r.wilaya?.name].filter(Boolean).join(' · ')} />;
+  const menu = (r: DeliveryRow) => <ParcelActionsMenu parcels={parcels} subject={subject(r)} label={t('action.actions')} heading={[`${docRef(t, r.orderNumber)}`, r.shipment ? t(shipmentStatusKey(r.shipment)) : t('delivery.row.notSentPill'), r.wilaya?.name].filter(Boolean).join(' · ')} />;
 
   const columns: Column<DeliveryRow>[] = [
     {
@@ -248,7 +249,7 @@ export function DeliveryOverviewPage() {
   const chosen = rows.filter((r) => selected.has(r.id));
   const sendTargets: SendTarget[] = chosen.map((r) => {
     const a = actionState(r.actions, SHIPMENT_ACTION.send, t);
-    return { id: r.orderId, number: r.orderNumber, label: `#${r.orderNumber} · ${r.client.name}`, blocked: a.present && a.enabled ? null : (a.reason ?? (r.shipment ? t('error.DELIVERY_ORDER_ALREADY_SENT') : forbiddenReason(t))) };
+    return { id: r.orderId, number: r.orderNumber, label: `${docRef(t, r.orderNumber)} · ${r.client.name}`, blocked: a.present && a.enabled ? null : (a.reason ?? (r.shipment ? t('error.DELIVERY_ORDER_ALREADY_SENT') : forbiddenReason(t))) };
   });
   const syncIds = chosen.filter((r) => r.shipment && actionState(r.actions, SHIPMENT_ACTION.sync, t).enabled).map((r) => r.shipment!.id);
   const forbidden = !canSend ? forbiddenReason(t) : offline ? t('banner.offline') : undefined;
@@ -430,7 +431,7 @@ export function DeliveryOverviewPage() {
           sort={list.sort}
           onSortChange={list.setSort}
           sortLabel={(header) => t('list.sortBy', { column: header })}
-          selection={canSend ? { selected, onChange: setSelected, allLabel: t('list.selectAll'), rowLabel: (r) => t('list.selectRow', { name: `#${r.orderNumber}` }) } : undefined}
+          selection={canSend ? { selected, onChange: setSelected, allLabel: t('list.selectAll'), rowLabel: (r) => t('list.selectRow', { name: `${docRef(t, r.orderNumber)}` }) } : undefined}
           density={list.density}
           onRowClick={(r) => (r.shipment ? list.openSheet(r.shipment.id) : router.push(`/orders/${r.orderId}`))}
           actionsLabel={t('action.actions')}
@@ -501,7 +502,7 @@ export function DeliveryOverviewPage() {
         onRetry={(ids) => withoutJob(patchListState(s, { tab: 'to_send', filters: { ids } }))}
         onClose={() => withoutJob()}
       />
-      <PrintLabelsDialog open={dialog === 'labels'} orders={chosen.map((r) => ({ id: r.orderId, label: `#${r.orderNumber} · ${r.client.name}`, sent: !!r.shipment?.trackingNumber && r.shipment.status !== 'cancelled' }))} onClose={() => setDialog(null)} />
+      <PrintLabelsDialog open={dialog === 'labels'} orders={chosen.map((r) => ({ id: r.orderId, label: `${docRef(t, r.orderNumber)} · ${r.client.name}`, sent: !!r.shipment?.trackingNumber && r.shipment.status !== 'cancelled' }))} onClose={() => setDialog(null)} />
       {parcels.element}
     </div>
   );

@@ -85,3 +85,30 @@ export function productNamedIn<P extends NamedProduct>(text: string, products: r
   }
   return null;
 }
+
+/**
+ * journey J08v-2 (19/11): EVERY product the text names, in the order of `products` — « je veux 1 tapis berbère et 1 porte-clés » names
+ * two, in the order the text names them. A product is named as `productNamedIn` says; one whose named words are all words of another named product that the text names
+ * by more of its words is left out (« tapis berbère » names « Tapis berbère », not « Tapis de prière » through « tapis »), and products
+ * the text names by the very same words are ambiguous: none of them is kept.
+ */
+export function productsNamedIn<P extends NamedProduct>(text: string, products: readonly P[]): P[] {
+  const list = productWords(text);
+  const said = new Set(list);
+  if (!said.size) return [];
+  const padded = ` ${articleless(foldText(text))} `;
+  const hits: { p: P; words: Set<string>; at: number }[] = [];
+  for (const p of products) {
+    const words = productWords(p.name);
+    const own = new Set(words.filter((w) => said.has(w)));
+    const byName = words.length > 0 && (said.has(words[0]!) || own.size >= 2);
+    const byKey = (p.keywords ?? []).some((k) => {
+      const key = articleless(foldText(k));
+      return key.replace(/\s/g, '').length >= 3 && padded.includes(` ${key} `);
+    });
+    if (byName || byKey) hits.push({ p, words: byKey && !byName ? new Set([`key:${p.id}`]) : own, at: byName ? Math.min(...[...own].map((w) => list.indexOf(w))) : list.length });
+  }
+  const within = (a: Set<string>, b: Set<string>) => [...a].every((w) => b.has(w));
+  // (in the order the text names them)
+  return hits.filter((h) => !hits.some((o) => o !== h && within(h.words, o.words))).sort((a, b) => a.at - b.at).map((h) => h.p);
+}

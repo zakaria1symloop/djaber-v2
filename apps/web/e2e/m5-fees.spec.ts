@@ -39,6 +39,9 @@ test('AT-DLV-09 · 69 rows, inline edit saved on blur, fill missing keeps custom
   await page.getByTestId('fees-fill').click();
   await expect(page.getByText(/wilayas? complétées?|Aucune wilaya manquante/)).toBeVisible();
   await expect(setif.getByRole('textbox', { name: /DOMICILE · Sétif/ })).toHaveValue('450');
+  // journey J08v-3: with nothing missing the click still says so — an announced toast (role status)
+  await page.getByTestId('fees-fill').click();
+  await expect(page.getByRole('status').filter({ hasText: 'Aucune wilaya manquante : la grille est complète' })).toBeVisible();
 
   // reset row ↺ back to default
   await setif.getByRole('button', { name: 'Réinitialiser la ligne (valeurs par défaut)' }).click();

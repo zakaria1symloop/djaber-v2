@@ -12,7 +12,7 @@ import { useOffline } from '@/features/orders/offline';
 import { Link, useRouter } from '@/i18n/navigation';
 import { actionState } from '@/lib/actions';
 import { useBack } from '@/lib/back';
-import { iso } from '@/lib/format-message';
+import { iso, docRef } from '@/lib/format-message';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { algiersDay } from '@/features/catalog/stock/logic';
 import { usePurchase } from './api';
@@ -60,7 +60,7 @@ function PurchaseDetail({ id }: { id: string }) {
     // a cancelled purchase that had been ordered (paid or partly received) keeps its « commandé » step (STOCK-15)
     p.status !== 'draft' && (p.status !== 'cancelled' || p.payments.length > 0 || p.units.received > 0) ? t('purchases.page.orderedOn', { date: day(p.purchasedAt.slice(0, 10)) }) : null,
     // J07-11: every partial receipt is listed; the last one of a fully received purchase is its « reçu » step
-    ...p.receipts.map((r, i) => (p.receivedAt && i === p.receipts.length - 1 ? null : t('purchases.page.partReceivedOn', { date: day(algiersDay(r.at)), units: iso(formatNumber(r.units)) }))),
+    ...p.receipts.map((r, i) => (p.receivedAt && i === p.receipts.length - 1 ? null : t('purchases.page.partReceivedOn', { date: day(algiersDay(r.at)), unitsN: r.units, units: iso(formatNumber(r.units)) }))),
     p.receivedAt ? t('purchases.page.receivedOn', { date: day(p.receivedAt.slice(0, 10)) }) : null,
     ...p.payments.map((x) => t('purchases.page.paidOn', { date: day(x.paidAt.slice(0, 10)), amount: iso(formatMoney(x.amount)) })),
     p.cancelledAt ? t('purchases.page.cancelledOn', { date: day(p.cancelledAt.slice(0, 10)) }) : null,
@@ -87,7 +87,7 @@ function PurchaseDetail({ id }: { id: string }) {
           <ActionButton action={off(order)} label={t('purchases.action.order')} onClick={() => actions.menu(p).find((a) => a.key === 'order')?.onSelect?.()} variant="primary" testId="purchase-order" />
           <ActionButton action={off(receive)} label={t('purchases.action.receive')} onClick={() => actions.open({ kind: 'receive', id: p.id, number: p.number })} variant={order.present ? 'secondary' : 'primary'} testId="purchase-receive" />
           {p.remaining > 0 ? <ActionButton action={off(pay)} label={t('purchases.action.paySolde')} onClick={() => actions.open({ kind: 'pay', id: p.id, number: p.number })} testId="purchase-pay" /> : null}
-          <ActionsMenu label={t('action.actions')} heading={`#${p.number}`} actions={actions.menu(p)} size="md" />
+          <ActionsMenu label={t('action.actions')} heading={`${docRef(t, p.number)}`} actions={actions.menu(p)} size="md" />
         </>
       }
     >
@@ -116,7 +116,7 @@ function PurchaseDetail({ id }: { id: string }) {
                 '—'
               ),
             },
-            { key: 'items', label: t('purchases.col.items'), value: t('purchases.page.itemsLine', { lines: p.itemCount, units: iso(formatNumber(p.units.ordered)), pct: iso(`${pct}\u00a0%`), date: p.receivedAt ? day(p.receivedAt.slice(0, 10)) : '—' }) },
+            { key: 'items', label: t('purchases.col.items'), value: t('purchases.page.itemsLine', { lines: p.itemCount, unitsN: p.units.ordered, units: iso(formatNumber(p.units.ordered)), pct: iso(`${pct}\u00a0%`), date: p.receivedAt ? day(p.receivedAt.slice(0, 10)) : '—' }) },
             {
               key: 'amounts',
               label: t('purchases.page.amounts'),
