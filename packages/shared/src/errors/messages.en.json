@@ -124,6 +124,7 @@
   "MEMBER_ALREADY_EXISTS": "Already a member.",
   "META_UNAVAILABLE": "Meta is not responding, retry.",
   "MODERATION_APPEAL_ALREADY_USED": "Appeal already used for this product.",
+  "MODERATION_APPEAL_SAME_REVIEWER": "Another moderator must decide this appeal.",
   "MODERATION_APPEAL_WINDOW_EXPIRED": "Appeal window expired (7 d).",
   "MODERATION_ITEM_ALREADY_DECIDED": "Already decided by another moderator.",
   "MODERATION_NOT_REJECTED": "This product is not rejected: nothing to resubmit.",

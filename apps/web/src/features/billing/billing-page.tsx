@@ -104,7 +104,8 @@ function BillingBody({ sub }: { sub: Subscription }) {
     handledLink.current = changeSlug;
     setParams({ change: null });
     if (linkAction === 'cancel') setCancelOpen(true);
-    else toast(ctaReason(t, linkedCta, linked, sub, locale));
+    // a reason, not a success: neutral tone, read for 8 s (the page is still loading around it)
+    else toast({ tone: 'info', message: ctaReason(t, linkedCta, linked, sub, locale), durationMs: 8_000 });
   }, [changeSlug, linked, linkedCta, linkAction, setParams, sub, t, locale]);
 
   const banner = planBanner({

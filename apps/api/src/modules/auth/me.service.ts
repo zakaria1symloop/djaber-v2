@@ -123,6 +123,18 @@ export class MeService {
     await TenantContext.runSystem(() => prisma.user.update({ where: { id: userId }, data: { avatarUrl: url } }));
   }
 
+  /**
+   * journey J13v-1 — `GET /me/viewer`: the person the merchant screens show as « me » (greeting, user menu, Profil,
+   * Sécurité). The signed-in user, or during a read-only impersonation the shop owner — read only (every write of the
+   * session is refused by the tenant guard), never the TOTP secret, the password or the recovery codes.
+   */
+  async viewer(userId: string) {
+    const user = await TenantContext.runSystem(() => prisma.user.findFirst({ where: { id: userId, deletedAt: null } }));
+    if (!user) throw new AppException('UNAUTHORIZED');
+    const { id, email, firstName, lastName, phone, locale, avatarUrl, emailVerifiedAt, totpEnabled, platformRole } = this.profile(user);
+    return { id, email, firstName, lastName, phone, locale, avatarUrl, emailVerifiedAt, totpEnabled, platformRole };
+  }
+
   async getPrefs(userId: string) {
     const user = await this.reauth.user(userId);
     return prefsOf(user.prefs);

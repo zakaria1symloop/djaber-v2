@@ -1,25 +1,20 @@
 // ADM-09 audit log viewer (filters incl. impersonation, before / after) + signed export (CSV with a `# sha256=` header line,
 // or JSON) as a platform job; the export is itself audited (`audit.export`). Also the invoices export job of ADM-05.
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { renderStoredTextIn, textIn, type AdminAuditExportInput, type AdminAuditQuery, type AuditLogDto } from '@djaber/shared';
+import { renderStoredTextIn, type AdminAuditExportInput, type AdminAuditQuery, type AuditLogDto } from '@djaber/shared';
 import { Prisma, prisma, TenantContext, type Job } from '@djaber/db';
 import { AuditService } from '../../core/audit/audit.service';
 import { viewerLocale } from '../../core/i18n/viewer-locale';
-import { maskName, maskPhone } from '../../core/privacy/mask';
 import { AppException, notFound } from '../../core/errors/app.exception';
 import { page, toSkipTake, type Page } from '../../core/http/pagination';
 import { algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
 import { AdminJobsService, sha256 } from './admin-jobs.service';
-import { DAY, assertUuid, entityName, pickLocal, type AdminActor } from './admin.util';
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { DAY, assertUuid, entityName, type AdminActor } from './admin.util';
+import { auditTargetNames } from './audit-targets';
 
 const EXPORT_MAX_ROWS = 100_000;
 const PERIOD_DAYS: Record<string, number> = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 };
 type Row = Prisma.AuditLogGetPayload<{ include: { actor: { select: { id: true; firstName: true; lastName: true } } } }>;
-
-/** « ENTRÉE » (a pill label) inside a label reads « Entrée ». */
-const inSentence = (label: string) => (label === label.toUpperCase() && label !== label.toLowerCase() ? label.charAt(0) + label.slice(1).toLowerCase() : label);
 
 @Injectable()
 export class AuditQueryService implements OnModuleInit {
@@ -63,7 +58,7 @@ export class AuditQueryService implements OnModuleInit {
     return rows.map((r) => {
       const ws = wss.find((w) => w.id === r.workspaceId);
       const name = r.actor ? `${r.actor.firstName} ${r.actor.lastName}`.trim() : r.actorType === 'system' ? 'Système' : r.actorType;
-      const named = names.get(`${r.entity}:${r.entityId}`);
+      const named = names.get(`${r.entity}:${r.entityId}`) ?? names.get(`row:${r.id}`);
       // J13-6: a readable target (plan name + slug, pack, preset, product / agent name with its shop…), the short id only when the record is gone
       const label =
         r.entity === 'Workspace'
@@ -87,58 +82,10 @@ export class AuditQueryService implements OnModuleInit {
       };
     });
   }
-  /** `Entity:id` ⇒ readable name of the audited record, for the models an admin investigates (J13-6). */
-  private async targetNames(rows: Row[], locale: string): Promise<Map<string, string>> {
-    const out = new Map<string, string>();
-    const ids = (entity: string) => [...new Set(rows.filter((r) => r.entity === entity && r.entityId && UUID.test(r.entityId)).map((r) => r.entityId!))];
-    const load = async <T extends { id: string }>(entity: string, find: (ids: string[]) => Promise<T[]>, name: (x: T) => string | null | undefined) => {
-      const list = ids(entity);
-      if (!list.length) return;
-      for (const x of await find(list)) {
-        const n = name(x)?.trim();
-        if (n) out.set(`${entity}:${x.id}`, n);
-      }
-    };
-    const where = (i: string[]) => ({ where: { id: { in: i } } });
-    await TenantContext.runSystem(() =>
-      Promise.all([
-        load('Plan', (i) => prisma.plan.findMany({ ...where(i), select: { id: true, slug: true, name: true } }), (p) => `${pickLocal(p.name)} (${p.slug})`),
-        load('CreditPack', (i) => prisma.creditPack.findMany({ ...where(i), select: { id: true, slug: true, name: true } }), (p) => `${pickLocal(p.name)} (${p.slug})`),
-        load('AgentPreset', (i) => prisma.agentPreset.findMany({ ...where(i), select: { id: true, key: true, name: true } }), (p) => `${pickLocal(p.name)} (${p.key})`),
-        load('CmsEntry', (i) => prisma.cmsEntry.findMany({ ...where(i), select: { id: true, key: true } }), (c) => c.key),
-        load('PromoCode', (i) => prisma.promoCode.findMany({ ...where(i), select: { id: true, code: true } }), (c) => c.code),
-        load('AiModel', (i) => prisma.aiModel.findMany({ ...where(i), select: { id: true, displayName: true } }), (m) => m.displayName),
-        load('Product', (i) => prisma.product.findMany({ ...where(i), select: { id: true, name: true } }), (x) => x.name),
-        load('Agent', (i) => prisma.agent.findMany({ ...where(i), select: { id: true, name: true, displayName: true } }), (a) => a.displayName || a.name),
-        load('ApiKey', (i) => prisma.apiKey.findMany({ ...where(i), select: { id: true, name: true } }), (k) => k.name),
-        load('WebhookEndpoint', (i) => prisma.webhookEndpoint.findMany({ ...where(i), select: { id: true, url: true } }), (w) => w.url.replace(/^https?:\/\//, '').slice(0, 60)),
-        load('Job', (i) => prisma.job.findMany({ ...where(i), select: { id: true, kind: true } }), (j) => j.kind),
-        load('ModerationItem', (i) => prisma.moderationItem.findMany({ ...where(i), select: { id: true, type: true, product: { select: { name: true } }, agent: { select: { name: true, displayName: true } }, category: { select: { name: true } } } }), (m) => {
-          const n = m.product?.name ?? m.agent?.displayName ?? m.agent?.name ?? m.category?.name;
-          // journey J13r-10: the item type in words (« Produit », « Nom d'agent »), never the stored value `agent_name`
-          const type = textIn(`adminMod.type.${m.type}`, locale) ?? m.type;
-          return n ? `${type} « ${n} »` : type;
-        }),
-        // journey J13r (J13-6): merchant records by their human reference — number, name (customer names / phones masked as in
-        // the viewers), shortcut — never « Sale 01a1ef01 » for a record that exists
-        load('Sale', (i) => prisma.sale.findMany({ ...where(i), select: { id: true, number: true } }), (x) => x.number),
-        load('Order', (i) => prisma.order.findMany({ ...where(i), select: { id: true, number: true } }), (x) => x.number),
-        load('Purchase', (i) => prisma.purchase.findMany({ ...where(i), select: { id: true, number: true } }), (x) => x.number),
-        load('InventoryCount', (i) => prisma.inventoryCount.findMany({ ...where(i), select: { id: true, number: true } }), (x) => x.number),
-        load('Invoice', (i) => prisma.invoice.findMany({ ...where(i), select: { id: true, number: true } }), (x) => x.number),
-        load('SupportTicket', (i) => prisma.supportTicket.findMany({ ...where(i), select: { id: true, number: true } }), (x) => x.number),
-        load('Client', (i) => prisma.client.findMany({ ...where(i), select: { id: true, name: true } }), (x) => maskName(x.name)),
-        load('CustomerBlock', (i) => prisma.customerBlock.findMany({ ...where(i), select: { id: true, phone: true, client: { select: { name: true } } } }), (x) => maskPhone(x.phone) ?? (x.client ? maskName(x.client.name) : null)),
-        load('Supplier', (i) => prisma.supplier.findMany({ ...where(i), select: { id: true, name: true } }), (x) => x.name),
-        load('StockMovement', (i) => prisma.stockMovement.findMany({ ...where(i), select: { id: true, type: true, product: { select: { name: true } } } }), (x) => `${x.product.name} · ${inSentence(textIn(`enum.StockMovement.type.${x.type}`, locale) ?? x.type)}`),
-        load('QuickReply', (i) => prisma.quickReply.findMany({ ...where(i), select: { id: true, title: true, shortcut: true } }), (x) => (x.shortcut ? `${x.shortcut} · ${x.title}` : x.title)),
-        load('CannedReply', (i) => prisma.cannedReply.findMany({ ...where(i), select: { id: true, title: true } }), (x) => x.title),
-        load('Category', (i) => prisma.category.findMany({ ...where(i), select: { id: true, name: true } }), (x) => x.name),
-        load('Unit', (i) => prisma.unit.findMany({ ...where(i), select: { id: true, name: true } }), (x) => x.name),
-        load('Channel', (i) => prisma.channel.findMany({ ...where(i), select: { id: true, name: true } }), (x) => x.name),
-      ]),
-    );
-    return out;
+  /** Readable names of the page's targets — every audited record type has an entry in `AUDIT_TARGETS` (journey J13v-5). */
+  private targetNames(rows: Row[], locale: string): Promise<Map<string, string>> {
+    const l = (locale === 'ar' || locale === 'en' ? locale : 'fr') as 'fr' | 'ar' | 'en';
+    return TenantContext.runSystem(() => auditTargetNames(rows, l));
   }
 
   // full-test 15/11 ADMIN-02: « 2FA ✓ » only for an actor whose account has 2FA on (a sign-in of such an account always asks for the code) — it was claimed for every admin row

@@ -30,6 +30,12 @@ export type MeDto = {
   deletionScheduledAt: string | null;
 };
 
+/**
+ * journey J13v-1 — `GET /me/viewer`: the person the merchant shell shows as « me » (greeting, user menu, Profil,
+ * Sécurité). The signed-in user, or during a read-only impersonation the shop owner.
+ */
+export type ViewerDto = Pick<MeDto, 'id' | 'email' | 'firstName' | 'lastName' | 'phone' | 'locale' | 'avatarUrl' | 'emailVerifiedAt' | 'totpEnabled' | 'platformRole'>;
+
 export type AuthTokens = { accessToken: string; expiresIn: number; user: MeDto };
 export type LoginResult = AuthTokens | { mfaToken: string };
 export const isMfaChallenge = (r: LoginResult): r is { mfaToken: string } => 'mfaToken' in r;

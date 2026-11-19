@@ -454,7 +454,9 @@ export function ToastRegion({ label, closeLabel }: { label: string; closeLabel: 
   return (
     <div role="region" aria-label={label} aria-live="polite" className="pointer-events-none fixed bottom-4 end-4 z-[60] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2">
       {items.map((t) => (
-        <div key={t.id} data-toast={t.tone ?? 'success'} className="pointer-events-auto relative flex items-center gap-3 overflow-hidden rounded-card border border-line-edge bg-ink-raised px-3 py-2.5 text-[13px] shadow-xl">
+        // journey J13v (J12r-1 retest): each toast is its own status, so a reader looking for the page's status messages finds
+        // it (the region alone was not found); danger toasts too — the inline alerts of the forms keep role=alert
+        <div key={t.id} role="status" data-toast={t.tone ?? 'success'} className="pointer-events-auto relative flex items-center gap-3 overflow-hidden rounded-card border border-line-edge bg-ink-raised px-3 py-2.5 text-[13px] shadow-xl">
           <span className={cn('size-2 shrink-0 rounded-full', toneDot[t.tone ?? 'success'])} />
           <span className="min-w-0 flex-1">{t.message}</span>
           {t.progress !== undefined ? (

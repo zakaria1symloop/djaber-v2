@@ -5,7 +5,7 @@ import { memberCan, type MemberRole, type MerchantPermission } from '@djaber/sha
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, ApiError, apiSession, refreshRefused, refreshSession } from './api';
-import type { AuthTokens, MeDto, Membership, WorkspaceDto } from './contracts';
+import type { AuthTokens, MeDto, Membership, ViewerDto, WorkspaceDto } from './contracts';
 import type { SessionStatus } from './guards';
 import { useImpersonation } from './impersonation';
 import { pickWorkspaceId } from './workspace-pick';
@@ -28,6 +28,12 @@ const storeWorkspace = (id: string | null) => {
 export type SessionValue = {
   status: SessionStatus;
   me: MeDto | null;
+  /**
+   * journey J13v-1: the person the merchant screens show as « me » (greeting, user menu, Profil, Sécurité, « Vous » in the
+   * members) — `me` itself, or during a read-only impersonation the shop owner (`GET /me/viewer`); null while it loads.
+   * `me` stays the signed-in account (memberships, platform role, legal acceptance).
+   */
+  viewer: ViewerDto | null;
   membership: Membership | null;
   workspaceId: string | null;
   workspace: WorkspaceDto | null;
@@ -100,6 +106,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const me = boot.data === true ? (meQ.data ?? null) : null;
 
   const imp = useImpersonation().session;
+  // journey J13v-1: under an impersonation the screens show the shop owner, keyed by the session (never mixed with `me`)
+  const viewerQ = useQuery({ queryKey: ['session', 'viewer', imp?.sessionId ?? null] as const, queryFn: () => api<ViewerDto>('/me/viewer'), enabled: !!me && !!imp, staleTime: 60_000 });
+  const viewer: ViewerDto | null = imp ? (viewerQ.data ?? null) : me;
   const ownWorkspaceId = useMemo(() => pickWorkspaceId(me, stored), [me, stored]);
   // an impersonation session shows the target workspace; the API sends it with the impersonation headers
   const workspaceId = imp ? imp.workspaceId : ownWorkspaceId;
@@ -194,6 +203,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     () => ({
       status,
       me,
+      viewer,
       membership,
       workspaceId,
       workspace: wsQ.data ?? null,
@@ -211,7 +221,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       refetchWorkspace: () => wsQ.refetch(),
       bootError: meQ.error,
     }),
-    [status, me, membership, workspaceId, wsQ, role, readOnly, hiddenSections, imp, signIn, logout, logoutAll, switchWorkspace, meQ],
+    [status, me, viewer, membership, workspaceId, wsQ, role, readOnly, hiddenSections, imp, signIn, logout, logoutAll, switchWorkspace, meQ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

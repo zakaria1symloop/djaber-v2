@@ -237,6 +237,20 @@ describe('read-only impersonation (D21-bis, AT-IMP-01, AT-IMP-02)', () => {
     expect(sessions.every((x: any) => x.current === false && (x.ip === null || /x\.x$/.test(x.ip)))).toBe(true);
     // the data export is an action: refused like every write
     expect((await imp('/me/data-export').expect(403)).body.error.code).toBe('ADMIN_IMPERSONATION_FORBIDDEN_ACTION');
+    // journey J13v-1: « me » on Home / Profil / Sécurité / the user menu is the owner; the account itself stays the admin's,
+    // and its profile cannot be edited from inside the shop
+    const ownerUser = await db.user.findUniqueOrThrow({ where: { id: owner.userId } });
+    const viewer = (await imp('/me/viewer').expect(200)).body.data;
+    expect(viewer).toMatchObject({ id: owner.userId, email: ownerUser.email, firstName: ownerUser.firstName, totpEnabled: ownerUser.totpEnabled });
+    expect(viewer).not.toHaveProperty('totpSecret');
+    expect(viewer).not.toHaveProperty('passwordHash');
+    expect((await imp('/me').expect(200)).body.data.id).toBe(support.userId);
+    expect((await imp('/dashboard/home').expect(200)).body.data.greeting.firstName).toBe(ownerUser.firstName);
+    const write = request(app.http()).patch('/api/v1/me').set('Authorization', `Bearer ${started.token}`).set('X-Impersonation-Session', started.sessionId).send({ firstName: 'Piraté' });
+    expect((await write.expect(403)).body.error.code).toBe('ADMIN_IMPERSONATION_FORBIDDEN_ACTION');
+    expect((await db.user.findUniqueOrThrow({ where: { id: support.userId } })).firstName).not.toBe('Piraté');
+    // outside an impersonation the viewer is the signed-in user
+    expect((await support.get('/me/viewer').expect(200)).body.data.id).toBe(support.userId);
     await support.delete(`/admin/impersonation/sessions/${started.sessionId}`).expect(200);
   });
 

@@ -137,7 +137,7 @@ describe('order slip PDF (DLV-06 / ORD-09)', () => {
     expect(formatSlipAmount(12500)).toBe('12 500 DA');
     expect(formatSlipAmount(1234567)).toBe('1 234 567 DA');
     expect(formatSlipAmount(0)).toBe('0 DA');
-    expect(formatSlipAmount(-500)).toBe('-500 DA');
+    expect(formatSlipAmount(-500)).toBe('–500 DA'); // journey J06v-2: the PDF-safe minus, glued
     expect(formatSlipPhone('0555123456')).toBe('0555 12 34 56');
     expect(formatSlipPhone('٠٥٥٥١٢٣٤٥٦')).toBe('0555 12 34 56');
     expect(formatSlipPhone('021234567')).toBe('021 23 45 67');

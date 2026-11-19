@@ -124,6 +124,7 @@
   "MEMBER_ALREADY_EXISTS": "عضو بالفعل.",
   "META_UNAVAILABLE": "ميتا لا تستجيب، أعد المحاولة.",
   "MODERATION_APPEAL_ALREADY_USED": "تم استخدام الاعتراض مسبقًا لهذا المنتج.",
+  "MODERATION_APPEAL_SAME_REVIEWER": "يجب أن يبتّ مشرف آخر في هذا الاعتراض.",
   "MODERATION_APPEAL_WINDOW_EXPIRED": "انتهت مهلة الاعتراض (7 أيام).",
   "MODERATION_ITEM_ALREADY_DECIDED": "تمت معالجته من مشرف آخر.",
   "MODERATION_NOT_REJECTED": "هذا المنتج غير مرفوض: لا شيء لإعادة إرساله.",

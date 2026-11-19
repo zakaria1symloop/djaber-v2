@@ -10,6 +10,7 @@ import type { ApiQuery } from '@/lib/list-state';
 import { useWorkspaceId } from '@/lib/session';
 import { useWsEvent } from '@/lib/ws';
 import type { CancelReason } from '@/features/orders/contracts';
+import { invalidateFigures } from '@/lib/figures';
 import type {
   Commune,
   CopyRatesDiff,
@@ -188,7 +189,7 @@ export function useDeliveryRefresh() {
         qc.invalidateQueries({ queryKey: deliveryKeys.overview(ws) }),
         qc.invalidateQueries({ queryKey: deliveryKeys.couriers(ws) }),
         qc.invalidateQueries({ queryKey: [ws, 'orders'] }),
-        qc.invalidateQueries({ queryKey: [ws, 'dashboard'] }),
+        invalidateFigures(qc, ws),
         ...(orderId ? [qc.invalidateQueries({ queryKey: [ws, 'order', orderId] })] : []),
       ]);
     },

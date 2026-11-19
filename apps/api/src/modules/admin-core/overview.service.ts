@@ -20,14 +20,27 @@ export type PlatformMetrics = {
   suspended: number;
   mrr: number;
   creditsConsumed: number;
+  /** AI cost of every run of the day (the « Coût IA par fournisseur / modèle » table) */
   aiCostUsd: number;
+  /** journey J13v-2: AI cost of the charged runs only (`creditsCharged > 0`) — the basis of the margin */
+  chargedCostUsd: number;
   conversations: number;
   aiReplies: number;
-  byModel: { modelId: string; provider: string; model: string; capability: string; costUsd: number; runs: number; credits: number }[];
+  byModel: { modelId: string; provider: string; model: string; capability: string; costUsd: number; chargedCostUsd: number; runs: number; credits: number }[];
+  /** definition version of the stored figures (`METRICS_VERSION`); an older row is recomputed before it is read */
+  v?: number;
 };
 const PERIOD_DAYS: Record<AdminPeriod, number> = { '7d': 7, '30d': 30, '90d': 90 };
 /** `sched-daily-stats` recomputes yesterday and the 7 days before it (late rows), like the merchant rollup. */
 const RECOMPUTE_DAYS = 8;
+/**
+ * Version of the stored daily figures. 2 (journey J13v-2 / J13r-5 retest): consumption = AI actions only (an admin removal
+ * is an adjustment), plus the cost of the charged runs. A stored row of an older version is recomputed (its flow figures;
+ * the point-in-time ones — active workspaces, suspended, MRR — are kept) and stored again: idempotent, no data migration.
+ */
+export const METRICS_VERSION = 2;
+/** The longest overview period: stored rows older than this are never read. */
+const MAX_PERIOD_DAYS = 90;
 
 @Injectable()
 export class AdminOverviewService implements OnModuleInit {
@@ -46,11 +59,30 @@ export class AdminOverviewService implements OnModuleInit {
         const day = algiersDay(new Date(algiersDayStart(today).getTime() - i * DAY + 3600_000));
         const prev = await prisma.platformDailyStat.findUnique({ where: { day: new Date(`${day}T00:00:00Z`) } });
         const m = await this.metricsOf(day, i === 1 ? undefined : (prev?.metrics as PlatformMetrics | undefined));
-        await prisma.platformDailyStat.upsert({ where: { day: new Date(`${day}T00:00:00Z`) }, create: { day: new Date(`${day}T00:00:00Z`), metrics: m as unknown as Prisma.InputJsonValue }, update: { metrics: m as unknown as Prisma.InputJsonValue, computedAt: new Date() } });
+        await this.store(day, m);
+        n++;
+      }
+      // older rows still holding a previous definition (J13v-2): recomputed once, then left alone
+      const stale = await this.staleDays(algiersDay(new Date(algiersDayStart(today).getTime() - MAX_PERIOD_DAYS * DAY + 3600_000)), today);
+      for (const r of stale) {
+        await this.store(r.day, await this.metricsOf(r.day, r.metrics));
         n++;
       }
       return n;
     });
+  }
+
+  private store(day: string, m: PlatformMetrics) {
+    const at = new Date(`${day}T00:00:00Z`);
+    return prisma.platformDailyStat.upsert({ where: { day: at }, create: { day: at, metrics: m as unknown as Prisma.InputJsonValue }, update: { metrics: m as unknown as Prisma.InputJsonValue, computedAt: new Date() } });
+  }
+
+  /** Stored days in [from, to) whose figures were computed with an older definition (`v` < METRICS_VERSION). */
+  private async staleDays(from: string, to: string): Promise<{ day: string; metrics: PlatformMetrics }[]> {
+    const rows = await prisma.platformDailyStat.findMany({ where: { day: { gte: new Date(`${from}T00:00:00Z`), lt: new Date(`${to}T00:00:00Z`) } } });
+    return rows
+      .map((r) => ({ day: r.day.toISOString().slice(0, 10), metrics: r.metrics as unknown as PlatformMetrics }))
+      .filter((r) => (r.metrics?.v ?? 1) < METRICS_VERSION);
   }
 
   /**
@@ -72,14 +104,18 @@ export class AdminOverviewService implements OnModuleInit {
       prisma.creditLedger.aggregate({ where: { kind: 'debit', action: { in: CONSUMPTION_ACTIONS }, createdAt: { gte, lt } }, _sum: { credits: true } }),
       prisma.$queryRaw<{ n: bigint }[]>`SELECT count(DISTINCT "conversationId") AS n FROM "Message" WHERE "direction" = 'in' AND "sentAt" >= ${gte} AND "sentAt" < ${lt}`,
       prisma.aiRun.count({ where: { kind: 'reply', status: { not: 'error' }, startedAt: { gte, lt } } }),
-      prisma.$queryRaw<{ modelId: string; runs: bigint; input: bigint | null; output: bigint | null; credits: bigint | null }[]>`
-        SELECT "modelId", count(*) AS runs, sum("inputTokens") AS input, sum("outputTokens") AS output, sum("creditsCharged") AS credits FROM "AiRun" WHERE "startedAt" >= ${gte} AND "startedAt" < ${lt} GROUP BY "modelId"`,
+      // journey J13v-2: the tokens of the charged runs apart — the margin compares their cost with the credits they charged
+      prisma.$queryRaw<{ modelId: string; runs: bigint; input: bigint | null; output: bigint | null; cinput: bigint | null; coutput: bigint | null; credits: bigint | null }[]>`
+        SELECT "modelId", count(*) AS runs, sum("inputTokens") AS input, sum("outputTokens") AS output,
+          sum("inputTokens") FILTER (WHERE "creditsCharged" > 0) AS cinput, sum("outputTokens") FILTER (WHERE "creditsCharged" > 0) AS coutput,
+          sum("creditsCharged") AS credits FROM "AiRun" WHERE "startedAt" >= ${gte} AND "startedAt" < ${lt} GROUP BY "modelId"`,
     ]);
     const models = runs.length ? await prisma.aiModel.findMany({ where: { id: { in: runs.map((r) => r.modelId) } }, include: { provider: true } }) : [];
+    const usd = (m: (typeof models)[number] | undefined, input: bigint | null, output: bigint | null) =>
+      m ? Math.round(((Number(input ?? 0) * Number(m.inputPricePerM) + Number(output ?? 0) * Number(m.outputPricePerM)) / 1_000_000) * 100) / 100 : 0;
     const byModel = runs.map((r) => {
       const m = models.find((x) => x.id === r.modelId);
-      const cost = m ? (Number(r.input ?? 0) * Number(m.inputPricePerM) + Number(r.output ?? 0) * Number(m.outputPricePerM)) / 1_000_000 : 0;
-      return { modelId: r.modelId, provider: m?.provider.displayName ?? '—', model: m?.modelId ?? '—', capability: m?.capabilities[0] ?? 'text', costUsd: Math.round(cost * 100) / 100, runs: Number(r.runs), credits: Number(r.credits ?? 0) };
+      return { modelId: r.modelId, provider: m?.provider.displayName ?? '—', model: m?.modelId ?? '—', capability: m?.capabilities[0] ?? 'text', costUsd: usd(m, r.input, r.output), chargedCostUsd: usd(m, r.cinput, r.coutput), runs: Number(r.runs), credits: Number(r.credits ?? 0) };
     });
     const point = keep ?? (await this.pointInTime());
     return {
@@ -92,9 +128,11 @@ export class AdminOverviewService implements OnModuleInit {
       mrr: point.mrr,
       creditsConsumed: -(credits._sum.credits ?? 0),
       aiCostUsd: Math.round(byModel.reduce((n, m) => n + m.costUsd, 0) * 100) / 100,
+      chargedCostUsd: Math.round(byModel.reduce((n, m) => n + m.chargedCostUsd, 0) * 100) / 100,
       conversations: Number(convs[0]?.n ?? 0),
       aiReplies: replies,
       byModel,
+      v: METRICS_VERSION,
     };
   }
 
@@ -118,6 +156,15 @@ export class AdminOverviewService implements OnModuleInit {
     const byDay = new Map(rows.map((r) => [r.day.toISOString().slice(0, 10), r.metrics as unknown as PlatformMetrics]));
     // days not rolled up yet (fresh install, worker down) are computed on the fly; today is always live
     for (const d of days) if (!byDay.has(d) || d === today) byDay.set(d, await this.metricsOf(d, d === today ? undefined : (byDay.get(d) ?? (await this.pointInTime()))));
+    // journey J13v-2 (J13r-5 retest): a stored day of an older definition (admin removals counted as consumption, no
+    // charged-run cost) is recomputed and stored again before it is read — the worker does the same for the last 90 days
+    for (const d of days) {
+      const m = byDay.get(d)!;
+      if (d === today || (m.v ?? 1) >= METRICS_VERSION) continue;
+      const fresh = await this.metricsOf(d, m);
+      await this.store(d, fresh);
+      byDay.set(d, fresh);
+    }
     const series = days.map((d) => ({ day: d, signups: byDay.get(d)!.signups, activations: byDay.get(d)!.activations, churned: byDay.get(d)!.churned }));
     const ms = days.map((d) => byDay.get(d)!);
     const live = byDay.get(today)!;
@@ -153,7 +200,10 @@ export class AdminOverviewService implements OnModuleInit {
       aiByModel.set(b.modelId, cur);
     }
     const consumed = ms.reduce((s, m) => s + m.creditsConsumed, 0);
-    const aiCost = Math.round(ms.reduce((s, m) => s + m.aiCostUsd, 0) * 100) / 100;
+    const allCost = Math.round(ms.reduce((s, m) => s + m.aiCostUsd, 0) * 100) / 100;
+    // journey J13v-2: the margin compares what the charged credits bring in with what the charged runs cost — the
+    // uncharged runs (playground tests, analyses, generation) are shown apart, never in the margin
+    const aiCost = Math.round(ms.reduce((s, m) => s + (m.chargedCostUsd ?? m.aiCostUsd), 0) * 100) / 100;
     const pricing = await prisma.creditPricing.findFirst({ where: { effectiveAt: { lte: now } }, orderBy: { version: 'desc' } });
     const revenueDzd = consumed * Number(pricing?.creditPriceDzd ?? 0);
     const costDzd = aiCost * Number(pricing?.usdToDzd ?? 135);
@@ -170,7 +220,7 @@ export class AdminOverviewService implements OnModuleInit {
           byPlan: plans.filter((p) => p.slug !== 'free').map((p) => ({ slug: p.slug, name: pickLocal(p.name), count: byPlan.find((b) => b.planId === p.id)?._count._all ?? 0 })),
           free: byPlan.find((b) => plans.find((p) => p.id === b.planId)?.slug === 'free')?._count._all ?? 0,
         },
-        credits: { consumed, aiCostUsd: aiCost, marginPct: revenueDzd > 0 ? Math.round(((revenueDzd - costDzd) / revenueDzd) * 100) : null },
+        credits: { consumed, aiCostUsd: aiCost, unchargedCostUsd: Math.max(0, Math.round((allCost - aiCost) * 100) / 100), marginPct: revenueDzd > 0 ? Math.round(((revenueDzd - costDzd) / revenueDzd) * 100) : null },
         conversations: { perDayAvg: Math.round(ms.reduce((s, m) => s + m.conversations, 0) / n), peak: peak && peak.count > 0 ? peak : null },
         webhooks: { availabilityPct: Math.round(Math.max(0, 100 - (incidentMinutes / periodMin) * 100) * 10) / 10, incidentMinutes, queueDelays: incidents.filter((i) => i.components.some((c) => /queue|file|job/i.test(c))).length },
       },

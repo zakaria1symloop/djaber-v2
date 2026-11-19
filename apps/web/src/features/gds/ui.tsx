@@ -60,6 +60,14 @@ export const useDayLabel = () => {
   const locale = useLocaleCode() as AppLocale;
   return (day: string) => withoutYear(formatDate(`${day}T12:00:00Z`, locale));
 };
+/**
+ * journey J06v-2: the day of a `CASH_DAY_CLOSED` refusal with its year (« Journée du 19 nov. 2026 clôturée. »), as the
+ * server's refusal reads in every other dialog — the period labels keep the short form.
+ */
+export const useClosedDayLabel = () => {
+  const locale = useLocaleCode() as AppLocale;
+  return (day: string) => formatDate(`${day}T12:00:00Z`, locale);
+};
 
 /**
  * "Période : 30 j ⌄" — the API `period` key (today · 7 d · 30 d · this month · last month · 90 d · year) or a custom

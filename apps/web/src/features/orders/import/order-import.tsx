@@ -20,6 +20,7 @@ import { downloadUrl, isJobRunning, jobKey, useJob, type JobDto, type JobRef } f
 import { useWorkspaceId } from '@/lib/session';
 import { uploadWithProgress } from '@/lib/upload';
 import { uuid } from '@/lib/uuid';
+import { invalidateFigures } from '@/lib/figures';
 
 type Job = JobDto<OrderImportPreviewResult>;
 export type OrderImportPhase = 'upload' | 'analysing' | 'analysisFailed' | 'mapping' | 'preview' | 'importing' | 'done' | 'importFailed' | 'loading';
@@ -122,7 +123,7 @@ export function OrderImportWizard() {
     refreshed.current = jobId;
     void qc.invalidateQueries({ queryKey: [ws, 'orders'] });
     void qc.invalidateQueries({ queryKey: [ws, 'clients'] });
-    void qc.invalidateQueries({ queryKey: [ws, 'dashboard'] });
+    void invalidateFigures(qc, ws);
   }, [phase, jobId, qc, ws]);
 
   const commit = async () => {

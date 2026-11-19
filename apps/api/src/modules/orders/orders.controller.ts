@@ -102,7 +102,7 @@ export class OrdersController {
   @RequirePermission('orders.import')
   @Idempotent({ required: true })
   @HttpCode(202)
-  @Audited({ entity: 'Job', action: 'order.import_commit', idFrom: 'params.id' })
+  @Audited({ entity: 'Job', action: 'order.import_commit', idFrom: 'params.jobId' })
   commitImport(@Param('jobId', ParseUUIDPipe) jobId: string) {
     return this.imports.commit(jobId);
   }

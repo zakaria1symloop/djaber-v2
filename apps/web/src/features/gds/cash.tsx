@@ -51,7 +51,7 @@ import { signedMoney, signedNumber } from '@/lib/money';
 import { useSession } from '@/lib/session';
 import { useListState } from '@/lib/use-list-state';
 import { gdsApi, useCash, useCashDays, useCashStats, useGdsRefresh } from './api';
-import { CashCategoryPill, AdvancedOnly, KpiSkeleton, shortName, useDayLabel } from './ui';
+import { CashCategoryPill, AdvancedOnly, KpiSkeleton, shortName, useClosedDayLabel, useDayLabel } from './ui';
 import { CloseDayDialog, ManualEntryDialog, ReopenDayDialog, type ManualMode } from './cash-dialogs';
 import { CASH_CATEGORIES, type CashRow, type GdsPeriodKey } from './contracts';
 import { cashSelection, cashSelectionQuery, daysList, selectionDay } from './logic';
@@ -83,6 +83,7 @@ function CashLedger() {
   const offline = useOffline();
   const refresh = useGdsRefresh();
   const day = useDayLabel();
+  const closedDay = useClosedDayLabel();
   const today = algiersDay();
   const sel = cashSelection({ day: filterText(s, 'day'), period: filterText(s, 'period'), from: filterText(s, 'from'), to: filterText(s, 'to') }, today);
   const selQuery = cashSelectionQuery(sel);
@@ -231,7 +232,7 @@ function CashLedger() {
           </Button>
           <Button
             onClick={() => oneDay && setClosing(oneDay)}
-            disabledReason={writeBlocked ?? (!oneDay ? t('cash.close.pickDay') : closed ? t('error.CASH_DAY_CLOSED', { date: day(oneDay) }) : closeAction.present && !closeAction.enabled ? closeAction.reason : undefined)}
+            disabledReason={writeBlocked ?? (!oneDay ? t('cash.close.pickDay') : closed ? t('error.CASH_DAY_CLOSED', { date: closedDay(oneDay) }) : closeAction.present && !closeAction.enabled ? closeAction.reason : undefined)}
             data-testid="cash-close"
           >
             {t('cash.close.action')}

@@ -123,6 +123,7 @@ export const ERROR_CODES = {
   MEMBER_ALREADY_EXISTS: { status: 409, params: [] },
   META_UNAVAILABLE: { status: 503, params: [] },
   MODERATION_APPEAL_ALREADY_USED: { status: 409, params: [] },
+  MODERATION_APPEAL_SAME_REVIEWER: { status: 403, params: [] },
   MODERATION_APPEAL_WINDOW_EXPIRED: { status: 410, params: [] },
   MODERATION_ITEM_ALREADY_DECIDED: { status: 409, params: [] },
   MODERATION_NOT_REJECTED: { status: 409, params: [] },

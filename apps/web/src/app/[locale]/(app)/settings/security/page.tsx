@@ -4,7 +4,7 @@
 // + "SAFE — Trust & safety (merchant)": blocked customers and automatic rules (features/safety).
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ChangePasswordSchema, passwordStrength, type ChangePasswordInput } from '@djaber/shared';
-import { Button, Card, Checkbox, ConfirmDialog, Dialog, Field, FormAlert, OtpInput, PasswordInput, Pill, SectionLabel, Skeleton, Spinner, StrengthBar, toast } from '@djaber/ui';
+import { Banner, Button, Card, Checkbox, ConfirmDialog, Dialog, Field, FormAlert, OtpInput, PasswordInput, Pill, SectionLabel, Skeleton, Spinner, StrengthBar, toast } from '@djaber/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
@@ -16,17 +16,31 @@ import { ChangeEmailDialog } from '@/features/settings/account-dialogs';
 import { Section, SettingsPage } from '@/features/settings/common';
 import { describeUserAgent } from '@/features/settings/user-agent';
 import { ApiError } from '@/lib/api';
+import { useImpersonation } from '@/lib/impersonation';
 import { applyServerErrors, errorMessage, fieldError } from '@/lib/forms';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { meKey, useSession } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
 
+/** journey J13v-1: the reason every account control is greyed during a read-only impersonation (the impersonation sentence). */
+function useAccountReadOnly(): string | undefined {
+  const t = useT();
+  return useSession().impersonating ? t('error.READ_ONLY_MEMBER') : undefined;
+}
+
 export default function SecurityPage() {
   const t = useT();
-  const { me } = useSession();
+  // journey J13v-1: the person shown is the shop owner during a read-only impersonation (e-mail, 2FA, sessions)
+  const { viewer: me } = useSession();
+  const readOnlyReason = useAccountReadOnly();
   const [emailOpen, setEmailOpen] = useState(false);
   return (
     <SettingsPage title={t('nav.settings.security')} description={t('settings.security.description')}>
+      {readOnlyReason ? (
+        <Banner tone="warning">
+          <span data-testid="security-read-only">{readOnlyReason}</span>
+        </Banner>
+      ) : null}
       <Section title={t('dialog.changePassword.title')}>
         <PasswordForm />
       </Section>
@@ -40,7 +54,9 @@ export default function SecurityPage() {
               {me?.emailVerifiedAt ? <Pill tone="success">{t('settings.security.emailVerified')}</Pill> : <Pill tone="warning">{t('settings.security.emailUnverified')}</Pill>}
             </div>
           </div>
-          <Button onClick={() => setEmailOpen(true)}>{t('action.edit')}</Button>
+          <Button onClick={() => setEmailOpen(true)} disabledReason={readOnlyReason}>
+            {t('action.edit')}
+          </Button>
         </div>
       </Section>
       <TwoFactorSection />
@@ -74,11 +90,12 @@ function PasswordForm() {
       );
     }
   });
-  const busy = change.isPending;
+  const readOnlyReason = useAccountReadOnly();
+  const busy = change.isPending || !!readOnlyReason;
   const errors = form.formState.errors;
   const labels = { showLabel: t('auth.password.show'), hideLabel: t('auth.password.hide') };
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-4" aria-busy={busy}>
+    <form onSubmit={submit} noValidate className="flex flex-col gap-4" aria-busy={change.isPending}>
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label={t('settings.password.current')} htmlFor="currentPassword" error={fieldError(t, errors.currentPassword?.message)}>
           <PasswordInput id="currentPassword" autoComplete="current-password" disabled={busy} aria-invalid={!!errors.currentPassword} {...labels} {...form.register('currentPassword')} />
@@ -96,7 +113,7 @@ function PasswordForm() {
       <p className="ts-label-meta text-text-muted">{t('settings.password.hint')}</p>
       {formError ? <FormAlert>{formError}</FormAlert> : null}
       <div className="flex justify-end">
-        <Button type="submit" variant="primary" loading={busy}>
+        <Button type="submit" variant="primary" loading={change.isPending} disabledReason={readOnlyReason}>
           {t('settings.password.submit')}
         </Button>
       </div>
@@ -107,7 +124,8 @@ function PasswordForm() {
 /* ---------- 2FA ---------- */
 function TwoFactorSection() {
   const t = useT();
-  const { me } = useSession();
+  const { viewer: me } = useSession();
+  const readOnlyReason = useAccountReadOnly();
   const [dialog, setDialog] = useState<'enable' | 'disable' | 'regenerate' | null>(null);
   const required = !!me && me.platformRole !== 'none';
   return (
@@ -122,13 +140,15 @@ function TwoFactorSection() {
         </div>
         {me?.totpEnabled ? (
           <>
-            <Button onClick={() => setDialog('regenerate')}>{t('settings.twofa.regenerate')}</Button>
-            <Button className="border-accent-alert/60 text-accent-alert" onClick={() => setDialog('disable')} disabledReason={required ? t('error.TWO_FA_REQUIRED_FOR_ROLE') : undefined}>
+            <Button onClick={() => setDialog('regenerate')} disabledReason={readOnlyReason}>
+              {t('settings.twofa.regenerate')}
+            </Button>
+            <Button className="border-accent-alert/60 text-accent-alert" onClick={() => setDialog('disable')} disabledReason={readOnlyReason ?? (required ? t('error.TWO_FA_REQUIRED_FOR_ROLE') : undefined)}>
               {t('action.disable')}
             </Button>
           </>
         ) : (
-          <Button variant="primary" onClick={() => setDialog('enable')}>
+          <Button variant="primary" onClick={() => setDialog('enable')} disabledReason={readOnlyReason}>
             {t('settings.twofa.enable')}
           </Button>
         )}
@@ -385,7 +405,10 @@ function SessionsSection() {
   const t = useT();
   const locale = useLocaleCode();
   const qc = useQueryClient();
-  const key = ['session', 'sessions'] as const;
+  // journey J13v-1: keyed by the impersonation session — the owner's devices are never shown on the admin's own page after it
+  const imp = useImpersonation().session?.sessionId ?? null;
+  const key = ['session', 'sessions', imp] as const;
+  const readOnlyReason = useAccountReadOnly();
   const sessions = useQuery({ queryKey: key, queryFn: authApi.sessions });
   const revoke = useMutation({ mutationFn: authApi.revokeSession });
   const [all, setAll] = useState(false);
@@ -456,7 +479,7 @@ function SessionsSection() {
                   {s.current ? (
                     <Pill tone="success">{t('settings.sessions.current')}</Pill>
                   ) : (
-                    <Button variant="ghost" size="sm" onClick={() => setConfirmOne(s.id)} disabled={revoke.isPending || all}>
+                    <Button variant="ghost" size="sm" onClick={() => setConfirmOne(s.id)} disabled={revoke.isPending || all} disabledReason={readOnlyReason}>
                       {t('action.disconnect')}
                     </Button>
                   )}
@@ -489,7 +512,7 @@ function SessionsSection() {
         }}
       />
       {others.length > 0 ? (
-        <Button className="mt-3 border-accent-alert/60 text-accent-alert" onClick={() => setConfirmAll(true)} loading={all}>
+        <Button className="mt-3 border-accent-alert/60 text-accent-alert" onClick={() => setConfirmAll(true)} loading={all} disabledReason={readOnlyReason}>
           {t('settings.sessions.revokeOthers')}
         </Button>
       ) : null}

@@ -41,7 +41,8 @@ export const Idempotent = (o: { required: boolean } = { required: false }) => Se
 export type AuditOptions = {
   entity: string;
   action: string;
-  idFrom?: 'params.id' | 'result.id';
+  /** where the audited record's id is read (journey J13v-5: a route whose param is not `:id` names it, e.g. `params.jobId`) */
+  idFrom?: `params.${string}` | `result.${string}`;
   diff?: boolean;
   reasonFrom?: 'body.reason';
 };

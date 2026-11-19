@@ -10,6 +10,7 @@ import { useWsEvent } from '@/lib/ws';
 import { ORDER_EVENTS } from './action-keys';
 import type { Client } from '@/features/clients/contracts';
 import type { CreatePaymentLinkInput, OrderPaymentLinkDto, OrderRefundInput } from '@djaber/shared';
+import { invalidateFigures } from '@/lib/figures';
 import type {
   BulkItemResult,
   BulkOrderAssignInput,
@@ -130,7 +131,7 @@ export function useOrdersRefresh() {
       if (o.order) qc.setQueryData(ordersKeys.order(ws, o.order.id), o.order);
       const jobs = [
         qc.invalidateQueries({ queryKey: ordersKeys.all(ws) }),
-        qc.invalidateQueries({ queryKey: [ws, 'dashboard'] }),
+        invalidateFigures(qc, ws),
         qc.invalidateQueries({ queryKey: [ws, 'clients'] }),
         qc.invalidateQueries({ queryKey: [ws, 'client'] }),
       ];
@@ -171,7 +172,7 @@ export function useOrderEvents() {
   const qc = useQueryClient();
   const derived = () => {
     void qc.invalidateQueries({ queryKey: ordersKeys.stats(ws) });
-    void qc.invalidateQueries({ queryKey: [ws, 'dashboard'] });
+    void invalidateFigures(qc, ws);
   };
   useWsEvent<OrderCreatedEvent>(ORDER_EVENTS.created, (p) => {
     if (!p?.order?.id) return;

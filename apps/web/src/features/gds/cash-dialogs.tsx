@@ -19,14 +19,14 @@ import { uploadWithProgress } from '@/lib/upload';
 import { gdsApi, useGdsRefresh } from './api';
 import { CASH_MANUAL_IN, CASH_MANUAL_OUT, PAYMENT_METHODS, type CashCategory, type CashMethod, type CashRow, type CashType } from './contracts';
 import { cashDateIso, closingGap } from './logic';
-import { useDayLabel } from './ui';
+import { useClosedDayLabel, useDayLabel } from './ui';
 
 export type ManualMode = { kind: 'new' } | { kind: 'edit'; row: CashRow } | { kind: 'duplicate'; row: CashRow } | { kind: 'correct'; row: CashRow };
 
 export function ManualEntryDialog({ mode, onClose, defaultDay }: { mode: ManualMode | null; onClose: () => void; defaultDay: string }) {
   const t = useT();
   const refresh = useGdsRefresh();
-  const dayLabel = useDayLabel();
+  const closedDayLabel = useClosedDayLabel();
   const typed = useTypedFlag(!!mode);
   const row = mode && mode.kind !== 'new' ? mode.row : null;
   const [type, setType] = useState<CashType>('expense');
@@ -179,7 +179,7 @@ export function ManualEntryDialog({ mode, onClose, defaultDay }: { mode: ManualM
         ) : null}
         {s.error ? (
           <FormAlert>
-            {closedError ? t('error.CASH_DAY_CLOSED', { date: dayLabel(s.closedDay || day) }) : s.error}
+            {closedError ? t('error.CASH_DAY_CLOSED', { date: closedDayLabel(s.closedDay || day) }) : s.error}
             <ClosedDayHint day={s.closedDay} />
           </FormAlert>
         ) : null}

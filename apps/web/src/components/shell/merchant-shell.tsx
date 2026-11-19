@@ -266,12 +266,14 @@ function useShellBanners(): ShellBanner[] {
       action: s.can('workspace.delete') ? { label: t('settings.danger.cancel'), onClick: () => void onCancelDeletion(), disabled: cancelDeletion.isPending } : undefined,
     });
   }
-  if (s.me && !s.me.emailVerifiedAt) {
+  // journey J13v-1: the banner is about the person shown as « me » — the shop owner during a read-only impersonation, with no
+  // « Renvoyer » (a write of the owner's account)
+  if (s.viewer && !s.viewer.emailVerifiedAt) {
     banners.push({
       id: 'emailUnverified',
       tone: 'info',
-      content: tWithLtr(t, 'shell.emailUnverified', 'email', s.me.email),
-      action: cooldown > 0 ? { label: t('action.resendIn', { time: formatClock(cooldown) }), disabled: true } : { label: t('action.resend'), onClick: onResend },
+      content: tWithLtr(t, 'shell.emailUnverified', 'email', s.viewer.email),
+      action: s.impersonating ? undefined : cooldown > 0 ? { label: t('action.resendIn', { time: formatClock(cooldown) }), disabled: true } : { label: t('action.resend'), onClick: onResend },
     });
   }
   // tester report 22/10 UX-024: an impersonation is read-only by itself — its red banner says so, not the member-limit one
@@ -413,7 +415,9 @@ export function UserMenu() {
   const router = useRouter();
   const [language, setLanguage] = useState(false);
   if (!s.me) return null;
-  const name = `${s.me.firstName} ${s.me.lastName}`.trim();
+  // journey J13v-1: the person shown as « me » — the shop owner during a read-only impersonation (the account actions below stay the admin's)
+  const who = s.viewer ?? s.me;
+  const name = `${who.firstName} ${who.lastName}`.trim();
   const out = async (all: boolean) => {
     await (all ? s.logoutAll() : s.logout());
     router.replace('/login');
@@ -423,14 +427,14 @@ export function UserMenu() {
       <Menu
         trigger={
           <button type="button" aria-label={t('shell.userMenu.label', { name })} className="rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-inbound">
-            <Avatar name={name} src={s.me.avatarUrl} size={32} />
+            <Avatar name={name} src={who.avatarUrl} size={32} />
           </button>
         }
       >
         <div className="px-2.5 py-2">
           <div className="truncate text-[13px] font-medium">{name}</div>
           <div className="truncate text-[12px] text-text-muted" dir="ltr">
-            {s.me.email}
+            {who.email}
           </div>
         </div>
         <MenuSeparator />

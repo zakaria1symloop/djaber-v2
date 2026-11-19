@@ -340,7 +340,9 @@ export class ModerationService {
 
   private presentAppeal(a: Prisma.ModerationAppealGetPayload<{ include: ModerationService['appealInclude'] }>, actor: PlatformActor, canWrite: boolean): ModerationAppealDto {
     const sameReviewer = a.item.reviewer?.id === actor.userId;
-    const reasonCode = !canWrite ? 'FORBIDDEN' : a.decision ? 'MODERATION_ITEM_ALREADY_DECIDED' : sameReviewer ? 'FORBIDDEN' : undefined;
+    // journey J13v-3: the moderator who took the first decision reads the real reason (« Un autre modérateur doit décider de
+    // cet appel. »), never « Vous n'avez pas la permission. » (a super admin holds every permission)
+    const reasonCode = !canWrite ? 'FORBIDDEN' : a.decision ? 'MODERATION_ITEM_ALREADY_DECIDED' : sameReviewer ? 'MODERATION_APPEAL_SAME_REVIEWER' : undefined;
     return {
       id: a.id,
       item: { id: a.item.id, type: a.item.type, productId: a.item.productId, productName: a.item.product?.name ?? null, decision: a.item.decision, merchantMessage: a.item.merchantMessage, reviewer: toUserRef(a.item.reviewer), decidedAt: iso(a.item.decidedAt) },
@@ -381,7 +383,7 @@ export class ModerationService {
       const a = await tx.moderationAppeal.findUnique({ where: { id }, include: { item: true } });
       if (!a) throw notFound();
       if (a.decision) throw new AppException('MODERATION_ITEM_ALREADY_DECIDED');
-      if (a.item.reviewerId === actor.userId) throw new AppException('FORBIDDEN');
+      if (a.item.reviewerId === actor.userId) throw new AppException('MODERATION_APPEAL_SAME_REVIEWER');
       const now = new Date();
       await tx.moderationAppeal.update({ where: { id }, data: { decision: input.decision, decisionNote: input.note, reviewerId: actor.userId, decidedAt: now } });
       const overturned = input.decision === 'overturned';

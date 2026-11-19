@@ -9,6 +9,7 @@ import type { CreateOrderInput, Order, OrderDraft } from '@/features/orders/cont
 import { api, apiRaw } from '@/lib/api';
 import { searchTerm } from '@/lib/phone';
 import { useWorkspaceId } from '@/lib/session';
+import { invalidateFigures } from '@/lib/figures';
 
 export const orderFormApi = {
   /** `GET /clients?q=` — a phone fragment is sent normalised ("0555 12" → "055512"); min 2 characters (§1.6). */
@@ -88,7 +89,7 @@ export function useOrderCreatedRefresh() {
         qc.invalidateQueries({ queryKey: [ws, 'orders'] }),
         qc.invalidateQueries({ queryKey: [ws, 'clients'] }),
         qc.invalidateQueries({ queryKey: [ws, 'client'] }),
-        qc.invalidateQueries({ queryKey: [ws, 'dashboard'] }),
+        invalidateFigures(qc, ws),
         qc.invalidateQueries({ queryKey: [ws, 'products'] }),
         qc.invalidateQueries({ queryKey: [ws, 'stock'] }),
       ]),

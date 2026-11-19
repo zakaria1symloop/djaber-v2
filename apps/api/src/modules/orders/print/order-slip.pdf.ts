@@ -51,13 +51,18 @@ const isArabicFont = (f: FontKey): boolean => f === 'ar' || f === 'arB';
 // Formatting helpers (Latin digits, integer DZD, Africa/Algiers)
 // ---------------------------------------------------------------------------
 
+/** The minus sign every PDF prints (U+2013): the screens' « − » (U+2212) has no glyph in the embedded fonts. */
+export const PDF_MINUS = '–';
+
 /** `12500` -> `12 500 DA`. */
 export function formatSlipAmount(value: number): string {
   const v = Math.round(value);
   const digits = Math.abs(v)
     .toString()
     .replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-  return `${v < 0 ? '-' : ''}${digits} DA`;
+  // journey J06v-2: a negative amount reads « –700 DA » — the en dash glued to the digits is the PDF-safe form of the screens'
+  // minus « −700 DA » (the WinAnsi Latin font and Noto Naskh have no U+2212; a hyphen read as a dash)
+  return `${v < 0 ? PDF_MINUS : ''}${digits} DA`;
 }
 
 /** `0555123456` -> `0555 12 34 56`; 9-digit landlines -> `021 23 45 67`; anything else unchanged. */
@@ -165,9 +170,11 @@ function visualSegments(text: string, bold: boolean): Seg[] {
   chars.forEach((ch, i) => {
     const t = resolved[i] ?? base;
     const level = t === 'R' ? 1 : t === 'E' ? 2 : base === 'L' ? 0 : 2;
-    const cp = ch.codePointAt(0) ?? 0;
+    // journey J06v-2: the screens' minus sign (U+2212, e.g. a value formatted for a screen) prints as the PDF minus (U+2013)
+    const minus = ch.codePointAt(0) === 0x2212;
+    const cp = minus ? 0x2013 : (ch.codePointAt(0) ?? 0);
     let font: FontKey;
-    let out = ch;
+    let out = minus ? PDF_MINUS : ch;
     if (level % 2 === 1 && (isArabicCp(cp) || ch === ' ')) font = 'ar';
     else if (isWinAnsi(cp)) font = 'lat';
     else if (isArabicCp(cp)) font = 'ar';

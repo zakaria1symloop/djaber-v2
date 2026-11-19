@@ -414,4 +414,31 @@ describe('ADM-09 audit · ADM-17 viewers · ADM-01 overview', () => {
     expect(withSla).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'moderation_sla', link: '/admin/moderation?tab=urgent' })]));
     await db.moderationItem.delete({ where: { id: late.id } });
   });
+
+  it('journey J13v-2: one margin basis — cost of the charged runs vs charged credits, free runs apart; stored days of the old definition recomputed', async () => {
+    const sa = await asPlatform(app, 'read');
+    const owner = await asOwner(app);
+    const model = await db.aiModel.findFirstOrThrow({ where: { inputPricePerM: { gt: 0 } }, include: { provider: true } });
+    const base = (await sa.get('/admin/analytics?period=7d').expect(200)).body.data.kpis.credits;
+    // a playground run nobody pays for (1 M input tokens) and a charged reply
+    const free = await db.aiRun.create({ data: { workspaceId: owner.workspaceId, kind: 'test', modelId: model.id, providerId: model.providerId, status: 'ok', inputTokens: 1_000_000, outputTokens: 0, creditsCharged: 0 } });
+    const paid = await db.aiRun.create({ data: { workspaceId: owner.workspaceId, kind: 'reply', modelId: model.id, providerId: model.providerId, status: 'ok', inputTokens: 1000, outputTokens: 100, creditsCharged: 1 } });
+    const after = (await sa.get('/admin/analytics?period=7d').expect(200)).body.data.kpis.credits;
+    // the free run is shown apart, never in the margin's cost; the charged reply is in the margin's cost
+    expect(after.unchargedCostUsd - base.unchargedCostUsd).toBeCloseTo(Number(model.inputPricePerM), 1);
+    expect(after.aiCostUsd - base.aiCostUsd).toBeLessThan(0.05);
+    // a stored day of the old definition (admin removals counted as consumption, no charged-run cost) is recomputed once read
+    const day = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
+    const at = new Date(`${day}T00:00:00Z`);
+    const old = { signups: 0, workspacesCreated: 0, activations: 0, churned: 0, activeWorkspaces: 1, suspended: 0, mrr: 0, creditsConsumed: 3000, aiCostUsd: 50, conversations: 0, aiReplies: 0, byModel: [] };
+    await db.platformDailyStat.upsert({ where: { day: at }, create: { day: at, metrics: old }, update: { metrics: old } });
+    await sa.get('/admin/analytics?period=7d').expect(200);
+    const stored = (await db.platformDailyStat.findUniqueOrThrow({ where: { day: at } })).metrics as Record<string, unknown>;
+    expect(stored).toMatchObject({ v: 2, activeWorkspaces: 1 });
+    expect(stored.creditsConsumed).not.toBe(3000);
+    // the worker recompute is idempotent: nothing left to recompute
+    const n = await app.app.get(AdminOverviewService).rollupPlatform();
+    expect(n).toBe(8);
+    await db.aiRun.deleteMany({ where: { id: { in: [free.id, paid.id] } } });
+  });
 });

@@ -104,12 +104,14 @@ export function DeleteAccountSection() {
   const t = useT();
   const locale = useLocaleCode() as AppLocale;
   const qc = useQueryClient();
-  const { me } = useSession();
+  const { me, viewer, impersonating } = useSession();
   const [open, setOpen] = useState(false);
-  const key = ['session', 'deletion-request', me?.id] as const;
-  const current = useQuery({ queryKey: key, queryFn: authApi.deletionRequest, enabled: !!me });
+  // journey J13v-1: during a read-only impersonation the section shows the shop owner's request, greyed with the reason
+  const readOnlyReason = impersonating ? t('error.READ_ONLY_MEMBER') : undefined;
+  const key = ['session', 'deletion-request', viewer?.id] as const;
+  const current = useQuery({ queryKey: key, queryFn: authApi.deletionRequest, enabled: !!viewer });
   const cancel = useMutation({ mutationFn: authApi.cancelDeletion });
-  const scheduledAt = current.data?.status === 'grace' ? current.data.scheduledAt : me?.deletionScheduledAt;
+  const scheduledAt = current.data?.status === 'grace' ? current.data.scheduledAt : impersonating ? null : me?.deletionScheduledAt;
 
   const onCancel = async () => {
     try {
@@ -125,14 +127,14 @@ export function DeleteAccountSection() {
       {scheduledAt ? (
         <div className="flex flex-wrap items-center gap-3">
           <p className="min-w-0 flex-1 text-[13px] text-text-secondary">{t('settings.deleteAccount.scheduled', { date: formatDate(scheduledAt, locale) })}</p>
-          <Button onClick={onCancel} loading={cancel.isPending}>
+          <Button onClick={onCancel} loading={cancel.isPending} disabledReason={readOnlyReason}>
             {t('settings.deleteAccount.cancel')}
           </Button>
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-3">
           <p className="min-w-0 flex-1 text-[13px] text-text-secondary">{t('settings.deleteAccount.description')}</p>
-          <Button variant="danger" onClick={() => setOpen(true)}>
+          <Button variant="danger" onClick={() => setOpen(true)} disabledReason={readOnlyReason}>
             {t('settings.deleteAccount.open')}
           </Button>
         </div>

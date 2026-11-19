@@ -26,7 +26,7 @@ export class AuditInterceptor implements NestInterceptor {
       tap((result) => {
         const t = TenantContext.maybe();
         const entityId =
-          o.idFrom === 'result.id' ? (result as { id?: string } | undefined)?.id : getPath(req, o.idFrom ?? 'params.id');
+          o.idFrom?.startsWith('result.') ? getPath(result, o.idFrom.slice('result.'.length)) : getPath(req, o.idFrom ?? 'params.id');
         this.audit
           .write({
             workspaceId: t?.workspaceId || null,

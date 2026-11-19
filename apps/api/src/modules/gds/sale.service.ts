@@ -415,9 +415,9 @@ export class SaleService {
         rows: s.items.map((i) => [i.variantName ? `${i.productName} · ${i.variantName}` : i.productName, String(i.quantity), money(i.unitPrice), money(i.total)]),
         totals: [
           { label: t.subtotal!, value: money(s.subtotal) },
-          // journey J06r-5b: a minus sign, never the hyphen « -700 DA » — the en dash, as the PDF's Latin font (WinAnsi)
-          // has no « − » (it would print « ? »)
-          ...(s.discount ? [{ label: t.discount!, value: `– ${money(s.discount)}` }] : []),
+          // journey J06r-5b / J06v-2: the PDF minus « –700 DA » (en dash glued, like every negative amount of the PDFs — the
+          // embedded fonts have no « − »)
+          ...(s.discount ? [{ label: t.discount!, value: money(-s.discount) }] : []),
           ...(s.tax ? [{ label: t.tax!, value: money(s.tax) }] : []),
           { label: t.total!, value: money(s.total), bold: true },
           { label: t.paid!, value: money(s.amountPaid) },

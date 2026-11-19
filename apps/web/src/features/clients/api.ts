@@ -10,6 +10,7 @@ import { downloadUrl, jobFileName, type JobRef, trackJob } from '@/lib/jobs';
 import type { ApiQuery } from '@/lib/list-state';
 import { useWorkspaceId } from '@/lib/session';
 import type { BulkClientTagsInput, Client, ClientListItem, CreateClientInput, MergeClientsInput, UpdateClientInput } from './contracts';
+import { invalidateFigures } from '@/lib/figures';
 
 export type Page<T> = { rows: T[]; total: number; page: number; pageSize: number; meta: Meta };
 export type BulkItemResult = { id: string; ok: boolean; error?: { code: string; message: string; params?: Record<string, unknown> } };
@@ -76,7 +77,7 @@ export function useClientsRefresh() {
   const qc = useQueryClient();
   return useCallback(
     (o: { clientId?: string } = {}) => {
-      const jobs = [qc.invalidateQueries({ queryKey: clientKeys.clients(ws) }), qc.invalidateQueries({ queryKey: [ws, 'orders'] }), qc.invalidateQueries({ queryKey: [ws, 'dashboard'] })];
+      const jobs = [qc.invalidateQueries({ queryKey: clientKeys.clients(ws) }), qc.invalidateQueries({ queryKey: [ws, 'orders'] }), invalidateFigures(qc, ws)];
       // journey J09-1: a bulk action (tags, delete…) names no client — every open card (full page, sheet) is refreshed too
       jobs.push(qc.invalidateQueries({ queryKey: o.clientId ? clientKeys.client(ws, o.clientId) : [ws, 'client'] }));
       return Promise.all(jobs);

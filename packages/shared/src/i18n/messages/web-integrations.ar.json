@@ -35,7 +35,7 @@
   "settings.integrations.sheets.row.lastError": "آخر خطأ",
   "settings.integrations.sheets.tabNote": "(تبويب « {tab} » في ورقتك، عمود مخفي يتيح لـ Djaber التعرّف على كل طلب)",
   "settings.integrations.sheets.noSheet": "لم تُختر أي ورقة",
-  "settings.integrations.sheets.rows": "{count, plural, one {طلبية واحدة متزامنة} two {طلبيتان متزامنتان} few {{value} طلبيات متزامنة} other {{value} طلبية متزامنة}}",
+  "settings.integrations.sheets.rows": "{count, plural, one {طلبية واحدة متزامنة} two {طلبيتان متزامنتان} few {{value} طلبيات متزامنة} many {{value} طلبيةً متزامنة} other {{value} طلبية متزامنة}}",
   "settings.integrations.sheets.pending": "{count} قيد الانتظار",
   "settings.integrations.sheets.noError": "لا شيء",
   "settings.integrations.sheets.filters.allPages": "كل الصفحات",

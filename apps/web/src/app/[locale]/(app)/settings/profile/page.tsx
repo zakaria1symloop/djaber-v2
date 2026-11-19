@@ -2,7 +2,7 @@
 // /settings/profile — Figma "SET — Settings — Profile · Workspace · Security" (Profil) + DLG "Changer l'e-mail", "Supprimer mon compte".
 import { zodResolver } from '@hookform/resolvers/zod';
 import { UpdateProfileSchema, type AppLocale, type UpdateProfileInput } from '@djaber/shared';
-import { Avatar, Button, Field, FormAlert, Input, Select, Skeleton, toast } from '@djaber/ui';
+import { Avatar, Banner, Button, Field, FormAlert, Input, Select, Skeleton, toast } from '@djaber/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -22,7 +22,10 @@ export default function ProfilePage() {
   const router = useRouter();
   const pathname = usePathname();
   const qc = useQueryClient();
-  const { me } = useSession();
+  // journey J13v-1: during a read-only impersonation the page shows the shop owner's profile (`viewer`), every control greyed
+  // with the reason — the admin never edits the signed-in (shared admin) account from inside the shop
+  const { viewer: me, impersonating } = useSession();
+  const readOnlyReason = impersonating ? t('error.READ_ONLY_MEMBER') : undefined;
   const [emailOpen, setEmailOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -61,20 +64,26 @@ export default function ProfilePage() {
   });
 
   if (!me) return <Skeleton className="h-64" />;
-  const busy = save.isPending;
+  // the fields are greyed while saving, and during a read-only impersonation
+  const busy = save.isPending || impersonating;
   const errors = form.formState.errors;
   const name = `${me.firstName} ${me.lastName}`.trim();
   return (
     <SettingsPage title={t('settings.profile.title')} description={t('settings.profile.description')}>
+      {readOnlyReason ? (
+        <Banner tone="warning">
+          <span data-testid="profile-read-only">{readOnlyReason}</span>
+        </Banner>
+      ) : null}
       <Section>
         <div className="flex flex-wrap items-center gap-4">
           <Avatar name={name} src={me.avatarUrl} size={64} />
           {avatar.input}
-          <Button onClick={avatar.open} loading={avatar.uploading}>
+          <Button onClick={avatar.open} loading={avatar.uploading} disabledReason={readOnlyReason}>
             {avatar.uploading ? t('settings.upload.uploading') : t('settings.profile.changePhoto')}
           </Button>
           {me.avatarUrl ? (
-            <Button variant="ghost" onClick={() => removeAvatar.mutate()} loading={removeAvatar.isPending}>
+            <Button variant="ghost" onClick={() => removeAvatar.mutate()} loading={removeAvatar.isPending} disabledReason={readOnlyReason}>
               {t('action.remove')}
             </Button>
           ) : null}
@@ -82,7 +91,7 @@ export default function ProfilePage() {
         </div>
         {avatar.error ? <FormAlert className="mt-3">{avatar.error}</FormAlert> : null}
 
-        <form onSubmit={submit} noValidate className="mt-5 flex flex-col gap-4" aria-busy={busy}>
+        <form onSubmit={submit} noValidate className="mt-5 flex flex-col gap-4" aria-busy={save.isPending}>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t('auth.field.firstName')} htmlFor="firstName" error={fieldError(t, errors.firstName?.message, { max: 80 })}>
               <Input id="firstName" autoComplete="given-name" disabled={busy} aria-invalid={!!errors.firstName} {...form.register('firstName')} />
@@ -93,7 +102,9 @@ export default function ProfilePage() {
             <Field label={t('common.email')} htmlFor="email" hint={t('settings.profile.emailHint')}>
               <div className="flex gap-2">
                 <Input id="email" type="email" dir="ltr" value={me.email} readOnly disabled className="min-w-0 flex-1" />
-                <Button onClick={() => setEmailOpen(true)}>{t('action.edit')}</Button>
+                <Button onClick={() => setEmailOpen(true)} disabledReason={readOnlyReason}>
+                  {t('action.edit')}
+                </Button>
               </div>
             </Field>
             <Field label={t('settings.profile.language')} htmlFor="locale">
@@ -114,8 +125,8 @@ export default function ProfilePage() {
                 {t('state.form.saved')}
               </span>
             ) : null}
-            <Button type="submit" variant="primary" loading={busy} disabled={!form.formState.isDirty}>
-              {busy ? t('common.saving') : t('action.save')}
+            <Button type="submit" variant="primary" loading={save.isPending} disabled={!form.formState.isDirty} disabledReason={readOnlyReason}>
+              {save.isPending ? t('common.saving') : t('action.save')}
             </Button>
           </div>
         </form>

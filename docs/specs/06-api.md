@@ -38,6 +38,7 @@ POST /auth/verify-email · POST /auth/verify-email/resend
 POST /auth/2fa/setup · POST /auth/2fa/enable · POST /auth/2fa/disable (password; users with a platform role ⇒ 403 TWO_FA_REQUIRED_FOR_ROLE) · POST /auth/2fa/verify { mfaToken, code | recoveryCode } · POST /auth/2fa/recovery-codes (password)
 GET /me · PATCH /me · PATCH /me/password · POST /me/email-change · account deletion: POST /me/deletion-request (§8.1)
 GET /me/sessions · DELETE /me/sessions/:id
+GET /me/viewer → { id, email, firstName, lastName, phone, locale, avatarUrl, emailVerifiedAt, totpEnabled, platformRole } — the person the merchant shell shows as « me » (Home greeting, user menu, Profil, Sécurité): the signed-in user, or during a read-only impersonation (D21-bis) the shop owner, read only (journey J13v-1, 2026-11-19). `GET /me` stays the signed-in account (memberships, platform role).
 POST /me/devices · DELETE /me/devices/:token (§11)
 ```
 

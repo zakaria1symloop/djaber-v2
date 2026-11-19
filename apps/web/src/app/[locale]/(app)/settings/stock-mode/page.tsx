@@ -70,7 +70,6 @@ export default function StockModePage() {
         open={confirmSimple}
         onOpenChange={setConfirmSimple}
         title={t('settings.stockMode.toSimple.title')}
-        description={t('settings.stockMode.toSimple.description')}
         confirmLabel={t('settings.stockMode.toSimple.confirm')}
         cancelLabel={t('action.cancel')}
         closeLabel={t('action.close')}
@@ -79,7 +78,10 @@ export default function StockModePage() {
           setConfirmSimple(false);
           void choose('simple');
         }}
-      />
+      >
+        {/* journey J06v-2: the explanation is the dialog's body text, like the other dialogs (not the small mono note) */}
+        <p className="ts-body text-text-secondary">{t('settings.stockMode.toSimple.description')}</p>
+      </ConfirmDialog>
     </SettingsPage>
   );
 }

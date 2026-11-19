@@ -25,6 +25,7 @@ import { recordOrigin } from '@/lib/origin';
 import { useWorkspaceId } from '@/lib/session';
 import { uploadWithProgress } from '@/lib/upload';
 import { useWsEvent } from '@/lib/ws';
+import { invalidateFigures } from '@/lib/figures';
 import type {
   AiFillCurrent,
   AiFillResult,
@@ -216,7 +217,7 @@ export function useCatalogRefresh() {
   return useCallback(
     (o: { productId?: string; taxonomies?: boolean } = {}) => {
       // journeys J02r-3 / J07r-3: the Home tiles (stock value, « À traiter », low stock) are derived from the stock too
-      const jobs = [qc.invalidateQueries({ queryKey: catalogKeys.products(ws) }), qc.invalidateQueries({ queryKey: [ws, 'stock'] }), qc.invalidateQueries({ queryKey: [ws, 'dashboard'] })];
+      const jobs = [qc.invalidateQueries({ queryKey: catalogKeys.products(ws) }), qc.invalidateQueries({ queryKey: [ws, 'stock'] }), invalidateFigures(qc, ws)];
       if (o.productId) jobs.push(qc.invalidateQueries({ queryKey: catalogKeys.product(ws, o.productId) }));
       if (o.taxonomies) jobs.push(qc.invalidateQueries({ queryKey: catalogKeys.categories(ws) }), qc.invalidateQueries({ queryKey: catalogKeys.units(ws) }));
       return Promise.all(jobs);
@@ -253,7 +254,7 @@ export function useCatalogEvents() {
     void qc.invalidateQueries({ queryKey: catalogKeys.lowStock(ws) });
     void qc.invalidateQueries({ queryKey: [ws, 'stock'] });
     // the Home tiles follow the stock even when the Home is not on screen (J02r-3 / J07r-3: it kept the old figures 30 s)
-    void qc.invalidateQueries({ queryKey: [ws, 'dashboard'] });
+    void invalidateFigures(qc, ws);
     // stock state pills, margins and variant summaries are derived by the server: the visible lists are refetched
     void qc.invalidateQueries({ queryKey: [ws, 'products', 'list'] });
   });

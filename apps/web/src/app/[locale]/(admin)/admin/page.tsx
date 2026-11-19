@@ -68,7 +68,14 @@ export default function AdminOverviewPage() {
               value={k ? f.num(k.mrr.amount) : '—'}
               unit={t('admin.overview.kpi.mrr')}
             />
-            <OpsKpiTile data-kpi="credits" context={k ? t('admin.overview.kpi.creditsCtx', { cost: f.num(Math.round(k.credits.aiCostUsd)), margin: k.credits.marginPct ?? '—' }) : undefined} value={k ? compactAmount(k.credits.consumed, f.locale) : '—'} unit={t('admin.overview.kpi.credits', { days })} />
+            {/* journey J13v-2: cost and margin of the charged runs; the runs nobody pays for (tests, analyses) apart */}
+            <OpsKpiTile
+              data-kpi="credits"
+              context={
+                k
+                  ? [t('admin.overview.kpi.creditsCtx', { cost: f.num(Math.round(k.credits.aiCostUsd)), margin: k.credits.marginPct ?? '—' }), k.credits.unchargedCostUsd >= 0.5 ? t('admin.overview.kpi.creditsUncharged', { cost: f.num(Math.round(k.credits.unchargedCostUsd)) }) : null].filter(Boolean).join(' · ')
+                  : undefined
+              } value={k ? compactAmount(k.credits.consumed, f.locale) : '—'} unit={t('admin.overview.kpi.credits', { days })} />
             <OpsKpiTile data-kpi="conversations" context={k?.conversations.peak ? t('admin.overview.kpi.peak', { count: f.num(k.conversations.peak.count), date: f.short(k.conversations.peak.day) }) : undefined} value={k ? f.num(k.conversations.perDayAvg) : '—'} unit={t('admin.overview.kpi.conversations')} />
             <OpsKpiTile data-kpi="webhooks" context={k ? t('admin.overview.kpi.webhooksCtx', { minutes: k.webhooks.incidentMinutes, delays: k.webhooks.queueDelays }) : undefined} value={typeof k?.webhooks.availabilityPct === 'number' ? `${String(k.webhooks.availabilityPct).replace('.', f.locale === 'en' ? '.' : ',')} %` : '—'} unit={t('admin.overview.kpi.webhooks')} />
           </OpsKpiStrip>
@@ -90,7 +97,11 @@ export default function AdminOverviewPage() {
                   {/* tester report 22/10 UX-007: the period totals and the activation rate, dates and a scale, the three series
                       side by side (an activation is often a shop that signed up earlier: stacked, it read as more new shops) */}
                   <p className="mb-2 ts-label-meta text-text-secondary" data-testid="overview-chart-totals">
+                    {/* journey J13v-4: the counts choose the plural form (Arabic two / few / many), the formatted values are shown */}
                     {t('admin.overview.chart.totals', {
+                      signupsN: d.series.reduce((n, s) => n + s.signups, 0),
+                      activationsN: d.series.reduce((n, s) => n + s.activations, 0),
+                      churnedN: d.series.reduce((n, s) => n + s.churned, 0),
                       signups: f.num(d.series.reduce((n, s) => n + s.signups, 0)),
                       activations: f.num(d.series.reduce((n, s) => n + s.activations, 0)),
                       churned: f.num(d.series.reduce((n, s) => n + s.churned, 0)),

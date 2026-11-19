@@ -10,6 +10,7 @@ import type { JobRef } from '@/lib/jobs';
 import type { ApiQuery } from '@/lib/list-state';
 import { useWorkspaceId } from '@/lib/session';
 import { useWsEvent } from '@/lib/ws';
+import { invalidateFigures } from '@/lib/figures';
 import type {
   CashDay,
   CashEntryInput,
@@ -295,7 +296,8 @@ export function useGdsRefresh() {
   return useCallback(
     () =>
       Promise.all(
-        ['suppliers', 'purchases', 'sales', 'cash', 'inventories', 'stock-recos', 'cross-sell', 'stock', 'products', 'product', 'clients', 'client', 'dashboard'].map((k) =>
+        // journey J06v-1: the reports and the statistics too (the Paiements report kept the old payment mode for 30 s)
+        ['suppliers', 'purchases', 'sales', 'cash', 'inventories', 'stock-recos', 'cross-sell', 'stock', 'products', 'product', 'clients', 'client', 'dashboard', 'reports', 'analytics'].map((k) =>
           qc.invalidateQueries({ queryKey: [ws, k] }),
         ),
       ),
@@ -314,8 +316,8 @@ export function useGdsEvents() {
     void qc.invalidateQueries({ queryKey: gdsKeys.cash(ws) });
     void qc.invalidateQueries({ queryKey: gdsKeys.sales(ws) });
     void qc.invalidateQueries({ queryKey: gdsKeys.purchases(ws) });
-    // revenue / cash tiles of the Home (J02r-3 / J07r-3 family)
-    void qc.invalidateQueries({ queryKey: [ws, 'dashboard'] });
+    // revenue / cash tiles of the Home (J02r-3 / J07r-3 family), the reports and the statistics (journey J06v-1)
+    void invalidateFigures(qc, ws);
   });
   useWsEvent<{ id?: string }>('inventory.updated', (p) => {
     void qc.invalidateQueries({ queryKey: gdsKeys.inventories(ws) });

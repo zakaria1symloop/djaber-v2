@@ -389,8 +389,9 @@ describe('decisions', () => {
     const row = appeals.find((a: { item: { id: string } }) => a.item.id === item.id);
     expect(row).toMatchObject({ message: 'Ce prix est un déstockage, facture jointe.', overdue: false, item: { reviewer: { id: mod.userId } } });
     const mine = (await mod.get('/admin/moderation/appeals?status=pending').expect(200)).body.data.find((a: { id: string }) => a.id === row.id);
-    expect(mine.actions.every((x: { enabled: boolean; reasonCode?: string }) => !x.enabled && x.reasonCode === 'FORBIDDEN')).toBe(true);
-    expect((await mod.post(`/admin/moderation/appeals/${row.id}/decide`, { decision: 'overturned', note: 'ok' }).expect(403)).body.error.code).toBe('FORBIDDEN');
+    // journey J13v-3: the first moderator reads why (a second moderator decides), not « no permission »
+    expect(mine.actions.every((x: { enabled: boolean; reasonCode?: string }) => !x.enabled && x.reasonCode === 'MODERATION_APPEAL_SAME_REVIEWER')).toBe(true);
+    expect((await mod.post(`/admin/moderation/appeals/${row.id}/decide`, { decision: 'overturned', note: 'ok' }).expect(403)).body.error.code).toBe('MODERATION_APPEAL_SAME_REVIEWER');
     const decided = await mod2.post(`/admin/moderation/appeals/${row.id}/decide`, { decision: 'overturned', note: 'Facture de déstockage valable.' }).expect(200);
     expect(decided.body.data).toMatchObject({ decision: 'overturned', reviewer: { id: mod2.userId } });
     expect((await mod2.post(`/admin/moderation/appeals/${row.id}/decide`, { decision: 'upheld', note: 'x' }).expect(409)).body.error.code).toBe('MODERATION_ITEM_ALREADY_DECIDED');

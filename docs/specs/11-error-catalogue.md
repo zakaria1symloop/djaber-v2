@@ -349,6 +349,7 @@ Every code drawn in a Figma frame (dialog footers, greyed menu items, grey "ÉTA
 | 409 | `MODERATION_APPEAL_ALREADY_USED` | Contestation déjà utilisée pour ce produit. | تم استخدام الاعتراض مسبقًا لهذا المنتج. | Appeal already used for this product. | button hidden / toast | resubmit |
 | 410 | `MODERATION_APPEAL_WINDOW_EXPIRED` | Délai de contestation dépassé (7 j). | انتهت مهلة الاعتراض (7 أيام). | Appeal window expired (7 d). | state | resubmit |
 | 409 | `MODERATION_ITEM_ALREADY_DECIDED` | Déjà traité par un autre modérateur. | تمت معالجته من مشرف آخر. | Already decided by another moderator. | toast (admin) + refresh | — |
+| 403 | `MODERATION_APPEAL_SAME_REVIEWER` | Un autre modérateur doit décider de cet appel. | يجب أن يبتّ مشرف آخر في هذا الاعتراض. | Another moderator must decide this appeal. | disabled reason of the appeal decision controls (admin) · inline | another moderator (03 MOD « second modérateur décide », journey J13v-3) |
 | 422 | `MODERATION_REASON_REQUIRED` | Motif et message au marchand obligatoires. | السبب والرسالة إلى التاجر إلزاميان. | Reason and message to the merchant required. | inline (admin) | — |
 | 422 | `MODERATION_REJECTED` | Produit refusé : modifiez-le et resoumettez. | المنتج مرفوض: عدّله وأعد إرساله. | Product rejected: edit and resubmit. | banner (product) | resubmit / appeal |
 | 409 | `MODERATION_NOT_REJECTED` | Ce produit n'est pas refusé : rien à resoumettre. | هذا المنتج غير مرفوض: لا شيء لإعادة إرساله. | This product is not rejected: nothing to resubmit. | toast (action hidden normally) | reload |

@@ -63,7 +63,7 @@ export class ReportsController {
   @Delete(':key/schedule')
   @RequirePermission('reports.schedule')
   @HttpCode(204)
-  @Audited({ entity: 'ReportSchedule', action: 'report.unschedule' })
+  @Audited({ entity: 'ReportSchedule', action: 'report.unschedule', idFrom: 'params.key' })
   async unschedule(@Param('key') key: string, @Body() dto: ReportUnscheduleDto, @Query('email') email?: string) {
     await this.schedules.remove(key, (dto as { email?: string }).email ?? email);
   }

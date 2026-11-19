@@ -43,6 +43,13 @@ export class MeController {
     return { avatarUrl: upload.url, upload };
   }
 
+  /** journey J13v-1: the identity the merchant shell shows as « me » — the shop owner during a read-only impersonation. */
+  @Get('viewer')
+  @Authenticated()
+  viewer(@CurrentUser() user: AuthUser) {
+    return this.me.viewer(viewerUserId() ?? user.id);
+  }
+
   @Get('prefs')
   @Authenticated()
   getPrefs(@CurrentUser() user: AuthUser) {

@@ -43,7 +43,7 @@ const fullName = (m: MemberDto) => `${m.user.firstName} ${m.user.lastName}`.trim
 
 export default function MembersPage() {
   const t = useT();
-  const { workspace, can, me } = useSession();
+  const { workspace, can, me, viewer } = useSession();
   const ws = useWorkspaceId();
   const qc = useQueryClient();
   const canWrite = can('members.write');
@@ -147,7 +147,8 @@ export default function MembersPage() {
                     <span dir="auto" className="min-w-0 truncate">
                       {fullName(m)}
                     </span>
-                    {m.user.id === me?.id ? <span className="shrink-0">{t('settings.members.you')}</span> : null}
+                    {/* journey J13v-1: « (vous) » marks the person shown as « me » — the owner during a read-only impersonation */}
+                    {m.user.id === viewer?.id ? <span className="shrink-0">{t('settings.members.you')}</span> : null}
                   </div>
                   {/* full-test 15/11 SETTINGS-16: the e-mail is its own LTR box (in Arabic the start was cut); journeys 18/11 J10r-7:
                       it wraps instead of being cut at its end — at 390 px two addresses with the same start read the same */}

@@ -102,12 +102,14 @@ function useDelayed(on: boolean, ms = 300) {
 export default function HomePage() {
   const t = useT();
   const locale = useLocaleCode();
-  const { me, workspace } = useSession();
+  const { viewer, workspace } = useSession();
   const home = useHome();
   useHomeEvents();
   const skeleton = useDelayed(home.isPending);
   const now = new Date();
-  const greeting = t(greetingKey(now), { name: me?.firstName ?? '' });
+  // journey J13v-1: the API's greeting names the shop owner during a read-only impersonation; the session's viewer is the
+  // same person and fills the line while the page loads
+  const greeting = t(greetingKey(now), { name: home.data?.greeting.firstName || viewer?.firstName || '' });
 
   return (
     <AppPage title={t('nav.home')} bare permission="analytics.read">

@@ -353,7 +353,7 @@ export class CashController {
   @HttpCode(200)
   @RequirePermission('gds.write')
   @Idempotent({ required: true })
-  @Audited({ entity: 'CashClosing', action: 'cash.close' })
+  @Audited({ entity: 'CashClosing', action: 'cash.close', idFrom: 'result.closing.id' })
   close(@Body() dto: CloseCashDto) {
     return this.cash.close(dto);
   }
@@ -361,7 +361,7 @@ export class CashController {
   @Post('days/:day/reopen')
   @HttpCode(200)
   @RequirePermission('gds.write')
-  @Audited({ entity: 'CashClosing', action: 'cash.reopen', reasonFrom: 'body.reason' })
+  @Audited({ entity: 'CashClosing', action: 'cash.reopen', idFrom: 'params.day', reasonFrom: 'body.reason' })
   reopen(@Param('day') day: string, @Body() dto: ReopenCashDto) {
     if (!isDay(day)) throw validationError({ day: 'validation.date' });
     return this.cash.reopen(day, dto);
@@ -391,8 +391,11 @@ export class CashController {
   @Delete(':id')
   @HttpCode(204)
   @RequirePermission('gds.write')
-  @Audited({ entity: 'CashTransaction', action: 'cash.delete' })
-  async remove(@Id() id: string) {
+  @Audited({ entity: 'CashTransaction', action: 'cash.delete', diff: true })
+  async remove(@Id() id: string, @Req() req: { auditBefore?: unknown }) {
+    // journey J13v-5: the row is deleted — the audit keeps what it was, so the log names it (« loyer · −2 000 DA »)
+    const row = await this.cash.get(id);
+    req.auditBefore = { description: row.description, category: row.category, type: row.type, amount: row.amount, date: row.date };
     await this.cash.remove(id);
   }
 }

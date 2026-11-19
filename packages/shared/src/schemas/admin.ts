@@ -79,7 +79,12 @@ export type AdminOverviewDto = {
   kpis: {
     workspaces: { active: number; newInPeriod: number; suspended: number };
     mrr: { amount: number; deltaPct: number | null; byPlan: { slug: string; name: string; count: number }[]; free: number };
-    credits: { consumed: number; aiCostUsd: number; marginPct: number | null };
+    /**
+     * journey J13v-2 — one margin basis: `aiCostUsd` = AI cost of the CHARGED runs (`AiRun.creditsCharged > 0`), revenue =
+     * the consumed (charged) credits × credit price, `marginPct` compares the two. Runs nobody pays for (playground tests,
+     * page analysis, agent generation…) are shown apart in `unchargedCostUsd`. Admin removals are never consumption.
+     */
+    credits: { consumed: number; aiCostUsd: number; unchargedCostUsd: number; marginPct: number | null };
     conversations: { perDayAvg: number; peak: { day: string; count: number } | null };
     webhooks: { availabilityPct: number | null; incidentMinutes: number; queueDelays: number };
   };
