@@ -15,6 +15,7 @@ import type {
   MetaInstagramToken,
   MetaPage,
   MetaPageInfo,
+  MetaPageScopedId,
   MetaPost,
   MetaPostsPage,
   MetaProfile,
@@ -38,6 +39,7 @@ export class FakeMetaGateway implements MetaGateway {
   private readonly history = new Map<string, MetaHistoryConversation[]>();
   private readonly profiles = new Map<string, MetaProfile | null>();
   private readonly postsByPage = new Map<string, MetaPost[]>();
+  private readonly pageIdsByAsid = new Map<string, MetaPageScopedId[]>();
   readonly invalidTokens = new Set<string>();
 
   // --- scripting (tests) ----------------------------------------------------------------------------------------------
@@ -66,6 +68,10 @@ export class FakeMetaGateway implements MetaGateway {
   setPosts(externalId: string, posts: MetaPost[]) {
     this.postsByPage.set(externalId, posts);
   }
+  /** Page-scoped ids returned by `idsForPages` for an app-scoped user id (MSG-08). Unknown ids answer `[]`. */
+  setIdsForPages(appScopedUserId: string, ids: MetaPageScopedId[]) {
+    this.pageIdsByAsid.set(appScopedUserId, ids);
+  }
   callsOf(op: string) {
     return this.calls.filter((c) => c.op === op);
   }
@@ -78,6 +84,7 @@ export class FakeMetaGateway implements MetaGateway {
     this.history.clear();
     this.profiles.clear();
     this.postsByPage.clear();
+    this.pageIdsByAsid.clear();
     this.invalidTokens.clear();
   }
 
@@ -220,6 +227,11 @@ export class FakeMetaGateway implements MetaGateway {
     const size = Math.min(opts.limit, 2);
     const posts = all.slice(start, start + size);
     return { posts, nextCursor: start + size < all.length ? String(start + size) : null };
+  }
+
+  async idsForPages(appScopedUserId: string): Promise<MetaPageScopedId[]> {
+    this.record('idsForPages', { appScopedUserId });
+    return [...(this.pageIdsByAsid.get(appScopedUserId) ?? [])];
   }
 
   /** Media "download": a generated picture / tiny payload for fake URLs; any other host is refused (no network here). */

@@ -90,7 +90,7 @@ export function BuyPackDialog({ open, onClose }: { open: boolean; onClose: () =>
                 data-pack={p.slug}
                 name={p.name}
                 // seed packs are named after their credits ("2 000 crédits"): the line is not repeated then
-                credits={p.name.replace(/\D/g, '') === String(p.credits) ? undefined : t('credits.pack.credits', { count: formatNumber(p.credits) })}
+                credits={p.name.replace(/\D/g, '') === String(p.credits) ? undefined : t('credits.pack.credits', { count: formatNumber(p.credits), countN: p.credits })}
                 price={t('credits.pack.price', { amount: formatNumber(p.priceWebDzd) })}
                 perCredit={t('credits.pack.perCredit', { price: pricePerCredit(p.pricePerCreditDzd, locale) })}
                 badge={p.isFeatured ? t('billing.plan.badge.featured') : undefined}

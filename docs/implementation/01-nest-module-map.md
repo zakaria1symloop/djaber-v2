@@ -207,7 +207,7 @@ express.raw (only /webhooks/*)  →  Helmet / CORS  →  RequestIdMiddleware  �
 | `admin.safety.write` | ● | — | ● | — | — | abuse reports decide/assign, blacklist, blocked words, auto-rules, compliance export |
 | `admin.support.write` | ● | ● | — | — | — | tickets create/messages/assign/resolve/reopen/escalate/wait-customer/link-incident, canned replies |
 | `admin.team.write` | ● | — | — | — | — | `/admin/platform-members*`, `POST /admin/users/:id/platform-role { platformRole, totpCode }` (2FA re-check) |
-| `admin.deletion.write` | ● | ● | — | — | — | `POST /admin/deletion-requests/:id/{cancel\|resolve\|process-now}` |
+| `admin.deletion.write` | ● | ● | — | — | — | `POST /admin/deletion-requests/:id/{cancel\|resolve\|process-now}`, `POST /admin/data-deletion-requests` (MSG-08 e-mail requests) |
 
 Every platform role requires `User.totpEnabled` (`TWO_FA_REQUIRED_FOR_ROLE`); every write under `/admin/*` that touches a merchant requires `reason` (≥ 10 chars) and writes `AuditLog.reason`.
 

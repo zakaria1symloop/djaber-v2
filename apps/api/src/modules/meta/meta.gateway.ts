@@ -44,6 +44,8 @@ export type MetaDownload = { body: Buffer; mime: string };
 /** A page post / Instagram media read by the page analysis (CHN-08, FL-15). */
 export type MetaPost = { id: string; text: string | null; imageUrl: string | null; createdAt: string };
 export type MetaPostsPage = { posts: MetaPost[]; nextCursor: string | null };
+/** One page-scoped id (PSID) of a person, for a page of the business that owns the app (`/<asid>/ids_for_pages`). */
+export type MetaPageScopedId = { pageId: string; psid: string };
 
 export interface MetaGateway {
   readonly driver: 'fake' | 'graph';
@@ -82,6 +84,14 @@ export interface MetaGateway {
 
   /** Downloads an inbound attachment from Meta's CDN (only called by the `media` job). */
   download(url: string): Promise<MetaDownload>;
+
+  // --- data deletion (MSG-08) -------------------------------------------------------------------------------------------
+  /**
+   * App-scoped user id (the `user_id` of a data-deletion signed_request) → the page-scoped ids the same person has on the
+   * pages of the business that owns the app (`GET /<asid>/ids_for_pages`, app access token). An id Meta does not know
+   * answers `[]`. Only called by the `meta-data-deletion` job, never from an HTTP handler (rule 4).
+   */
+  idsForPages(appScopedUserId: string): Promise<MetaPageScopedId[]>;
 }
 
 export const FACEBOOK_SCOPES = [

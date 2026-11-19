@@ -89,7 +89,7 @@ export function CalculatorDialog({ open, onClose, onSeePacks }: { open: boolean;
         </div>
         <EstimateBox data-testid="calc-result" data-credits={shown.credits}>
           <span className={cn(q.isFetching && 'opacity-70')}>
-            {t('credits.calc.formula', { text: formatNumber(shown.textTurns), image: formatNumber(shown.imageTurns), voice: formatNumber(shown.voiceTurns), total: formatNumber(shown.credits) })}
+            {t('credits.calc.formula', { text: formatNumber(shown.textTurns), image: formatNumber(shown.imageTurns), voice: formatNumber(shown.voiceTurns), total: formatNumber(shown.credits), totalN: shown.credits })}
             {suggestion ? ` → ${suggestion}` : ''}
             {s ? ` · ${t('credits.calc.monthly', { amount: formatNumber(s.totalMonthlyDzd) })}` : ''}
           </span>

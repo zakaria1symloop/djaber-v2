@@ -91,7 +91,7 @@ Keys `admin.<area>.read` / `admin.<area>.write`, areas = `overview, workspaces, 
 | Platform settings, providers test, feature flags, app versions, maintenance (`PUT /admin/settings/:key`, `/admin/providers/:key/test`, `/admin/feature-flags*`, `/admin/app-versions*`) | `admin.settings.write` | ● | — | — | — | — |
 | Audit export (`POST /admin/audit-logs/export`) | `admin.audit.write` | ● | — | — | ● | — |
 | Viewer unmask (`?unmask=1` on `/admin/conversations/*`, `/admin/users/:id`) — audited `pii.view` | `admin.overview.write` | ● | — | — | — | — |
-| Deletion requests process / cancel (`/admin/deletion-requests/:id/*`) | `admin.deletion.write` | ● | ● | — | — | — |
+| Deletion requests process / cancel (`/admin/deletion-requests/:id/*`), end-customer data deletion by e-mail (`POST /admin/data-deletion-requests`) | `admin.deletion.write` | ● | ● | — | — | — |
 
 `read` has every `admin.<area>.read` and nothing else. Every platform write is audited (01 §3.4).
 
@@ -171,17 +171,21 @@ Caching: Redis for tenant context (30 s), plan limits (30 s), rates (1 h), `conv
 | Postgres | PITR (WAL) + hourly base backups, 30 d on-site, daily off-site copy; RTO/RPO < 1 h | managed Postgres or `pgbackrest`; `sched-backup-verify` |
 | Object storage | versioning on; lifecycle per prefix (05-integrations §9) | bucket policy |
 | Redis | no persistence needed except delayed jobs ⇒ AOF `everysec` | config |
-| AuditLog | 24 months | `sched-retention` |
-| Invoice + BillingPayment + CreditPackPurchase | 10 years (legal) | never deleted; survive user anonymisation and workspace purge (workspace row kept as `purged` stub with billing identity) |
-| Payment events (`InboundEvent provider=payment`) | 5 years | `sched-retention` |
+| AuditLog | 24 months | `sched-retention` (`ComplianceRetentionService`, batched) |
+| Invoice + BillingPayment + CreditPackPurchase | 10 years (legal) | never deleted; survive user anonymisation and workspace purge (workspace row kept as `purged` stub with billing identity: same id, name, `billingInfo`, locale, dates, `deletedAt` set, no owner / members; the payment proof `Upload` is kept with its payment; `WorkspaceDeletionService.deleteKeepingBilling`) |
+| Payment events (`InboundEvent` provider `chargily` / `google_play` / `app_store`) | 5 years | `sched-retention` (excluded from the 7-day raw-event purge) |
 | Messages / attachments | 12 months then purge, conversation anonymised | D28 |
-| Raw inbound events (Meta/courier) | 7 d | |
+| Raw inbound events (Meta/courier) | 7 d | `sched-retention` |
+| Reports (closed) · customer blocks (lifted) · platform blacklist (revoked) | 2 years after the decision / lift / revocation (04 §13); open reports and blocks in force are kept | `sched-retention` |
+| Meta data deletion (end customer) | on request (callback or e-mail), handled by the `meta-data-deletion` job | MSG-08 |
 | Webhook deliveries | 30 d | |
 | Deleted workspace | 30 d grace then hard purge | D31 |
 | Account deletion | 30 d grace then anonymise | ADM-16 |
-| Jobs rows/results | 90 d; export files 7 d | |
-| AiRun / AiToolCall | 24 months (analytics), tool args with PII masked after 12 months | |
+| Jobs rows/results | 90 d (finished jobs); export files 7 d | `sched-retention` (rows); bucket lifecycle (files) |
+| AiRun / AiToolCall | 24 months (analytics), tool args with PII masked after 12 months | `sched-retention` (args / results replaced by `{ redacted: true }`) |
 | Refresh tokens | 7 d + 30 d after expiry | |
+
+**End-customer data deletion by e-mail** (MSG-08; the privacy policy and the data-deletion page give the support address, because a Meta callback may match nothing — status AUCUNE DONNÉE): (1) support answers within 30 days, asks for the page / shop the person wrote to and the phone used for the order (or the conversation link the merchant can give); (2) `POST /admin/data-deletion-requests { phone, workspaceId?, reason: "Demande e-mail du <date> (ticket …)" }` with a `super_admin` / `support` account (2FA), from `/api/docs` or the Postman collection (no screen yet); without `workspaceId` the phone is matched in every shop; a page-scoped sender id can be given as `externalSenderId`; (3) the answer carries `code` and `statusUrl`: send the URL to the requester; the job runs within the minute and the page shows TERMINÉ (what was deleted / anonymised) or AUCUNE DONNÉE; (4) `GET /admin/data-deletion-requests?source=admin` lists the requests; the phone is not kept once processed, the audit row keeps it masked.
 
 Restore runbook: `docs/runbook/restore.md` (written in M0): restore DB to point in time, replay `Outbox` unprocessed rows, re-verify Meta webhook subscription, re-point `WEB_ORIGINS`.
 

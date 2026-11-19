@@ -1,6 +1,7 @@
 'use client';
 // Public status of a Meta data-deletion request — `GET /data-deletion/:code` (api-contract §3.14):
-// EN COURS (received, handled within 30 days) · TERMINÉ (data deleted) · INTROUVABLE (unknown code, 404).
+// EN COURS (received, handled within 30 days) · TERMINÉ (data deleted) · AUCUNE DONNÉE (processed, nothing matched: the
+// page says so and gives the e-mail path, MSG-08) · INTROUVABLE (unknown code, 404).
 import { useDocumentTitle } from '@/lib/document-title';
 import type { DataDeletionStatusView } from '@djaber/shared';
 import { formatDate, type AppLocale } from '@djaber/shared';
@@ -9,6 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { LocaleSwitch } from '@/components/auth/auth-card';
 import { Logo } from '@/components/shell/sidebar';
 import { ApiError } from '@/lib/api';
+import { SUPPORT_EMAIL } from '@/features/public/logic';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import { notificationsApi } from './api';
 
@@ -71,9 +73,11 @@ export function DataDeletionStatus({ code }: { code: string }) {
                 ? t('dataDeletion.pending', { date: date(q.data?.requestedAt) })
                 : status === 'done'
                   ? t('dataDeletion.done', { date: date(q.data?.completedAt) })
-                  : t('dataDeletion.notFound')}
+                  : status === 'no_data'
+                    ? t('dataDeletion.noData', { date: date(q.data?.completedAt), email: SUPPORT_EMAIL })
+                    : t('dataDeletion.notFound')}
             </p>
-            {status === 'not_found' ? null : <p className="ts-label-meta mt-4 text-text-muted">{t('dataDeletion.legalNote')}</p>}
+            {status === 'not_found' || status === 'no_data' ? null : <p className="ts-label-meta mt-4 text-text-muted">{t('dataDeletion.legalNote')}</p>}
           </>
         )}
       </Card>

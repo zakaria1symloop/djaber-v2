@@ -580,7 +580,7 @@ export function ValidateInventoryDialog({ inventoryId, onClose }: { inventoryId:
       open={!!inventoryId}
       onOpenChange={(o) => !o && !s.busy && guard.requestClose()}
       title={title}
-      description={inv ? t('inventory.validate.description', { counted: formatNumber(counted.length), gaps: gaps.length, value: signedMoney(totals.value) }) : undefined}
+      description={inv ? t('inventory.validate.description', { counted: formatNumber(counted.length), countedN: counted.length, gaps: gaps.length, value: signedMoney(totals.value) }) : undefined}
       closeLabel={t('action.close')}
       size="lg"
       footer={<DialogFooter onClose={guard.requestClose} busy={s.busy} onSubmit={() => void submit()} label={t('inventory.validate.submit', { count: gaps.length })} closeLabel={t('inventory.validate.resume')} disabled={!inv} note={t('inventory.validate.note')} />}

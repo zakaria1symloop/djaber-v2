@@ -11,6 +11,7 @@ import {
   CmsLocaleStatusValues,
   CmsStatusValues,
   CmsTypeValues,
+  DataDeletionStatusValues,
   DeletionStatusValues,
   InvoiceKindValues,
   InvoiceStatusValues,
@@ -793,6 +794,40 @@ export type DeletionRequestAdminDto = {
 };
 /** `GET /admin/deletion-requests` meta.counts */
 export type AdminDeletionCounts = { toProcess: number; blocked: number };
+
+/**
+ * MSG-08 — end-customer data deletion asked by e-mail (the Meta callback carries an app-scoped id that may match nothing):
+ * `POST /admin/data-deletion-requests { phone? | externalSenderId?, workspaceId?, reason }` (`admin.deletion.write`) runs the
+ * same `meta-data-deletion` job as the callback and answers the confirmation code + status URL to send to the requester.
+ */
+export const AdminDataDeletionCreateSchema = z
+  .object({
+    phone: str(32).optional(),
+    externalSenderId: z.string().trim().regex(/^\d{5,32}$/, 'validation.invalid').optional(),
+    workspaceId: id.optional(),
+    reason,
+    ticketId: id.optional(),
+  })
+  .strict()
+  .refine((v) => !!v.phone || !!v.externalSenderId, { message: 'validation.required', path: ['phone'] });
+export type AdminDataDeletionCreateInput = z.infer<typeof AdminDataDeletionCreateSchema>;
+export const AdminDataDeletionQuerySchema = z.object({ ...paging, status: csv(z.enum(DataDeletionStatusValues)).optional(), source: z.enum(['callback', 'admin']).optional() }).strict();
+export type AdminDataDeletionRequestDto = {
+  id: string;
+  code: string;
+  statusUrl: string;
+  source: 'callback' | 'admin';
+  status: 'pending' | 'done' | 'not_found' | 'no_data';
+  /** masked phone or sender id while pending; null once processed (the target is not kept) */
+  target: string | null;
+  workspaceId: string | null;
+  requestedAt: string;
+  completedAt: string | null;
+  affectedWorkspaces: number;
+  summary: { conversations: number; clientsAnonymised: number; clientsDeleted: number; orders: number; workspaces: number } | null;
+  /** how the app-scoped id of a callback was resolved: `ids_for_pages` (page-scoped ids found), `none`, `failed` */
+  resolution: string | null;
+};
 
 // =============================================================================================================================
 // ADM-17 viewers + impersonation

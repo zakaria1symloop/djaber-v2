@@ -51,7 +51,7 @@
  "gaps.agents.generate.discard.title": "التخلي عن هذا التحليل؟",
  "gaps.agents.generate.pickPage": "اختر الصفحة المراد تحليلها.",
  "gaps.agents.order.needsTakeOrders": "فعّل «أخذ الطلبات» أعلاه لاختيار الحقول المطلوبة.",
- "gaps.agents.rail.estimateNoUsage": "≈ {perConv} رصيد / محادثة (نص 1 · صورة 5 إن فُعّلت · صوتي 3). التقدير الشهري: — (لا محادثات هذا الشهر بعد؛ الباقة: {limit} رصيد).",
+ "gaps.agents.rail.estimateNoUsage": "≈ الأرصدة لكل محادثة: {perConv} (نص 1 · صورة 5 إن فُعّلت · صوتي 3). التقدير الشهري: — (لا محادثات هذا الشهر بعد؛ رصيد الباقة: {limit}).",
  "gaps.agents.wizard.forPage": "سيُربط هذا الوكيل بالصفحة «{page}» بمجرد إنشاء المسودة.",
  "gaps.channels.connect.atLimit": "تم بلوغ حد الصفحات ({current} / {limit}): ستُتجاهل الصفحات الجديدة المختارة على فيسبوك. يمكن إعادة ربط صفحة متصلة مسبقًا.",
  "gaps.channels.connect.upgrade": "تغيير الباقة",

@@ -6,7 +6,7 @@ import { ConversationService } from './conversation.service';
 import { DataLifecycleService } from './data-lifecycle.service';
 import { HistorySyncService } from './history-sync.service';
 import { InboundProcessor } from './inbound.processor';
-import { ChannelMessagesController, ConversationsController, DataDeletionController, DevSimulatorController, MessagesController, MetaWebhookController, SafetyController } from './messaging.controllers';
+import { ChannelMessagesController, ConversationsController, DataDeletionController, AdminDataDeletionController, DevSimulatorController, MessagesController, MetaWebhookController, SafetyController } from './messaging.controllers';
 import { MetaWebhookService } from './meta-webhook.service';
 import { OutboundSendService } from './outbound-send.service';
 import { SafetyService } from './safety.service';
@@ -19,7 +19,7 @@ import { SafetyService } from './safety.service';
  */
 @Module({
   imports: [ChannelsModule],
-  controllers: [MetaWebhookController, DataDeletionController, ConversationsController, MessagesController, ChannelMessagesController, SafetyController, DevSimulatorController],
+  controllers: [MetaWebhookController, DataDeletionController, AdminDataDeletionController, ConversationsController, MessagesController, ChannelMessagesController, SafetyController, DevSimulatorController],
   providers: [MetaWebhookService, ConversationResolver, SafetyService, OutboundSendService, ConversationService, BatchingService, InboundProcessor, HistorySyncService, DataLifecycleService],
   exports: [OutboundSendService, ConversationService, BatchingService, SafetyService, MetaWebhookService, InboundProcessor, HistorySyncService, DataLifecycleService],
 })

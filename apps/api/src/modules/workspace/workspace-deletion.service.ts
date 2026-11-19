@@ -1,7 +1,9 @@
 // FL-14 / 04 §16 / D31 — danger zone: `DELETE /workspace` schedules the deletion (status `deletion_scheduled`,
-// `deletionScheduledAt = now + 30 d`), `POST /workspace/deletion/cancel` restores it, `sched-workspace-purge` purges at the date.
+// `deletionScheduledAt = now + 30 d`), `POST /workspace/deletion/cancel` restores it, `sched-workspace-purge` purges at the date
+// and leaves a `purged` stub holding the invoices / payments kept 10 years (07-non-functional §4).
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { prisma, TenantContext, type Tx } from '@djaber/db';
+import { randomUUID } from 'node:crypto';
+import { Prisma, prisma, TenantContext, type Tx } from '@djaber/db';
 import { AuditService } from '../../core/audit/audit.service';
 import { ConfigService } from '../../core/config/config.service';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
@@ -143,7 +145,56 @@ export class WorkspaceDeletionService implements OnModuleInit {
   }
 
   /**
-   * Scheduled purge (D31): one transaction per workspace; the rows of the workspace go with it (FK cascade).
+   * 07-non-functional §4: invoices, billing payments (and their proof uploads) and credit-pack purchases are kept 10 years
+   * (Algerian accounting obligation, DEL-03) and survive the purge. They are parked on a temporary holder row, the workspace
+   * is deleted (every other row goes with it, FK cascade), a `purged` stub is re-created under the SAME id with the billing
+   * identity only (name, `billingInfo`, locale, dates — no owner, no members, `deletedAt` set: invisible to the tenant
+   * resolver and to every merchant / admin list), and the billing rows move back to it. Without billing rows nothing is kept.
+   * Returns the number of billing rows kept.
+   */
+  async deleteKeepingBilling(tx: Tx, workspaceId: string, now = new Date()): Promise<number> {
+    const full = await tx.workspace.findUniqueOrThrow({ where: { id: workspaceId } });
+    const [invoices, payments, packs] = await Promise.all([
+      tx.invoice.count({ where: { workspaceId } }),
+      tx.billingPayment.count({ where: { workspaceId } }),
+      tx.creditPackPurchase.count({ where: { workspaceId } }),
+    ]);
+    const kept = invoices + payments + packs;
+    if (!kept) {
+      await tx.workspace.delete({ where: { id: workspaceId } });
+      return 0;
+    }
+    const holder = randomUUID();
+    const proofIds = (await tx.billingPayment.findMany({ where: { workspaceId, proofUploadId: { not: null } }, select: { proofUploadId: true } })).map((p) => p.proofUploadId!);
+    const move = async (from: string, to: string) => {
+      await tx.invoice.updateMany({ where: { workspaceId: from }, data: { workspaceId: to } });
+      await tx.billingPayment.updateMany({ where: { workspaceId: from }, data: { workspaceId: to } });
+      await tx.creditPackPurchase.updateMany({ where: { workspaceId: from }, data: { workspaceId: to } });
+      if (proofIds.length) await tx.upload.updateMany({ where: { id: { in: proofIds } }, data: { workspaceId: to } });
+    };
+    const stub = (id: string, slug: string) => ({
+      id,
+      name: full.name,
+      slug,
+      locale: full.locale,
+      billingInfo: (full.billingInfo ?? undefined) as Prisma.InputJsonValue | undefined,
+      status: 'purged' as const,
+      deletionScheduledAt: full.deletionScheduledAt,
+      createdAt: full.createdAt,
+      deletedAt: now,
+    });
+    await tx.workspace.create({ data: stub(holder, `purge-hold-${holder}`) });
+    await move(workspaceId, holder);
+    await tx.workspace.delete({ where: { id: workspaceId } });
+    await tx.workspace.create({ data: stub(workspaceId, `purged-${workspaceId}`) });
+    await move(holder, workspaceId);
+    await tx.workspace.delete({ where: { id: holder } });
+    return kept;
+  }
+
+  /**
+   * Scheduled purge (D31): one transaction per workspace; the rows of the workspace go with it (FK cascade) except the
+   * billing rows kept 10 years (`deleteKeepingBilling`).
    * Safe to run twice: a purged workspace no longer matches. Returns the number of purged workspaces.
    */
   async purgeDue(now = new Date()): Promise<number> {
@@ -162,11 +213,12 @@ export class WorkspaceDeletionService implements OnModuleInit {
             const left = await prisma.channel.findMany({ where: { workspaceId: ws.id, accessToken: { not: null } }, select: { id: true } });
             for (const c of left) await unsubscribe({ channelId: c.id, workspaceId: ws.id }, { attemptsMade: 0 } as never).catch((e) => this.log.warn({ channelId: c.id, err: String(e) }, 'unsubscribe at purge failed'));
           }
+          let kept = 0;
           await prisma.$transaction(async (tx) => {
             const owner = await tx.user.findFirst({ where: { ownedWorkspaceId: ws.id } });
             await tx.user.updateMany({ where: { ownedWorkspaceId: ws.id }, data: { ownedWorkspaceId: null } });
             await tx.user.updateMany({ where: { lastWorkspaceId: ws.id }, data: { lastWorkspaceId: null } });
-            await tx.workspace.delete({ where: { id: ws.id } });
+            kept = await this.deleteKeepingBilling(tx as Tx, ws.id, now);
             if (owner && owner.status !== 'blocked' && !owner.deletedAt) {
               await this.mail.send(
                 { to: owner.email, template: 'workspace/deleted', locale: owner.locale, params: { workspaceName: ws.name }, key: `ws-deleted:${ws.id}` },
@@ -175,7 +227,8 @@ export class WorkspaceDeletionService implements OnModuleInit {
             }
           });
           await this.tenants.invalidate(ws.id);
-          await this.audit.write({ actorType: 'system', action: 'workspace.purged', entity: 'Workspace', entityId: ws.id, before: { name: ws.name } });
+          await this.audit.write({ actorType: 'system', action: 'workspace.purged', entity: 'Workspace', entityId: ws.id, before: { name: ws.name }, after: { billingRowsKept: kept } });
+          this.log.log({ workspaceId: ws.id, billingRowsKept: kept }, 'workspace purged');
           purged++;
         } catch (e) {
           this.log.error({ workspaceId: ws.id, err: String(e) }, 'workspace purge failed');

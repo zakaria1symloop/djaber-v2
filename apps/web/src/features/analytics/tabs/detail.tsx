@@ -522,7 +522,7 @@ function WilayaPanel({ rows, range }: { rows: { wilayaId: number; name: string; 
   return (
     <ChartPanel title={t('analytics.orders.map')}>
       <div className="mx-auto max-w-[420px]">
-        <WilayaMap values={values} names={names} format={(v) => t('analytics.orders.mapValue', { count: formatNumber(v) })} onSelect={(code) => router.push(`/orders?wilayaId=${code}&${range}`)} labels={{ title: t('analytics.orders.map'), low: t('analytics.map.low'), high: t('analytics.map.high'), noData: t('analytics.map.none') }} />
+        <WilayaMap values={values} names={names} format={(v) => t('analytics.orders.mapValue', { count: formatNumber(v), countN: v })} onSelect={(code) => router.push(`/orders?wilayaId=${code}&${range}`)} labels={{ title: t('analytics.orders.map'), low: t('analytics.map.low'), high: t('analytics.map.high'), noData: t('analytics.map.none') }} />
       </div>
     </ChartPanel>
   );

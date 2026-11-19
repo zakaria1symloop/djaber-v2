@@ -75,6 +75,7 @@ enum WorkspaceStatus {
   active
   suspended
   deletion_scheduled
+  purged // 07-non-functional §4: stub left by sched-workspace-purge, holds the billing rows kept 10 years
 }
 
 enum SuspendReason {
@@ -1151,6 +1152,7 @@ enum DataDeletionStatus {
   pending
   done
   not_found
+  no_data // processed, but nothing held matched the request (PUB-05 « AUCUNE DONNÉE »)
 }
 
 // --- Platform settings -------------------------------------------------------------
@@ -4027,12 +4029,26 @@ model ImpersonationSession {
 model DataDeletionRequest {
   id                 String             @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   provider           String             @default("meta")
+  /// MSG-08: `callback` (Meta signed_request, app-scoped user id) · `admin` (request received by e-mail, run from ADM-16)
+  source             String             @default("callback")
   confirmationCode   String             @unique
-  externalUserId     String
+  /// callback: the app-scoped user id of the signed_request · admin: a page-scoped sender id, when the requester gave one
+  externalUserId     String?
+  /// admin request: the customer's phone (normalised), cleared once the request is processed
+  targetPhone        String?
+  /// admin request: limited to one workspace (no FK: platform table, survives the workspace)
+  workspaceId        String?            @db.Uuid
+  requestedById      String?            @db.Uuid
+  reason             String?
   status             DataDeletionStatus @default(pending)
   requestedAt        DateTime           @default(now())
   completedAt        DateTime?
   affectedWorkspaces Int                @default(0)
+  /// what was deleted / anonymised: { senderIds, conversations, identities, clientsDeleted, clientsAnonymised, orders, sales, resolution }
+  result             Json?
+
+  @@index([provider, externalUserId, status])
+  @@index([source, requestedAt])
 }
 
 // =============================================================================

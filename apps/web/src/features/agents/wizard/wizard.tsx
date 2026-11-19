@@ -395,7 +395,9 @@ function WizardBody({ step, agent, crumb, inTunnel, exitTo, initialStart }: { st
               ? t('agents.rail.estimateValue', {
                   perConv: locale === 'en' ? String(perConv) : String(perConv).replace('.', ','),
                   conversations: formatNumber(conversations),
+                  conversationsN: conversations,
                   credits: formatNumber(monthlyCreditEstimate(draft, conversations)),
+                  creditsN: monthlyCreditEstimate(draft, conversations),
                   limit: formatNumber(creditLimit),
                 })
               : t('gaps.agents.rail.estimateNoUsage', {

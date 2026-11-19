@@ -103,7 +103,7 @@ export function ledgerReason(t: TFunction, action: string, reason: string | null
   if (!m) return reason;
   const prefix = m[1]!;
   const rest = m[2] ?? '';
-  if (prefix === 'pack') return t.has('credits.reason.pack') ? t('credits.reason.pack', { credits: formatNumber(Math.abs(credits)) }) : rest;
+  if (prefix === 'pack') return t.has('credits.reason.pack') ? t('credits.reason.pack', { credits: formatNumber(Math.abs(credits)), creditsN: Math.abs(credits) }) : rest;
   if (prefix === 'store_refund') return t.has('credits.reason.storeRefund') ? t('credits.reason.storeRefund') : null;
   if (prefix === 'upgrade') return t.has('credits.reason.upgrade') ? t('credits.reason.upgrade') : rest;
   if (prefix === 'promo' || prefix === 'referral') return t.has(`credits.reason.${prefix}`) ? t(`credits.reason.${prefix}`, { code: rest }) : rest;

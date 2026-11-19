@@ -317,7 +317,7 @@
  "admin.credits.col.uses": "Uses",
  "admin.credits.col.validity": "Validity",
  "admin.credits.description": "Purchasable packs (web: Chargily CIB / Edahabia; mobile: Google Play / App Store in-app purchase required for digital goods), promo codes and goodwill gestures.",
- "admin.credits.effect.credits": "+{count} credits",
+ "admin.credits.effect.credits": "{countN, plural, one {+{count} credit} other {+{count} credits}}",
  "admin.credits.effect.periods": "{count, plural, one {# month} other {# months}}",
  "admin.credits.effect.trial": "+{days} d trial",
  "admin.credits.history.cta": "Pricing history",

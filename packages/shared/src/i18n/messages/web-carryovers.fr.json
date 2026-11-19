@@ -34,7 +34,7 @@
   "carry.inbox.typing.someone": "Un membre",
   "carry.labels.includeRecap": "Inclure le récapitulatif interne",
   "carry.labels.onePdfPerOrder": "Un PDF par commande",
-  "carry.labels.zipFile": "{file} · {files} fichiers PDF · {pages} pages",
+  "carry.labels.zipFile": "{file} · {filesN, plural, one {{files} fichier PDF} other {{files} fichiers PDF}} · {pagesN, plural, one {{pages} page} other {{pages} pages}}",
   "carry.products.agents.viewList": "Voir dans Agents IA",
   "carry.products.chip.supplier": "Fournisseur : {name}",
   "carry.reports.filter.channel": "Canal : {value}",

@@ -185,9 +185,10 @@ export class OutboundSendService implements OnModuleInit {
       const now = new Date();
       if (o.oncePer24h && last && now.getTime() - Date.parse(last) < DAY_MS) return null;
       const ws = await tx.workspace.findUniqueOrThrow({ where: { id: conv.workspaceId }, select: { name: true, locale: true, systemMessages: true } });
-      const template = this.templateOf(key, this.localeOf(o.lang ? { context: { ...ctx, lastLanguage: o.lang } as Prisma.JsonValue } : conv, ws.locale), ws.systemMessages);
+      const locale = this.localeOf(o.lang ? { context: { ...ctx, lastLanguage: o.lang } as Prisma.JsonValue } : conv, ws.locale);
+      const template = this.templateOf(key, locale, ws.systemMessages);
       if (!template) return null;
-      const text = formatMessage(template, { shop: ws.name, ...params });
+      const text = formatMessage(template, { shop: ws.name, ...params }, locale);
       const patch: Prisma.ConversationUncheckedUpdateInput = { ...(o.patch ?? {}), context: { ...((o.patch?.context as object | undefined) ?? {}), lastSystemTextAt: { ...(ctx.lastSystemTextAt ?? {}), [key]: now.toISOString() } } as Prisma.InputJsonValue };
       const { message } = await this.store(tx, conversationId, { author: o.author ?? 'system', kind: o.kind ?? 'system', text, payload: { templateKey: key }, authorUserId: o.authorUserId ?? null }, { patch, now });
       return message;

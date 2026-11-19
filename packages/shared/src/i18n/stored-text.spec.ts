@@ -47,7 +47,8 @@ describe('stored text tokens', () => {
     const fr = getMessages('fr');
     const keys = Object.keys(fr).filter((k) => k.startsWith('stored.') || k.startsWith('actor.label.'));
     expect(keys.length).toBeGreaterThan(20);
-    const slots = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+    // the arguments of the message, plural selectors included (« {count, plural, one {…} … } », journey J14v-2)
+    const slots = (s: string) => [...new Set([...s.matchAll(/(?<!(?:zero|one|two|few|many|other|=\d+)\s*)\{(\w+)[,}]/g)].map((m) => m[1]))].sort();
     for (const l of ['ar', 'en'] as const) {
       const m = getMessages(l);
       for (const k of keys) {

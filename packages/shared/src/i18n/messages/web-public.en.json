@@ -155,5 +155,7 @@
   "public.deletion.invalid.title": "This link is not valid.",
   "public.deletion.invalid.text": "The link is incomplete or was copied wrong. Ask again to receive a new link (valid 24 h).",
   "public.pricing.cta.member": "Choose this plan",
-  "public.meta.status.description": "Real-time availability of the Djaber.ai services and incident history."
+  "public.meta.status.description": "Real-time availability of the Djaber.ai services and incident history.",
+  "dataDeletion.status.no_data": "NO DATA FOUND",
+  "dataDeletion.noData": "Request processed on {date}: no conversation or customer card linked to this Facebook account was found at the shops that use Djaber. If you wrote to a shop, e-mail us at {email} with the page name and your phone number and we will delete it by hand."
 }

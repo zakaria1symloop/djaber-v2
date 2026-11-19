@@ -155,5 +155,7 @@
   "public.deletion.invalid.title": "Ce lien n’est pas valide.",
   "public.deletion.invalid.text": "Le lien est incomplet ou mal copié. Refaites une demande pour recevoir un nouveau lien (valable 24 h).",
   "public.pricing.cta.member": "Choisir ce plan",
-  "public.meta.status.description": "Disponibilité des services Djaber.ai en temps réel et historique des incidents."
+  "public.meta.status.description": "Disponibilité des services Djaber.ai en temps réel et historique des incidents.",
+  "dataDeletion.status.no_data": "AUCUNE DONNÉE",
+  "dataDeletion.noData": "Demande traitée le {date} : aucune conversation ni fiche client liée à ce compte Facebook n'a été trouvée chez les boutiques qui utilisent Djaber. Si vous avez écrit à une boutique, écrivez-nous à {email} avec le nom de la page et votre numéro de téléphone : nous ferons la suppression à la main."
 }

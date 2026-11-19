@@ -178,6 +178,9 @@ export const SafetyPills: Story = {
         <StatusPill enumKey="DataDeletion.status" value="done">
           TERMINÉ
         </StatusPill>
+        <StatusPill enumKey="DataDeletion.status" value="no_data">
+          AUCUNE DONNÉE
+        </StatusPill>
         <StatusPill enumKey="DataDeletion.status" value="not_found">
           INTROUVABLE
         </StatusPill>

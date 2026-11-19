@@ -1,6 +1,7 @@
 // Global infrastructure module: everything in `core/` is available to every feature module without imports.
 import { Global, Module } from '@nestjs/common';
 import { AuditService } from './audit/audit.service';
+import { ComplianceRetentionService } from './audit/retention.service';
 import { TokenService } from './auth/token.service';
 import { SessionDenylistService } from './auth/session-denylist.service';
 import { ApiKeyAuthService } from './auth/api-key-auth.service';
@@ -36,6 +37,7 @@ const providers = [
   TenantResolver,
   OutboxService,
   AuditService,
+  ComplianceRetentionService,
   QueueService,
   QueueOutbox,
   StorageService,

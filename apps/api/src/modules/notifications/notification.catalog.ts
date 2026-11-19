@@ -1,7 +1,7 @@
 // 03-events-and-jobs §5.1 / 03 §15 — per `NotificationType`: its family (filter chips of NTF-01) and its web deep link
 // (the mobile link is `djaber://` + the same path). Titles and bodies are i18n keys rendered in the reader's locale.
 import { Logger } from '@nestjs/common';
-import { ERROR_MESSAGES, formatNumber, getMessages, handoffReasonOf, type AppLocale, type NotificationGroup } from '@djaber/shared';
+import { ERROR_MESSAGES, expandPlurals as expandPluralsIn, getMessages, handoffReasonOf, type AppLocale, type NotificationGroup } from '@djaber/shared';
 import type { NotificationType } from '@djaber/db';
 
 /** `stock_low` → `stock.low`, `conversation_needs_human_message` → `conversation.needs_human_message` (00-build-order §0). */
@@ -297,39 +297,7 @@ const display = (type: string, key: string, value: string | number, messages: Re
  * `{credits, plural, one {…} few {…} other {…}}` picks its branch with the reader's plural rules (`=N` first), `#` is the
  * number as displayed. A value that is not a number keeps the `other` branch.
  */
-export const expandPlurals = (template: string, data: Data, locale: AppLocale): string => {
-  let out = '';
-  let i = 0;
-  const head = /\{(\w+), plural,/g;
-  for (let m = head.exec(template); m; m = head.exec(template)) {
-    let depth = 0;
-    let j = m.index;
-    for (; j < template.length; j++) {
-      if (template[j] === '{') depth++;
-      else if (template[j] === '}' && --depth === 0) break;
-    }
-    const body = template.slice(m.index + m[0].length, j);
-    const branches = new Map<string, string>();
-    const br = /\s*(=\d+|zero|one|two|few|many|other)\s*\{/g;
-    for (let b = br.exec(body); b; b = br.exec(body)) {
-      let d = 0;
-      let k = b.index + b[0].length - 1;
-      for (; k < body.length; k++) {
-        if (body[k] === '{') d++;
-        else if (body[k] === '}' && --d === 0) break;
-      }
-      branches.set(b[1]!, body.slice(b.index + b[0].length, k));
-      br.lastIndex = k + 1;
-    }
-    const raw = valueOf(data, m[1]!);
-    const n = typeof raw === 'number' ? raw : typeof raw === 'string' && /^-?\d+$/.test(raw) ? Number(raw) : NaN;
-    const pick = Number.isNaN(n) ? branches.get('other') : (branches.get(`=${n}`) ?? branches.get(new Intl.PluralRules(locale).select(n)) ?? branches.get('other'));
-    out += template.slice(i, m.index) + (pick ?? '').replace(/#/g, Number.isNaN(n) ? String(raw ?? '') : formatNumber(n));
-    i = j + 1;
-    head.lastIndex = j + 1;
-  }
-  return out + template.slice(i);
-};
+export const expandPlurals = (template: string, data: Data, locale: AppLocale): string => expandPluralsIn(template, (k) => valueOf(data, k), locale);
 
 /**
  * Title / body in the reader's locale. A type without a body key renders an empty body. A placeholder never reaches the

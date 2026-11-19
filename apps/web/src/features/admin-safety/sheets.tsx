@@ -166,7 +166,7 @@ export function AutoRulesSheet({ open, onClose, canWrite }: { open: boolean; onC
                 <li key={r.key} className="px-3 py-2.5" data-testid="auto-rule">
                   <div className="text-[14px]">{t(`adminSafety.rule.${r.key}`, { threshold: r.threshold, days: r.windowDays })}</div>
                   <div className="mt-0.5 ts-label-micro text-text-muted">
-                    {t('adminSafety.rules.hits', { count: formatNumber(r.hits30d) })}
+                    {t('adminSafety.rules.hits', { count: formatNumber(r.hits30d), countN: r.hits30d })}
                     {r.lastRunAt ? ` · ${t('adminSafety.rules.lastRun', { date: formatDateTime(r.lastRunAt, locale) })}` : ''}
                   </div>
                 </li>

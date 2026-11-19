@@ -219,7 +219,7 @@ export function FaqSection({ agentId, readOnly, hasInsights }: { agentId: string
       title={t('agents.faq.title')}
       description={
         <>
-          {t('agents.faq.description', { max: FAQ_MAX_ENTRIES, chars: formatNumber(FAQ_MAX_CHARS) })}{' '}
+          {t('agents.faq.description', { max: FAQ_MAX_ENTRIES, chars: formatNumber(FAQ_MAX_CHARS), charsN: FAQ_MAX_CHARS })}{' '}
           <span data-testid="faq-count">
             <Ltr className="ts-label-meta text-text-muted">{t('agents.faq.count', { count: rows.length, max: FAQ_MAX_ENTRIES })}</Ltr>
           </span>

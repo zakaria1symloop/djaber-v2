@@ -3,7 +3,7 @@
 // "DLG — Orders, delivery & clients II — dialogs catalogue" (Grille des frais — actions). The client always pays this
 // grid (D15); courier rates feed cost and margin and can be copied into the grid (DLV-07, M6). 69 rows, inline edit saved on blur, ↺ back to the default
 // row, "Compléter les manquants", "Tout réinitialiser" (confirm), free-delivery rule (`Workspace.freeDeliveryThreshold`).
-import { formatMoney, formatNumber } from '@djaber/shared';
+import { formatMoney } from '@djaber/shared';
 import { Banner, Button, Card, ConfirmDialog, FeeCell, FreeDeliveryBar, IconButton, Ltr, RowSaveState, SearchInput, Skeleton, StatusPill, Switch, Td, Th, Table, Tooltip, toast, type CellState } from '@djaber/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
@@ -267,7 +267,7 @@ export function FeeGridView() {
             </Table>
             {rows.length === 0 ? <p className="px-3 py-6 text-center ts-label-meta text-text-muted">{t('fees.noMatch', { q })}</p> : null}
             <p className="border-t border-line-hairline px-3 py-2.5 ts-label-meta text-text-muted">
-              {meta ? t('fees.footer', { count: formatNumber(fees.data?.rows.length ?? 0), custom: meta.custom, inactive: meta.inactive }) : null}
+              {meta ? t('fees.footer', { count: fees.data?.rows.length ?? 0, custom: meta.custom, inactive: meta.inactive }) : null}
             </p>
           </>
         )}

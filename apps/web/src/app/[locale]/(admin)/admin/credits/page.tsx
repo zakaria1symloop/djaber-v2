@@ -94,7 +94,7 @@ export default function AdminCreditsPage() {
     );
   };
   const effect = (p: PromoCodeDto) => {
-    const v = p.kind === 'percent_discount' ? `−${p.value} %` : p.kind === 'fixed_discount' ? `−${f.money(p.value)}` : p.kind === 'credits' ? t('admin.credits.effect.credits', { count: f.num(p.value) }) : t('admin.credits.effect.trial', { days: p.value });
+    const v = p.kind === 'percent_discount' ? `−${p.value} %` : p.kind === 'fixed_discount' ? `−${f.money(p.value)}` : p.kind === 'credits' ? t('admin.credits.effect.credits', { count: f.num(p.value), countN: p.value }) : t('admin.credits.effect.trial', { days: p.value });
     const per = p.periods ? ` ${t('admin.credits.effect.periods', { count: p.periods })}` : '';
     const plans = p.planSlugs.length ? ` · ${p.planSlugs.join(' & ')}` : '';
     return `${v}${per}${plans}`;

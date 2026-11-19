@@ -59,7 +59,7 @@
   "public.pricing.billedYearly": "تُفوتر {amount} DA / سنة",
   "public.pricing.badge.featured": "الأكثر طلبًا",
   "public.pricing.cta.free": "ابدأ",
-  "public.pricing.cta.trial": "تجربة مجانية {days} يومًا",
+  "public.pricing.cta.trial": "{days, plural, one {تجربة مجانية ليوم واحد} two {تجربة مجانية ليومين} few {تجربة مجانية لـ # أيام} many {تجربة مجانية لـ # يومًا} other {تجربة مجانية لـ # يوم}}",
   "public.pricing.note": "1 رصيد = 1 رد نصي · باقات الأرصدة ابتداءً من {price} DA",
   "public.pricing.noteNoPack": "1 رصيد = 1 رد نصي",
   "public.pricing.plans": "الخطط",
@@ -155,5 +155,7 @@
   "public.deletion.invalid.title": "هذا الرابط غير صالح.",
   "public.deletion.invalid.text": "الرابط غير مكتمل أو نُسخ بشكل خاطئ. أعد الطلب لتتلقى رابطًا جديدًا (صالحًا لمدة 24 ساعة).",
   "public.pricing.cta.member": "اختيار هذه الخطة",
-  "public.meta.status.description": "توفّر خدمات Djaber.ai في الوقت الفعلي وسجل الحوادث."
+  "public.meta.status.description": "توفّر خدمات Djaber.ai في الوقت الفعلي وسجل الحوادث.",
+  "dataDeletion.status.no_data": "لا توجد بيانات",
+  "dataDeletion.noData": "عولج الطلب في {date}: لم نجد أي محادثة أو بطاقة عميل مرتبطة بحساب فيسبوك هذا لدى المتاجر التي تستعمل Djaber. إذا راسلت متجرًا، اكتب لنا على {email} مع اسم الصفحة ورقم هاتفك وسنقوم بالحذف يدويًا."
 }

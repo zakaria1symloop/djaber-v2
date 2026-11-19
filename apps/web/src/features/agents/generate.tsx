@@ -145,7 +145,7 @@ export function GenerateAgent() {
                   <Select id="generate-channel" value={channelId} onChange={(e) => setChannelId(e.target.value)} disabled={starting}>
                     {pages.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {t('agents.generate.channelOption', { name: c.name, platform: t(`channels.platform.${c.platform}`), count: formatNumber(c.counts.conversations) })}
+                        {t('agents.generate.channelOption', { name: c.name, platform: t(`channels.platform.${c.platform}`), count: formatNumber(c.counts.conversations), countN: c.counts.conversations })}
                       </option>
                     ))}
                   </Select>
@@ -188,7 +188,7 @@ export function GenerateAgent() {
           <div className="flex flex-col gap-4" data-testid="generate-review">
             <div className="flex flex-wrap items-center gap-2 ts-label-meta text-text-muted">
               <MonoChip tone="info">{t('agents.generate.step.review')}</MonoChip>
-              <Ltr>{t('agents.generate.read', { page: page?.name ?? '—', conversations: formatNumber(result.conversations), messages: formatNumber(result.messages) })}</Ltr>
+              <Ltr>{t('agents.generate.read', { page: page?.name ?? '—', conversations: formatNumber(result.conversations), conversationsN: result.conversations, messages: formatNumber(result.messages), messagesN: result.messages })}</Ltr>
             </div>
             <ReviewBlock label={t('agents.generate.summary')}>{result.summary}</ReviewBlock>
             <ReviewBlock label={t('agents.generate.languages')}>

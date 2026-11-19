@@ -193,8 +193,8 @@ export function LabelJobViewer({ jobId, open, onClose, onRetry }: { jobId: strin
               text={
                 result
                   ? zip
-                    ? t('carry.labels.zipFile', { file: result.fileName, files: formatNumber(result.files ?? result.count), pages: formatNumber(result.pages) })
-                    : t('labels.job.file', { file: result.fileName, pages: formatNumber(result.pages) })
+                    ? t('carry.labels.zipFile', { file: result.fileName, files: formatNumber(result.files ?? result.count), filesN: result.files ?? result.count, pages: formatNumber(result.pages), pagesN: result.pages })
+                    : t('labels.job.file', { file: result.fileName, pages: formatNumber(result.pages), pagesN: result.pages })
                   : undefined
               }
               actions={

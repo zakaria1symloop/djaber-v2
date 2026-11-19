@@ -2,7 +2,6 @@
 // "Étiquettes" — product label sheet (Figma "CAT-08 — Products — bulk bar + row actions menu" + product page menu; M2
 // carry-over closed in M6): `POST /products/bulk/labels { ids, copies, withPrice, includeVariants }` → 202 job (A4 sheet,
 // 3 × 8 labels: name, variant, SKU, price, QR of the SKU) followed by the job toast (Ouvrir when ready).
-import { formatNumber } from '@djaber/shared';
 import { Checkbox, Dialog, Field, FormAlert, NumberInput, toast } from '@djaber/ui';
 import { useRef, useState } from 'react';
 import { DialogFooter, refusal, useOnOpen } from '@/features/orders/dialogs/common';
@@ -57,7 +56,7 @@ export function ProductLabelsDialog({ open, ids, onClose, onStarted }: { open: b
       open={open}
       onOpenChange={(o) => !o && !busy && onClose()}
       title={t('products.labels.title')}
-      description={t('products.labels.context', { count: formatNumber(ids.length) })}
+      description={t('products.labels.context', { count: ids.length })}
       closeLabel={t('action.close')}
       size="sm"
       footer={<DialogFooter onClose={onClose} busy={busy} onSubmit={() => void submit()} label={t('products.labels.submit')} disabled={invalid || !ids.length} />}

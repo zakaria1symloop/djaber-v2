@@ -158,7 +158,7 @@ export function ImportWizard() {
   const usable = result ? importableCount(result.totals) : 0;
 
   return (
-    <AppPage back={{ href: '/products', label: t('nav.products') }} title={t('import.title')} description={t('import.subtitle', { rows: formatNumber(IMPORT_MAX_ROWS) })} permission="catalog.write">
+    <AppPage back={{ href: '/products', label: t('nav.products') }} title={t('import.title')} description={t('import.subtitle', { rows: formatNumber(IMPORT_MAX_ROWS), rowsN: IMPORT_MAX_ROWS })} permission="catalog.write">
       <Steps items={steps} label={t('import.steps.label')} />
 
       {job.isError && jobId ? (
@@ -341,7 +341,7 @@ function UploadStep({ failure, onUploaded }: { failure: { code: string; message:
         ) : (
           <>
             <div className="ts-title">{t('import.upload.title')}</div>
-            <p className="ts-label-meta max-w-md uppercase text-text-muted">{t('import.upload.limits', { rows: formatNumber(IMPORT_MAX_ROWS) })}</p>
+            <p className="ts-label-meta max-w-md uppercase text-text-muted">{t('import.upload.limits', { rows: formatNumber(IMPORT_MAX_ROWS), rowsN: IMPORT_MAX_ROWS })}</p>
             <Button variant="primary" onClick={() => input.current?.click()}>
               {t('import.upload.choose')}
             </Button>

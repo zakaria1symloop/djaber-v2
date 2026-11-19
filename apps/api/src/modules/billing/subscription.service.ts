@@ -11,7 +11,7 @@ import { prisma, TenantContext, type BillingCycle, type Invoice, type Plan, type
 import { AuditService } from '../../core/audit/audit.service';
 import { AppException } from '../../core/errors/app.exception';
 import { OutboxService } from '../../core/outbox/outbox.service';
-import { TenantResolver } from '../../core/tenancy/tenant.resolver';
+import { liveWorkspaceStatus, TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { creditPeriod, CreditService } from '../credits/credit.service';
 import { NotificationProducer } from '../notifications/notification.producer';
 import { addCycle, addMonths, currentSub, isFreePlan, isPaid, iso, lockBilling, priceOf, type SubWithPlan } from './billing.util';
@@ -365,7 +365,7 @@ export class SubscriptionService implements OnModuleInit {
     const ws = await tx.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { status: true, stockMode: true, locale: true } });
     const payload: WorkspaceSubscriptionEvent & { id: string } = {
       id: workspaceId,
-      workspace: { status: ws.status, subscription: { planSlug: s?.plan.slug ?? 'free', status: s?.status ?? 'expired', dunningStage: s?.dunningStage ?? null, currentPeriodEnd: (s?.currentPeriodEnd ?? new Date()).toISOString() } },
+      workspace: { status: liveWorkspaceStatus(ws.status), subscription: { planSlug: s?.plan.slug ?? 'free', status: s?.status ?? 'expired', dunningStage: s?.dunningStage ?? null, currentPeriodEnd: (s?.currentPeriodEnd ?? new Date()).toISOString() } },
     };
     await this.outbox.ws(tx, `ws:${workspaceId}`, 'workspace.updated', { ...payload, workspace: { ...payload.workspace, stockMode: ws.stockMode, locale: ws.locale } } as unknown as Record<string, unknown>, `workspace.updated:sub:${s?.id ?? 'none'}:${s?.status ?? ''}:${s?.dunningStage ?? ''}:${s?.planId ?? ''}:${s?.currentPeriodEnd.getTime() ?? 0}:${Date.now()}`);
   }

@@ -80,6 +80,8 @@ export const AUDIT_TARGETS: Record<string, AuditTargetSpec> = {
   PlatformProvider: { kind: 'named', load: async (i) => byId(await prisma.platformProvider.findMany({ ...where(i), select: { id: true, key: true } }), (p) => p.key) },
   // an account deletion request: the account (masked e-mail — it may be anonymised already)
   AccountDeletionRequest: { kind: 'named', load: async (i) => { const rows = await prisma.accountDeletionRequest.findMany({ ...where(i), select: { id: true, userId: true } }); const users = rows.length ? await prisma.user.findMany({ where: { id: { in: rows.map((r) => r.userId) } }, select: { id: true, email: true } }) : []; return byId(rows, (r) => { const u = users.find((x) => x.id === r.userId); return u ? maskEmail(u.email) : null; }); } },
+  // MSG-08 e-mail requests: named by their public confirmation code (the target phone is never shown)
+  DataDeletionRequest: { kind: 'named', load: async (i) => byId(await prisma.dataDeletionRequest.findMany({ ...where(i), select: { id: true, confirmationCode: true } }), (r) => r.confirmationCode) },
   PlatformInvitation: { kind: 'named', load: async (i) => byId(await prisma.platformInvitation.findMany({ ...where(i), select: { id: true, email: true } }), (x) => maskEmail(x.email)) },
   PlatformBlacklist: { kind: 'named', load: async (i) => byId(await prisma.platformBlacklist.findMany({ ...where(i), select: { id: true, phone: true } }), (x) => maskPhone(x.phone)) },
   // the id is the Meta permission scope

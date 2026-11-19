@@ -542,7 +542,19 @@ export type SafetyReportView = {
   resolvedAt: string | null;
 };
 /** `GET /data-deletion/:code` (public, MSG-08). */
-export type DataDeletionStatusView = { code: string; status: 'pending' | 'done' | 'not_found'; requestedAt: string | null; completedAt: string | null };
+/**
+ * PUB-05 / MSG-08 — public status of a data-deletion request. `not_found` = unknown code; `no_data` = processed, but no
+ * conversation, identity or customer card matched (the page says so and gives the e-mail path, never « TERMINÉ »).
+ * `summary` (done only): what was deleted / anonymised, counts across every workspace.
+ */
+export type DataDeletionStatusView = {
+  code: string;
+  status: 'pending' | 'done' | 'not_found' | 'no_data';
+  requestedAt: string | null;
+  completedAt: string | null;
+  summary?: DataDeletionSummary | null;
+};
+export type DataDeletionSummary = { conversations: number; clientsAnonymised: number; clientsDeleted: number; orders: number; workspaces: number };
 
 /** 04 §23 — is a reply still possible in the standard window? Shared by the server presenter and the web banner. */
 export const isWithin24h = (lastCustomerMessageAt: string | Date | null | undefined, now: Date = new Date()): boolean => {

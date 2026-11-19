@@ -478,7 +478,7 @@ export class ConversationService implements OnModuleInit {
     const time = order.callbackAt ? new Intl.DateTimeFormat('fr-FR', { timeZone: 'Africa/Algiers', hour: '2-digit', minute: '2-digit', hour12: false }).format(order.callbackAt) : '';
     if (key === 'reminderScheduled' && !time) throw validationError({ templateKey: 'validation.invalid' });
     const params = { number: order.number.replace(/^#/, ''), tracking: shipment?.trackingNumber ?? '', courier: shipment?.provider ?? '', reason: shipment?.failureReason ?? '', time };
-    return formatMessage(getMessages(locale)[`customer.${key}`] ?? '', params);
+    return formatMessage(getMessages(locale)[`customer.${key}`] ?? '', params, locale);
   }
 
   /** `POST /conversations/:id/messages` — stored `pending`, sent by the `meta-send` job; the reply pauses the AI (D19). */

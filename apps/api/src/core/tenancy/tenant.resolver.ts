@@ -6,6 +6,13 @@ import { RedisService } from '../redis/redis.provider';
 import { loadConfig } from '../config/config.service';
 import type { AuthUser } from '../auth/decorators';
 
+/** Status of a workspace that can still be used. A `purged` stub (07-non-functional §4: billing rows kept 10 years) is gone. */
+export type LiveWorkspaceStatus = 'active' | 'suspended' | 'deletion_scheduled';
+export const liveWorkspaceStatus = (s: LiveWorkspaceStatus | 'purged'): LiveWorkspaceStatus => {
+  if (s === 'purged') throw new AppException('NOT_FOUND');
+  return s;
+};
+
 type WorkspaceCtx = {
   workspaceId: string;
   status: 'active' | 'suspended' | 'deletion_scheduled';
@@ -72,7 +79,7 @@ export class TenantResolver {
         : NO_LIMITS;
       const out: WorkspaceCtx = {
         workspaceId: ws.id,
-        status: ws.status,
+        status: liveWorkspaceStatus(ws.status),
         deletionScheduledAt: ws.deletionScheduledAt ? ws.deletionScheduledAt.toISOString() : null,
         locale: ws.locale,
         stockMode: ws.stockMode,

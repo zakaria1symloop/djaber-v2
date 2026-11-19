@@ -21,16 +21,19 @@ import {
   type UpdateConversationInput,
 } from '@djaber/shared';
 import { prisma } from '@djaber/db';
-import { Audited, Idempotent, Public, RequirePermission, ApiScope, ApiScopes } from '../../core/auth/decorators';
+import { Audited, Idempotent, Platform, Public, RequirePermission, RequirePlatformRole, ApiScope, ApiScopes } from '../../core/auth/decorators';
 import { ConfigService } from '../../core/config/config.service';
 import { AppException, notFound } from '../../core/errors/app.exception';
 import { RawResponse } from '../../core/http/envelope.interceptor';
+import { Admin, type AdminActor } from '../admin-core/admin.util';
 import { FAKE_MEDIA_HOST } from '../meta/fake-meta.gateway';
 import { parseSignedRequest, signWebhookBody } from '../meta/meta-signature';
 import { META_GATEWAY, type MetaGateway } from '../meta/meta.gateway';
 import { ConversationService } from './conversation.service';
 import { DataLifecycleService } from './data-lifecycle.service';
 import {
+  AdminDataDeletionCreateDto,
+  AdminDataDeletionQueryDto,
   BlockConversationDto,
   BlockedWordsDto,
   ChannelMessagesQueryDto,
@@ -110,6 +113,29 @@ export class DataDeletionController {
   @Get(':code')
   status(@Param('code') code: string) {
     return this.lifecycle.status(code.slice(0, 64));
+  }
+}
+
+/**
+ * MSG-08 — end-customer data deletion asked by e-mail (ADM-16 « Demandes de suppression »): an admin runs the same deletion
+ * job as the Meta callback for a phone or a page-scoped sender id, and sends the returned status URL to the requester.
+ */
+@Controller('admin/data-deletion-requests')
+@Platform()
+export class AdminDataDeletionController {
+  constructor(private readonly lifecycle: DataLifecycleService) {}
+
+  @Get()
+  @RequirePlatformRole('admin.deletion.read')
+  list(@Query() q: AdminDataDeletionQueryDto) {
+    return this.lifecycle.listAdmin(q);
+  }
+
+  @Post()
+  @HttpCode(201)
+  @RequirePlatformRole('admin.deletion.write')
+  create(@Body() dto: AdminDataDeletionCreateDto, @Admin() a: AdminActor) {
+    return this.lifecycle.requestByAdmin(dto, a);
   }
 }
 

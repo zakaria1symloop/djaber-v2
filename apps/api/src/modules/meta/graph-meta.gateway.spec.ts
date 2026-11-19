@@ -269,6 +269,31 @@ describe('history, page info, insights (05 §1.6)', () => {
   });
 });
 
+describe('data deletion — ids_for_pages (MSG-08)', () => {
+  it('app-scoped id → page-scoped ids with the app access token, follows paging, (#100) ⇒ [], other errors thrown', async () => {
+    const next = 'https://graph.facebook.com/v21.0/123456789012345/ids_for_pages?after=abc';
+    net.reply(
+      { json: { data: [{ id: '6789012345678901', page: { id: '104455667788990', name: 'Boutique Yasmine' } }], paging: { next } } },
+      { json: { data: [{ id: '6789012345678902', page: { id: '104455667788991', name: 'Autre page' } }, { id: 'x' }] } },
+    );
+    expect(await graph.idsForPages('123456789012345')).toEqual([
+      { pageId: '104455667788990', psid: '6789012345678901' },
+      { pageId: '104455667788991', psid: '6789012345678902' },
+    ]);
+    expect(path(net.calls[0]!.url)).toBe('https://graph.facebook.com/v21.0/123456789012345/ids_for_pages');
+    expect(q(net.calls[0]!.url)).toEqual({ access_token: `${APP.appId}|${APP.appSecret}`, limit: '100' });
+    expect(net.calls[1]!.url).toBe(next);
+
+    net.reply({ status: 400, json: { error: { code: 100, message: 'Unsupported get request' } } });
+    expect(await graph.idsForPages('123456789012346')).toEqual([]);
+    net.reply({ status: 500, json: { error: { code: 2, message: 'Service temporarily unavailable' } } });
+    await expect(graph.idsForPages('123456789012347')).rejects.toMatchObject({ kind: 'unavailable', retryable: true });
+    // not a Facebook id: nothing is asked
+    expect(await graph.idsForPages('../me')).toEqual([]);
+    expect(net.calls).toHaveLength(4);
+  });
+});
+
 describe('error mapping (05 §1.4 table)', () => {
   const recipientId = '6789012345678901';
   const send = () => graph.send(page, { recipientId, message: { kind: 'text', text: 'x' }, messagingType: 'RESPONSE' });

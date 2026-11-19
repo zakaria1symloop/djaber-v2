@@ -44,7 +44,7 @@ export function BillingPage() {
 export function describe(s: Subscription, t: TFunction, locale: AppLocale): string {
   const date = formatDate(s.currentPeriodEnd, locale);
   if (s.status === 'trial') return t('billing.description.trial', { plan: s.plan.name, date: formatDate(s.trialEndsAt ?? s.currentPeriodEnd, locale) });
-  if (s.status === 'expired' || isFreePlan(s.plan)) return t('billing.description.free', { credits: formatNumber(s.plan.limits.monthlyCredits) });
+  if (s.status === 'expired' || isFreePlan(s.plan)) return t('billing.description.free', { credits: formatNumber(s.plan.limits.monthlyCredits), creditsN: s.plan.limits.monthlyCredits });
   if (s.cancelAtPeriodEnd) return t('billing.description.cancelling', { plan: s.plan.name, date });
   return t(s.provider === 'manual' ? 'billing.description.manual' : 'billing.description.paid', { plan: s.plan.name, date });
 }

@@ -30,7 +30,7 @@ import { OutboxService } from '../../core/outbox/outbox.service';
 import { QueueOutbox } from '../../core/queue/queue.outbox';
 import { canPlatform } from '../../core/rbac/permission-matrix';
 import { algiersDay } from '../../core/time/algiers';
-import { TenantResolver } from '../../core/tenancy/tenant.resolver';
+import { liveWorkspaceStatus, TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { EmailTokenService } from '../auth/email-token.service';
 import { CURRENT_STATUSES, addCycle, lockBilling, priceOf } from '../billing/billing.util';
 import { LimitService } from '../billing/limit.service';
@@ -178,7 +178,7 @@ export class AdminWorkspacesService {
         owner: owner ? { id: owner.id, firstName: owner.firstName, lastName: owner.lastName, email: owner.email, avatarUrl: owner.avatarUrl, emailVerified: !!owner.emailVerifiedAt, totpEnabled: owner.totpEnabled } : { id: '', firstName: '', lastName: '', email: '', avatarUrl: null, emailVerified: false, totpEnabled: false },
         plan: { slug: plan?.slug ?? 'free', name: plan ? pickLocal(plan.name) : freePlanName() },
         subscriptionStatus,
-        status: w.status,
+        status: liveWorkspaceStatus(w.status),
         trustLevel: w.trustLevel,
         credits: { used: f.planUsed, limit: unlimited ? -1 : f.planLimit, exhausted: !unlimited && f.planNet + f.pack <= 0, pack: Math.max(0, f.pack), packTotal: Math.max(0, f.packTotal ?? 0, f.pack) },
         pages: { count: myChans.length, platforms: [...new Set(myChans.map((c) => c.platform))] },

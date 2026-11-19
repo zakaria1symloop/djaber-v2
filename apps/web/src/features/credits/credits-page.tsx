@@ -300,7 +300,7 @@ function codedReason(raw: string, credits: number, t: TFunction): string {
   const [, prefix, rest] = m as unknown as [string, string, string];
   switch (prefix) {
     case 'pack':
-      return t('credits.reason.pack', { credits: formatNumber(Math.abs(credits)) });
+      return t('credits.reason.pack', { credits: formatNumber(Math.abs(credits)), creditsN: Math.abs(credits) });
     case 'store_refund':
       return t('credits.reason.storeRefund');
     case 'upgrade':

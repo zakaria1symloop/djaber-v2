@@ -59,7 +59,7 @@ export default function AdminWorkspacesPage() {
         options: (['trial', 'active', 'dunning', 'expired', 'cancelled'] as const).map((v) => ({ value: v, label: t(`enum.Subscription.status.${v}`) })),
       },
       { kind: 'multi', key: 'trustLevel', label: t('admin.ws.filter.trust'), options: (['new', 'standard', 'trusted', 'watch'] as const).map((v) => ({ value: v, label: t(`enum.Workspace.trustLevel.${v}`) })) },
-      { kind: 'single', key: 'inactiveDays', label: t('admin.ws.filter.activity'), options: ['7', '30', '90'].map((v) => ({ value: v, label: t('admin.ws.filter.inactive', { days: v }) })) },
+      { kind: 'single', key: 'inactiveDays', label: t('admin.ws.filter.activity'), options: ['7', '30', '90'].map((v) => ({ value: v, label: t('admin.ws.filter.inactive', { days: Number(v) }) })) },
       { kind: 'range', key: 'pages', label: t('admin.ws.col.pages'), min: 'minPages', max: 'maxPages' },
       { kind: 'range', key: 'products', label: t('admin.ws.filter.products'), min: 'minProducts', max: 'maxProducts' },
       { kind: 'range', key: 'revenue', label: t('admin.ws.filter.revenue'), min: 'minRevenue', max: 'maxRevenue', unit: 'DA' },

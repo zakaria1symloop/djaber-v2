@@ -67,7 +67,7 @@ export const textIn = (key: string, locale: string, params: Record<string, strin
   // full-test 15/11 SALES-CASH-14: a value that is itself a token without values (`§sales.cancel.reason.entry_error`, a
   // reason picked from a list) is read in the reader's language too — typed text stays as typed
   const shown = Object.fromEntries(Object.entries(params).map(([k, v]) => [k, typeof v === 'string' && v.startsWith(STORED_TEXT_MARK) && !v.includes('|') ? (textIn(v.slice(STORED_TEXT_MARK.length), l) ?? '') : v]));
-  return formatMessage(template, shown);
+  return formatMessage(template, shown, l);
 };
 
 /**

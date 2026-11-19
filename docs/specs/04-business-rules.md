@@ -140,12 +140,12 @@ Africa/Algiers for "today", periods, buckets, numbering; stored UTC. Date-only `
 | Supplier | soft |
 | Order | hard only if not `delivered` (rollback first) and no active courier Shipment (`409 DELIVERY_ORDER_ALREADY_SENT` — cancel the parcel first via `cancelParcel`, else mark returned); otherwise cancel/return |
 | Sale | hard only if unpaid (validated sales are immutable, 04 §20); Purchase hard only while `status ∈ {draft, pending}` ∧ `paymentStatus=unpaid` (`422 PURCHASE_DELETE_NOT_PENDING` otherwise; received units go through cancel/adjustment, 04 §20) |
-| Conversation | soft (Admin+); messages purged after 12 months (D28); Meta deletion = hard for that sender |
+| Conversation | soft (Admin+); messages purged after 12 months (D28); Meta deletion = hard for that sender (MSG-08: page-scoped ids resolved from the app-scoped callback id by the job; the customer card is deleted when it has no orders / sales, else anonymised « Client supprimé » with its orders / sales stripped of name, phones, address, note — figures, payments, invoices unchanged; nothing matched ⇒ `no_data`) |
 | Agent | hard; channel links removed; conversations keep `agentId` null; pending insights dismissed |
 | Channel | disconnect = unsubscribe + token cleared + status `disconnected`; conversations/orders kept; agent link removed; hard purge only with workspace |
 | Member | removed ⇒ sessions revoked (a revoked session — logout, "Déconnecter toutes les sessions" in Settings or in the admin user sheet, block, password change — also stops its access token at once: the family id is denylisted in Redis for one access-token lifetime and the API answers 401 `UNAUTHORIZED`); assignments cleared; authored notes/replies kept |
-| Workspace | soft, AI stops, channels unsubscribed, purge after 30 days (D31) |
-| Payment logs 5 y · Audit logs 2 y · Webhook deliveries 30 d · Raw inbound events 7 d |
+| Workspace | soft, AI stops, channels unsubscribed, purge after 30 days (D31); the purge keeps `Invoice`, `BillingPayment` (+ proof upload) and `CreditPackPurchase` (10 years, DEL-03) on a `purged` stub with the same id, the name and `billingInfo` only, `deletedAt` set (no tenant, in no list) |
+| Payment logs 5 y · Audit logs 2 y · Webhook deliveries 30 d · Raw inbound events 7 d — enforced by `sched-retention` (03-events §4): payment events = `InboundEvent` of `chargily` / `google_play` / `app_store` (5 y, excluded from the 7-day purge); closed reports, lifted blocks and revoked blacklist entries 2 y (§13); AI tool arguments redacted after 12 months, AI runs 24 months, finished jobs 90 d (07-non-functional §4); batched, idempotent |
 
 ## 10. Numbering
 
@@ -189,7 +189,7 @@ Sections 12–24 implement decisions D36–D71 (README Decisions, all DECIDED, c
 | Reports (`POST /safety/reports`) | `Report` acknowledged at once (toast + e-mail), `slaDueAt = createdAt + 24 h`; the reporter is notified at decision (`report.resolved`). Same reporter + same target with an open report ⇒ `409 ABUSE_REPORT_ALREADY_OPEN`; > 20 reports / day / workspace ⇒ `429 ABUSE_REPORT_RATE_LIMITED`; reporting one's own workspace ⇒ `422 ABUSE_REPORT_SELF` (prefix `ABUSE_REPORT_*`; `REPORT_*` belongs to the reports module). No automatic sanction for abusive reporting in v2. |
 | Platform auto-rules | Same phone blocked by ≥ 3 workspaces in 7 d ⇒ system `Report(type=customer)` proposing the blacklist; ≥ 3 end-customer reports of one workspace in 30 d ⇒ system `Report(type=merchant)` "revue de l'espace"; ≥ 5 reports of AI messages for one agent in 30 d ⇒ platform alert on its preset + insights. |
 | Evidence | Report extract = 10 messages around the reported one, read-only, customer phone masked `05•• •• •• 56`; "Afficher" (super admin, reason) unmasks and is audited; export of a report extract is forbidden. |
-| Retention | Reports and blocks kept 2 years (with audit); monthly export for store compliance (CSV, counts by type / decision). |
+| Retention | Reports and blocks kept 2 years (with audit) — `sched-retention` deletes a report 2 years after its decision (`actioned` / `dismissed`; open ones are kept), a block 2 years after it was lifted (a block in force is kept), a platform blacklist entry 2 years after it was revoked; monthly export for store compliance (CSV, counts by type / decision). |
 
 ## 14. Billing additions: dunning, packs, IAP, promo, plan versions (D40, D49, D57, D60, D63) `[FIG ADM-05, ADM-15, ADM-04, BIL-04]`
 

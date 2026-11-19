@@ -26,7 +26,7 @@ export function promoLabel(p: Pick<PromoValidation, 'kind' | 'value' | 'periods'
       : p.kind === 'fixed_discount'
         ? t('billing.promo.fixed', { value: formatNumber(p.value) })
         : p.kind === 'credits'
-          ? t('billing.promo.credits', { value: formatNumber(p.value) })
+          ? t('billing.promo.credits', { value: formatNumber(p.value), valueN: p.value })
           : t('billing.promo.trial', { value: p.value });
   return p.periods ? `${base} · ${t('billing.promo.periods', { count: p.periods })}` : base;
 }
@@ -121,7 +121,7 @@ export function ChangePlanDialog({ open, plan, cycle: initialCycle, sub, onClose
     try {
       const r = await redeem.mutateAsync({ code: promo.code });
       await refresh();
-      toast({ tone: 'success', message: r.creditsAdded > 0 ? t('billing.promo.redeemed.credits', { count: formatNumber(r.creditsAdded) }) : t('billing.promo.redeemed.trial', { date: r.trialEndsAt ? formatDate(r.trialEndsAt, locale) : '—' }) });
+      toast({ tone: 'success', message: r.creditsAdded > 0 ? t('billing.promo.redeemed.credits', { count: formatNumber(r.creditsAdded), countN: r.creditsAdded }) : t('billing.promo.redeemed.trial', { date: r.trialEndsAt ? formatDate(r.trialEndsAt, locale) : '—' }) });
       setPromo(null);
       setPromoText('');
     } catch (e) {
@@ -190,7 +190,7 @@ export function ChangePlanDialog({ open, plan, cycle: initialCycle, sub, onClose
               {p.mode === 'renewal'
                 ? t('billing.change.preview.renewal', { now: formatNumber(p.amountNow), date: formatDate(p.nextAt, locale) })
                 : p.prorataDays
-                ? t('billing.change.preview.prorata', { now: formatNumber(p.amountNow), days: p.prorataDays, next: formatNumber(p.nextAmount), date: formatDate(p.nextAt, locale), credits: formatNumber(p.creditsNow) })
+                ? t('billing.change.preview.prorata', { now: formatNumber(p.amountNow), days: p.prorataDays, next: formatNumber(p.nextAmount), date: formatDate(p.nextAt, locale), credits: formatNumber(p.creditsNow), creditsN: p.creditsNow })
                 : t('billing.change.preview.now', { now: formatNumber(p.amountNow), next: formatNumber(p.nextAmount), date: formatDate(p.nextAt, locale), credits: formatNumber(p.creditsNow) })}
               {p.pausedResources.length ? ` ${t('billing.change.downgrade.paused', { list: p.pausedResources.map((r) => r.name).join(', '), plan: plan.name })}` : ''}
             </EstimateBox>

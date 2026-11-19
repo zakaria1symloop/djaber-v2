@@ -80,24 +80,15 @@ export function countedNounProblems(messages: Record<string, string>): string[] 
     .filter(([, msg]) => typeof msg === 'string' && COUNT_BEFORE_NOUN.test(outsideBlocks(msg)))
     .map(([key]) => key);
 }
-/**
- * The messages written before this check that still count outside a plural block (a ratchet: a new one fails, a fixed one must leave the
- * list). Some are not counts (« {name} المحادثة »: a member's name). Each is fixed with its call site, which must pass the count as a number.
- */
-const BASELINE = JSON.parse(readFileSync(join(__dirname, 'arabic-plurals.baseline.json'), 'utf8')) as Record<string, string[]>;
-
 describe('Arabic plural forms (journey J13v-4)', () => {
   it('journey J14v-2: a count before a counted noun outside a plural block is found (« {count} وحدة »), inside one it is not', () => {
     expect(countedNounProblems({ a: '{count} وحدة', b: 'محجوز {count} وحدة (طلبات)', c: '{count, plural, one {{n} وحدة} two {وحدتان} few {{n} وحدات} many {{n} وحدةً} other {{n} وحدة}}', d: '{amount} دج', e: 'المجموع {total} · {units} وحدة' })).toEqual(['a', 'b', 'e']);
   });
 
-  it.each(readdirSync(DIR).filter((f) => f.endsWith('.ar.json')))('%s: no new count outside a plural block (journey J14v-2 ratchet)', (file) => {
+  // the 164 messages listed when the check came in were fixed with their call sites (journey J14v-2 follow-up): none is left
+  it.each(readdirSync(DIR).filter((f) => f.endsWith('.ar.json')))('%s: no count outside a plural block (journey J14v-2)', (file) => {
     const messages = JSON.parse(readFileSync(join(DIR, file), 'utf8')) as Record<string, string>;
-    const found = countedNounProblems(messages);
-    const known = new Set(BASELINE[file] ?? []);
-    expect(found.filter((k) => !known.has(k))).toEqual([]);
-    // a message fixed (or removed) leaves the baseline
-    expect([...known].filter((k) => !found.includes(k))).toEqual([]);
+    expect(countedNounProblems(messages)).toEqual([]);
   });
 
   it('reads the forms of a message', () => {

@@ -14,6 +14,7 @@ import {
   type MetaOutgoing,
   type MetaPage,
   type MetaPageInfo,
+  type MetaPageScopedId,
   type MetaPostsPage,
   type MetaProfile,
   type MetaSendInput,
@@ -326,6 +327,30 @@ export class GraphMetaGateway implements MetaGateway {
       const last = values[values.length - 1]?.value;
       return { key: String(m.name), value: typeof last === 'number' ? last : null };
     });
+  }
+
+  // --- data deletion (MSG-08) -------------------------------------------------------------------------------------------
+  /** `GET /<asid>/ids_for_pages` with the app access token; follows `paging.next` (≤ 10 pages). (#100) unknown id ⇒ `[]`. */
+  async idsForPages(appScopedUserId: string): Promise<MetaPageScopedId[]> {
+    if (!/^\d{1,32}$/.test(appScopedUserId)) return [];
+    const out: MetaPageScopedId[] = [];
+    let url: string | null = null;
+    try {
+      let b = await this.get(this.fb(`/${appScopedUserId}/ids_for_pages`), { access_token: `${this.o.appId}|${this.o.appSecret}`, limit: '100' });
+      for (let n = 0; n < 10; n++) {
+        for (const row of (b.data ?? []) as Json[]) {
+          const pageId = row.page?.id;
+          if (row.id && pageId) out.push({ pageId: String(pageId), psid: String(row.id) });
+        }
+        url = typeof b.paging?.next === 'string' && b.paging.next.startsWith(`${FB_GRAPH}/`) ? b.paging.next : null;
+        if (!url) break;
+        b = await this.call(url, { method: 'GET' });
+      }
+    } catch (e) {
+      if (e instanceof MetaError && e.code === 100) return out;
+      throw e;
+    }
+    return out;
   }
 
   async download(url: string): Promise<MetaDownload> {

@@ -16,7 +16,7 @@ export const PILL_TONES = {
   'Notification.group': { orders: 'success', queue: 'warning', ai: 'danger', stock: 'warning', parcels: 'danger', payments: 'info', pages: 'danger', credits_plan: 'warning', members: 'violet', integrations: 'info', jobs: 'neutral', moderation: 'warning', safety: 'danger', support: 'info', platform: 'neutral' },
   'CustomerBlock.source': { manual: 'neutral', auto_rule: 'warning', platform: 'danger' },
   'AgentInsight.type': { unclear: 'neutral', unknown_topic: 'info', handoff: 'warning', error: 'danger' },
-  'DataDeletion.status': { pending: 'warning', done: 'success', not_found: 'danger' },
+  'DataDeletion.status': { pending: 'warning', done: 'success', no_data: 'neutral', not_found: 'danger' },
   'Channel.status': { active: 'success', paused: 'warning', pending_review: 'warning', needs_reconnect: 'danger', disabled: 'neutral', disconnected: 'neutral' },
   'Channel.platform': { facebook: 'info', instagram: 'violet' },
   'Agent.status': { draft: 'neutral', active: 'success', paused: 'warning' },

@@ -2,7 +2,7 @@
 // Client dialogs — Figma "DLG — Orders, delivery & clients II — dialogs catalogue" (Nouveau client, Supprimer le client,
 // Tags) and "DLG — Orders & delivery — dialogs catalogue" (Fusionner les clients). Server errors render inside the open
 // dialog and the typed content is kept (AT-UX-04).
-import { CreateClientSchema, formatNumber, formatPhoneDz, UpdateClientSchema } from '@djaber/shared';
+import { CreateClientSchema, formatPhoneDz, UpdateClientSchema } from '@djaber/shared';
 import { Button, Checkbox, Combobox, Dialog, EmailInput, Field, FormAlert, Input, MergeCard, PhoneInput, TagToggle, Textarea, toast, type ComboOption, type TagToggleState } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
@@ -432,7 +432,7 @@ export function TagsDialog({ ids, known, current, onClose, onDone }: { ids: stri
       open={!!ids}
       onOpenChange={(o) => !o && !m.isPending && onClose()}
       title={t('clients.dialog.tags.title')}
-      description={t('clients.dialog.tags.context', { count: formatNumber(count) })}
+      description={t('clients.dialog.tags.context', { count })}
       closeLabel={t('action.close')}
       size="md"
       footer={

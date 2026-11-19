@@ -34,7 +34,7 @@
   "carry.inbox.typing.someone": "A member",
   "carry.labels.includeRecap": "Include the internal summary",
   "carry.labels.onePdfPerOrder": "One PDF per order",
-  "carry.labels.zipFile": "{file} · {files} PDF files · {pages} pages",
+  "carry.labels.zipFile": "{file} · {filesN, plural, one {{files} PDF file} other {{files} PDF files}} · {pagesN, plural, one {{pages} page} other {{pages} pages}}",
   "carry.products.agents.viewList": "View in AI agents",
   "carry.products.chip.supplier": "Supplier: {name}",
   "carry.reports.filter.channel": "Channel: {value}",

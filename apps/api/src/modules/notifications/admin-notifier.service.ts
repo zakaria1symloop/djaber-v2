@@ -47,7 +47,7 @@ export const renderAdminNotification = (kind: string, params: Record<string, unk
     if (v === null || v === undefined || typeof v === 'object') continue;
     values[k] = LABELLED.has(k) ? (m[`adminNotif.label.${k}.${String(v)}`] ?? String(v)) : String(v);
   }
-  const text = (suffix: 'title' | 'body') => formatMessage(m[`adminNotif.${kind}.${suffix}`] ?? m[`notification.platform.admin.${suffix}`] ?? '', values).replace(/\{\w+\}/g, '').trim();
+  const text = (suffix: 'title' | 'body') => formatMessage(m[`adminNotif.${kind}.${suffix}`] ?? m[`notification.platform.admin.${suffix}`] ?? '', values, locale).replace(/\{\w+\}/g, '').trim();
   return { title: text('title'), body: text('body') };
 };
 

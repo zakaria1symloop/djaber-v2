@@ -131,7 +131,7 @@ function ReportView({ reportKey }: { reportKey: ReportKey }) {
       const r = await reportsApi.export(reportKey, format, { ...query, lang: locale });
       if (r.kind === 'file') {
         downloadUrl(r.file.url, r.file.fileName);
-        toast({ tone: 'success', message: t('reports.export.fileReady', { format: format.toUpperCase(), count: formatNumber(r.file.rows) }) });
+        toast({ tone: 'success', message: t('reports.export.fileReady', { format: format.toUpperCase(), count: formatNumber(r.file.rows), countN: r.file.rows }) });
       } else {
         setJobId(r.jobId);
         trackJob({
@@ -291,7 +291,7 @@ function ReportView({ reportKey }: { reportKey: ReportKey }) {
           <ExportJobBanner jobId={jobId} onClose={() => setJobId(null)} />
           {view.totalRows > REPORT_CSV_IMMEDIATE_MAX_ROWS ? (
             <div data-testid="large-export-banner">
-              <Banner tone="warning">{t('reports.largeBanner', { count: formatNumber(view.totalRows) })}</Banner>
+              <Banner tone="warning">{t('reports.largeBanner', { count: formatNumber(view.totalRows), countN: view.totalRows })}</Banner>
             </div>
           ) : null}
           <ReportKpis view={view} simple={simple} />

@@ -1,6 +1,8 @@
 // Request DTOs of the messaging module: shared zod schemas (packages/shared/src/schemas/inbox.ts) wrapped for nestjs-zod.
 import { createZodDto } from 'nestjs-zod';
 import {
+  AdminDataDeletionCreateSchema,
+  AdminDataDeletionQuerySchema,
   BlockConversationSchema,
   BlockedWordsSchema,
   ChannelMessagesQuerySchema,
@@ -33,3 +35,6 @@ export class SafetyReportsQueryDto extends createZodDto(SafetyReportsQuerySchema
 export class SafetyRulesDto extends createZodDto(SafetyRulesSchema) {}
 export class BlockedWordsDto extends createZodDto(BlockedWordsSchema) {}
 export class ChannelMessagesQueryDto extends createZodDto(ChannelMessagesQuerySchema) {}
+// MSG-08 — data-deletion requests received by e-mail (ADM-16)
+export class AdminDataDeletionCreateDto extends createZodDto(AdminDataDeletionCreateSchema) {}
+export class AdminDataDeletionQueryDto extends createZodDto(AdminDataDeletionQuerySchema) {}

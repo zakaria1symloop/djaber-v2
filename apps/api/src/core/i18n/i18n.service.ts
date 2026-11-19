@@ -10,11 +10,11 @@ export class I18nService {
     if (key.startsWith('error.')) {
       const code = key.slice('error.'.length);
       const template = ERROR_MESSAGES[l][code] ?? ERROR_MESSAGES.fr[code] ?? code;
-      return formatMessage(template, params);
+      return formatMessage(template, params, l);
     }
     // copy-deck keys (`enum.Shipment.status.sent`, …) resolve from the shared messages; anything else is a literal template
     const deck = getMessages(l)[key] ?? getMessages('fr')[key];
-    return formatMessage(deck ?? key, params);
+    return formatMessage(deck ?? key, params, l);
   }
 
   /**

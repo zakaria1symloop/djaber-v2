@@ -102,7 +102,7 @@ function ReturnState({ view, data, attempts, locale }: { view: ReturnView; data:
           title={t('checkout.success.title')}
           description={
             pack
-              ? t('checkout.success.pack', { credits: formatNumber(data?.credits ?? 0) })
+              ? t('checkout.success.pack', { credits: formatNumber(data?.credits ?? 0), creditsN: data?.credits ?? 0 })
               : data?.planName && data.planUntil
                 ? t('checkout.success.plan', { plan: data.planName, date: formatDate(data.planUntil, locale) })
                 : t('checkout.success.invoice')
