@@ -138,6 +138,7 @@
   "ORDER_ALREADY_REFUNDED": "Paiement déjà remboursé.",
   "ORDER_CALLBACK_IN_PAST": "Choisissez une heure à venir.",
   "ORDER_CALL_ON_TERMINAL": "Appel enregistré ; commande inchangée.",
+  "ORDER_CONFIRMATION_REQUIRED": "Le client n'a pas encore confirmé : confirmez d'abord la commande.",
   "ORDER_DELETE_DELIVERED": "Commande livrée : non supprimable.",
   "ORDER_INSUFFICIENT_STOCK": "Stock insuffisant pour {product} ({available}).",
   "ORDER_INVALID_TRANSITION": "Passage {from} → {to} impossible.",

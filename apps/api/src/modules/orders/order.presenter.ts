@@ -1,7 +1,7 @@
 // api-contract §2, §3.7 — read models of an order (list row, detail, WS summary) and the `Actions ⌄` descriptors
 // (D42: current-state items, first = primary, forbidden ones greyed with their reason; a transition the state machine
 // refuses is left out — UX-060; LST-01 shortcuts).
-import { cashDisplayMethod, isNotOffered, ORDER_READ_ONLY_STATUSES, renderStoredTextIn, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, textIn, type ActionDescriptor, type AddressView, type CashMethodName, type ClientRefView, type OrderListItemView, type OrderStatusName, type OrderSummary, type OrderUserRef, type OrderView, type SourceBadge } from '@djaber/shared';
+import { cashDisplayMethod, communeNameOf, isNotOffered, isReliableClient, ORDER_READ_ONLY_STATUSES, renderStoredTextIn, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, textIn, type ActionDescriptor, type AddressView, type CashMethodName, type ClientRefView, type OrderListItemView, type OrderStatusName, type OrderSummary, type OrderUserRef, type OrderView, type SourceBadge } from '@djaber/shared';
 import { TenantContext, type Order, type Prisma } from '@djaber/db';
 import { can, type MerchantPermission } from '../../core/rbac/permission-matrix';
 import { thumbUrlOf } from '../catalog/product-image.util';
@@ -78,7 +78,7 @@ export const clientRefOf = (c: { id: string; name: string; phone: string | null;
   isPlaceholder: c.isPlaceholder,
   blocked,
   orderCount: c.orderCount,
-  ...(c._count && c.returnCount !== undefined ? { reliable: c._count.orders >= 1 && c.returnCount === 0 } : {}),
+  ...(c._count && c.returnCount !== undefined ? { reliable: isReliableClient({ deliveredCount: c._count.orders, returnCount: c.returnCount }) } : {}),
 });
 
 const sourceOf = (o: OrderListRow): SourceBadge => {
@@ -96,8 +96,9 @@ const sourceOf = (o: OrderListRow): SourceBadge => {
 };
 
 /** Live state of an order for the status machine (`activeShipment` = the latest parcel not cancelled / failed / returned). */
-export const stateOf = (o: Pick<Order, 'status' | 'deliveryStatus' | 'wilayaId' | 'communeId' | 'communeText' | 'address' | 'isStopdesk' | 'stopdeskId'>, activeShipment: { provider: string; status: string } | null | undefined): OrderState => ({
+export const stateOf = (o: Pick<Order, 'status' | 'deliveryStatus' | 'confirmationStatus' | 'wilayaId' | 'communeId' | 'communeText' | 'address' | 'isStopdesk' | 'stopdeskId'>, activeShipment: { provider: string; status: string } | null | undefined): OrderState => ({
   status: o.status,
+  confirmationStatus: o.confirmationStatus,
   deliveryStatus: o.deliveryStatus,
   shipmentStatus: activeShipment?.status ?? null,
   courierParcel: !!activeShipment && activeShipment.provider !== 'manual' && activeShipment.status !== 'delivered',
@@ -127,7 +128,7 @@ const act = (key: string, permission: MerchantPermission, o: { reason?: Reason; 
 const PRIMARY: Partial<Record<OrderStatusName, string>> = { new: 'confirm', confirmed: 'prepare', preparing: 'ship_manual', shipped: 'deliver' };
 
 /** `actions` of a row / the order page, in menu order (primary first). */
-export const orderActions = (o: Pick<Order, 'status' | 'deliveryStatus' | 'paymentStatus' | 'conversationId' | 'wilayaId' | 'communeId' | 'communeText' | 'address' | 'isStopdesk' | 'stopdeskId' | 'total' | 'amountPaid'>, activeShipment: { provider: string; status: string } | null | undefined, ctx: Pick<PresentCtx, 'hasCourier' | 'onlinePayment'>): ActionDescriptor[] => {
+export const orderActions = (o: Pick<Order, 'status' | 'deliveryStatus' | 'confirmationStatus' | 'paymentStatus' | 'conversationId' | 'wilayaId' | 'communeId' | 'communeText' | 'address' | 'isStopdesk' | 'stopdeskId' | 'total' | 'amountPaid'>, activeShipment: { provider: string; status: string } | null | undefined, ctx: Pick<PresentCtx, 'hasCourier' | 'onlinePayment'>): ActionDescriptor[] => {
   const state = stateOf(o, activeShipment);
   const role = TenantContext.get().role;
   const terminal = isTerminal(o.status);
@@ -238,7 +239,8 @@ export const addressOf = (
         wilayaId: o.wilayaId,
         wilayaName: wilayaName(o.wilaya, locale),
         communeId: o.communeId,
-        communeText: o.communeText ?? (o.commune ? wilayaName(o.commune, locale) : null),
+        // journey J05v-3: the display form (« Ain Sebt », the seat « Sétif »); the stored names stay the matching keys
+        communeText: communeNameOf(o, locale),
         address: o.address,
         isStopdesk: o.isStopdesk,
         stopdeskId: o.stopdeskId,

@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ALL_WILAYA_IDS, COURIER_WILAYA_COUNT, courierWilayaId, isWilayaId, WILAYA_COUNT, WILAYA_PARENT, wilayasOfCourierCode } from './geo';
+import { ALL_WILAYA_IDS, communeDisplayName, communeNameOf, COURIER_WILAYA_COUNT, courierWilayaId, isWilayaId, isWilayaSeat, WILAYA_COUNT, WILAYA_PARENT, wilayasOfCourierCode } from './geo';
 import { FeeQuoteQuerySchema } from './schemas/delivery';
 import { wilayaCode } from './validators';
 
@@ -33,5 +35,52 @@ describe('wilayas (loi 26-06: 69 wilayas)', () => {
     expect(FeeQuoteQuerySchema.safeParse({ wilayaId: '70' }).success).toBe(false);
     expect(wilayaCode.safeParse(69).success).toBe(true);
     expect(wilayaCode.safeParse(70).success).toBe(false);
+  });
+});
+
+describe('journey J05v-3 — commune display names (stored names untouched)', () => {
+  // the seeded list itself: one display name per commune, no hyphen, no double space, each seat in its wilaya's spelling
+  const seed = <T>(file: string): T => JSON.parse(readFileSync(resolve(__dirname, '../../db/seeds/data', file), 'utf8')) as T;
+  const communes = seed<{ id: number; wilayaId: number; nameFr: string; nameAr: string }[]>('communes.json');
+  const wilayas = seed<{ id: number; nameFr: string; nameAr: string }[]>('wilayas.json');
+  const byId = new Map(wilayas.map((w) => [w.id, w]));
+  it('hyphens read as spaces, spaces collapsed, the seat takes the wilaya spelling', () => {
+    expect(communeDisplayName('Ain-Sebt')).toBe('Ain Sebt');
+    expect(communeDisplayName('Bir-El-Arch')).toBe('Bir El Arch');
+    expect(communeDisplayName('Ain- Adden')).toBe('Ain Adden');
+    expect(communeDisplayName('Beni  Bouattab')).toBe('Beni Bouattab');
+    expect(communeDisplayName("Tizi N'bechar")).toBe("Tizi N'bechar");
+    expect(communeDisplayName('Setif', byId.get(19))).toBe('Sétif');
+    expect(communeDisplayName('Tizi-Ouzou', byId.get(15))).toBe('Tizi Ouzou');
+    expect(communeDisplayName('El Eulma', byId.get(19))).toBe('El Eulma');
+    expect(communeDisplayName('سطيف', byId.get(19))).toBe('سطيف');
+    expect(communeDisplayName('  ')).toBeNull();
+    expect(communeDisplayName(null)).toBeNull();
+  });
+  it('over the full seeded list: no hyphen / double space shown, and the display name folds to the stored name (every matcher still finds it)', () => {
+    const fold = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    for (const c of communes) {
+      const shown = communeDisplayName(c.nameFr, byId.get(c.wilayaId))!;
+      expect(shown).not.toMatch(/-|\s{2}/);
+      expect(fold(shown)).toBe(fold(c.nameFr));
+      const w = byId.get(c.wilayaId)!;
+      // Arabic: unchanged, or the wilaya's own spelling for its seat (« أفلو » in the wilaya « آفلو »)
+      expect([c.nameAr.replace(/\s+/g, ' ').trim(), w.nameAr]).toContain(communeDisplayName(c.nameAr, w));
+    }
+    // the 19 seats spelled without their accents in the data (« Setif », « Bejaia », « Ghardaia »…)
+    const seats = communes.filter((c) => isWilayaSeat(c.nameFr, byId.get(c.wilayaId)?.nameFr));
+    expect(seats.length).toBeGreaterThanOrEqual(19);
+    for (const c of seats) expect(communeDisplayName(c.nameFr, byId.get(c.wilayaId))).toBe(byId.get(c.wilayaId)!.nameFr);
+  });
+  it('communeNameOf: typed text first, the reader’s language; isWilayaSeat ignores accents, hyphens and spaces', () => {
+    const sétif = byId.get(19)!;
+    expect(communeNameOf({ communeText: null, commune: { nameFr: 'Ain-Sebt', nameAr: 'عين السبت' }, wilaya: sétif }, 'fr')).toBe('Ain Sebt');
+    expect(communeNameOf({ communeText: null, commune: { nameFr: 'Ain-Sebt', nameAr: 'عين السبت' }, wilaya: sétif }, 'ar')).toBe('عين السبت');
+    expect(communeNameOf({ communeText: 'setif', commune: null, wilaya: sétif }, 'fr')).toBe('Sétif');
+    expect(communeNameOf({ communeText: null, commune: null, wilaya: sétif }, 'fr')).toBeNull();
+    expect(isWilayaSeat('Setif', 'Sétif')).toBe(true);
+    expect(isWilayaSeat('Tizi-Ouzou', 'Tizi Ouzou')).toBe(true);
+    expect(isWilayaSeat('El Eulma', 'Sétif')).toBe(false);
+    expect(isWilayaSeat(null, 'Sétif')).toBe(false);
   });
 });

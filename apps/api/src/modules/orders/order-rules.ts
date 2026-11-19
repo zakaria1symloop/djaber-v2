@@ -13,6 +13,8 @@ export type OrderState = {
   /** an active shipment created at a courier (provider ≠ manual) */
   courierParcel: boolean;
   hasAddress: boolean;
+  /** `Order.confirmationStatus` — journey J05v-1: a `new` order the customer was not reached for cannot skip its confirmation */
+  confirmationStatus?: string;
 };
 
 const DAY = 86_400_000;
@@ -20,8 +22,17 @@ export const isTerminal = (s: OrderStatusName) => (ORDER_TERMINAL_STATUSES as re
 const ADMIN_UP: Role[] = ['owner', 'admin'];
 
 /**
+ * journey J05v-1 (04 §1.2): the confirmation states where the shop called and did not reach the customer (`no_answer`) or
+ * waits to call them back (`callback`). From them, a `new` order cannot jump to preparing / shipped / delivered — the
+ * merchant confirms it first (an answered call, or « Confirmer », logged in the history). A never-called order (`pending`)
+ * keeps the direct path of the matrix (the customer confirmed outside the call log), logged as a confirmation.
+ */
+export const UNREACHED_CONFIRMATION: readonly string[] = ['no_answer', 'callback'];
+const SKIPS_CONFIRMATION: readonly OrderStatusName[] = ['preparing', 'shipped', 'delivered'];
+
+/**
  * Can `actor` move the order to `to`? `null` = allowed. `system` = courier sync / AI (no role check).
- * Order of the checks: shipping a closed order → terminal → matrix → pickup guard → role → address.
+ * Order of the checks: shipping a closed order → terminal → matrix → pickup guard → unconfirmed guard → role → address.
  * UX-064: `→ shipped` (« Marquer expédiée (livraison propre) ») on a delivered / cancelled / returned order is refused with
  * the readable `DELIVERY_ORDER_<STATUS>` (same reason as the courier send), never « Passage delivered → shipped ».
  */
@@ -37,6 +48,7 @@ export const checkTransition = (o: OrderState, to: OrderStatusName, actor: { rol
   if (o.status === 'shipped' && to === 'confirmed' && o.shipmentStatus && !['pending', 'sent'].includes(o.shipmentStatus)) {
     return { code: 'ORDER_INVALID_TRANSITION', params: { from: o.status, to } };
   }
+  if (o.status === 'new' && SKIPS_CONFIRMATION.includes(to) && !actor.system && UNREACHED_CONFIRMATION.includes(o.confirmationStatus ?? '')) return { code: 'ORDER_CONFIRMATION_REQUIRED' };
   // `delivered → returned` is Admin+ (06 §9; courier sync may do it too)
   if (o.status === 'delivered' && to === 'returned' && !actor.system && !ADMIN_UP.includes(actor.role)) return { code: 'FORBIDDEN' };
   if ((ORDER_ADDRESS_REQUIRED_FOR as readonly string[]).includes(to) && !o.hasAddress) return { code: 'ORDER_ADDRESS_REQUIRED' };
@@ -105,7 +117,6 @@ export const transitionPlan = (from: OrderStatusName, to: OrderStatusName, o: { 
       break;
     case 'preparing':
       plan.stamps.push('confirmedAt');
-      plan.confirmationStatus = from === 'new' ? 'confirmed' : null;
       plan.clearCallback = true;
       break;
     case 'shipped':
@@ -147,8 +158,12 @@ export const transitionPlan = (from: OrderStatusName, to: OrderStatusName, o: { 
     default:
       break;
   }
-  // a new order confirmed (or prepared / shipped / delivered straight away) takes its reserved stock now
-  if (from === 'new' && (to === 'confirmed' || to === 'preparing' || to === 'shipped' || to === 'delivered')) plan.stock = 'commit';
+  // a new order confirmed (or prepared / shipped / delivered straight away) takes its reserved stock now; journey J05v-3: the
+  // direct path is the merchant's confirmation too — a shipped / delivered order kept « À APPELER » (only preparing set it)
+  if (from === 'new' && (to === 'confirmed' || to === 'preparing' || to === 'shipped' || to === 'delivered')) {
+    plan.stock = 'commit';
+    plan.confirmationStatus = 'confirmed';
+  }
   return plan;
 };
 
@@ -245,6 +260,14 @@ export const itemsChange = (before: ItemSnapshot[], after: ItemSnapshot[]): { fr
   }
   return from.length ? { from: from.join(', '), to: to.join(', ') } : null;
 };
+
+/**
+ * journey J05v-3: the readable form of a stored « Articles » value — a line that left the order is stored « Foulard ×0 » on
+ * the `to` side (« Foulard ×1 → Foulard ×0 »), a new one « ×0 » on the `from` side; they read « Foulard (retiré) » /
+ * « Foulard (ajouté) » in the reader's language (`word`). Rows already stored are read the same way.
+ */
+export const itemsHistoryText = (v: string | null, side: 'from' | 'to', word: (side: 'from' | 'to', name: string) => string): string | null =>
+  v ? v.replace(/(^|, )([^,]+?) ×0(?=, |$)/g, (_m, sep: string, name: string) => `${sep}${word(side, name)}`) : v;
 
 /** 04 §21: what is left to collect — nothing on a cancelled / returned order (full-test ORDERS-11, journey 16/11 J05-10). */
 export const remainingOf = (o: { status: string; total: number; amountPaid: number }): number => (o.status === 'cancelled' || o.status === 'returned' ? 0 : Math.max(0, o.total - o.amountPaid));

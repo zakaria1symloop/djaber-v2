@@ -3,7 +3,7 @@
 // last sync + "Actualiser" (actualisation… / à jour / limite 1 / 5 min `TRACKING_SYNC_RATE_LIMITED` / `TRACKING_NOT_FOUND`
 // / `COURIER_UNAVAILABLE`), timeline (source courier / Djaber member), the parcel actions, and the alternative panels
 // Annulée / Livrée ✓ (COD encaissé) / Retournée (stock réintégré). Opened from a row (`?sheet=<shipmentId>`).
-import { formatDate, formatMoney, formatPhoneDz, renderStoredText, type AppLocale } from '@djaber/shared';
+import { formatDate, formatMoney, formatPhoneDz, isWilayaSeat, renderStoredText, type AppLocale } from '@djaber/shared';
 import { ActionsMenu, Banner, Button, Ltr, Pill, SideSheet, Skeleton, StatusPill, toast, TrackingSyncBar, TrackingTimeline, type SheetNav, type SyncState, type TrackingStep } from '@djaber/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { QueryError } from '@/components/global-states';
@@ -192,7 +192,7 @@ export function TrackingPanel({ shipmentId, onClose, nav, parcels }: { shipmentI
                 ) : null}
               </dd>
               <dt className="ts-label-micro self-center text-text-muted">{t('common.address')}</dt>
-              <dd className="min-w-0">{[s.address.wilayaName, s.address.communeText, s.address.isStopdesk ? (s.address.stopdeskName ?? t('common.stopdesk')) : s.address.address].filter(Boolean).join(' · ')}</dd>
+              <dd className="min-w-0">{[s.address.wilayaName, isWilayaSeat(s.address.communeText, s.address.wilayaName) ? null : s.address.communeText, s.address.isStopdesk ? (s.address.stopdeskName ?? t('common.stopdesk')) : s.address.address].filter(Boolean).join(' · ')}</dd>
               <dt className="ts-label-micro self-center text-text-muted">{t('tracking.panel.cod')}</dt>
               <dd>
                 <Ltr className="!inline">{formatMoney(s.codAmount)}</Ltr>

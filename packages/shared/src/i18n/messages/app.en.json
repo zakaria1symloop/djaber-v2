@@ -6798,6 +6798,8 @@
  "billing.cycle.yearlyDiscount": "Yearly −{pct} %",
  "orders.history.field.total": "Total",
  "orders.history.field.discount": "Discount",
+ "orders.history.itemAdded": "{name} (added)",
+ "orders.history.itemRemoved": "{name} (removed)",
  "orders.page.unitPriceOf": "Unit price of {name}",
  "orders.page.itemsMoneyNote": "Unit prices, discount and delivery fee can be changed (Admin): a fee typed here replaces the grid fee.",
  "orders.page.itemsMoneyLocked": "Prices, discount and delivery fee: an Admin or the owner can change them.",

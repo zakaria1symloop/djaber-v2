@@ -4,7 +4,7 @@
 // "GLOBAL — Offline — stale data (Orders)". L6 list: KPI strip following the filters (`GET /orders/stats`), status tabs
 // = the status filter (with counts), search, quick filters, filter panel, sort, density, columns, pagination 25/50/100,
 // selection + bulk bar with per-item results, row `Actions ⌄` from the server descriptors — all of it in the URL.
-import { formatDate, formatMoney, formatNumber, type AppLocale } from '@djaber/shared';
+import { confirmationShown, formatDate, formatMoney, formatNumber, type AppLocale } from '@djaber/shared';
 import { ActionsMenu, Button, buttonClass, Card, cn, DataTable, KpiTile, KpiTileSkeleton, Ltr, OrderNumber, TableViewMenu, type Column } from '@djaber/ui';
 import { ShoppingBag } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -283,7 +283,7 @@ export function OrdersList() {
                   <Money value={r.total} className="ts-label-meta" />
                   <OrderStatusPill status={r.status} />
                   {/* journey J14-8 b: « مؤكَّد · مؤكَّد » — a confirmed call says nothing the status pill does not (no column headers on a card) */}
-                  {r.confirmationStatus !== 'confirmed' ? <ConfirmationPill row={r} /> : null}
+                  {r.confirmationStatus !== 'confirmed' && confirmationShown(r) ? <ConfirmationPill row={r} /> : null}
                 </div>
               </Link>
               {menu(r)}

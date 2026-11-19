@@ -4,10 +4,12 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Prisma, prisma, TenantContext, type Client, type Tx } from '@djaber/db';
 import {
+  communeNameOf,
   CLIENT_TAGS_SUGGESTIONS_MAX,
   type ClientAddressInput,
   type ClientListItemView,
   type ClientMergePreview,
+  clientPillOf,
   type ClientPill,
   type ClientQuality,
   type ClientsQuery,
@@ -137,13 +139,9 @@ export class ClientService implements OnModuleInit {
     return [{ [field]: dir }, { id: 'desc' }];
   }
 
+  /** one rule with the orders list and the orders export (shared `clientPillOf`, journey J05v-2) */
   private pill(c: Pick<Client, 'isPlaceholder' | 'riskLevel' | 'orderCount' | 'returnCount'>, blocked: boolean, delivered: number): ClientPill | null {
-    if (blocked) return 'blocked';
-    if (c.riskLevel === 'high') return 'risk';
-    if (c.isPlaceholder) return 'placeholder';
-    if (delivered >= 1 && c.returnCount === 0) return 'reliable';
-    if (c.orderCount === 0) return 'unknown';
-    return null;
+    return clientPillOf({ blocked, riskLevel: c.riskLevel, isPlaceholder: c.isPlaceholder, orderCount: c.orderCount, returnCount: c.returnCount, deliveredCount: delivered });
   }
 
   private async listViews(rows: ClientRow[], index: BlockIndex): Promise<ClientListItemView[]> {
@@ -294,7 +292,7 @@ export class ClientService implements OnModuleInit {
         wilayaId: a.wilayaId,
         wilayaName: locale === 'ar' ? a.wilaya.nameAr : a.wilaya.nameFr,
         communeId: a.communeId,
-        communeText: a.communeText ?? (a.commune ? (locale === 'ar' ? a.commune.nameAr : a.commune.nameFr) : null),
+        communeText: communeNameOf(a, locale),
         address: a.address,
         isStopdesk: a.isStopdesk,
         stopdeskId: a.stopdeskId,
@@ -307,7 +305,7 @@ export class ClientService implements OnModuleInit {
                 wilayaId: lastOrderAddress.wilaya.id,
                 wilayaName: locale === 'ar' ? lastOrderAddress.wilaya.nameAr : lastOrderAddress.wilaya.nameFr,
                 communeId: lastOrderAddress.communeId,
-                communeText: lastOrderAddress.communeText ?? (lastOrderAddress.commune ? (locale === 'ar' ? lastOrderAddress.commune.nameAr : lastOrderAddress.commune.nameFr) : null),
+                communeText: communeNameOf(lastOrderAddress, locale),
                 address: lastOrderAddress.address,
                 isStopdesk: lastOrderAddress.isStopdesk,
                 stopdeskId: lastOrderAddress.stopdeskId,

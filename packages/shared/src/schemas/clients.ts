@@ -19,6 +19,24 @@ export const CLIENT_LAST_ORDER_FILTERS = ['lt30', '30_90', 'gt90', 'never'] as c
 /** Pills of the clients list `[FIG REF Component sheet]`: FIABLE · INCONNU · RISQUE · BLOQUÉ · PLACEHOLDER. */
 export const CLIENT_PILLS = ['reliable', 'unknown', 'risk', 'blocked', 'placeholder'] as const;
 export type ClientPill = (typeof CLIENT_PILLS)[number];
+/** FIABLE (journey J09-9): at least one delivered order and no return. One rule for every screen and export (journey J05v-2). */
+export const isReliableClient = (c: { deliveredCount: number; returnCount: number }): boolean => c.deliveredCount >= 1 && c.returnCount === 0;
+/** Clients list / card pill: blocked > risk > placeholder > reliable > unknown (no order) > none. */
+export const clientPillOf = (c: { blocked: boolean; riskLevel: string; isPlaceholder: boolean; orderCount: number; returnCount: number; deliveredCount: number }): ClientPill | null => {
+  if (c.blocked) return 'blocked';
+  if (c.riskLevel === 'high') return 'risk';
+  if (c.isPlaceholder) return 'placeholder';
+  if (isReliableClient(c)) return 'reliable';
+  if (c.orderCount === 0) return 'unknown';
+  return null;
+};
+/**
+ * RISQUE column of the order rows (orders list `RiskPill`, order page, orders export — journey J05v-2: the export wrote the
+ * raw « normal » as « FIABLE » for every client): blocked > high (the order's snapshot or the client's current level) >
+ * reliable > none (« — »).
+ */
+export const orderRiskPill = (o: { blocked: boolean; orderRisk: string; clientRisk: string; reliable: boolean }): 'blocked' | 'risk' | 'reliable' | null =>
+  o.blocked ? 'blocked' : o.orderRisk === 'high' || o.clientRisk === 'high' ? 'risk' : o.reliable ? 'reliable' : null;
 
 // --- primitives -------------------------------------------------------------------------------------------------------
 const id = z.string({ required_error: 'validation.required', invalid_type_error: 'validation.id' }).uuid('validation.id');

@@ -3,7 +3,7 @@
 // 1 · VÉRIFIER (contact, region, items, totals, last calls; address missing ⇒ blocked ORDER_ADDRESS_REQUIRED) →
 // 2 · APPEL (CallResult + note; `picked_up` confirms the order server-side) → 3 · RÉSULTAT (status result, Préparer,
 // Envoyer au transporteur enabled only with a courier — server descriptor — , Fermer). Also "Résultat de l'appel".
-import { formatMoney, formatPhoneDz } from '@djaber/shared';
+import { formatMoney, formatPhoneDz, isWilayaSeat } from '@djaber/shared';
 import { Button, ChecksNote, Dialog, FormAlert, Ltr, StepChips, toast, Tooltip, type StepChip } from '@djaber/ui';
 import { Phone } from 'lucide-react';
 import { useState } from 'react';
@@ -25,7 +25,7 @@ function ContactCard({ order }: { order: Order }) {
   const t = useT();
   const misses = unansweredCalls(order);
   const a = order.address;
-  const region = a ? [a.wilayaName, a.communeText, a.isStopdesk ? (a.stopdeskName ?? t('common.stopdesk')) : a.address].filter(Boolean).join(' · ') : t('orders.confirm.noAddress');
+  const region = a ? [a.wilayaName, isWilayaSeat(a.communeText, a.wilayaName) ? null : a.communeText, a.isStopdesk ? (a.stopdeskName ?? t('common.stopdesk')) : a.address].filter(Boolean).join(' · ') : t('orders.confirm.noAddress');
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 rounded-card bg-ink-raised px-4 py-3" data-testid="confirm-contact">
       <div className="min-w-0">
@@ -231,6 +231,12 @@ export function ConfirmOrderDialog({ order, open, onClose, onDone, onAddress, on
           <div className="flex flex-col gap-2" data-testid="confirm-result">
             <p className="text-[14px] font-medium">{resultText}</p>
             {fresh?.status === 'confirmed' ? <p className="ts-label-meta text-text-muted" data-testid="confirm-next-step">{t(autoSent ? 'orders.confirm.result.autoSend' : 'orders.confirm.result.next')}</p> : null}
+            {/* journey J05v-1: after « Sans réponse » the order is still to confirm — « Préparer » is greyed and says why */}
+            {prepare.present && !prepare.enabled && prepare.reason ? (
+              <p className="ts-label-micro !normal-case text-text-muted" data-testid="confirm-prepare-reason">
+                {t('action.prepare')} : {prepare.reason}
+              </p>
+            ) : null}
             {send.present && !autoSent && !send.enabled && send.reason ? <p className="ts-label-micro !normal-case text-text-muted">{t('action.sendToCourier')} : {send.reason}</p> : null}
             {fresh?.confirmationStatus === 'no_answer' && fresh.callAttempts >= ORDER_NO_ANSWER_PROPOSAL_AT ? <p className="ts-label-meta text-accent-starred">{t('orders.call.thirdNoAnswer')}</p> : null}
           </div>

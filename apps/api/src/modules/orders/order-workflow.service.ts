@@ -152,10 +152,13 @@ export class OrderWorkflowService implements OnModuleInit {
     const updated = await tx.order.update({ where: { id: o.id }, data });
     await tx.orderStatusHistory.create({ data: { orderId: o.id, field: 'status', from: o.status, to, actorType: opt.actor.type, actorId: opt.actor.id, reason: [opt.reason, opt.note].filter(Boolean).join(' · ') || null, effectiveAt: opt.effectiveAt ?? null } });
     if (paid && paid.paymentStatus !== o.paymentStatus) await tx.orderStatusHistory.create({ data: { orderId: o.id, field: 'paymentStatus', from: o.paymentStatus, to: paid.paymentStatus, actorType: opt.actor.type, actorId: opt.actor.id } });
+    // journey J05v-1: a confirmation made by the status change (« Confirmer », or a `new` order moved on directly) is said in
+    // the history — « Confirmation : À appeler → Confirmée » with its actor — never written silently
+    if (data.confirmationStatus && data.confirmationStatus !== o.confirmationStatus) await tx.orderStatusHistory.create({ data: { orderId: o.id, field: 'confirmationStatus', from: o.confirmationStatus, to: data.confirmationStatus as string, actorType: opt.actor.type, actorId: opt.actor.id } });
     if (plan.aggregates) await this.effects.recomputeClient(tx, o.clientId);
 
     // outbox
-    const changed = ['status', ...(paid ? ['paymentStatus', 'amountPaid'] : []), ...(plan.deliveryStatus ? ['deliveryStatus'] : [])];
+    const changed = ['status', ...(paid ? ['paymentStatus', 'amountPaid'] : []), ...(plan.deliveryStatus ? ['deliveryStatus'] : []), ...(data.confirmationStatus && data.confirmationStatus !== o.confirmationStatus ? ['confirmationStatus'] : [])];
     await this.effects.emitUpdated(tx, updated, changed);
     await this.effects.webhook(tx, 'order.status_changed', o.id, { from: o.status, to, actorType: opt.actor.type, reason: opt.reason ?? null });
     for (const event of plan.webhooks) await this.effects.webhook(tx, event, o.id, event === 'order.delivered' ? { deliveredAt: at.toISOString() } : event === 'order.shipped' ? { shipment: { id: active?.id ?? null, provider: active?.provider ?? 'manual', trackingNumber: opt.trackingNumber ?? null } } : {});

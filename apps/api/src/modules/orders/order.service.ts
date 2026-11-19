@@ -4,7 +4,7 @@
 // Side effects (stock, cash, aggregates, outbox) only through OrderEffects (04 §3).
 import { formatSlipAmount } from './print/order-slip.pdf';
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { AI_ORDER_DUPLICATE_WINDOW_MIN, formatMoney, ORDER_READ_ONLY_STATUSES, storedText, type CreateOrderInput, type OrderDraft, type OrderListItemView, type OrdersExportQuery, type OrdersQuery, type OrderView, type UpdateOrderInput } from '@djaber/shared';
+import { AI_ORDER_DUPLICATE_WINDOW_MIN, communeDisplayName, communeNameOf, confirmationShown, formatMessage, formatMoney, getMessages, isAppLocale, isReliableClient, isWilayaSeat, ORDER_READ_ONLY_STATUSES, orderRiskPill, storedText, type CreateOrderInput, type OrderDraft, type OrderListItemView, type OrdersExportQuery, type OrdersQuery, type OrderView, type UpdateOrderInput } from '@djaber/shared';
 import { prisma, TenantContext, type Order, type Prisma, type Tx } from '@djaber/db';
 import { AuditService } from '../../core/audit/audit.service';
 import { ConfigService } from '../../core/config/config.service';
@@ -26,7 +26,7 @@ import { ExportService } from '../jobs/export.service';
 import { contextOf, type ConversationContext } from '../messaging/messaging.presenter';
 import { SafetyService } from '../messaging/safety.service';
 import { OrderEffects, type Actor } from './order-effects.service';
-import { checkOrderedAt, checkPaymentPatch, isTerminal, itemsChange, orderTotals, remainingOf, type Refusal, type StockLine } from './order-rules';
+import { checkOrderedAt, checkPaymentPatch, isTerminal, itemsChange, itemsHistoryText, orderTotals, remainingOf, type Refusal, type StockLine } from './order-rules';
 import { ACTIVE_SHIPMENT, hasDeliveryAddress, ORDER_DETAIL_INCLUDE, ORDER_LIST_INCLUDE, parseAddressSnapshot, presentOrder, presentOrderListItem, type PresentCtx } from './order.presenter';
 import { orderOrderBy, orderStats, orderWhere, type OrderFilters } from './order.query';
 
@@ -158,6 +158,10 @@ export class OrderService implements OnModuleInit {
     // no history value is ever a localized date
     const readable = (v: string | null) => (v ? (actorNames.get(v) ?? v) : v);
     for (const h of o.history) if (h.field === 'assigneeId' && !historyText.has(h.id)) historyText.set(h.id, { from: readable(h.from), to: readable(h.to) });
+    // journey J05v-3: a removed line reads « Foulard (retiré) », not « Foulard ×0 »
+    const m = getMessages(isAppLocale(ctx.locale) ? ctx.locale : 'fr');
+    const lineWord = (side: 'from' | 'to', name: string) => formatMessage(m[side === 'to' ? 'orders.history.itemRemoved' : 'orders.history.itemAdded'] ?? '{name}', { name });
+    for (const h of o.history) if (h.field === 'items') historyText.set(h.id, { from: itemsHistoryText(h.from, 'from', lineWord), to: itemsHistoryText(h.to, 'to', lineWord) });
     const stopdeskName = o.isStopdesk && o.stopdeskId ? stopdeskText(desks.get(o.stopdeskId)) : null;
     return presentOrder(o, { payments, actorNames, feeExplanation: explanation, stopdeskName, historyText }, ctx);
   }
@@ -185,7 +189,11 @@ export class OrderService implements OnModuleInit {
     const text = (a: (typeof all)[number] | null) => {
       if (!a) return null;
       const where = a.isStopdesk ? [relay, a.stopdeskId ? (desks.get(a.stopdeskId)?.name ?? null) : null].filter(Boolean).join(' ') : a.address;
-      return [name(a.wilayaId !== null ? w.get(a.wilayaId) : undefined) ?? (a.wilayaId !== null ? String(a.wilayaId) : null), a.communeText ?? name(a.communeId !== null ? c.get(a.communeId) : undefined), where].filter(Boolean).join(' · ') || null;
+      const wilaya = a.wilayaId !== null ? w.get(a.wilayaId) : undefined;
+      const wName = name(wilaya) ?? (a.wilayaId !== null ? String(a.wilayaId) : null);
+      // journey J05v-3: the commune's display form, written once when it is the wilaya's seat (« Sétif · Setif »)
+      const commune = communeDisplayName(a.communeText ?? name(a.communeId !== null ? c.get(a.communeId) : undefined), wilaya);
+      return [wName, isWilayaSeat(commune, wName) ? null : commune, where].filter(Boolean).join(' · ') || null;
     };
     for (const p of parsed) out.set(p.id, { from: text(p.from), to: text(p.to) });
     return out;
@@ -585,12 +593,15 @@ export class OrderService implements OnModuleInit {
   private async exportTable(q: OrdersExportQuery, locale: 'fr' | 'ar' | 'en') {
     const { scope, format: _f, columns, includeItems, courierFormat, sort, ...filters } = q;
     const where = scope === 'all' ? {} : orderWhere(filters);
-    const rows = await prisma.order.findMany({ where, orderBy: orderOrderBy(sort), take: 100_000, include: { items: { orderBy: { id: 'asc' } }, wilaya: true, commune: true, channel: { select: { name: true } }, shipments: { where: { status: { in: [...ACTIVE_SHIPMENT] } }, take: 1, orderBy: { createdAt: 'desc' } } } });
+    const rows = await prisma.order.findMany({ where, orderBy: orderOrderBy(sort), take: 100_000, include: { items: { orderBy: { id: 'asc' } }, wilaya: true, commune: true, channel: { select: { name: true } }, shipments: { where: { status: { in: [...ACTIVE_SHIPMENT] } }, take: 1, orderBy: { createdAt: 'desc' } }, client: { select: { riskLevel: true, returnCount: true, phone: true, _count: { select: { orders: { where: { status: 'delivered' } } } } } } } });
     const h = EXPORT_HEADERS[locale] ?? EXPORT_HEADERS.fr;
     type R = (typeof rows)[number] & { line?: (typeof rows)[number]['items'][number] };
     const flat: R[] = includeItems ? rows.flatMap((o) => o.items.map((line) => ({ ...o, line }))) : rows;
     const wilaya = (r: R) => (r.wilaya ? (locale === 'ar' ? r.wilaya.nameAr : r.wilaya.nameFr) : '');
-    const commune = (r: R) => r.communeText ?? (r.commune ? (locale === 'ar' ? r.commune.nameAr : r.commune.nameFr) : '');
+    // journey J05v-3: the commune as the screens show it (« Ain Sebt », the seat « Sétif »); the ZR Express file keeps the
+    // stored name — the courier's import matches it
+    const commune = (r: R) => communeNameOf(r, locale) ?? '';
+    const courierCommune = (r: R) => r.communeText ?? r.commune?.nameFr ?? '';
     if (courierFormat === 'zrexpress') {
       // ZR Express bulk-import layout (one parcel per row, COD = remaining)
       return {
@@ -602,7 +613,7 @@ export class OrderService implements OnModuleInit {
           { header: 'Tel 1', value: (r: R) => r.clientPhone },
           { header: 'Tel 2', value: (r: R) => r.clientPhone2 ?? '' },
           { header: 'Wilaya', value: (r: R) => r.wilaya?.code ?? '' },
-          { header: 'Commune', value: (r: R) => commune(r) },
+          { header: 'Commune', value: (r: R) => courierCommune(r) },
           { header: 'Adresse', value: (r: R) => r.address ?? '' },
           { header: 'Produit', value: (r: R) => r.items.map((i) => `${i.productName}${i.variantName ? ` ${i.variantName}` : ''} x${i.quantity}`).join(', ') },
           { header: 'Total', value: (r: R) => r.total - r.amountPaid },
@@ -612,6 +623,12 @@ export class OrderService implements OnModuleInit {
       };
     }
     const desks = await stopdeskLabels(rows.map((r) => (r.isStopdesk ? r.stopdeskId : null)));
+    const blocks = columns === 'all' ? await this.safety.index() : null;
+    const RISK_LABEL = { blocked: ['enum.Client', 'blocked'], risk: ['enum.Client.riskLevel', 'high'], reliable: ['enum.Client.riskLevel', 'normal'] } as const;
+    const riskCell = (r: R) => {
+      const pill = orderRiskPill({ blocked: !!blocks?.has({ clientId: r.clientId, channelId: '', externalSenderId: '' }, r.client.phone ?? r.clientPhone), orderRisk: r.riskLevel, clientRisk: r.client.riskLevel, reliable: isReliableClient({ deliveredCount: r.client._count.orders, returnCount: r.client.returnCount }) });
+      return pill ? exportLabel(locale, RISK_LABEL[pill][0], RISK_LABEL[pill][1]) : '';
+    };
     const standard = [
       { header: h.number, value: (r: R) => r.number },
       { header: h.date, value: (r: R) => exportDateTime(r.orderedAt) },
@@ -634,7 +651,8 @@ export class OrderService implements OnModuleInit {
       { header: h.remaining, value: (r: R) => remainingOf(r) },
       { header: h.paymentMethod, value: (r: R) => exportLabel(locale, 'enum.Order.paymentMethod', r.paymentMethod) },
       { header: h.status, value: (r: R) => exportLabel(locale, 'enum.Order.status', r.status) },
-      { header: h.confirmation, value: (r: R) => exportLabel(locale, 'enum.Order.confirmationStatus', r.confirmationStatus, { attempts: r.callAttempts, time: '' }) },
+      // journey J05v-3: no « À APPELER » on a cancelled / returned order (shared `confirmationShown`, as the orders list)
+      { header: h.confirmation, value: (r: R) => (confirmationShown(r) ? exportLabel(locale, 'enum.Order.confirmationStatus', r.confirmationStatus, { attempts: r.callAttempts, time: '' }) : '') },
       { header: h.delivery, value: (r: R) => exportLabel(locale, ['enum.Order.deliveryStatus', 'enum.Shipment.status'], r.deliveryStatus) },
       { header: h.courier, value: (r: R) => exportLabel(locale, 'couriers.provider', r.shipments[0]?.provider) },
       { header: h.tracking, value: (r: R) => r.shipments[0]?.trackingNumber ?? '' },
@@ -660,7 +678,9 @@ export class OrderService implements OnModuleInit {
             // journey J05r-8: merchant words, as the standard columns (it wrote « unpaid », « normal », « unreachable »)
             { header: h.payment, value: (r: R) => exportLabel(locale, 'enum.Order.paymentStatus', r.paymentStatus) },
             { header: h.calls, value: (r: R) => r.callAttempts },
-            { header: h.risk, value: (r: R) => exportLabel(locale, 'enum.Client.riskLevel', r.riskLevel) },
+            // journey J05v-2: the RISQUE pill of the orders list (blocked > risk > reliable > « — »), not the raw level — « normal »
+            // only means « not risky » and was written « FIABLE » for every client
+            { header: h.risk, value: (r: R) => riskCell(r) },
             { header: h.notes, value: (r: R) => r.notes ?? '' },
             { header: h.cancelReason, value: (r: R) => exportLabel(locale, 'enum.Order.cancelReason', r.cancelReason) },
           ]

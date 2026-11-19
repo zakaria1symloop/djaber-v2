@@ -44,6 +44,14 @@ export const ORDER_SORTS = ['orderedAt', 'total', 'status', 'clientName'] as con
 export const ORDER_TERMINAL_STATUSES: readonly OrderStatusName[] = ['cancelled', 'returned'];
 /** Statuses whose order fields are read-only except notes (ORD-06). */
 export const ORDER_READ_ONLY_STATUSES: readonly OrderStatusName[] = ['delivered', 'cancelled', 'returned'];
+/**
+ * journey J05v-3: the CONFIRMATION cell of an order — « À APPELER » (`pending`) is a call still to make, so it only shows
+ * while the order is `new`; « RAPPEL » (`callback`) only on an open order. A cancelled / returned / delivered (or moved-on)
+ * order without a call result shows nothing (« — »). Results (confirmed, no_answer, rejected, wrong_number) always show.
+ * Used by the orders list, the order page and the orders export.
+ */
+export const confirmationShown = (o: { status: string; confirmationStatus: string }): boolean =>
+  o.confirmationStatus === 'pending' ? o.status === 'new' : o.confirmationStatus === 'callback' ? !(ORDER_READ_ONLY_STATUSES as readonly string[]).includes(o.status) : true;
 
 /**
  * 04 §1.2 status matrix (+ D14 self-delivery). `shipped → confirmed` is the "Confirmée (retour arrière)" of 04 §21,

@@ -3,7 +3,7 @@
 // and the same body on the full page `/clients/[id]`. Metrics tiles, merged / placeholder / blocked notices, contact,
 // default address, channels, recent orders, counter sales ("DA dépensés" counts them too — tester report 2026-10-19
 // UX-003), conversations, "Nouvelle commande pour {prénom}".
-import { formatDate, formatMoney, formatNumber, formatPhoneDz, type AppLocale } from '@djaber/shared';
+import { formatDate, formatMoney, formatNumber, formatPhoneDz, isWilayaSeat, type AppLocale } from '@djaber/shared';
 import { ActionsMenu, Banner, Button, buttonClass, MetricTile, SheetSection, SideSheet, Skeleton, StatusPill, TagChips, type MenuAction } from '@djaber/ui';
 import { Ltr } from '@djaber/ui';
 import type { ReactNode } from 'react';
@@ -54,7 +54,7 @@ export function ClientDetailBody({ client: c, pillInHeader = false }: { client: 
   const address = c.addresses.find((a) => a.isDefault) ?? c.addresses[0] ?? null;
   const merged = c.mergedFrom[0];
   const addressText = address
-    ? [`${address.wilayaName} (${String(address.wilayaId).padStart(2, '0')})`, address.communeText, address.address, address.isStopdesk ? (address.stopdeskName ?? t('common.stopdesk')) : t('clients.sheet.atHome')].filter(Boolean).join(' · ')
+    ? [`${address.wilayaName} (${String(address.wilayaId).padStart(2, '0')})`, isWilayaSeat(address.communeText, address.wilayaName) ? null : address.communeText, address.address, address.isStopdesk ? (address.stopdeskName ?? t('common.stopdesk')) : t('clients.sheet.atHome')].filter(Boolean).join(' · ')
     : null;
   return (
     <div className="flex flex-col gap-5" data-testid="client-detail">

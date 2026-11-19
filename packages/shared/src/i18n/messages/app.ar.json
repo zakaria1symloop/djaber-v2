@@ -6798,6 +6798,8 @@
  "billing.cycle.yearlyDiscount": "سنوي −{pct} %",
  "orders.history.field.total": "المجموع",
  "orders.history.field.discount": "الخصم",
+ "orders.history.itemAdded": "{name} (أُضيف)",
+ "orders.history.itemRemoved": "{name} (أُزيل)",
  "orders.page.unitPriceOf": "سعر الوحدة لـ {name}",
  "orders.page.itemsMoneyNote": "يمكن تعديل أسعار الوحدات والخصم ورسوم التوصيل (المسؤول): الرسوم المُدخلة هنا تحل محل رسوم الشبكة.",
  "orders.page.itemsMoneyLocked": "الأسعار والخصم ورسوم التوصيل: يعدّلها المسؤول أو المالك.",

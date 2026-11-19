@@ -1,7 +1,7 @@
 // AT-ORD-01 (table-driven over every (from, to) pair of 04 §1.2 + D14 + §21), AT-ORD-02 COD plan, AT-ORD-03 / 18 / 25
 // call outcomes, AT-ORD-22 payment rules, the 04 §3 effects plan of every allowed transition, totals and stock deltas.
 import { derivePaymentStatus, ORDER_STATUS_TRANSITIONS, type OrderStatusName } from '@djaber/shared';
-import { itemsChange, remainingOf } from './order-rules';
+import { itemsChange, itemsHistoryText, remainingOf } from './order-rules';
 import { formatMessage } from '@djaber/shared';
 import { callPlan, checkEffectiveAt, checkOrderedAt, checkPaymentPatch, checkTransition, codPlan, orderTotals, paymentLinkRefusal, recordPaymentRefusal, refundRefusal, stockDeltas, transitionPlan, type OrderState } from './order-rules';
 
@@ -249,5 +249,36 @@ describe('journey 16/11 J05-5 / J05-10 / J05-17 — history of the lines, remain
     expect(formatMessage('déjà payé ({paid} DA) :', { paid: 3000 })).toBe('déjà payé (3 000 DA) :');
     expect(formatMessage('({paid} دج)', { paid: 12500 })).toBe('(12 500 دج)');
     expect(formatMessage('{count} lignes en {year}', { count: 1500, year: 2026 })).toBe('1500 lignes en 2026');
+  });
+});
+
+describe('journey J05v-1 — an order the customer was not reached for is confirmed before it moves on (04 §1.2)', () => {
+  it.each(['no_answer', 'callback'])('new + %s ⇒ preparing / shipped / delivered refused ORDER_CONFIRMATION_REQUIRED; confirm and cancel stay open', (confirmationStatus) => {
+    const o = state('new', { confirmationStatus });
+    for (const to of ['preparing', 'shipped', 'delivered'] as const) expect(checkTransition(o, to, { role: 'owner' })).toEqual({ code: 'ORDER_CONFIRMATION_REQUIRED' });
+    expect(checkTransition(o, 'confirmed', { role: 'operator' })).toBeNull();
+    expect(checkTransition(o, 'cancelled', { role: 'operator' })).toBeNull();
+    // courier sync / system moves are not the merchant skipping a call
+    expect(checkTransition(o, 'delivered', { role: undefined, system: true })).toBeNull();
+  });
+  it('a never-called (pending) or confirmed new order keeps the direct path; a confirmed order with a later unanswered call prepares', () => {
+    for (const confirmationStatus of ['pending', 'confirmed', undefined]) expect(checkTransition(state('new', { confirmationStatus }), 'preparing', { role: 'owner' })).toBeNull();
+    expect(checkTransition(state('confirmed', { confirmationStatus: 'no_answer' }), 'preparing', { role: 'owner' })).toBeNull();
+  });
+  it('leaving new for a live status confirms the order (journey J05v-3: a shipped / delivered order kept « À APPELER »)', () => {
+    for (const to of ['confirmed', 'preparing', 'shipped', 'delivered'] as const) expect(transitionPlan('new', to, { paymentStatus: 'unpaid', hasActiveShipment: false }).confirmationStatus).toBe('confirmed');
+    expect(transitionPlan('new', 'cancelled', { paymentStatus: 'unpaid', hasActiveShipment: false }).confirmationStatus).toBeNull();
+    expect(transitionPlan('confirmed', 'preparing', { paymentStatus: 'unpaid', hasActiveShipment: false }).confirmationStatus).toBeNull();
+  });
+});
+
+describe('journey J05v-3 — « Articles » history: a removed line reads « retiré », a new one « ajouté »', () => {
+  const word = (side: 'from' | 'to', name: string) => `${name} (${side === 'to' ? 'retiré' : 'ajouté'})`;
+  it('stored « ×0 » segments are read in words; the other lines and prices are kept', () => {
+    expect(itemsHistoryText('QA J05v Foulard soie ×0', 'to', word)).toBe('QA J05v Foulard soie (retiré)');
+    expect(itemsHistoryText('Robe kabyle ×3, Foulard (Bleu) ×0', 'to', word)).toBe('Robe kabyle ×3, Foulard (Bleu) (retiré)');
+    expect(itemsHistoryText('Foulard (Bleu) ×0, Robe kabyle ×2', 'from', word)).toBe('Foulard (Bleu) (ajouté), Robe kabyle ×2');
+    expect(itemsHistoryText('Robe kabyle ×20 · 4 500 DA', 'to', word)).toBe('Robe kabyle ×20 · 4 500 DA');
+    expect(itemsHistoryText(null, 'to', word)).toBeNull();
   });
 });

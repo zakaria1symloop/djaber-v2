@@ -138,6 +138,7 @@
   "ORDER_ALREADY_REFUNDED": "Payment already refunded.",
   "ORDER_CALLBACK_IN_PAST": "Pick a future time.",
   "ORDER_CALL_ON_TERMINAL": "Call logged; order unchanged.",
+  "ORDER_CONFIRMATION_REQUIRED": "The customer has not confirmed yet: confirm the order first.",
   "ORDER_DELETE_DELIVERED": "Delivered order can't be deleted.",
   "ORDER_INSUFFICIENT_STOCK": "Insufficient stock for {product} ({available}).",
   "ORDER_INVALID_TRANSITION": "Transition {from} → {to} not allowed.",

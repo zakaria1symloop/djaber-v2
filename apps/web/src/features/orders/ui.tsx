@@ -1,7 +1,7 @@
 'use client';
 // Display pieces of the order screens: the pills of Order / Shipment (colours from the `StatusPill` map, labels from
 // `enum.*`), the SOURCE cell, the client cell and the risk pill.
-import { formatDate, formatPhoneDz, type AppLocale } from '@djaber/shared';
+import { confirmationShown, formatDate, formatPhoneDz, orderRiskPill, type AppLocale } from '@djaber/shared';
 import { Ltr, SourceTag, StatusPill } from '@djaber/ui';
 import { useLocaleCode, useT } from '@/lib/i18n';
 import type { CallResult, ClientRef, OrderListItem, OrderStatus, PaymentStatus, SourceBadge } from './contracts';
@@ -18,8 +18,10 @@ export function OrderStatusPill({ status }: { status: OrderStatus }) {
   );
 }
 
-export function ConfirmationPill({ row }: { row: Pick<OrderListItem, 'confirmationStatus' | 'callAttempts' | 'callbackAt'> }) {
+/** journey J05v-3: « — » for a call state that no longer applies (« À APPELER » on a cancelled order — shared `confirmationShown`). */
+export function ConfirmationPill({ row }: { row: Pick<OrderListItem, 'status' | 'confirmationStatus' | 'callAttempts' | 'callbackAt'> }) {
   const t = useT();
+  if (!confirmationShown(row)) return <span className="text-text-muted">—</span>;
   const { key, params } = confirmationPillParams(row);
   return (
     <StatusPill enumKey="Order.confirmationStatus" value={row.confirmationStatus} className={PILL}>
@@ -59,21 +61,23 @@ export function CallResultPill({ result }: { result: CallResult }) {
 
 /** RISQUE for a high-risk client, FIABLE by the client list's rule (≥ 1 delivered order, no return — journey J09-9), nothing otherwise. */
 /** `risk` = the order's snapshot (`Order.riskLevel` at creation); the client's current level wins when it is high (e.g. a later "faux numéro"). */
+/** One rule with the orders export (shared `orderRiskPill`, journey J05v-2). */
 export function RiskPill({ client, risk }: { client: Pick<ClientRef, 'orderCount' | 'blocked' | 'riskLevel' | 'reliable'>; risk: 'normal' | 'high' }) {
   const t = useT();
-  if (client.blocked)
+  const pill = orderRiskPill({ blocked: client.blocked, orderRisk: risk, clientRisk: client.riskLevel, reliable: !!client.reliable });
+  if (pill === 'blocked')
     return (
       <StatusPill enumKey="Client.riskLevel" value="high" className={PILL}>
         {t('enum.Client.blocked')}
       </StatusPill>
     );
-  if (risk === 'high' || client.riskLevel === 'high')
+  if (pill === 'risk')
     return (
       <StatusPill enumKey="Client.riskLevel" value="high" className={PILL}>
         {t('enum.Client.riskLevel.high')}
       </StatusPill>
     );
-  if (client.reliable)
+  if (pill === 'reliable')
     return (
       <StatusPill enumKey="Client.riskLevel" value="normal" className={PILL}>
         {t('enum.Client.riskLevel.normal')}

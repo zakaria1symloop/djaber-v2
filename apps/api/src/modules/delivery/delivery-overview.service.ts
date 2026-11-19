@@ -3,7 +3,7 @@
 // `GET /delivery/overview` (KPI tiles, tab counts, the first failures and "Sans mouvement" rows, per-courier figures —
 // also the data source of Analytics › Livraison, DLV-11). Raw SQL with the workspace filter written explicitly.
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { DELIVERY_TABS, failureHandledAs, isNotOffered, ORDER_SEND_CLOSED_STATUSES, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, type ActionDescriptor, type DeliveryOverviewView, type DeliveryRowView, type DeliveryTab, type ShipmentsQuery } from '@djaber/shared';
+import { communeNameOf, DELIVERY_TABS, failureHandledAs, isNotOffered, ORDER_SEND_CLOSED_STATUSES, sendClosedCode, SHIPMENT_STALE_AFTER_DAYS, type ActionDescriptor, type DeliveryOverviewView, type DeliveryRowView, type DeliveryTab, type ShipmentsQuery } from '@djaber/shared';
 import { Prisma, prisma, TenantContext, type Shipment } from '@djaber/db';
 import { AppException } from '../../core/errors/app.exception';
 import { RedisService } from '../../core/redis/redis.provider';
@@ -191,7 +191,7 @@ export class DeliveryOverviewService implements OnModuleInit {
         total: o.total,
         remaining: Math.max(0, o.total - o.amountPaid),
         wilaya: o.wilaya ? { id: o.wilaya.id, name: locale === 'ar' ? o.wilaya.nameAr : o.wilaya.nameFr } : null,
-        communeName: o.communeText ?? (o.commune ? (locale === 'ar' ? o.commune.nameAr : o.commune.nameFr) : null),
+        communeName: communeNameOf(o, locale),
         isStopdesk: o.isStopdesk,
         confirmedAt: o.confirmedAt?.toISOString() ?? null,
         labelPrintedAt: o.labelPrintedAt?.toISOString() ?? null,

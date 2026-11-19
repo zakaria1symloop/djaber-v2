@@ -1,7 +1,7 @@
 'use client';
 // Blocks of the order page (Figma "ORD-06 — Order page — new"): CLIENTE (inline contact edit), ARTICLES (+ totals,
 // quantity edit while editable), PAIEMENT, HISTORIQUE, APPELS, NOTES INTERNES (LIVRAISON: features/delivery/order-block).
-import { formatDate, formatDateTime, formatMoney, formatPhoneDz, type AppLocale } from '@djaber/shared';
+import { formatDate, formatDateTime, formatMoney, formatPhoneDz, isWilayaSeat, type AppLocale } from '@djaber/shared';
 import { Button, DetailRows, Field, FormAlert, IconButton, Input, Ltr, MoneyInput, MonoChip, OrderBlock, OrderTimeline, PhoneInput, QtyStepper, StatusPill, Textarea, TotalsRows, Tooltip, type TimelineItem } from '@djaber/ui';
 import { ExternalLink, Trash2 } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -134,7 +134,7 @@ export function ClientBlock({
             {a ? (
               <>
                 <div className="mt-1 text-[13px]">
-                  {a.wilayaName} (<Ltr>{String(a.wilayaId).padStart(2, '0')}</Ltr>){a.communeText ? ` · ${a.communeText}` : ''}
+                  {a.wilayaName} (<Ltr>{String(a.wilayaId).padStart(2, '0')}</Ltr>){a.communeText && !isWilayaSeat(a.communeText, a.wilayaName) ? ` · ${a.communeText}` : ''}
                 </div>
                 <div className="text-[13px] text-text-secondary">{a.isStopdesk ? (a.stopdeskName ?? '—') : (a.address ?? '—')}</div>
                 <MonoChip className="mt-1.5">{a.isStopdesk ? t('common.stopdesk') : t('orders.page.home')}</MonoChip>

@@ -6798,6 +6798,8 @@
  "billing.cycle.yearlyDiscount": "Annuel −{pct} %",
  "orders.history.field.total": "Total",
  "orders.history.field.discount": "Remise",
+ "orders.history.itemAdded": "{name} (ajouté)",
+ "orders.history.itemRemoved": "{name} (retiré)",
  "orders.page.unitPriceOf": "Prix unitaire de {name}",
  "orders.page.itemsMoneyNote": "Prix unitaires, remise et frais de livraison modifiables (Admin) : des frais saisis ici remplacent ceux de la grille.",
  "orders.page.itemsMoneyLocked": "Prix, remise et frais de livraison : modifiables par un Admin ou le propriétaire.",

@@ -2,7 +2,7 @@
 // /orders/[id]/print — "Bon de commande A5 (ORD-09)" of Figma "DLV-06 / ORD-09 — Labels viewer (…) + order print
 // preview A5": HTML slip printed with `@page { size: A5 }` (two copies on one A4 with "2 par page"), options with /
 // without prices and the slip language; the server PDF (`GET /orders/:id/print` → signed URL) is the secondary action.
-import { formatDateTime, formatMoney, formatPhoneDz, isRtl, type AppLocale } from '@djaber/shared';
+import { formatDateTime, formatMoney, formatPhoneDz, isRtl, isWilayaSeat, type AppLocale } from '@djaber/shared';
 // the slip language may differ from the screen's: the whole catalogue of the three languages, only on this route (PUBLIC-04)
 import { getMessages } from '@djaber/shared/messages';
 import { A5OrderSlip, Button, Card, Checkbox, Field, FormAlert, Select, Skeleton, toast, type A5SlipProps } from '@djaber/ui';
@@ -28,8 +28,8 @@ type Shop = { name: string; logoUrl?: string | null; phone?: string | null; addr
  */
 export function slipAddress(a: Order['address'], tr: (key: string, params?: Record<string, string | number>) => string): string {
   if (!a) return '—';
-  const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
-  const commune = a.communeText && fold(a.communeText) !== fold(a.wilayaName) ? a.communeText : null;
+  // journey J05v-3: the shared seat rule (accents, hyphens and spaces ignored — « Tizi Ouzou » / « Tizi-Ouzou »)
+  const commune = a.communeText && !isWilayaSeat(a.communeText, a.wilayaName) ? a.communeText : null;
   const where = a.isStopdesk ? tr('orders.print.relay', { name: a.stopdeskName ?? '—' }) : a.address ? tr('orders.print.homeAt', { address: a.address }) : tr('orders.print.home');
   return [a.wilayaName, commune, where].filter(Boolean).join(' · ');
 }

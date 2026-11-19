@@ -1,5 +1,5 @@
 // GSH-03 / 05-integrations §3 — the 18 cells (A…R) of an order row, and the GSH-06 filter. Pure: unit-tested.
-import { SHEETS_COLUMNS, type SheetsFilters } from '@djaber/shared';
+import { communeDisplayName, SHEETS_COLUMNS, type SheetsFilters } from '@djaber/shared';
 import type { SheetCell } from './sheets.gateway';
 
 const OFFSET_MS = 60 * 60_000; // Africa/Algiers = UTC+1, no DST
@@ -40,7 +40,8 @@ export const sheetsRowOf = (o: SheetsOrder, label: Labeler): SheetCell[] => {
     client: o.clientName,
     phone: `'${o.clientPhone}`,
     wilaya: o.wilaya?.nameFr ?? '',
-    commune: o.commune?.nameFr ?? o.communeText ?? '',
+    // journey J05v-3: the display form of the screens (the stored name stays the matching key)
+    commune: communeDisplayName(o.commune?.nameFr ?? o.communeText, o.wilaya) ?? '',
     address: o.isStopdesk ? `Stop-desk ${o.stopdeskName ?? ''}`.trim() : (o.address ?? ''),
     items: o.items.map((i) => `${i.productName}${i.variantName ? ` ${i.variantName}` : ''} ×${i.quantity}`).join('; '),
     subtotal: o.subtotal,

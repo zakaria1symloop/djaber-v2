@@ -138,6 +138,7 @@
   "ORDER_ALREADY_REFUNDED": "تم استرداد الدفع مسبقًا.",
   "ORDER_CALLBACK_IN_PAST": "اختر وقتًا لاحقًا.",
   "ORDER_CALL_ON_TERMINAL": "تم تسجيل المكالمة؛ الطلب دون تغيير.",
+  "ORDER_CONFIRMATION_REQUIRED": "لم يؤكد العميل الطلب بعد: أكّد الطلب أولًا.",
   "ORDER_DELETE_DELIVERED": "طلب مُسلَّم: لا يمكن حذفه.",
   "ORDER_INSUFFICIENT_STOCK": "المخزون غير كافٍ لـ {product} ({available}).",
   "ORDER_INVALID_TRANSITION": "الانتقال {from} → {to} غير ممكن.",

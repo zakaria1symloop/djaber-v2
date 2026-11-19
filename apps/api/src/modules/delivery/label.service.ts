@@ -4,6 +4,7 @@
 // `labels-merge` (one merged PDF; orders without a created parcel skipped with `SHIPMENT_NOT_CREATED`; optional
 // "bordereau imprimé" stamp on `Order.labelPrintedAt`; M11: `onePdfPerOrder` ⇒ a ZIP of one PDF per order, `includeRecap`
 // ⇒ an internal recap first). Also the M2 product label sheet (`POST /products/bulk/labels`).
+import { communeNameOf } from '@djaber/shared';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { zipSync } from 'fflate';
 import { PDFDocument } from 'pdf-lib';
@@ -101,7 +102,7 @@ export class LabelService implements OnModuleInit {
         phone: o.clientPhone,
         phone2: o.clientPhone2,
         wilaya: o.wilaya ? `${o.wilaya.code} · ${name(o.wilaya)}` : null,
-        commune: o.communeText ?? name(o.commune),
+        commune: communeNameOf(o, lang),
         address: o.address,
         isStopdesk: o.isStopdesk,
         stopdeskName: s.stopdeskId ? (stopdesks.get(s.stopdeskId)?.name ?? null) : null,

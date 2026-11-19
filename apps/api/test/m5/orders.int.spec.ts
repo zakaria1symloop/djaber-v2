@@ -664,3 +664,76 @@ describe('roles and tenancy (AT-AUTH-11 for the M5 routes)', () => {
     expect(view.actions.find((a: any) => a.key === 'send_courier')).toMatchObject({ enabled: false, reasonCode: 'DELIVERY_ORDER_NOT_CONFIRMED' });
   });
 });
+
+describe('journey J05v (19/11): unreached customer, export risk / confirmation, commune names, removed line', () => {
+  const xlsxOf = async (owner: Actor, query: string) => {
+    const res = await owner.get(`/orders/export?${query}`).set('Accept-Language', 'fr').expect(202);
+    await drain(app, owner.workspaceId);
+    const url = new URL((await jobOf(owner, res.body.data.jobId)).resultUrl);
+    const { default: request } = await import('supertest');
+    const { readXlsx } = await import('../../src/modules/jobs/xlsx');
+    const file = await request(app.http())
+      .get(`${url.pathname}${url.search}`)
+      .buffer(true)
+      .parse((r, cb) => {
+        const chunks: Buffer[] = [];
+        r.on('data', (c: Buffer) => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    const [head, ...rows] = readXlsx(file.body as Buffer);
+    return { col: (row: string[], name: string) => row[head!.indexOf(name)], rows };
+  };
+
+  it('J05v-1: after « Sans réponse » a new order cannot be prepared / shipped / delivered (ORDER_CONFIRMATION_REQUIRED, greyed); « Confirmer » is the logged way on', async () => {
+    const owner = await shop();
+    const { order } = await newOrder(owner);
+    let o = (await owner.post(`/orders/${order.id}/calls`, { result: 'no_answer' }).expect(200)).body.data;
+    const before = await movementsOf(order.id);
+    for (const key of ['prepare', 'ship_manual', 'deliver']) expect(o.actions.find((a: any) => a.key === key)).toMatchObject({ enabled: false, reasonCode: 'ORDER_CONFIRMATION_REQUIRED' });
+    for (const to of ['preparing', 'shipped', 'delivered']) expect((await status(owner, o, to).expect(422)).body.error.code).toBe('ORDER_CONFIRMATION_REQUIRED');
+    expect((await owner.post(`/orders/${order.id}/ship-manual`, {}).expect(422)).body.error.code).toBe('ORDER_CONFIRMATION_REQUIRED');
+    expect(await movementsOf(order.id)).toEqual(before); // nothing taken out
+    o = (await status(owner, await reload(owner, order.id), 'confirmed').expect(200)).body.data;
+    expect(o).toMatchObject({ status: 'confirmed', confirmationStatus: 'confirmed' });
+    expect(o.history.find((h: any) => h.field === 'confirmationStatus' && h.to === 'confirmed')).toMatchObject({ from: 'no_answer', actor: expect.objectContaining({ type: 'user' }) });
+    expect(o.actions.find((a: any) => a.key === 'prepare')).toMatchObject({ enabled: true });
+    expect((await status(owner, o, 'preparing').expect(200)).body.data.status).toBe('preparing');
+  });
+
+  it('J05v-1 / J05v-3: a never-called new order keeps the direct path, confirmed and said in the history (it kept « À APPELER » when shipped)', async () => {
+    const owner = await shop();
+    const { order } = await newOrder(owner);
+    const o = (await owner.post(`/orders/${order.id}/ship-manual`, {}).expect(200)).body.data;
+    expect(o).toMatchObject({ status: 'shipped', confirmationStatus: 'confirmed' });
+    expect(o.history.find((h: any) => h.field === 'confirmationStatus')).toMatchObject({ from: 'pending', to: 'confirmed' });
+  });
+
+  it('J05v-3: a removed line reads « (retiré) »; commune display names (seat in the wilaya spelling, hyphens as spaces) while the stored name stays; J05v-2 / J05v-3 export', async () => {
+    const owner = await shop();
+    const robe = await createProduct(owner, { name: 'Robe J05v', price: 4500, stock: 10 });
+    const foulard = await createProduct(owner, { name: 'Foulard J05v', price: 1200, stock: 10 });
+    const seat = await db.commune.findFirstOrThrow({ where: { wilayaId: 19, nameFr: 'Setif' } });
+    const sebt = await db.commune.findFirstOrThrow({ where: { wilayaId: 19, nameFr: 'Ain-Sebt' } });
+    const two = (await postOrder(owner, orderBody(robe.id, { items: [{ productId: robe.id, quantity: 1 }, { productId: foulard.id, quantity: 1 }], delivery: address({ wilayaId: 19, communeId: seat.id, communeText: null }) })).expect(201)).body.data;
+    expect(two.address).toMatchObject({ wilayaName: 'Sétif', communeText: 'Sétif' });
+    const edited = (await owner.patch(`/orders/${two.id}`, { items: [{ productId: robe.id, quantity: 1 }], version: two.version }).expect(200)).body.data;
+    expect(edited.history.find((h: any) => h.field === 'items')).toMatchObject({ from: 'Foulard J05v ×1', to: 'Foulard J05v (retiré)' });
+    expect((await owner.get(`/orders/${two.id}`).set('Accept-Language', 'en').expect(200)).body.data.history.find((h: any) => h.field === 'items').to).toBe('Foulard J05v (removed)');
+    const other = (await postOrder(owner, orderBody(robe.id, { delivery: address({ wilayaId: 19, communeId: sebt.id, communeText: null }) })).expect(201)).body.data;
+    expect(other.address.communeText).toBe('Ain Sebt');
+    expect((await db.commune.findUniqueOrThrow({ where: { id: sebt.id } })).nameFr).toBe('Ain-Sebt');
+    // the delivered client is FIABLE, the other ones nothing (« normal » is not « reliable »); the cancelled order has no « À APPELER »
+    await owner.post(`/orders/${two.id}/deliver`, {}).expect(200);
+    const cancelled = (await newOrder(owner, {}, robe)).order;
+    await owner.post(`/orders/${cancelled.id}/cancel`, { reason: 'unreachable' }).expect(200);
+    const x = await xlsxOf(owner, 'format=xlsx&columns=all');
+    const row = (n: string) => x.rows.find((r) => x.col(r, 'N°') === n)!;
+    expect(x.col(row(two.number), 'Risque')).toBe('FIABLE');
+    expect(x.col(row(two.number), 'Commune')).toBe('Sétif');
+    expect(x.col(row(other.number), 'Commune')).toBe('Ain Sebt');
+    expect(x.col(row(cancelled.number), 'Risque') ?? '').toBe('');
+    expect(x.col(row(cancelled.number), 'Confirmation') ?? '').toBe('');
+    expect(x.col(row(other.number), 'Confirmation')).toBe('À APPELER');
+  });
+});

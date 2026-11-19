@@ -137,6 +137,7 @@ export const ERROR_CODES = {
   ORDER_ALREADY_REFUNDED: { status: 422, params: [] },
   ORDER_CALLBACK_IN_PAST: { status: 422, params: [] },
   ORDER_CALL_ON_TERMINAL: { status: 422, params: [] },
+  ORDER_CONFIRMATION_REQUIRED: { status: 422, params: [] },
   ORDER_DELETE_DELIVERED: { status: 422, params: [] },
   ORDER_INSUFFICIENT_STOCK: { status: 422, params: ["product","available"] },
   ORDER_INVALID_TRANSITION: { status: 422, params: ["from","to"] },

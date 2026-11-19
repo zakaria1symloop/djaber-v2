@@ -5,7 +5,7 @@
 // for a stop-desk with a courier that has points), address, COD, weight, content. States: editing · creating (202) ·
 // sending… (parcel `pending` until WS `shipment.updated`) · sent (tracking) · queued (`COURIER_UNAVAILABLE`, retries)
 // · courier refusal mapped to its field + banner "rien n'a été créé chez le transporteur" (AT-DLV-02) · no courier.
-import { formatMoney, formatPhoneDz } from '@djaber/shared';
+import { communeDisplayName, formatMoney, formatPhoneDz } from '@djaber/shared';
 import { Button, buttonClass, Dialog, Field, FormAlert, Input, Ltr, MoneyInput, RadioCards, SegmentedControl, Skeleton, toast } from '@djaber/ui';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -299,7 +299,7 @@ export function SendToCourierDialog({
                 <WilayaCombobox id="send-wilaya" value={d.wilayaId} invalid={!!shown('wilaya')} disabled={working} onChange={(id) => set({ wilayaId: id, communeId: null, communeText: null, stopdeskId: null })} />
               </Field>
               <Field label={t('common.commune')} htmlFor="send-commune" error={shown('commune')} hint={!d.communeId && d.communeText ? t('send.communeText', { commune: d.communeText }) : undefined}>
-                <CommuneCombobox id="send-commune" wilayaId={d.wilayaId} value={d.communeId} invalid={!!shown('commune')} disabled={working} onChange={(id, c) => set({ communeId: id, communeText: c?.nameFr ?? null, stopdeskId: null })} />
+                <CommuneCombobox id="send-commune" wilayaId={d.wilayaId} value={d.communeId} invalid={!!shown('commune')} disabled={working} onChange={(id, c) => set({ communeId: id, communeText: communeDisplayName(c?.nameFr), stopdeskId: null })} />
               </Field>
             </div>
             <SegmentedControl

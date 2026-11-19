@@ -32,3 +32,39 @@ export const wilayasOfCourierCode = (code: number): number[] => [code, ...Object
 
 /** `[1, 2, …, WILAYA_COUNT]`. */
 export const ALL_WILAYA_IDS: readonly number[] = Object.freeze(Array.from({ length: WILAYA_COUNT }, (_, i) => i + 1));
+
+// --- commune display names (journey J05v-3 / J05r-10) -------------------------------------------------------------------
+// The seeded commune list (`Commune.nameFr`) mixes « Ain-Sebt » and « Ain Arnat », and spells the wilaya seats without
+// their accents (« Setif » in the wilaya « Sétif »). The stored names stay as they are: the courier commune maps
+// (`CourierCommuneMap.externalCode`, Yalidine / ZR Express payloads), the AI place index, the order import and the stop-desk
+// sync read them (folded, but a courier may compare them raw). Only what is SHOWN is normalised, here.
+type PlaceNames = { nameFr: string; nameAr: string };
+/** Accent-, case-, hyphen- and space-insensitive key of a place name. */
+const placeKey = (s: string): string =>
+  s
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+
+/**
+ * The display form of a commune name: hyphens between words written as spaces, like the official list and the wilaya names
+ * (« Ain-Sebt » ⇒ « Ain Sebt », « Bir-El-Arch » ⇒ « Bir El Arch »), runs of spaces collapsed; the commune that is its
+ * wilaya's seat takes the wilaya's spelling (« Setif » in Sétif ⇒ « Sétif », « Tizi-Ouzou » ⇒ « Tizi Ouzou »). Null when empty.
+ */
+export const communeDisplayName = (name: string | null | undefined, wilaya?: Partial<PlaceNames> | null): string | null => {
+  const n = (name ?? '').replace(/\s*[-‐‑–]\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!n) return null;
+  for (const w of [wilaya?.nameFr, wilaya?.nameAr]) if (w && placeKey(w) === placeKey(n)) return w;
+  return n;
+};
+
+/** The commune of an address in the reader's language (`communeText` first, as typed), in its display form. */
+export const communeNameOf = (a: { communeText?: string | null; commune?: PlaceNames | null; wilaya?: PlaceNames | null }, locale: string): string | null =>
+  communeDisplayName(a.communeText ?? (a.commune ? (locale === 'ar' ? a.commune.nameAr || a.commune.nameFr : a.commune.nameFr) : null), a.wilaya);
+
+/**
+ * The commune is the wilaya's namesake (its seat): a one-line region shows the wilaya once — « Sétif (19) », not
+ * « Sétif (19) · Setif » (the print slip already did; journey J05v-3). Separate wilaya / commune cells keep both.
+ */
+export const isWilayaSeat = (commune: string | null | undefined, wilayaName: string | null | undefined): boolean => !!commune && !!wilayaName && placeKey(commune) === placeKey(wilayaName);

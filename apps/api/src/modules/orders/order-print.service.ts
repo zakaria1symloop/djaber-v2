@@ -1,5 +1,6 @@
 // ORD-09 / DLV-06 — A5 order slips (pdfkit renderer in ./print): one order on demand (`GET /orders/:id/print`, the file
 // is written under `private/` and returned as a signed URL), several as a job (`POST /orders/bulk/print` → 202).
+import { communeNameOf } from '@djaber/shared';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { prisma, TenantContext, type Job, type Tx } from '@djaber/db';
 import type { BulkOrderPrintInput, OrderPrintQuery } from '@djaber/shared';
@@ -67,7 +68,7 @@ export class OrderPrintService implements OnModuleInit {
         clientPhone: o.clientPhone,
         clientPhone2: o.clientPhone2,
         wilaya: o.wilaya ? `${o.wilaya.code} · ${lang === 'ar' ? o.wilaya.nameAr : o.wilaya.nameFr}` : null,
-        commune: o.communeText ?? (o.commune ? (lang === 'ar' ? o.commune.nameAr : o.commune.nameFr) : null),
+        commune: communeNameOf(o, lang),
         address: o.address,
         isStopdesk: o.isStopdesk,
         stopdeskName: o.stopdeskId ? stopdeskText(desks.get(o.stopdeskId)) : null,

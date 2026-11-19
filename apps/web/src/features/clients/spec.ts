@@ -1,5 +1,6 @@
 // Clients list — URL state definition (06 §10 "Clients [CLI-03 filter panel]", api-contract §4 `ClientsQuery`), date
 // presets, active filter chips, list pill. Pure functions (unit tested); the page wires them to `useListState`.
+import { clientPillOf } from '@djaber/shared';
 import type { PillEnum } from '@djaber/ui';
 import { matchPreset, presetRange, type DatePreset } from '@/features/catalog/products-list/spec';
 import type { ApiQuery, ListSpec, ListState } from '@/lib/list-state';
@@ -52,12 +53,8 @@ export function clientsQuery(base: ApiQuery): ApiQuery {
 /* ---------- list pill: blocked > risk > placeholder > reliable > unknown (server `pill`, recomputed when absent) ---------- */
 export function clientPill(c: Pick<ClientListItem, 'blocked' | 'riskLevel' | 'isPlaceholder' | 'orderCount'> & { pill?: ClientPill | null; deliveredCount?: number; returnCount?: number }): ClientPill | null {
   if (c.pill !== undefined) return c.pill;
-  if (c.blocked) return 'blocked';
-  if (c.riskLevel === 'high') return 'risk';
-  if (c.isPlaceholder) return 'placeholder';
-  if ((c.deliveredCount ?? 0) > 0 && (c.returnCount ?? 0) === 0) return 'reliable';
-  if (c.orderCount === 0) return 'unknown';
-  return null;
+  // one rule with the API and the orders export (shared `clientPillOf`, journey J05v-2)
+  return clientPillOf({ blocked: c.blocked, riskLevel: c.riskLevel, isPlaceholder: c.isPlaceholder, orderCount: c.orderCount, returnCount: c.returnCount ?? 0, deliveredCount: c.deliveredCount ?? 0 });
 }
 /** Label key and colour (the `StatusPill` maps of REF — Component sheet: FIABLE · INCONNU · RISQUE · BLOQUÉ · PLACEHOLDER). */
 export const CLIENT_PILL_VIEW: Record<ClientPill, { key: string; enumKey: PillEnum; value: string }> = {

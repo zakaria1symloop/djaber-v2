@@ -203,7 +203,7 @@ One scenario per rule; IDs `AT-<area>-nn`. Columns: scenario (Given / When / The
 | AT-ORD-17 | Manual order as `confirmed` without address ⇒ `ORDER_ADDRESS_REQUIRED`; with address ⇒ created confirmed with history row | ORD-02, 04 §1.2 | I |
 | AT-ORD-18 | Call outcomes no_answer/busy/voicemail ⇒ `confirmationStatus=no_answer`, attempts +1, status unchanged | ORD-04 | I |
 | AT-ORD-19 | Order page: contact edit validates phone; wilaya/commune shown; history lists actor and reason; delivered order shows read-only fields with Mark returned (Admin only) | ORD-06 | E |
-| AT-ORD-20 | Confirm dialog result step: "Prepare" ⇒ preparing; "Send to courier" enabled only when a courier exists (tooltip otherwise) | ORD-07 | E |
+| AT-ORD-20 | Confirm dialog result step: "Prepare" ⇒ preparing; "Send to courier" enabled only when a courier exists (tooltip otherwise); after « Sans réponse » / « Rappel » on a `new` order "Prepare" is greyed `ORDER_CONFIRMATION_REQUIRED` and `→ preparing / shipped / delivered` answers 422 until an answered call or « Confirmer » (logged « Confirmation : … → Confirmée ») — journey J05v-1 | ORD-07 | I/E |
 | AT-ORD-21 | IG and FB AI orders identical except channel badge | ORD-11 | I |
 | AT-ORD-22 | Payment: amountPaid 300 of 1000 ⇒ partial; `paymentStatus` sent without amount ⇒ 422 | PAY-01, 04 §1.4 | I |
 | AT-DLV-09 | Fee seed creates 69 rules from the default table (59–69 = their parent's default fee); "fill missing" keeps custom; "reset all" overwrites after confirm; the 2026-10-15 migration copies each workspace's parent row to 59–69 and moves open orders / addresses with their commune (idempotent) | DLV-01 | I/E |
