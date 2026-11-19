@@ -4,9 +4,10 @@ import { notFound } from 'next/navigation';
 import { NextIntlClientProvider } from 'next-intl';
 import { setRequestLocale } from 'next-intl/server';
 import type { ReactNode } from 'react';
-import { getMessages, isAppLocale, isRtl } from '@djaber/shared';
+import { isAppLocale, isRtl } from '@djaber/shared';
 import { Providers } from '@/components/providers';
 import { routing } from '@/i18n/routing';
+import { publicMessages } from '@/lib/server-messages';
 import '../globals.css';
 
 const syne = Syne({ subsets: ['latin'], weight: ['700'], variable: '--f-syne', display: 'swap' });
@@ -22,11 +23,12 @@ export default async function LocaleLayout({ children, params }: { children: Rea
   const { locale } = await params;
   if (!isAppLocale(locale)) notFound();
   setRequestLocale(locale);
+  // PUBLIC-04: only the public subset here; (app) / (admin) / (onboarding) add the rest (lib/server-messages.tsx)
   return (
     <html lang={locale} dir={isRtl(locale) ? 'rtl' : 'ltr'} className={`${syne.variable} ${geist.variable} ${mono.variable} ${changa.variable}`}>
       <body>
         <NextIntlClientProvider locale={locale} messages={{}} timeZone="Africa/Algiers">
-          <Providers locale={locale} messages={getMessages(locale)}>{children}</Providers>
+          <Providers locale={locale} messages={publicMessages(locale)}>{children}</Providers>
         </NextIntlClientProvider>
       </body>
     </html>

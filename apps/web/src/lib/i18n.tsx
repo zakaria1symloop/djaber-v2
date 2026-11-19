@@ -12,6 +12,16 @@ export function MessagesProvider({ locale, messages, children }: { locale: strin
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
+/**
+ * Adds keys to the catalogue of the provider above (PUBLIC-04: the locale layout sends the public subset, a non-public
+ * route group layout sends the rest through `FullMessages`, lib/server-messages.tsx).
+ */
+export function ExtendMessages({ messages, children }: { messages: Flat; children: ReactNode }) {
+  const parent = useContext(Ctx);
+  const value = useMemo(() => ({ locale: parent.locale, messages: { ...parent.messages, ...messages } }), [parent, messages]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
 export function useT(): TFunction {
   const { locale, messages } = useContext(Ctx);
   return useMemo(() => makeT(locale, messages), [locale, messages]);

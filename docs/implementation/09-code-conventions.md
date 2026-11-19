@@ -702,6 +702,8 @@ describe('workspace/quick-replies', () => {
 ```
 Same keys in `ar.json`, `en.json` (`dialog.quickReply.title`, `action.*` already exist in 06).
 
+Loading (PUBLIC-04, 02-next-route-map §7): a client component reads keys only with `useT()` — never `getMessages` from the `@djaber/shared` barrel (an empty stand-in in the browser; use `@djaber/shared/messages` when another language's whole catalogue is really needed). A screen of `(app)` / `(admin)` / `(onboarding)` gets every key; a component used by a public, auth, status or tracking page gets the public subset, regenerated with `node apps/web/scripts/public-messages.mjs` (keys built at run time from API values must match a literal, a `prefix.` + value, a `prefix.${x}` template or a namespace path in the code, or be added to `ALWAYS_PREFIXES`).
+
 ### 3.9 Web — API hooks (`apps/web/src/features/quick-replies/api.ts`)
 ```ts
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';

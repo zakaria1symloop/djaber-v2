@@ -1,7 +1,9 @@
 'use client';
 // /settings/system-messages — Figma "SET — Settings — … System messages" + DLG "Message système — réinitialiser" (AT-SET-01, 11 §9):
 // 4 editable keys × 3 locales, preview, reset to default, and the 3 fixed platform texts shown read-only.
-import { getMessages, SYSTEM_MESSAGE_KEYS, SYSTEM_MESSAGE_VARIABLES, unknownVariables, variablesLabel, type AppLocale, type SystemMessageKey } from '@djaber/shared';
+import { SYSTEM_MESSAGE_KEYS, SYSTEM_MESSAGE_VARIABLES, unknownVariables, variablesLabel, type AppLocale, type SystemMessageKey } from '@djaber/shared';
+// the defaults of the three languages (whole catalogue, only on this route — PUBLIC-04)
+import { getMessages } from '@djaber/shared/messages';
 import { Button, Card, ConfirmDialog, FormAlert, SegmentedControl, Skeleton, Textarea, toast } from '@djaber/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';

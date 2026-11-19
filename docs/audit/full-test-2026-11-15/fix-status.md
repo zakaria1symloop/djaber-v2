@@ -11,8 +11,7 @@ Needs owner: PUBLIC-02 (legal texts are CMS content), AGENTS-06 (archive the pla
 
 Batch 2 (16/11, 4 fix agents — per-ID reports kept in `.local/qa/fix/*-report.md`): every other ID of the 18 areas is fixed,
 except:
-- **Not fixed:** PUBLIC-04 (split of the i18n catalogue per route
-  group — needs a visual check of every public page), AGENTS-08 / AI-CHAT-11 partly (see agents-report).
+- **Not fixed:** AGENTS-08 / AI-CHAT-11 partly (see agents-report). (PUBLIC-04: fixed 19/11, see below.)
 - **Needs owner / live data:** PUBLIC-02 (legal texts), HELP-02 (help guides), PUBLIC-08 (« test » guide and incidents),
   PUBLIC-09 (free plan name « Gratuit » + trialDays), AGENTS-06 (archive the test presets), DELIVERY-09 (cached rates and fake
   parcels of the test shop), MOBILE-A11Y-05 (Figma muted-text variable → #8a8a8a).
@@ -23,3 +22,15 @@ except:
 18/11 (saved views): **ORDERS-22 fixed** — `GET|POST|PATCH|DELETE /me/saved-views` + `POST /me/saved-views/:id/share`, the
 `?view=<id>` expansion of every list of 05 §16, and the « Vues ⌄ » panel (REF « Vues enregistrées ») on orders, products,
 clients, delivery, movements, agents, purchases, sales and cash (inbox, channels, notifications: no URL list state yet).
+
+19/11 (PUBLIC-04): **PUBLIC-04 fixed** — the locale layout sends only the public subset of the catalogue (991 of 9 727 keys,
+`apps/web/src/i18n/public-keys.json`, generated from the import graph of (public) / (auth) / s / status / meta by
+`apps/web/scripts/public-messages.mjs`, run by the web build); (app) / (admin) / (onboarding) / agent-test / dev add the
+rest with `FullMessages`; the browser bundles no longer carry the three-language catalogue of the `@djaber/shared` barrel
+(empty stand-in, next.config.ts). Local `next build` + `next start`, API down (error states): HTML /fr 676 640 → 103 868 B
+(gz 176 → 27 KB), /fr/pricing 668 696 → 95 742 B, /fr/login 656 441 → 83 175 B, /ar/signup 782 285 → 94 067 B,
+/fr/s/… 664 415 → 91 088 B; `admin.*` keys in the login HTML 1 209 → 10 (keys of reachable shared components); First Load
+JS /fr and /fr/pricing 813 → 320 kB, /fr/login 831 → 337 kB, /fr/home 832 → 339 kB. Hydrated text of 31 public / auth / app
+routes compared before / after in Chromium: identical on 30 / 31 (the 31st, /meta/data-deletion, only differs by loading vs error
+state timing with the API down); states that need API data (plan cards, tracking timeline, guides) are covered by the
+import-graph test, not by this visual pass.

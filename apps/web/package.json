@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3010",
-    "build": "next build",
+    "build": "node scripts/public-messages.mjs && next build",
     "start": "next start -p 3010",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",

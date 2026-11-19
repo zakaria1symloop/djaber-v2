@@ -132,6 +132,7 @@ Zod DTO whitelist (unknown keys rejected 422); file uploads validated by magic b
 | List endpoints | p95 < 500 ms at 100 k orders / 10 k products / 50 k conversations per workspace | composite indexes `(workspaceId, status, orderedAt desc)`, `(workspaceId, lastMessageAt desc)`, trigram GIN on products; keyset pagination for messages/notifications; `count` via `pg_class` estimate when `total > 10 000` (exact below) | k6 `orders-list` |
 | Analytics endpoints | p95 < 500 ms | `DailyStat(workspaceId, day, metrics, computedAt)` rollups (`@@unique([workspaceId, day])`, job `sched-daily-stats` at 00:30 Africa/Algiers for D−1) + today computed live | integration |
 | Dashboard LCP | < 3 s on 4G | RSC shell, route-level code splitting, skeletons, `next/font`, image thumbnails 320 px | Lighthouse CI budget |
+| Public / auth page weight (PUBLIC-04) | only the texts the page can show: no merchant / admin catalogue in the HTML, no catalogue in the JS | locale layout sends the generated public subset of the catalogue, non-public route groups add the rest (`FullMessages`), browser bundles get an empty stand-in for the `@djaber/shared` catalogue module (02-next-route-map §7) | `apps/web/src/i18n/public-keys.spec.ts`, `client-catalogue.spec.ts` |
 | WS fan-out | message visible < 2 s | Redis adapter, room per workspace | AT-INB-01 |
 | Tracking sync | 10 k shipments / run | batch 50, limiter 2/s/account, 4 workers | k6/integration |
 | Throughput | > 100 req/s, 1 000 concurrent conversations | stateless API ×2, worker ×2, pgbouncer | k6 |
