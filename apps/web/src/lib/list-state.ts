@@ -16,6 +16,12 @@ export type ListSpec = {
   /** status tabs: the tab is a filter preset chosen by the page (`?tab=pending`) */
   tabs?: readonly string[];
   layouts?: readonly string[];
+  /**
+   * URL namespace of a second list on the same page (`dd.` ⇒ `?dd.status=pending&dd.page=2`): every parameter of this
+   * list is read and written with the prefix, so two lists never share `page` / `status` (ADM-16: account deletions and
+   * customer data deletions). The API query keeps the plain names.
+   */
+  prefix?: string;
 };
 
 export type ListState = {
@@ -67,6 +73,9 @@ const parseFilter = (kind: FilterKind, raw: string): FilterValue | undefined => 
 
 type Params = { get(name: string): string | null };
 
+/** URL name of a list parameter (`page` ⇒ `dd.page` for a prefixed list). */
+export const urlParam = (spec: Pick<ListSpec, 'prefix'>, name: string): string => `${spec.prefix ?? ''}${name}`;
+
 /**
  * A `from` / `to` (or `xFrom` / `xTo`) pair typed or shared inverted in the URL is read in the right order (journeys 16/11
  * J06-7: `?from=2026-11-16&to=2026-11-01` broke Caisse and Ventes with « Impossible de charger »). The date picker never
@@ -86,7 +95,8 @@ export function swapInvertedRanges(filters: Record<string, FilterValue>) {
 }
 
 /** Reads the state from the query string; unknown or malformed values fall back to the defaults (never throws). */
-export function parseListState(spec: ListSpec, params: Params): ListState {
+export function parseListState(spec: ListSpec, all: Params): ListState {
+  const params: Params = spec.prefix ? { get: (name) => all.get(urlParam(spec, name)) } : all;
   const filters: Record<string, FilterValue> = {};
   for (const [name, kind] of Object.entries(spec.filters)) {
     const raw = params.get(name);
@@ -126,6 +136,7 @@ const encodeFilter = (value: FilterValue): string | null => {
 /** Writes the state as query pairs in a stable order; defaults are omitted so that a pristine list has a clean URL. */
 export function serializeListState(spec: ListSpec, s: ListState): [string, string][] {
   const out: [string, string][] = [];
+  const done = () => (spec.prefix ? out.map(([k, v]): [string, string] => [urlParam(spec, k), v]) : out);
   if (s.tab) out.push(['tab', s.tab]);
   if (s.q.trim()) out.push(['q', s.q.trim()]);
   for (const name of Object.keys(spec.filters)) {
@@ -141,13 +152,13 @@ export function serializeListState(spec: ListSpec, s: ListState): [string, strin
   if (s.layout) out.push(['layout', s.layout]);
   if (s.hide.length) out.push(['hide', s.hide.join(',')]);
   if (s.sheet) out.push(['sheet', s.sheet]);
-  return out;
+  return done();
 }
 
 /** Query string (without `?`), keeping the parameters of the page that are not part of the list state. */
 export function listQueryString(spec: ListSpec, s: ListState, current?: Iterable<[string, string]>): string {
   const p = new URLSearchParams();
-  const own = new Set([...RESERVED, ...Object.keys(spec.filters)]);
+  const own = new Set([...RESERVED, ...Object.keys(spec.filters)].map((k) => urlParam(spec, k)));
   for (const [k, v] of current ?? []) if (!own.has(k)) p.append(k, v);
   for (const [k, v] of serializeListState(spec, s)) p.set(k, v);
   return p.toString();

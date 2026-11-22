@@ -2,7 +2,8 @@
 // /admin/team — Figma "ADM-16 — Platform admin — admin roles & account deletion requests" + DLG "Changer le rôle
 // plateforme" / "Inviter un membre plateforme". Role matrix (computed from PLATFORM_PERMISSIONS, the same table as the
 // API), members (2FA NON ⚠ accès bloqué → Forcer la 2FA), pending invitations, account deletion requests (EN GRÂCE /
-// BLOQUÉE ACCOUNT_OWNS_WORKSPACE + WORKSPACE_HAS_DEBT / ANONYMISÉ) with Voir · Annuler · Résoudre · Traiter maintenant.
+// BLOQUÉE ACCOUNT_OWNS_WORKSPACE + WORKSPACE_HAS_DEBT / ANONYMISÉ) with Voir · Annuler · Résoudre · Traiter maintenant,
+// then the end customers' data deletions (MSG-08: Meta callback + e-mail requests, « Nouvelle demande », URL keys `dd.*`).
 import { PLATFORM_PERMISSIONS, type AdminDeletionCounts, type DeletionRequestAdminDto, type PlatformMemberDto, type PlatformPermission, type PlatformTeamDto } from '@djaber/shared';
 import { ActionsMenu, Button, DataTable, FrameNote, ListSkeleton, MonoChip, OpsPanel, RoleMatrix, toast, type Column } from '@djaber/ui';
 import { useMutation } from '@tanstack/react-query';
@@ -14,6 +15,7 @@ import { adminWrite, useAdminGet, useAdminInvalidate, useAdminList } from '@/fea
 import { AdminDialog, NO_ERRORS, ReasonField, reasonOk, toServerErrors, useOnOpen, type ServerErrors } from '@/features/admin/dialog-kit';
 import { usePlatform } from '@/features/admin/platform';
 import { DELETION_LIST } from '@/features/admin/specs';
+import { DataDeletionSection } from '@/features/admin/team/data-deletion';
 import { ChangeRoleDialog, InviteMemberDialog } from '@/features/admin/team/dialogs';
 import { AdminPill, fullName, useFormats } from '@/features/admin/ui';
 import { useRouter } from '@/i18n/navigation';
@@ -202,6 +204,11 @@ export default function AdminTeamPage() {
             />
           )}
           <FrameNote className="mt-3">{t('admin.team.del.note')}</FrameNote>
+        </OpsPanel>
+      ) : null}
+      {can('admin.deletion.read') ? (
+        <OpsPanel title={t('admin.team.dd.title')} sub={t('admin.team.dd.sub')} data-testid="customer-data-deletion">
+          <DataDeletionSection canWrite={can('admin.deletion.write')} />
         </OpsPanel>
       ) : null}
       <InviteMemberDialog open={invite} onClose={() => setInvite(false)} />

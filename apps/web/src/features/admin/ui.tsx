@@ -21,6 +21,7 @@ export const ADMIN_TONES: Record<string, Record<string, ChipTone>> = {
   'Cms.status': { published: 'success', missing: 'danger', draft: 'warning', scheduled: 'info', archived: 'neutral' },
   'Preset.status': { published: 'info', draft: 'neutral', archived: 'danger' },
   'Deletion.status': { pending_confirmation: 'neutral', grace: 'warning', blocked: 'danger', anonymised: 'neutral', cancelled: 'neutral' },
+  'DataDeletion.status': { pending: 'warning', done: 'success', no_data: 'neutral', not_found: 'danger' },
   'Audit.action': { danger: 'danger', money: 'success', warn: 'warning', info: 'info' },
 };
 

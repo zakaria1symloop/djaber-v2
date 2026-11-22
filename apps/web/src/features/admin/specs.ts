@@ -54,5 +54,7 @@ export const AUDIT_LIST: ListSpec = {
 };
 
 export const DELETION_LIST: ListSpec = { filters: { status: 'list' }, sorts: ['requestedAt'], defaultSort: '-requestedAt' };
+/** ADM-16 / MSG-08 — end-customer data deletions, second list of `/admin/team`: its URL keys carry `dd.` (`?dd.status=pending`) */
+export const DATA_DELETION_LIST: ListSpec = { prefix: 'dd.', filters: { status: 'list', source: 'text' }, sorts: ['requestedAt'], defaultSort: '-requestedAt' };
 
 export const VIEWER_PRODUCTS_LIST: ListSpec = { filters: { workspaceId: 'text', moderationStatus: 'list' }, sorts: ['name', 'updatedAt'], defaultSort: 'name' };

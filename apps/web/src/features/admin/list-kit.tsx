@@ -86,14 +86,14 @@ const activeOf = (f: AdminFilter, list: ListController): number => {
   return s.filters[f.key] === true ? 1 : 0;
 };
 
-/** search · quick dropdowns · Filtres (n) · count on the end side */
-export function AdminFilterBar({ list, search, quick, panel = [], count, end }: { list: ListController; search: string; quick: AdminFilter[]; panel?: AdminFilter[]; count?: string; end?: ReactNode }) {
+/** search · quick dropdowns · Filtres (n) · count on the end side; no `search` = a list whose API has no `q` (no search box) */
+export function AdminFilterBar({ list, search, quick, panel = [], count, end }: { list: ListController; search?: string; quick: AdminFilter[]; panel?: AdminFilter[]; count?: string; end?: ReactNode }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <SearchInput value={list.state.q} onChange={(q) => list.set({ q })} label={t('action.search')} placeholder={search} clearLabel={t('list.clearSearch')} className="min-w-56 flex-1 md:max-w-80" />
+        {search !== undefined ? <SearchInput value={list.state.q} onChange={(q) => list.set({ q })} label={t('action.search')} placeholder={search} clearLabel={t('list.clearSearch')} className="min-w-56 flex-1 md:max-w-80" /> : null}
         {quick.map((f) => (
           <FilterDropdown key={f.key} label={f.label} count={activeOf(f, list) || undefined}>
             <FilterBody f={f} list={list} />
