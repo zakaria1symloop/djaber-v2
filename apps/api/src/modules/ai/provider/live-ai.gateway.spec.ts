@@ -402,7 +402,15 @@ describe('failure classes (04 §6)', () => {
       json: { id: 'msg_r1', type: 'message', role: 'assistant', model: 'claude-haiku-5-5', content: [{ type: 'tool_use', id: 'toolu_r1', name: 'handoff_to_human', input: { reason: 'other', evidence: 'Boufarik' } }], stop_reason: 'tool_use', stop_sequence: null, usage: { input_tokens: 900, output_tokens: 30 } },
     });
     const res = await gateway.generate(request('anthropic', 'claude-haiku-5-5', { tools: [SEARCH_TOOL] }));
-    expect(res).toEqual({ text: '', toolCalls: [], rejectedToolCalls: [{ id: 'toolu_r1', name: 'handoff_to_human', args: { reason: 'other', evidence: 'Boufarik' } }], usage: { inputTokens: 0, outputTokens: 0 }, finishReason: 'tool-calls' });
+    expect(res).toEqual({ text: '', toolCalls: [], rejectedToolCalls: [{ id: 'toolu_r1', name: 'handoff_to_human', args: { reason: 'other', evidence: 'Boufarik' } }], usage: { inputTokens: 900, outputTokens: 30 }, cache: { read: 0, write: 0 }, finishReason: 'tool-calls' });
+  });
+
+  it('R23: the reply written next to a call to a tool that does not exist (« noop ») is kept, with the offered calls and the tokens', async () => {
+    expectHost('api.anthropic.com').reply({
+      json: { id: 'msg_r2', type: 'message', role: 'assistant', model: 'claude-haiku-5-5', content: [{ type: 'text', text: '{"reply":"Bonsoir"}' }, { type: 'tool_use', id: 'toolu_s', name: 'search_products', input: { query: 'robe' } }, { type: 'tool_use', id: 'toolu_n', name: 'noop', input: {} }], stop_reason: 'tool_use', stop_sequence: null, usage: { input_tokens: 120, output_tokens: 44, cache_read_input_tokens: 5750, cache_creation_input_tokens: 0 } },
+    });
+    const res = await gateway.generate(request('anthropic', 'claude-haiku-5-5', { tools: [SEARCH_TOOL] }));
+    expect(res).toEqual({ text: '{"reply":"Bonsoir"}', toolCalls: [{ id: 'toolu_s', name: 'search_products', args: { query: 'robe' } }], rejectedToolCalls: [{ id: 'toolu_n', name: 'noop', args: {} }], usage: { inputTokens: 120, outputTokens: 44 }, cache: { read: 5750, write: 0 }, finishReason: 'tool-calls' });
     expect(net.calls).toHaveLength(1);
   });
 

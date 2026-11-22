@@ -143,6 +143,20 @@ const withEffort = (init: RequestInit | undefined, effort: string): RequestInit 
     return init;
   }
 };
+/** An Anthropic Messages answer read back after the SDK refused it (a call to a tool not offered): text, offered calls, usage. */
+export const anthropicStep = (body: unknown, offered: ReadonlySet<string>): Pick<AiGenerateResult, 'text' | 'toolCalls' | 'usage' | 'cache'> | null => {
+  if (!body || typeof body !== 'object' || !Array.isArray((body as { content?: unknown }).content)) return null;
+  const b = body as { content: { type?: string; text?: string; id?: string; name?: string; input?: unknown }[]; usage?: Record<string, unknown> };
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  return {
+    text: b.content.filter((c) => c.type === 'text' && typeof c.text === 'string').map((c) => c.text).join(''),
+    toolCalls: b.content
+      .filter((c) => c.type === 'tool_use' && typeof c.name === 'string' && offered.has(c.name) && typeof c.id === 'string')
+      .map((c) => ({ id: c.id!, name: c.name!, args: c.input && typeof c.input === 'object' && !Array.isArray(c.input) ? (c.input as Record<string, unknown>) : {} })),
+    usage: { inputTokens: n(b.usage?.input_tokens), outputTokens: n(b.usage?.output_tokens) },
+    cache: { read: n(b.usage?.cache_read_input_tokens), write: n(b.usage?.cache_creation_input_tokens) },
+  };
+};
 /** a 400 whose reason names the `temperature` parameter */
 const rejectsTemperature = (error: unknown): boolean => {
   const last = RetryError.isInstance(error) ? error.lastError : error;
@@ -226,9 +240,18 @@ export class LiveAiGateway implements AiGateway {
   /** Resolved at call time, so that replacing `globalThis.fetch` (tests) is honoured. */
   private readonly fetch: typeof fetch = (input, init) => (this.options.fetch ?? globalThis.fetch)(input, init);
 
-  private languageModel(model: AiModelRef, apiKey: string, dropTemperature = false, purpose?: AiPurpose): LanguageModel {
+  private languageModel(model: AiModelRef, apiKey: string, dropTemperature = false, purpose?: AiPurpose, onAnswer?: (body: unknown) => void): LanguageModel {
     const effort = model.provider === 'anthropic' && purpose ? anthropicEffort(model.modelId, purpose) : null;
-    const base: typeof globalThis.fetch = effort ? (input, init) => this.fetch(input, withEffort(init, effort)) : this.fetch;
+    const sent: typeof globalThis.fetch = effort ? (input, init) => this.fetch(input, withEffort(init, effort)) : this.fetch;
+    // R23 (22/11): the provider's answer is kept for the step — a step that calls a tool not offered (« noop ») is refused whole
+    // by the SDK, and the reply the model wrote next to that call was lost (a second model call, 1.6–3.4 s, for the same answer)
+    const base: typeof globalThis.fetch = onAnswer
+      ? async (input, init) => {
+          const res = await sent(input, init);
+          if (res.ok) onAnswer(await res.clone().json().catch(() => null));
+          return res;
+        }
+      : sent;
     // the SDK always sends a temperature (0 when none is given): a model that refuses it gets the body without one
     const fetch: typeof globalThis.fetch = dropTemperature ? (input, init) => base(input, withoutTemperature(init)) : base;
     switch (model.provider) {
@@ -273,6 +296,7 @@ export class LiveAiGateway implements AiGateway {
     const signal = AbortSignal.timeout(req.timeoutMs);
     // journey retest R1-1: the calls the SDK cannot accept (a tool this step does not offer, arguments that are not JSON)
     const rejected: AiGenerateResult['rejectedToolCalls'] = [];
+    let answer: unknown = null;
     try {
       const tools = toTools(req.tools);
       // full-test 15/11 proposal 13 (18 255 input tokens for one turn of a 10-product shop): Anthropic caches the stable
@@ -285,7 +309,7 @@ export class LiveAiGateway implements AiGateway {
         : [];
       const run = (dropTemperature: boolean) =>
         generateText({
-          model: this.languageModel(req.model, apiKey, dropTemperature, req.purpose),
+          model: this.languageModel(req.model, apiKey, dropTemperature, req.purpose, provider === 'anthropic' ? (b) => (answer = b) : undefined),
           ...(cached ? {} : { system: req.system }),
           messages: [...systemMessages, ...toMessages(tools ? req.messages : flattenTools(req.messages))],
           ...(tools
@@ -322,7 +346,10 @@ export class LiveAiGateway implements AiGateway {
       // journey retest R1-1: a step whose only fault is a call to a tool not offered (or unreadable arguments) is not a
       // failure: its calls come back as `rejectedToolCalls` (the step's tokens are unknown here: counted 0)
       if (rejected.length && (NoSuchToolError.isInstance(e) || InvalidToolArgumentsError.isInstance(e))) {
-        return { text: '', toolCalls: [], rejectedToolCalls: [...rejected], usage: { inputTokens: 0, outputTokens: 0 }, finishReason: 'tool-calls' };
+        // R23 (22/11): what the provider answered is read back — the text the model wrote with the call (often the whole JSON
+        // reply) and its calls to offered tools; the pipeline answers with that text instead of asking the model again
+        const kept = anthropicStep(answer, new Set((req.tools ?? []).map((t) => t.name)));
+        return { text: kept?.text ?? '', toolCalls: kept?.toolCalls ?? [], rejectedToolCalls: [...rejected], usage: kept?.usage ?? { inputTokens: 0, outputTokens: 0 }, ...(kept?.cache ? { cache: kept.cache } : {}), finishReason: 'tool-calls' };
       }
       throw toProviderError(provider, e, signal.aborted);
     }
