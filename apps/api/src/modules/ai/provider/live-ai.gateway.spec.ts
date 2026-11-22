@@ -241,6 +241,19 @@ describe('LiveAiGateway.generate — Anthropic, Google, Groq', () => {
     expect(net.calls.at(-1)!.json.system).toEqual([{ type: 'text', text: SYSTEM }]);
   });
 
+  it('22/11 slow replies: a Claude 5 chat step asks for effort low; Claude 4.x and the other purposes keep the model default', async () => {
+    const ok = (id: string) => ({ json: { id, type: 'message', role: 'assistant', model: 'claude-haiku-5-5', content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', usage: { input_tokens: 9, output_tokens: 1 } } });
+    expectHost('api.anthropic.com').reply(ok('msg_e1'));
+    await gateway.generate(request('anthropic', 'claude-haiku-5-5'));
+    expect(net.calls[0]!.json.output_config).toEqual({ effort: 'low' });
+    expectHost('api.anthropic.com').reply(ok('msg_e2'));
+    await gateway.generate(request('anthropic', 'claude-haiku-5-5', { purpose: 'agent_generation' }));
+    expect(net.calls.at(-1)!.json.output_config).toBeUndefined();
+    expectHost('api.anthropic.com').reply(ok('msg_e3'));
+    await gateway.generate(request('anthropic', 'claude-haiku-4-5'));
+    expect(net.calls.at(-1)!.json.output_config).toBeUndefined();
+  });
+
   it('Anthropic: assistant tool call + tool result are serialised as tool_use / tool_result blocks', async () => {
     expectHost('api.anthropic.com').reply({ json: { id: 'msg_fixture_2', type: 'message', role: 'assistant', model: 'claude-3-5-haiku-20241022', content: [{ type: 'text', text: 'Disponible.' }], stop_reason: 'end_turn', usage: { input_tokens: 90, output_tokens: 4 } } });
     const res = await gateway.generate(

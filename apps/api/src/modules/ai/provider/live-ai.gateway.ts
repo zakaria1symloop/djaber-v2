@@ -17,6 +17,7 @@ import {
   type AiMessage,
   type AiModelRef,
   type AiProviderName,
+  type AiPurpose,
   type AiToolDef,
   type AiTranscribeRequest,
   type AiTranscribeResult,
@@ -122,6 +123,26 @@ const withoutTemperature = (init?: RequestInit): RequestInit | undefined => {
     return init;
   }
 };
+/**
+ * 22/11 (slow replies, R23): the Claude 5 models think before every answer by default (Haiku 5.5: adaptive thinking, effort
+ * `medium`) — 500 to 880 output tokens for a three-sentence chat reply, most of the 2.5–4.8 s of a step. A chat turn (and the
+ * image description / caption of a customer photo) asks for effort `low`; the other purposes (agent generation, FAQ
+ * extraction…) keep the model's default. The SDK in use (ai 4 / @ai-sdk/anthropic 1) has no setting for it: the request body is
+ * completed here. Claude 4.x models reject `effort`: only the 5 generation gets it.
+ */
+const LOW_EFFORT_PURPOSES: ReadonlySet<AiPurpose> = new Set(['reply', 'vision_describe', 'vision_match', 'caption']);
+export const anthropicEffort = (modelId: string, purpose: AiPurpose): 'low' | null =>
+  LOW_EFFORT_PURPOSES.has(purpose) && /^claude-(haiku|sonnet|opus|fable|mythos)-5(\b|[-.])/.test(modelId) ? 'low' : null;
+const withEffort = (init: RequestInit | undefined, effort: string): RequestInit | undefined => {
+  if (typeof init?.body !== 'string') return init;
+  try {
+    const body = JSON.parse(init.body) as Record<string, unknown>;
+    const config = body.output_config && typeof body.output_config === 'object' ? (body.output_config as Record<string, unknown>) : {};
+    return { ...init, body: JSON.stringify({ ...body, output_config: { ...config, effort } }) };
+  } catch {
+    return init;
+  }
+};
 /** a 400 whose reason names the `temperature` parameter */
 const rejectsTemperature = (error: unknown): boolean => {
   const last = RetryError.isInstance(error) ? error.lastError : error;
@@ -205,9 +226,11 @@ export class LiveAiGateway implements AiGateway {
   /** Resolved at call time, so that replacing `globalThis.fetch` (tests) is honoured. */
   private readonly fetch: typeof fetch = (input, init) => (this.options.fetch ?? globalThis.fetch)(input, init);
 
-  private languageModel(model: AiModelRef, apiKey: string, dropTemperature = false): LanguageModel {
+  private languageModel(model: AiModelRef, apiKey: string, dropTemperature = false, purpose?: AiPurpose): LanguageModel {
+    const effort = model.provider === 'anthropic' && purpose ? anthropicEffort(model.modelId, purpose) : null;
+    const base: typeof globalThis.fetch = effort ? (input, init) => this.fetch(input, withEffort(init, effort)) : this.fetch;
     // the SDK always sends a temperature (0 when none is given): a model that refuses it gets the body without one
-    const fetch: typeof globalThis.fetch = dropTemperature ? (input, init) => this.fetch(input, withoutTemperature(init)) : this.fetch;
+    const fetch: typeof globalThis.fetch = dropTemperature ? (input, init) => base(input, withoutTemperature(init)) : base;
     switch (model.provider) {
       case 'openai':
         return createOpenAI({ apiKey, fetch }).chat(model.modelId);
@@ -262,7 +285,7 @@ export class LiveAiGateway implements AiGateway {
         : [];
       const run = (dropTemperature: boolean) =>
         generateText({
-          model: this.languageModel(req.model, apiKey, dropTemperature),
+          model: this.languageModel(req.model, apiKey, dropTemperature, req.purpose),
           ...(cached ? {} : { system: req.system }),
           messages: [...systemMessages, ...toMessages(tools ? req.messages : flattenTools(req.messages))],
           ...(tools
