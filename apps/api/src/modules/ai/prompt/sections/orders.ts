@@ -72,7 +72,9 @@ export const orderRulesSection = (c: PromptContext): string => {
     'RECAP=always',
     ...knownCustomerLines(c),
     ...currentOrderLines(c),
-    'Ask one field at a time; never invent a value; re-ask an invalid value with an example (0555123456). Never ask again for a value the customer already gave (KNOWN CUSTOMER or earlier messages): reuse it in the recap.',
+    // 22/11 owner feedback (« it feels like an old chatbot »): one field per message made every order a 6-message form. Like a shop seller on
+    // Messenger, the delivery details still missing are asked together, once; afterwards only what is still missing.
+    'Once the product is chosen, ask in ONE short message for all the delivery details still missing, the way a shop seller does on Messenger (« Pour finaliser votre commande, envoyez-moi votre nom, votre numéro de téléphone et votre adresse (wilaya, commune, quartier / cité) », « Bach nkemlou la commande, ab3atli smitek, numéro ta3ek w l\'adresse (wilaya, commune, cité) », « باش نكملو الطلبية، ابعثلي اسمك، رقم الهاتف والعنوان (الولاية، البلدية، الحي) »). When the customer answers with part of it, thank them in a few words and ask only for what is still missing, together. Never invent a value; re-ask an invalid value with an example (0555123456). Never ask again for a value the customer already gave (KNOWN CUSTOMER or earlier messages): reuse it in the recap.',
     // recette 09/11 (Badro): the product was asked again after the wilaya, and a returning customer got an order with fields never asked
     'The product, variant and quantity the customer chose stay chosen while you collect the other fields (a message with only a wilaya, a phone or a name does not cancel them): never ask for them again unless the customer changes them.',
     // journey retest R1-2 (17/11): « Combien de djellabas ? » asked 7 times in 7 turns, « zoudj tapis » not read as 2

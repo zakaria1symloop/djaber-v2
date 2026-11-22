@@ -197,7 +197,28 @@ export const normalizeReplyObject = (input: Record<string, unknown>): Record<str
     confidence: Number.isFinite(conf) ? Math.min(1, Math.max(0, conf >= 2 && conf <= 100 ? conf / 100 : conf)) : 0.5,
     ...(language && (AI_LANGUAGES as readonly string[]).includes(language) ? { language } : {}),
     ...(Object.keys(kept).length ? { customer: kept } : {}),
+    ...(cartOf(o.cart) ? { cart: cartOf(o.cart)! } : {}),
   };
+};
+
+/**
+ * 22/11 (known issue « the AI forgets the chosen product »): the model's `cart` was dropped here, so `context.chosen` (CURRENT ORDER) was never
+ * filled. Kept in a strict shape — ids as strings, a whole quantity 1–10 000 or none; the ids are checked against the catalogue where they are
+ * used (CURRENT ORDER prints only catalogue products, the price rules look them up).
+ */
+const cartOf = (v: unknown): { items: { productId: string; variantId?: string; quantity?: number }[] } | null => {
+  const raw = v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>).items : Array.isArray(v) ? v : null;
+  if (!Array.isArray(raw)) return null;
+  const items = raw.flatMap((i) => {
+    if (!i || typeof i !== 'object') return [];
+    const r = i as Record<string, unknown>;
+    const productId = str(r.productId)?.trim();
+    if (!productId || productId.length > 80) return [];
+    const variantId = str(r.variantId)?.trim();
+    const q = Math.floor(Number(r.quantity));
+    return [{ productId, ...(variantId && variantId.length <= 80 ? { variantId } : {}), ...(Number.isFinite(q) && q >= 1 && q <= 10_000 ? { quantity: q } : {}) }];
+  });
+  return items.length ? { items: items.slice(0, 20) } : null;
 };
 
 /**

@@ -212,6 +212,7 @@ describe('LiveAiGateway.generate — Anthropic, Google, Groq', () => {
       text: 'Je vérifie le catalogue.',
       toolCalls: [{ id: 'toolu_01A', name: 'search_products', args: { query: 'robe rouge' } }],
       usage: { inputTokens: 77, outputTokens: 21 },
+      cache: { read: 0, write: 0 },
       finishReason: 'tool-calls',
     });
     const call = net.calls[0]!;

@@ -202,7 +202,6 @@ describe('R22-3 (Minor) — the product being sold and its price before the firs
     expect(reply).toContain('missing a digit');
   });
 
-  // the model's `cart` stays out of the normalised reply (owner-safe choice 18/11: the CURRENT ORDER prompt is unchanged live)
   it('a subtotal two products could make names none; catalogue-answered searches count as found', async () => {
     const prices = guardOf('x', 'fr', J03R).cataloguePrices ?? [];
     expect(knownProductIds({ args: { query: 'Tapis de prière' } }, { products: [], inCatalogue: true }, prices)).toEqual([TAPIS.id]);

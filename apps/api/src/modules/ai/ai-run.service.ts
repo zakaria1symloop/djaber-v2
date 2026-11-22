@@ -676,7 +676,7 @@ export type TurnRequest = {
  */
 // journey retest R19-1 (18/11): `stray` — the tools it asked that the step did not offer (R19 counted 27 such calls and could not tell which
 // tools); an empty `steps` list is a turn the server answered with no model call (a plain yes to the recap shown)
-export type TurnStep = { ms: number; calls?: string[]; stray?: string[]; next?: string };
+export type TurnStep = { ms: number; calls?: string[]; stray?: string[]; next?: string; cacheRead?: number; cacheWrite?: number; outTok?: number };
 type TurnBase = { tools: ExecutedTool[]; usage: AiUsage; model: RoutedModel | null; usedFallback: boolean; steps?: TurnStep[] };
 export type TurnResult =
   | (TurnBase & { ok: true; output: AiReplyOutput; model: RoutedModel; forcedHandoff: string | null; repaired: boolean; salvaged?: boolean; /** retest 12/11: a handoff of the model was refused by the server this turn (handoff-judge) */ handoffRefused?: HandoffRefusal; /** §4.3: the reply guard found something (and what was done) */ guard?: GuardOutcome })
@@ -1495,7 +1495,7 @@ export class AiRunService implements OnModuleInit {
         if (e instanceof AiProviderError) return guardFallback() ?? { ok: false, kind: 'provider', error: providerErrorLabel(e), tools: executed, usage, model, usedFallback };
         throw e;
       }
-      steps.push({ ms: Date.now() - stepStart, ...(res.value.toolCalls.length ? { calls: res.value.toolCalls.map((c) => canonicalTool(c.name)) } : {}) });
+      steps.push({ ms: Date.now() - stepStart, ...(res.value.toolCalls.length ? { calls: res.value.toolCalls.map((c) => canonicalTool(c.name)) } : {}), ...(res.value.cache ? { cacheRead: res.value.cache.read, cacheWrite: res.value.cache.write } : {}), outTok: res.value.usage.outputTokens });
       model = res.model;
       usedFallback ||= res.usedFallback;
       usage.inputTokens += res.value.usage.inputTokens;

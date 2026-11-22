@@ -292,6 +292,7 @@ export class LiveAiGateway implements AiGateway {
         text: res.text,
         toolCalls: res.toolCalls.map((c) => ({ id: c.toolCallId, name: c.toolName, args: (c.args ?? {}) as Record<string, unknown> })),
         usage: { inputTokens: count(res.usage.promptTokens), outputTokens: count(res.usage.completionTokens) },
+        ...cacheOf(res.providerMetadata),
         finishReason: res.finishReason,
       };
     } catch (e) {
@@ -344,3 +345,11 @@ export class LiveAiGateway implements AiGateway {
     };
   }
 }
+
+/** 22/11 (slow replies): the Anthropic prompt-cache tokens of a step, when the provider reports them. */
+const cacheOf = (meta: unknown): { cache?: { read: number; write: number } } => {
+  const a = (meta as { anthropic?: { cacheReadInputTokens?: unknown; cacheCreationInputTokens?: unknown } } | undefined)?.anthropic;
+  if (!a) return {};
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  return { cache: { read: n(a.cacheReadInputTokens), write: n(a.cacheCreationInputTokens) } };
+};

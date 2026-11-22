@@ -43,6 +43,8 @@ export type AiGenerateResult = {
   /** tool calls the model asked for; empty when the step is the final answer */
   toolCalls: AiToolCallRequest[];
   usage: AiUsage;
+  /** 22/11 (slow replies): the prompt-cache tokens of the step (Anthropic), kept on `AiRun.meta.steps` */
+  cache?: { read: number; write: number };
   finishReason: string;
   /**
    * journey retest R1-1 (17/11): calls the model made to a tool this step did not offer (handoff_to_human withheld on an
