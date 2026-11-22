@@ -142,9 +142,12 @@ export class ReplyProcessor implements OnModuleInit {
    * The earlier messages (oldest first); a customer message after a long pause carries the NEW_VISIT note, the first one
    * after the team gave the thread back (`context.resumedAt`, retest 12/11) the RESUMED note — `resumed`: the batch itself
    * is the first customer message after it.
+   * R23 (22/11, Boutique de Lalla 20/11): the shop's answers written after the batch's first message are history too — « السلام عليكم »
+   * then « كيف يمكنني » 7 s later: the second batch began before the first reply was saved, the run did not see it and greeted again
+   * (and the repeat_greeting check thought it was the first reply).
    */
   private async history(conv: Conversation, before: Date): Promise<{ messages: HistoryMessage[]; newVisit: boolean; resumed: boolean }> {
-    const rows = (await prisma.message.findMany({ where: { conversationId: conv.id, createdAt: { lt: before }, type: { not: 'system' }, author: { in: ['customer', 'ai', 'human'] } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 30, include: { authorUser: { select: { firstName: true } } } })).reverse();
+    const rows = (await prisma.message.findMany({ where: { conversationId: conv.id, type: { not: 'system' }, OR: [{ createdAt: { lt: before }, author: { in: ['customer', 'ai', 'human'] } }, { createdAt: { gte: before }, author: { in: ['ai', 'human'] } }] }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 30, include: { authorUser: { select: { firstName: true } } } })).reverse();
     const gap = (i: number) => i > 0 && rows[i]!.createdAt.getTime() - rows[i - 1]!.createdAt.getTime() > NEW_VISIT_AFTER_MS;
     const stamp = contextOf(conv).resumedAt;
     const resumedAt = stamp ? new Date(stamp).getTime() : null;

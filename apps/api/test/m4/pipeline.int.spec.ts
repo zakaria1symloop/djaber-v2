@@ -227,6 +227,26 @@ describe('FL-01 — reply turn', () => {
     expect(back.out.at(-1)).toMatchObject({ author: 'ai', text: 'La robe est à 4\u00a0500\u00a0DA.' });
   });
 
+  it('R23 (Boutique de Lalla 20/11): a reply saved after the next message arrived is history for that message — no second greeting', async () => {
+    const s = await shop();
+    const sender = newSender();
+    fakeAi(app).script('reply', { reply: 'وعليكم السلام، واش تحب تلقى اليوم؟', intent: 'INFO' });
+    expect((await turn(s, sender, { text: 'السلام عليكم' })).outcome).toBe('sent');
+    await resetAi();
+    // the second message came in while the first reply was being written: the reply is saved after it
+    const { conversation } = await receive(app, s.page, sender, { text: 'كيف يمكنني' });
+    const second = await db.message.findFirstOrThrow({ where: { conversationId: conversation.id, author: 'customer' }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
+    await db.message.updateMany({ where: { conversationId: conversation.id, author: 'ai' }, data: { createdAt: new Date(second.createdAt.getTime() + 2000) } });
+    fakeAi(app).script('reply', { reply: 'وعليكم السلام ورحمة الله، يسعدني مساعدتك.', intent: 'INFO' });
+    expect((await answer(app, s.owner.workspaceId, conversation.id))?.outcome).toBe('sent');
+    const [call] = fakeAi(app).callsOf('reply');
+    expect(JSON.stringify(call!.messages)).toContain('واش تحب تلقى اليوم');
+    // the model saw it had answered: the repeated greeting is removed by the guard
+    const texts = (await aiMessages(conversation.id)).map((m) => m.text);
+    expect(texts).toHaveLength(2);
+    expect(texts.filter((t) => t !== 'وعليكم السلام، واش تحب تلقى اليوم؟')).toEqual([expect.not.stringMatching(/^وعليكم السلام/u)]);
+  });
+
   it('tester report 22/10 / full-test 15/11 AI-CHAT-02: in a long thread the format-reminder retry keeps only the last 8 messages (and offers no tool), so the answer still goes out', async () => {
     const s = await shop();
     const sender = newSender();
