@@ -376,6 +376,8 @@ describe('full-test 15/11 — language, dialect and script (AI-CHAT-04, proposal
     expect(rules('مرحبا، كيفاش وnعاونك؟', facts({ lang: 'ar', customerText: 'x' }, []))).toContain('script_mix');
     expect(fixScriptMix('كيفاش وnعاونك؟')).toBe('كيفاش وعاونك؟');
     expect(rules('التوصيل لـ Oran بـ 600 دج', facts({ lang: 'ar', customerText: 'x' }, [{ ok: true, fee: 600 }]))).not.toContain('script_mix');
+    // R23 (22/11): a size glued to « و » before an Arabic comma is not a glued letter — « S وM، » kept its « M » only after this
+    expect(rules('بسعر 4 900 دج للمقاسين S وM، و5200 دج للمقاس XL.', facts({ lang: 'ar', customerText: 'x' }, []))).not.toContain('script_mix');
     const e = enforceReply('مرحبا، كيفاش وnعاونك اليوم؟', [{ rule: 'script_mix', sentence: 0 }], facts({ lang: 'ar' }), { hasCards: false });
     expect(e.reply).toBe('مرحبا، كيفاش وعاونك اليوم؟');
   });

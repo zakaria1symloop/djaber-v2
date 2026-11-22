@@ -41,5 +41,7 @@ export const outputContractSection = (c: PromptContext): string =>
     '"reply" is the exact text sent to the customer: what a good human seller of this shop would write on Messenger — plain text, no markdown, no internal id, short. Prices, fees and stock come only from the catalogue above or from tool results.',
     // A5: the owner's rules are checked last, right before the answer is written
     ...(c.agent.customInstructions.trim() ? ['Before answering, check that "reply" follows the OWNER INSTRUCTIONS above (emoji use, tone, length, words to avoid).'] : []),
+    // R23 (22/11): steps calling « noop » / « dummy » (1.2–3.4 s each, then the same answer one step later)
+    'Call a tool only when this answer needs its result, and only a tool of the list. When no tool is needed, write the JSON object directly: never a placeholder call (« noop », « dummy », « none »).',
     'Return only the structured output.',
   ].join('\n');

@@ -454,7 +454,9 @@ export const fixMoroccan = (text: string): string => {
   return out;
 };
 /** A Latin letter glued inside an Arabic word (« وnعاونك », rule 16 « one script per sentence »). */
-export const SCRIPT_GLUE = /(?<=[؀-ۿ])[A-Za-z]{1,3}(?=[؀-ۿ])/gu;
+// R23 (22/11): Arabic LETTERS on both sides only — « للمقاسين S وM، » (و glued to the size, then an Arabic comma) lost its « M »:
+// the punctuation of the Arabic block (، ؛ ؟) and its digits are not letters
+export const SCRIPT_GLUE = /(?<=[ء-يٮ-ۓ])[A-Za-z]{1,3}(?=[ء-يٮ-ۓ])/gu;
 
 /**
  * Locale of the workspace system messages (welcome, out of hours, handoff, out of stock — fr / ar / en only): `ar` for
