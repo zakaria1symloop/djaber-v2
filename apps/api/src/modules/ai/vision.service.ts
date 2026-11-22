@@ -41,6 +41,11 @@ const MATCH = 'The first image is a customer photo. The next images are candidat
 const CAPTION = 'Caption this product image in one sentence for search: type, colour, material, notable text';
 const PRODUCT = 'You help a shop owner create a product from photos. Reply as JSON { "name": string, "description": string, "categoryName": string|null, "unitName": string|null, "attributes": [{ "name": string, "values": string[] }] }. Never give a price. Pick categoryName and unitName only from the lists provided.';
 
+// R23 (22/11): the Claude 5 models think inside max_tokens — at the default effort the describe call spent its 400 tokens
+// thinking and answered nothing (no description, so no match: « je n'arrive pas à confirmer la photo »). Room for both.
+export const VISION_MAX_TOKENS = 1500;
+export const PRODUCT_VISION_MAX_TOKENS = 2500;
+
 @Injectable()
 export class VisionService {
   private readonly log = new Logger(VisionService.name);
@@ -51,7 +56,7 @@ export class VisionService {
     private readonly storage: StorageService,
   ) {}
 
-  private async ask(purpose: 'vision_describe' | 'vision_match' | 'caption' | 'product_vision', system: string, parts: AiPart[], usage: AiUsage, maxTokens = 400) {
+  private async ask(purpose: 'vision_describe' | 'vision_match' | 'caption' | 'product_vision', system: string, parts: AiPart[], usage: AiUsage, maxTokens = VISION_MAX_TOKENS) {
     const r = await this.routing.call('vision', (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose, system, messages: [{ role: 'user', content: parts }], temperature: 0, maxTokens, timeoutMs }));
     usage.inputTokens += r.value.usage.inputTokens;
     usage.outputTokens += r.value.usage.outputTokens;
@@ -120,7 +125,7 @@ export class VisionService {
     ];
     let text: string;
     try {
-      text = await this.ask('product_vision', PRODUCT, parts, { inputTokens: 0, outputTokens: 0 }, 700);
+      text = await this.ask('product_vision', PRODUCT, parts, { inputTokens: 0, outputTokens: 0 }, PRODUCT_VISION_MAX_TOKENS);
     } catch (e) {
       if (e instanceof AiProviderError || (e instanceof AppException && e.code === 'AGENT_MODEL_UNAVAILABLE')) throw new AppException('IMAGE_ANALYSIS_UNAVAILABLE');
       throw e;
