@@ -367,6 +367,12 @@ describe('full-test 15/11 — language, dialect and script (AI-CHAT-04, proposal
   ] as const)('not flagged: %s', (_what, lang, reply) => {
     expect(rules(reply, facts({ lang, customerText: 'x' }, []))).not.toContain('language_switch');
   });
+  it('Houssem L28 (23/11): « حبيت نشوف الصور » in a French conversation is an Arabic message — the Arabic reply stands, a French one is the switch', () => {
+    const f = facts({ lang: 'fr', customerText: 'حبيت نشوف الصور' }, []);
+    expect(f.messageLang).toBe('ar');
+    expect(rules('هاهم الصور تاع الكوستيم، وصلوك تحت. تحب نحجزهولك؟', f)).not.toContain('language_switch');
+    expect(rules('Voici les photos du produit, elles arrivent juste après. Je vous le réserve ?', facts({ lang: 'ar', customerText: 'حبيت نشوف الصور' }, []))).toContain('language_switch');
+  });
   it('Moroccan words in an arabizi / Arabic-script reply; never in French', () => {
     expect(rules('Chno t7eb tchouf ? 3andna bezzaf dyal les modèles.', facts({ lang: 'arabizi', customerText: 'x' }, []))).toContain('moroccan_darija');
     expect(rules('شنو بغيتي؟', facts({ lang: 'ar', customerText: 'x' }, []))).toContain('moroccan_darija');

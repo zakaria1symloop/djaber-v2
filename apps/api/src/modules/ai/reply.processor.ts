@@ -374,11 +374,13 @@ export class ReplyProcessor implements OnModuleInit {
     const out = turn.output;
     const blocked = await this.blockedWord(conv.workspaceId, out.reply);
     // AI-14: cards only for products the agent may sell right now
-    const cards = blocked ? [] : (await this.catalogue.byIds(agent, out.productCards)).map((p) => p.id);
+    const cardsAsked = blocked ? [] : (await this.catalogue.byIds(agent, out.productCards)).map((p) => p.id);
     // PV 09/11 « l'agent répond avec seulement l'image principale »: every picture of a product (a gallery) when the customer
     // tapped « Plus de photos » on a card or asked for more photos (`productPhotos`) — products the agent may sell only
     const askedPhotos = photosTapped(batch);
     const galleries = blocked ? [] : (await this.catalogue.byIds(agent, [...new Set([...askedPhotos, ...(out.productPhotos ?? [])])])).map((p) => p.id).slice(0, 2);
+    // Houssem L28 (23/11): a product sent as its gallery is not sent again as a single card (its first photo went out twice)
+    const cards = cardsAsked.filter((id) => !galleries.includes(id));
     const toolProducts = turn.tools.flatMap((t) => ((t.result as { products?: { id: string }[] } | null)?.products ?? []).map((p) => p.id).slice(0, 3));
     const last = batch.messages[batch.messages.length - 1]!;
     const streak = (contextOf(conv).unclearStreak ?? 0) + (out.status === 'UNCLEAR' ? 1 : 0);

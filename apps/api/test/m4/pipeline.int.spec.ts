@@ -626,7 +626,8 @@ describe('product cards on Messenger (PV 09/11)', () => {
 
     // the customer taps « Plus de photos »: the message names the product, the 3 pictures go as one carousel
     await resetAi();
-    fakeAi(app).script('reply', { reply: 'Voici toutes les photos.', status: 'OK', intent: 'SALE' });
+    // Houssem L28 (23/11): the model also names the product as a card — it goes once, as its gallery (its first photo went out twice)
+    fakeAi(app).script('reply', { reply: 'Voici toutes les photos.', status: 'OK', intent: 'SALE', productCards: [s.robe.id] });
     const tap = (payload: string, title: string) => ({ sender: { id: sender }, recipient: { id: s.page.externalId }, timestamp: Date.now(), postback: { mid: `m_${Math.random().toString(36).slice(2)}`, title, payload } });
     await postWebhook(app, delivery(s.page, [tap(`PHOTOS:${s.robe.id}`, 'Plus de photos')])).expect(200);
     await work(app, [s.owner.workspaceId]);
@@ -635,6 +636,7 @@ describe('product cards on Messenger (PV 09/11)', () => {
     expect(asked.text).toBe('Plus de photos · Robe satin bordeaux');
     await answer(app, s.owner.workspaceId, conv.id);
     const gallery = (await outMessages(conv.id)).filter((m) => m.type === 'product_cards').at(-1)!;
+    expect((await outMessages(conv.id)).filter((m) => m.type === 'product_cards' && m.createdAt >= asked.createdAt)).toHaveLength(1);
     expect(gallery.payload).toMatchObject({ gallery: true, locale: 'fr', cards: [{ photo: { n: 1, total: 3 } }, { photo: { n: 2, total: 3 } }, { photo: { n: 3, total: 3 } }] });
     const carousel = sends(sender).filter((c) => c.args.message.kind === 'generic').at(-1)!.args.message.elements;
     expect(carousel).toHaveLength(3);
