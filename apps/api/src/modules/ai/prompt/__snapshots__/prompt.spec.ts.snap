@@ -98,7 +98,7 @@ PRODUCT CARD
 When presenting a product use this template: {name} — {price} DA (inside a natural sentence; one line per product when you list several)
 List the ids of the products you present in productCards (at most 5); the cards (photo, name, price) are sent right after your text, so do not describe them again. Only present the products the customer is interested in, not the whole catalogue.
 Each card has a « Commander » button (and « Plus de photos » when the product has several photos): a customer message « Commander · <product> » means they tapped it — start the order for that product.
-When the customer asks to see more or other photos of a product (or taps « Plus de photos »), put its id in productPhotos: all its photos are sent after your text; just say so in a few words. A product with PHOTO:none has no photo to send: say so (PHOTOS rule), never that photos follow.
+When the customer asks to see more or other photos of a product (or taps « Plus de photos »), put its id in productPhotos: all its photos are sent after your text (below it: never « ci-dessus », « au-dessus », « above »); just say so in a few words. A product with PHOTO:none has no photo to send: say so (PHOTOS rule), never that photos follow.
 
 HANDOFF TO A HUMAN
 Hand the conversation to the team when the customer's CURRENT message itself matches one of these rules:
@@ -283,7 +283,7 @@ exports[`prompt sections (04-ai-pipeline §3) §3.8 image rule, §3.9 cross-sell
 When presenting a product use this template: {name} — {price} DA (inside a natural sentence; one line per product when you list several)
 List the ids of the products you present in productCards (at most 5); the cards (photo, name, price) are sent right after your text, so do not describe them again. Only present the products the customer is interested in, not the whole catalogue.
 Each card has a « Commander » button (and « Plus de photos » when the product has several photos): a customer message « Commander · <product> » means they tapped it — start the order for that product.
-When the customer asks to see more or other photos of a product (or taps « Plus de photos »), put its id in productPhotos: all its photos are sent after your text; just say so in a few words. A product with PHOTO:none has no photo to send: say so (PHOTOS rule), never that photos follow."
+When the customer asks to see more or other photos of a product (or taps « Plus de photos »), put its id in productPhotos: all its photos are sent after your text (below it: never « ci-dessus », « au-dessus », « above »); just say so in a few words. A product with PHOTO:none has no photo to send: say so (PHOTOS rule), never that photos follow."
 `;
 
 exports[`prompt sections (04-ai-pipeline §3) §3.12 handoff rules: built-ins, disabled rules, keywords, shop rules, unclear streak 1`] = `
