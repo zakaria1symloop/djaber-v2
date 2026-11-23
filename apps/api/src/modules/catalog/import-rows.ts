@@ -56,7 +56,7 @@ export const missingRequired = (mapping: ImportMapping): ImportField[] => IMPORT
 
 /** "12 500", "12500 DA", "12 500,00", "12,500.00" → 12500. Null when the cell is not an integer amount. */
 export const parseInteger = (raw: string): number | null => {
-  let s = raw.replace(/[\s  ]/g, '').replace(/(da|dzd|dinars?|د\.?ج)$/i, '');
+  let s = raw.replace(/[\s\u00a0\u202f]/g, '').replace(/(da|dzd|dinars?|د\.?ج)$/i, '');
   if (s === '') return null;
   s = s.replace(/[.,]0{1,2}$/, ''); // ",00" / ".0" written by spreadsheets
   if (/^-?\d{1,3}([.,]\d{3})+$/.test(s)) s = s.replace(/[.,]/g, ''); // thousands separators

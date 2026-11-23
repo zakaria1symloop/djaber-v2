@@ -376,7 +376,8 @@ export class OrderService implements OnModuleInit {
     if (risky && agent?.riskyClientBehavior === 'handoff') return { ok: false, hint: 'risky_client' };
     // FL-02 F-4 duplicate guard
     const signature = (items: { productId: string; variantId: string | null; quantity: number }[]) => items.map((i) => `${i.productId}:${i.variantId ?? ''}:${i.quantity}`).sort().join('|');
-    const recent = await prisma.order.findMany({ where: { clientPhone: req.clientPhone, status: { not: 'cancelled' }, orderedAt: { gte: new Date(Date.now() - AI_ORDER_DUPLICATE_WINDOW_MIN * MIN) } }, include: { items: true }, orderBy: { orderedAt: 'desc' } });
+    // Houssem live 23/11 UX-081: the order being replaced is no duplicate of its replacement (same phone and items, another address)
+    const recent = await prisma.order.findMany({ where: { clientPhone: req.clientPhone, status: { not: 'cancelled' }, ...(req.replaces ? { id: { not: req.replaces.id } } : {}), orderedAt: { gte: new Date(Date.now() - AI_ORDER_DUPLICATE_WINDOW_MIN * MIN) } }, include: { items: true }, orderBy: { orderedAt: 'desc' } });
     const duplicate = recent.find((o) => signature(o.items) === signature(req.items));
     if (duplicate) return this.toolResult(duplicate, duplicate.items, duplicate.number);
 

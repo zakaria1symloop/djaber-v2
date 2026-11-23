@@ -126,6 +126,14 @@ describe('checkout → Chargily → activation (BIL-02, FL-28)', () => {
     await fakeChargily(app).decide(checkoutIdOf(b.checkoutUrl), 'failed', 'insufficient_funds');
     // no webhook delivered: the poll asks the gateway (one verify per poll) and settles it
     expect((await owner.get(`/billing/checkout/return?ref=${b.ref}`).expect(200)).body.data).toMatchObject({ status: 'failed', failureReason: 'insufficient_funds' });
+    // Houssem live 23/11 UX-078 (« Payment declined. Bank reason: PAYMENT_FAILED » after the merchant's own « Cancel »): a payment the payer
+    // cancelled says `canceled`; a failure the gateway gives no reason for carries none — never a code of ours as the « bank reason »
+    const b2 = (await checkout(owner, { planId: await planId('pro'), cycle: 'monthly' }).expect(200)).body.data;
+    await fakeChargily(app).decide(checkoutIdOf(b2.checkoutUrl), 'failed', 'canceled');
+    expect((await owner.get(`/billing/checkout/return?ref=${b2.ref}`).expect(200)).body.data).toMatchObject({ status: 'failed', failureReason: 'canceled' });
+    const b3 = (await checkout(owner, { planId: await planId('pro'), cycle: 'monthly' }).expect(200)).body.data;
+    await fakeChargily(app).decide(checkoutIdOf(b3.checkoutUrl), 'failed', '');
+    expect((await owner.get(`/billing/checkout/return?ref=${b3.ref}`).expect(200)).body.data).toMatchObject({ status: 'failed', failureReason: null });
     const c = (await checkout(owner, { planId: await planId('pro'), cycle: 'monthly' }).expect(200)).body.data;
     await payFake(app, c.checkoutUrl, 'expired');
     expect((await owner.get(`/billing/checkout/return?ref=${c.ref}`).expect(200)).body.data.status).toBe('expired');

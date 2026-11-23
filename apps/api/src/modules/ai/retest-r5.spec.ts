@@ -62,7 +62,7 @@ describe('R5-1 — an out-of-stock product is never offered as an alternative', 
   });
   it('the prompt: alternatives come from in-stock products only', () => {
     const s = catalogueSection({ catalogue: { full: true, count: 0, products: [], awaitingReview: false }, workspace: { systemMessages: {} }, agent: { outOfStockBehavior: 'suggest_alternative', showMissingVariants: false }, lang: 'fr', locale: 'fr', descriptionMax: 200 } as never);
-    expect(s).toContain('ALTERNATIVES_IN_STOCK: every product you offer, suggest or list');
+    expect(s).toContain('ALTERNATIVES_IN_STOCK: every product you offer or suggest on your own');
     expect(s).toContain('suggest an alternative from the same category that is in stock');
     expect(s).toContain('offer what is listed and in stock');
   });

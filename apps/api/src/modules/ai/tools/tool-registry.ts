@@ -127,7 +127,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
         notes: { type: 'string', maxLength: 500 },
         customerConfirmed: { const: true },
         phoneConfirmed: { type: 'boolean', description: 'true once the customer re-confirmed the phone number when a tool asked for it' },
-        replacesOrder: { type: 'string', maxLength: 30, description: "number of THIS customer's order that the new one replaces (other product, size, quantity or address): the new order is created first, then that one is cancelled" },
+        replacesOrder: { type: 'string', maxLength: 30, description: "number of THIS customer's order that the new one replaces (other product, size, quantity or address): give the new values — the items, name, phone and delivery place the customer does not change are kept from that order; the new order is created first, then that one is cancelled" },
       },
     },
   },
@@ -139,7 +139,7 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
   lookup_order: {
     name: 'lookup_order',
     description:
-      "Where are the customer's orders: order status, delivery status, courier, tracking number, tracking link (trackingUrl), last courier event and, for the customer's own orders, the total and what is left to pay (leftToPay: 0 once paid, cancelled or returned). Without arguments: the orders of this customer (this conversation, or the phone they ordered with). An order placed by phone or from another account: give the phone number used for it, or the parcel's tracking number.",
+      "Where are the customer's orders: order status, delivery status, courier, tracking number, tracking link (trackingUrl), last courier event and, for the customer's own orders, the total and what is left to pay (leftToPay: 0 once paid, cancelled or returned). Without arguments: the orders of this customer (this conversation, or the phone they ordered with), each with its items; an order placed in this conversation also comes with its delivery details and `changeable`. An order placed by phone or from another account: give the phone number used for it, or the parcel's tracking number.",
     parameters: { type: 'object', additionalProperties: false, properties: { orderNumber: { type: 'string' }, phone: { type: 'string', description: 'phone number the order was placed with (05/06/07…)' }, trackingNumber: { type: 'string' } } },
   },
   handoff_to_human: {
@@ -764,7 +764,7 @@ export class ToolRegistry {
     const byPhone = (p: string[]): Prisma.OrderWhereInput[] => (p.length ? [{ clientPhone: { in: p } }, { clientPhone2: { in: p } }] : []);
     // a phone / tracking number the customer typed: exactly those orders; otherwise the customer's own orders
     const asked: Prisma.OrderWhereInput[] = [...byPhone(phone ? [phone] : []), ...(tracking ? [{ shipments: { some: { trackingNumber: { equals: tracking, mode: 'insensitive' as const } } } }] : [])];
-    const who: Prisma.OrderWhereInput[] = asked.length ? asked : [...(ctx.clientId ? [{ clientId: ctx.clientId }] : []), ...byPhone(own)];
+    const who: Prisma.OrderWhereInput[] = asked.length ? asked : [...this.ownOrders(ctx), ...byPhone(own)];
     // full-test 15/11 AI-CHAT-16: the playground sees the TEST-n orders of its session (status new, not shipped)
     // journey re-run J04r-2 (18/11): with the cancelled / replaced ones and their status (« elle est bien annulée ? » found nothing)
     const simulated = ctx.dryRun && !phone && !tracking ? simulatedOrderStates(ctx.orderHistory).filter((o) => !number || o.number.toLowerCase() === number.toLowerCase()).map((o) => ({ number: o.number, status: o.status, deliveryStatus: 'not_sent', courier: null, trackingNumber: null, trackingUrl: null, lastEvent: null, total: o.total, orderedAt: aiDateTime(o.at), ...(o.replacedBy ? { replacedBy: o.replacedBy } : {}), simulated: true })) : [];
@@ -775,14 +775,17 @@ export class ToolRegistry {
       where: { OR: who, ...(number ? { number: { equals: number, mode: 'insensitive' } } : tracking ? {} : { NOT: { status: { in: ['delivered', 'cancelled', 'returned'] }, orderedAt: { lt: old } } }) },
       orderBy: { orderedAt: 'desc' },
       take: 5,
-      include: { shipments: { orderBy: { createdAt: 'desc' }, take: 1, include: { events: { orderBy: { at: 'desc' }, take: 1 } } } },
+      include: { shipments: { orderBy: { createdAt: 'desc' }, take: 1, include: { events: { orderBy: { at: 'desc' }, take: 1 } } }, items: true, wilaya: { select: { nameFr: true } }, commune: { select: { nameFr: true } } },
     });
     const web = this.config.get('PUBLIC_WEB_URL').replace(/\/$/, '');
     return {
       orders: rows.map((o) => {
         const s = o.shipments[0];
         const e = s?.events[0];
-        const mine = (!!ctx.clientId && o.clientId === ctx.clientId) || own.includes(o.clientPhone) || (!!o.clientPhone2 && own.includes(o.clientPhone2));
+        // Houssem live 23/11 UX-081: an order placed in this very conversation is the customer's own, whatever phone it was placed with
+        const here = !!ctx.conversationId && o.conversationId === ctx.conversationId;
+        const mine = here || (!!ctx.clientId && o.clientId === ctx.clientId) || own.includes(o.clientPhone) || (!!o.clientPhone2 && own.includes(o.clientPhone2));
+        const changeable = o.status === 'new' && o.deliveryStatus === 'not_sent';
         return {
           number: o.number,
           status: o.status,
@@ -793,10 +796,61 @@ export class ToolRegistry {
           lastEvent: e ? { at: aiDateTime(e.at), label: shipmentEventLabel(e), location: e.location ?? null } : null,
           // journey J08v-4: what is left to pay = the shared « reste à encaisser » of the order pages (0 once cancelled / returned)
           ...(mine ? { total: o.total, leftToPay: orderRemaining(o) } : {}),
+          // UX-081 (« je n'ai pas le détail de son contenu… j'ai besoin du produit et de la quantité »): what the order holds, and for
+          // an order of this conversation where it goes — so a change (create_order with replacesOrder) needs nothing asked again
+          ...(mine ? { items: o.items.map((i) => ({ productId: i.productId, ...(i.variantId ? { variantId: i.variantId } : {}), name: i.variantName ? `${i.productName} — ${i.variantName}` : i.productName, quantity: i.quantity })) } : {}),
+          ...(here ? { delivery: { clientName: o.clientName, clientPhone: o.clientPhone, wilayaId: o.wilayaId, wilaya: o.wilaya?.nameFr ?? null, communeName: o.communeText ?? o.commune?.nameFr ?? null, address: o.address, isStopdesk: o.isStopdesk } } : {}),
+          ...(mine ? { changeable, ...(changeable ? { toChange: `create_order with replacesOrder=${o.number} and the new values only (the rest of the order is kept)` } : {}) } : {}),
           orderedAt: aiDateTime(o.orderedAt),
         };
       }),
     };
+  }
+
+  /**
+   * The customer's own orders: those of their client record and those placed in this very conversation. Houssem live 23/11 UX-081: a
+   * customer who orders with another phone number gets another client record, and the orders placed earlier in the same thread
+   * (CMD-1011) were « not found » — no status, no cancellation, no change.
+   */
+  private ownOrders(ctx: Pick<ToolRunContext, 'clientId' | 'conversationId'>): Prisma.OrderWhereInput[] {
+    return [...(ctx.clientId ? [{ clientId: ctx.clientId }] : []), ...(ctx.conversationId ? [{ conversationId: ctx.conversationId }] : [])];
+  }
+
+  /**
+   * UX-081 (« je veux changer l'adresse de ma commande CMD-1011 » ⇒ handed to the team, then « j'ai besoin du produit et de la
+   * quantité »): a `create_order` that replaces an order keeps what the call leaves out — the items of that order always; its name,
+   * phone and delivery place only for an order placed in this very conversation (the recap shows them). `kept` = the personal
+   * fields that are that order's own values: they were given for it, so they are never « not given by the customer ».
+   */
+  private async carriedOver(args: Record<string, unknown>, ctx: ToolRunContext): Promise<{ args: Record<string, unknown>; kept: Set<string> } | null> {
+    const number = typeof args.replacesOrder === 'string' ? args.replacesOrder.trim() : '';
+    const own = this.ownOrders(ctx);
+    if (!number || ctx.dryRun || !own.length) return null;
+    const old = await prisma.order.findFirst({ where: { OR: own, number: { equals: number, mode: 'insensitive' }, status: 'new', deliveryStatus: 'not_sent' }, include: { items: true, commune: { select: { nameFr: true } } } });
+    if (!old) return null;
+    const out: Record<string, unknown> = { ...args };
+    const kept = new Set<string>();
+    const blank = (k: string) => out[k] === undefined || out[k] === null || (typeof out[k] === 'string' && !(out[k] as string).trim());
+    const same = (a: unknown, b: unknown) => fold(String(a ?? '')) === fold(String(b ?? ''));
+    if (!Array.isArray(out.items) || !out.items.length) out.items = old.items.map((i) => ({ productId: i.productId, ...(i.variantId ? { variantId: i.variantId } : {}), quantity: i.quantity }));
+    if (!ctx.conversationId || old.conversationId !== ctx.conversationId) return { args: out, kept };
+    if (blank('clientName')) out.clientName = old.clientName;
+    if (same(out.clientName, old.clientName)) kept.add('clientName');
+    if (blank('clientPhone')) out.clientPhone = old.clientPhone;
+    if (normalizePhoneDz(String(out.clientPhone)) === normalizePhoneDz(old.clientPhone)) kept.add('clientPhone');
+    if (blank('secondPhone') && old.clientPhone2 && kept.has('clientPhone')) out.secondPhone = old.clientPhone2;
+    // the delivery place: the wilaya stays unless another one is given; the commune stays in the same wilaya; the address in the same commune
+    if (blank('wilayaId') && old.wilayaId) out.wilayaId = old.wilayaId;
+    if (!old.wilayaId || Number(out.wilayaId) !== old.wilayaId) return { args: out, kept };
+    kept.add('wilayaId');
+    const oldCommune = old.communeText ?? old.commune?.nameFr ?? null;
+    const placeGiven = !blank('address') || !blank('communeName');
+    // the delivery mode stays unless the call says otherwise or gives a home address
+    if (out.isStopdesk === undefined || out.isStopdesk === null) out.isStopdesk = placeGiven ? false : old.isStopdesk;
+    if (out.isStopdesk === true && old.isStopdesk && blank('stopdeskId') && old.stopdeskId) out.stopdeskId = old.stopdeskId;
+    if (blank('communeName') && oldCommune) out.communeName = oldCommune;
+    if (out.isStopdesk !== true && blank('address') && old.address && same(out.communeName, oldCommune)) out.address = old.address;
+    return { args: out, kept };
   }
 
   /** Validation, catalogue check and limits of `create_order` (04 §5, FL-02); the write itself is the `OrderTools` port. */
@@ -807,6 +861,10 @@ export class ToolRegistry {
     // `customerConfirmed false` ⇒ « not given yet », no order, and an invented « problème technique »)
     const pending = this.pendingOrder(args, ctx);
     if (pending) args = pending;
+    // UX-081: an order that replaces another one keeps what the customer does not change
+    const carried = await this.carriedOver(args, ctx);
+    if (carried) args = carried.args;
+    const kept = carried?.kept ?? new Set<string>();
     // journey retest R11-1 (17/11): `items` sent as a JSON string or as code (F1b T3) is read into lines when it names the shop's
     // products without doubt — else a precise refusal naming the expected shape (never « the customer has not given items yet »)
     if (!pending && args.items !== undefined && args.items !== null && !(typeof args.items === 'string' && !args.items.trim())) {
@@ -826,26 +884,27 @@ export class ToolRegistry {
     // with the absent fields, and the model is told not to call create_order again in this turn
     const known = ctx.customerHistory !== undefined ? await this.knownPhones(ctx) : null;
     const typedPhone = typeof args.clientPhone === 'string' && args.clientPhone.trim() ? normalizePhoneDz(args.clientPhone) : null;
+    if (known && typedPhone && kept.has('clientPhone')) known.add(typedPhone);
     const wilayaArg = Number(args.wilayaId);
     const place = Number.isInteger(wilayaArg) && wilayaArg >= 1 && wilayaArg <= WILAYA_COUNT ? await prisma.wilaya.findUnique({ where: { id: wilayaArg }, include: { communes: { select: { nameFr: true, nameAr: true } } } }) : null;
     const invented: string[] = [];
     // a wrong number the customer did type (« 05559876 ») keeps its own answer (re-asked with an example)
     const typedDigits = typedPhone ? typedPhone.replace(/\D/g, '').slice(-8) : '';
     if (known && typedPhone && !absent.includes('clientPhone') && !known.has(typedPhone) && !(ctx.customerHistory ?? '').replace(/\D/g, '').includes(typedDigits)) invented.push('clientPhone');
-    if (place && ctx.customerHistory !== undefined && !absent.includes('wilayaId') && !(await this.wilayaGiven(ctx, place, typeof args.communeName === 'string' ? args.communeName : null))) invented.push('wilayaId');
+    if (place && ctx.customerHistory !== undefined && !kept.has('wilayaId') && !absent.includes('wilayaId') && !(await this.wilayaGiven(ctx, place, typeof args.communeName === 'string' ? args.communeName : null))) invented.push('wilayaId');
     // journey retest R3-3: a name the customer never wrote (« Client » with nothing else given) is refused with the rest — a
     // placeholder always, any other name when none of its words is in their messages or in the client record
     let typedName = typeof args.clientName === 'string' ? args.clientName.trim() : '';
     // journey retest R8-2 (17/11): « smiti وليد بوزيد » sent as « Walid Bouzid » — the name the customer wrote in the other
     // script is theirs: the server uses their own text (refused twice in F3, no recap was ever shown)
-    if (typedName && !absent.includes('clientName') && !isPlaceholderName(typedName) && ctx.customerHistory !== undefined && !(await this.nameKnown(ctx, typedName))) {
+    if (typedName && !kept.has('clientName') && !absent.includes('clientName') && !isPlaceholderName(typedName) && ctx.customerHistory !== undefined && !(await this.nameKnown(ctx, typedName))) {
       const own = customerOwnName(typedName, ctx.customerHistory);
       if (own) {
         args = { ...args, clientName: own };
         typedName = own;
       }
     }
-    if (typedName && !absent.includes('clientName') && (isPlaceholderName(typedName) || (ctx.customerHistory !== undefined && !(await this.nameKnown(ctx, typedName))))) invented.unshift('clientName');
+    if (typedName && !absent.includes('clientName') && (isPlaceholderName(typedName) || (!kept.has('clientName') && ctx.customerHistory !== undefined && !(await this.nameKnown(ctx, typedName))))) invented.unshift('clientName');
     // journey retest R3-3: a phone the customer did type but with the wrong length (« 05559876 ») is named in the same answer
     const badPhone = typedPhone && !invented.includes('clientPhone') && !absent.includes('clientPhone') && !isPhoneDz(typedPhone) ? 'clientPhone' : null;
     if (absent.length || invented.length) {
@@ -872,7 +931,7 @@ export class ToolRegistry {
     // journey re-run J04r-1 (18/11, Blocker): the last valid phone the customer gave wins — « 0661234567 » then « non, c'est 0770998877 »
     // ⇒ 0770998877 whatever number the model copied (a later message adding a second number keeps the first one as the main phone)
     const lastPhone = ctx.customerHistory !== undefined ? latestPhone(ctx.customerHistory) : null;
-    if (lastPhone && isPhoneDz(phone) && lastPhone !== phone && (!d.secondPhone || normalizePhoneDz(d.secondPhone) !== lastPhone) && known?.has(phone)) phone = lastPhone;
+    if (lastPhone && !kept.has('clientPhone') && isPhoneDz(phone) && lastPhone !== phone && (!d.secondPhone || normalizePhoneDz(d.secondPhone) !== lastPhone) && known?.has(phone)) phone = lastPhone;
     // journey 16/11 J05-9: a number the customer never wrote (« 0500000000 », « 0000000000 » before any phone was given) is
     // asked for first, before the address and the other checks — the model used to get a format error and guess again
     if (!isPhoneDz(phone)) return fail(known && known.size === 0 ? { ok: false, error: { code: 'VALIDATION', field: 'clientPhone', missing: true, example: EXAMPLES.clientPhone }, say: 'ask the customer for this value (one question); never invent it' } : invalid('clientPhone', EXAMPLES.clientPhone));
@@ -896,7 +955,8 @@ export class ToolRegistry {
     const simulatedOld = ctx.dryRun && d.replacesOrder ? simulatedOrders(ctx.orderHistory).find((o) => o.number.toLowerCase() === d.replacesOrder!.trim().toLowerCase()) : undefined;
     if (simulatedOld) replaces = { id: 'simulated', number: simulatedOld.number };
     else if (d.replacesOrder) {
-      const old = ctx.clientId ? await prisma.order.findFirst({ where: { clientId: ctx.clientId, number: { equals: d.replacesOrder.trim(), mode: 'insensitive' } }, include: { items: true } }) : null;
+      const mine = this.ownOrders(ctx);
+      const old = mine.length ? await prisma.order.findFirst({ where: { OR: mine, number: { equals: d.replacesOrder.trim(), mode: 'insensitive' } }, include: { items: true } }) : null;
       if (!old || old.status === 'cancelled' || old.status === 'returned' || old.status === 'delivered' || old.deliveryStatus !== 'not_sent') return fail({ ok: false, error: { code: 'ORDER_NOT_REPLACEABLE', number: d.replacesOrder } });
       if (old.status !== 'new') return fail({ ok: false, error: { code: 'ORDER_CONFIRMED_BY_SELLER', number: old.number }, hint: 'handoff' });
       replaces = { id: old.id, number: old.number };
@@ -1187,17 +1247,18 @@ export class ToolRegistry {
         return { ok: true, cancelled: target.number, simulated: true };
       }
     }
-    if (!ctx.clientId) return { ok: false, error: { code: 'NO_OPEN_ORDER' } };
+    const mine = this.ownOrders(ctx);
+    if (!mine.length) return { ok: false, error: { code: 'NO_OPEN_ORDER' } };
     // A8 (tester report 2026-10-20): only orders the shop has not confirmed yet; a confirmed one is the team's to cancel
-    const open = await prisma.order.findMany({ where: { clientId: ctx.clientId, status: 'new', deliveryStatus: 'not_sent' }, orderBy: { orderedAt: 'desc' }, take: 10 });
+    const open = await prisma.order.findMany({ where: { OR: mine, status: 'new', deliveryStatus: 'not_sent' }, orderBy: { orderedAt: 'desc' }, take: 10 });
     const candidates: CancellableOrder[] = open.map((o) => ({ id: o.id, number: o.number, total: o.total, status: o.status, orderedAt: aiDateTime(o.orderedAt) }));
     const publicList = candidates.map(({ id: _id, ...c }) => c);
-    const confirmed = await prisma.order.findFirst({ where: { clientId: ctx.clientId, status: { in: ['confirmed', 'preparing'] }, deliveryStatus: 'not_sent', ...(number ? { number: { equals: number, mode: 'insensitive' } } : {}) }, select: { number: true } });
+    const confirmed = await prisma.order.findFirst({ where: { OR: mine, status: { in: ['confirmed', 'preparing'] }, deliveryStatus: 'not_sent', ...(number ? { number: { equals: number, mode: 'insensitive' } } : {}) }, select: { number: true } });
     if (confirmed && (!candidates.length || (number && !candidates.some((c) => c.number.toLowerCase() === number)))) return { ok: false, error: { code: 'ORDER_CONFIRMED_BY_SELLER', number: confirmed.number }, hint: 'handoff' };
     if (!candidates.length) {
       const was = already(0);
       if (was) return was;
-      const any = number ? await prisma.order.findFirst({ where: { clientId: ctx.clientId, number: { equals: number, mode: 'insensitive' } }, select: { id: true } }) : await prisma.order.findFirst({ where: { clientId: ctx.clientId, status: { notIn: ['cancelled', 'returned', 'delivered'] } }, select: { id: true } });
+      const any = number ? await prisma.order.findFirst({ where: { OR: mine, number: { equals: number, mode: 'insensitive' } }, select: { id: true } }) : await prisma.order.findFirst({ where: { OR: mine, status: { notIn: ['cancelled', 'returned', 'delivered'] } }, select: { id: true } });
       return { ok: false, error: { code: any ? 'ORDER_NOT_CANCELLABLE' : 'NO_OPEN_ORDER' } };
     }
     const target = number ? candidates.find((c) => c.number.toLowerCase() === number) : candidates.length === 1 ? candidates[0] : undefined;

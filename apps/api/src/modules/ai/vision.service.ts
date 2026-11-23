@@ -98,7 +98,10 @@ export class VisionService {
     // every candidate gets its primary picture first, then the other pictures while room is left
     const keys = candidates.map((c) => (c.imageKeys?.length ? c.imageKeys : c.imageKey ? [c.imageKey] : []).slice(0, VISION_PHOTOS_PER_PRODUCT));
     const take = keys.map(() => 0);
-    for (let round = 0; round < VISION_PHOTOS_PER_PRODUCT && left > 0; round++) for (let i = 0; i < keys.length && left > 0; i++) if (keys[i]!.length > round) (take[i]!++, left--);
+    for (let round = 0; round < VISION_PHOTOS_PER_PRODUCT && left > 0; round++) for (let i = 0; i < keys.length && left > 0; i++) if (keys[i]!.length > round) {
+          take[i]!++;
+          left--;
+        }
     return Promise.all(
       candidates.map(async (c, i) => ({ c, imgs: (await Promise.all(keys[i]!.slice(0, take[i]).map((k) => this.storage.get(k).then((f) => f.body, () => null)))).filter((b): b is Buffer => !!b) })),
     );

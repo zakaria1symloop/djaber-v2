@@ -217,7 +217,11 @@ export class PaymentService implements OnModuleInit {
     const raw = (r.raw ?? {}) as Raw;
     const open = Date.now() - r.createdAt.getTime() < CHECKOUT_EXPIRES_MIN * 60_000;
     const status: CheckoutReturnDto['status'] = r.status === 'paid' ? 'success' : r.status === 'failed' ? 'failed' : r.status === 'expired' ? 'expired' : raw.flagged || !open ? 'pending' : 'verifying';
-    return { status, ...(await describe(r)), failureReason: r.status === 'failed' ? (raw.failureReason ?? 'PAYMENT_FAILED') : null };
+    // Houssem live 23/11 UX-078 (« Payment declined. Bank reason: PAYMENT_FAILED » after the merchant's own « Cancel »): the reason is
+    // `canceled` for a payment the payer cancelled, the bank's own reason when the gateway gives one, else none (never a code of ours)
+    const reason = (raw.failureReason ?? '').trim();
+    const failureReason = r.status !== 'failed' ? null : /^cancell?ed$/i.test(reason) ? 'canceled' : !reason || /^(?:failed|payment_failed)$/i.test(reason) ? null : reason;
+    return { status, ...(await describe(r)), failureReason };
   }
 
   intentOf(p: Pick<BillingPayment, 'raw'>): PaymentIntent | null {

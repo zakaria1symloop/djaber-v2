@@ -41,14 +41,16 @@ import type { PromptContext } from './prompt/prompt.types';
 import { productWanted } from './product-named';
 import { TOOL_ALIASES, TOOL_DEFS } from './tools/tool-registry';
 import { confirmation, phonesIn } from './tools/order-confirmation';
-import { confirmRequest, notedClaim, orderClaim, recapClaim } from './tools/order-confirmation-text';
+import { confirmRequest, money, notedClaim, orderClaim, recapClaim } from './tools/order-confirmation-text';
 import { articleless, fold as foldPlace, WILAYA_ALIASES } from './tools/wilaya-aliases';
 
-export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing' | 'contradicts_customer' | 'unavailable_offer' | 'photo_claim' | 'invented_problem' | 'confirm_without_recap' | 'order_claim';
+export type GuardRule = 'unknown_amount' | 'technical_leak' | 'stock_count' | 'repeat_greeting' | 'self_name' | 'language_switch' | 'moroccan_darija' | 'script_mix' | 'false_confession' | 'fee_missing' | 'contradicts_customer' | 'unavailable_offer' | 'photo_claim' | 'invented_problem' | 'confirm_without_recap' | 'order_claim' | 'list_incomplete' | 'greeting_push';
 /** Rules the server fixes itself: no corrective model turn for them alone. */
 // journey retest R18-3 (18/11): and a missing fee — the server writes the fee sentence of every owed quote (`enforceReply`) instead of a corrective
 // model turn that only re-wrote the reply with the fee (F1b T2 7.8 s, R16 F9)
-export const AUTO_FIX_RULES: readonly GuardRule[] = ['script_mix', 'fee_missing'];
+// Houssem live 23/11 UX-080: and a product list that leaves products out — the server adds them (`enforceReply`)
+// UX-079: and an offer pushed on a plain greeting — its sentences are dropped (a short greeting is left)
+export const AUTO_FIX_RULES: readonly GuardRule[] = ['script_mix', 'fee_missing', 'list_incomplete', 'greeting_push'];
 export type LeakKind = 'uuid' | 'tool' | 'code' | 'key' | 'json' | 'marker';
 /** `sentence` = index in `splitSentences(reply)`; `value` = the amount / count (never message text) */
 export type GuardViolation = { rule: GuardRule; sentence: number; value?: number; kind?: LeakKind };
@@ -113,6 +115,12 @@ export type GuardFacts = {
   zeroStock?: string[];
   /** their catalogue names (the corrective instruction) */
   zeroStockNames?: string[];
+  /**
+   * Houssem live 23/11 UX-080 (client list L55 / L93 « la liste des produits oublie des produits »): what the shop sells, when the whole
+   * catalogue is in the prompt and it is short — every product that can be ordered (in stock, a service, or sold beyond its stock),
+   * with its folded names and its price (`from` = the lowest of several variant prices).
+   */
+  listable?: { keys: string[]; name: string; price: number; from: boolean }[];
   /** journey retest R17-3: every customer message of the conversation (a product they asked for earlier is no offer) */
   customerHistory?: string;
   /** journey retest R6-2: ids of the products known to have no photo (catalogue / tool imageUrl null) */
@@ -351,7 +359,7 @@ export const stockCounts = (folded: string): number[] => {
 
 // --- greetings ------------------------------------------------------------------------------------------------------------------
 const GREETINGS = [
-  're\\s*bonjour', 'bonjour', 'bonsoir', 'salut', 'coucou', 'bienvenue', 'hello', 'hi', 'hey', 'good\\s+(?:morning|afternoon|evening)', 'welcome', 'greetings',
+  're\\s*bonjour', 'bonjour', 'bonsoir', 'salut', 'coucou', 'slt', 'cc', 'bjr', 'bsr', 'bienvenue', 'hello', 'hi', 'hey', 'good\\s+(?:morning|afternoon|evening)', 'welcome', 'greetings',
   'و?عليكم\\s+السلام', 'السلام\\s+عليكم', 'سلام\\s+عليكم', 'سلام', 'مرحبا\\s+بيك', 'مرحبتين', 'مرحبا', 'اهلا\\s+و\\s*سهلا', 'اهلا', 'اهلين', 'هلا', 'صباح\\s+الخير', 'مساء\\s+الخير', 'صباح\\s+النور', 'مساء\\s+النور',
   'wa?\\s*(?:3|a)?l[ia]?[iy]?k[ou]u?m\\s+(?:e?s+)?salam', 'salam(?:ou?|u)?\\s+(?:3|a)?l[ia]?[iy]?k[ou]u?m', 'assalam(?:ou|u)?', 'salam', 'slm', 'salem', 'ahlan', 'ahla', 'ahlin', 'marhba', 'marhaba', 'mar7ba', 'sba[7h]\\s*(?:el|l)\\s*khir', 'msa\\s*(?:el|l)\\s*khir',
 ];
@@ -359,6 +367,37 @@ const GREETING_RE = new RegExp(`^(?:${GREETINGS.join('|')})(?=$|[\\s,!.?؟،:;)\
 const INTRO_RE = /^(?:je suis|moi c'est|ici|i am|i'm|this is|ana|انا|معاك|m3ak)(?=\s)/u;
 const ASSISTANT_RE = /assistant|conseill|vendeu|مساعد|البائع|mosa3id|virtual|virtuel/u;
 const LEAD = /^[\s\p{P}\p{S}\p{Emoji_Presentation}]*/u;
+
+// Houssem live 23/11 UX-079 (H-07 16:06 « slt » ⇒ « Je peux te réserver 1 QA 23/11 photos à 5 000 DA, livraison à Alger possible. Tu veux que
+// je la réserve ? »; 16:09 « hello » ⇒ « … I can reserve 1 QA 23/11 photos at 5 000 DA for you »): a message that is only a greeting
+const SHORT_GREETINGS = new Set(['slt', 'cc', 'bjr', 'bsr', 'yo', 'wesh', 'wech', 'azul', 'saha', 'sa7a', 'sa7it', 'salamo', 'salamou', 'slm', 'hola']);
+const SMALL_TALK = new Set(
+  ['ca', 'va', 'cv', 'cava', 'bien', 'labas', 'labes', 'la', 'bas', 'wach', 'rak', 'raki', 'rakom', 'kirak', 'kiraki', 'kifach', 'how', 'are', 'you', 'doing', 'tout', 'le', 'monde', 'كيراك', 'كيفاش', 'راك', 'راكي', 'واش', 'لاباس', 'لباس', 'الحال', 'وراك'].map((w) => foldGuard(w)),
+);
+/** UX-079: the message is only a greeting (« slt », « salam », « hello », « bonjour ça va ? », « السلام عليكم ») — nothing asked, nothing named. */
+export const greetingOnly = (text: string | undefined): boolean => {
+  let t = lightFold((text ?? '').trim()).replace(/[^\p{L}\p{N}' ]+/gu, ' ').replace(/\s+/g, ' ').trim();
+  if (!t || t.split(' ').length > 8) return false;
+  let greeted = false;
+  while (t) {
+    const m = GREETING_RE.exec(t);
+    const first = t.split(' ')[0]!;
+    if (m) {
+      greeted = true;
+      t = t.slice(m[0].length).trim();
+    }
+    else if (SHORT_GREETINGS.has(first)) {
+      greeted = true;
+      t = t.slice(first.length).trim();
+    }
+    else if (GREETING_COMPANIONS.has(foldGuard(first)) || SMALL_TALK.has(foldGuard(first))) t = t.slice(first.length).trim();
+    else return false;
+  }
+  return greeted;
+};
+/** UX-079: a sentence that offers to sell — an amount, or a word of ordering / reserving / delivering. */
+const PUSH_RE = /r[eé]serv|commande|commander|order|livraison|deliver|shipping|tawsil|twassel|nreserv|n7ajz|na7jez|n7jz|ncommand|توصيل|طلبي|الطلب|كوموند|نحجز|احجز|حجز/u;
+export const greetingPushes = (parts: string[]): number[] => parts.map((s, i) => (moneyAmounts(foldGuard(s)).length || PUSH_RE.test(foldGuard(s)) || PUSH_RE.test(s.toLowerCase()) ? i : -1)).filter((i) => i >= 0);
 
 /** Length (in the original text) of a greeting / self-introduction opening `text`, 0 when none. */
 export const greetingAt = (text: string, agentName?: string | null): number => {
@@ -553,6 +592,14 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   // journey 16/11 J03-2: the fee the tool returned this turn is the answer — never dropped for a « merci pour ta patience »
   // journey retest R16-1 (18/11): the fee of EVERY quoted wilaya (F9: Sétif given, the Oran stop-desk quote left out)
   if (facts.quotes?.length && owedQuotes(reply, facts.quotes, facts.customerText).length) out.push({ rule: 'fee_missing', sentence: 0 });
+  // UX-079: nothing is offered, priced or reserved on a message that is only a greeting
+  if (greetingOnly(facts.customerText)) for (const i of greetingPushes(parts)) out.push({ rule: 'greeting_push', sentence: i });
+  // UX-080: « quels produits vous avez ? » answered with a list that leaves products out (H-07: 7 named, 3 forgotten — a service, a product
+  // sold beyond its stock, a product whose name put the model off): the server adds them
+  if (facts.listable?.length && listAsked(facts.customerText)) {
+    const missing = listMissing(reply, facts.listable);
+    if (missing.length && facts.listable.length - missing.length >= 2) out.push({ rule: 'list_incomplete', sentence: 0 });
+  }
   // journey retest R5-1: an out-of-stock product is never offered (N7: « … ou notre parfum Oud 50 ml » to « lunettes de soleil ? »)
   if (facts.unavailable?.length || facts.zeroStock?.length) for (const i of unavailableOffers(parts, facts)) out.push({ rule: 'unavailable_offer', sentence: i });
   // journey retest R6-2: photos announced while none is sent (N9 « Hak tsawer ta3 la robe kabyle brodée », the product has none)
@@ -609,6 +656,47 @@ const nameKeys = (name: string): string[] => {
   while (words.length && /\d|^(?:ml|cl|l|cm|mm|m|g|kg|x)$/u.test(words[words.length - 1]!)) words.pop();
   return [...new Set([full, ...(words.length >= 2 ? [words.join(' ')] : [])])].filter((k) => k.length >= 4);
 };
+/** UX-080: a list this long is given whole; a longer catalogue is summed up by the model. */
+export const LIST_MAX = 15;
+const LIST_ASK = new RegExp(
+  [
+    String.raw`(?:quels?|quelles?|c['\s]*est\s+quoi|montre[zr]?(?:\s+moi)?|liste(?:\s+de)?|tous?|toute?s?)\s+(?:(?:sont\s+)?(?:les|vos|tes|des)\s+)?(?:produits?|articles?)`,
+    String.raw`(?:vos|tes|les|des|la\s+liste\s+des?)\s+(?:produits?|articles?)\s+(?:disponibles?|dispo|en\s+vente|que\s+(?:vous|tu))`,
+    String.raw`(?:vous|tu)\s+(?:vendez|vends|proposez|proposes|avez|as)\s+quoi`,
+    String.raw`qu['\s]*est\s*ce\s+que?\s*(?:vous|tu)\s+(?:vendez|vends|proposez|proposes|avez|as)(?:\s+(?:comme|en)\s+(?:produits?|articles?))?\s*$`,
+    String.raw`(?:what|which)\s+(?:products?|items?)\b`,
+    String.raw`what\s+do\s+you\s+(?:sell|have|offer)`,
+    String.raw`(?:your|the)\s+(?:products?|catalog(?:ue)?)\s*(?:list)?\s*$`,
+    String.raw`(?:show|list)\s+(?:me\s+)?(?:all\s+)?(?:your|the)\s+(?:products?|items?)`,
+    String.raw`(?:wach|wech|wesh|ach|chnou|chno|chkoun)\s+(?:3and(?:kom|koum|ek|k)|3ndkom|tbi3ou|tbi3o|kayen)(?:\s+(?:men|mn))?(?:\s+(?:produits?|sel3a|sal3a|articles?))?\s*$`,
+    String.raw`(?:wach|wech|wesh|ach|chnou|chno)\s+(?:homa|houma|hiya)?\s*(?:les\s+)?(?:produits?|sel3a|sal3a|articles?)`,
+    String.raw`(?:واش|وش|اش|شنو|شنوا|ماذا|ما\s+هي|ماهي|ايش)\s+(?:عندكم|عندك|تبيعو|تبيعوا|تبيع|كاين|المنتجات|المنتوجات|السلعة|هي\s+المنتجات|هي\s+المنتوجات|هما\s+المنتجات)`,
+    String.raw`(?:قائمة|ليستة|كل|جميع)\s+(?:ال)?(?:منتجات|منتوجات|سلعة)`,
+  ].join('|'),
+  'iu',
+);
+/** UX-080: the customer's message asks what the shop sells (the list of its products). */
+export const listAsked = (customerText: string | undefined): boolean => !!customerText && LIST_ASK.test(plainWords(customerText));
+/** UX-080: the listable products the text does not name. */
+export const listMissing = (text: string, listable: NonNullable<GuardFacts['listable']>): NonNullable<GuardFacts['listable']> => {
+  const t = ` ${plainWords(text)} `;
+  return listable.filter((p) => !p.keys.some((k) => t.includes(` ${k} `)));
+};
+const ALSO: Record<'fr' | 'en' | 'ar' | 'arabizi', { lead: string; at: (name: string, price: string) => string; from: (name: string, price: string) => string; join: string; last: string; cur: string }> = {
+  fr: { lead: 'On a aussi', at: (n, p) => `${n} à ${p}`, from: (n, p) => `${n} à partir de ${p}`, join: ', ', last: ' et ', cur: 'DA' },
+  en: { lead: 'We also have', at: (n, p) => `${n} at ${p}`, from: (n, p) => `${n} from ${p}`, join: ', ', last: ' and ', cur: 'DA' },
+  ar: { lead: 'وعندنا ثاني', at: (n, p) => `${n} بـ ${p}`, from: (n, p) => `${n} ابتداء من ${p}`, join: '، ', last: ' و', cur: 'دج' },
+  arabizi: { lead: '3andna tani', at: (n, p) => `${n} b ${p}`, from: (n, p) => `${n} men ${p}`, join: ', ', last: ' w ', cur: 'DA' },
+};
+/** UX-080: « On a aussi : A à 1 500 DA, B à partir de 2 000 DA et C à 30 000 DA. » — the products a list left out, in the reply's language. */
+export const alsoSentence = (missing: NonNullable<GuardFacts['listable']>, lang: AiLanguage, shopLocale?: GuardFacts['shopLocale']): string => {
+  const loc = serverTextLanguage(lang, shopLocale);
+  const t = ALSO[loc];
+  const items = missing.map((p) => (p.from ? t.from : t.at)(p.name, `${money(p.price)} ${t.cur}`));
+  const list = items.length > 1 ? `${items.slice(0, -1).join(t.join)}${t.last}${items.at(-1)!}` : items[0]!;
+  return `${t.lead}${loc === 'fr' ? ' : ' : ': '}${list}.`;
+};
+
 /**
  * journey retest R5-1 (17/11): the sentences that name an out-of-stock product with no out-of-stock word (in it or in the
  * sentence before), when the customer's message does not name that product — an offer or a suggestion of it. The names of the
@@ -619,7 +707,8 @@ export const unavailableOffers = (parts: string[], facts: Pick<GuardFacts, 'unav
   const notAsked = (k: string, said: string) => !said.includes(` ${k} `) && !said.includes(` ${k.split(' ')[0]} `);
   // journey retest R17-3 (18/11): a product at stock 0 sold beyond its stock is no offer only when the customer asked for it (now or earlier)
   const ever = ` ${plainWords([facts.customerHistory ?? '', facts.customerText ?? ''].join(' '))} `;
-  const keys = [...(facts.unavailable ?? []).filter((k) => notAsked(k, asked)), ...(facts.zeroStock ?? []).filter((k) => notAsked(k, ever))];
+  // UX-080 (client list L55 / L93): … and when they ask what the shop sells — the list names every product that can be ordered
+  const keys = [...(facts.unavailable ?? []).filter((k) => notAsked(k, asked)), ...(listAsked(facts.customerText) ? [] : (facts.zeroStock ?? []).filter((k) => notAsked(k, ever)))];
   if (!keys.length) return [];
   const others = [...(facts.available ?? [])].filter((o) => !(facts.zeroStock ?? []).includes(o)).sort((a, b) => b.length - a.length);
   const out: number[] = [];
@@ -711,6 +800,7 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
   }
   if (rules.includes('stock_count')) lines.push('- STOCK_PRIVATE: never say how many units are in stock or left; say only that it is available (or not).');
   if (rules.includes('technical_leak')) lines.push('- NO TECHNICAL TEXT: no internal id, code in capitals, tool name, field name, JSON or bracket note in "reply": plain words for the customer.');
+  if (rules.includes('greeting_push')) lines.push("- GREETING ONLY: the customer's message is only a greeting: greet back in a few words and ask what they are looking for — no product, no price, no delivery, no offer to order or reserve (what was discussed earlier comes back only when they mention it).");
   if (rules.includes('repeat_greeting')) lines.push('- NO NEW GREETING: you already answered this customer in this conversation; do not greet or introduce yourself again — start with the answer.');
   if (rules.includes('self_name')) lines.push(facts.agentName ? `- YOUR NAME is "${facts.agentName}": never give yourself another name.` : "- YOU HAVE NO PERSONAL NAME: never give yourself one; if asked, you are the shop's assistant.");
   if (rules.includes('language_switch')) lines.push(`- LANGUAGE: the customer writes ${LANGUAGE_NAMES[facts.lang] ?? facts.lang}. Rewrite "reply" in that language and script, as they write it (never switch on your own)${facts.lang === 'arabizi' ? ' — every sentence, a list of sizes or prices too (product names stay as written)' : ''}.`);
@@ -761,6 +851,8 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
 export const SAFE_SENTENCES = {
   price_on_card: { fr: 'Le prix est indiqué sur la fiche du produit ci-dessous.', en: 'The price is shown on the product card below.', ar: 'السعر مكتوب في بطاقة المنتوج لتحت.', arabizi: 'Soum maktoub f la fiche ta3 lproduit lta7t.' },
   available: { fr: 'Oui, ce produit est disponible.', en: 'Yes, this product is available.', ar: 'إيه، المنتوج متوفر.', arabizi: 'Ih, lproduit disponible.' },
+  // UX-079: what is left of a reply that only pushed an offer on a greeting
+  greet: { fr: 'Bonjour ! Comment puis-je vous aider ?', en: 'Hello! How can I help you?', ar: 'أهلا بيك! كيفاش نقدر نعاونك؟', arabizi: 'Salam! Kifach n9der n3awnek?' },
   which: {
     fr: 'Pouvez-vous me préciser le produit (taille ou couleur) et, pour la livraison, votre wilaya ?',
     en: 'Could you tell me which product (size or colour) and, for delivery, which wilaya?',
@@ -778,7 +870,7 @@ const selfSentence = (loc: 'fr' | 'en' | 'ar' | 'arabizi', name: string | null):
 // journey retest R9-1: the one language decision of the server texts (a `mixed` turn takes the shop's locale)
 const safeLocale = (lang: AiLanguage, shopLocale?: GuardFacts['shopLocale']): 'fr' | 'en' | 'ar' | 'arabizi' => serverTextLanguage(lang, shopLocale);
 
-const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession', 'contradicts_customer', 'unavailable_offer', 'photo_claim', 'invented_problem', 'confirm_without_recap', 'order_claim'];
+const CONTENT_RULES: GuardRule[] = ['unknown_amount', 'stock_count', 'technical_leak', 'self_name', 'false_confession', 'contradicts_customer', 'unavailable_offer', 'photo_claim', 'invented_problem', 'confirm_without_recap', 'order_claim', 'greeting_push'];
 /** Rules about the form of the reply: the text is kept when the corrective turn did not fix them (a reply is better than none). */
 const STYLE_RULES: GuardRule[] = ['language_switch', 'moroccan_darija', 'script_mix', 'repeat_greeting'];
 const quoteText = (q: QuoteFact) => `${q.wilaya || 'this wilaya'}: ${q.isStopdesk ? `stop-desk ${q.fee} DA` : q.free || q.fee === 0 ? 'home delivery free' : `home ${q.fee} DA`}${!q.isStopdesk && q.stopdeskFee !== null ? `, stop-desk ${q.stopdeskFee} DA` : ''}`;
@@ -861,6 +953,17 @@ export function enforceReply(reply: string, violations: GuardViolation[], facts:
     const lead = splitSentences(text);
     text = lead.length > 1 && !stripGreeting(lead[0]!, facts.agentName).trim() ? `${lead[0]!.trim()} ${fee} ${lead.slice(1).join('').trim()}` : `${fee}${text ? ` ${text}` : ''}`;
   }
+  // UX-080: the products the list left out, before its closing question (« Lequel te plaît ? »)
+  if (violations.some((v) => v.rule === 'list_incomplete') && facts.listable?.length) {
+    const left = listMissing(text, facts.listable);
+    if (left.length && left.length < facts.listable.length) {
+      const also = alsoSentence(left, facts.lang, facts.shopLocale);
+      const sentences = splitSentences(text);
+      const tail = sentences.length > 1 && /[?؟]\s*$/.test(sentences.at(-1)!) ? sentences.at(-1)!.trim() : '';
+      const head = (tail ? sentences.slice(0, -1).join('') : text).trim();
+      text = [head, also, tail].filter(Boolean).join(' ');
+    }
+  }
   // journey retest R8-2: the refusal's field is asked when what is left asks nothing (« Saha Walid, tsajjel: zoudj tapis … »)
   const refusalQuestion = (rules0: Set<GuardRule>) => (rules0.has('invented_problem') || rules0.has('confirm_without_recap') || rules0.has('order_claim')) && facts.missingField ? FIELD_QUESTIONS[facts.missingField]?.[safeLocale(facts.lang, facts.shopLocale)] : undefined;
   const ask = refusalQuestion(new Set(violations.map((v) => v.rule)));
@@ -876,6 +979,8 @@ export function enforceReply(reply: string, violations: GuardViolation[], facts:
   if (wordCount(text) >= 2) return { reply: text, action: text === reply.trim() && violations.every((v) => STYLE_RULES.includes(v.rule)) ? 'kept' : 'stripped' };
   const rules = new Set(violations.map((v) => v.rule));
   const loc = safeLocale(facts.lang, facts.shopLocale);
+  // UX-079: the reply was only the offer — a greeting back and « how can I help? »
+  if (rules.has('greeting_push')) return { reply: SAFE_SENTENCES.greet[loc], action: 'safe_sentence' };
   // journey retest R8-1 / R8-2: only an invented problem or a request to confirm was there — the question for the missing field
   if (rules.has('invented_problem') || rules.has('confirm_without_recap') || rules.has('order_claim')) {
     const q = facts.missingField ? FIELD_QUESTIONS[facts.missingField] : undefined;
@@ -963,6 +1068,8 @@ export type GuardFactsInput = {
   outOfHours?: boolean;
   /** journey J02r-6: the shop's products wait for their first review */
   awaitingReview?: boolean;
+  /** UX-080: the whole catalogue is in the prompt (`CatalogueSlice.full`) */
+  catalogueFull?: boolean;
 };
 
 /**
@@ -1034,6 +1141,12 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
   // journey retest R17-3 (18/11): stock 0 but sold beyond it — orderable when asked for, never an alternative
   const zero = i.products.filter((p) => typeof p.stock === 'number' && p.stock <= 0 && p.sellOutOfStock);
   const zeroStock = [...new Set(zero.flatMap((p) => nameKeys(p.name)))];
+  // UX-080: what the shop sells — everything but the out-of-stock products, when the prompt holds the whole (short) catalogue
+  const sold = i.products.filter((p) => !out.includes(p) && (!p.hasVariants || p.variants.length));
+  const listable = i.catalogueFull && sold.length >= 2 && sold.length <= LIST_MAX ? sold.map((p) => {
+    const variantPrices = p.hasVariants ? p.variants.map((v) => v.price) : [];
+    return { keys: nameKeys(p.name), name: p.name, price: variantPrices.length ? Math.min(...variantPrices) : p.price, from: variantPrices.length > 1 && Math.min(...variantPrices) !== Math.max(...variantPrices) };
+  }).filter((p) => p.keys.length) : [];
   // journey retest R4-2: a name typed in Arabic script (« سمير بن علي ») is no Arabic message — an Arabic reply to a French customer is a switch
   // journey retest R9-1: nor a Latin name next to Arabic-script words (« Samir Benali 0661234567، قسنطينة … ») a Latin message
   // journey retest R14-1: nor the words of an address / a field label (« taille S, …, rue des frères Bouadou n 5 ») a French message
@@ -1059,6 +1172,7 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
     customerText: i.customerText,
     ...(unavailable.length || zeroStock.length ? { unavailable, unavailableNames: out.map((p) => p.name), available } : {}),
     ...(zeroStock.length ? { zeroStock, zeroStockNames: zero.map((p) => p.name) } : {}),
+    ...(listable.length >= 2 ? { listable } : {}),
     ...(noPhoto.length ? { noPhoto } : {}),
     ...(i.galleries?.length ? { galleries: i.galleries } : {}),
     ...(i.products.length ? { catalogueNames: i.products.map((p) => foldGuard([p.name, ...p.variants.map((v) => v.name)].join(' '))) } : {}),
@@ -1098,6 +1212,7 @@ export function guardFactsOf(p: Omit<PromptContext, 'descriptionMax'>, o: Omit<G
     ...(p.locale === 'fr' || p.locale === 'ar' || p.locale === 'en' ? { shopLocale: p.locale } : {}),
     ...(p.outOfHours ? { outOfHours: true } : {}),
     ...(p.catalogue.count === 0 && p.catalogue.awaitingReview ? { awaitingReview: true } : {}),
+    ...(p.catalogue.full ? { catalogueFull: true } : {}),
     products: p.catalogue.products,
     shopTexts,
     freeDeliveryThreshold: p.workspace.freeDeliveryThreshold,

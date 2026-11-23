@@ -53,6 +53,7 @@ describe('lookup_order / cancel_order give the model Algiers times', () => {
         clientPhone2: null,
         total: 4900,
         orderedAt,
+        items: [],
         shipments: [{ provider: 'yalidine', trackingNumber: 'YAL-1', publicTrackingToken: 't', events: [{ at: new Date('2026-11-11T14:05:00Z'), rawStatus: 'Sorti en livraison', mappedStatus: 'out_for_delivery', description: null, location: 'Oran', source: 'poll' }] }],
       },
     ] as never);

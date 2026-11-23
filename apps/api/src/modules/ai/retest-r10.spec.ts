@@ -322,7 +322,7 @@ describe('R10-4 (Cosmetic) — catalogue words in their own script, no name in t
       const gateway = new FakeAiGateway();
       gateway.script('reply', { reply, intent: 'INFO' });
       const tools = { defsFor: async () => [], forcedHandoff: () => null, execute: jest.fn() } as unknown as ToolRegistry;
-      const r = await new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never).turn(turnReq('salam', [], { guard: { ...facts('salam', { products: CATALOGUE }), lang } }));
+      const r = await new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never).turn(turnReq('ok', [], { guard: { ...facts('ok', { products: CATALOGUE }), lang } }));
       return r.ok ? r.output.reply : null;
     };
     expect(await run('Hiya robe kabyle brodée bil yed, mais b tissu khfif. Wach men taille t7ebb ?', 'arabizi')).toBe('Hiya robe kabyle brodée bil yed, bessah b tissu khfif. Wach men taille t7ebb ?');

@@ -117,9 +117,9 @@ function ReturnState({ view, data, attempts, locale }: { view: ReturnView; data:
       return (
         <CheckoutStatus
           state="failed"
-          label={t('checkout.label.failed')}
-          title={t('error.PAYMENT_FAILED')}
-          description={data?.failureReason ? t('checkout.failed.reason', { reason: data.failureReason }) : t('checkout.failed.body')}
+          label={data?.failureReason === 'canceled' ? t('checkout.label.cancelled') : t('checkout.label.failed')}
+          title={data?.failureReason === 'canceled' ? t('checkout.cancelled.title') : t('error.PAYMENT_FAILED')}
+          description={data?.failureReason === 'canceled' ? t('checkout.cancelled.body') : data?.failureReason ? t('checkout.failed.reason', { reason: data.failureReason }) : t('checkout.failed.body')}
           actions={
             <>
               <Link href="/help/contact" className={buttonClass({ variant: 'secondary' })} data-testid="return-manual">

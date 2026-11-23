@@ -317,6 +317,49 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(2);
   });
 
+  it('Houssem live 23/11 UX-081: after an order with another phone (another client record), the order placed earlier in the same conversation is still the customer’s — found with its content, its address changed with the new street only, and the other one cancellable', async () => {
+    const s = await shop();
+    const sender = newSender();
+    await recap(s, sender);
+    fakeAi(app).script('reply', { toolCalls: [createCall(s)] }, { reply: 'OK', intent: 'SALE' });
+    const first = await turn(s, sender, 'oui');
+    const firstOrder = lastResult(first.runs);
+    expect(firstOrder).toMatchObject({ ok: true, number: 'CMD-1001' });
+    // a second order with another phone: the conversation now points to another client record
+    await resetAi();
+    const other = { clientPhone: '0661 22 33 44', items: [{ productId: s.robe.id, quantity: 2 }] };
+    await recap(s, sender, other);
+    fakeAi(app).script('reply', { toolCalls: [createCall(s, other)] }, { reply: 'OK', intent: 'SALE' });
+    const second = await turn(s, sender, 'oui');
+    expect(lastResult(second.runs)).toMatchObject({ ok: true, number: 'CMD-1002' });
+    const old = await db.order.findUniqueOrThrow({ where: { id: firstOrder.orderId } });
+    expect(second.conversation.clientId).not.toBe(old.clientId);
+    // the first order is found by its number, with what it holds and where it goes
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'lookup_order', args: { orderNumber: 'CMD-1001' } }] }, { reply: 'Votre commande CMD-1001 est bien enregistrée.', intent: 'OTHER' });
+    const where = await turn(s, sender, 'où est ma commande CMD-1001 ?');
+    expect(lastResult(where.runs).orders).toEqual([expect.objectContaining({ number: 'CMD-1001', status: 'new', changeable: true, items: [expect.objectContaining({ productId: s.robe.id, quantity: 1 })], delivery: expect.objectContaining({ clientPhone: old.clientPhone, wilayaId: 16, isStopdesk: false }) })]);
+    // its address changes: the call gives the new street only — the items, the name, the phone and the wilaya are kept from the order
+    await resetAi();
+    const change = { name: 'create_order', args: { replacesOrder: 'CMD-1001', address: 'Cité 500 logements, bâtiment 2', customerConfirmed: true } };
+    fakeAi(app).script('reply', { toolCalls: [change] }, { reply: 'Bien sûr.', intent: 'SALE' });
+    const asked = await turn(s, sender, 'je veux changer l’adresse de ma commande CMD-1001 : Cité 500 logements, bâtiment 2');
+    expect(lastResult(asked.runs)).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recap: { clientName: 'Amine Benali', clientPhone: old.clientPhone, replaces: 'CMD-1001' } });
+    expect(asked.out.map((m) => m.text).join('\n')).toContain('500 logements');
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [{ ...change, id: 'call_addr' }] }, { reply: 'C’est modifié.', intent: 'SALE' });
+    const done = await turn(s, sender, 'oui');
+    expect(lastResult(done.runs)).toMatchObject({ ok: true, number: 'CMD-1003', replaced: { number: 'CMD-1001' } });
+    expect(await db.order.findUniqueOrThrow({ where: { id: firstOrder.orderId } })).toMatchObject({ status: 'cancelled' });
+    expect(await db.order.findFirstOrThrow({ where: { workspaceId: s.owner.workspaceId, number: 'CMD-1003' }, include: { items: true } })).toMatchObject({ clientPhone: old.clientPhone, clientName: 'Amine Benali', wilayaId: 16, address: expect.stringContaining('500 logements'), items: [expect.objectContaining({ productId: s.robe.id, quantity: 1 })] });
+    // the order placed with the other phone is still this conversation's: it can be cancelled
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'cancel_order', args: { orderNumber: 'CMD-1002', customerConfirmed: true } }] }, { reply: 'C’est annulé.', intent: 'OTHER' });
+    const cancel = await turn(s, sender, 'annulez la commande CMD-1002 svp');
+    expect(lastResult(cancel.runs)).toMatchObject({ ok: true, cancelled: { number: 'CMD-1002' } });
+    expect(await db.order.findFirstOrThrow({ where: { workspaceId: s.owner.workspaceId, number: 'CMD-1002' } })).toMatchObject({ status: 'cancelled' });
+  });
+
   it('a blocked customer ⇒ CUSTOMER_BLOCKED, no order, silent handoff (04 §13); risky client with RISKY_CLIENT_POLICY=handoff ⇒ handoff', async () => {
     const s = await shop();
     await s.owner.post('/safety/blocks', { phone: '0555123456', reason: 'fraud' }).expect(201);

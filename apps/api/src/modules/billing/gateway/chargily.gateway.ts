@@ -108,7 +108,9 @@ export class ChargilyGateway implements PaymentGateway {
     const eventId = str(body.id);
     const checkoutId = str(data.id);
     if (!eventId || !checkoutId) return null;
-    const failureReason = str((data as { failure_reason?: unknown }).failure_reason);
+    // Houssem live 23/11 UX-078: a payment the merchant cancelled on Chargily's page came back as « declined by the bank »
+    const cancelled = type === 'checkout.canceled' || /^cancell?ed$/.test(str(data.status));
+    const failureReason = str((data as { failure_reason?: unknown }).failure_reason) || (cancelled ? 'canceled' : '');
     return { eventId, checkoutId, status, amount: Number(data.amount ?? 0), method: method(data.payment_method), metadata, raw: body, ...(status === 'failed' && failureReason ? { failureReason } : {}) };
   }
 }

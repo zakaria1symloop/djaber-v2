@@ -459,7 +459,9 @@ export class OrderWorkflowService implements OnModuleInit {
         const tx = db as Tx;
         const o = await this.orders.lock(tx, order.id);
         // A8: never an order the shop confirmed (only `new`), never a parcel already sent
-        if (o.clientId !== ctx.clientId || o.status !== 'new' || o.deliveryStatus !== 'not_sent') throw new AppException('ORDER_INVALID_TRANSITION', { from: o.status, to: 'cancelled' });
+        // UX-081: the customer's own order = their client record's, or one placed in this very conversation (ordered with another phone)
+        const own = o.clientId === ctx.clientId || (!!ctx.conversationId && o.conversationId === ctx.conversationId);
+        if (!own || o.status !== 'new' || o.deliveryStatus !== 'not_sent') throw new AppException('ORDER_INVALID_TRANSITION', { from: o.status, to: 'cancelled' });
         await this.transition(tx, o, 'cancelled', { actor: { type: 'ai', id: ctx.agentId }, reason: 'changed_mind', note: aiCancelNote(reason), system: true, notifyCustomer: false, shipmentNotice: false });
       });
     } catch (e) {
