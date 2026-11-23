@@ -747,7 +747,7 @@ One `notification.<slug>.title` key per value of the Prisma enum `NotificationTy
 | Key | fr | ar | en |
 |---|---|---|---|
 | customer.orderConfirmed | Votre commande #{number} est confirmée ✓ Nous vous appelons pour confirmer la livraison. | | |
-| customer.orderShipped | Votre commande #{number} est en route · suivi {tracking} ({courier}). | | |
+| customer.orderShipped | Votre commande #{number} est en route · suivi {tracking} ({courier}). — `{tracking}` = n° de suivi, suivi de « — » et de la page de suivi publique (`/s/{token}`) pour un colis envoyé à un transporteur (UX-075, 23/11) | | |
 | customer.orderOutForDelivery | Votre colis #{number} est en cours de livraison aujourd'hui. | | |
 | customer.orderDelivered | Votre commande #{number} a été livrée. Merci ! | | |
 | customer.orderFailed | La livraison de #{number} n'a pas abouti ({reason}). Nous vous recontactons. | | |

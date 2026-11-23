@@ -386,7 +386,7 @@ export class OrderService implements OnModuleInit {
         const tx = db as Tx;
         const { client, created } = await this.clients.resolveForOrder(tx, { name: req.clientName, phone: req.clientPhone, phone2: req.secondPhone }, { source: 'ai', conversationClientId: conversation?.clientId });
         if (conversation && conversation.clientId !== client.id) await tx.conversation.update({ where: { id: conversation.id }, data: { clientId: client.id, version: { increment: 1 } } });
-        const communes = req.communeName ? await tx.commune.findMany({ where: { wilayaId: req.wilayaId }, select: { id: true, nameFr: true, nameAr: true } }) : [];
+        const communes = req.communeName && req.wilayaId ? await tx.commune.findMany({ where: { wilayaId: req.wilayaId }, select: { id: true, nameFr: true, nameAr: true } }) : [];
         const wanted = fold(req.communeName ?? '');
         const commune = wanted ? communes.find((c) => fold(c.nameFr) === wanted || fold(c.nameAr) === wanted) : undefined;
         const lines = await this.resolveLines(tx, req.items.map((i) => ({ productId: i.productId, variantId: i.variantId, quantity: i.quantity, unitPrice: i.unitPrice })));
@@ -406,7 +406,8 @@ export class OrderService implements OnModuleInit {
             clientName: req.clientName,
             clientPhone: req.clientPhone,
             clientPhone2: req.secondPhone,
-            wilayaId: req.wilayaId,
+            // UX-082: an order of services is not delivered (wilayaId 0 from the AI tool)
+            wilayaId: req.wilayaId || null,
             communeId: commune?.id ?? null,
             communeText: commune ? null : req.communeName,
             address: req.address,

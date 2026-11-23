@@ -8,7 +8,7 @@ import { withMsaWording } from '../msa';
 import { articleless, foldText } from './wilaya-aliases';
 
 type Line = { name?: unknown; variant?: unknown; quantity?: unknown; unitPrice?: unknown };
-type Placed = { number: string; items: Line[]; deliveryFee: number; total: number; duplicate: boolean; replaced: string | null; beyondStock: boolean; eta: string };
+type Placed = { number: string; items: Line[]; deliveryFee: number; total: number; duplicate: boolean; replaced: string | null; beyondStock: boolean; eta: string; /** every unit is beyond the stock */ beyondAll: boolean; /** UX-082: an order of services, not delivered */ noDelivery: boolean };
 
 /** « 12500 » → « 12 500 » (CLAUDE.md rule 11: Latin digits, space as thousands separator). */
 export const money = (n: number): string => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -30,21 +30,25 @@ export const placedOrder = (calls: { name: string; result: unknown }[]): Placed 
       replaced: typeof replaced === 'string' && replaced ? replaced : null,
       beyondStock: Array.isArray(r.beyondStock) && r.beyondStock.length > 0,
       eta,
+      beyondAll: r.beyondAll === true,
+      noDelivery: r.noDelivery === true,
     };
   }
   return null;
 };
 
 type Loc = 'fr' | 'ar' | 'arabizi' | 'en';
-const T: Record<Loc, { head: (n: string) => string; again: (n: string) => string; fee: (v: string) => string; free: string; total: (v: string) => string; eta: (a: string, b: string) => string; beyond: string; replaced: (n: string) => string; thanks: string; cur: string }> = {
+const T: Record<Loc, { head: (n: string) => string; again: (n: string) => string; fee: (v: string) => string; free: string; total: (v: string) => string; totalOnly: (v: string) => string; eta: (a: string, b: string) => string; beyond: string; beyondAll: string; replaced: (n: string) => string; thanks: string; cur: string }> = {
   fr: {
     head: (n) => `Votre commande ${n} est bien enregistrée ✅`,
     again: (n) => `Votre commande ${n} est déjà enregistrée ✅`,
     fee: (v) => `Livraison : ${v}`,
     free: 'Livraison : gratuite',
     total: (v) => `Total : ${v}, à payer à la livraison.`,
+    totalOnly: (v) => `Total : ${v}.`,
     eta: (a, b) => `Délai de livraison : ${a} à ${b} jours.`,
     beyond: 'Une partie de la commande peut prendre un peu plus de temps à être livrée.',
+    beyondAll: 'La commande peut prendre un peu plus de temps à être livrée.',
     replaced: (n) => `Elle remplace la commande ${n}, qui est annulée.`,
     thanks: 'Merci pour votre confiance !',
     cur: 'DA',
@@ -55,8 +59,10 @@ const T: Record<Loc, { head: (n: string) => string; again: (n: string) => string
     fee: (v) => `التوصيل: ${v}`,
     free: 'التوصيل: مجاني',
     total: (v) => `المجموع: ${v}، الدفع عند الاستلام.`,
+    totalOnly: (v) => `المجموع: ${v}.`,
     eta: (a, b) => `مدة التوصيل: من ${a} إلى ${b} أيام.`,
     beyond: 'جزء من الطلبية يمكن يتعطل شوية في التوصيل.',
+    beyondAll: 'الطلبية يمكن تتعطل شوية في التوصيل.',
     replaced: (n) => `هذي الطلبية تعوض الطلبية ${n}، اللي تلغات.`,
     thanks: 'شكرا على ثقتك!',
     cur: 'دج',
@@ -67,8 +73,10 @@ const T: Record<Loc, { head: (n: string) => string; again: (n: string) => string
     fee: (v) => `Livraison: ${v}`,
     free: 'Livraison: batel',
     total: (v) => `Total: ${v}, tkhalles ki tewsel.`,
+    totalOnly: (v) => `Total: ${v}.`,
     eta: (a, b) => `Tawsil f ${a} l ${b} ayam.`,
     beyond: 'Juz2 men la commande ymken yt3atel chwiya f tawsil.',
+    beyondAll: 'La commande ymken tet3atel chwiya f tawsil.',
     replaced: (n) => `Hadi t3awed la commande ${n}, lli tlghat.`,
     thanks: 'Saha, merci 3la thiqa ta3ek!',
     cur: 'DA',
@@ -79,8 +87,10 @@ const T: Record<Loc, { head: (n: string) => string; again: (n: string) => string
     fee: (v) => `Delivery: ${v}`,
     free: 'Delivery: free',
     total: (v) => `Total: ${v}, cash on delivery.`,
+    totalOnly: (v) => `Total: ${v}.`,
     eta: (a, b) => `Delivery in ${a} to ${b} days.`,
     beyond: 'Part of the order may take a little longer to be delivered.',
+    beyondAll: 'The order may take a little longer to be delivered.',
     replaced: (n) => `It replaces order ${n}, which is cancelled.`,
     thanks: 'Thank you for your trust!',
     cur: 'DA',
@@ -90,7 +100,7 @@ const T: Record<Loc, { head: (n: string) => string; again: (n: string) => string
 const locOf = (lang: AiLanguage | string | undefined): Loc => serverTextLanguage(lang);
 
 // --- the recap (journey retest R1-6 / R1-7, 17/11) ---------------------------------------------------------------------------
-type Recap = { items: Line[]; deliveryFee: number; total: number; clientName: string; clientPhone: string; secondPhone: string | null; wilaya: string; communeName: string | null; address: string | null; isStopdesk: boolean; replaces: string | null; /** journey retest R2-7 */ wilayaAr?: string | null; communeAr?: string | null; /** journey retest R6-3: part of it is sold beyond the stock */ beyondStock?: boolean };
+type Recap = { items: Line[]; deliveryFee: number; total: number; clientName: string; clientPhone: string; secondPhone: string | null; wilaya: string; communeName: string | null; address: string | null; isStopdesk: boolean; replaces: string | null; /** journey retest R2-7 */ wilayaAr?: string | null; communeAr?: string | null; /** journey retest R6-3: part of it is sold beyond the stock */ beyondStock?: boolean; /** every unit of it is */ beyondAll?: boolean; /** UX-082: an order of services, not delivered */ noDelivery?: boolean };
 const s = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 /**
  * The recap a `create_order` of this turn returned for the customer to confirm (`CONFIRMATION_REQUIRED` of a first recap,
@@ -118,16 +128,18 @@ export const pendingRecap = (calls: { name: string; result: unknown }[]): Recap 
       wilayaAr: s(p.wilayaAr) || null,
       communeAr: s(p.communeAr) || null,
       beyondStock: Array.isArray(p.beyondStock) && p.beyondStock.length > 0,
+      beyondAll: p.beyondAll === true,
+      noDelivery: p.noDelivery === true,
     };
   }
   return null;
 };
 
-const R: Record<Loc, { comma: string; head: string; home: (place: string) => string; stop: (place: string) => string; free: string; total: (v: string) => string; name: string; phone: string; phone2: string; address: string; replaces: (n: string) => string; beyond: string; ask: string; cur: string; sep: string }> = {
-  fr: { comma: ', ', head: 'Voici le récapitulatif de votre commande :', home: (p) => `Livraison à domicile${p ? ` (${p})` : ''}`, stop: (p) => `Livraison en stop-desk${p ? ` (${p})` : ''}`, free: 'gratuite', total: (v) => `Total : ${v}, à payer à la livraison.`, name: 'Nom', phone: 'Téléphone', phone2: 'Deuxième téléphone', address: 'Adresse', replaces: (n) => `Elle remplacera la commande ${n}.`, beyond: T.fr.beyond, ask: 'Répondez « oui » pour confirmer la commande, ou dites-moi ce qu’il faut changer.', cur: 'DA', sep: ' : ' },
-  ar: { comma: '، ', head: 'هذا ملخص الطلبية:', home: (p) => `التوصيل للدار${p ? ` (${p})` : ''}`, stop: (p) => `التوصيل لنقطة الاستلام${p ? ` (${p})` : ''}`, free: 'مجاني', total: (v) => `المجموع: ${v}، الدفع عند الاستلام.`, name: 'الاسم', phone: 'الهاتف', phone2: 'الهاتف الثاني', address: 'العنوان', replaces: (n) => `هذي الطلبية تعوض الطلبية ${n}.`, beyond: T.ar.beyond, ask: 'جاوبني بـ « إيه » باش نأكدو الطلبية، ولا قولي واش نبدلو.', cur: 'دج', sep: ': ' },
-  arabizi: { comma: ', ', head: 'Hada récap ta3 la commande:', home: (p) => `Tawsil l dar${p ? ` (${p})` : ''}`, stop: (p) => `Tawsil l stop-desk${p ? ` (${p})` : ''}`, free: 'batel', total: (v) => `Total: ${v}, tkhalles ki tewsel.`, name: 'Smitek', phone: 'Numéro', phone2: 'Numéro lokhra', address: 'Adresse', replaces: (n) => `Hadi t3awed la commande ${n}.`, beyond: T.arabizi.beyond, ask: 'Ktebli « ih » bach nconfirmi la commande, wela goulli wach nbeddlou.', cur: 'DA', sep: ': ' },
-  en: { comma: ', ', head: 'Here is your order summary:', home: (p) => `Home delivery${p ? ` (${p})` : ''}`, stop: (p) => `Stop-desk delivery${p ? ` (${p})` : ''}`, free: 'free', total: (v) => `Total: ${v}, cash on delivery.`, name: 'Name', phone: 'Phone', phone2: 'Second phone', address: 'Address', replaces: (n) => `It will replace order ${n}.`, beyond: T.en.beyond, ask: 'Reply « yes » to confirm the order, or tell me what to change.', cur: 'DA', sep: ': ' },
+const R: Record<Loc, { comma: string; head: string; home: (place: string) => string; stop: (place: string) => string; free: string; total: (v: string) => string; name: string; phone: string; phone2: string; address: string; replaces: (n: string) => string; beyond: string; beyondAll: string; totalOnly: (v: string) => string; ask: string; cur: string; sep: string }> = {
+  fr: { comma: ', ', head: 'Voici le récapitulatif de votre commande :', home: (p) => `Livraison à domicile${p ? ` (${p})` : ''}`, stop: (p) => `Livraison en stop-desk${p ? ` (${p})` : ''}`, free: 'gratuite', total: (v) => `Total : ${v}, à payer à la livraison.`, name: 'Nom', phone: 'Téléphone', phone2: 'Deuxième téléphone', address: 'Adresse', replaces: (n) => `Elle remplacera la commande ${n}.`, beyond: T.fr.beyond, beyondAll: T.fr.beyondAll, totalOnly: T.fr.totalOnly, ask: 'Répondez « oui » pour confirmer la commande, ou dites-moi ce qu’il faut changer.', cur: 'DA', sep: ' : ' },
+  ar: { comma: '، ', head: 'هذا ملخص الطلبية:', home: (p) => `التوصيل للدار${p ? ` (${p})` : ''}`, stop: (p) => `التوصيل لنقطة الاستلام${p ? ` (${p})` : ''}`, free: 'مجاني', total: (v) => `المجموع: ${v}، الدفع عند الاستلام.`, name: 'الاسم', phone: 'الهاتف', phone2: 'الهاتف الثاني', address: 'العنوان', replaces: (n) => `هذي الطلبية تعوض الطلبية ${n}.`, beyond: T.ar.beyond, beyondAll: T.ar.beyondAll, totalOnly: T.ar.totalOnly, ask: 'جاوبني بـ « إيه » باش نأكدو الطلبية، ولا قولي واش نبدلو.', cur: 'دج', sep: ': ' },
+  arabizi: { comma: ', ', head: 'Hada récap ta3 la commande:', home: (p) => `Tawsil l dar${p ? ` (${p})` : ''}`, stop: (p) => `Tawsil l stop-desk${p ? ` (${p})` : ''}`, free: 'batel', total: (v) => `Total: ${v}, tkhalles ki tewsel.`, name: 'Smitek', phone: 'Numéro', phone2: 'Numéro lokhra', address: 'Adresse', replaces: (n) => `Hadi t3awed la commande ${n}.`, beyond: T.arabizi.beyond, beyondAll: T.arabizi.beyondAll, totalOnly: T.arabizi.totalOnly, ask: 'Ktebli « ih » bach nconfirmi la commande, wela goulli wach nbeddlou.', cur: 'DA', sep: ': ' },
+  en: { comma: ', ', head: 'Here is your order summary:', home: (p) => `Home delivery${p ? ` (${p})` : ''}`, stop: (p) => `Stop-desk delivery${p ? ` (${p})` : ''}`, free: 'free', total: (v) => `Total: ${v}, cash on delivery.`, name: 'Name', phone: 'Phone', phone2: 'Second phone', address: 'Address', replaces: (n) => `It will replace order ${n}.`, beyond: T.en.beyond, beyondAll: T.en.beyondAll, totalOnly: T.en.totalOnly, ask: 'Reply « yes » to confirm the order, or tell me what to change.', cur: 'DA', sep: ': ' },
 };
 /**
  * journey retest R17-2 (18/11): the text holds the server recap's request to answer yes (« Répondez « oui » pour confirmer la commande, … »,
@@ -267,15 +279,16 @@ export const orderRecapText = (recap: Recap, lang: AiLanguage | string | undefin
   return [
     t.head,
     ...recap.items.map((i) => itemLine(i, amount)),
-    `- ${recap.isStopdesk ? t.stop(place) : t.home(place)}${t.sep}${fee}`,
-    t.total(amount(recap.total)),
+    // UX-082: an order of services is not delivered — no delivery line, no « à payer à la livraison »
+    ...(recap.noDelivery ? [] : [`- ${recap.isStopdesk ? t.stop(place) : t.home(place)}${t.sep}${fee}`]),
+    recap.noDelivery ? t.totalOnly(amount(recap.total)) : t.total(amount(recap.total)),
     ...(recap.clientName ? [`${t.name}${t.sep}${recap.clientName}`] : []),
     ...(recap.clientPhone ? [`${t.phone}${t.sep}${recap.clientPhone}`] : []),
     ...(recap.secondPhone ? [`${t.phone2}${t.sep}${recap.secondPhone}`] : []),
-    ...(!recap.isStopdesk && recap.address ? [`${t.address}${t.sep}${placeOf(t.comma, withoutTrailingPlaces(recap.address, [...commune, ...wilaya]), commune, wilaya)}`] : []),
+    ...(!recap.noDelivery && !recap.isStopdesk && recap.address ? [`${t.address}${t.sep}${placeOf(t.comma, withoutTrailingPlaces(recap.address, [...commune, ...wilaya]), commune, wilaya)}`] : []),
     ...(recap.replaces ? [t.replaces(recap.replaces)] : []),
     // journey retest R6-3: the model said it as « commandée au-delà du stock » (the internal idea); the server says it plainly
-    ...(recap.beyondStock ? [t.beyond] : []),
+    ...(recap.beyondStock ? [recap.beyondAll ? t.beyondAll : t.beyond] : []),
     t.ask,
   ].join('\n');
 };
@@ -331,7 +344,7 @@ const contentWords = (t: string) => [...new Set(folded(t).split(/[^\p{L}]+/u).fi
  * partie de la commande peut prendre un peu plus de temps à être livrée. »): 3 words or more of it, 60 % of the sentence.
  */
 export const repeatsRecapLine = (sentence: string, recap: Pick<Recap, 'beyondStock' | 'replaces'>): boolean => {
-  const lines = [...(recap.beyondStock ? (Object.keys(R) as Loc[]).map((l) => R[l].beyond) : []), ...(recap.replaces ? (Object.keys(R) as Loc[]).map((l) => R[l].replaces(recap.replaces!)) : [])];
+  const lines = [...(recap.beyondStock ? (Object.keys(R) as Loc[]).flatMap((l) => [R[l].beyond, R[l].beyondAll]) : []), ...(recap.replaces ? (Object.keys(R) as Loc[]).map((l) => R[l].replaces(recap.replaces!)) : [])];
   if (!lines.length) return false;
   if (recap.beyondStock && bothForms(sentence).some((v) => LATER_TALK.test(v))) return true;
   const words = contentWords(sentence);
@@ -598,10 +611,9 @@ export const orderConfirmationText = (calls: { name: string; result: unknown }[]
   return [
     o.duplicate ? t.again(o.number) : t.head(o.number),
     ...items,
-    o.deliveryFee > 0 ? t.fee(amount(o.deliveryFee)) : t.free,
-    t.total(amount(o.total)),
-    t.eta(a ?? '2', b ?? '5'),
-    ...(o.beyondStock ? [t.beyond] : []),
+    // UX-082: an order of services is not delivered — no delivery line, no « à payer à la livraison », no delivery delay
+    ...(o.noDelivery ? [t.totalOnly(amount(o.total))] : [o.deliveryFee > 0 ? t.fee(amount(o.deliveryFee)) : t.free, t.total(amount(o.total)), t.eta(a ?? '2', b ?? '5')]),
+    ...(o.beyondStock ? [o.beyondAll ? t.beyondAll : t.beyond] : []),
     ...(o.replaced ? [t.replaced(o.replaced)] : []),
     t.thanks,
   ].join('\n');

@@ -7,7 +7,7 @@ import { ShipmentEffects } from '../../src/modules/delivery/shipment-effects.ser
 import { anonymous, asAdmin, asOperator, asOwner } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
 import { jobOf } from '../support/m2';
-import { forbidNetwork, wsOf } from '../support/m3';
+import { connectedPage, forbidNetwork, newSender, receive, wsOf } from '../support/m3';
 import { closeOutbox } from '../support/m4';
 import { cashOf, newOrder, orderBody, postOrder, productStock, seedFees } from '../support/m5';
 import { addCourier, confirmedOrder, db, drain, fakeCourier, idem, reloadOrder, send, sendAndWork, sendBody, shipmentRow } from '../support/m6';
@@ -57,6 +57,21 @@ describe('send to courier (DLV-05, FL-08)', () => {
     expect(await db.notification.count({ where: { workspaceId: owner.workspaceId, type: 'shipment_created' } })).toBeGreaterThan(0);
     expect((await wsOf(`ws:${owner.workspaceId}`, 'shipment.updated')).some((e) => e.payload.shipment.id === parcel.id && e.payload.shipment.status === 'sent')).toBe(true);
     expect(await db.outbox.count({ where: { topic: 'webhook', key: { startsWith: `order.shipped:${order.id}` } } })).toBe(1);
+  });
+
+  it('tester log 23/11 UX-075: the « en route » message of an order taken in a conversation names the courier and carries the public tracking page', async () => {
+    const { owner } = await shop();
+    const page = await connectedPage(owner, app);
+    const { conversation } = await receive(app, page, newSender(), { text: 'bonjour' });
+    const { order } = await confirmedOrder(owner);
+    await db.order.update({ where: { id: order.id }, data: { conversationId: conversation.id } });
+    const res = await send(owner, order).expect(202);
+    await drain(app, owner.workspaceId);
+    const parcel = await db.shipment.findUniqueOrThrow({ where: { id: res.body.data.id } });
+    const shipped = await db.message.findFirstOrThrow({ where: { conversationId: conversation.id, author: 'system', text: { contains: 'en route' } } });
+    expect(shipped.text).toContain(parcel.trackingNumber!);
+    expect(shipped.text).toContain(`/s/${parcel.publicTrackingToken}`);
+    expect(shipped.text).toContain('(ZR Express)');
   });
 
   it('loi 26-06: an order in a new wilaya (68 Bou Saâda) reaches the courier under its parent code (28 M’Sila), commune unchanged', async () => {

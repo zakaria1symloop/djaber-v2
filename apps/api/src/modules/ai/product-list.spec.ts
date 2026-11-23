@@ -75,3 +75,21 @@ describe('UX-080 the product list the customer asks for', () => {
     expect(splitSentences(alsoSentence(left, 'fr'))).toHaveLength(1);
   });
 });
+
+describe('UX-080 live 23/11: a product named without the part of its name in brackets is named', () => {
+  const products: P[] = [
+    { id: 'a', name: 'QA 23/11 photos', price: 5000, stock: 9 },
+    { id: 'b', name: 'Satin dress', price: 2000, stock: 20 },
+    { id: 'c', name: 'Website Development (تصميم وتطوير مواقع إلكترونية)', price: 30000, stock: null },
+  ];
+  it('« Website Development : service …, 30 000 DA » is not added a second time; the Arabic part alone names it too', () => {
+    const f = facts('quels produits vous avez', 'fr', { products });
+    expect(checkReply('Voici ce qu’on propose :\n- QA 23/11 photos : 5 000 DA\n- Satin dress : 2 000 DA\n- Website Development : service de création de sites web, 30 000 DA\nQuelque chose vous plaît ?', f)).toEqual([]);
+    expect(checkReply('عندنا QA 23/11 photos بـ 5 000 دج، Satin dress بـ 2 000 دج وخدمة تصميم وتطوير مواقع إلكترونية بـ 30 000 دج.', facts('واش عندكم', 'ar', { products }))).toEqual([]);
+  });
+  it('the added sentence takes its own line in a reply written as lines', () => {
+    const f = facts('quels produits vous avez', 'fr', { products });
+    const reply = 'Voici ce qu’on propose :\n- QA 23/11 photos : 5 000 DA\n- Satin dress : 2 000 DA\nQuelque chose vous plaît ?';
+    expect(enforceReply(reply, checkReply(reply, f), f, { hasCards: false }).reply).toBe('Voici ce qu’on propose :\n- QA 23/11 photos : 5 000 DA\n- Satin dress : 2 000 DA\nOn a aussi : Website Development (تصميم وتطوير مواقع إلكترونية) à 30 000 DA.\nQuelque chose vous plaît ?');
+  });
+});

@@ -1,4 +1,4 @@
-# Djaber — réponse à la liste de recette (Boutique de Lalla, feuille du 22/11) — état au 23/11
+# Djaber — réponse à la liste de recette (Boutique de Lalla, feuille du 22/11) — état au 23/11 au soir
 
 Chaque ligne de votre feuille (n° = ligne). « Corrigé 23/11 » = corrigé et mis en ligne aujourd'hui, vérifié par nos tests ; « Vérifié 23/11 » = retesté en conditions réelles (Messenger) par notre testeur avec preuve ; « Déjà présent » = la fonction existe, voici où la trouver ; « Fonctionnement prévu » = comportement voulu, avec l'explication.
 
@@ -32,6 +32,30 @@ Chaque ligne de votre feuille (n° = ligne). « Corrigé 23/11 » = corrigé et 
 | 28 / 29 / 30 | Photos : toutes les photos du produit sont envoyées (carrousel), une photo ajoutée ensuite est prise en compte ; une demande en arabe reçoit une réponse en arabe (corrigé 23/11). |
 | 31 | « الجزائر العاصمة » est compris : frais de livraison d'Alger donnés. |
 | — | Nouvelle commande du même produit : acceptée (récapitulatif puis « oui ») — corrigé 23/11. |
+| 3 | Session : 45 minutes d’utilisation dont 20 minutes d’inactivité, jamais « Session expirée ». |
+| 37 / 38 | « Changer la quantité de ma commande » : nouveau récapitulatif, puis une seule commande active (l’ancienne est annulée et remplacée), stock réservé une seule fois. |
+| 39 | Limite de 10 par commande : « je veux 50 » est transmis à l’équipe avec la raison ; « ok 5 » reprend la conversation avec l’IA sans intervention. |
+| 40 | Stop-desk : le tarif de la grille (Alger 250 DA) est appliqué dans deux conversations, sans demande de point de retrait. |
+| 41 / 92 | Langue : « slt » → français, « salam ch7al » → darija en lettres latines, arabe → arabe, « hello » → anglais ; aucun message sans réponse. |
+| 42 | Wilaya « Alger », « الجزائر » ou « 16 » : la commande est enregistrée sur Alger (jamais Adrar). |
+| 45 / 94 | Produit en rupture : seule une alternative en stock est proposée. Produit « commandes acceptées en rupture » : commandable, le délai est dit dans le récapitulatif et la confirmation, pas à chaque message. |
+| 48 | Toutes les confirmations de commande du jour sont arrivées dans Messenger (38 messages vérifiés, aucun « Non délivré »). |
+| 56 | Photo du client : la photo d’un produit est reconnue avec son prix ; une photo sans rapport est décrite et déclarée « pas un article de la boutique ». Toutes les photos du produit sont comparées (corrigé 23/11, à revérifier le 24/11 sur la photo n° 3). |
+| 59 | Messages vocaux en darija : prix, photos et livraison obtenus par la voix (corrigé 23/11 : un nombre dans le nom d’un produit n’est plus pris pour une quantité). |
+| 88 | « Où est ma commande ? » : la commande est retrouvée avec le numéro de téléphone. |
+| 89 | « Annuler ma commande CMD-… » : seule la commande demandée est annulée, aucune autre n’est proposée, pas d’excuse sur les messages précédents. |
+| — | Transporteur : commande confirmée → colis créé chez ZR Express → le client reçoit « en route · suivi n° … (ZR Express) ». |
+| — | Paiement Chargily (mode test) : pack payé → crédits ajoutés et facture créée en moins d’une minute ; paiement refusé ou annulé → rien n’est ajouté. |
+
+## Corrigé le 23/11 au soir après les tests (à revérifier le 24/11)
+
+| N° | Ce qui a été corrigé |
+|---|---|
+| 51 | Service / produit numérique : la commande d’un service ne demande plus ni wilaya ni adresse, sans frais de livraison ni « à payer à la livraison » — seulement le nom et le téléphone. |
+| 55 / 93 | « Quels produits vous avez ? » : tous les produits commandables sont cités avec leur prix — en stock, services, et produits acceptés en rupture. Un produit en rupture non commandable n’est pas cité. |
+| 90 | Changement d’adresse d’une commande : la commande passée dans la même conversation est retrouvée même si le client a donné un autre numéro depuis ; l’IA reprend le contenu de la commande, ne demande que la nouvelle adresse, envoie le nouveau récapitulatif, et ne transmet plus à l’équipe pour cela. |
+| — | Un simple « salut » reçoit un salut et « comment puis-je vous aider ? », sans proposition de réservation. |
+| — | Paiement annulé par le marchand sur la page Chargily : l’écran de retour dit « Paiement annulé » (et plus « refusé par la banque »). |
 
 ## Déjà présent — où le trouver
 
@@ -53,6 +77,12 @@ Chaque ligne de votre feuille (n° = ligne). « Corrigé 23/11 » = corrigé et 
 | 86 | Une recommandation « ignorée » reste visible dans l'onglet « Historique » (ou le filtre Statut › « Ignorée »). |
 | 81 | Une commande importée s'annule normalement ; si elle n'a pas de commune, c'est sa **confirmation** qui est bloquée (adresse incomplète) — complétez la commune puis confirmez. |
 
-## En cours de test (testeur, 23/11)
+## Reste à tester (testeur, 24/11)
 
-7 (deux pages à la fois — limite Facebook de création de pages côté testeur), 37 / 38 (modification de quantité), 39, 40, 41, 42, 45, 48, 51, 55, 56, 59, 61, 88, 89, 90, 91, 93, 94, 95, 97, 21.
+7 (deux pages à la fois — limite Facebook de création de pages côté testeur), 61 / 91 (deux agents sur la même page), 95 (commande au-delà du stock puis réapprovisionnement), 97 (un administrateur ne peut pas acheter de pack), 21 (« Remplir avec l’IA » 4 fois), et la revérification des points 51, 55 / 93 et 90 corrigés le 23/11 au soir.
+
+## Reste ouvert
+
+| N° | État |
+|---|---|
+| 4 / 27 | Temps de réponse : ramené de 8–12 s à 3–7 s sur la plupart des messages ; certains messages (longue conversation, photo) prennent encore 9–11 s. |

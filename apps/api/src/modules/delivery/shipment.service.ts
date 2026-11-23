@@ -406,7 +406,10 @@ export class ShipmentService implements OnModuleInit {
           o = await this.fx.followDeliveryStatus(tx, o, 'sent', { type: 'courier', id: null });
         }
         await this.fx.notify(tx, 'shipment_created', u, o, { stamp: 'created' });
-        await this.fx.customerText(tx, o, 'orderShipped', { number: o.number, tracking: r.trackingNumber, courier: courierName });
+        // tester log 23/11 UX-075 (« … en route · suivi 16-NDDYMPUZHJ-ZR (zr-api). », no link): the public tracking page goes with the number,
+        // so the customer follows the parcel from Messenger
+        const page = u.publicTrackingToken ? `${this.config.get('PUBLIC_WEB_URL').replace(/\/$/, '')}/s/${u.publicTrackingToken}` : null;
+        await this.fx.customerText(tx, o, 'orderShipped', { number: o.number, tracking: page ? `${r.trackingNumber} — ${page}` : r.trackingNumber, courier: courierName });
         if ((await this.capsOf(tx, s)).label) await this.queueOutbox.add(tx, 'courier', 'fetch-label', { shipmentId, workspaceId: s.workspaceId }, `label:${shipmentId}`, { attempts: 3, backoff: { type: 'fixed', delay: 30_000 } });
         await this.fx.emit(tx, u, e as unknown as ShipmentRow['events'][number]);
       },

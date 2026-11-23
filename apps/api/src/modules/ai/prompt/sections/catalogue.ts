@@ -23,7 +23,8 @@ export const productBlock = (p: CatalogueProduct, n: number, descriptionMax: num
   if (description) lines.push(description);
   if (p.variants.length) lines.push(`VARIANTS: ${p.variants.map((v) => `${v.name} [VID:${v.id}] ${v.price} DA ${stockWord(v.stock, p.sellOutOfStock)}`).join('; ')}`);
   if (p.hasVariants) lines.push('VARIANT REQUIRED: the customer chooses one of the VARIANTS; never offer this product without a variant or at another price.');
-  if (p.stock === null) lines.push('SERVICE: present it as a service (what is done, how, when), never as a product in stock or a parcel.');
+  // Houssem live 23/11 UX-082 (client list L51): a service was ordered with a delivery fee, an address and « à payer à la livraison »
+  if (p.stock === null) lines.push('SERVICE: present it as a service (what is done, how, when), never as a product in stock or a parcel. It is not delivered: its order needs only the name and the phone — never ask a wilaya, a commune, an address or a delivery mode for it, never give a delivery fee or a delivery delay; call create_order with the name, the phone and the item (no wilayaId). An order that also holds a delivered product is delivered as usual.');
   // PV 22/10: the merchant takes orders for it at zero stock
   // PV 09/11 « il valide la commande seulement quand le produit est à 0 stock »: the line only came at STOCK 0, so with
   // STOCK 2 and 5 asked the model refused on its own although the shop takes such orders

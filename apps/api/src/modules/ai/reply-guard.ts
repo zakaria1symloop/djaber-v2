@@ -677,6 +677,16 @@ const LIST_ASK = new RegExp(
 );
 /** UX-080: the customer's message asks what the shop sells (the list of its products). */
 export const listAsked = (customerText: string | undefined): boolean => !!customerText && LIST_ASK.test(plainWords(customerText));
+/**
+ * UX-080: the ways a list may name a product — its name, its name without the part in brackets, that part alone (live 23/11: « Website
+ * Development : service de création de sites web, 30 000 DA » for « Website Development (تصميم وتطوير مواقع إلكترونية) » was read as
+ * left out and added a second time).
+ */
+export const listKeys = (name: string): string[] => {
+  const outside = name.replace(/[(（[][^)）\]]*[)）\]]/gu, ' ');
+  const inside = [...name.matchAll(/[(（[]([^)）\]]*)[)）\]]/gu)].map((m) => m[1]!);
+  return [...new Set([name, outside, ...inside].flatMap((n) => nameKeys(n)))];
+};
 /** UX-080: the listable products the text does not name. */
 export const listMissing = (text: string, listable: NonNullable<GuardFacts['listable']>): NonNullable<GuardFacts['listable']> => {
   const t = ` ${plainWords(text)} `;
@@ -961,7 +971,7 @@ export function enforceReply(reply: string, violations: GuardViolation[], facts:
       const sentences = splitSentences(text);
       const tail = sentences.length > 1 && /[?؟]\s*$/.test(sentences.at(-1)!) ? sentences.at(-1)!.trim() : '';
       const head = (tail ? sentences.slice(0, -1).join('') : text).trim();
-      text = [head, also, tail].filter(Boolean).join(' ');
+      text = [head, also, tail].filter(Boolean).join(head.includes('\n') ? '\n' : ' ');
     }
   }
   // journey retest R8-2: the refusal's field is asked when what is left asks nothing (« Saha Walid, tsajjel: zoudj tapis … »)
@@ -1145,7 +1155,7 @@ export function buildGuardFacts(i: GuardFactsInput): GuardFacts {
   const sold = i.products.filter((p) => !out.includes(p) && (!p.hasVariants || p.variants.length));
   const listable = i.catalogueFull && sold.length >= 2 && sold.length <= LIST_MAX ? sold.map((p) => {
     const variantPrices = p.hasVariants ? p.variants.map((v) => v.price) : [];
-    return { keys: nameKeys(p.name), name: p.name, price: variantPrices.length ? Math.min(...variantPrices) : p.price, from: variantPrices.length > 1 && Math.min(...variantPrices) !== Math.max(...variantPrices) };
+    return { keys: listKeys(p.name), name: p.name, price: variantPrices.length ? Math.min(...variantPrices) : p.price, from: variantPrices.length > 1 && Math.min(...variantPrices) !== Math.max(...variantPrices) };
   }).filter((p) => p.keys.length) : [];
   // journey retest R4-2: a name typed in Arabic script (« سمير بن علي ») is no Arabic message — an Arabic reply to a French customer is a switch
   // journey retest R9-1: nor a Latin name next to Arabic-script words (« Samir Benali 0661234567، قسنطينة … ») a Latin message

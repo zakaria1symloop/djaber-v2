@@ -360,6 +360,42 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     expect(await db.order.findFirstOrThrow({ where: { workspaceId: s.owner.workspaceId, number: 'CMD-1002' } })).toMatchObject({ status: 'cancelled' });
   });
 
+  it('Houssem live 23/11 UX-082 (client list L51): an order of a service has no delivery — no wilaya, no address, no fee; the recap and the confirmation say neither « livraison » nor « à payer à la livraison »; a service ordered with a delivered product is delivered as usual', async () => {
+    const s = await shop();
+    const service = await createProduct(s.owner, { name: 'Création de site web', price: 30000, trackStock: false, stock: null });
+    const sender = newSender();
+    // the call gives the name, the phone and the item only
+    const call = { name: 'create_order', args: { clientName: 'Amine Benali', clientPhone: '0555 12 34 56', items: [{ productId: service.id, quantity: 1 }], customerConfirmed: true } };
+    fakeAi(app).script('reply', { toolCalls: [call] }, { reply: 'Bien sûr.', intent: 'SALE' });
+    const asked = await turn(s, sender, 'je veux commander le service Création de site web. Amine Benali, 0555 12 34 56');
+    const first = lastResult(asked.runs);
+    expect(first).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recapToShow: true, recap: { noDelivery: true, deliveryFee: 0, total: 30000, clientName: 'Amine Benali' } });
+    const recapText = asked.out.map((m) => m.text).join('\n');
+    expect(recapText).toContain('1 × Création de site web : 30 000 DA');
+    expect(recapText).toContain('Total : 30 000 DA.');
+    expect(recapText).not.toMatch(/livraison|adresse/i);
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [{ ...call, id: 'call_service' }] }, { reply: 'OK', intent: 'SALE' });
+    const done = await turn(s, sender, 'oui');
+    const placed = lastResult(done.runs);
+    expect(placed).toMatchObject({ ok: true, number: 'CMD-1001', deliveryFee: 0, total: 30000, noDelivery: true });
+    expect(await db.order.findUniqueOrThrow({ where: { id: placed.orderId } })).toMatchObject({ status: 'new', source: 'ai', wilayaId: null, communeId: null, address: null, isStopdesk: false, deliveryFee: 0, total: 30000 });
+    // the order page and the list read an AI order without delivery
+    expect((await s.owner.get(`/orders/${placed.orderId}`).expect(200)).body.data).toMatchObject({ number: 'CMD-1001', total: 30000 });
+    await s.owner.get('/orders').expect(200);
+    const confirmation = done.out.map((m) => m.text).join('\n');
+    expect(confirmation).toContain('CMD-1001');
+    expect(confirmation).toContain('Total : 30 000 DA.');
+    expect(confirmation).not.toMatch(/livraison/i);
+    // the service with a delivered product: the order is delivered — the wilaya and the address are required, the fee is added
+    await resetAi();
+    const other = newSender();
+    const mixed = { name: 'create_order', args: { clientName: 'Amine Benali', clientPhone: '0555 12 34 56', items: [{ productId: service.id, quantity: 1 }, { productId: s.robe.id, quantity: 1 }], customerConfirmed: true } };
+    fakeAi(app).script('reply', { toolCalls: [mixed] }, { reply: 'Quelle est votre wilaya ?', intent: 'SALE' });
+    const partial = await turn(s, other, 'je veux le service Création de site web et la robe satin bordeaux. Amine Benali, 0555 12 34 56');
+    expect(lastResult(partial.runs)).toMatchObject({ ok: false, error: { code: 'VALIDATION', fields: expect.arrayContaining(['wilayaId']) } });
+    expect(await db.order.count({ where: { workspaceId: s.owner.workspaceId } })).toBe(1);
+  });
   it('a blocked customer ⇒ CUSTOMER_BLOCKED, no order, silent handoff (04 §13); risky client with RISKY_CLIENT_POLICY=handoff ⇒ handoff', async () => {
     const s = await shop();
     await s.owner.post('/safety/blocks', { phone: '0555123456', reason: 'fraud' }).expect(201);

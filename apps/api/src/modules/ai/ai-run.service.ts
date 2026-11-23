@@ -20,7 +20,7 @@ import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } f
 import { absentFields, canonicalTool, TOOL_DEFS, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
 import { allowedHandoffReasons, complaintIn, establishedReasons, HANDOFF_REFUSED_MARK, productAsk, fieldOnlyMessage, handoffReason, handoffRefusedInstruction, judgeHandoff, messageHandoffReasons, orderDetailsMessage, orderStatusAsk, placeCandidate, type HandoffRefusal } from './handoff-judge';
 import { offCatalogueWords, productNamedIn, productsNamedIn, productWanted, productWords } from './product-named';
-import { AUTO_FIX_RULES, checkReply, enforceReply, feeSentence, FIELD_QUESTIONS, guardInstruction, numbersIn, orderClaimsIn, owedQuotes, quoteFacts, stripMarkdown, withToolResults, type CataloguePrice, type CatalogueStock, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
+import { AUTO_FIX_RULES, checkReply, enforceReply, feeSentence, FIELD_QUESTIONS, greetingOnly, guardInstruction, numbersIn, orderClaimsIn, owedQuotes, quoteFacts, stripMarkdown, withToolResults, type CataloguePrice, type CatalogueStock, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
 import { asksDelivery, asksSomething, blockedOrderText, confirmRequest, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, serverRecapAsked, withoutRecapClaims } from './tools/order-confirmation-text';
 import { asksCancel, cancelAsked, cancelledAsked, cancelledNumber, confirmation, lastCancelled, phonesIn, placedNumbers, recapPending, recapYesArgs } from './tools/order-confirmation';
 import { matchWilaya, namedVariant } from './tools/tool-registry';
@@ -61,6 +61,24 @@ export const NO_ADDRESS_NOTE =
  * create_order is not offered — it was called on « Je voudrais le sac …, 1 seul. Karim Haddad 0770112233 » with `wilayaId 1`
  * (Adrar, never named), refused as `notGivenByCustomer`: without a wilaya the call can only be refused.
  */
+/**
+ * Houssem live 23/11 (H-07 13:42 « salut » ⇒ the recap of an order left open 20 minutes earlier, no greeting; UX-079 « slt » ⇒ an offer to
+ * reserve): on a message that is only a greeting, create_order is not offered — the model called it again for the earlier cart.
+ */
+export const GREETING_ONLY_NOTE =
+  "GREETING ONLY: the customer's message is only a greeting, so create_order is not available in this turn. Greet back in a few words and ask what they are looking for — no product, no price, no recap, no offer to order or reserve.";
+/**
+ * Houssem live 23/11 UX-082 (client list L51): told to the model when the product the customer takes is a service — its order is not
+ * delivered, so the notes about a missing wilaya / address do not apply and create_order stays offered.
+ */
+export const SERVICE_ORDER_NOTE =
+  'SERVICE ORDER: the product the customer takes is a service — it is not delivered. Its order needs only their name and phone: never ask a wilaya, a commune, an address or a delivery mode, never give a delivery fee or delay. Once the name and the phone are known, call create_order with them and the item (no wilayaId): the platform sends the recap.';
+/** UX-082: the product the customer takes (the latest CATALOGUE product their messages name) is a service (no stock tracking). */
+export const takesService = (history: string, catalogue: readonly CataloguePrice[], stock: readonly CatalogueStock[] | undefined): boolean => {
+  const name = takenName(history, catalogue);
+  const id = name ? catalogue.find((p) => p.name === name)?.id : undefined;
+  return !!id && stock?.find((x) => x.id === id)?.stock === null;
+};
 export const NO_PLACE_NOTE =
   'NO WILAYA YET: the customer has not named their wilaya (nor a commune or an address) in this conversation, so create_order is not available in this turn. Answer the customer and ask the next missing order field (the wilaya once the product, the name and the phone are known) — never a recap, never a default wilaya.';
 /**
@@ -869,7 +887,9 @@ export class AiRunService implements OnModuleInit {
     // journey retest R6-5: with a phone create_order stays offered, but with no street address / stop-desk word in the
     // customer's messages (and no recap yet) the model is told to ask for the address rather than call it (F1b: « Sétif, El
     // Eulma » ⇒ `create_order` without an address, refused)
-    const noAddress = !noPhone && noAddressYet(req.toolCtx);
+    // UX-082: an order of a service has no delivery — nothing about an address or a wilaya is withheld or asked for it
+    const serviceTaken = takesService(req.toolCtx.customerHistory ?? req.toolCtx.customerText ?? '', req.guard?.cataloguePrices ?? [], req.guard?.catalogueStock);
+    const noAddress = !noPhone && !serviceTaken && noAddressYet(req.toolCtx);
     // journey retest R7-4: and with no wilaya either (none named, no commune of one, none known of the customer) it is not
     // offered at all — such a call can only be refused (F1b T1 `wilayaId 1`)
     // the wilaya / commune lists, read once for the turn (unreadable ⇒ null: nothing is withheld on their account)
@@ -932,8 +952,10 @@ export class AiRunService implements OnModuleInit {
     const offeredNow = !yesOrder && plainYesNow && !serverRecapAsked(lastAiText) && req.guard ? offeredInQuestion(lastAiText, req.guard.cataloguePrices ?? [], req.guard.unavailableNames ?? []) : [];
     const choiceNames = offeredNow.length >= 2 ? offeredNow.map((p) => p.name) : null;
     const substituteTaken = offeredNow.length === 1 && takesUnavailable ? offeredNow[0]!.name : null;
+    // UX-079: a message that is only a greeting starts no order (a « oui » to a waiting recap is no greeting)
+    const greetOnly = greetingOnly(said) && !yesOrder;
     const withheld = (name: string) =>
-      (name === 'handoff_to_human' && (noHandoff || !reasons.length)) || (name === 'create_order' && (noPhone || noPlace || noStreet || noAddressHere || !!takesGone)) || (name === 'cancel_order' && noCancel) || (name === 'lookup_order' && (noLookup || confirmingYes)) || (name === 'add_faq_candidate' && noFaq);
+      (name === 'handoff_to_human' && (noHandoff || !reasons.length)) || (name === 'create_order' && (noPhone || noPlace || noStreet || noAddressHere || !!takesGone || greetOnly)) || (name === 'cancel_order' && noCancel) || (name === 'lookup_order' && (noLookup || confirmingYes)) || (name === 'add_faq_candidate' && noFaq);
     const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !withheld(d.name)).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
     // journey retest R1-1: the model still called the withheld tool (the prompt describes it) and the SDK refused the whole
     // step — 5 of 59 turns of a shop with handoff rules ended in 503. The note says it is not available for this message
@@ -1036,7 +1058,7 @@ export class AiRunService implements OnModuleInit {
     };
     // journey re-run J04r-4 (18/11): the customer writes Modern Standard Arabic (no darija word in their Arabic-script messages)
     const msa = req.guard?.lang === 'ar' && msaRegister(req.toolCtx.customerHistory ?? req.toolCtx.customerText);
-    const system = [req.prompt.system, ...(msa ? [MSA_NOTE] : []), ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noStreet ? [NO_STREET_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : []), ...(knownNote ? [knownNote] : []), ...(recapReady ? [RECAP_READY_NOTE] : []), ...(takesGone ? [takesUnavailableNote(takesGone)] : []), ...(substituteTaken ? [takesSubstituteNote(substituteTaken)] : [])].join('\n\n');
+    const system = [req.prompt.system, ...(msa ? [MSA_NOTE] : []), ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(greetOnly ? [GREETING_ONLY_NOTE] : []), ...(serviceTaken && !greetOnly ? [SERVICE_ORDER_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noStreet ? [NO_STREET_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : []), ...(knownNote ? [knownNote] : []), ...(recapReady ? [RECAP_READY_NOTE] : []), ...(takesGone ? [takesUnavailableNote(takesGone)] : []), ...(substituteTaken ? [takesSubstituteNote(substituteTaken)] : [])].join('\n\n');
     // journey retest R7-5: run once, when the answer to a delivery question comes without any quote_delivery of the turn
     let serverQuoted = false;
     // journey retest R14-2: the server's quote for the fees of a « home or stop-desk? » question (not a delivery question)

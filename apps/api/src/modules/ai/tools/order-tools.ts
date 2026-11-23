@@ -17,6 +17,7 @@ export type CreateOrderRequest = {
   clientName: string;
   clientPhone: string;
   secondPhone: string | null;
+  /** 0 = an order of services only, not delivered (UX-082): stored as no wilaya */
   wilayaId: number;
   communeName: string | null;
   address: string | null;

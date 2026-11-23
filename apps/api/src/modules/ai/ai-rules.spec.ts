@@ -164,7 +164,7 @@ describe('tools (§4.2) and runs (§5)', () => {
     expect(RUN_TOOLS).toEqual(['search_products', 'get_product', 'check_availability', 'quote_delivery', 'lookup_order', 'add_faq_candidate', 'handoff_to_human', 'create_order', 'cancel_order']);
     expect([canonicalTool('get_shipping_fee'), canonicalTool('get_order_status'), canonicalTool('search_products')]).toEqual(['quote_delivery', 'lookup_order', 'search_products']);
     for (const name of RUN_TOOLS) expect(TOOL_DEFS[name]).toMatchObject({ name, parameters: { type: 'object' } });
-    expect((TOOL_DEFS.create_order.parameters as any).required).toEqual(['clientName', 'clientPhone', 'wilayaId', 'items', 'customerConfirmed']);
+    expect((TOOL_DEFS.create_order.parameters as any).required).toEqual(['clientName', 'clientPhone', 'items', 'customerConfirmed']);
     expect((TOOL_DEFS.create_order.parameters as any).properties.customerConfirmed).toEqual({ const: true });
     expect((TOOL_DEFS.handoff_to_human.parameters as any).properties.reason.enum).toContain('order_limits');
   });

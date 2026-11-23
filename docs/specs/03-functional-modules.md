@@ -93,7 +93,7 @@ Each requirement has an ID, a phase (P0–P3, 01 §5) and a source. Acceptance c
 
 | ID | Requirement |
 |---|---|
-| AI-01 | Language rule (V1 prompt): reply in the same language **and script** as the customer's last message (darija in Arabic script, arabizi, French, English, mixed); never switch on your own; product names, SKUs, variants, prices kept verbatim (Latin digits + "DA"). |
+| AI-01 | Language rule (V1 prompt): reply in the same language **and script** as the customer's last message (darija in Arabic script, arabizi, French, English, mixed); never switch on your own; product names, SKUs and variants kept verbatim; prices in Latin digits with the currency of the reply's script — « DA » in French, English and arabizi, « دج » in Arabic script, as the Arabic texts of the app and of `11-error-catalogue.md` write amounts (tester log 23/11 UX-071: by design). |
 | AI-02 | Grounding (D34): agent config + products in scope. ≤ 60 products ⇒ full catalogue in context (id, name, sku, price/old price, variants with stock, description, recommendations); > 60 ⇒ keyword retrieval (`search_products` trigram, top 30) + last-mentioned products. Embeddings = P3 option. |
 | AI-03 | Structured output (replaces V1 tags): `{reply, status: OK|UNCLEAR|UNKNOWN|HANDOFF, statusDetail?, intent: SALE|INFO|TRACKING|COMPLAINT|GREETING|OTHER, productCards[productId], recommendations[{sourceId, recommendedId}], confidence 0–1}`. Malformed ⇒ one retry, then FL-01 F-6. |
 | AI-04 | Tools: `search_products(query)`, `get_product(id)`, `get_shipping_fee(wilayaId|name, isStopdesk, subtotal)`, `create_order`, `cancel_order`, `get_order_status`, `create_payment_link(orderId)` (P2, when enabled). Max 3 tool rounds. `cancel_order` targets this client's open orders only (V1 rule) and **never** creates an order. |
@@ -125,7 +125,7 @@ Each requirement has an ID, a phase (P0–P3, 01 §5) and a source. Acceptance c
 | CAT-08 | Product list: filters category (multi), price / cost / qty / profit / margin ranges, low stock, active; sort name / sku / cost / price / qty; table + grid; low-stock deep link honoured (**fix**). |
 | CAT-09 | Low stock: `quantity ≤ minStock` per product **and** per variant (`ProductVariant.minStock`) (**fix**: V1 product only); list, notification max 1/day/product, webhooks `stock.low` / `stock.out`. |
 | CAT-10 | Archive (soft delete) is always allowed; SKU freed; excluded from AI (AI-14), search and recommendations (auto-deactivated); order/sale lines keep their snapshot; restore (`POST /products/:id/restore`) re-checks SKU uniqueness. |
-| CAT-11 | Services = products with `trackStock=false`; shown in a "Services" list `[FIG 16s]`. |
+| CAT-11 | Services = products with `trackStock=false`; shown in a "Services" list `[FIG 16s]`. | An AI order whose every item is a service is not delivered (tester log 23/11 UX-082, client list L51): the AI asks the name and the phone only — no wilaya, commune, address, delivery mode, fee or delay — and the order is stored without delivery; a service ordered together with a delivered product follows the normal delivery.
 
 ## 9. Clients — `CLI` (P1) `[V1][CDC §9.1.3][FIG Clients]`
 

@@ -113,12 +113,12 @@ export const TOOL_DEFS: Record<ToolName, AiToolDef> = {
     parameters: {
       type: 'object',
       additionalProperties: false,
-      required: ['clientName', 'clientPhone', 'wilayaId', 'items', 'customerConfirmed'],
+      required: ['clientName', 'clientPhone', 'items', 'customerConfirmed'],
       properties: {
         clientName: { type: 'string', minLength: 3, maxLength: 80, description: 'the name exactly as the customer wrote it, in the script they used (« وليد بوزيد » stays in Arabic letters, never « Walid Bouzid ») — never « Client », « Customer » or another placeholder' },
         clientPhone: { type: 'string', pattern: '^(\\+213|00213|0)?[5-7][0-9]{8}$' },
         secondPhone: { type: 'string', description: 'the other number when the customer gave two (« 0661… ou 0770… »): keep both, never ask which one to keep' },
-        wilayaId: { type: 'integer', minimum: 1, maximum: WILAYA_COUNT },
+        wilayaId: { type: 'integer', minimum: 1, maximum: WILAYA_COUNT, description: 'the delivery wilaya — always given, except when every item is a service (STOCK:service): a service is not delivered, its order has no wilaya, commune, address or delivery mode' },
         communeName: { type: 'string', maxLength: 100 },
         address: { type: 'string', maxLength: 500, description: 'home delivery: the street, cité / building or landmark the customer wrote — never only the commune or wilaya name' },
         isStopdesk: { type: 'boolean', default: false },
@@ -170,7 +170,7 @@ const OrderArgs = z.object({
   clientName: str.min(3).max(80),
   clientPhone: str.min(1).max(30),
   secondPhone: str.max(30).optional(),
-  wilayaId: z.coerce.number().int().min(1).max(WILAYA_COUNT),
+  wilayaId: z.coerce.number().int().min(0).max(WILAYA_COUNT),
   communeName: str.max(100).optional(),
   address: str.max(500).optional(),
   isStopdesk: z.boolean().default(false),
@@ -186,7 +186,7 @@ const EXAMPLES: Record<string, string | number> = { clientName: 'Amine Benali', 
  * journey retest R1-5: the required `create_order` fields absent from the call (not the invalid ones: a wrong phone or a
  * short address keep their own VALIDATION answer with an example), in the order they are asked.
  */
-export const absentFields = (args: Record<string, unknown>, agent: Pick<ToolRunContext['agent'], 'orderFields'>): string[] => {
+export const absentFields = (args: Record<string, unknown>, agent: Pick<ToolRunContext['agent'], 'orderFields'>, noDelivery = false): string[] => {
   const text = (v: unknown) => (typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '');
   const fields = Array.isArray(agent.orderFields) ? (agent.orderFields as unknown as { key: string; required: boolean }[]) : [];
   const required = new Set(fields.length ? fields.filter((f) => f.required).map((f) => f.key) : ['commune', 'address']);
@@ -195,6 +195,8 @@ export const absentFields = (args: Record<string, unknown>, agent: Pick<ToolRunC
   if (!Array.isArray(args.items) || !args.items.length) out.push('items');
   if (!text(args.clientName)) out.push('clientName');
   if (!text(args.clientPhone)) out.push('clientPhone');
+  // Houssem live 23/11 UX-082 (client list L51): an order of services only is not delivered — no wilaya, commune or address
+  if (noDelivery) return out;
   if (!text(args.wilayaId)) out.push('wilayaId');
   if (!stopdesk && required.has('commune') && !text(args.communeName)) out.push('communeName');
   if (!stopdesk && !text(args.address)) out.push('address');
@@ -807,6 +809,14 @@ export class ToolRegistry {
     };
   }
 
+  /** UX-082: every item of the call is a service of the agent's catalogue (no stock tracking) — an order that is not delivered. */
+  private async servicesOnly(args: Record<string, unknown>, ctx: ToolRunContext): Promise<boolean> {
+    const ids = Array.isArray(args.items) ? [...new Set((args.items as { productId?: unknown }[]).map((i) => (i && typeof i.productId === 'string' ? i.productId : '')))] : [];
+    if (!ids.length || ids.some((id) => !id) || typeof this.catalogue.byIds !== 'function') return false;
+    const found = await this.catalogue.byIds(ctx.agent, ids);
+    return found.length === ids.length && found.every((p) => p.stock === null);
+  }
+
   /**
    * The customer's own orders: those of their client record and those placed in this very conversation. Houssem live 23/11 UX-081: a
    * customer who orders with another phone number gets another client record, and the orders placed earlier in the same thread
@@ -854,7 +864,7 @@ export class ToolRegistry {
   }
 
   /** Validation, catalogue check and limits of `create_order` (04 §5, FL-02); the write itself is the `OrderTools` port. */
-  async prepareOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<{ ok: true; request: CreateOrderRequest; draft: string; core?: string; beyondStock?: { name: string; quantity: number }[] } | { ok: false; result: ToolResult }> {
+  async prepareOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<{ ok: true; request: CreateOrderRequest; draft: string; core?: string; beyondStock?: { name: string; quantity: number }[]; beyondAll?: boolean; noDelivery?: boolean } | { ok: false; result: ToolResult }> {
     const fail = (result: ToolResult) => ({ ok: false as const, result });
     // journey retest R8-1 (17/11): a bare « oui » to the pending server recap confirms THAT recap — the order is the one the
     // server built for it (stored with the recap), whatever the confirming call left out (N5 T3: no commune, no address,
@@ -878,7 +888,12 @@ export class ToolRegistry {
     }
     // journey retest R1-5 (J04-6): a call made before the customer gave the fields (« create_order {} », no address, no
     // wilaya) is refused at once, before the catalogue reads, with every missing field — the model asks for the first one
-    const absent = absentFields(args, ctx.agent);
+    // Houssem live 23/11 UX-082 (client list L51: « Website Development » ⇒ a recap with « Livraison à domicile : 400 DA », the address and « à
+    // payer à la livraison »): an order whose every item is a service (CAT-11: no stock tracking) is not delivered — no wilaya, commune,
+    // address or delivery mode is needed or kept, no fee is added (wilayaId 0 here, null on the order)
+    const noDelivery = await this.servicesOnly(args, ctx);
+    if (noDelivery) args = { ...args, wilayaId: 0, isStopdesk: false, communeName: undefined, address: undefined, stopdeskId: undefined };
+    const absent = absentFields(args, ctx.agent, noDelivery);
     // journey retest R2-4: a value the customer never wrote counts as absent — a phone that is in none of their messages
     // (« 0000000000 » before any number), a wilaya they never named (wilayaId 1 = Adrar after the phone) — refused at once
     // with the absent fields, and the model is told not to call create_order again in this turn
@@ -924,6 +939,7 @@ export class ToolRegistry {
       return fail(invalid(path[0] === 'items' && path.length > 1 ? `items.${field}` : field, EXAMPLES[field]));
     }
     const d = a.data;
+    if (!noDelivery && d.wilayaId < 1) return fail(invalid('wilayaId', EXAMPLES.wilayaId));
     // full-test 15/11 AI-CHAT-01: never an invented value (« Client », 0555000000) — ask the customer
     const ask = (field: string) => fail({ ok: false, error: { code: 'VALIDATION', field, missing: true, example: EXAMPLES[field] }, say: 'ask the customer for this value (one question); never invent it' });
     if (isPlaceholderName(d.clientName)) return ask('clientName');
@@ -941,11 +957,11 @@ export class ToolRegistry {
     // journey retest R4-6: « Nadia Kaci, 0661234568 ou 0770998877 » — the other number is kept as the second phone (the model
     // asked which one to keep, then dropped 0770998877 without an answer), unless the customer said one replaces the other
     if (!phone2 && ctx.customerHistory !== undefined && phone2Field(ctx.agent)) phone2 = otherPhoneGiven(ctx.customerHistory, phone);
-    if (!d.isStopdesk && (d.address ?? '').length < 10) return fail(invalid('address', EXAMPLES.address));
+    if (!noDelivery && !d.isStopdesk && (d.address ?? '').length < 10) return fail(invalid('address', EXAMPLES.address));
     // journey retest R2-2: « Adresse : Bab Ezzouar, Alger » — a home address that is only the commune / wilaya name
     if (!d.isStopdesk && place && placeOnlyAddress(d.address ?? '', [place.nameFr, place.nameAr, ...place.communes.flatMap((c) => [c.nameFr, c.nameAr]), ...(d.communeName ? [d.communeName] : [])], place.id))
       return fail({ ok: false, error: { code: 'VALIDATION', field: 'address', missing: true, example: EXAMPLES.address }, say: 'The address is only the commune / wilaya name: ask the customer for the street, the cité or building, or a landmark (one short question), or offer the stop-desk. No recap without it; do not call create_order again in this turn.' });
-    const missing = this.missingRequired(d, ctx.agent);
+    const missing = noDelivery ? this.missingRequired({ ...d, isStopdesk: true }, ctx.agent) : this.missingRequired(d, ctx.agent);
     if (missing) return fail({ ok: false, error: { code: 'VALIDATION', field: missing, missing: true, ...(EXAMPLES[missing] !== undefined ? { example: EXAMPLES[missing] } : {}) }, say: 'ask the customer for this field (one question), then show the recap again' });
 
     // A9: the order it replaces must be this customer's and not confirmed by the shop yet; its units count as free here
@@ -1029,7 +1045,7 @@ export class ToolRegistry {
     // PV 28/10: an empty limit is no limit (the agent page shows ∞); it used to mean 10 units / 50 000 DA
     const maxQty = ctx.agent.maxQtyPerOrder ?? null;
     const maxAmount = ctx.agent.maxAmountPerOrder ?? null;
-    const quote = await this.quote({ wilayaId: d.wilayaId, isStopdesk: d.isStopdesk, subtotal });
+    const quote: ToolResult = noDelivery ? { ok: true, fee: 0, wilayaName: '' } : await this.quote({ wilayaId: d.wilayaId, isStopdesk: d.isStopdesk, subtotal });
     if (quote.ok === false) return fail(quote);
     const deliveryFee = Number(quote.fee ?? 0);
     // no order, no error code: the turn is handed to the team (statusDetail=order_limits)
@@ -1042,7 +1058,7 @@ export class ToolRegistry {
     // adds them back as « street, commune, wilaya » (N21 T4 « البليدة، بوفاريك، حي الورود رقم 12 » was shown and stored wilaya first)
     const communeRow = place && d.communeName ? place.communes.find((c) => samePlace(c.nameFr, d.communeName!) || samePlace(c.nameAr, d.communeName!)) : undefined;
     const placeNames = [place?.nameFr, place?.nameAr, d.communeName, communeRow?.nameFr, communeRow?.nameAr];
-    let street = d.address ? withoutPlaceSegments(d.address, placeNames) || d.address : null;
+    let street = noDelivery ? null : d.address ? withoutPlaceSegments(d.address, placeNames) || d.address : null;
     // journey retest R13-3 (18/11): a street the model translated (« Cité 1000 logements, immeuble 5 » for « حي 1000 مسكن عمارة 5 ») is
     // the customer's own words — as the name (R8-2)
     if (street && ctx.customerHistory !== undefined) street = customerOwnStreet(street, ctx.customerHistory, placeNames) ?? street;
@@ -1071,6 +1087,8 @@ export class ToolRegistry {
     if (placedNow) return fail({ ok: false, error: { code: 'ORDER_ALREADY_PLACED', number: placedNow }, say: 'An order was already placed in this turn: confirm that one to the customer, never create another one now.' });
     const before = orderedBefore(ctx.orderHistory, draft, Date.now(), core, { anotherAsked: anotherOrderAsked(ctx.customerText) });
     if (before) return fail({ ok: false, error: { code: 'ORDER_ALREADY_PLACED', number: before }, say: `This order (same phone, wilaya and items) was already placed as ${before}: confirm it to the customer. To change its name or address, call create_order with replacesOrder=${before}. Create another order only when the customer clearly asks for an additional one.` });
+    // client list L45 remark (Houssem 23/11): « Une partie de la commande … » for an order whose every unit is beyond the stock
+    const beyondAll = beyondStock.length === items.length && beyondStock.every((b, k) => b.quantity >= items[k]!.quantity);
     const recap = {
       items: items.map((i) => ({ name: i.name, variant: i.variant, quantity: i.quantity, unitPrice: i.unitPrice })),
       // J03-10: the wording of the request (the confirmed recap's, when the call only reworded it)
@@ -1081,6 +1099,8 @@ export class ToolRegistry {
       ...(communeAr(place?.communes ?? [], request.communeName) ? { communeAr: communeAr(place?.communes ?? [], request.communeName) } : {}),
       ...(replaces ? { replaces: replaces.number } : {}),
       ...(beyondStock.length ? { beyondStock } : {}),
+      ...(beyondAll ? { beyondAll: true } : {}),
+      ...(noDelivery ? { noDelivery: true } : {}),
     };
     // journey retest R4-3 (Critical): only a SERVER recap of an earlier turn (its CONFIRMATION_REQUIRED draft, or the latest
     // recap with the same core, J03-10) can be confirmed. The J04-4 rule « the AI's previous message showed the phone, the total
@@ -1104,7 +1124,7 @@ export class ToolRegistry {
     if (said === 'unclear') return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft, core }, recap, draftOrder, say: 'The customer has not clearly confirmed this recap yet: nothing is ordered. Answer their message, then ask them to reply « oui » to confirm the order (or say what to change).' });
     // 04 §21: `phoneConfirmed` counts only once the tool asked the customer to re-confirm this number
     if (d.phoneConfirmed && phoneCheckAsked(ctx.orderHistory, phone)) request.phoneConfirmed = true;
-    return { ok: true, request, draft, core, ...(beyondStock.length ? { beyondStock } : {}) };
+    return { ok: true, request, draft, core, ...(beyondStock.length ? { beyondStock } : {}), ...(beyondAll ? { beyondAll: true } : {}), ...(noDelivery ? { noDelivery: true } : {}) };
   }
 
   /**
@@ -1207,7 +1227,7 @@ export class ToolRegistry {
     if (!prepared.ok) return prepared.result;
     const r = prepared.request;
     // `draft`: the content key (a later turn never places the same order again); `etaDays`: the server's confirmation text
-    const beyond = { ...(prepared.beyondStock ? { beyondStock: prepared.beyondStock } : {}), draft: prepared.draft, ...(prepared.core ? { core: prepared.core } : {}), etaDays: '2–5' };
+    const beyond = { ...(prepared.beyondStock ? { beyondStock: prepared.beyondStock } : {}), ...(prepared.beyondAll ? { beyondAll: true } : {}), ...(prepared.noDelivery ? { noDelivery: true } : {}), draft: prepared.draft, ...(prepared.core ? { core: prepared.core } : {}), etaDays: '2–5' };
     // §8 dry run: everything validated, nothing written; a blocked phone is refused like live (journey J09-14, 04 §13)
     if (ctx.dryRun && (await this.orders.isBlocked?.({ conversationId: ctx.conversationId }, r.clientPhone))) return customerBlockedResult();
     if (ctx.dryRun) return { ok: true, orderId: null, number: `TEST-${seqOf(ctx.callId)}`, simulated: true, subtotal: r.subtotal, deliveryFee: r.deliveryFee, total: r.total, items: r.items.map((i) => ({ name: i.name, variant: i.variant, quantity: i.quantity, unitPrice: i.unitPrice })), duplicateOf: null, paymentOptions: ['cod'], ...(r.replaces ? { replaced: { number: r.replaces.number } } : {}), ...beyond };
