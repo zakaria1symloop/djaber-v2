@@ -370,7 +370,7 @@ export class LiveAiGateway implements AiGateway {
     const signal = AbortSignal.timeout(req.timeoutMs);
     try {
       if (provider !== 'groq' && provider !== 'openai') throw new AiProviderError('provider_error', provider, `${provider} provider_error`);
-      const fetch = this.transcriptionFetch(req.mime);
+      const fetch = this.transcriptionFetch(req.mime, req.language);
       const res = await transcribeAudio({
         model: provider === 'groq' ? createGroq({ apiKey, fetch }).transcription(req.model.modelId) : createOpenAI({ apiKey, fetch }).transcription(req.model.modelId),
         audio: req.audio,
@@ -385,7 +385,7 @@ export class LiveAiGateway implements AiGateway {
   }
 
   /** Same transport, with the real mime / file extension of the audio and `response_format=verbose_json` on the form. */
-  private transcriptionFetch(mime: string): typeof fetch {
+  private transcriptionFetch(mime: string, language?: string): typeof fetch {
     const type = mime.split(';')[0]!.trim().toLowerCase();
     const extension = AUDIO_EXTENSIONS[type];
     return (input, init) => {
@@ -394,6 +394,7 @@ export class LiveAiGateway implements AiGateway {
         const file = body.get('file');
         if (extension && typeof file !== 'string' && file !== null) body.set('file', new File([file], `audio.${extension}`, { type }));
         if (!body.has('response_format')) body.set('response_format', 'verbose_json');
+        if (language) body.set('language', language);
       }
       return this.fetch(input, init);
     };

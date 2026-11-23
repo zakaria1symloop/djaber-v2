@@ -18,6 +18,9 @@ import { RoutingService } from './routing.service';
 type TranscribeJob = { workspaceId: string; messageId: string };
 export type TranscribeOutcome = 'done' | 'failed' | 'too_long' | 'noop';
 
+/** The languages a customer of an Algerian shop speaks in a voice note (provider names or ISO codes); unknown ⇒ trusted. */
+export const spokenHere = (language: string | null | undefined): boolean => !language || /^(ar|fr|en|arabic|french|english)$/i.test(language.trim());
+
 @Injectable()
 export class TranscriptionService implements OnModuleInit {
   private readonly log = new Logger(TranscriptionService.name);
@@ -39,6 +42,12 @@ export class TranscriptionService implements OnModuleInit {
   /** Transcribes an audio buffer through the transcription route (primary, then fallback). */
   async transcribe(audio: Buffer, mime: string) {
     const r = await this.routing.call('transcription', (m, timeoutMs) => this.gateway.transcribe({ model: m.ref, audio, mime, timeoutMs }));
+    // owner 23/11 (« voice didn't work »): a 3-second darija voice note came back as « Azerbaijani » gibberish — the model guesses the
+    // language of short Algerian audio badly. A guess outside the languages customers speak here is transcribed again as Arabic.
+    if (!spokenHere(r.value.language)) {
+      const again = await this.routing.call('transcription', (m, timeoutMs) => this.gateway.transcribe({ model: m.ref, audio, mime, timeoutMs, language: 'ar' })).catch(() => null);
+      if (again?.value.text.trim()) return { ...again.value, language: 'ar', model: again.model, usedFallback: again.usedFallback };
+    }
     return { ...r.value, model: r.model, usedFallback: r.usedFallback };
   }
 

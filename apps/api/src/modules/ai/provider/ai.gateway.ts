@@ -54,7 +54,14 @@ export type AiGenerateResult = {
   rejectedToolCalls?: AiToolCallRequest[];
 };
 
-export type AiTranscribeRequest = { model: AiModelRef; audio: Buffer; mime: string; timeoutMs: number };
+export type AiTranscribeRequest = {
+  model: AiModelRef;
+  audio: Buffer;
+  mime: string;
+  timeoutMs: number;
+  /** ISO 639-1 hint (« ar »): the provider transcribes in that language instead of guessing it */
+  language?: string;
+};
 export type AiTranscribeResult = { text: string; language: string | null; durationSec: number | null };
 
 /**
