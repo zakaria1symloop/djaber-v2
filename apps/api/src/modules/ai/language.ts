@@ -77,7 +77,11 @@ export const detectLanguage = (text: string | null | undefined, previous?: AiLan
     // journey 16/11 J04-2: inside a conversation, a Latin message switches the language only with 2 clues or more — one
     // word (« oui », « merci », « thanks », « Bonsoir ») keeps the conversation's language
     const score = verdict === 'arabizi' ? arabizi : verdict === 'fr' ? fr : en;
-    return previous && previous !== verdict && score < 2 ? previous : verdict;
+    // Houssem live 23/11 (H-07 11:56): « nouvelle commande : 2 qa/11 photos, a domicile, wiliya 16, commune bab ezzouar… » after Arabic-script
+    // messages kept Arabic (one French clue left once the address words are out): a whole sentence in Latin letters after Arabic script
+    // is a switch by itself
+    const scriptSwitch = previous === 'ar' && arabic === 0 && w.filter((x) => !NEUTRAL_WORDS.has(x) && /\p{L}{2,}/u.test(x)).length >= 3;
+    return previous && previous !== verdict && score < 2 && !scriptSwitch ? previous : verdict;
   }
   // no clue in the text ("ok", "spam 0", a name): the turn keeps the previous language, else English (`neutral: 'previous'`:
   // the previous one whatever it is, else none — the inbound side then lets the workspace locale apply)
