@@ -676,7 +676,7 @@ export type TurnRequest = {
  */
 // journey retest R19-1 (18/11): `stray` — the tools it asked that the step did not offer (R19 counted 27 such calls and could not tell which
 // tools); an empty `steps` list is a turn the server answered with no model call (a plain yes to the recap shown)
-export type TurnStep = { ms: number; calls?: string[]; stray?: string[]; next?: string; cacheRead?: number; cacheWrite?: number; outTok?: number };
+export type TurnStep = { ms: number; calls?: string[]; stray?: string[]; next?: string; cacheRead?: number; cacheWrite?: number; outTok?: number; bad?: string };
 type TurnBase = { tools: ExecutedTool[]; usage: AiUsage; model: RoutedModel | null; usedFallback: boolean; steps?: TurnStep[] };
 export type TurnResult =
   | (TurnBase & { ok: true; output: AiReplyOutput; model: RoutedModel; forcedHandoff: string | null; repaired: boolean; salvaged?: boolean; /** retest 12/11: a handoff of the model was refused by the server this turn (handoff-judge) */ handoffRefused?: HandoffRefusal; /** §4.3: the reply guard found something (and what was done) */ guard?: GuardOutcome })
@@ -1054,6 +1054,10 @@ export class AiRunService implements OnModuleInit {
     // before any model call); the limit a create_order of this turn reported comes from its answer (`limitNow`)
     let messageLimit: OrderLimit | null = null;
     let toolRounds = 0;
+    // client list L92 (23/11): after a call to a tool that does not exist (« dummy », « noop ») with nothing to run, the next step is asked
+    // WITHOUT tools — the model answers instead of making up another call (« ماهي المنتجات اللي عندكم »: dummy, then handoff_to_human, then the
+    // answer — 3 model calls, 15 s)
+    let noToolsNext = false;
     let handoffAsked = false;
     let confirmAsked = false;
     // journey retest R11-5: the plain-text step after the format reminder was asked (once)
@@ -1474,7 +1478,7 @@ export class AiRunService implements OnModuleInit {
       // the corrective turn of the guard is offered no tool: an order or a cancellation is never done twice
       // full-test 15/11 AI-CHAT-02: nor the format retry — it only re-writes the answer (it cancelled the order it had just created)
       // full-test 15/11 proposal 13: a message that is only an order field gets 2 tool rounds at most (10–21 s turns)
-      const offerTools = toolRounds < (fieldOnly ? 2 : MAX_STEPS - 1) && !forcedHandoff && !guardFirst && !repaired;
+      const offerTools = toolRounds < (fieldOnly ? 2 : MAX_STEPS - 1) && !forcedHandoff && !guardFirst && !repaired && !noToolsNext;
       // journey retest R12-3 (17/11): once create_order placed the order in this turn, lookup_order is not offered either (F6 T3, F3 T4
       // looked up the order they had just placed: `{orders: []}`)
       const placedNow = orderClosed && !!confirmationNow();
@@ -1607,6 +1611,7 @@ export class AiRunService implements OnModuleInit {
         }
         if (!serverReply) {
           messages.push({ role: 'user', content: stray.map((c) => `[tool result ${c.name}] ${JSON.stringify(unavailableTool(c.name, noHandoff, noPhone, noPlace, noStreet, noAddressHere, takesGone))}`).join('\n') });
+          if (!runnable.length && stray.every((c) => !(canonicalTool(c.name) in TOOL_DEFS))) noToolsNext = true;
           continue;
         }
       }
@@ -1825,6 +1830,8 @@ export class AiRunService implements OnModuleInit {
       // the last FORMAT_RETRY_HISTORY messages: without any of them (full-test 15/11 AI-CHAT-02) the model saw this turn's
       // tool calls full of a name / phone / address it had never read, concluded it had invented them and said so.
       repaired = true;
+      // 23/11 (H-07 live: every reply needed the format retry, +1.1–1.3 s): why the first answer was refused, kept on the step for the logs
+      if (steps.length) steps[steps.length - 1]!.bad = `${parsed.reason}: ${(res.value.text ?? '').slice(0, 160)}`;
       messages.splice(0, Math.max(0, req.prompt.messages.length - 1 - FORMAT_RETRY_HISTORY));
       messages.push({ role: 'assistant', content: res.value.text || '(no answer)' }, { role: 'user', content: FORMAT_REMINDER });
     }

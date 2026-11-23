@@ -379,8 +379,12 @@ export const OrdersExportQuerySchema = z
 export type OrdersExportQuery = z.infer<typeof OrdersExportQuerySchema>;
 
 // --- order import (03 §37 ORD "Import orders", D69, `orders.import`) ----------------------------------------------------
-/** CSV columns of 06 "Orders" `POST /orders/import`; `items` = "SKU×qty;SKU×qty" (also `x`, `*`). */
-export const ORDER_IMPORT_FIELDS = ['clientName', 'phone', 'wilaya', 'commune', 'address', 'items', 'note'] as const;
+/**
+ * CSV columns of 06 "Orders" `POST /orders/import`; `items` = "SKU×qty;SKU×qty" (also `x`, `*`). `orderedAt` (client list
+ * Boutique de Lalla 22/11 L80): the order date of the file — Africa/Algiers wall time « dd/mm/yyyy [hh:mm] », « yyyy-mm-dd
+ * [hh:mm] » or an Excel date cell; absent ⇒ the import time.
+ */
+export const ORDER_IMPORT_FIELDS = ['clientName', 'phone', 'wilaya', 'commune', 'address', 'items', 'note', 'orderedAt'] as const;
 export type OrderImportField = (typeof ORDER_IMPORT_FIELDS)[number];
 export const ORDER_IMPORT_REQUIRED_FIELDS: readonly OrderImportField[] = ['clientName', 'phone', 'wilaya', 'address', 'items'];
 export const ORDER_IMPORT_MAX_ROWS = 1000;
@@ -396,7 +400,8 @@ export type OrderImportRowError = { field: OrderImportField | null; code: string
 export type OrderImportPreviewRow = {
   row: number;
   ok: boolean;
-  values: { clientName: string | null; phone: string | null; wilayaId: number | null; wilaya: string | null; commune: string | null; communeId: number | null; address: string | null; note: string | null; items: { sku: string; quantity: number; productId: string | null; variantId: string | null; name: string | null; unitPrice: number | null }[] };
+  /** `orderedAt`: ISO instant (UTC) read from the order-date column; null ⇒ the order is dated at the commit (absent in previews made before L80) */
+  values: { clientName: string | null; phone: string | null; wilayaId: number | null; wilaya: string | null; commune: string | null; communeId: number | null; address: string | null; note: string | null; orderedAt?: string | null; items: { sku: string; quantity: number; productId: string | null; variantId: string | null; name: string | null; unitPrice: number | null }[] };
   /** subtotal of the lines at catalogue prices + the grid fee (informative) */
   total: number | null;
   /** an existing client with this phone (found) or a new one (created) */

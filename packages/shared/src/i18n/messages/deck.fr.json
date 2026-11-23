@@ -722,6 +722,7 @@
  "shortcuts.esc": "Échap",
  "validation.price_max": "Montant trop élevé (100 000 000 DA maximum)",
  "validation.quantity_max": "Quantité trop élevée (10 000 000 maximum)",
+ "validation.import_group": "Produit non importé : corrigez la ligne {row} (un produit et ses variantes sont importés ensemble)",
  "dialog.archiveProduct.title": "Archiver « {name} » ?",
  "validation.unknownVariable": "Variable inconnue : {names} — utilisez {allowed}.",
  "notification.shipment.returned.done.title": "Commande retournée #{number}",

@@ -172,7 +172,8 @@ export type UpdateUnitInput = z.infer<typeof UpdateUnitSchema>;
 // --- stock (CAT-05, GDS-02/03) ------------------------------------------------------------------------------------------
 export const STOCK_ADJUSTMENT_TYPES = ['in', 'out', 'set'] as const;
 /** Reasons a person may pick in the adjust dialog (subset of `MovementReason`). */
-export const STOCK_ADJUSTMENT_REASONS = ['breakage', 'loss', 'initial', 'inventory', 'correction', 'other'] as const;
+// client list L74 (23/11): « Alimentation » (restock) first — the most common entry
+export const STOCK_ADJUSTMENT_REASONS = ['restock', 'breakage', 'loss', 'initial', 'inventory', 'correction', 'other'] as const;
 /** `POST /stock/adjustments` (Idempotency-Key required). `set` = exact quantity, the server computes the delta. */
 export const StockAdjustmentSchema = z
   .object({
@@ -227,8 +228,12 @@ export const computeBulkPrice = (current: number, o: Pick<BulkPriceInput, 'op' |
 };
 
 // --- import (CAT-06, FL-12) ---------------------------------------------------------------------------------------------
-/** Target fields of the column-mapping dialog; `name` and `price` are required. */
-export const IMPORT_FIELDS = ['sku', 'name', 'description', 'category', 'unit', 'price', 'oldPrice', 'costPrice', 'stock', 'minStock', 'weightGrams', 'keywords', 'isActive'] as const;
+/**
+ * Target fields of the column-mapping dialog; `name` and `price` are required. Client list L77 / L78 (Boutique de Lalla
+ * 22/11): `variant` / `variantSku` (rows of the same product SKU are one product and its variants) and the stock flags
+ * `trackStock` / `sellOutOfStock`, so that the products export imports back as the same catalogue.
+ */
+export const IMPORT_FIELDS = ['sku', 'name', 'variant', 'variantSku', 'description', 'category', 'unit', 'price', 'oldPrice', 'costPrice', 'stock', 'minStock', 'weightGrams', 'keywords', 'trackStock', 'sellOutOfStock', 'isActive'] as const;
 export type ImportField = (typeof IMPORT_FIELDS)[number];
 export const IMPORT_REQUIRED_FIELDS: readonly ImportField[] = ['name', 'price'];
 /** `POST /products/import/mapping` — `mapping[field]` = header of the file column (null / absent = not imported). */
@@ -427,6 +432,12 @@ export type ImportPreviewRow = {
   action: 'create' | 'update' | 'skip';
   values: Partial<Record<ImportField, string | number | boolean | null>>;
   errors: { field: ImportField | null; code: string; params?: Record<string, string | number> }[];
+  /**
+   * L78: the file line of the product this row is a variant of (rows of one product SKU: the first is the product, the
+   * rows with a « Variante » are its variants). Equal to `row` when the product line names a variant itself (exports
+   * before 23/11/2026: one line per variant, no product line). Absent on a product without variants.
+   */
+  variantOf?: number;
 };
 export type ImportPreviewResult = {
   stage: 'mapping' | 'preview' | 'committed';
@@ -435,8 +446,9 @@ export type ImportPreviewResult = {
   mapping: Partial<Record<ImportField, string | null>>;
   missingColumns: ImportField[];
   updateExisting: boolean;
-  totals: { rows: number; valid: number; invalid: number; create: number; update: number; overPlanLimit: number; newCategories: number };
+  /** `variants`: valid variant rows (only when a « Variante » column is mapped); `create` / `update` count products */
+  totals: { rows: number; valid: number; invalid: number; create: number; update: number; overPlanLimit: number; newCategories: number; variants?: number };
   rows: ImportPreviewRow[];
   /** `pendingReview`: products of this import waiting for validation after it (absent on imports run before 10/11/2026) */
-  report?: { created: number; updated: number; skipped: number; categoriesCreated: number; pendingReview?: number };
+  report?: { created: number; updated: number; skipped: number; categoriesCreated: number; pendingReview?: number; variantsCreated?: number };
 };

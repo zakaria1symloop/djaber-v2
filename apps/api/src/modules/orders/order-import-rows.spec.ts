@@ -1,5 +1,5 @@
 // 03 §37 ORD "Import orders" — column auto-mapping, "SKU×qty;SKU×qty" parsing and per-row validation.
-import { autoMapOrders, buildOrderRow, missingOrderColumns, parseItems, resolveWilaya, type ImportCatalog, type ImportItem } from './order-import-rows';
+import { autoMapOrders, buildOrderRow, missingOrderColumns, parseItems, parseOrderDate, resolveWilaya, type ImportCatalog, type ImportItem } from './order-import-rows';
 
 const ROBE: ImportItem = { productId: 'p1', variantId: null, name: 'Robe', hasVariants: false, trackStock: true, available: 3, price: 4500 };
 const KAB: ImportItem = { productId: 'p2', variantId: null, name: 'Kabyle', hasVariants: true, trackStock: true, available: null, price: 5000 };
@@ -73,5 +73,47 @@ describe('order import rows', () => {
     expect(buildOrderRow(5, raw({ Wilaya: 'Sétif' }), mapping, c, taken).errors[0]).toMatchObject({ code: 'WILAYA_NOT_SERVED' });
     expect(buildOrderRow(6, raw({ Articles: 'ROBE-01×2' }), mapping, c, taken).ok).toBe(true);
     expect(buildOrderRow(7, raw({ Articles: 'ROBE-01×2' }), mapping, c, taken).errors[0]).toEqual({ field: 'items', code: 'ORDER_INSUFFICIENT_STOCK', params: { product: 'Robe', available: 1 } });
+  });
+
+  describe('L80 (client list 22/11): the order date comes from the file', () => {
+    const iso = (s: string) => parseOrderDate(s)?.toISOString() ?? null;
+    it('auto-maps the « Date » column of our export (fr / ar / en) and the usual names', () => {
+      expect(autoMapOrders(['N°', 'Date', 'Heure', 'Client', 'Téléphone', 'Wilaya', 'Adresse / stop-desk', 'Articles (nom × qté × prix)'])).toMatchObject({ orderedAt: 'Date', clientName: 'Client', address: 'Adresse / stop-desk' });
+      expect(autoMapOrders(['التاريخ', 'العميل', 'الهاتف'])).toMatchObject({ orderedAt: 'التاريخ', clientName: 'العميل', phone: 'الهاتف' });
+      expect(autoMapOrders(['Order date', 'Client'])).toMatchObject({ orderedAt: 'Order date' });
+      expect(autoMapOrders(['Date de commande'])).toEqual({ orderedAt: 'Date de commande' });
+      // a delivery date is not the order date
+      expect(autoMapOrders(['Date livraison'])).toEqual({});
+    });
+    it('reads Algiers wall time (UTC+1) and stores UTC: dd/mm/yyyy [hh:mm], yyyy-mm-dd [hh:mm], Excel serial, ISO instant', () => {
+      expect(iso('20/11/2026 15:38')).toBe('2026-11-20T14:38:00.000Z');
+      expect(iso('20/11/2026')).toBe('2026-11-19T23:00:00.000Z');
+      expect(iso('5/3/2026 9:05')).toBe('2026-03-05T08:05:00.000Z');
+      expect(iso('20-11-2026 15h38')).toBe('2026-11-20T14:38:00.000Z');
+      expect(iso('20.11.26')).toBe('2026-11-19T23:00:00.000Z');
+      expect(iso('2026-11-20 15:38:20')).toBe('2026-11-20T14:38:20.000Z');
+      expect(iso('2026-11-20T15:38')).toBe('2026-11-20T14:38:00.000Z');
+      expect(iso('2026-11-20')).toBe('2026-11-19T23:00:00.000Z');
+      expect(iso('2026-11-20T14:38:00.000Z')).toBe('2026-11-20T14:38:00.000Z');
+      expect(iso('2026-11-20T15:38:00+01:00')).toBe('2026-11-20T14:38:00.000Z');
+      // the XLSX date cell of our export (« 20/11/2026 15:38 » = serial 46346 + 15:38 / 24 h), float noise rounded to the minute
+      expect(iso(String(46346 + (15 * 60 + 38) / 1440))).toBe('2026-11-20T14:38:00.000Z');
+      expect(iso('46346')).toBe('2026-11-19T23:00:00.000Z');
+    });
+    it('unreadable: impossible days, text, bare numbers that are no date cell', () => {
+      for (const bad of ['31/02/2026', '13/13/2026', '2026-13-01', '20/11/2026 25:00', 'hier', '12', '0555123456', '20/11']) expect([bad, iso(bad)]).toEqual([bad, null]);
+    });
+    it('row: date kept as an ISO instant; empty ⇒ null (dated at the import); unreadable / future ⇒ VALIDATION_ERROR on orderedAt', () => {
+      const m = autoMapOrders(['Nom', 'Téléphone', 'Wilaya', 'Commune', 'Adresse', 'Articles', 'Note', 'Date']);
+      const now = new Date('2026-11-23T10:00:00Z');
+      const row = (Date: string) => buildOrderRow(2, { ...raw(), Date }, m, cat(), new Map(), now);
+      expect(row('20/11/2026 15:38')).toMatchObject({ ok: true, values: { orderedAt: '2026-11-20T14:38:00.000Z' } });
+      expect(row('')).toMatchObject({ ok: true, values: { orderedAt: null } });
+      expect(row('31/02/2026').errors).toEqual([{ field: 'orderedAt', code: 'VALIDATION_ERROR', params: { rule: 'validation.date', reason: 'format', value: '31/02/2026' } }]);
+      expect(row('24/11/2026').errors).toEqual([{ field: 'orderedAt', code: 'VALIDATION_ERROR', params: { rule: 'validation.date', reason: 'future', value: '24/11/2026' } }]);
+      // later today (Algiers 11:00 = 10:00 UTC … 12:00 is still to come) is refused too; the minute of now is accepted
+      expect(row('23/11/2026 12:00').ok).toBe(false);
+      expect(row('23/11/2026 11:00').ok).toBe(true);
+    });
   });
 });

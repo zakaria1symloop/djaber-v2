@@ -314,6 +314,9 @@ describe('R20-1 (Minor) — « ih ndirha » placed by the server; no lookup aske
     // the product wanted cannot be told (no keyword of it in the message): the model answers, as before
     const unknown = await turnOf(said, 'ar', [{ toolCalls: [{ name: 'dummy', args: {} }] }, { reply: 'صحيت سمير! الجلابة الرجالي عندنا ب\u0640 7500 دج. عطيني العنوان تاعك ؟', intent: 'SALE' }], { history: [T1], assistant: [A1] });
     expect(unknown.gateway.calls).toHaveLength(2);
+    // client list L92 (23/11): the step after a made-up tool is asked without tools — no second made-up call, no third model call
+    expect((unknown.gateway.calls[0] as { tools?: unknown[] }).tools?.length).toBeGreaterThan(0);
+    expect((unknown.gateway.calls[1] as { tools?: unknown[] }).tools).toBeUndefined();
   });
 
   it('N21 T3 (phone alone) ⇒ the wilaya question; A3 T1 `search_products {«noop»}` is not run; a message with a question still goes to the model', async () => {

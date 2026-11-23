@@ -220,7 +220,7 @@ The Figma "Web V2" page (124 frames, sections 00 → 14) is **ahead** of §4; th
 
 ### 7.13 Navigation additions
 - Sidebar: unchanged items; "Aide" opens the in-app help center (D46); Settings sub-nav (left rail): Profil · Espace de travail · Membres · Mode stock · Réponses rapides · Messages système · Sécurité · Intégrations · Plan & facturation · Crédits · Zone de danger; "Sécurité & clients bloqués" (SAFE) is reached from Settings › Sécurité (`/settings/security`).
-- Orders list header gains "Importer" (D69, P2; opens `/orders/import` = the CAT-06 wizard with columns `clientName, phone, wilaya, commune?, address, items "SKU×qty;…", note?`; `POST /orders/import` → 202, `POST /orders/import/:jobId/commit`) next to Exporter / + Nouvelle commande.
+- Orders list header gains "Importer" (D69, P2; opens `/orders/import` = the CAT-06 wizard with columns `clientName, phone, wilaya, commune?, address, items "SKU×qty;…", note?, orderedAt?`; `POST /orders/import` → 202, `POST /orders/import/:jobId/commit`) next to Exporter / + Nouvelle commande.
 - Delivery header: Grille des frais · Transporteurs · "Envoyer les confirmées (n)".
 - Public shell: Fonctionnalités · Tarifs · Aide · Statut · FR/AR/EN · Se connecter · Essai gratuit 14 j.
 

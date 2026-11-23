@@ -9,6 +9,8 @@ import { orderBody, seedFees } from '../support/m5';
 import { db, idem, product } from '../support/m7';
 import { TenantResolver } from '../../src/core/tenancy/tenant.resolver';
 import { RecommendationsScheduler } from '../../src/modules/recommendations/recommendations.module';
+import { algiersDay } from '../../src/core/time/algiers';
+import { emptyDay } from '../../src/modules/analytics/day-metrics';
 
 let app: TestApp;
 beforeAll(async () => {
@@ -37,7 +39,9 @@ describe('order import (carry-over M5, D69)', () => {
     const robe = await product(owner, { name: 'Robe satin', sku: 'ROB-1', price: 4500, stock: 50 });
     const kab = await product(owner, { name: 'Kabyle brodée', sku: 'KAB', price: 5000, stock: undefined, variants: [{ name: 'M', price: 5000, stock: 40 }, { name: 'L', price: 5200, stock: 40 }] });
     const m = kab.variants.find((v: { name: string }) => v.name === 'M');
-    await owner.post('/orders', orderBody(robe.id, { items: [{ productId: robe.id, quantity: 2 }, { productId: kab.id, variantId: m.id, quantity: 1 }] })).set(idem()).expect(201);
+    const placed = (await owner.post('/orders', orderBody(robe.id, { items: [{ productId: robe.id, quantity: 2 }, { productId: kab.id, variantId: m.id, quantity: 1 }] })).set(idem()).expect(201)).body.data;
+    // L80: the « Date » cell of the export (to the minute) is read back as the order date; the ZR Express layout has none
+    const minute = new Date(Math.floor(Date.parse(placed.orderedAt) / 60_000) * 60_000).toISOString();
     const exported = async (query: string, locale = 'fr') => {
       const jobId = (await owner.get(`/orders/export?${query}`).set('Accept-Language', locale).expect(202)).body.data.jobId;
       await drain(app, owner.workspaceId, ['job']);
@@ -56,6 +60,7 @@ describe('order import (carry-over M5, D69)', () => {
       const preview = await reimport(await exported(query, locale));
       expect([query, preview.status, preview.result.stage, preview.result.totals]).toEqual([query, 'done', 'preview', expect.objectContaining({ rows: 1, valid: 1, invalid: 0 })]);
       expect(lines(preview)).toEqual(want);
+      expect([query, preview.result.rows[0].values.orderedAt]).toEqual([query, query.includes('zrexpress') ? null : minute]);
     }
     // the workspace is switched to Arabic: wilayas and communes are exported in Arabic
     await db.workspace.update({ where: { id: owner.workspaceId }, data: { locale: 'ar' } });
@@ -64,6 +69,7 @@ describe('order import (carry-over M5, D69)', () => {
     const arabic = await reimport(await exported('scope=all', 'ar'));
     expect(arabic.result.totals).toMatchObject({ rows: 1, valid: 1 });
     expect(lines(arabic)).toEqual(want);
+    expect(arabic.result.rows[0].values.orderedAt).toBe(minute);
     expect(arabic.result.rows[0].values.wilayaId).toBe(16);
   });
 
@@ -116,6 +122,88 @@ describe('order import (carry-over M5, D69)', () => {
     await owner.post(`/orders/import/${jobId}/commit`).set(idem()).expect(202);
     await drain(app, owner.workspaceId, ['job']);
     expect(await db.order.count({ where: { workspaceId: owner.workspaceId } })).toBe(2);
+  });
+
+  it('L80 (client list 22/11): the order date comes from the file (Algiers wall time, stored UTC); empty ⇒ import time; unreadable / future ⇒ row error; reports read the imported date', async () => {
+    const owner = await asOwner(app);
+    await seedFees(app, owner.workspaceId);
+    await product(owner, { name: 'Robe', sku: 'ROBE-D', price: 4500, stock: 10 });
+    const now = Date.now();
+    const old = algiersDay(new Date(now - 15 * 86_400_000));
+    const [y, m, d] = old.split('-');
+    const tomorrow = algiersDay(new Date(now + 86_400_000)).split('-').reverse().join('/');
+    // the nightly rollup already wrote the old day (empty): the imported order must not stay invisible in the reports
+    await db.dailyStat.create({ data: { workspaceId: owner.workspaceId, day: new Date(`${old}T00:00:00Z`), metrics: emptyDay() as object } });
+    const res = await upload(owner, app, '/orders/import', 'file', file([
+      ['Date', 'Nom', 'Téléphone', 'Wilaya', 'Adresse', 'Articles'],
+      [`${d}/${m}/${y} 14:30`, 'Amine Benali', '0555123401', '16', 'Cité 200 logements Bt 4', 'ROBE-D×1'],
+      ['', 'Sara Kaci', '0770112202', '16', 'Rue Didouche Mourad 12', 'ROBE-D×1'],
+      ['31/02/2026', 'Nadia Fares', '0661223303', '16', 'Rue Larbi Ben Mhidi 3', 'ROBE-D×1'],
+      [tomorrow, 'Karim Ziani', '0661223304', '16', 'Rue Larbi Ben Mhidi 4', 'ROBE-D×1'],
+    ])).expect(202);
+    const jobId = res.body.data.jobId;
+    await drain(app, owner.workspaceId, ['job']);
+    const preview = await jobOf(owner, jobId);
+    expect(preview.result).toMatchObject({ stage: 'preview', mapping: { orderedAt: 'Date' }, totals: { rows: 4, valid: 2, invalid: 2 } });
+    expect(preview.result.rows.map((r: any) => [r.values.orderedAt, r.errors.map((e: any) => [e.field, e.code, e.params?.reason])])).toEqual([
+      [`${old}T13:30:00.000Z`, []],
+      [null, []],
+      [null, [['orderedAt', 'VALIDATION_ERROR', 'format']]],
+      [expect.any(String), [['orderedAt', 'VALIDATION_ERROR', 'future']]],
+    ]);
+    const before = Date.now();
+    await owner.post(`/orders/import/${jobId}/commit`).set(idem()).expect(202);
+    await drain(app, owner.workspaceId, ['job']);
+    const orders = await db.order.findMany({ where: { workspaceId: owner.workspaceId }, orderBy: { number: 'asc' } });
+    expect(orders.map((o) => o.clientPhone)).toEqual(['0555123401', '0770112202']);
+    expect(orders[0]!.orderedAt.toISOString()).toBe(`${old}T13:30:00.000Z`);
+    // the record's own creation stamp stays the import time (audit); the empty date row is dated at the import
+    expect(orders[0]!.createdAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
+    expect(orders[1]!.orderedAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
+    const view = (await owner.get(`/orders/${orders[0]!.id}`).expect(200)).body.data;
+    expect(view.orderedAt).toBe(`${old}T13:30:00.000Z`);
+    // orders list « date » filter, analytics of that day (the stale rollup row was dropped) and « today » all read orderedAt
+    const listed = (await owner.get(`/orders?from=${old}&to=${old}`).expect(200)).body.data;
+    expect(listed.map((o: any) => o.id)).toEqual([orders[0]!.id]);
+    expect(await db.dailyStat.count({ where: { workspaceId: owner.workspaceId, day: new Date(`${old}T00:00:00Z`) } })).toBe(0);
+    const day = (await owner.get(`/analytics/orders?from=${old}&to=${old}`).expect(200)).body.data;
+    expect(day.kpis.orders.value).toBe(1);
+    const today = algiersDay();
+    expect((await owner.get(`/orders?from=${today}&to=${today}`).expect(200)).body.data.map((o: any) => o.id)).toEqual([orders[1]!.id]);
+  });
+
+  it('L81 (client list 22/11): an imported order is cancelled through the normal cancel endpoint — reservation released, order cancelled', async () => {
+    const owner = await asOwner(app);
+    await seedFees(app, owner.workspaceId);
+    const robe = await product(owner, { name: 'Robe', sku: 'ROBE-C', price: 4500, stock: 5 });
+    const res = await upload(owner, app, '/orders/import', 'file', file([
+      ['Nom', 'Téléphone', 'Wilaya', 'Commune', 'Adresse', 'Articles'],
+      ['Amine Benali', '0555123411', '16', 'Bab Ezzouar', 'Cité 200 logements Bt 4', 'ROBE-C×2'],
+      ['Sara Kaci', '0770112212', '16', 'Hydra', 'Rue Didouche Mourad 12', 'ROBE-C×1'],
+    ])).expect(202);
+    const jobId = res.body.data.jobId;
+    await drain(app, owner.workspaceId, ['job']);
+    await owner.post(`/orders/import/${jobId}/commit`).set(idem()).expect(202);
+    await drain(app, owner.workspaceId, ['job']);
+    const [first, second] = await db.order.findMany({ where: { workspaceId: owner.workspaceId }, orderBy: { number: 'asc' } });
+    expect((await owner.get(`/products/${robe.id}`).expect(200)).body.data.stockDetail.reserved).toBe(3);
+    // the order page offers « Annuler » enabled
+    const page = (await owner.get(`/orders/${first!.id}`).expect(200)).body.data;
+    expect(page.source.source).toBe('import');
+    expect(page.actions.find((a: any) => a.key === 'cancel')).toMatchObject({ enabled: true });
+    // the web dialog body: reason + version (notifyCustomer omitted, no conversation)
+    const cancelled = (await owner.post(`/orders/${first!.id}/cancel`, { reason: 'changed_mind', note: null, version: page.version }).expect(200)).body.data;
+    expect(cancelled).toMatchObject({ status: 'cancelled', cancelReason: 'changed_mind' });
+    expect((await owner.get(`/products/${robe.id}`).expect(200)).body.data.stockDetail.reserved).toBe(1);
+    expect((await db.product.findUniqueOrThrow({ where: { id: robe.id } })).stock).toBe(5);
+    // a confirmed imported order gives its taken stock back on cancel
+    const s = (await owner.get(`/orders/${second!.id}`).expect(200)).body.data;
+    await owner.post(`/orders/${second!.id}/status`, { to: 'confirmed', version: s.version }).set(idem()).expect(200);
+    expect((await db.product.findUniqueOrThrow({ where: { id: robe.id } })).stock).toBe(4);
+    const s2 = (await owner.get(`/orders/${second!.id}`).expect(200)).body.data;
+    await owner.post(`/orders/${second!.id}/cancel`, { reason: 'other', version: s2.version }).expect(200);
+    expect((await db.product.findUniqueOrThrow({ where: { id: robe.id } })).stock).toBe(5);
+    expect((await owner.get(`/products/${robe.id}`).expect(200)).body.data.stockDetail.reserved).toBe(0);
   });
 
   it('missing columns ⇒ failed with IMPORT_COLUMNS_MISSING and stage mapping; mapping dialog ⇒ preview again; roles (Admin+ only) and tenancy', async () => {

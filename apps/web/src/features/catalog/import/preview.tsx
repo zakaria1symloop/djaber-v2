@@ -115,7 +115,8 @@ export function PreviewRows({
 
   const columns: Column<ImportPreviewRow>[] = [
     { key: 'row', header: t('import.col.row'), ltr: true, hideable: false, className: 'w-14 tabular-nums text-text-muted', cell: (r) => r.row },
-    { key: 'name', header: t('common.name'), cell: (r) => <span className="font-medium">{text(r.values.name)}</span> },
+    // client list L78: a variant row reads « Robe · M » (its product is the row above with the same SKU)
+    { key: 'name', header: t('common.name'), cell: (r) => <span className="font-medium">{text(r.values.name)}{r.values.variant ? <span className="text-text-muted"> · {String(r.values.variant)}</span> : null}</span> },
     { key: 'sku', header: t('import.col.sku'), ltr: true, cell: (r) => text(r.values.sku) },
     { key: 'price', header: t('common.price'), align: 'end', cell: (r) => (numeric(r.values.price) !== null ? <Money value={numeric(r.values.price)} /> : text(r.values.price)) },
     { key: 'stock', header: t('import.col.stock'), align: 'end', cell: (r) => (numeric(r.values.stock) !== null ? <Num value={numeric(r.values.stock)} /> : text(r.values.stock)) },

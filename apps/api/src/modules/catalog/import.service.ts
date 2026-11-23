@@ -3,7 +3,7 @@
 // movements, moderation items). A failure in the middle writes nothing.
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { prisma, TenantContext, type Job, type Prisma, type Tx } from '@djaber/db';
+import { prisma, TenantContext, type Job, type Prisma, type Product, type Tx } from '@djaber/db';
 import { IMPORT_FIELDS, IMPORT_MAX_BYTES, IMPORT_MAX_ROWS, systemUnitText, type ImportField, type ImportMappingInput, type ImportPreviewResult, type ImportPreviewRow } from '@djaber/shared';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
 import { I18nService } from '../../core/i18n/i18n.service';
@@ -13,11 +13,12 @@ import { JobService } from '../jobs/job.service';
 import { detectFormat, readTable, TableFileError, writeTable } from '../jobs/table-file';
 import type { UploadedFile } from '../uploads/image-upload.service';
 import { isUnique, skuTaken } from './catalog.util';
-import { autoMap, buildPreview, missingRequired, type ImportMapping } from './import-rows';
+import { autoMap, buildPreview, missingRequired, type ExistingProduct, type ImportMapping } from './import-rows';
 import { ModerationHookService, needsReview } from './moderation-hook.service';
 import { PlanLimitService } from './plan-limit.service';
 import { SkuService } from './sku.service';
 import { StockService } from './stock.service';
+import { VariantService } from './variant.service';
 
 const PREVIEW = 'product-import-preview';
 const COMMIT = 'product-import-commit';
@@ -35,6 +36,7 @@ export class ImportService implements OnModuleInit {
     private readonly limits: PlanLimitService,
     private readonly moderation: ModerationHookService,
     private readonly i18n: I18nService,
+    private readonly variants: VariantService,
   ) {}
 
   onModuleInit() {
@@ -122,15 +124,21 @@ export class ImportService implements OnModuleInit {
   private async context(tx: Tx) {
     const t = TenantContext.get();
     const [products, variants, units, categories, slots] = await Promise.all([
-      tx.product.findMany({ where: { deletedAt: null }, select: { sku: true } }),
-      tx.productVariant.findMany({ where: { deletedAt: null, sku: { not: null } }, select: { sku: true } }),
+      tx.product.findMany({ where: { deletedAt: null }, select: { id: true, sku: true, trackStock: true, sellOutOfStock: true, hasVariants: true } }),
+      tx.productVariant.findMany({ where: { deletedAt: null }, select: { productId: true, name: true, sku: true } }),
       tx.unit.findMany({ where: { OR: [{ workspaceId: null }, { workspaceId: t.workspaceId }] }, select: { id: true, name: true, abbreviation: true, isSystem: true } }),
       tx.category.findMany({ where: { deletedAt: null }, select: { id: true, name: true } }),
       this.limits.productSlots(tx),
     ]);
     const existingSkus = new Map<string, 'product' | 'variant'>();
-    for (const v of variants) existingSkus.set(v.sku!, 'variant');
+    for (const v of variants) if (v.sku) existingSkus.set(v.sku, 'variant');
     for (const p of products) existingSkus.set(p.sku, 'product');
+    // client list L78: the variants of each product, so that an update re-imports them by name
+    const variantsOf = new Map<string, Map<string, string | null>>();
+    for (const v of variants) variantsOf.set(v.productId, (variantsOf.get(v.productId) ?? new Map()).set(v.name.toLowerCase(), v.sku));
+    const existingProducts = new Map<string, ExistingProduct>(
+      products.map((p) => [p.sku, { trackStock: p.trackStock, sellOutOfStock: p.sellOutOfStock, hasVariants: p.hasVariants, variants: variantsOf.get(p.id) ?? new Map() }]),
+    );
     const unitIds = new Map<string, string>();
     for (const u of units) {
       unitIds.set(u.abbreviation.toLowerCase(), u.id);
@@ -141,7 +149,7 @@ export class ImportService implements OnModuleInit {
         if (shown) for (const w of [shown.name, shown.abbreviation]) if (!unitIds.has(w.toLowerCase())) unitIds.set(w.toLowerCase(), u.id);
       }
     }
-    return { existingSkus, unitIds, categoryIds: new Map(categories.map((c) => [c.name.toLowerCase(), c.id])), slots };
+    return { existingSkus, existingProducts, unitIds, categoryIds: new Map(categories.map((c) => [c.name.toLowerCase(), c.id])), slots };
   }
 
   /** Job `jobs/product-import-preview`. */
@@ -200,6 +208,7 @@ export class ImportService implements OnModuleInit {
           freeSlots: ctx.slots.free,
           limit: ctx.slots.limit,
           current: ctx.slots.current,
+          products: ctx.existingProducts,
         },
       });
       await prisma.job.updateMany({ where: { id: job.id }, data: { total: table.rows.length } });
@@ -278,11 +287,19 @@ export class ImportService implements OnModuleInit {
     const ctx = await this.context(tx);
     const str = (v: Values[ImportField]) => (typeof v === 'string' && v ? v : null);
     const num = (v: Values[ImportField]) => (typeof v === 'number' ? v : null);
+    const tracked = (v: Values) => v.trackStock !== false;
+    const fromImport = { reason: 'import', refType: 'import', refId: jobId, silent: true } as const;
+
+    // client list L78: the variant rows of each product row (a product row naming a variant is its own first variant)
+    const variantRows = new Map<number, ImportPreviewRow[]>();
+    for (const r of rows) if (r.variantOf !== undefined) variantRows.set(r.variantOf, [...(variantRows.get(r.variantOf) ?? []), r]);
+    const variantsOf = (r: ImportPreviewRow) => variantRows.get(r.row) ?? [];
+    const productRows = rows.filter((r) => r.variantOf === undefined || r.variantOf === r.row);
 
     // the catalogue may have changed since the preview: decide again what each row does, under the plan and SKU locks
     const creates: ImportPreviewRow[] = [];
     const updates: ImportPreviewRow[] = [];
-    for (const r of rows) {
+    for (const r of productRows) {
       const sku = str(r.values.sku);
       const holder = sku ? ctx.existingSkus.get(sku) : undefined;
       if (r.action === 'update' && holder === 'product') updates.push(r);
@@ -295,7 +312,7 @@ export class ImportService implements OnModuleInit {
 
     // missing categories are created (FL-12)
     const wanted = new Map<string, string>();
-    for (const r of rows) {
+    for (const r of productRows) {
       const name = str(r.values.category);
       if (name && !ctx.categoryIds.has(name.toLowerCase()) && !wanted.has(name.toLowerCase())) wanted.set(name.toLowerCase(), name);
     }
@@ -316,33 +333,44 @@ export class ImportService implements OnModuleInit {
             description: str(r.values.description),
             categoryId: categoryId(r.values),
             unitId: unitId(r.values),
-            trackStock: true,
+            // client list L77: the stock flags of the file (a file without them: tracked, no backorder, as before)
+            trackStock: tracked(r.values),
+            sellOutOfStock: tracked(r.values) && r.values.sellOutOfStock === true,
             price: num(r.values.price)!,
             oldPrice: num(r.values.oldPrice),
             costPrice: num(r.values.costPrice),
-            stock: 0,
+            stock: tracked(r.values) ? 0 : null,
             minStock: num(r.values.minStock) ?? 0,
             weightGrams: num(r.values.weightGrams),
             keywords: keywords(r.values),
             isActive: r.values.isActive !== false,
             createdById: t.userId ?? null,
           })) as Prisma.ProductCreateManyInput[],
-          select: { id: true, sku: true },
         })
       : [];
-    const idBySku = new Map(created.map((p) => [p.sku, p.id]));
+    const bySku = new Map(created.map((p) => [p.sku, p]));
+    const made = creates.map((r, i) => ({ r, product: bySku.get(skus[i]!)! }));
+    const simple = made.filter((m) => !variantsOf(m.r).length && tracked(m.r.values));
     await this.stock.openingStock(
       tx,
-      creates.map((r, i) => ({ productId: idBySku.get(skus[i]!)!, quantity: num(r.values.stock) ?? 0 })),
+      simple.map((m) => ({ productId: m.product.id, quantity: num(m.r.values.stock) ?? 0 })),
       { reason: 'import', refType: 'import', refId: jobId },
     );
+    // L78: a product sold at zero stock may come with a stock below 0 (the preview refuses it for the others)
+    for (const m of simple) {
+      const quantity = num(m.r.values.stock) ?? 0;
+      if (quantity < 0) await this.stock.move(tx, { productId: m.product.id, change: { setTo: quantity }, ...fromImport, allowNegative: true });
+    }
+    let variantsCreated = 0;
+    for (const m of made) if (variantsOf(m.r).length) variantsCreated += await this.addVariants(tx, m.product, variantsOf(m.r), fromImport);
     await this.moderation.submitMany(tx, created.map((p) => p.id), 'import');
 
     // --- existing products (updateExisting): only the mapped columns change; stock moves through a movement
-    const review: string[] = [];
+    const review = new Set<string>();
     for (const r of updates) {
       const before = await tx.product.findFirst({ where: { sku: str(r.values.sku)!, deletedAt: null } });
       if (!before) throw notFound();
+      const vrows = variantsOf(r);
       const data: Prisma.ProductUncheckedUpdateInput = { name: String(r.values.name), price: num(r.values.price)!, version: { increment: 1 } };
       if (mapped('description')) data.description = str(r.values.description);
       if (mapped('category')) data.categoryId = categoryId(r.values);
@@ -353,9 +381,45 @@ export class ImportService implements OnModuleInit {
       if (mapped('weightGrams')) data.weightGrams = num(r.values.weightGrams);
       if (mapped('keywords')) data.keywords = keywords(r.values);
       if (mapped('isActive')) data.isActive = r.values.isActive !== false;
+      // L77: the stock flags, as the product form (CAT-11: a product with variants stays tracked — refused in the preview)
+      let trackedAfter = before.trackStock;
+      if (mapped('trackStock') && tracked(r.values) !== before.trackStock && !before.hasVariants && !vrows.length) {
+        trackedAfter = tracked(r.values);
+        if (!trackedAfter && (before.stock ?? 0) !== 0) await this.stock.move(tx, { productId: before.id, change: { setTo: 0 }, ...fromImport, allowNegative: true });
+        data.trackStock = trackedAfter;
+        data.stock = trackedAfter ? 0 : null;
+      }
+      if (mapped('sellOutOfStock')) data.sellOutOfStock = trackedAfter && r.values.sellOutOfStock === true;
       await tx.product.update({ where: { id: before.id }, data });
-      if (mapped('stock') && before.trackStock && !before.hasVariants && num(r.values.stock) !== null) {
-        await this.stock.move(tx, { productId: before.id, change: { setTo: num(r.values.stock)! }, reason: 'import', refType: 'import', refId: jobId, silent: true });
+      if (mapped('stock') && trackedAfter && !before.hasVariants && !vrows.length && num(r.values.stock) !== null) {
+        // the preview accepts a stock below 0 only for a product sold at zero stock
+        await this.stock.move(tx, { productId: before.id, change: { setTo: num(r.values.stock)! }, ...fromImport, allowNegative: num(r.values.stock)! < 0 });
+      }
+      if (vrows.length) {
+        // L78: a variant of the file updates the live variant of the same name; the others are added
+        const live = new Map((await tx.productVariant.findMany({ where: { productId: before.id, deletedAt: null } })).map((v) => [v.name.toLowerCase(), v]));
+        const fresh: ImportPreviewRow[] = [];
+        for (const v of vrows) {
+          const current = live.get(String(v.values.variant).toLowerCase());
+          if (!current) {
+            fresh.push(v);
+            continue;
+          }
+          const patch: Prisma.ProductVariantUncheckedUpdateInput = { price: num(v.values.price)! };
+          if (mapped('costPrice')) patch.costPrice = num(v.values.costPrice);
+          if (mapped('minStock')) patch.minStock = num(v.values.minStock) ?? 0;
+          if (mapped('isActive')) patch.isActive = v.values.isActive !== false;
+          if (str(v.values.variantSku)) patch.sku = str(v.values.variantSku);
+          await tx.productVariant.update({ where: { id: current.id }, data: patch });
+          if (mapped('stock') && num(v.values.stock) !== null) {
+            await this.stock.move(tx, { productId: before.id, variantId: current.id, change: { setTo: num(v.values.stock)! }, ...fromImport, allowNegative: num(v.values.stock)! < 0 });
+          }
+        }
+        if (fresh.length) {
+          variantsCreated += await this.addVariants(tx, (await tx.product.findFirst({ where: { id: before.id } }))!, fresh, fromImport);
+          review.add(before.id); // a new variant is customer-visible content (tester report 25/10 UX-003)
+        }
+        await this.stock.recomputeProductStock(tx, before.id);
       }
       const after = {
         name: String(r.values.name),
@@ -363,13 +427,35 @@ export class ImportService implements OnModuleInit {
         categoryId: mapped('category') ? categoryId(r.values) : before.categoryId,
         price: num(r.values.price)!,
       };
-      if (needsReview(before, after)) review.push(before.id);
+      if (needsReview(before, after)) review.add(before.id);
     }
-    await this.moderation.resubmitMany(tx, review, 'import');
+    await this.moderation.resubmitMany(tx, [...review], 'import');
     // recette 09/11 UX-044: the result screen says how many products of THIS import wait for validation (the banner
     // showed the shop's total only, which read as if the import had created 6 products to review)
     const touched = [...created.map((p) => p.id), ...review];
     const pendingReview = touched.length ? await tx.product.count({ where: { id: { in: touched }, moderationStatus: 'pending' } }) : 0;
-    return { created: created.length, updated: updates.length, skipped: 0, categoriesCreated: wanted.size, pendingReview };
+    return { created: created.length, updated: updates.length, skipped: 0, categoriesCreated: wanted.size, pendingReview, ...(variantsCreated ? { variantsCreated } : {}) };
+  }
+
+  /**
+   * Client list L78: the variants of one product row (name, SKU — generated when empty, as the variant dialog — price,
+   * cost, threshold, active), then their quantities as `import` movements; below 0 only for a product sold at zero
+   * stock (checked by the preview).
+   */
+  private async addVariants(tx: Tx, product: Product, rows: ImportPreviewRow[], ref: { reason: 'import'; refType: 'import'; refId: string; silent: true }): Promise<number> {
+    const str = (v: Values[ImportField]) => (typeof v === 'string' && v ? v : null);
+    const num = (v: Values[ImportField]) => (typeof v === 'number' ? v : null);
+    const variants = await this.variants.addMany(
+      tx,
+      product,
+      rows.map((r) => ({ name: String(r.values.variant), sku: str(r.values.variantSku), price: num(r.values.price)!, costPrice: num(r.values.costPrice), minStock: num(r.values.minStock) ?? 0, isActive: r.values.isActive !== false })),
+    );
+    const byName = new Map(variants.map((v) => [v.name, v]));
+    for (const r of rows) {
+      const quantity = num(r.values.stock) ?? 0;
+      const variant = byName.get(String(r.values.variant));
+      if (quantity && variant) await this.stock.move(tx, { productId: product.id, variantId: variant.id, change: { setTo: quantity }, ...(quantity > 0 ? { type: 'in' as const } : {}), ...ref, allowNegative: quantity < 0 });
+    }
+    return variants.length;
   }
 }

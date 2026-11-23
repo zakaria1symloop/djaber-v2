@@ -47,6 +47,7 @@ export const MOVEMENT_REASONS = [
   'archive',
   'import',
   'other',
+  'restock',
 ] as const;
 export const MOVEMENT_REF_TYPES = ['order', 'sale', 'purchase', 'inventory', 'import', 'manual', 'variant'] as const;
 export const MODERATION_STATUSES = ['not_required', 'pending', 'approved', 'rejected', 'appealed'] as const;

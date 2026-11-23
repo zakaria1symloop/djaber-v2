@@ -509,7 +509,11 @@ export class ProductService implements OnModuleInit {
     // PV 08/11 « l'export de la fiche produits se fait sans variantes et confusion sur le prix »: a product with variants
     // was one line at its base price (never sold at it) with a variant count. Now one line per variant — its name, SKU,
     // price, cost, stock and threshold; a product without variants keeps its own line.
-    type R = { sku: string; name: string; variant: string; variantSku: string; category: string; unit: string; price: number; oldPrice: number | null; cost: number | null; stock: number | null; min: number; active: boolean };
+    // Client list L77 / L78 (Boutique de Lalla 22/11): the file imports back as the same catalogue — a product with
+    // variants has its own line first (its price, flags, description…; no stock: it is the sum of its variants), then one
+    // line per variant under the same SKU; the stock flags (« Suivi du stock », « Vente en rupture »), the description,
+    // the weight and the keywords are exported too. Every header is an alias of the import (import-rows HEADER_ALIASES).
+    type R = { sku: string; name: string; variant: string; variantSku: string; category: string; unit: string; price: number; oldPrice: number | null; cost: number | null; stock: number | null; min: number; active: boolean; product?: { trackStock: boolean; sellOutOfStock: boolean; description: string; weightGrams: number | null; keywords: string } };
     const rows: R[] = [];
     for (let i = 0; i < ids.length; i += 500) {
       const chunk = ids.slice(i, i + 500);
@@ -519,11 +523,13 @@ export class ProductService implements OnModuleInit {
       for (const p of products) {
         const base = { sku: p.sku, name: p.name, category: p.category?.name ?? '', unit: unitOf(p.unit, locale)?.abbreviation ?? '' };
         const list = p.hasVariants ? (byProduct.get(p.id) ?? []) : [];
-        if (!list.length) rows.push({ ...base, variant: '', variantSku: '', price: p.price, oldPrice: p.oldPrice, cost: p.costPrice, stock: p.trackStock ? p.stock : null, min: p.minStock, active: p.isActive });
-        for (const v of list) rows.push({ ...base, variant: v.name, variantSku: v.sku ?? '', price: v.price, oldPrice: null, cost: v.costPrice ?? p.costPrice, stock: p.trackStock ? v.stock : null, min: v.minStock, active: p.isActive && v.isActive });
+        const product = { trackStock: p.trackStock, sellOutOfStock: p.trackStock && p.sellOutOfStock, description: p.description ?? '', weightGrams: p.weightGrams, keywords: p.keywords.join(', ') };
+        rows.push({ ...base, variant: '', variantSku: '', price: p.price, oldPrice: p.oldPrice, cost: p.costPrice, stock: p.trackStock && !list.length ? p.stock : null, min: p.minStock, active: p.isActive, product });
+        for (const v of list) rows.push({ ...base, variant: v.name, variantSku: v.sku ?? '', price: v.price, oldPrice: null, cost: v.costPrice, stock: p.trackStock ? v.stock : null, min: v.minStock, active: v.isActive });
       }
     }
     const h = PRODUCT_HEADERS[locale] ?? PRODUCT_HEADERS.fr;
+    const flag = (v: boolean | undefined) => (v === undefined ? '' : v ? h.yes : h.no);
     return {
       sheetName: h.sheet,
       fileName: `produits-${algiersDay()}`,
@@ -540,14 +546,19 @@ export class ProductService implements OnModuleInit {
         { header: h.cost, value: (r: R) => r.cost },
         { header: h.stock, value: (r: R) => r.stock },
         { header: h.min, value: (r: R) => r.min },
+        { header: h.trackStock, value: (r: R) => flag(r.product?.trackStock) },
+        { header: h.sellOutOfStock, value: (r: R) => flag(r.product?.sellOutOfStock) },
         { header: h.active, value: (r: R) => (r.active ? h.yes : h.no) },
+        { header: h.description, value: (r: R) => r.product?.description ?? '' },
+        { header: h.weight, value: (r: R) => r.product?.weightGrams ?? null },
+        { header: h.keywords, value: (r: R) => r.product?.keywords ?? '' },
       ],
     };
   }
 }
 
 const PRODUCT_HEADERS = {
-  fr: { sheet: 'Produits', name: 'Nom', category: 'Catégorie', unit: 'Unité', price: 'Prix', oldPrice: 'Ancien prix', cost: 'Coût', stock: 'Stock', min: 'Seuil', variant: 'Variante', variantSku: 'SKU variante', active: 'Actif', yes: 'Oui', no: 'Non' },
-  en: { sheet: 'Products', name: 'Name', category: 'Category', unit: 'Unit', price: 'Price', oldPrice: 'Old price', cost: 'Cost', stock: 'Stock', min: 'Threshold', variant: 'Variant', variantSku: 'Variant SKU', active: 'Active', yes: 'Yes', no: 'No' },
-  ar: { sheet: 'المنتجات', name: 'الاسم', category: 'الفئة', unit: 'الوحدة', price: 'السعر', oldPrice: 'السعر القديم', cost: 'التكلفة', stock: 'المخزون', min: 'الحد الأدنى', variant: 'المتغيّر', variantSku: 'SKU المتغيّر', active: 'نشط', yes: 'نعم', no: 'لا' },
+  fr: { sheet: 'Produits', name: 'Nom', category: 'Catégorie', unit: 'Unité', price: 'Prix', oldPrice: 'Ancien prix', cost: 'Coût', stock: 'Stock', min: 'Seuil', variant: 'Variante', variantSku: 'SKU variante', active: 'Actif', trackStock: 'Suivi du stock', sellOutOfStock: 'Vente en rupture', description: 'Description', weight: 'Poids (g)', keywords: 'Mots-clés', yes: 'Oui', no: 'Non' },
+  en: { sheet: 'Products', name: 'Name', category: 'Category', unit: 'Unit', price: 'Price', oldPrice: 'Old price', cost: 'Cost', stock: 'Stock', min: 'Threshold', variant: 'Variant', variantSku: 'Variant SKU', active: 'Active', trackStock: 'Track stock', sellOutOfStock: 'Sell out of stock', description: 'Description', weight: 'Weight (g)', keywords: 'Keywords', yes: 'Yes', no: 'No' },
+  ar: { sheet: 'المنتجات', name: 'الاسم', category: 'الفئة', unit: 'الوحدة', price: 'السعر', oldPrice: 'السعر القديم', cost: 'التكلفة', stock: 'المخزون', min: 'الحد الأدنى', variant: 'المتغيّر', variantSku: 'SKU المتغيّر', active: 'نشط', trackStock: 'تتبع المخزون', sellOutOfStock: 'البيع عند نفاد المخزون', description: 'الوصف', weight: 'الوزن (غ)', keywords: 'الكلمات المفتاحية', yes: 'نعم', no: 'لا' },
 } as const;

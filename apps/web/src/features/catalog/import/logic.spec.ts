@@ -52,6 +52,10 @@ describe('autoMapping', () => {
   it('detects EN headers', () => {
     expect(autoMapping(['SKU', 'Name', 'Price', 'Stock', 'Category'])).toMatchObject({ sku: 'SKU', name: 'Name', price: 'Price', stock: 'Stock', category: 'Category' });
   });
+  it('client list L77 / L78: the headers of the products export map the variant and stock-flag columns', () => {
+    expect(autoMapping(['SKU', 'Nom', 'Variante', 'SKU variante', 'Seuil', 'Suivi du stock', 'Vente en rupture', 'Poids (g)'])).toMatchObject({ sku: 'SKU', variant: 'Variante', variantSku: 'SKU variante', minStock: 'Seuil', trackStock: 'Suivi du stock', sellOutOfStock: 'Vente en rupture', weightGrams: 'Poids (g)' });
+    expect(autoMapping(['Variant', 'Variant SKU', 'Track stock', 'Sell out of stock', 'Weight (g)'])).toMatchObject({ variant: 'Variant', variantSku: 'Variant SKU', trackStock: 'Track stock', sellOutOfStock: 'Sell out of stock', weightGrams: 'Weight (g)' });
+  });
   it('keeps the server detection and completes the rest', () => {
     const m = autoMapping(headers, { name: 'Ref interne', price: 'Colonne absente' });
     expect(m.name).toBe('Ref interne');
@@ -173,9 +177,10 @@ describe('example file (tester report 2026-10-20)', () => {
     expect(csv.charCodeAt(0)).toBe(0xfeff);
     const lines = csv.slice(1).trimEnd().split(/\r\n/);
     expect(lines).toHaveLength(3);
-    expect(lines[0]).toBe('SKU;Nom;Description;Catégorie;Unité;Prix;Ancien prix;Coût;Stock;Seuil;Poids;Mots-clés;Actif');
+    // client list L77 / L78: the variant and stock-flag columns of the products export
+    expect(lines[0]).toBe('SKU;Nom;Variante;SKU variante;Description;Catégorie;Unité;Prix;Ancien prix;Coût;Stock;Seuil;Poids;Mots-clés;Suivi du stock;Vente en rupture;Actif');
     expect(lines[1]).toContain(';robe, kabyle, fête;');
-    expect(importTemplateCsv('en').split(/\r\n/)[0]).toContain('Name;Description');
+    expect(importTemplateCsv('en').split(/\r\n/)[0]).toContain('Name;Variant;Variant SKU;Description');
     expect(importTemplateCsv('ar').split(/\r\n/)[0]).toContain('الاسم');
   });
 });

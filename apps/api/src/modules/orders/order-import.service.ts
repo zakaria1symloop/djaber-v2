@@ -2,12 +2,14 @@
 // preview job with per-row errors (mapping dialog when required columns are missing) → commit job: one order per valid
 // row (`source=import`, `status=new`, `importJobId`), client found or created by phone, stock checked per row by the
 // normal order creation (a row refused at commit is reported, the others are kept). Committing twice writes once.
+// L80 (client list 22/11): an optional order-date column dates each order (`orderedAt`); absent ⇒ the import time.
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { ORDER_IMPORT_FIELDS, ORDER_IMPORT_MAX_ROWS, IMPORT_MAX_BYTES, type OrderImportMappingInput, type OrderImportPreviewResult, type OrderImportPreviewRow } from '@djaber/shared';
 import { prisma, TenantContext, type Job, type Prisma, type Tx } from '@djaber/db';
 import { AppException, conflict, notFound, validationError } from '../../core/errors/app.exception';
 import { viewerLocale } from '../../core/i18n/viewer-locale';
+import { algiersDay } from '../../core/time/algiers';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { StorageService } from '../../core/storage/storage.service';
 import { fold } from '../ai/tools/wilaya-aliases';
@@ -210,6 +212,8 @@ export class OrderImportService implements OnModuleInit {
               paymentMethod: 'cash',
               status: 'new',
               notes: v.note,
+              // L80 (client list 22/11): the date of the file, not the import time (absent ⇒ now, as before)
+              ...(v.orderedAt ? { orderedAt: v.orderedAt } : {}),
             },
             locale,
             'import',
@@ -222,8 +226,22 @@ export class OrderImportService implements OnModuleInit {
         }
         if (n % 20 === 19) await this.jobs.progress(job.id, ((n + 1) * 100) / valid.length);
       }
+      await this.staleRollups(orderIds);
       const result: OrderImportPreviewResult = { ...preview, stage: 'committed', report: { created: orderIds.length, skipped: preview.rows.length - valid.length, failed, orderIds } };
       return { result, status: failed.length || result.report!.skipped ? ('partial' as const) : ('done' as const) };
     });
+  }
+
+  /**
+   * L80: orders dated in the past by the file belong to days whose `DailyStat` row may already be written (the nightly
+   * rollup only rewrites the last 8 days). Those rows are dropped: the analytics compute a day without a row live, and the
+   * next nightly run writes it again (figures are recomputed, never incremented).
+   */
+  private async staleRollups(orderIds: string[]) {
+    if (!orderIds.length) return;
+    const today = algiersDay();
+    const dated = await prisma.order.findMany({ where: { id: { in: orderIds } }, select: { orderedAt: true } });
+    const days = [...new Set(dated.map((o) => algiersDay(o.orderedAt)))].filter((d) => d < today);
+    if (days.length) await prisma.dailyStat.deleteMany({ where: { workspaceId: TenantContext.workspaceId(), day: { in: days.map((d) => new Date(`${d}T00:00:00Z`)) } } });
   }
 }

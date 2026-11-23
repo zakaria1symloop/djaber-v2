@@ -3,7 +3,7 @@
 // `/orders/import`): upload (CSV / XLSX ≤ 5 MB, ≤ 1 000 rows) → analysis job → column mapping when required columns are
 // missing (DLG GDS "Correspondance des colonnes") → preview with per-row errors (phone, wilaya, unknown SKU, stock) →
 // commit job (Idempotency-Key) → report (created / skipped / failed). The job id is URL state (`?job=`, `&step=import`).
-import { formatNumber, ORDER_IMPORT_FIELDS, ORDER_IMPORT_MAX_ROWS, ORDER_IMPORT_REQUIRED_FIELDS, type OrderImportField, type OrderImportPreviewResult, type OrderImportPreviewRow } from '@djaber/shared';
+import { formatDateTime, formatNumber, ORDER_IMPORT_FIELDS, ORDER_IMPORT_MAX_ROWS, ORDER_IMPORT_REQUIRED_FIELDS, type AppLocale, type OrderImportField, type OrderImportPreviewResult, type OrderImportPreviewRow } from '@djaber/shared';
 import { Button, buttonClass, Card, cn, FormAlert, KpiTile, Ltr, ProgressBar, SegmentedControl, Select, Steps, type StepItem } from '@djaber/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { CircleCheck, FileUp } from 'lucide-react';
@@ -15,7 +15,7 @@ import { BOM, checkImportFile, csvCell, IMPORT_ACCEPT } from '@/features/catalog
 import { Link } from '@/i18n/navigation';
 import { api, ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/forms';
-import { useT, type TFunction } from '@/lib/i18n';
+import { useLocaleCode, useT, type TFunction } from '@/lib/i18n';
 import { downloadUrl, isJobRunning, jobKey, useJob, type JobDto, type JobRef } from '@/lib/jobs';
 import { useWorkspaceId } from '@/lib/session';
 import { uploadWithProgress } from '@/lib/upload';
@@ -45,6 +45,8 @@ export function orderImportPhase(jobId: string | null, job: Pick<Job, 'status' |
 export const describeOrderRowError = (t: TFunction, e: OrderImportPreviewRow['errors'][number]): string => {
   const field = e.field ? t(`orderImport.field.${e.field}`) : null;
   if (e.code === 'NOT_FOUND' && e.field === 'items') return t('orderImport.error.skuUnknown', { sku: String(e.params?.sku ?? '') });
+  // L80 (22/11): the order-date column says why — unreadable form or a date still to come
+  if (e.code === 'VALIDATION_ERROR' && e.field === 'orderedAt' && (e.params?.reason === 'future' || e.params?.reason === 'format')) return t(e.params.reason === 'future' ? 'orderImport.error.dateFuture' : 'orderImport.error.dateFormat', { value: String(e.params.value ?? '') });
   if (e.code === 'VALIDATION_ERROR') return field ? t('orderImport.error.invalid', { field }) : t('error.VALIDATION_ERROR');
   const key = `error.${e.code}`;
   const text = t.has(key) ? t(key, { product: '', available: '', ...e.params }) : e.code;
@@ -412,6 +414,9 @@ function MappingStep({ result, jobId, onSaved, onBack }: { result: OrderImportPr
 
 function PreviewTable({ rows }: { rows: OrderImportPreviewRow[] }) {
   const t = useT();
+  const locale = useLocaleCode() as AppLocale;
+  // L80: the date column only when the file has one (a dated row shows the date the order will carry)
+  const dated = rows.some((r) => r.values.orderedAt);
   if (!rows.length) return <p className="ts-label-meta text-text-muted">{t('orderImport.noRow')}</p>;
   return (
     <Card className="overflow-x-auto">
@@ -419,6 +424,7 @@ function PreviewTable({ rows }: { rows: OrderImportPreviewRow[] }) {
         <thead>
           <tr className="ts-label-micro text-text-muted">
             <th className="px-3 py-2 text-start font-normal">{t('import.col.row')}</th>
+            {dated ? <th className="px-3 py-2 text-start font-normal">{t('orderImport.field.orderedAt')}</th> : null}
             <th className="px-3 py-2 text-start font-normal">{t('orderImport.field.clientName')}</th>
             <th className="px-3 py-2 text-start font-normal">{t('orderImport.field.phone')}</th>
             <th className="px-3 py-2 text-start font-normal">{t('orderImport.field.wilaya')}</th>
@@ -432,6 +438,11 @@ function PreviewTable({ rows }: { rows: OrderImportPreviewRow[] }) {
               <td className="px-3 py-2">
                 <Ltr className="tabular-nums">{r.row}</Ltr>
               </td>
+              {dated ? (
+                <td className="px-3 py-2">
+                  <Ltr className="tabular-nums">{r.values.orderedAt ? formatDateTime(r.values.orderedAt, locale) : '—'}</Ltr>
+                </td>
+              ) : null}
               <td className="px-3 py-2">{r.values.clientName ?? '—'}</td>
               <td className="px-3 py-2">
                 <Ltr>{r.values.phone ?? '—'}</Ltr>

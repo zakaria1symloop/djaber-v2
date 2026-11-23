@@ -568,6 +568,8 @@ enum MovementReason {
   archive
   import
   other
+  /// client list L74 (23/11): « Alimentation » — goods received outside a purchase
+  restock
 }
 
 enum MovementRefType {

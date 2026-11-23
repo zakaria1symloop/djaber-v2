@@ -277,6 +277,89 @@ describe('catalogue import', () => {
     const exportJob = (await owner.get('/products/export').expect(202)).body.data.jobId;
     expect((await commit(owner, exportJob).expect(404)).body.error.code).toBe('NOT_FOUND');
   });
+
+  it('client list L77 / L78: the products export imports back as the same catalogue (variants, stock flags, negative stock), into a new shop and onto itself', async () => {
+    const owner = await asOwner(app);
+    const category = (await owner.post('/categories', { name: 'Robes' }).expect(201)).body.data;
+    const robe = await createProduct(owner, {
+      sku: 'ROBE',
+      name: 'Robe kabyle',
+      price: 4000,
+      costPrice: 2000,
+      minStock: 2,
+      categoryId: category.id,
+      sellOutOfStock: true,
+      description: 'Brodée main',
+      weightGrams: 800,
+      keywords: ['robe', 'fête'],
+      stock: undefined,
+      variants: [
+        { name: 'S', sku: 'ROBE-S', price: 4000, stock: 3, minStock: 1 },
+        { name: 'M', price: 4200, costPrice: 2100, stock: 0, isActive: false },
+      ],
+    });
+    const s = await db.productVariant.findFirstOrThrow({ where: { productId: robe.id, name: 'S' } });
+    await adjust(owner, { productId: robe.id, variantId: s.id, type: 'out', quantity: 5, reason: 'correction', force: true }).expect(201); // backorders: 3 → -2
+    await createProduct(owner, { sku: 'SRV', name: 'Retouche', price: 500, trackStock: false, stock: undefined });
+    await createProduct(owner, { sku: 'THE', name: 'Thé vert', price: 800, oldPrice: 950, stock: 12, minStock: 4, isActive: false });
+
+    const snapshot = async (workspaceId: string) =>
+      (await db.product.findMany({ where: { workspaceId, deletedAt: null }, orderBy: { sku: 'asc' }, include: { category: true, variants: { where: { deletedAt: null }, orderBy: { name: 'asc' } } } })).map((p) => ({
+        sku: p.sku,
+        name: p.name,
+        category: p.category?.name ?? null,
+        price: p.price,
+        oldPrice: p.oldPrice,
+        costPrice: p.costPrice,
+        stock: p.stock,
+        minStock: p.minStock,
+        trackStock: p.trackStock,
+        sellOutOfStock: p.sellOutOfStock,
+        hasVariants: p.hasVariants,
+        isActive: p.isActive,
+        description: p.description,
+        weightGrams: p.weightGrams,
+        keywords: p.keywords,
+        variants: p.variants.map((v) => ({ name: v.name, sku: v.sku, price: v.price, costPrice: v.costPrice, stock: v.stock, minStock: v.minStock, isActive: v.isActive })),
+      }));
+    const before = await snapshot(owner.workspaceId);
+    expect(before.find((p) => p.sku === 'ROBE')).toMatchObject({ stock: -2, hasVariants: true, sellOutOfStock: true });
+    const exportFile = async (format: 'csv' | 'xlsx', locale: string) => {
+      const jobId = (await owner.get(`/products/export?format=${format}`).set('Accept-Language', locale).expect(202)).body.data.jobId;
+      await drain(app, owner.workspaceId);
+      return (await download((await jobOf(owner, jobId)).resultUrl).expect(200)).body as Buffer;
+    };
+
+    // --- into a new shop (fr CSV): same products, variants, flags and quantities; no « SKU en double »
+    const other = await asOwner(app);
+    const jobId = await startImport(other, { buffer: await exportFile('csv', 'fr'), name: 'produits.csv', type: 'text/csv' });
+    await drain(app, other.workspaceId);
+    const preview = await jobOf(other, jobId);
+    expect(preview).toMatchObject({ status: 'done', result: { stage: 'preview', totals: { rows: 5, valid: 5, invalid: 0, create: 3, update: 0, variants: 2 } } });
+    expect(preview.result.mapping).toMatchObject({ sku: 'SKU', variant: 'Variante', variantSku: 'SKU variante', trackStock: 'Suivi du stock', sellOutOfStock: 'Vente en rupture', minStock: 'Seuil', description: 'Description', weightGrams: 'Poids (g)', keywords: 'Mots-clés' });
+    await commit(other, jobId).expect(202);
+    await drain(app, other.workspaceId);
+    expect(await jobOf(other, jobId)).toMatchObject({ status: 'done', result: { report: { created: 3, updated: 0, skipped: 0, categoriesCreated: 1, variantsCreated: 2 } } });
+    expect(await snapshot(other.workspaceId)).toEqual(before);
+    const robeCopy = await db.product.findFirstOrThrow({ where: { workspaceId: other.workspaceId, sku: 'ROBE' } });
+    expect((await db.stockMovement.findMany({ where: { productId: robeCopy.id }, orderBy: { createdAt: 'asc' } })).map((m) => [m.type, m.reason, m.refType, m.quantity])).toEqual([
+      ['adjustment_out', 'import', 'import', -2], // variant S sold at zero stock: -2 as in the file
+    ]);
+
+    // --- onto itself (ar XLSX, « mettre à jour les produits existants »): every row updates, nothing changes
+    const again = await startImport(owner, { buffer: await exportFile('xlsx', 'ar'), name: 'products.xlsx', type: XLSX });
+    await drain(app, owner.workspaceId);
+    const strict = await jobOf(owner, again);
+    // without updateExisting the SKUs are taken — reported per product, not as duplicates of the file
+    expect(strict.result.rows.flatMap((r: any) => r.errors.map((e: any) => e.code))).not.toContain('IMPORT_DUPLICATE_SKU_IN_FILE');
+    await owner.post('/products/import/mapping', { jobId: again, mapping: strict.result.mapping, updateExisting: true }).expect(202);
+    await drain(app, owner.workspaceId);
+    expect(await jobOf(owner, again)).toMatchObject({ status: 'done', result: { totals: { valid: 5, invalid: 0, create: 0, update: 3, variants: 2 } } });
+    await commit(owner, again).expect(202);
+    await drain(app, owner.workspaceId);
+    expect(await jobOf(owner, again)).toMatchObject({ status: 'done', result: { report: { created: 0, updated: 3, skipped: 0 } } });
+    expect(await snapshot(owner.workspaceId)).toEqual(before);
+  });
 });
 
 describe('exports and jobs', () => {
@@ -292,19 +375,22 @@ describe('exports and jobs', () => {
     expect(await jobOf(owner, jobId)).toMatchObject({ kind: 'export', name: 'export', status: 'queued', resultUrl: null, expiresAt: expect.any(String) });
     expect(await drain(app, owner.workspaceId)).toEqual(['export']);
     const job = await jobOf(owner, jobId);
-    expect(job).toMatchObject({ status: 'done', progress: 100, result: { kind: 'products', rows: 3, format: 'xlsx' } });
+    expect(job).toMatchObject({ status: 'done', progress: 100, result: { kind: 'products', rows: 4, format: 'xlsx' } });
     expect(job.result.fileName).toMatch(/^produits-\d{4}-\d{2}-\d{2}\.xlsx$/);
     expect(job.resultUrl).toMatch(/\/api\/v1\/files\/private\/ws\/.+\/exports\/.+\.xlsx\?exp=\d+&sig=/);
     const upload = await db.upload.findFirstOrThrow({ where: { workspaceId: owner.workspaceId, kind: 'export' } });
     expect(upload.storageKey.startsWith(`private/ws/${owner.workspaceId}/exports/`)).toBe(true);
     const sheet = readXlsx((await download(job.resultUrl).expect(200)).body);
-    expect(sheet).toEqual([
-      // PV 08/11: one line per variant, at its own price (the base price of a product with variants is never shown)
-      ['SKU', 'Nom', 'Variante', 'SKU variante', 'Catégorie', 'Unité', 'Prix', 'Ancien prix', 'Coût', 'Stock', 'Seuil', 'Actif'],
-      ['TEA-2', "'=Formule", '100 g', expect.any(String), '', '', '500', '', '', '0', '0', 'Non'], // formula injection neutralised
-      ['TEA-2', "'=Formule", '250 g', expect.any(String), '', '', '1100', '', '', '0', '0', 'Non'],
-      ['TEA-1', 'Thé vert', '', '', 'Thés', '', '800', '950', '300', '12', '2', 'Oui'],
+    expect(sheet.map((r) => r.slice(0, 14))).toEqual([
+      // PV 08/11: one line per variant, at its own price. Client list L77 / L78: the product line comes first (its own
+      // price and flags, no stock — the sum of its variants), then the stock flags; the file imports back as is
+      ['SKU', 'Nom', 'Variante', 'SKU variante', 'Catégorie', 'Unité', 'Prix', 'Ancien prix', 'Coût', 'Stock', 'Seuil', 'Suivi du stock', 'Vente en rupture', 'Actif'],
+      ['TEA-2', "'=Formule", '', '', '', '', '500', '', '', '', '0', 'Oui', 'Non', 'Non'], // formula injection neutralised
+      ['TEA-2', "'=Formule", '100 g', expect.any(String), '', '', '500', '', '', '0', '0', '', '', 'Oui'],
+      ['TEA-2', "'=Formule", '250 g', expect.any(String), '', '', '1100', '', '', '0', '0', '', '', 'Oui'],
+      ['TEA-1', 'Thé vert', '', '', 'Thés', '', '800', '950', '300', '12', '2', 'Oui', 'Non', 'Oui'],
     ]);
+    expect(sheet[0]!.slice(14)).toEqual(['Description', 'Poids (g)', 'Mots-clés']);
     // the file is private: no signature, a wrong one or another key ⇒ 404
     const path = new URL(job.resultUrl).pathname;
     await request(app.http()).get(path).expect(404);
@@ -319,13 +405,16 @@ describe('exports and jobs', () => {
     const csvResult = await jobOf(owner, csvJob);
     const text = (await download(csvResult.resultUrl).expect(200)).body.toString('utf8');
     // the language of the member who asked for it (weak-points audit 12/11, 07 §4 « Language source »), not the shop's (fr)
-    expect(parseCsv(text)).toEqual([['SKU', 'Name', 'Variant', 'Variant SKU', 'Category', 'Unit', 'Price', 'Old price', 'Cost', 'Stock', 'Threshold', 'Active'], ['TEA-1', 'Thé vert', '', '', 'Thés', '', '800', '950', '300', '12', '2', 'Yes']]);
+    expect(parseCsv(text)).toEqual([
+      ['SKU', 'Name', 'Variant', 'Variant SKU', 'Category', 'Unit', 'Price', 'Old price', 'Cost', 'Stock', 'Threshold', 'Track stock', 'Sell out of stock', 'Active', 'Description', 'Weight (g)', 'Keywords'],
+      ['TEA-1', 'Thé vert', '', '', 'Thés', '', '800', '950', '300', '12', '2', 'Yes', 'No', 'Yes', '', '', ''],
+    ]);
 
     // selection export, archived rows included
     await owner.delete(`/products/${a.id}`).expect(204);
     const bulk = (await owner.post('/products/bulk/export', { ids: [a.id, b.id] }).expect(202)).body.data.jobId;
     await drain(app, owner.workspaceId);
-    expect((await jobOf(owner, bulk)).result).toMatchObject({ rows: 3 }); // TEA-1 + the two variants of TEA-2
+    expect((await jobOf(owner, bulk)).result).toMatchObject({ rows: 4 }); // TEA-1 + TEA-2 and its two variants
     expect((await owner.get('/products/export?sort=nope').expect(400)).body.error.code).toBe('BAD_REQUEST');
     expect((await owner.get('/products/export?format=pdf').expect(422)).body.error.code).toBe('VALIDATION_ERROR');
   });

@@ -568,6 +568,7 @@ enum MovementReason {
   archive
   import
   other
+  restock
 }
 
 enum MovementRefType {

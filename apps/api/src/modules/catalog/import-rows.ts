@@ -1,18 +1,24 @@
 // CAT-06 / FL-12 — pure part of the catalogue import: header aliases (FR / EN / AR, as V1), cell parsing, row validation,
 // preview. No database here: the service passes what the rows must be checked against.
-import { CATALOG_MAX_MONEY, CATALOG_MAX_QTY, formatNumber, IMPORT_FIELDS, IMPORT_REQUIRED_FIELDS, type ImportField, type ImportPreviewResult, type ImportPreviewRow } from '@djaber/shared';
+import { CATALOG_MAX_MONEY, CATALOG_MAX_QTY, formatNumber, IMPORT_FIELDS, IMPORT_REQUIRED_FIELDS, VARIANTS_MAX, type ImportField, type ImportPreviewResult, type ImportPreviewRow } from '@djaber/shared';
 
 /** Lowercase, accents dropped, letters and digits only: "Prix d’achat" → "prixdachat". Arabic letters are kept. */
 export const normalizeHeader = (value: unknown): string =>
   String(value ?? '')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9\u0600-\u06ff]/g, '');
+    .replace(/[^a-z0-9؀-ۿ]/g, '');
 
+/**
+ * Aliases are compared in their normalised form. Every header of the products export (fr / ar / en, `PRODUCT_HEADERS`
+ * of product.service) is one of them, so an exported file maps itself (client list L78).
+ */
 export const HEADER_ALIASES: Record<ImportField, string[]> = {
   sku: ['sku', 'reference', 'ref', 'codearticle', 'code', 'referenceproduit', 'الرمز', 'المرجع'],
   name: ['name', 'nom', 'produit', 'product', 'libelle', 'designation', 'nomduproduit', 'productname', 'الاسم', 'المنتج'],
+  variant: ['variant', 'variante', 'declinaison', 'variantname', 'nomvariante', 'nomdelavariante', 'المتغيّر', 'المتغير'],
+  variantSku: ['variantsku', 'skuvariante', 'skudelavariante', 'referencevariante', 'SKU المتغيّر', 'SKU المتغير', 'رمز المتغير'],
   description: ['description', 'desc', 'details', 'detail', 'الوصف'],
   category: ['category', 'categorie', 'famille', 'rayon', 'الفئة'],
   unit: ['unit', 'unite', 'unitemesure', 'uom', 'mesure', 'الوحدة'],
@@ -20,9 +26,11 @@ export const HEADER_ALIASES: Record<ImportField, string[]> = {
   oldPrice: ['oldprice', 'ancienprix', 'prixbarre', 'compareatprice', 'السعرالقديم'],
   costPrice: ['costprice', 'prixdachat', 'prixachat', 'cout', 'coutunitaire', 'cost', 'achat', 'purchaseprice', 'التكلفة', 'سعرالشراء'],
   stock: ['stock', 'quantity', 'quantite', 'qte', 'qty', 'الكمية', 'المخزون'],
-  minStock: ['minstock', 'stockmin', 'seuil', 'seuilalerte', 'stockminimum', 'minquantity', 'alerte', 'الحدالادنى'],
-  weightGrams: ['weightgrams', 'weight', 'poids', 'poidsg', 'poidsgrammes', 'الوزن'],
+  minStock: ['minstock', 'stockmin', 'seuil', 'seuilalerte', 'seuildalerte', 'stockminimum', 'minquantity', 'alerte', 'threshold', 'alertthreshold', 'الحدالادنى', 'الحد الأدنى', 'حد التنبيه'],
+  weightGrams: ['weightgrams', 'weight', 'weightg', 'poids', 'poidsg', 'poidsgrammes', 'الوزن', 'الوزن (غ)'],
   keywords: ['keywords', 'motscles', 'tags', 'etiquettes', 'الكلماتالمفتاحية'],
+  trackStock: ['trackstock', 'suividustock', 'suivistock', 'stocksuivi', 'gererlestock', 'تتبع المخزون', 'تتبّع المخزون'],
+  sellOutOfStock: ['selloutofstock', 'venteenrupture', 'accepterlescommandesenrupture', 'commandesenrupture', 'backorder', 'البيع عند نفاد المخزون'],
   isActive: ['isactive', 'active', 'actif', 'statut', 'status', 'نشط'],
 };
 
@@ -48,7 +56,7 @@ export const missingRequired = (mapping: ImportMapping): ImportField[] => IMPORT
 
 /** "12 500", "12500 DA", "12 500,00", "12,500.00" → 12500. Null when the cell is not an integer amount. */
 export const parseInteger = (raw: string): number | null => {
-  let s = raw.replace(/[\s\u00a0\u202f]/g, '').replace(/(da|dzd|dinars?|د\.?ج)$/i, '');
+  let s = raw.replace(/[\s  ]/g, '').replace(/(da|dzd|dinars?|د\.?ج)$/i, '');
   if (s === '') return null;
   s = s.replace(/[.,]0{1,2}$/, ''); // ",00" / ".0" written by spreadsheets
   if (/^-?\d{1,3}([.,]\d{3})+$/.test(s)) s = s.replace(/[.,]/g, ''); // thousands separators
@@ -59,6 +67,15 @@ export const parseInteger = (raw: string): number | null => {
 
 const TRUE = new Set(['1', 'true', 'oui', 'yes', 'y', 'o', 'actif', 'active', 'x', 'نعم']);
 const FALSE = new Set(['0', 'false', 'non', 'no', 'n', 'inactif', 'inactive', 'لا']);
+/** "oui" / "non" (fr, ar, en): true / false; '' → undefined (the default applies); anything else → null (invalid). */
+export const parseFlag = (raw: string): boolean | null | undefined => {
+  const s = raw.trim().toLowerCase();
+  if (!s) return undefined;
+  return TRUE.has(s) ? true : FALSE.has(s) ? false : null;
+};
+
+/** A product of the catalogue a row may update (`updateExisting`), keyed by its SKU. */
+export type ExistingProduct = { trackStock: boolean; sellOutOfStock: boolean; hasVariants: boolean; /** lower-cased live variant name → its SKU */ variants: Map<string, string | null> };
 
 export type ImportContext = {
   /** live SKUs of the workspace → what holds them */
@@ -71,16 +88,21 @@ export type ImportContext = {
   freeSlots: number;
   limit: number;
   current: number;
+  /** live products by SKU, with their variants (variant rows of an update are checked against them) */
+  products?: Map<string, ExistingProduct>;
 };
 
 type Values = ImportPreviewRow['values'];
 type RowError = ImportPreviewRow['errors'][number];
 
-const MAX = { sku: 255, name: 255, description: 5000, category: 80 };
+const MAX = { sku: 255, name: 255, variant: 120, description: 5000, category: 80 };
 /** The bounds of the product form (`CreateProductSchema`): a row the form would refuse is refused here (journey J02-2). */
 const BOUND = { money: CATALOG_MAX_MONEY, qty: CATALOG_MAX_QTY, weightGrams: 1_000_000 };
+/** What a variant row brings (the other cells repeat its product and are read on the product line). */
+const VARIANT_ROW_FIELDS = new Set<ImportField | null>(['variant', 'variantSku', 'price', 'costPrice', 'stock', 'minStock', 'isActive']);
 
-const parseRow = (cell: (f: ImportField) => string, mapped: (f: ImportField) => boolean): { values: Values; errors: RowError[] } => {
+/** `negativeStock`: the product accepts orders at zero stock (L78), so its stock may be below 0. */
+const parseRow = (cell: (f: ImportField) => string, mapped: (f: ImportField) => boolean, negativeStock: boolean): { values: Values; errors: RowError[] } => {
   const values: Values = {};
   const errors: RowError[] = [];
   const err = (field: ImportField, code: string, params?: Record<string, string | number>) => errors.push({ field, code, ...(params ? { params } : {}) });
@@ -103,6 +125,16 @@ const parseRow = (cell: (f: ImportField) => string, mapped: (f: ImportField) => 
     const sku = cell('sku');
     if (sku.length > MAX.sku) err('sku', 'validation.length');
     values.sku = sku || null;
+  }
+  if (mapped('variant')) {
+    const v = cell('variant');
+    if (v.length > MAX.variant) err('variant', 'validation.length');
+    values.variant = v || null;
+  }
+  if (mapped('variantSku')) {
+    const s = cell('variantSku');
+    if (s.length > MAX.sku) err('variantSku', 'validation.length');
+    values.variantSku = s || null;
   }
   if (mapped('description')) {
     const d = cell('description');
@@ -140,7 +172,9 @@ const parseRow = (cell: (f: ImportField) => string, mapped: (f: ImportField) => 
     const n = parseInteger(raw);
     // the weight message names its bounds (« Valeur hors limites (0–1 000 000) »)
     const weightRange = { min: 0, max: formatNumber(BOUND.weightGrams) };
-    if (n === null || n < 0) err(f, f === 'weightGrams' ? 'validation.range' : 'validation.quantity', f === 'weightGrams' ? weightRange : undefined);
+    // client list L78: the stock of a product sold at zero stock may be below 0 (orders taken without stock)
+    const min = f === 'stock' && negativeStock ? -BOUND.qty : 0;
+    if (n === null || n < min) err(f, f === 'weightGrams' ? 'validation.range' : 'validation.quantity', f === 'weightGrams' ? weightRange : undefined);
     else if (n > (f === 'weightGrams' ? BOUND.weightGrams : BOUND.qty)) err(f, f === 'weightGrams' ? 'validation.range' : 'validation.quantity_max', f === 'weightGrams' ? weightRange : undefined);
     values[f] = n ?? raw;
   }
@@ -153,15 +187,27 @@ const parseRow = (cell: (f: ImportField) => string, mapped: (f: ImportField) => 
       .map((k) => k.slice(0, 50))
       .join(', ');
   }
+  // client list L77: the stock flags of the product form; an empty cell keeps the form default (tracked, no backorder)
+  for (const f of ['trackStock', 'sellOutOfStock'] as const) {
+    if (!mapped(f)) continue;
+    const flag = parseFlag(cell(f));
+    if (flag === null) err(f, 'validation.invalid');
+    else values[f] = flag ?? f === 'trackStock';
+  }
   if (mapped('isActive')) {
-    const raw = cell('isActive').toLowerCase();
-    if (!raw || TRUE.has(raw)) values.isActive = true;
-    else if (FALSE.has(raw)) values.isActive = false;
-    else err('isActive', 'validation.invalid');
+    const flag = parseFlag(cell('isActive'));
+    if (flag === null) err('isActive', 'validation.invalid');
+    else values.isActive = flag ?? true;
   }
   return { values, errors };
 };
 
+/**
+ * Client list L78 (Boutique de Lalla 22/11): when a « Variante » column is mapped, the rows of one product SKU are one
+ * product — the first row is the product, the rows naming a variant are its variants (a first row naming a variant is
+ * the product and its first variant: exports made before 23/11/2026). A variant row without SKU belongs to the product
+ * just above it when it repeats its name. A product and its variants are imported together or not at all.
+ */
 export const buildPreview = (input: {
   fileName: string;
   headers: string[];
@@ -177,47 +223,142 @@ export const buildPreview = (input: {
     const i = h ? headers.indexOf(h) : -1;
     if (i >= 0) index.set(f, i);
   }
+  const mapped = (f: ImportField) => index.has(f);
+  const cellOf = (cells: string[]) => (f: ImportField) => (index.has(f) ? (cells[index.get(f)!] ?? '').trim() : '');
+  const grouping = mapped('variant');
+  const n = input.rows.length;
+  const line = (i: number) => i + 2; // line number in the file: the header is line 1
+
+  // --- pass 1: which row is a product, which is a variant of which product
+  const head: number[] = new Array(n);
+  const duplicateOf: (number | undefined)[] = new Array(n);
+  const headBySku = new Map<string, number>();
+  let previousHead = -1;
+  for (let i = 0; i < n; i++) {
+    const cell = cellOf(input.rows[i]!);
+    const sku = cell('sku');
+    const variant = grouping ? cell('variant') : '';
+    const known = sku ? headBySku.get(sku) : undefined;
+    const sameAsAbove = !sku && variant && previousHead >= 0 && !cellOf(input.rows[previousHead]!)('sku') && cellOf(input.rows[previousHead]!)('name').toLowerCase() === cell('name').toLowerCase();
+    if (known !== undefined && variant) head[i] = known;
+    else if (sameAsAbove) head[i] = previousHead;
+    else {
+      head[i] = i;
+      if (known !== undefined) duplicateOf[i] = known;
+      else if (sku) headBySku.set(sku, i);
+    }
+    previousHead = head[i]!;
+  }
+
+  // the product of each product row: created, updated (updateExisting) and its stock flags
+  const existing = (i: number) => {
+    const sku = cellOf(input.rows[i]!)('sku');
+    return sku && duplicateOf[i] === undefined && input.updateExisting && ctx.existingSkus.get(sku) === 'product' ? (ctx.products?.get(sku) ?? null) : undefined;
+  };
+  const flagsOf = new Map<number, { updating: boolean; tracked: boolean; trackedInvalid: boolean; negativeStock: boolean; target: ExistingProduct | null | undefined }>();
+  const flags = (h: number) => {
+    let f = flagsOf.get(h);
+    if (!f) {
+      const cell = cellOf(input.rows[h]!);
+      const target = existing(h);
+      const track = mapped('trackStock') ? parseFlag(cell('trackStock')) : undefined;
+      const sell = mapped('sellOutOfStock') ? parseFlag(cell('sellOutOfStock')) : undefined;
+      const tracked = track === undefined || track === null ? (target?.trackStock ?? true) : track;
+      const selling = sell === undefined || sell === null ? (mapped('sellOutOfStock') ? false : (target?.sellOutOfStock ?? false)) : sell;
+      f = { updating: target !== undefined, tracked, trackedInvalid: track === false && !!target?.hasVariants, negativeStock: tracked && selling, target };
+      flagsOf.set(h, f);
+    }
+    return f;
+  };
+
+  // variant SKUs of the catalogue → `<product SKU>\n<variant name>` (an update may keep a variant's own SKU)
+  const variantOwner = new Map<string, string>();
+  for (const [sku, p] of ctx.products ?? []) for (const [name, vSku] of p.variants) if (vSku) variantOwner.set(vSku, `${sku}\n${name}`);
+
+  // --- pass 2: each row on its own, then against the file and the catalogue
   const firstRowOfSku = new Map<string, number>();
   const newCategories = new Set<string>();
+  const groupNames = new Map<number, Map<string, number>>(); // product row → lower-cased variant name → its line
+  const groupNew = new Map<number, number>(); // product row → variants it adds
+  const parsed = input.rows.map((cells, i) => {
+    const h = head[i]!;
+    const f = flags(h);
+    const cell = cellOf(cells);
+    const { values, errors: all } = parseRow(cell, mapped, f.negativeStock);
+    const isProduct = h === i;
+    const variant = grouping && typeof values.variant === 'string' ? values.variant : null;
+    // the cells of a variant row that describe the product are read on the product line
+    const errors = isProduct ? all : all.filter((e) => VARIANT_ROW_FIELDS.has(e.field));
+    let action: ImportPreviewRow['action'] = f.updating ? 'update' : 'create';
+
+    if (isProduct) {
+      const sku = typeof values.sku === 'string' ? values.sku : null;
+      if (sku) {
+        const first = firstRowOfSku.get(sku);
+        if (first !== undefined) errors.push({ field: 'sku', code: 'IMPORT_DUPLICATE_SKU_IN_FILE', params: { row: first } });
+        else firstRowOfSku.set(sku, line(i));
+        const holder = ctx.existingSkus.get(sku);
+        if (holder === 'product' && input.updateExisting) action = 'update';
+        else if (holder) errors.push({ field: 'sku', code: 'PRODUCT_SKU_ALREADY_EXISTS' });
+      }
+      if (typeof values.unit === 'string' && values.unit && !ctx.units.has(values.unit.toLowerCase())) errors.push({ field: 'unit', code: 'validation.invalid' });
+      // tracked → service is refused for a product with variants (CAT-11, as the product form)
+      if (f.trackedInvalid) errors.push({ field: 'trackStock', code: 'validation.invalid' });
+    }
+    if (variant) {
+      const productSku = cellOf(input.rows[h]!)('sku');
+      const vSku = typeof values.variantSku === 'string' ? values.variantSku : null;
+      if (vSku) {
+        const first = firstRowOfSku.get(vSku);
+        if (first !== undefined) errors.push({ field: 'variantSku', code: 'IMPORT_DUPLICATE_SKU_IN_FILE', params: { row: first } });
+        else firstRowOfSku.set(vSku, line(i));
+        const ownVariant = f.updating && variantOwner.get(vSku) === `${productSku}\n${variant.toLowerCase()}`;
+        if (ctx.existingSkus.has(vSku) && !ownVariant) errors.push({ field: 'variantSku', code: 'PRODUCT_SKU_ALREADY_EXISTS' });
+      }
+      const names = groupNames.get(h) ?? new Map<string, number>();
+      groupNames.set(h, names);
+      if (names.has(variant.toLowerCase())) errors.push({ field: 'variant', code: 'validation.taken' });
+      else {
+        names.set(variant.toLowerCase(), line(i));
+        if (!f.target?.variants.has(variant.toLowerCase())) groupNew.set(h, (groupNew.get(h) ?? 0) + 1);
+        if ((f.target?.variants.size ?? 0) + (groupNew.get(h) ?? 0) > VARIANTS_MAX) errors.push({ field: 'variant', code: 'VARIANT_LIMIT' });
+      }
+      // variants keep quantities: a service (stock not tracked) has none (CAT-11)
+      if (!f.tracked) errors.push({ field: 'trackStock', code: 'PRODUCT_NOT_STOCK_TRACKED' });
+    }
+    return { i, values, errors, action, isProduct, variant };
+  });
+
+  // --- plan limit (02 §5): one slot per new product, in file order; a product whose group has an error takes none
+  const groupBad = new Map<number, number>(); // product row → first line in error in its group
+  for (const r of parsed) if (r.errors.length && !groupBad.has(head[r.i]!)) groupBad.set(head[r.i]!, line(r.i));
   let slots = ctx.freeSlots;
-  const totals = { rows: input.rows.length, valid: 0, invalid: 0, create: 0, update: 0, overPlanLimit: 0, newCategories: 0 };
+  let overPlanLimit = 0;
+  for (const r of parsed) {
+    if (!r.isProduct || r.action !== 'create' || groupBad.has(r.i)) continue;
+    if (slots <= 0) {
+      r.errors.push({ field: null, code: 'PLAN_LIMIT', params: { resource: 'products', limit: ctx.limit, current: ctx.current } });
+      groupBad.set(r.i, line(r.i));
+      overPlanLimit++;
+    } else slots--;
+  }
 
-  const rows: ImportPreviewRow[] = input.rows.map((cells, i) => {
-    const row = i + 2; // line number in the file: the header is line 1
-    const { values, errors } = parseRow(
-      (f) => (index.has(f) ? (cells[index.get(f)!] ?? '').trim() : ''),
-      (f) => index.has(f),
-    );
-    let action: ImportPreviewRow['action'] = 'create';
-
-    const sku = typeof values.sku === 'string' ? values.sku : null;
-    if (sku) {
-      const first = firstRowOfSku.get(sku);
-      if (first !== undefined) errors.push({ field: 'sku', code: 'IMPORT_DUPLICATE_SKU_IN_FILE', params: { row: first } });
-      else firstRowOfSku.set(sku, row);
-      const holder = ctx.existingSkus.get(sku);
-      if (holder === 'product' && input.updateExisting) action = 'update';
-      else if (holder) errors.push({ field: 'sku', code: 'PRODUCT_SKU_ALREADY_EXISTS' });
-    }
-    if (typeof values.unit === 'string' && values.unit && !ctx.units.has(values.unit.toLowerCase())) errors.push({ field: 'unit', code: 'validation.invalid' });
-
-    if (!errors.length && action === 'create') {
-      // 02 §5: rows beyond the plan are reported in the preview, in file order
-      if (slots <= 0) {
-        errors.push({ field: null, code: 'PLAN_LIMIT', params: { resource: 'products', limit: ctx.limit, current: ctx.current } });
-        totals.overPlanLimit++;
-      } else slots--;
-    }
-    const ok = errors.length === 0;
+  const totals: ImportPreviewResult['totals'] = { rows: n, valid: 0, invalid: 0, create: 0, update: 0, overPlanLimit, newCategories: 0, ...(grouping ? { variants: 0 } : {}) };
+  const rows: ImportPreviewRow[] = parsed.map((r) => {
+    const h = head[r.i]!;
+    // a product and its variants are written together: the other rows of a group in error are left out with it
+    const bad = groupBad.get(h);
+    if (bad !== undefined && !r.errors.length) r.errors.push({ field: null, code: 'validation.import_group', params: { row: bad } });
+    const ok = r.errors.length === 0;
     if (ok) {
       totals.valid++;
-      totals[action === 'update' ? 'update' : 'create']++;
-      if (typeof values.category === 'string' && values.category && !ctx.categories.has(values.category.toLowerCase())) newCategories.add(values.category.toLowerCase());
-    } else {
-      totals.invalid++;
-      action = 'skip';
-    }
-    return { row, ok, action, values, errors };
+      if (r.isProduct) {
+        totals[r.action === 'update' ? 'update' : 'create']++;
+        if (typeof r.values.category === 'string' && r.values.category && !ctx.categories.has(r.values.category.toLowerCase())) newCategories.add(r.values.category.toLowerCase());
+      }
+      if (r.variant && totals.variants !== undefined) totals.variants++;
+    } else totals.invalid++;
+    return { row: line(r.i), ok, action: ok ? r.action : 'skip', values: r.values, errors: r.errors, ...(r.variant ? { variantOf: line(h) } : {}) };
   });
   totals.newCategories = newCategories.size;
   return { stage: 'preview', fileName: input.fileName, headers, mapping, missingColumns: [], updateExisting: input.updateExisting, totals, rows };

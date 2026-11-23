@@ -30,6 +30,9 @@ export type ImportMapping = Partial<Record<ImportField, string | null>>;
 const ALIASES: Record<ImportField, readonly string[]> = {
   sku: ['sku', 'ref', 'reference', 'code', 'codeproduit', 'refproduit', 'productcode'],
   name: ['name', 'nom', 'designation', 'produit', 'product', 'nomproduit', 'productname', 'titre', 'title', 'libelle'],
+  // client list L77 / L78: the columns of the products export (variants under the product SKU, stock flags)
+  variant: ['variant', 'variante', 'declinaison', 'variantname', 'nomvariante'],
+  variantSku: ['variantsku', 'skuvariante', 'skudelavariante', 'referencevariante'],
   description: ['description', 'desc', 'details'],
   category: ['category', 'categorie', 'famille', 'rayon'],
   unit: ['unit', 'unite'],
@@ -38,8 +41,10 @@ const ALIASES: Record<ImportField, readonly string[]> = {
   costPrice: ['costprice', 'cost', 'cout', 'prixdachat', 'prixachat', 'pa', 'purchaseprice'],
   stock: ['stock', 'qte', 'quantite', 'quantity', 'qty', 'enstock'],
   minStock: ['minstock', 'stockmin', 'stockminimum', 'seuil', 'seuilalerte', 'alerte', 'threshold'],
-  weightGrams: ['weightgrams', 'weight', 'poids', 'poidsg', 'poidsgrammes'],
+  weightGrams: ['weightgrams', 'weight', 'weightg', 'poids', 'poidsg', 'poidsgrammes'],
   keywords: ['keywords', 'motscles', 'tags', 'etiquettes'],
+  trackStock: ['trackstock', 'suividustock', 'suivistock', 'stocksuivi'],
+  sellOutOfStock: ['selloutofstock', 'venteenrupture', 'accepterlescommandesenrupture', 'commandesenrupture', 'backorder'],
   isActive: ['isactive', 'active', 'actif', 'visible', 'statut', 'status'],
 };
 
@@ -176,9 +181,9 @@ export function buildErrorsCsv(
 /* ---------- example file (tester report 2026-10-20: "a CSV example so the client knows the columns") ---------- */
 /** Column headers of the example file, in the interface language — each one is a header alias the import recognises. */
 const TEMPLATE_HEADERS: Record<'fr' | 'ar' | 'en', Record<ImportField, string>> = {
-  fr: { sku: 'SKU', name: 'Nom', description: 'Description', category: 'Catégorie', unit: 'Unité', price: 'Prix', oldPrice: 'Ancien prix', costPrice: 'Coût', stock: 'Stock', minStock: 'Seuil', weightGrams: 'Poids', keywords: 'Mots-clés', isActive: 'Actif' },
-  en: { sku: 'SKU', name: 'Name', description: 'Description', category: 'Category', unit: 'Unit', price: 'Price', oldPrice: 'Old price', costPrice: 'Cost price', stock: 'Stock', minStock: 'Min stock', weightGrams: 'Weight', keywords: 'Keywords', isActive: 'Active' },
-  ar: { sku: 'الرمز', name: 'الاسم', description: 'الوصف', category: 'الفئة', unit: 'الوحدة', price: 'السعر', oldPrice: 'السعر القديم', costPrice: 'التكلفة', stock: 'المخزون', minStock: 'الحد الادنى', weightGrams: 'الوزن', keywords: 'الكلمات المفتاحية', isActive: 'نشط' },
+  fr: { sku: 'SKU', name: 'Nom', description: 'Description', category: 'Catégorie', unit: 'Unité', price: 'Prix', oldPrice: 'Ancien prix', costPrice: 'Coût', stock: 'Stock', minStock: 'Seuil', weightGrams: 'Poids', keywords: 'Mots-clés', trackStock: 'Suivi du stock', sellOutOfStock: 'Vente en rupture', isActive: 'Actif', variant: 'Variante', variantSku: 'SKU variante' },
+  en: { sku: 'SKU', name: 'Name', description: 'Description', category: 'Category', unit: 'Unit', price: 'Price', oldPrice: 'Old price', costPrice: 'Cost price', stock: 'Stock', minStock: 'Min stock', weightGrams: 'Weight', keywords: 'Keywords', trackStock: 'Track stock', sellOutOfStock: 'Sell out of stock', isActive: 'Active', variant: 'Variant', variantSku: 'Variant SKU' },
+  ar: { sku: 'الرمز', name: 'الاسم', description: 'الوصف', category: 'الفئة', unit: 'الوحدة', price: 'السعر', oldPrice: 'السعر القديم', costPrice: 'التكلفة', stock: 'المخزون', minStock: 'الحد الادنى', weightGrams: 'الوزن', keywords: 'الكلمات المفتاحية', trackStock: 'تتبع المخزون', sellOutOfStock: 'البيع عند نفاد المخزون', isActive: 'نشط', variant: 'المتغيّر', variantSku: 'SKU المتغيّر' },
 };
 const TEMPLATE_ROWS: Record<'fr' | 'ar' | 'en', Partial<Record<ImportField, string>>[]> = {
   fr: [

@@ -1,6 +1,6 @@
 // full-test 15/11 ORDERS-21: the « Import terminé » screen offers the error report of the skipped / refused rows.
 import { describe, expect, it } from 'vitest';
-import { orderImportErrorsCsv } from './order-import';
+import { describeOrderRowError, orderImportErrorsCsv } from './order-import';
 
 const row = (n: number, ok: boolean, errors: { field: null | 'phone'; code: string }[] = []) => ({
   row: n,
@@ -23,5 +23,14 @@ describe('order import error report', () => {
     expect(lines[0]).toBe('Ligne;Client;Téléphone;Wilaya;Articles;Erreur;Code (support)');
     expect(lines[1]).toBe('3;Client 3;0550111222;Alger;RB-1 × 2;msg:VALIDATION_ERROR;VALIDATION_ERROR');
     expect(lines[2]).toBe('4;Client 4;0550111222;Alger;RB-1 × 2;msg:ORDER_INSUFFICIENT_STOCK;ORDER_INSUFFICIENT_STOCK');
+  });
+});
+
+describe('L80 (client list 22/11): order-date row errors', () => {
+  const t = Object.assign((key: string, p?: Record<string, unknown>) => `${key}${p ? JSON.stringify(p) : ''}`, { has: () => true }) as unknown as Parameters<typeof describeOrderRowError>[0];
+  it('says why the date is refused (unreadable form / still to come), other fields unchanged', () => {
+    expect(describeOrderRowError(t, { field: 'orderedAt', code: 'VALIDATION_ERROR', params: { rule: 'validation.date', reason: 'format', value: '31/02/2026' } })).toBe('orderImport.error.dateFormat{"value":"31/02/2026"}');
+    expect(describeOrderRowError(t, { field: 'orderedAt', code: 'VALIDATION_ERROR', params: { rule: 'validation.date', reason: 'future', value: '24/11/2026' } })).toBe('orderImport.error.dateFuture{"value":"24/11/2026"}');
+    expect(describeOrderRowError(t, { field: 'phone', code: 'VALIDATION_ERROR', params: { rule: 'validation.phone' } })).toBe('orderImport.error.invalid{"field":"orderImport.field.phone"}');
   });
 });
