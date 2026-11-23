@@ -26,6 +26,8 @@ import {
 export type LiveAiGatewayOptions = {
   /** Tests only. Default: the global `fetch`, looked up at call time. */
   fetch?: typeof fetch;
+  /** `AI_REPLY_THINKING`: `off` = chat steps (purpose `reply`) of Claude 5 models without thinking */
+  replyThinking?: 'low' | 'off';
 };
 
 /** SDK retries on retryable API errors (429, 5xx, connection): 2 for a model step (04 §6), 1 for a transcription. */
@@ -133,12 +135,12 @@ const withoutTemperature = (init?: RequestInit): RequestInit | undefined => {
 const LOW_EFFORT_PURPOSES: ReadonlySet<AiPurpose> = new Set(['reply', 'vision_describe', 'vision_match', 'caption', 'page_post']);
 export const anthropicEffort = (modelId: string, purpose: AiPurpose): 'low' | null =>
   LOW_EFFORT_PURPOSES.has(purpose) && /^claude-(haiku|sonnet|opus|fable|mythos)-5(\b|[-.])/.test(modelId) ? 'low' : null;
-const withEffort = (init: RequestInit | undefined, effort: string): RequestInit | undefined => {
+const withEffort = (init: RequestInit | undefined, effort: string, noThinking = false): RequestInit | undefined => {
   if (typeof init?.body !== 'string') return init;
   try {
     const body = JSON.parse(init.body) as Record<string, unknown>;
     const config = body.output_config && typeof body.output_config === 'object' ? (body.output_config as Record<string, unknown>) : {};
-    return { ...init, body: JSON.stringify({ ...body, output_config: { ...config, effort } }) };
+    return { ...init, body: JSON.stringify({ ...body, output_config: { ...config, effort }, ...(noThinking ? { thinking: { type: 'disabled' } } : {}) }) };
   } catch {
     return init;
   }
@@ -242,7 +244,9 @@ export class LiveAiGateway implements AiGateway {
 
   private languageModel(model: AiModelRef, apiKey: string, dropTemperature = false, purpose?: AiPurpose, onAnswer?: (body: unknown) => void): LanguageModel {
     const effort = model.provider === 'anthropic' && purpose ? anthropicEffort(model.modelId, purpose) : null;
-    const sent: typeof globalThis.fetch = effort ? (input, init) => this.fetch(input, withEffort(init, effort)) : this.fetch;
+    // UX-066: AI_REPLY_THINKING=off — a chat step without thinking (Claude 5 models accept it at effort low)
+    const noThinking = effort === 'low' && purpose === 'reply' && this.options.replyThinking === 'off';
+    const sent: typeof globalThis.fetch = effort ? (input, init) => this.fetch(input, withEffort(init, effort, noThinking)) : this.fetch;
     // R23 (22/11): the provider's answer is kept for the step — a step that calls a tool not offered (« noop ») is refused whole
     // by the SDK, and the reply the model wrote next to that call was lost (a second model call, 1.6–3.4 s, for the same answer)
     const base: typeof globalThis.fetch = onAnswer

@@ -81,6 +81,9 @@ export const ConfigSchema = z.object({
   AI_DRIVER: z.enum(['fake', 'live']).default('fake'),
   // safety guard: the live adapter refuses to start in development / test unless this is true
   AI_ALLOW_LIVE: bool.default(false),
+  // UX-066 (23/11, replies 10–12 s on Messenger): `off` sends the chat steps of Claude 5 models (purpose `reply`) without thinking
+  // (`thinking: {type: "disabled"}`, accepted at effort low); `low` keeps adaptive thinking at effort low (the 22/11 setting)
+  AI_REPLY_THINKING: z.enum(['low', 'off']).default('low'),
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   GOOGLE_AI_API_KEY: z.string().optional(),

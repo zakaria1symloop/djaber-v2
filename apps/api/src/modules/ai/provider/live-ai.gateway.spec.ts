@@ -252,6 +252,15 @@ describe('LiveAiGateway.generate — Anthropic, Google, Groq', () => {
     expectHost('api.anthropic.com').reply(ok('msg_e3'));
     await gateway.generate(request('anthropic', 'claude-haiku-4-5'));
     expect(net.calls.at(-1)!.json.output_config).toBeUndefined();
+    expect(net.calls[0]!.json.thinking).toBeUndefined();
+    // UX-066: AI_REPLY_THINKING=off — chat steps go without thinking; the other purposes keep it
+    const fast = new LiveAiGateway({ replyThinking: 'off' });
+    expectHost('api.anthropic.com').reply(ok('msg_e4'));
+    await fast.generate(request('anthropic', 'claude-haiku-5-5'));
+    expect(net.calls.at(-1)!.json).toMatchObject({ output_config: { effort: 'low' }, thinking: { type: 'disabled' } });
+    expectHost('api.anthropic.com').reply(ok('msg_e5'));
+    await fast.generate(request('anthropic', 'claude-haiku-5-5', { purpose: 'vision_describe' }));
+    expect(net.calls.at(-1)!.json.thinking).toBeUndefined();
   });
 
   it('Anthropic: assistant tool call + tool result are serialised as tool_use / tool_result blocks', async () => {
