@@ -21,6 +21,13 @@ describe('ConversationService.resumableAfterHandoff', () => {
       expect([reason, can(reason, HANDOFF_IDLE_RESUME_MS + 1, 'toujours là ?')]).toEqual([reason, true]);
     }
   });
+  it('client list L39 (Houssem live 23/11): after an order-limit handoff, a new quantity gives the thread back to the AI; other messages wait', () => {
+    for (const text of ['ok 5', 'alors 3 seulement', 'واحد برك', 'zoudj', 'ok deux', '٥']) expect([text, can('order_limits', 30_000, text)]).toEqual([text, true]);
+    for (const text of ['ok', 'bonjour', 'pourquoi ?', 'merci']) expect([text, can('order_limits', 30_000, text)]).toEqual([text, false]);
+    // a quantity changes nothing for the other reasons the customer asked the team for
+    expect(can('complaint', 30_000, 'ok 5')).toBe(false);
+    expect(can('order_limits', 30_000, 'ok 5', { aiPausedById: 'u1' })).toBe(false);
+  });
   it('kept handoffs never come back on their own; an AI failure after 2 min (A3)', () => {
     for (const reason of ['manual', 'abuse_guard', 'credits_exhausted', 'quota_exceeded', 'risky_client']) expect([reason, can(reason, 24 * 3_600_000, 'salam')]).toEqual([reason, false]);
     expect(can('ai_error', AI_ERROR_RETRY_AFTER_MS - 1, 'salam')).toBe(false);

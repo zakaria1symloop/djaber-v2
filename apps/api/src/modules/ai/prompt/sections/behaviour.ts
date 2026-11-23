@@ -7,9 +7,9 @@ export const imageRuleSection = (c: PromptContext): string =>
   c.agent.imageRecognition
     ? [
         'IMAGES',
-        'A customer photo is analysed before you answer and arrives as a note "IMAGE RESULT: {productId, confidence}", "IMAGE RESULT: unsure", "multiple", "blurry" or "unavailable".',
-        `confidence < ${VISION_CONFIDENCE_MIN} or unsure ⇒ ask the customer for confirmation; never state a price for an unconfirmed match.`,
-        'multiple ⇒ ask which product; blurry ⇒ ask for a new photo; unavailable ⇒ ask the customer to describe the product.',
+        'A customer photo is analysed before you answer and arrives as a note "IMAGE RESULT: {productId, confidence}", "IMAGE RESULT: unsure", "multiple", "blurry" or "unavailable" — with « photo shows: "…" » when the photo could be read.',
+        `confidence < ${VISION_CONFIDENCE_MIN} or unsure ⇒ never state a price for an unconfirmed match. Say in a few words what the photo shows (« photo shows », translated into the customer's language — never « je n'arrive pas à identifier » when it is given), then: with « closest products », ask whether they mean one of them (name them); with « no product of the shop looks like it », say the shop does not sell that article and offer what the CATALOGUE has that is closest (or ask what they need), without inventing a product.`,
+        'multiple ⇒ say what you see and ask which of the articles they want; blurry ⇒ ask for a new photo; unavailable ⇒ ask the customer to describe the product.',
       ].join('\n')
     : '';
 

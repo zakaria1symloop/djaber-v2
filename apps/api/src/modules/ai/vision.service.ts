@@ -24,14 +24,24 @@ const ProductSchema = z.object({ name: z.string().default(''), description: z.st
 /** The §3.8 note injected next to `[image]` in the customer turn. */
 export type VisionNote =
   | { kind: 'match'; productId: string; confidence: number; name: string; alternatives: string[] }
-  | { kind: 'unsure'; candidates: string[] }
-  | { kind: 'multiple' }
+  | { kind: 'unsure'; candidates: string[]; seen?: string }
+  | { kind: 'multiple'; seen?: string }
   | { kind: 'blurry' }
   | { kind: 'unavailable' };
 export type VisionResult = { note: VisionNote; /** pass 2 answered: the image credits are due */ matched: boolean; usage: AiUsage };
 
+// owner 23/11 (« image recognition didn't work », zakaria's shop 13:57): with no product to match, the AI only said « je n'arrive pas à
+// identifier le produit » — it never knew what the photo showed. The note now says it (`photo shows`), so the reply can name what the
+// customer is looking for and say whether the shop sells it.
+const seenText = (s?: string) => (s?.trim() ? ` — photo shows: "${s.trim().replace(/"/g, "'").slice(0, 160)}"` : '');
 export const visionNoteText = (n: VisionNote): string =>
-  n.kind === 'match' ? `IMAGE RESULT: ${JSON.stringify({ productId: n.productId, confidence: n.confidence, name: n.name })}` : n.kind === 'unsure' ? `IMAGE RESULT: unsure${n.candidates.length ? ` (closest products: ${n.candidates.join(', ')})` : ''}` : `IMAGE RESULT: ${n.kind}`;
+  n.kind === 'match'
+    ? `IMAGE RESULT: ${JSON.stringify({ productId: n.productId, confidence: n.confidence, name: n.name })}`
+    : n.kind === 'unsure'
+      ? `IMAGE RESULT: unsure${n.candidates.length ? ` (closest products: ${n.candidates.join(', ')})` : ' (no product of the shop looks like it)'}${seenText(n.seen)}`
+      : n.kind === 'multiple'
+        ? `IMAGE RESULT: multiple${seenText(n.seen)}`
+        : `IMAGE RESULT: ${n.kind}`;
 
 // PV 28/10: the description came back in English and the catalogue (French / Arabic names) was searched with it — no
 // candidate, so the photo was never compared. `keywords` are the search words, in the three languages of the shops.
@@ -80,14 +90,16 @@ export class VisionService {
     const described = parseJsonObject(await this.ask('vision_describe', DESCRIBE, [photo, { type: 'text', text: 'Describe the photo.' }], usage), DescribeSchema);
     const d = described.ok ? described.value : DescribeSchema.parse({});
     if (d.quality === 'blurry') return { note: { kind: 'blurry' }, matched: false, usage };
-    if (d.multipleProducts) return { note: { kind: 'multiple' }, matched: false, usage };
+    // what the photo shows, in a few words (the model's description, else its type and colours)
+    const seen = (d.description || [d.category, ...d.colors, d.text].filter(Boolean).join(', ')).trim().slice(0, 160) || undefined;
+    if (d.multipleProducts) return { note: { kind: 'multiple', ...(seen ? { seen } : {}) }, matched: false, usage };
     // the search words first (all of them, not the first 8 of an English sentence), then the rest of the description
     const keywords = [...d.keywords, d.text, d.category, ...d.colors].map((w) => w.trim()).filter(Boolean);
     const query = [...keywords, d.description].join(' ').slice(0, 200);
     const found = query ? await this.catalogue.search(agent, query, VISION_CANDIDATES, { maxWords: 24 }) : [];
     // the photo is always compared with pictures: the text matches first, then the shop's other pictured products
     const candidates = [...found, ...(await this.catalogue.withImages(agent, VISION_CANDIDATES - found.length, found.map((c) => c.id)))];
-    if (!candidates.length) return { note: { kind: 'unsure', candidates: [] }, matched: false, usage };
+    if (!candidates.length) return { note: { kind: 'unsure', candidates: [], ...(seen ? { seen } : {}) }, matched: false, usage };
     // pass 2
     const withImages = (await Promise.all(candidates.map(async (c) => ({ c, img: await this.primaryImage(c) })))).filter((x): x is { c: CatalogueProduct; img: Buffer } => !!x.img);
     const list = (withImages.length ? withImages.map((x) => x.c) : candidates).map((c) => ({ id: c.id, name: c.name }));
@@ -96,7 +108,7 @@ export class VisionService {
     const m = matched.ok ? matched.value : MatchSchema.parse({});
     const hit = m.productId ? candidates.find((c) => c.id === m.productId) : undefined;
     const names = (ids: string[]) => ids.map((id) => candidates.find((c) => c.id === id)?.name).filter((x): x is string => !!x).slice(0, 3);
-    if (!hit || m.confidence < VISION_CONFIDENCE_MIN) return { note: { kind: 'unsure', candidates: names([...(hit ? [hit.id] : []), ...m.alternatives]) }, matched: true, usage };
+    if (!hit || m.confidence < VISION_CONFIDENCE_MIN) return { note: { kind: 'unsure', candidates: names([...(hit ? [hit.id] : []), ...m.alternatives]), ...(seen ? { seen } : {}) }, matched: true, usage };
     return { note: { kind: 'match', productId: hit.id, confidence: Math.round(m.confidence * 100) / 100, name: hit.name, alternatives: m.alternatives.filter((id) => candidates.some((c) => c.id === id)) }, matched: true, usage };
   }
 

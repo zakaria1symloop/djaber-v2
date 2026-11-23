@@ -66,6 +66,9 @@ const HANDOFF_KEPT = new Set(['manual', 'abuse_guard', 'credits_exhausted', 'quo
 /** The customer (or a shop rule) asked for the team: a greeting does not undo it, only the idle delay does. */
 const HANDOFF_ASKED = new Set(['customer_request', 'human_request', 'refund', 'complaint', 'angry', 'anger', 'keyword', 'order_limits', 'over_limits']);
 
+/** A quantity in a customer message: digits (Latin or Arabic) or a number word (fr / darija / Arabic script / en, 1 to 10). */
+export const QUANTITY_SAID = /[0-9٠-٩]|(?<![\p{L}])(?:une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|wa7ed|wahed|wa7da|wahda|zou?d?j|tlata|rab3a|khamsa|setta|sab3a|tmanya|tes3a|3achra|واحد|وحدة|زوج|ثلاثة|تلاتة|ربعة|أربعة|خمسة|ستة|سبعة|ثمانية|تسعة|عشرة|one|two|three|four|five|six|seven|eight|nine|ten)(?![\p{L}])/iu;
+
 @Injectable()
 export class ConversationService implements OnModuleInit {
   constructor(
@@ -574,6 +577,10 @@ export class ConversationService implements OnModuleInit {
     const age = now.getTime() - at.getTime();
     if (reason === 'ai_error') return age >= AI_ERROR_RETRY_AFTER_MS;
     if (age >= HANDOFF_IDLE_RESUME_MS) return true;
+    // client list L39 (Houssem live 23/11 13:51): « je veux 50 » → handed to the team (limit 10), then « ok 5 » got no answer until a
+    // member clicked « Reprendre ». A new quantity in the customer's message gives the thread back to the AI: it takes the order when
+    // the quantity fits, and hands off again (the limit sentence) when it still does not.
+    if ((reason === 'order_limits' || reason === 'over_limits') && QUANTITY_SAID.test(text ?? '')) return true;
     return !HANDOFF_ASKED.has(reason) && isGreetingOnly(text);
   }
 
