@@ -125,7 +125,27 @@ export const otherFieldAsked = (lastAi: string | null | undefined): boolean =>
  * ⇒ « 42 » is a size), and the numbers that are no quantity there (the prices of that message and of the catalogue, numeric variant
  * names such as « 42 »).
  */
-export type QuantityContext = { selling: boolean; lastAi?: string | null; productWords?: readonly string[]; notQuantities?: readonly number[] };
+export type QuantityContext = {
+  selling: boolean;
+  lastAi?: string | null;
+  productWords?: readonly string[];
+  notQuantities?: readonly number[];
+  /**
+   * Houssem live 23/11 (voice note « شحال le prix تاع le produit QnA 2311 و ابعثلي photo », product « QA 23/11 photos »): the numbers
+   * written in the product names (each group and the groups joined: 23, 11, 2311) are a name, never a quantity — the price question was
+   * handed to the team as « more than 10 pieces ».
+   */
+  nameNumbers?: readonly number[];
+};
+/** The numbers a product name carries: each digit group, and the groups joined (« QA 23/11 photos » ⇒ 23, 11, 2311; « X200 » ⇒ 200). */
+export const nameNumbersOf = (names: readonly string[]): number[] => [
+  ...new Set(
+    names.flatMap((name) => {
+      const groups = name.match(/\d+/gu) ?? [];
+      return [...groups.map(Number), ...(groups.length > 1 ? [Number(groups.join(''))] : [])].filter((n) => Number.isSafeInteger(n));
+    }),
+  ),
+];
 
 /**
  * The quantity above `max` the message asks for, or null: a counted word (« 500 pièces ») or a word naming a product of the shop
@@ -134,13 +154,14 @@ export type QuantityContext = { selling: boolean; lastAi?: string | null; produc
  */
 export async function quantityAbove(text: string | undefined, max: number | null | undefined, namesProduct: (words: string) => boolean | Promise<boolean>, context?: QuantityContext): Promise<number | null> {
   if (!text || max === null || max === undefined || !Number.isInteger(max) || max <= 0) return null;
+  const named = context?.nameNumbers ?? [];
   for (const q of quantitiesAsked(text)) {
-    if (q.quantity <= max) continue;
+    if (q.quantity <= max || named.includes(q.quantity)) continue;
     if (q.unit || (await namesProduct(q.next))) return q.quantity;
   }
   if (!context?.selling || otherFieldAsked(context.lastAi)) return null;
   const bare = bareQuantity(text, context.productWords ?? []);
-  return bare !== null && bare > max && !(context.notQuantities ?? []).includes(bare) ? bare : null;
+  return bare !== null && bare > max && !(context.notQuantities ?? []).includes(bare) && !named.includes(bare) ? bare : null;
 }
 
 /** The limit a `create_order` answer reports (`hint: 'order_limit'`): the quantity limit or the amount limit, and its value. */

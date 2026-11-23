@@ -28,7 +28,7 @@ import { offCatalogueWordsOf, placeIndex, placeNamedIn, placeOnlyMessage, wilaya
 import { contextOf } from '../messaging/messaging.presenter';
 import { asksAddress, fillerMessage, handoffKind, handoffReply, handoffSystemLineShown, limitHandoffReply, cancelledReply, cancelClaimed, cancelQuestion, modeQuestionAt, noPhotoReply, noPhotoSaid, openingSaid, photoAsked, substitutionLine, withArabicCurrency, withArabicWords, withArabiziWords, withAskedPrice, withBothFees, withModeFees, withOneNowWord, withOrderStatusWording, withoutNameInPriceSlot, withoutPresenceTalk, withoutQuickReply, withoutStrayYes, withPlaceFacts, withAskedFacts, withoutBookingOffer, withOneStopdeskOffer, withoutRefusals, withSingleSpaces, withoutUnrelatedOffer, teamSaid, teamOnlyKind, withNotServed, withoutNotedSteps, withoutOrderStepAsk, withCustomerScriptName, choiceQuestion, withSpacedAmounts, withoutNotedOpening, withoutFalseApology, withPendingProductWording, withThanksFirst, withoutRepeatedNotServed, type PlaceProduct } from './reply-fixes';
 import { bareYes as bareYesWords, serverTextLanguage, systemLocale } from './language';
-import { orderLimitOf, quantityAbove, type OrderLimit, type QuantityContext } from './order-limit';
+import { orderLimitOf, quantityAbove, type OrderLimit, type QuantityContext, nameNumbersOf } from './order-limit';
 import { msaRegister, MSA_NOTE, withMsaWording } from './msa';
 import { foldText } from './tools/wilaya-aliases';
 import { foldGuard, splitSentences } from './reply-guard';
@@ -2004,7 +2004,7 @@ export class AiRunService implements OnModuleInit {
       ...prices.flatMap((p) => [p.price, ...p.variants.map((v) => v.price)]),
       ...prices.flatMap((p) => p.variants.flatMap((v) => (v.name.match(/\d+/gu) ?? []).map(Number))),
     ];
-    return { selling, lastAi, productWords: [...new Set(prices.flatMap((p) => productWords(p.name)))], notQuantities };
+    return { selling, lastAi, productWords: [...new Set(prices.flatMap((p) => productWords(p.name)))], notQuantities, nameNumbers: nameNumbersOf(prices.map((p) => p.name)) };
   }
 
   // journey re-run J04r-3 (18/11): `looked` — the products this turn's search / get_product returned. One product of the CATALOGUE found for a

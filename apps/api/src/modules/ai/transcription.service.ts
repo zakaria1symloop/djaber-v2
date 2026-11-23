@@ -51,7 +51,7 @@ export class TranscriptionService implements OnModuleInit {
   }
 
   /** Transcribes an audio buffer through the transcription route (primary, then fallback). */
-  async transcribe(audio: Buffer, mime: string) {
+  async transcribe(audio: Buffer, mime: string, o: { productNames?: readonly string[] } = {}) {
     const r = await this.routing.call('transcription', (m, timeoutMs) => this.gateway.transcribe({ model: m.ref, audio, mime, timeoutMs }));
     const first = { ...r.value, model: r.model, usedFallback: r.usedFallback };
     // French and English speech is read well as it is
@@ -67,7 +67,7 @@ export class TranscriptionService implements OnModuleInit {
     const readings = [spokenHere(r.value.language) ? r.value.text.trim() : '', darija, french].filter(Boolean);
     if (readings.length < 2) return base;
     const fixed = await this.routing
-      .call('text', (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose: 'voice_fix', system: VOICE_FIX, messages: [{ role: 'user', content: readings.map((t, i) => `Reading ${i + 1}: ${t}`).join('\n') }], maxTokens: 800, timeoutMs }))
+      .call('text', (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose: 'voice_fix', system: VOICE_FIX, messages: [{ role: 'user', content: [...readings.map((t, i) => `Reading ${i + 1}: ${t}`), ...(o.productNames?.length ? [`Product names of this shop the customer may be saying (keep a name as the shop writes it): ${o.productNames.slice(0, 40).join(' · ')}`] : [])].join('\n') }], maxTokens: 800, timeoutMs }))
       .then((x) => voiceFixLine(x.value.text), (e) => (this.log.warn({ err: String(e) }, 'voice note repair unavailable'), null));
     return fixed ? { ...base, text: fixed, language: 'ar' } : base;
   }
@@ -92,7 +92,9 @@ export class TranscriptionService implements OnModuleInit {
           const file = await this.storage.get(audio.storageKey);
           if (file.body.length > VOICE_MAX_BYTES) outcome = 'too_long';
           else {
-            const r = await this.transcribe(file.body, file.mime || audio.mime || 'audio/mp4');
+            // Houssem live 23/11: « ch7al el prix ta3 QA 23/11 photos » came back as gibberish — the shop's product names help the repair
+            const productNames = (await prisma.product.findMany({ where: { deletedAt: null, isActive: true }, select: { name: true }, orderBy: { updatedAt: 'desc' }, take: 40 })).map((p) => p.name);
+            const r = await this.transcribe(file.body, file.mime || audio.mime || 'audio/mp4', { productNames });
             if ((r.durationSec ?? 0) > VOICE_MAX_SECONDS) outcome = 'too_long';
             else if (r.text.trim()) {
               transcript = r.text.trim().slice(0, 4000);
