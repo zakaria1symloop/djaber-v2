@@ -240,7 +240,15 @@ export class FakeAiGateway implements AiGateway {
     return { text, toolCalls: [], usage: { inputTokens: input, outputTokens: approxTokens(text) }, finishReason: 'stop' };
   }
 
+  private lastTranscript: AiTranscribeResult | null = null;
   async transcribe(req: AiTranscribeRequest): Promise<AiTranscribeResult> {
+    // a hinted call (language / prompt) is another reading of the same voice note: the same answer, no script consumed
+    if ((req.language || req.prompt) && this.lastTranscript) return this.lastTranscript;
+    const r = await this.firstReading(req);
+    this.lastTranscript = r;
+    return r;
+  }
+  private async firstReading(req: AiTranscribeRequest): Promise<AiTranscribeResult> {
     this.transcriptions.push(req);
     this.failing(req.model.modelId, req.model.provider);
     const next = this.transcripts.shift();

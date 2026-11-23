@@ -18,6 +18,17 @@ import { RoutingService } from './routing.service';
 type TranscribeJob = { workspaceId: string; messageId: string };
 export type TranscribeOutcome = 'done' | 'failed' | 'too_long' | 'noop';
 
+const DARIJA_HINT_AR = 'تسجيل صوتي بالدارجة الجزائرية مع كلمات فرنسية: واش كاين عندكم، شحال السومة، نحب نكوموندي، les produits، la livraison، الطلبية تاعي، وين راهي.';
+const DARIJA_HINT_FR = 'Message vocal en darija algérienne mélangée au français : wach kayen 3andkom, ch7al el prix, nheb ncommandi, les produits, la livraison, la commande ta3i, win rahi.';
+const VOICE_FIX =
+  'You repair automatic transcriptions of customer voice notes sent to an Algerian online shop. The customer speaks Algerian darija, often mixed with French. You receive several automatic readings of the SAME short voice note (speech recognition is poor at darija: it rewrites it into standard Arabic or French and mishears words — « السومة » (the price) heard as « السيارة », « produits » as « برودوي »). Work out what the customer most probably said, reading the versions phonetically and against each other, in a shop context (products, price, delivery, order, photos). Never add a request, a product, a number or a name that no reading carries. Reply with ONE line only: the message in Algerian darija written in Arabic script, French words kept in Latin letters — no comment, no explanation, no translation, no quotes. If the readings are too different to tell what was said, reply exactly: UNCLEAR';
+/** The repaired sentence of the model's answer: its last line; nothing when it says UNCLEAR or wrote an explanation only. */
+export const voiceFixLine = (text: string | null | undefined): string | null => {
+  const line = (text ?? '').split('\n').map((l) => l.trim()).filter(Boolean).pop() ?? '';
+  const clean = line.replace(/^["'«\s]+|["'»\s]+$/g, '');
+  return !clean || /^unclear\.?$/i.test(clean) || clean.length > 400 ? null : clean;
+};
+
 /** The languages a customer of an Algerian shop speaks in a voice note (provider names or ISO codes); unknown ⇒ trusted. */
 export const spokenHere = (language: string | null | undefined): boolean => !language || /^(ar|fr|en|arabic|french|english)$/i.test(language.trim());
 
@@ -42,13 +53,23 @@ export class TranscriptionService implements OnModuleInit {
   /** Transcribes an audio buffer through the transcription route (primary, then fallback). */
   async transcribe(audio: Buffer, mime: string) {
     const r = await this.routing.call('transcription', (m, timeoutMs) => this.gateway.transcribe({ model: m.ref, audio, mime, timeoutMs }));
-    // owner 23/11 (« voice didn't work »): a 3-second darija voice note came back as « Azerbaijani » gibberish — the model guesses the
-    // language of short Algerian audio badly. A guess outside the languages customers speak here is transcribed again as Arabic.
-    if (!spokenHere(r.value.language)) {
-      const again = await this.routing.call('transcription', (m, timeoutMs) => this.gateway.transcribe({ model: m.ref, audio, mime, timeoutMs, language: 'ar' })).catch(() => null);
-      if (again?.value.text.trim()) return { ...again.value, language: 'ar', model: again.model, usedFallback: again.usedFallback };
-    }
-    return { ...r.value, model: r.model, usedFallback: r.usedFallback };
+    const first = { ...r.value, model: r.model, usedFallback: r.usedFallback };
+    // French and English speech is read well as it is
+    if (/^(fr|en|french|english)$/i.test((r.value.language ?? '').trim()) || !r.value.text.trim()) return first;
+    // owner 23/11 (« my voice notes are not well understood »): the speech model is poor at Algerian darija — it rewrites it into standard
+    // Arabic, loses the French words and mishears (« السومة » → « السيارة », a 3-second note read as « Azerbaijani »). Arabic (or a language
+    // nobody speaks here) ⇒ two more readings of the same audio (Arabic with a darija hint, French with a darija hint), then the text
+    // model works out what was said from the three. Any failure keeps the best single reading.
+    const reading = (language: string, prompt: string) =>
+      this.routing.call('transcription', (m, timeoutMs) => this.gateway.transcribe({ model: m.ref, audio, mime, timeoutMs, language, prompt })).then((x) => x.value.text.trim(), () => '');
+    const [darija, french] = await Promise.all([reading('ar', DARIJA_HINT_AR), reading('fr', DARIJA_HINT_FR)]);
+    const base = spokenHere(r.value.language) ? first : { ...first, text: darija || first.text, language: 'ar' };
+    const readings = [spokenHere(r.value.language) ? r.value.text.trim() : '', darija, french].filter(Boolean);
+    if (readings.length < 2) return base;
+    const fixed = await this.routing
+      .call('text', (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose: 'voice_fix', system: VOICE_FIX, messages: [{ role: 'user', content: readings.map((t, i) => `Reading ${i + 1}: ${t}`).join('\n') }], maxTokens: 800, timeoutMs }))
+      .then((x) => voiceFixLine(x.value.text), (e) => (this.log.warn({ err: String(e) }, 'voice note repair unavailable'), null));
+    return fixed ? { ...base, text: fixed, language: 'ar' } : base;
   }
 
   async process(d: TranscribeJob): Promise<TranscribeOutcome> {

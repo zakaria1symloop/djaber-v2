@@ -18,7 +18,7 @@ export type AiMessage =
 export type AiToolDef = { name: string; description: string; parameters: Record<string, unknown> };
 
 /** What the call is for: routes the fake adapter's default answers and labels metrics; never changes the live request. */
-export type AiPurpose = 'reply' | 'vision_describe' | 'vision_match' | 'caption' | 'product_vision' | 'page_post' | 'agent_generation' | 'faq_extract';
+export type AiPurpose = 'reply' | 'vision_describe' | 'vision_match' | 'caption' | 'product_vision' | 'page_post' | 'agent_generation' | 'faq_extract' | 'voice_fix';
 
 export type AiGenerateRequest = {
   model: AiModelRef;
@@ -61,6 +61,8 @@ export type AiTranscribeRequest = {
   timeoutMs: number;
   /** ISO 639-1 hint (« ar »): the provider transcribes in that language instead of guessing it */
   language?: string;
+  /** vocabulary / style hint for the speech model (a sentence in the expected dialect) */
+  prompt?: string;
 };
 export type AiTranscribeResult = { text: string; language: string | null; durationSec: number | null };
 

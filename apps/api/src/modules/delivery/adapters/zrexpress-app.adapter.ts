@@ -54,7 +54,8 @@ export const buildGeo = (rows: Territory[]): Geo => {
 // Houssem live 23/11 (H-07 CMD-1018): ZR refused the parcel and the reason shown was « [object Object] » — its errors can be a list
 // of objects (`[{ propertyName, errorMessage }]`) or objects inside the map: every shape is read down to its sentence.
 export const refusalText = (v: unknown): string => {
-  if (typeof v === 'string') return v;
+  // ZR ends some sentences with an unfilled template (« … [Index: {CollectionIndex}] »): dropped
+  if (typeof v === 'string') return v.replace(/\s*\[Index:[^\]]*\]/g, '').trim();
   if (Array.isArray(v)) return v.map(refusalText).filter(Boolean).slice(0, 3).join(' · ');
   if (v && typeof v === 'object') {
     const o = v as Row;

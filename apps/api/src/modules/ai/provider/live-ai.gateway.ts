@@ -132,7 +132,7 @@ const withoutTemperature = (init?: RequestInit): RequestInit | undefined => {
  * extraction…) keep the model's default. The SDK in use (ai 4 / @ai-sdk/anthropic 1) has no setting for it: the request body is
  * completed here. Claude 4.x models reject `effort`: only the 5 generation gets it.
  */
-const LOW_EFFORT_PURPOSES: ReadonlySet<AiPurpose> = new Set(['reply', 'vision_describe', 'vision_match', 'caption', 'page_post']);
+const LOW_EFFORT_PURPOSES: ReadonlySet<AiPurpose> = new Set(['reply', 'vision_describe', 'vision_match', 'caption', 'page_post', 'voice_fix']);
 export const anthropicEffort = (modelId: string, purpose: AiPurpose): 'low' | null =>
   LOW_EFFORT_PURPOSES.has(purpose) && /^claude-(haiku|sonnet|opus|fable|mythos)-5(\b|[-.])/.test(modelId) ? 'low' : null;
 const withEffort = (init: RequestInit | undefined, effort: string, noThinking = false): RequestInit | undefined => {
@@ -370,7 +370,7 @@ export class LiveAiGateway implements AiGateway {
     const signal = AbortSignal.timeout(req.timeoutMs);
     try {
       if (provider !== 'groq' && provider !== 'openai') throw new AiProviderError('provider_error', provider, `${provider} provider_error`);
-      const fetch = this.transcriptionFetch(req.mime, req.language);
+      const fetch = this.transcriptionFetch(req.mime, req.language, req.prompt);
       const res = await transcribeAudio({
         model: provider === 'groq' ? createGroq({ apiKey, fetch }).transcription(req.model.modelId) : createOpenAI({ apiKey, fetch }).transcription(req.model.modelId),
         audio: req.audio,
@@ -385,7 +385,7 @@ export class LiveAiGateway implements AiGateway {
   }
 
   /** Same transport, with the real mime / file extension of the audio and `response_format=verbose_json` on the form. */
-  private transcriptionFetch(mime: string, language?: string): typeof fetch {
+  private transcriptionFetch(mime: string, language?: string, prompt?: string): typeof fetch {
     const type = mime.split(';')[0]!.trim().toLowerCase();
     const extension = AUDIO_EXTENSIONS[type];
     return (input, init) => {
@@ -395,6 +395,7 @@ export class LiveAiGateway implements AiGateway {
         if (extension && typeof file !== 'string' && file !== null) body.set('file', new File([file], `audio.${extension}`, { type }));
         if (!body.has('response_format')) body.set('response_format', 'verbose_json');
         if (language) body.set('language', language);
+        if (prompt) body.set('prompt', prompt);
       }
       return this.fetch(input, init);
     };

@@ -7,6 +7,8 @@ describe('ZR Express refusal reasons are always a sentence', () => {
     expect(refusalText(['Le numéro est invalide', 'Trop court'])).toBe('Le numéro est invalide · Trop court');
     expect(refusalText([{ propertyName: 'Customer.Phone.Number1', errorMessage: 'Numéro invalide' }])).toBe('Numéro invalide');
     expect(refusalText({ message: 'Hub introuvable' })).toBe('Hub introuvable');
+    // CMD-1018, second try: ZR's own unfilled template is dropped
+    expect(refusalText(['Phone_Number1 must be a valid international phone number. [Index: {CollectionIndex}]'])).toBe('Phone_Number1 must be a valid international phone number.');
     expect(refusalText({ foo: 1 })).toBe('{"foo":1}');
     expect(refusalText([{ a: 1 }])).not.toContain('[object Object]');
   });
