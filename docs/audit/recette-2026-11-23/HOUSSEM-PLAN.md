@@ -1,7 +1,7 @@
 # Djaber AI — test plan for Houssem — 23/11/2026
 
 Version on line: web `a9c8c67` (djaber.vercel.app), API + AI `8ea005e`. Your last tested version was `5a27849` (12/11): 87 changes since.
-Do the **BLOCKING** part first, then **NEW**, then **RETEST**.
+**FIRST: the client project manager's list, part H of `CLIENT-LIST-LALLA.md` (same folder) — proof required on every line.** Then **BLOCKING**, then **NEW**, then **RETEST**.
 
 ## How to work (Claude Code)
 
