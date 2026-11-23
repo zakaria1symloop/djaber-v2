@@ -654,6 +654,8 @@ export const sameCallKey = (name: string, args: unknown): string => {
  */
 export const placeSearchResult = (query: string) => ({ products: [], notAProduct: true, instruction: `« ${query} » is a wilaya / commune, not a product: no product search is needed. A delivery question is answered with quote_delivery — answer the customer now.` });
 
+/** The tools whose turn always needs the structured answer (an order placed, replaced or cancelled): never a plain-text shortcut. */
+const ORDER_TOOL_NAMES: ReadonlySet<string> = new Set(['create_order', 'cancel_order', 'update_order']);
 export type ExecutedTool = { callId: string; name: string; args: Record<string, unknown>; result: unknown; simulated: boolean; replayed: boolean };
 export type TurnRequest = {
   runId: string;
@@ -1679,7 +1681,13 @@ export class AiRunService implements OnModuleInit {
         }
         continue;
       }
-      const parsed: ReturnType<typeof parseReplyOutput> = serverReply ? { ok: true, value: serverReply } : parseReplyOutput(res.value.text);
+      const parsedRaw: ReturnType<typeof parseReplyOutput> = serverReply ? { ok: true, value: serverReply } : parseReplyOutput(res.value.text);
+      // Houssem live 23/11 (UX-066, H-07 Messenger): on a long Messenger thread the model often writes its answer as plain text (no
+      // JSON, `steps[].bad` « no_json: … »): the format retry cost a second model call (+1.1–4 s) for the same sentence. A plain
+      // message of a turn that touched no order is sent as it is (status OK, no card — the guard still checks it)
+      const plainFirst = !parsedRaw.ok && !serverReply && !guardFirst && !repaired && parsedRaw.reason === 'no_json' && !executed.some((e) => ORDER_TOOL_NAMES.has(e.name)) ? salvageReply(res.value.text) : null;
+      if (plainFirst) steps[steps.length - 1]!.bad = `plain_used: ${(res.value.text ?? '').slice(0, 80)}`;
+      const parsed: ReturnType<typeof parseReplyOutput> = plainFirst ? { ok: true, value: { ...plainFirst, intent: 'OTHER' } } : parsedRaw;
       if (guardFirst) {
         // the corrective answer: only its text is taken — status, cards, handoff and every other field stay the first answer's
         const { output: first, extra, violations } = guardFirst;

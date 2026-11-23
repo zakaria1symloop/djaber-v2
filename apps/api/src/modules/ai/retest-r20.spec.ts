@@ -364,3 +364,16 @@ describe('R20-4 (Cosmetic) — wording', () => {
     for (const t of ['Ma nwasslouch l Illizi f had lwaqt.', 'Nous ne livrons pas à Illizi pour le moment. Nous livrons à Oran.', 'Tawsil l Sétif: 650 DA l dar, 350 DA f stop-desk.']) expect(withoutRepeatedNotServed(t)).toBe(t);
   });
 });
+
+describe('Houssem live 23/11 (UX-066) — a plain-text answer is sent as it is, no format retry', () => {
+  it('a plain message (no JSON) of a turn with no order tool: one model call, the sentence is the reply', async () => {
+    const { r, gateway } = await turnOf('je veux la robe', 'fr', [{ text: 'Bien sûr, je vous écoute. Quelle taille voulez-vous ?' }, { reply: 'x', intent: 'SALE' }]);
+    expect(gateway.calls).toHaveLength(1);
+    expect(r.output.reply).toBe('Bien sûr, je vous écoute. Quelle taille voulez-vous ?');
+    expect(r.steps?.[0]?.bad).toMatch(/^plain_used: /);
+  });
+  it('half a JSON object (cut by the token limit) still gets the format retry', async () => {
+    const { gateway } = await turnOf('je veux la robe', 'fr', [{ text: '{"reply": "Voici les pho' }, { reply: 'Bien sûr, quelle taille voulez-vous ?', intent: 'SALE' }]);
+    expect(gateway.calls).toHaveLength(2);
+  });
+});

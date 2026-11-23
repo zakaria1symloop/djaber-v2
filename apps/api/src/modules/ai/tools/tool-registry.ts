@@ -17,7 +17,7 @@ import { contextOf } from '../../messaging/messaging.presenter';
 import { FlagsService } from '../../../core/flags/flags.service';
 import { articleless, fold, foldText, WILAYA_ALIASES } from './wilaya-aliases';
 import { handoffReason, handoffRefusedInstruction, judgeHandoff } from '../handoff-judge';
-import { storedOrderArgs, asksCancel, bareYes, cancelWordsIn, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, latestPhone, phonesIn, placedNumbers, simulatedOrders, simulatedOrderStates, lastCancelled, cancelledBefore, type DraftOrder, type OrderCallHistory } from './order-confirmation';
+import { storedOrderArgs, asksCancel, bareYes, cancelWordsIn, confirmation, coreKey, draftKey, latestRecap, wantsCancel, wordingChangedNow, hasDraft, isPlaceholderName, orderedBefore, phoneCheckAsked, latestPhone, phonesIn, placedNumbers, simulatedOrders, simulatedOrderStates, lastCancelled, cancelledBefore, type DraftOrder, type OrderCallHistory, anotherOrderAsked } from './order-confirmation';
 import { asksSomething, withoutPlaceSegments } from './order-confirmation-text';
 
 export type ToolName = 'search_products' | 'get_product' | 'check_availability' | 'quote_delivery' | 'create_order' | 'cancel_order' | 'lookup_order' | 'handoff_to_human' | 'add_faq_candidate' | 'create_payment_link';
@@ -1007,7 +1007,7 @@ export class ToolRegistry {
     // content again in a later turn (C06: TEST-2998 then TEST-2283 on « oui c'est bon »)
     const placedNow = await this.placedThisRun(ctx);
     if (placedNow) return fail({ ok: false, error: { code: 'ORDER_ALREADY_PLACED', number: placedNow }, say: 'An order was already placed in this turn: confirm that one to the customer, never create another one now.' });
-    const before = orderedBefore(ctx.orderHistory, draft, Date.now(), core);
+    const before = orderedBefore(ctx.orderHistory, draft, Date.now(), core, { anotherAsked: anotherOrderAsked(ctx.customerText) });
     if (before) return fail({ ok: false, error: { code: 'ORDER_ALREADY_PLACED', number: before }, say: `This order (same phone, wilaya and items) was already placed as ${before}: confirm it to the customer. To change its name or address, call create_order with replacesOrder=${before}. Create another order only when the customer clearly asks for an additional one.` });
     const recap = {
       items: items.map((i) => ({ name: i.name, variant: i.variant, quantity: i.quantity, unitPrice: i.unitPrice })),

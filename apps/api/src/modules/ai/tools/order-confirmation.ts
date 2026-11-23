@@ -253,11 +253,22 @@ export const orderHistoryOf = async (aiRun: Prisma.AiRunWhereInput): Promise<Ord
 
 type Placed = { ok?: unknown; number?: unknown; draft?: unknown; core?: unknown; simulated?: unknown; total?: unknown; replaced?: unknown };
 /** full-test 15/11 proposal 4 (C06: TEST-2998 then TEST-2283 on « oui c'est bon »): the number of the order an earlier turn already placed with this content. */
-export const orderedBefore = (history: OrderCallHistory | undefined, key: string, now = Date.now(), core?: string): string | null => {
+export const orderedBefore = (history: OrderCallHistory | undefined, key: string, now = Date.now(), core?: string, o: { anotherAsked?: boolean } = {}): string | null => {
+  // Houssem live 23/11 (H-07 CMD-1011): « طلبية جديدة بنفس المنتج » three times — the same content was refused as « already placed »
+  // for 2 hours, with no way to order it again. A customer who asks for another order in this message gets it (a new recap first)…
+  if (o.anotherAsked) return null;
+  const same = (r: { draft?: unknown; core?: unknown }) => r.draft === key || (!!core && r.core === core);
   // journey 16/11 J03-10: the same core (phone, wilaya, items, replaced order) counts too — a reworded address is not another order
-  const hit = history?.find((h) => isCreate(h) && now - h.at.getTime() <= DRAFT_TTL_MS && (h.result as Placed | null)?.ok === true && ((h.result as Placed).draft === key || (!!core && (h.result as Placed).core === core)));
-  return hit ? String((hit.result as Placed).number ?? '') || null : null;
+  const hits = (history ?? []).filter((h) => isCreate(h) && now - h.at.getTime() <= DRAFT_TTL_MS && (h.result as Placed | null)?.ok === true && same(h.result as Placed));
+  const hit = hits.sort((a, b) => b.at.getTime() - a.at.getTime())[0];
+  if (!hit) return null;
+  // …and the « oui » to the recap shown AFTER that order is that new order, not a repeat of the first one
+  const recapAfter = (history ?? []).some((h) => isCreate(h) && h.at.getTime() > hit.at.getTime() && codeOf(h.result) === 'CONFIRMATION_REQUIRED' && same((h.result as { error: { draft?: unknown; core?: unknown } }).error));
+  return recapAfter ? null : String((hit.result as Placed).number ?? '') || null;
 };
+/** Houssem live 23/11: the customer asks for another / a new order in this message (« nouvelle commande », « طلبية جديدة », « wa7da okhra »…). */
+const ANOTHER_ORDER = /(?<![\p{L}])(?:nouvelle\s+commande|une?\s+autre\s+commande|autre\s+commande|encore\s+une|deuxieme\s+commande|2e\s+commande|commande\s+jdida|commande\s+okhra|wa7da\s+(?:o?khra|jdida)|wahda\s+(?:o?khra|jdida)|new\s+order|another\s+(?:one|order)|one\s+more|طلبي[ةه]\s+(?:جديد[ةه]|[اأ]خر[ىي]|ثاني[ةه])|طلب\s+جديد|كوموند\s+جديد[ةه]|وحد[ةه]\s+(?:[اأ]خر[ىي]|جديد[ةه])|واحد\s+(?:اخر|آخر|جديد))(?![\p{L}])/iu;
+export const anotherOrderAsked = (customerText: string | undefined): boolean => !!customerText && ANOTHER_ORDER.test(fold(customerText));
 /** Numbers of the orders the AI placed in this conversation / session (last 2 hours). */
 export const placedNumbers = (history: OrderCallHistory | undefined): string[] =>
   (history ?? []).filter((h) => isCreate(h) && (h.result as Placed | null)?.ok === true && typeof (h.result as Placed).number === 'string').map((h) => String((h.result as Placed).number));

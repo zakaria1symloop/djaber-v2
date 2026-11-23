@@ -169,8 +169,8 @@ describe('FL-01 — reply turn', () => {
 
   it('AT-AI-03 malformed output ⇒ one retry with the format reminder; a loose object is read as it is, a prose answer is salvaged; nothing sendable ⇒ no customer message, insight `error`, `needs_human`, nothing charged', async () => {
     const s = await shop();
-    // repaired on the second try
-    fakeAi(app).script('reply', { text: 'Sure! The dress costs 4500.' }, { reply: 'La robe est à 4500 DA.', intent: 'INFO' });
+    // repaired on the second try (an object cut in the middle; a plain sentence is sent as it is since 23/11 — UX-066)
+    fakeAi(app).script('reply', { text: '{"reply": "La robe est à 45' }, { reply: 'La robe est à 4500 DA.', intent: 'INFO' });
     const ok = await turn(s, newSender(), { text: 'prix robe ?' });
     expect(ok.outcome).toBe('sent');
     expect(fakeAi(app).callsOf('reply')[1]!.messages.at(-1)).toMatchObject({ role: 'user', content: FORMAT_REMINDER });
@@ -186,13 +186,14 @@ describe('FL-01 — reply turn', () => {
     expect(Number(loose.runs[0]!.confidence)).toBe(0.8);
     expect(loose.out.find((m) => m.author === 'ai' && m.type === 'text')!.text).toBe('La robe est à 4\u00a0500\u00a0DA.');
 
-    // prose twice: the first answer is a plain message to the customer ⇒ it is sent (flag `format_salvaged`)
+    // prose: the first answer is a plain message to the customer ⇒ it is sent
     await resetAi();
     fakeAi(app).script('reply', { text: 'La robe est à 4500 DA, livraison 48 h.' }, { text: 'Désolé, voici la réponse : la robe est à 4500 DA.' });
     const prose = await turn(s, newSender(), { text: 'prix robe ?' });
     expect(prose.outcome).toBe('sent');
     expect(prose.out.find((m) => m.author === 'ai')!.text).toBe('La robe est à 4\u00a0500\u00a0DA, livraison 48 h.');
-    expect(prose.runs[0]!.flags).toContain('format_salvaged');
+    // 23/11 (UX-066): a plain message of a turn with no order tool is sent at once — no format retry, one model call
+    expect(fakeAi(app).callsOf('reply')).toHaveLength(1);
     expect(prose.conversation).toMatchObject({ status: 'active', aiPaused: false });
 
     // nothing that can be sent, twice, then nothing in the plain-text step either (journey retest R11-5) ⇒ FL-01 F-6
@@ -255,8 +256,8 @@ describe('FL-01 — reply turn', () => {
       expect((await turn(s, sender, { text })).outcome).toBe('sent');
       await resetAi();
     }
-    // the model copies the plain-text style of its past replies, then wraps its answer once reminded
-    fakeAi(app).script('reply', { text: 'La robe est à 4500 DA.' }, { reply: 'La robe est à 4500 DA.', intent: 'INFO' });
+    // the model answers in a broken shape, then wraps its answer once reminded (a plain sentence is sent as it is since 23/11)
+    fakeAi(app).script('reply', { text: '{"reply": "La robe est à 45' }, { reply: 'La robe est à 4500 DA.', intent: 'INFO' });
     const t = await turn(s, sender, { text: 'prix robe ?' });
     expect(t.outcome).toBe('sent');
     const [first, retry] = fakeAi(app).callsOf('reply');
@@ -265,7 +266,7 @@ describe('FL-01 — reply turn', () => {
     expect(retry!.messages).toHaveLength(11); // the last 8 + the batch + its answer + the reminder
     expect(retry!.messages.slice(0, 8)).toEqual(first!.messages.slice(4, 12));
     expect(String((retry!.messages[8] as { content: unknown }).content)).toContain('prix robe ?');
-    expect(retry!.messages[9]).toMatchObject({ role: 'assistant', content: 'La robe est à 4500 DA.' });
+    expect(retry!.messages[9]).toMatchObject({ role: 'assistant', content: '{"reply": "La robe est à 45' });
     expect(retry!.messages[10]).toMatchObject({ role: 'user', content: FORMAT_REMINDER });
     expect(retry!.tools).toBeUndefined();
     expect(t.out.at(-1)).toMatchObject({ author: 'ai', text: 'La robe est à 4\u00a0500\u00a0DA.' });
