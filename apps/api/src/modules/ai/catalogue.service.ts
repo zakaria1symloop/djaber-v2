@@ -26,6 +26,8 @@ export type CatalogueProduct = {
   imageUrl: string | null;
   /** storage key of the primary image (vision pass 2 reads the file) */
   imageKey: string | null;
+  /** storage keys of every approved picture, the primary first (client list L56: a customer photo is compared with all of them) */
+  imageKeys?: string[];
   category: string | null;
   also: { id: string; name: string; price: number; reason: string | null }[];
 };
@@ -142,6 +144,7 @@ export class CatalogueService {
         variants: p.hasVariants ? variants.map((v) => ({ id: v.id, name: v.name, price: v.price, stock: p.trackStock ? free(p.id, v.id, v.stock) : v.stock })) : [],
         imageUrl: image?.url ?? null,
         imageKey: image?.storageKey ?? null,
+        imageKeys: approvedImages(p, p.images).map((i) => i.storageKey).filter(Boolean),
         category: p.category?.name ?? null,
         also: also.get(p.id) ?? [],
       };

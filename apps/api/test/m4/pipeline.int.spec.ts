@@ -1,5 +1,7 @@
 // M4 — FL-01 steps 6–15 end to end: inbound webhook (fake Meta) → gates → batching → `ai-reply` job → AiRun with tool
 // replay → reply through the outbox → credits. AT ids from 13-acceptance-tests.md. The AI adapter is the scriptable fake.
+import { VISION_CANDIDATES } from '../../src/modules/ai/ai.constants';
+import { VisionService } from '../../src/modules/ai/vision.service';
 import { formatMoney, getMessages } from '@djaber/shared';
 import { RedisService } from '../../src/core/redis/redis.provider';
 import { ORDER_TOOLS, type OrderTools } from '../../src/modules/ai/tools/order-tools';
@@ -947,7 +949,32 @@ describe('providers, credits', () => {
     }
   });
 
+  afterEach(() => {
+    VisionService.onePassMax = VISION_CANDIDATES;
+  });
+
+  it('Houssem live 23/11 (photo 12–14 s, own photo not recognised): a small catalogue is matched in ONE call, against every picture of a product; the note says what the photo shows', async () => {
+    const s = await shop();
+    const first = await image(800, 800);
+    const second = await image(820, 820);
+    await upload(s.owner, app, `/products/${s.robe.id}/images`, 'file', [{ buffer: first, name: 'robe-1.jpg', type: 'image/jpeg' }]).expect(201);
+    await upload(s.owner, app, `/products/${s.robe.id}/images`, 'file', [{ buffer: second, name: 'robe-2.jpg', type: 'image/jpeg' }]).expect(201);
+    await s.owner.post(`/products/${s.robe.id}/submit-changes`, {}).expect(200);
+    await drain(app, s.owner.workspaceId);
+    const photo = { attachments: [{ type: 'image', payload: { url: 'https://fake.meta.local/photo-cliente.jpg' } }] };
+    await resetAi();
+    fakeAi(app).script('vision_match', { object: { productId: null, confidence: 0.1, alternatives: [], seen: 'a red toy car on a table', multipleProducts: false, quality: 'ok' } });
+    const t = await turn(s, newSender(), photo);
+    expect(fakeAi(app).callsOf('vision_describe')).toHaveLength(0);
+    const match = fakeAi(app).callsOf('vision_match');
+    expect(match).toHaveLength(1);
+    // the customer photo + both pictures of the robe
+    expect((match[0]!.messages[0] as any).content.filter((p: any) => p.type === 'image')).toHaveLength(3);
+    expect((fakeAi(app).callsOf('reply')[0]!.messages.at(-1) as any).content).toContain('photo shows: "a red toy car on a table"');
+    expect(t.runs[0]).toMatchObject({ status: 'ok', creditsCharged: 5 });
+  });
   it('AT-AI-08 / AT-BIL-03 photo of a catalogue product ⇒ 2-pass vision, match ≥ 0.7, card, 5 credits reserved then debited; unknown photo ⇒ confirmation question, no price; provider error ⇒ reservation released', async () => {
+    VisionService.onePassMax = 0; // the two-pass path (a catalogue too large for one call)
     const s = await shop();
     await upload(s.owner, app, `/products/${s.robe.id}/images`, 'file', [{ buffer: await image(800, 800), name: 'robe.jpg', type: 'image/jpeg' }]).expect(201);
     // the form's « Enregistrer » sends the new picture to moderation (approved at once here): only then is it shown / compared
@@ -1011,6 +1038,7 @@ describe('providers, credits', () => {
   });
 
   it('PV 28/10 « l\'agent IA ne reconnaît pas les photos »: an English description with no catalogue word still reaches the product pictures; the multilingual keywords find the product; a photo still downloading is waited for', async () => {
+    VisionService.onePassMax = 0; // the two-pass path (a catalogue too large for one call)
     const s = await shop();
     await upload(s.owner, app, `/products/${s.robe.id}/images`, 'file', [{ buffer: await image(800, 800), name: 'robe.jpg', type: 'image/jpeg' }]).expect(201);
     await s.owner.post(`/products/${s.robe.id}/submit-changes`, {}).expect(200);

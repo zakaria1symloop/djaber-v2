@@ -276,15 +276,22 @@ export class FakeAiGateway implements AiGateway {
         return { object: { category: '', colors: [], text: '', description: m ? d.replace(/\|(blurry|multiple)/g, '').trim() : `photo ${img ? hash6(img) : 'vide'}`, multipleProducts: /\|multiple/.test(d), quality: /\|blurry/.test(d) ? 'blurry' : 'ok' } };
       }
       case 'vision_match': {
-        const input = readInput<{ description?: string; candidates: { id: string; name: string }[] }>(req);
+        const input = readInput<{ description?: string; candidates: { id: string; name: string; photos?: number }[] }>(req);
         const imgs = imagesOf(req);
         const [photo, ...rest] = imgs;
         const candidates = input?.candidates ?? [];
-        // same bytes as a candidate's primary image ⇒ sure match; a candidate named in the description ⇒ likely match
+        // the candidates' pictures follow the customer photo, `photos` each (1 when not said): picture index → candidate
+        const owner = candidates.flatMap((c) => Array.from({ length: c.photos ?? 1 }, () => c));
+        // the one-pass call (no description): a `FAKE-IMAGE:` customer photo describes itself, as for vision_describe
+        const raw = photo ? photo.toString('utf8', 0, Math.min(photo.length, 400)) : '';
+        const self = (/^FAKE-IMAGE:(.*)$/s.exec(raw)?.[1] ?? '').trim();
+        const description = input?.description ?? self.replace(/\|(blurry|multiple)/g, '').trim();
+        // same bytes as one of a candidate's pictures ⇒ sure match; a candidate named in the description ⇒ likely match
         const same = photo ? rest.findIndex((b) => b.equals(photo)) : -1;
-        const named = candidates.find((c) => input?.description && input.description.toLowerCase().includes(c.name.toLowerCase()));
-        const hit = same >= 0 ? candidates[same] : named;
-        return { object: hit ? { productId: hit.id, confidence: same >= 0 ? 0.96 : 0.85, alternatives: candidates.filter((c) => c.id !== hit.id).slice(0, 2).map((c) => c.id) } : { productId: null, confidence: 0.2, alternatives: candidates.slice(0, 2).map((c) => c.id) } };
+        const named = candidates.find((c) => description && description.toLowerCase().includes(c.name.toLowerCase()));
+        const hit = same >= 0 ? owner[same] : named;
+        const extra = input?.description === undefined ? { seen: description || `photo ${photo ? hash6(photo) : 'vide'}`, multipleProducts: /\|multiple/.test(self), quality: /\|blurry/.test(self) ? 'blurry' : 'ok' } : {};
+        return { object: hit ? { productId: hit.id, confidence: same >= 0 ? 0.96 : 0.85, alternatives: candidates.filter((c) => c.id !== hit.id).slice(0, 2).map((c) => c.id), ...extra } : { productId: null, confidence: 0.2, alternatives: candidates.slice(0, 2).map((c) => c.id), ...extra } };
       }
       case 'caption': {
         const input = readInput<{ productName: string }>(req);

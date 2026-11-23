@@ -18,7 +18,18 @@ import { RoutingService } from './routing.service';
 import { parseJsonObject } from './structured-output';
 
 const DescribeSchema = z.object({ category: z.string().default(''), colors: z.array(z.string()).default([]), text: z.string().default(''), description: z.string().default(''), keywords: z.array(z.string()).default([]), multipleProducts: z.boolean().default(false), quality: z.enum(['ok', 'blurry']).default('ok') });
-const MatchSchema = z.object({ productId: z.string().nullable().default(null), confidence: z.number().min(0).max(1).default(0), alternatives: z.array(z.string()).default([]) });
+const MatchSchema = z.object({
+  productId: z.string().nullable().default(null),
+  confidence: z.number().min(0).max(1).default(0),
+  alternatives: z.array(z.string()).default([]),
+  // one-pass answers (small catalogues) also say what the customer photo shows
+  seen: z.string().default(''),
+  multipleProducts: z.boolean().default(false),
+  quality: z.enum(['ok', 'blurry']).catch('ok').default('ok'),
+});
+/** Pictures compared per candidate product, and in one call (client list L56 — a photo equal to a product's 2nd picture was not recognised). */
+export const VISION_PHOTOS_PER_PRODUCT = 3;
+export const VISION_PHOTOS_MAX = 12;
 const ProductSchema = z.object({ name: z.string().default(''), description: z.string().default(''), categoryName: z.string().nullable().default(null), unitName: z.string().nullable().default(null), attributes: z.array(z.object({ name: z.string(), values: z.array(z.string()) })).default([]) });
 
 /** The §3.8 note injected next to `[image]` in the customer turn. */
@@ -47,7 +58,12 @@ export const visionNoteText = (n: VisionNote): string =>
 // candidate, so the photo was never compared. `keywords` are the search words, in the three languages of the shops.
 const DESCRIBE =
   'Describe the product in this photo: category, colours, visible text/brand, shape. Reply as JSON { "category": string, "colors": string[], "text": string, "description": string, "keywords": string[], "multipleProducts": boolean, "quality": "ok"|"blurry" }. "keywords": 6 to 15 short search words for the product (its type, colour, material, brand), each given in French, then in Arabic, then in English — e.g. ["robe", "فستان", "dress", "satin", "ساتان", "bordeaux", "burgundy"].';
-const MATCH = 'The first image is a customer photo. The next images are candidate products of the shop, in the order of the candidates list. Which candidate is the product of the customer photo? Reply as JSON { "productId": string|null, "confidence": number 0-1, "alternatives": string[] }. Use null when none matches.';
+const MATCH =
+  'The first image is a customer photo. The next images are the photos of candidate products of the shop, in the order of the candidates list — each candidate gives how many photos it has (`photos`; 0 = no photo, judge it by its name). Which candidate is the product of the customer photo (the same article, also when the customer photo is another of its photos or another angle)? Reply as JSON { "productId": string|null, "confidence": number 0-1, "alternatives": string[] }. Use null when none matches.';
+// Houssem live 23/11 (H-07 15:12 / 15:17: 12.6 s and 13.8 s for a photo): a shop whose pictured products all fit in one call is asked once —
+// the match and what the photo shows together — instead of a describe call then a match call.
+const MATCH_ONE =
+  'The first image is a customer photo sent to a shop. The next images are the photos of the shop\'s products, in the order of the candidates list — each candidate gives how many photos it has (`photos`). Is the customer photo one of these products (the same article, also when it is another of its photos or another angle)? Reply as JSON { "productId": string|null, "confidence": number 0-1, "alternatives": string[], "seen": string, "multipleProducts": boolean, "quality": "ok"|"blurry" }. "seen": what the customer photo shows, in one short sentence. "multipleProducts": true when the customer photo shows several different articles and none is singled out. "alternatives": ids of the other candidates that look close. Use productId null when none matches.';
 const CAPTION = 'Caption this product image in one sentence for search: type, colour, material, notable text';
 const PRODUCT = 'You help a shop owner create a product from photos. Reply as JSON { "name": string, "description": string, "categoryName": string|null, "unitName": string|null, "attributes": [{ "name": string, "values": string[] }] }. Never give a price. Pick categoryName and unitName only from the lists provided.';
 
@@ -73,9 +89,27 @@ export class VisionService {
     return r.value.text;
   }
 
-  private async primaryImage(p: CatalogueProduct): Promise<Buffer | null> {
-    if (!p.imageKey) return null;
-    return this.storage.get(p.imageKey).then((f) => f.body, () => null);
+  /** The most pictured products a shop may have for the one-call match (tests of the two-pass path set it to 0). */
+  static onePassMax = VISION_CANDIDATES;
+
+  /** The pictures of the candidates, in order: up to `VISION_PHOTOS_PER_PRODUCT` each (the primary first), `VISION_PHOTOS_MAX` in all. */
+  private async photosOf(candidates: CatalogueProduct[]): Promise<{ c: CatalogueProduct; imgs: Buffer[] }[]> {
+    let left = VISION_PHOTOS_MAX;
+    // every candidate gets its primary picture first, then the other pictures while room is left
+    const keys = candidates.map((c) => (c.imageKeys?.length ? c.imageKeys : c.imageKey ? [c.imageKey] : []).slice(0, VISION_PHOTOS_PER_PRODUCT));
+    const take = keys.map(() => 0);
+    for (let round = 0; round < VISION_PHOTOS_PER_PRODUCT && left > 0; round++) for (let i = 0; i < keys.length && left > 0; i++) if (keys[i]!.length > round) (take[i]!++, left--);
+    return Promise.all(
+      candidates.map(async (c, i) => ({ c, imgs: (await Promise.all(keys[i]!.slice(0, take[i]).map((k) => this.storage.get(k).then((f) => f.body, () => null)))).filter((b): b is Buffer => !!b) })),
+    );
+  }
+
+  /** The verdict of a match answer: a match above the threshold, else unsure with the closest names (and what the photo shows). */
+  private verdict(m: z.output<typeof MatchSchema>, candidates: CatalogueProduct[], seen: string | undefined, usage: AiUsage): VisionResult {
+    const hit = m.productId ? candidates.find((c) => c.id === m.productId) : undefined;
+    const names = (ids: string[]) => ids.map((id) => candidates.find((c) => c.id === id)?.name).filter((x): x is string => !!x).slice(0, 3);
+    if (!hit || m.confidence < VISION_CONFIDENCE_MIN) return { note: { kind: 'unsure', candidates: names([...(hit ? [hit.id] : []), ...m.alternatives]), ...(seen ? { seen } : {}) }, matched: true, usage };
+    return { note: { kind: 'match', productId: hit.id, confidence: Math.round(m.confidence * 100) / 100, name: hit.name, alternatives: m.alternatives.filter((id) => candidates.some((c) => c.id === id)) }, matched: true, usage };
   }
 
   /**
@@ -86,6 +120,19 @@ export class VisionService {
     const usage: AiUsage = { inputTokens: 0, outputTokens: 0 };
     if (!image || !image.body.length || image.body.length > VISION_MAX_BYTES) return { note: { kind: 'unavailable' }, matched: false, usage };
     const photo: AiPart = { type: 'image', image: image.body, mime: image.mime };
+    // a small catalogue (every pictured product fits in one call): one call gives the match and what the photo shows
+    const pictured = await this.catalogue.withImages(agent, VISION_CANDIDATES + 1);
+    if (pictured.length && pictured.length <= VisionService.onePassMax) {
+      const shots = await this.photosOf(pictured);
+      const list = shots.map((x) => ({ id: x.c.id, name: x.c.name, photos: x.imgs.length }));
+      const parts: AiPart[] = [photo, ...shots.flatMap((x) => x.imgs.map((img): AiPart => ({ type: 'image', image: img, mime: 'image/webp' }))), { type: 'text', text: withInput(MATCH_ONE, { candidates: list }) }];
+      const one = parseJsonObject(await this.ask('vision_match', MATCH_ONE, parts, usage), MatchSchema);
+      const m = one.ok ? one.value : MatchSchema.parse({});
+      const seen = m.seen.trim().slice(0, 160) || undefined;
+      if (m.quality === 'blurry' && !m.productId) return { note: { kind: 'blurry' }, matched: false, usage };
+      if (m.multipleProducts && !m.productId) return { note: { kind: 'multiple', ...(seen ? { seen } : {}) }, matched: true, usage };
+      return this.verdict(m, pictured, seen, usage);
+    }
     // pass 1
     const described = parseJsonObject(await this.ask('vision_describe', DESCRIBE, [photo, { type: 'text', text: 'Describe the photo.' }], usage), DescribeSchema);
     const d = described.ok ? described.value : DescribeSchema.parse({});
@@ -101,15 +148,13 @@ export class VisionService {
     const candidates = [...found, ...(await this.catalogue.withImages(agent, VISION_CANDIDATES - found.length, found.map((c) => c.id)))];
     if (!candidates.length) return { note: { kind: 'unsure', candidates: [], ...(seen ? { seen } : {}) }, matched: false, usage };
     // pass 2
-    const withImages = (await Promise.all(candidates.map(async (c) => ({ c, img: await this.primaryImage(c) })))).filter((x): x is { c: CatalogueProduct; img: Buffer } => !!x.img);
-    const list = (withImages.length ? withImages.map((x) => x.c) : candidates).map((c) => ({ id: c.id, name: c.name }));
-    const parts: AiPart[] = [photo, ...withImages.map((x): AiPart => ({ type: 'image', image: x.img, mime: 'image/webp' })), { type: 'text', text: withInput(MATCH, { description: query, candidates: list }) }];
+    // client list L56: every candidate is compared with its pictures (up to 3 each), not its first one only
+    const shots = await this.photosOf(candidates);
+    const pictures = shots.filter((x) => x.imgs.length);
+    const list = (pictures.length ? pictures : shots).map((x) => ({ id: x.c.id, name: x.c.name, photos: x.imgs.length }));
+    const parts: AiPart[] = [photo, ...pictures.flatMap((x) => x.imgs.map((img): AiPart => ({ type: 'image', image: img, mime: 'image/webp' }))), { type: 'text', text: withInput(MATCH, { description: query, candidates: list }) }];
     const matched = parseJsonObject(await this.ask('vision_match', MATCH, parts, usage), MatchSchema);
-    const m = matched.ok ? matched.value : MatchSchema.parse({});
-    const hit = m.productId ? candidates.find((c) => c.id === m.productId) : undefined;
-    const names = (ids: string[]) => ids.map((id) => candidates.find((c) => c.id === id)?.name).filter((x): x is string => !!x).slice(0, 3);
-    if (!hit || m.confidence < VISION_CONFIDENCE_MIN) return { note: { kind: 'unsure', candidates: names([...(hit ? [hit.id] : []), ...m.alternatives]), ...(seen ? { seen } : {}) }, matched: true, usage };
-    return { note: { kind: 'match', productId: hit.id, confidence: Math.round(m.confidence * 100) / 100, name: hit.name, alternatives: m.alternatives.filter((id) => candidates.some((c) => c.id === id)) }, matched: true, usage };
+    return this.verdict(matched.ok ? matched.value : MatchSchema.parse({}), candidates, seen, usage);
   }
 
   // --- catalogue providers (M2 carry-over) -----------------------------------------------------------------------------------
