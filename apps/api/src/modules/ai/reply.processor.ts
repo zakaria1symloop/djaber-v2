@@ -40,6 +40,7 @@ import { handoffSystemLineShown } from './reply-fixes';
 import { AiProviderError } from './provider/ai.gateway';
 import { canonicalTool } from './tools/tool-registry';
 import { latestRecap, nextChosen, orderHistoryOf, placedThisTurn } from './tools/order-confirmation';
+import { orderRecapText, pendingRecap } from './tools/order-confirmation-text';
 import { TurnContextService } from './turn-context.service';
 import { VisionService, visionNoteText, type VisionNote } from './vision.service';
 
@@ -397,7 +398,15 @@ export class ReplyProcessor implements OnModuleInit {
       status = 'handoff';
       reason = 'blocked_word';
     }
-    const replyText = blocked ? '' : out.reply.trim();
+    // Houssem live 23/11 (H-07 13:14 / 13:16): the customer wrote again before answering a recap; create_order held the order
+    // (CONFIRMATION_REQUIRED) and the model's reply came out empty — nothing was sent and the customer re-typed twice. A turn never
+    // ends in silence while a recap waits: the recap goes again, with its request to answer « oui »
+    const silentRecap = !blocked && !out.reply.trim() && !cards.length && out.status !== 'HANDOFF' && !turn.forcedHandoff
+      ? pendingRecap(turn.tools.map((t) => (t.name === 'create_order' && t.result && typeof t.result === 'object' ? { name: t.name, result: { ...(t.result as object), recapToShow: true } } : { name: t.name, result: t.result })))
+      : null;
+    if (silentRecap) this.log.warn({ runId: run.id }, 'empty reply while a recap waits: the recap is sent again');
+    else if (!blocked && !out.reply.trim() && !cards.length && out.status !== 'HANDOFF' && !turn.forcedHandoff) this.log.warn({ runId: run.id }, 'empty reply: nothing sent');
+    const replyText = blocked ? '' : silentRecap ? orderRecapText(silentRecap, o.lang) : out.reply.trim();
 
     return prisma.$transaction(async (db): Promise<ReplyOutcome> => {
       const tx = db as Tx;

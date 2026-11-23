@@ -417,6 +417,21 @@ describe('tools', () => {
     create.mockRestore();
   });
 
+  it('Houssem live 23/11: the customer writes again before answering the recap and the model answers nothing ⇒ the recap goes again, never silence', async () => {
+    const s = await shop();
+    await feeRule(s.owner.workspaceId, 16, 400, 300);
+    const call = { name: 'create_order', args: { clientName: 'Amine Benali', clientPhone: '0555123456', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'Cité des 200 logements, Alger', items: [{ productId: s.robe.id, quantity: 1 }], customerConfirmed: true } };
+    const sender = newSender();
+    fakeAi(app).script('reply', { toolCalls: [call] }, { reply: 'Voici le récapitulatif :', intent: 'SALE' });
+    await turn(s, sender, { text: 'Amine Benali, 0555123456, Bab Ezzouar, Cité des 200 logements' });
+    await resetAi();
+    // the same details again: create_order holds the order (CONFIRMATION_REQUIRED) and the model writes nothing
+    fakeAi(app).script('reply', { toolCalls: [{ ...call, id: 'call_b', args: { ...call.args, customerConfirmed: false } }] }, { reply: '', intent: 'SALE' }, { reply: '', intent: 'SALE' }, { reply: '', intent: 'SALE' });
+    const t = await turn(s, sender, { text: 'lancé la commande' });
+    const texts = t.out.filter((m) => m.author === 'ai' && m.type === 'text').map((m) => m.text ?? '');
+    expect(texts.at(-1)).toContain('Robe satin bordeaux');
+  });
+
   it('AT-AI-05 the job crashes after `create_order` ran, before the send ⇒ the retry replays the stored tool result: the tool runs once, one reply, one debit', async () => {
     const s = await shop();
     await feeRule(s.owner.workspaceId, 16, 400, 300);
