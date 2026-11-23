@@ -148,6 +148,32 @@ describe('"Agents qui le vendent" (GET /agents?productId=)', () => {
     const foreign = await createProduct(other);
     expect((await owner.get(`/agents?productId=${foreign.id}`).expect(404)).body.error.code).toBe('NOT_FOUND');
   });
+
+  it('client list L60 / L69 (Boutique de Lalla 22/11): a product added one by one to a category agent is sold by it; « Utilisé par un agent » reads the real scope', async () => {
+    const owner = await asOwner(app);
+    const robes = (await owner.post('/categories', { name: 'Robes' }).expect(201)).body.data;
+    const sacs = (await owner.post('/categories', { name: 'Sacs' }).expect(201)).body.data;
+    const robe = await createProduct(owner, { name: 'Robe lin', categoryId: robes.id });
+    const sac = await createProduct(owner, { name: 'Sac paille', categoryId: sacs.id });
+    const free = await createProduct(owner, { name: 'Bougie' });
+    const cat = await linkedAgent(owner.workspaceId, [], { name: 'Robes', catalogScope: 'categories', scopeCategoryIds: [robes.id] } as never);
+    const ids = async (q: string) => ((await owner.get(`/products?${q}&pageSize=50`).expect(200)).body.data as any[]).map((p) => p.name).sort();
+    // before: the category agent sells the dress only; the other two are « sans agent »
+    expect(await ids(`agentId=${cat.id}`)).toEqual(['Robe lin']);
+    expect(await ids('noAgent=1')).toEqual(['Bougie', 'Sac paille']);
+    // « Ajouter à un agent » on the bag: it is now sold by the category agent too (it did nothing before)
+    expect((await owner.post('/products/bulk/agent', { ids: [sac.id], agentId: cat.id }).expect(200)).body.meta).toMatchObject({ ok: 1, failed: 0 });
+    expect(await ids(`agentId=${cat.id}`)).toEqual(['Robe lin', 'Sac paille']);
+    expect(await ids('noAgent=1')).toEqual(['Bougie']);
+    expect(((await owner.get(`/agents?productId=${sac.id}`).expect(200)).body.data as any[]).map((a) => a.name)).toEqual(['Robes']);
+    expect((await owner.get(`/products/${sac.id}`).expect(200)).body.data.agents.map((a: any) => a.name)).toEqual(['Robes']);
+    // a whole-catalogue agent sells everything: nothing is « sans agent », and it lists every product
+    const all = await linkedAgent(owner.workspaceId, [], { name: 'Tout' } as never);
+    expect(await ids(`agentId=${all.id}`)).toEqual(['Bougie', 'Robe lin', 'Sac paille']);
+    expect(await ids('noAgent=1')).toEqual([]);
+    expect(free.id).toBeTruthy();
+    expect(robe.id).toBeTruthy();
+  });
 });
 
 describe('inbox ?agentId= (M5 row)', () => {

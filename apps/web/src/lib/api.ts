@@ -43,6 +43,7 @@ const listeners = new Set<(event: ApiEvent) => void>();
 export const apiSession = {
   set(patch: Partial<Session>) {
     Object.assign(session, patch);
+    if (patch.accessToken) refreshAhead(patch.accessToken);
   },
   get: () => session,
   on(fn: (event: ApiEvent) => void) {
@@ -102,6 +103,7 @@ export const refreshSession = (): Promise<boolean> => {
       const json = (await r.json()) as Envelope<{ accessToken: string }>;
       if (!json?.data?.accessToken) return false;
       session.accessToken = json.data.accessToken;
+      refreshAhead(json.data.accessToken);
       return true;
     })
     .catch(() => {
@@ -113,6 +115,40 @@ export const refreshSession = (): Promise<boolean> => {
     });
   return refreshing;
 };
+/**
+ * client list L03 (Boutique de Lalla 22/11, « Session expirée » every 5–15 min): the access token (15 min) was only renewed after a
+ * 401, and any failed renewal — a network blip, an API restart, a 429 — logged the merchant out. Now the token is renewed one
+ * minute before it ends (and when the tab comes back to the front), and only a refusal of the refresh cookie ends the session.
+ */
+let aheadTimer: ReturnType<typeof setTimeout> | null = null;
+const tokenExpiry = (token: string): number | null => {
+  try {
+    const part = token.split('.')[1];
+    if (!part) return null;
+    const json = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '='))) as { exp?: number };
+    return typeof json.exp === 'number' ? json.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+};
+const refreshAhead = (token: string) => {
+  if (typeof window === 'undefined') return;
+  const exp = tokenExpiry(token);
+  if (aheadTimer) clearTimeout(aheadTimer);
+  aheadTimer = null;
+  if (!exp) return;
+  aheadTimer = setTimeout(() => {
+    if (session.accessToken === token) void refreshSession();
+  }, Math.max(5_000, exp - Date.now() - 60_000));
+};
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !session.accessToken) return;
+    const exp = tokenExpiry(session.accessToken);
+    if (exp && exp - Date.now() < 90_000) void refreshSession();
+  });
+}
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** HTTP status of the last refresh (0 = network failure): only a refusal (401) means « no session in this browser ». */
 let lastRefreshStatus = 0;
 export const refreshRefused = () => lastRefreshStatus === 204 || lastRefreshStatus === 401 || lastRefreshStatus === 403;
@@ -176,8 +212,14 @@ export async function apiRaw<T>(path: string, o: RequestOptions = {}): Promise<E
   if (res.status === 401 && impersonating) impersonation.markExpired();
   else if (res.status === 401 && !o.noRefresh) {
     if (await refreshSession()) return apiRaw<T>(path, { ...o, noRefresh: true });
-    // only a session that existed can expire (anonymous 401s are handled by the caller)
-    if (session.accessToken) {
+    // client list L03: a refresh that failed without being refused (network, 5xx, 429) is tried again before anything ends
+    for (const wait of [1_500, 4_000]) {
+      if (refreshRefused() || !session.accessToken) break;
+      await pause(wait);
+      if (await refreshSession()) return apiRaw<T>(path, { ...o, noRefresh: true });
+    }
+    // only a session that existed can expire (anonymous 401s are handled by the caller), and only when the refresh is refused
+    if (session.accessToken && refreshRefused()) {
       session.accessToken = null;
       emit('session-expired');
     }

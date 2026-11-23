@@ -17,6 +17,7 @@ import { RedisService } from '../../core/redis/redis.provider';
 import { algiersDay } from '../../core/time/algiers';
 import { AI_GATEWAY, AiProviderError, withInput, type AiGateway, type AiPart } from '../ai/provider/ai.gateway';
 import { RoutingService } from '../ai/routing.service';
+import { VISION_MAX_TOKENS } from '../ai/vision.service';
 import { parseJsonObject } from '../ai/structured-output';
 import { fold } from '../ai/tools/wilaya-aliases';
 import { I18nService } from '../../core/i18n/i18n.service';
@@ -136,6 +137,18 @@ export class PageService implements OnModuleInit {
     const c = await db.channel.findFirst({ where: { id, status: { not: 'disconnected' } }, include: { parent: true, agentChannels: { include: { agent: { select: { id: true, name: true, status: true, deletedAt: true } } } } } });
     if (!c) throw notFound();
     return c;
+  }
+
+  /** One post of a page analysis: an answer the model wrote but that cannot be read skips the post (null); a provider failure stops the run. */
+  private async askPost(parts: AiPart[]): Promise<z.output<typeof PostSchema> | null> {
+    try {
+      const r = await this.routing.call('vision', (m, timeoutMs) => this.ai.generate({ model: m.ref, purpose: 'page_post', system: POST_PROMPT, messages: [{ role: 'user', content: parts }], temperature: 0.2, maxTokens: VISION_MAX_TOKENS, timeoutMs: Math.max(timeoutMs, 30_000) }));
+      const parsed = parseJsonObject(r.value.text, PostSchema);
+      return parsed.ok ? parsed.value : null;
+    } catch (e) {
+      if (e instanceof AiProviderError) throw new AppException('AI_PROVIDER_ERROR');
+      throw e;
+    }
   }
 
   private async ask<S extends z.ZodTypeAny>(capability: 'text' | 'vision', purpose: 'agent_generation' | 'faq_extract' | 'page_post', system: string, content: string | AiPart[], schema: S, maxTokens = 1500): Promise<z.output<S>> {
@@ -417,7 +430,10 @@ export class PageService implements OnModuleInit {
             if (!post.imageUrl) continue; // FL-15: only posts with a picture are candidates
             const image = await this.meta.download(post.imageUrl).catch(() => null);
             const parts: AiPart[] = [...(image ? [{ type: 'image' as const, image: image.body, mime: image.mime }] : []), { type: 'text', text: withInput('Analyse this post.', { caption: post.text }) }];
-            const p = await this.ask('vision', 'page_post', POST_PROMPT, parts, PostSchema, 400);
+            // client list L82 (Boutique de Lalla 22/11): 400 tokens left no room for the model's thinking (no JSON → AI_PROVIDER_ERROR),
+            // and one unreadable post stopped the whole analysis: a post the model cannot read is skipped, a provider outage still stops
+            const p = await this.askPost(parts);
+            if (!p) continue;
             if (!p.isProduct || !p.name.trim()) continue;
             const key = fold(p.name);
             // the same product posted twice appears once

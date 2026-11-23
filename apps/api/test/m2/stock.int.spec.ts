@@ -129,6 +129,13 @@ describe('POST /stock/adjustments', () => {
     const forced = await adjust(owner, { productId: p.id, type: 'out', quantity: 4, reason: 'loss', force: true }).expect(201);
     expect(forced.body.data).toMatchObject({ before: 3, after: -1 });
     expect((await owner.get(`/products/${p.id}`).expect(200)).body.data).toMatchObject({ stock: -1, stockState: 'out' });
+    // client list L75 (Boutique de Lalla 22/11): a stock below 0 can be refilled — an entry or a « définir » that raises it is not refused
+    const back = await adjust(owner, { productId: p.id, type: 'out', quantity: 10, reason: 'loss', force: true }).expect(201);
+    expect(back.body.data).toMatchObject({ before: -1, after: -11 });
+    expect((await adjust(owner, { productId: p.id, type: 'in', quantity: 5, reason: 'correction' }).expect(201)).body.data).toMatchObject({ before: -11, after: -6 });
+    await adjust(owner, { productId: p.id, type: 'out', quantity: 4, reason: 'loss', force: true }).expect(201); // -10
+    expect((await adjust(owner, { productId: p.id, type: 'set', quantity: 2, reason: 'inventory' }).expect(201)).body.data).toMatchObject({ before: -10, after: 2 });
+    expect((await adjust(owner, { productId: p.id, type: 'out', quantity: 3, reason: 'loss' }).expect(422)).body.error.code).toBe('STOCK_INSUFFICIENT');
     expect((await adjust(owner, { productId: '018f0000-0000-7000-8000-000000000000', type: 'in', quantity: 1, reason: 'other' }).expect(404)).body.error.code).toBe('NOT_FOUND');
     const audit = await eventually(() => db.auditLog.findFirst({ where: { workspaceId: owner.workspaceId, action: 'stock.adjust', entityId: out.body.data.id } }));
     expect(audit).toMatchObject({ entity: 'StockMovement', actorId: owner.userId });

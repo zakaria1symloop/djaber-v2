@@ -31,7 +31,7 @@ import { ModerationHookService } from '../catalog/moderation-hook.service';
 import { ModerationPrescreenService } from '../catalog/moderation-prescreen.service';
 import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
-import { CatalogueService } from '../ai/catalogue.service';
+import { agentProductScope, agentsSellingWhere, CatalogueService } from '../ai/catalogue.service';
 import { InsightService } from '../ai/insight.service';
 import { RoutingService } from '../ai/routing.service';
 import { channelRef } from '../channels/channel.service';
@@ -283,11 +283,7 @@ export class AgentService implements OnModuleInit {
       if (!p) throw notFound();
       // AT-CAT-07: an archived product is out of every agent's selection (whole catalogue and category scopes included)
       and.push({
-        OR: p.deletedAt ? [{ id: { in: [] } }] : [
-          { sellAllProducts: false, products: { some: { productId: p.id } } },
-          { sellAllProducts: true, catalogScope: 'all' },
-          ...(p.categoryId ? [{ sellAllProducts: true, catalogScope: 'categories' as const, scopeCategoryIds: { has: p.categoryId } }] : []),
-        ],
+        OR: p.deletedAt ? [{ id: { in: [] } }] : agentsSellingWhere(p),
       });
     }
     const sort = q.sort ?? '-lastActiveAt';
@@ -774,7 +770,7 @@ export class AgentService implements OnModuleInit {
     const t = TenantContext.get();
     const scope = this.catalogue.scopeWhere(a);
     // full-test 15/11 AI-CHAT-17: the products the agent would sell (its own scope: list, categories or all) — not the whole shop's
-    const own = { deletedAt: null, isActive: true, ...(!a.sellAllProducts ? { agentProducts: { some: { agentId: id } } } : a.catalogScope === 'categories' ? { categoryId: { in: a.scopeCategoryIds } } : {}) };
+    const own: Prisma.ProductWhereInput = { deletedAt: null, isActive: true, AND: [agentProductScope(a)] };
     const [products, withoutPhoto, fees, pendingModeration, balance, user] = await Promise.all([
       prisma.product.count({ where: scope }),
       // journey 16/11 J04-1: the products waiting for Djaber count too (9 products without a photo showed « Produits sans photo · 0 »)

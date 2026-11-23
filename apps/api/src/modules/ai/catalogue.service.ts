@@ -76,12 +76,28 @@ const like = (q: string) => `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 /** journey retest R18-3: words of no weight in a catalogue search (French, English, arabizi, Arabic script). */
 const SEARCH_STOPWORDS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'un', 'une', 'en', 'et', 'au', 'aux', 'pour', 'avec', 'sur', 'dans', 'par', 'ou', 'the', 'of', 'and', 'for', 'with', 'an', 'in', 'on', 'or', 'ta3', 'في', 'من', 'على', 'مع']);
+/**
+ * The products an agent sells, before visibility: its own list; its categories PLUS the products added to it one by one (client
+ * list L69, Boutique de Lalla 22/11: « Ajouter à un agent » on a product outside the agent's categories did nothing); or everything.
+ */
+export const agentProductScope = (agent: AgentScope): Prisma.ProductWhereInput =>
+  !agent.sellAllProducts
+    ? { agentProducts: { some: { agentId: agent.id } } }
+    : agent.catalogScope === 'categories'
+      ? { OR: [{ categoryId: { in: agent.scopeCategoryIds } }, { agentProducts: { some: { agentId: agent.id } } }] }
+      : {};
+/** The same scope read the other way round: the agents that sell a product (`GET /agents?productId=`, the product page). */
+export const agentsSellingWhere = (p: { id: string; categoryId: string | null }): Prisma.AgentWhereInput[] => [
+  { sellAllProducts: false, products: { some: { productId: p.id } } },
+  { sellAllProducts: true, catalogScope: 'all' },
+  { sellAllProducts: true, catalogScope: 'categories', products: { some: { productId: p.id } } },
+  ...(p.categoryId ? [{ sellAllProducts: true, catalogScope: 'categories' as const, scopeCategoryIds: { has: p.categoryId } }] : []),
+];
+
 @Injectable()
 export class CatalogueService {
   scopeWhere(agent: AgentScope): Prisma.ProductWhereInput {
-    if (!agent.sellAllProducts) return { ...VISIBLE, agentProducts: { some: { agentId: agent.id } } };
-    if (agent.catalogScope === 'categories') return { ...VISIBLE, categoryId: { in: agent.scopeCategoryIds } };
-    return VISIBLE;
+    return { AND: [VISIBLE, agentProductScope(agent)] };
   }
 
   count(agent: AgentScope) {
@@ -90,8 +106,7 @@ export class CatalogueService {
 
   /** journey 16/11 J04-1: the agent's active products that wait for their first moderation decision (never shown yet). */
   awaitingReview(agent: AgentScope) {
-    const scope: Prisma.ProductWhereInput = !agent.sellAllProducts ? { agentProducts: { some: { agentId: agent.id } } } : agent.catalogScope === 'categories' ? { categoryId: { in: agent.scopeCategoryIds } } : {};
-    return prisma.product.count({ where: { ...scope, isActive: true, deletedAt: null, moderationStatus: 'pending', approvedSnapshot: { equals: Prisma.AnyNull } } });
+    return prisma.product.count({ where: { AND: [agentProductScope(agent)], isActive: true, deletedAt: null, moderationStatus: 'pending', approvedSnapshot: { equals: Prisma.AnyNull } } });
   }
 
   private async present(rows: Row[], withAlso: boolean, agent?: AgentScope): Promise<CatalogueProduct[]> {
@@ -235,7 +250,11 @@ export class CatalogueService {
     if (!words.length) return [];
     const scope: Prisma.Sql[] = [Prisma.sql`p."isActive" = true`, Prisma.sql`p."deletedAt" IS NULL`, Prisma.sql`(p."moderationStatus" IN ('approved','not_required') OR (p."moderationStatus" = 'pending' AND p."approvedSnapshot" IS NOT NULL))`];
     if (!agent.sellAllProducts) scope.push(Prisma.sql`EXISTS (SELECT 1 FROM "AgentProduct" ap WHERE ap."productId" = p."id" AND ap."agentId" = ${agent.id}::uuid)`);
-    else if (agent.catalogScope === 'categories') scope.push(agent.scopeCategoryIds.length ? Prisma.sql`p."categoryId" IN (${Prisma.join(agent.scopeCategoryIds.map((c) => Prisma.sql`${c}::uuid`))})` : Prisma.sql`false`);
+    else if (agent.catalogScope === 'categories') {
+      // client list L69: the products added one by one count with the agent's categories
+      const linked = Prisma.sql`EXISTS (SELECT 1 FROM "AgentProduct" ap WHERE ap."productId" = p."id" AND ap."agentId" = ${agent.id}::uuid)`;
+      scope.push(agent.scopeCategoryIds.length ? Prisma.sql`(p."categoryId" IN (${Prisma.join(agent.scopeCategoryIds.map((c) => Prisma.sql`${c}::uuid`))}) OR ${linked})` : linked);
+    }
     const hay = Prisma.sql`f_unaccent(p."name" || ' ' || coalesce(p."sku", '') || ' ' || array_to_string(p."keywords", ' ') || ' ' || coalesce(c."name", ''))`;
     const score = Prisma.join(
       [

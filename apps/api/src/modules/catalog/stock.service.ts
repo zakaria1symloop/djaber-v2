@@ -125,7 +125,9 @@ export class StockService implements OnModuleInit {
     }
     // a product sold at zero stock (PV 22/10) goes below 0 for an order (backorder); every other movement keeps the rule
     const backorder = product.sellOutOfStock && input.refType === 'order';
-    if (after < 0 && !input.allowNegative && !backorder) throw input.insufficient?.(before, { name: variant ? `${product.name} · ${variant.name}` : product.name }) ?? new AppException('STOCK_INSUFFICIENT', { available: before }, { quantity: 'validation.quantity' });
+    // client list L75 (Boutique de Lalla 22/11): a stock already below 0 (orders sold at zero stock) must be refillable — only a move
+    // that LOWERS the stock is refused below 0; an entry from -15 to -5 or a « définir » that raises it goes through
+    if (after < 0 && delta < 0 && !input.allowNegative && !backorder) throw input.insufficient?.(before, { name: variant ? `${product.name} · ${variant.name}` : product.name }) ?? new AppException('STOCK_INSUFFICIENT', { available: before }, { quantity: 'validation.quantity' });
 
     let productStock = after;
     if (variant) {

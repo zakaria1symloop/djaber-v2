@@ -82,8 +82,14 @@ export const productWhere = (q: Partial<ProductsQuery>): Prisma.Sql => {
   if (q.minMargin !== undefined) and.push(Prisma.sql`(p."costPrice" IS NOT NULL AND ${margin} >= ${q.minMargin})`);
   if (q.maxMargin !== undefined) and.push(Prisma.sql`(p."costPrice" IS NOT NULL AND ${margin} <= ${q.maxMargin})`);
 
-  if (q.agentId?.length) and.push(Prisma.sql`EXISTS (SELECT 1 FROM "AgentProduct" ap WHERE ap."productId" = p."id" AND ap."agentId" = ANY(${q.agentId}::uuid[]))`);
-  if (q.noAgent) and.push(Prisma.sql`NOT EXISTS (SELECT 1 FROM "AgentProduct" ap WHERE ap."productId" = p."id")`);
+  // client list L60 (Boutique de Lalla 22/11): « Utilisé par un agent » was empty — it only read the one-by-one links, while most
+  // agents sell the whole catalogue or some categories. Same scope as `agentProductScope` (an archived product is sold by none).
+  const sellingAgent = Prisma.sql`SELECT 1 FROM "Agent" a WHERE a."workspaceId" = p."workspaceId" AND a."deletedAt" IS NULL AND p."deletedAt" IS NULL AND (
+    (a."sellAllProducts" AND a."catalogScope"::text = 'all')
+    OR (a."sellAllProducts" AND a."catalogScope"::text = 'categories' AND p."categoryId"::text = ANY(a."scopeCategoryIds"))
+    OR EXISTS (SELECT 1 FROM "AgentProduct" ap WHERE ap."productId" = p."id" AND ap."agentId" = a."id" AND (NOT a."sellAllProducts" OR a."catalogScope"::text = 'categories')))`;
+  if (q.agentId?.length) and.push(Prisma.sql`EXISTS (${sellingAgent} AND a."id" = ANY(${q.agentId}::uuid[]))`);
+  if (q.noAgent) and.push(Prisma.sql`NOT EXISTS (${sellingAgent})`);
   // same set as the supplier sheet's `productCount` (purchases of any status but cancelled)
   if (q.supplierId) and.push(Prisma.sql`EXISTS (SELECT 1 FROM "PurchaseItem" pi JOIN "Purchase" pu ON pu."id" = pi."purchaseId" WHERE pi."productId" = p."id" AND pu."workspaceId" = ${ws}::uuid AND pu."supplierId" = ${q.supplierId}::uuid AND (pu."status" <> 'cancelled' OR pi."receivedQty" > 0))`);
   if (q.moderationStatus?.length) and.push(Prisma.sql`p."moderationStatus"::text = ANY(${q.moderationStatus}::text[])`);

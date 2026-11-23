@@ -133,7 +133,7 @@ export function ImageTileGrid({
                     <ProgressBar value={tile.status === 'uploading' ? (tile.progress ?? null) : null} label={labels.sending} />
                   </div>
                 ) : (
-                  <div className="absolute inset-x-1 bottom-1 flex justify-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                  <div className="absolute inset-x-1 bottom-1 flex justify-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
                     {tile.status === 'error' && onRetry && tile.retryable !== false ? (
                       <button type="button" className={action} aria-label={labels.retry} title={labels.retry} onClick={() => onRetry(tile.id)}>
                         <RotateCw className="size-3.5" aria-hidden />

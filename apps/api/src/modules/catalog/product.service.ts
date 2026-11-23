@@ -24,6 +24,7 @@ import { findProductIds } from './product.query';
 import { SkuService } from './sku.service';
 import { StockService, reservedQuantities } from './stock.service';
 import { VariantService } from './variant.service';
+import { agentsSellingWhere } from '../ai/catalogue.service';
 
 const DAY_MS = 24 * 3600 * 1000;
 /** MOD-01: a restored product is re-submitted when its last validation is older than 90 days. */
@@ -464,11 +465,7 @@ export class ProductService implements OnModuleInit {
     // selection — no whole-catalogue / category agent sells it either
     const selling: Prisma.AgentWhereInput = {
       deletedAt: null,
-      OR: [
-        { sellAllProducts: false, products: { some: { productId: id } } },
-        { sellAllProducts: true, catalogScope: 'all' },
-        ...(p.categoryId ? [{ sellAllProducts: true, catalogScope: 'categories' as const, scopeCategoryIds: { has: p.categoryId } }] : []),
-      ],
+      OR: agentsSellingWhere(p),
     };
     const [orderCount, orderItems, movementCount, movements, agents, recoCount, recos] = await Promise.all([
       prisma.order.count({ where: { items: { some: { productId: id } } } }),

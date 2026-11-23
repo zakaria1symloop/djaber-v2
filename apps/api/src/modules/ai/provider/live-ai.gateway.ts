@@ -130,7 +130,7 @@ const withoutTemperature = (init?: RequestInit): RequestInit | undefined => {
  * extraction…) keep the model's default. The SDK in use (ai 4 / @ai-sdk/anthropic 1) has no setting for it: the request body is
  * completed here. Claude 4.x models reject `effort`: only the 5 generation gets it.
  */
-const LOW_EFFORT_PURPOSES: ReadonlySet<AiPurpose> = new Set(['reply', 'vision_describe', 'vision_match', 'caption']);
+const LOW_EFFORT_PURPOSES: ReadonlySet<AiPurpose> = new Set(['reply', 'vision_describe', 'vision_match', 'caption', 'page_post']);
 export const anthropicEffort = (modelId: string, purpose: AiPurpose): 'low' | null =>
   LOW_EFFORT_PURPOSES.has(purpose) && /^claude-(haiku|sonnet|opus|fable|mythos)-5(\b|[-.])/.test(modelId) ? 'low' : null;
 const withEffort = (init: RequestInit | undefined, effort: string): RequestInit | undefined => {

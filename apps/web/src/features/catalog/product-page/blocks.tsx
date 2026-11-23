@@ -110,6 +110,12 @@ export function GalleryBlock({ product, canEdit }: { product: Pick<Product, 'id'
                     </span>
                   ) : null}
                 </button>
+                {/* client list L19 (Boutique de Lalla 22/11): the main photo could only be changed from « Modifier », on mouse hover */}
+                {canEdit && !img.isPrimary && !sending ? (
+                  <button type="button" className={cn(linkClass, 'mt-1 block w-[108px] truncate text-center text-[12px]')} onClick={() => editor.makePrimary(img.id)} data-testid="gallery-make-primary">
+                    {t('products.form.images.makePrimary')}
+                  </button>
+                ) : null}
               </li>
             );
           })}
