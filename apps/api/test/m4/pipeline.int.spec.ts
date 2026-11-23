@@ -432,6 +432,24 @@ describe('tools', () => {
     expect(texts.at(-1)).toContain('Robe satin bordeaux');
   });
 
+  it('Houssem live 23/11: a recap shown earlier is sent again when the customer asks for it after another exchange (it was only described « au-dessus »)', async () => {
+    const s = await shop();
+    await feeRule(s.owner.workspaceId, 16, 400, 300);
+    const call = { name: 'create_order', args: { clientName: 'Amine Benali', clientPhone: '0555123456', wilayaId: 16, communeName: 'Bab Ezzouar', address: 'Cité des 200 logements, Alger', items: [{ productId: s.robe.id, quantity: 1 }], customerConfirmed: true } };
+    const sender = newSender();
+    fakeAi(app).script('reply', { toolCalls: [call] }, { reply: 'Voici le récapitulatif :', intent: 'SALE' });
+    await turn(s, sender, { text: 'Amine Benali, 0555123456, Bab Ezzouar, Cité des 200 logements' });
+    await resetAi();
+    fakeAi(app).script('reply', { reply: 'Le paiement se fait à la livraison.', intent: 'INFO' });
+    await turn(s, sender, { text: 'je paie comment ?' });
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [{ ...call, id: 'call_c', args: { ...call.args, customerConfirmed: false } }] }, { reply: 'Le voici.', intent: 'SALE' }, { reply: 'Le voici.', intent: 'SALE' });
+    const t = await turn(s, sender, { text: 'donne moi le recap avant de passer la commande' });
+    const last = t.out.filter((m) => m.author === 'ai' && m.type === 'text').at(-1)?.text ?? '';
+    expect(last).toContain('Robe satin bordeaux');
+    expect(last).toMatch(/oui/);
+  });
+
   it('AT-AI-05 the job crashes after `create_order` ran, before the send ⇒ the retry replays the stored tool result: the tool runs once, one reply, one debit', async () => {
     const s = await shop();
     await feeRule(s.owner.workspaceId, 16, 400, 300);

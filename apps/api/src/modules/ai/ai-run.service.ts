@@ -903,7 +903,9 @@ export class AiRunService implements OnModuleInit {
     // server-side, whatever the model does on this turn (N5 T3 « oui » to the substitute's recap ⇒ « … confirmez-vous la commande du Coffret
     // … ? Si oui, je vous envoie le récapitulatif officiel », no create_order): its stored arguments (null when the message is no such yes)
     const lastAi = [...req.prompt.messages].reverse().find((m) => m.role === 'assistant');
-    const yesOrder = recapYesArgs(req.toolCtx.orderHistory, said, serverRecapAsked(typeof lastAi?.content === 'string' ? lastAi.content : null));
+    const recapShownLast = serverRecapAsked(typeof lastAi?.content === 'string' ? lastAi.content : null);
+    req.toolCtx.recapShownLast = recapShownLast;
+    const yesOrder = recapYesArgs(req.toolCtx.orderHistory, said, recapShownLast);
     // journey retest R16-3 (18/11): every order field is known — the message gives the order's details (or changes a recap that waits):
     // create_order computes the fee and checks the stock (N14 T1 / N1 T2 quoted and checked before the recap call)
     // journey retest R17-2 (18/11): not when the product the customer takes is out of stock — N5 T2 « Bon finalement je le prends » after

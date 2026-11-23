@@ -42,6 +42,8 @@ export type ToolRunContext = {
   ordering?: boolean;
   /** journey retest R4-1: the server reasons the earlier tool results of this turn established (handoff-judge `establishedReasons`) */
   established?: string[];
+  /** Houssem live 23/11: the AI's last message was the server recap (its request to answer yes) — else a recap that waits is shown again */
+  recapShownLast?: boolean;
 };
 
 /** journey 16/11 J04-7: an FAQ suggestion that carries a customer's phone, address or « Cliente X » (a note about one customer). */
@@ -1034,6 +1036,11 @@ export class ToolRegistry {
     }
     const said = confirmation(ctx.customerText ?? '');
     if (said === 'no') return fail({ ok: false, error: { code: 'CONFIRMATION_REFUSED', draft, core }, say: 'The customer did not confirm this recap: nothing is ordered. Ask what they want to change (or whether they still want to order).' });
+    // Houssem live 23/11 (H-07 13:21–13:24): the recap shown a few messages earlier was never shown again — « donne moi le recap » got
+    // « le récapitulatif juste au-dessus » then « il arrive juste après », and nothing came. When the AI's last message is not that recap,
+    // the platform sends it again
+    if (said === 'unclear' && ctx.recapShownLast === false)
+      return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft, core }, recap, recapToShow: true, draftOrder, say: 'Nothing is ordered yet. The platform sends this recap to the customer again right after your reply, with the request to answer yes: write no recap of your own — "reply" only answers anything else the customer asked in this message, in one short sentence, or stays empty. Do not call create_order again in this turn.' });
     if (said === 'unclear') return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft, core }, recap, draftOrder, say: 'The customer has not clearly confirmed this recap yet: nothing is ordered. Answer their message, then ask them to reply « oui » to confirm the order (or say what to change).' });
     // 04 §21: `phoneConfirmed` counts only once the tool asked the customer to re-confirm this number
     if (d.phoneConfirmed && phoneCheckAsked(ctx.orderHistory, phone)) request.phoneConfirmed = true;
