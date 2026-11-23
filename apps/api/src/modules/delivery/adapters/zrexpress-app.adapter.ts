@@ -51,11 +51,29 @@ export const buildGeo = (rows: Territory[]): Geo => {
 };
 
 /** ProblemDetails / validation answer → message + dialog field (`errors: { "DeliveryAddress.DistrictTerritoryId": ["…"] }`). */
+// Houssem live 23/11 (H-07 CMD-1018): ZR refused the parcel and the reason shown was « [object Object] » — its errors can be a list
+// of objects (`[{ propertyName, errorMessage }]`) or objects inside the map: every shape is read down to its sentence.
+export const refusalText = (v: unknown): string => {
+  if (typeof v === 'string') return v;
+  if (Array.isArray(v)) return v.map(refusalText).filter(Boolean).slice(0, 3).join(' · ');
+  if (v && typeof v === 'object') {
+    const o = v as Row;
+    return str(o.errorMessage) || str(o.message) || str(o.description) || str(o.detail) || str(o.title) || JSON.stringify(v).slice(0, 200);
+  }
+  return str(v);
+};
+export const refusalKey = (v: unknown): string => {
+  const o = (Array.isArray(v) ? v[0] : v) as Row | undefined;
+  return o && typeof o === 'object' ? str(o.propertyName) || str(o.property) || str(o.field) || str(o.name) || str(o.code) : '';
+};
 const refusal = (res: HttpResponse): { message: string; field: CourierField } => {
   const j = obj(res.json);
-  const errors = obj(j.errors);
-  const [key, msgs] = Object.entries(errors)[0] ?? ['', null];
-  const message = (Array.isArray(msgs) ? str(msgs[0]) : str(msgs)) || str(j.detail) || str(j.title) || str(j.message) || `HTTP ${res.status}`;
+  const listed = Array.isArray(j.errors) ? (j.errors as unknown[]) : null;
+  const errors = listed ? {} : obj(j.errors);
+  const [mapKey, msgs] = Object.entries(errors)[0] ?? ['', null];
+  const key = listed ? refusalKey(listed) : mapKey || refusalKey(msgs);
+  const said = refusalText(listed ?? msgs) || str(j.detail) || str(j.title) || str(j.message) || `HTTP ${res.status}`;
+  const message = key && !said.toLowerCase().includes(key.toLowerCase()) ? `${key}: ${said}` : said;
   const k = key.toLowerCase();
   const field: CourierField = k.includes('phone')
     ? 'phone'
