@@ -73,7 +73,8 @@ const refusal = (res: HttpResponse): { message: string; field: CourierField } =>
   const [mapKey, msgs] = Object.entries(errors)[0] ?? ['', null];
   const key = listed ? refusalKey(listed) : mapKey || refusalKey(msgs);
   const said = refusalText(listed ?? msgs) || str(j.detail) || str(j.title) || str(j.message) || `HTTP ${res.status}`;
-  const message = key && !said.toLowerCase().includes(key.toLowerCase()) ? `${key}: ${said}` : said;
+  // the field name stays out of the sentence (no technical text on shop screens): it only picks the dialog field
+  const message = said;
   const k = key.toLowerCase();
   const field: CourierField = k.includes('phone')
     ? 'phone'
