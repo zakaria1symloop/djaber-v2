@@ -35,7 +35,7 @@
   "carry.labels.includeRecap": "تضمين الملخص الداخلي",
   "carry.labels.onePdfPerOrder": "ملف PDF لكل طلب",
   "carry.labels.zipFile": "{file} · {filesN, plural, one {ملف PDF واحد} two {ملفا PDF} few {{files} ملفات PDF} many {{files} ملفًا PDF} other {{files} ملف PDF}} · {pagesN, plural, one {صفحة واحدة} two {صفحتان} few {{pages} صفحات} many {{pages} صفحةً} other {{pages} صفحة}}",
-  "carry.products.agents.viewList": "عرض في وكلاء الذكاء الاصطناعي",
+  "carry.products.agents.viewList": "عرض وكلاء الذكاء الاصطناعي الذين يبيعونه",
   "carry.products.chip.supplier": "المورد: {name}",
   "carry.reports.filter.channel": "القناة: {value}",
   "carry.reports.filter.channelTitle": "القناة",

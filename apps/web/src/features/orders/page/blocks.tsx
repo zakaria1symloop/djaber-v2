@@ -259,9 +259,13 @@ export function ItemsBlock({
                     <Link href={`/products/${l.product.id}`} dir="auto" className="block font-medium [text-align:match-parent] hover:underline max-md:break-words md:truncate">
                       {l.productName}
                     </Link>
-                    <div className="ts-label-micro text-text-muted max-md:break-all md:truncate">
-                      {[l.variantName, l.sku ? t('orders.page.sku', { sku: iso(l.sku) }) : null].filter(Boolean).join(' · ')}
-                    </div>
+                    {/* client list L44 (Boutique de Lalla 22/11): the ordered variant was an 8 px grey line nobody saw — its own line now */}
+                    {l.variantName ? (
+                      <div dir="auto" className="text-[12.5px] text-text-secondary [text-align:match-parent] max-md:break-words md:truncate" data-testid="order-line-variant">
+                        {l.variantName}
+                      </div>
+                    ) : null}
+                    {l.sku ? <div className="ts-label-micro text-text-muted max-md:break-all md:truncate">{t('orders.page.sku', { sku: iso(l.sku) })}</div> : null}
                     {/* journey J02-6: « variante » only for a variant line; a product sold beyond its stock is « to restock » */}
                     {l.stockWarning ? <div className="ts-label-micro text-accent-starred">⚠ {t(`orders.page.stock.${l.stockWarning === 'last_unit' && !l.variantId ? 'last_unit_product' : l.stockWarning}`)}</div> : null}
                   </div>

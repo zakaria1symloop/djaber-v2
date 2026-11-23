@@ -69,8 +69,8 @@
 .ts-body       { font-family: var(--font-sans);    font-weight: 400; font-size: 13px;   line-height: 1.32; letter-spacing: 0; }
 .ts-body-ar    { font-family: var(--font-arabic);  font-weight: 400; font-size: 13px;   line-height: 1.45; letter-spacing: 0; }
 .ts-label-section { font-family: var(--font-mono); font-weight: 500; font-size: 10.5px; line-height: 1.30; letter-spacing: 0.16em; text-transform: uppercase; }
-.ts-label-meta    { font-family: var(--font-mono); font-weight: 500; font-size: 9px;    line-height: 1.30; letter-spacing: 0.14em; }
-.ts-label-micro   { font-family: var(--font-mono); font-weight: 500; font-size: 8px;    line-height: 1.30; letter-spacing: 0.10em; text-transform: uppercase; }
+.ts-label-meta    { font-family: var(--font-mono); font-weight: 500; font-size: 11px;    line-height: 1.30; letter-spacing: 0.14em; }
+.ts-label-micro   { font-family: var(--font-mono); font-weight: 500; font-size: 10px;    line-height: 1.30; letter-spacing: 0.10em; text-transform: uppercase; }
 
 /* Arabic: every Geist/Syne text renders with Changa when dir="rtl" (14 MOB-R20, 02-next-route-map RTL rules). */
 [dir="rtl"] { --font-display: "Changa", system-ui, sans-serif; --font-sans: "Changa", system-ui, sans-serif; }

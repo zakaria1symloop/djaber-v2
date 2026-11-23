@@ -35,7 +35,7 @@
   "carry.labels.includeRecap": "Inclure le récapitulatif interne",
   "carry.labels.onePdfPerOrder": "Un PDF par commande",
   "carry.labels.zipFile": "{file} · {filesN, plural, one {{files} fichier PDF} other {{files} fichiers PDF}} · {pagesN, plural, one {{pages} page} other {{pages} pages}}",
-  "carry.products.agents.viewList": "Voir dans Agents IA",
+  "carry.products.agents.viewList": "Voir les agents IA qui le vendent",
   "carry.products.chip.supplier": "Fournisseur : {name}",
   "carry.reports.filter.channel": "Canal : {value}",
   "carry.reports.filter.channelTitle": "Canal",

@@ -86,7 +86,8 @@ export default function ProductsPage() {
         quickEdit: () => list.openSheet(row.id),
         edit: () => router.push(`/products/${row.id}/edit`),
         adjustStock: () => setDialog({ kind: 'adjust', product: row }),
-        variants: () => router.push(`/products/${row.id}/edit#variants`),
+        // client list L58: « Gérer les variantes » shows them on the product page (the edit form only when asked)
+        variants: () => router.push(`/products/${row.id}#variants`),
         movements: () => router.push(`/movements?productId=${row.id}`),
         orders: can('orders.read') ? () => router.push(`/orders?productId=${row.id}`) : undefined,
         duplicate: () => setDialog({ kind: 'duplicate', product: row }),

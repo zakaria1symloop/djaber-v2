@@ -3,9 +3,9 @@
 import { Card, cn } from '@djaber/ui';
 import type { ReactNode } from 'react';
 
-export function Block({ title, action, children, testId, className }: { title: string; action?: ReactNode; children: ReactNode; testId: string; className?: string }) {
+export function Block({ title, action, children, testId, className, id }: { title: string; action?: ReactNode; children: ReactNode; testId: string; className?: string; id?: string }) {
   return (
-    <Card className={cn('flex flex-col gap-3 p-4', className)} data-testid={testId}>
+    <Card id={id} className={cn('flex flex-col gap-3 p-4 scroll-mt-20', className)} data-testid={testId}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-[14px] font-medium">{title}</h2>
         {action}

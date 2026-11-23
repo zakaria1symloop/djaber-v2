@@ -46,6 +46,7 @@ import { Kpi } from '@/features/analytics/parts';
 import { ANALYTICS_PRESETS, customRangeError, periodQuery, todayAlgiers, type PeriodState } from '@/features/analytics/period';
 import { ListPagination } from '@/features/catalog/ui';
 import { useCategories } from '@/features/catalog/api';
+import { flattenCategories } from '@/features/catalog/contracts';
 import { useChannels } from '@/features/channels/api';
 import { useSuppliers } from '@/features/gds/api';
 import { ProductPicker } from '@/features/gds/product-picker';
@@ -121,6 +122,7 @@ function ReportView({ reportKey }: { reportKey: ReportKey }) {
   const canSchedulePerm = can('reports.schedule');
   const planFeature = (workspace?.plan?.limits.features ?? []).includes('scheduled_reports');
   const [scheduling, setScheduling] = useState(false);
+  const [pickedProduct, setPickedProduct] = useState<{ id: string; name: string } | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const simple = workspace?.stockMode === 'simple';
@@ -240,9 +242,17 @@ function ReportView({ reportKey }: { reportKey: ReportKey }) {
           </FilterDropdown>
         ) : null}
         {def?.filters.includes('productId') ? (
-          <FilterDropdown label={t('reports.filter.product', { value: filterText(s, 'productId') ? t('reports.filter.one') : t('reports.filter.all') })} count={filterText(s, 'productId') ? 1 : 0}>
+          <FilterDropdown label={t('reports.filter.product', { value: filterText(s, 'productId') ? (pickedProduct?.id === filterText(s, 'productId') ? pickedProduct.name : t('reports.filter.one')) : t('reports.filter.all') })} count={filterText(s, 'productId') ? 1 : 0}>
             <div className="flex flex-col gap-2">
-              <ProductPicker id="report-product" onPick={(p) => list.setFilter('productId', p.id)} placeholder={t('reports.filter.productSearch')} />
+              {/* client list L85 / L87: the picked product is named in the filter (it said « un produit », as if the click did nothing) */}
+              <ProductPicker
+                id="report-product"
+                onPick={(p) => {
+                  setPickedProduct({ id: p.id, name: p.name });
+                  list.setFilter('productId', p.id);
+                }}
+                placeholder={t('reports.filter.productSearch')}
+              />
               {filterText(s, 'productId') ? (
                 <Button size="sm" variant="ghost" onClick={() => list.setFilter('productId', null)}>
                   {t('action.clearFilters')}
@@ -373,17 +383,28 @@ function PeriodChip({ period, onChange }: { period: PeriodState; onChange: (p: P
 function CategoryFilter({ value, onChange }: { value: string; onChange: (v: string | null) => void }) {
   const t = useT();
   const cats = useCategories();
-  const name = cats.data?.find((c) => c.id === value)?.name;
+  // client list L85 (Boutique de Lalla 22/11): a closed select inside the popover showed one element until clicked again, and the
+  // sub-categories were missing — every category (sub-categories included) is listed open, the chosen one marked
+  const options = flattenCategories(cats.data ?? []);
+  const name = options.find((c) => c.id === value)?.label;
+  const item = (id: string, label: string, depth: 0 | 1) => (
+    <button
+      key={id || 'all'}
+      type="button"
+      role="option"
+      aria-selected={value === id}
+      onClick={() => onChange(id || null)}
+      className={cn('block w-full truncate rounded-[6px] px-2 py-1.5 text-start text-[13px] hover:bg-ink-raised', value === id ? 'bg-ink-raised font-medium text-text-primary' : 'text-text-secondary', depth === 1 && 'ps-5')}
+    >
+      {label}
+    </button>
+  );
   return (
     <FilterDropdown label={t('reports.filter.category', { value: value ? (name ?? '…') : t('reports.filter.allF') })} count={value ? 1 : 0}>
-      <Select aria-label={t('reports.filter.categoryTitle')} value={value} onChange={(e) => onChange(e.target.value || null)}>
-        <option value="">{t('reports.filter.allF')}</option>
-        {(cats.data ?? []).map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </Select>
+      <div role="listbox" aria-label={t('reports.filter.categoryTitle')} className="flex max-h-[280px] min-w-[220px] flex-col gap-0.5 overflow-y-auto" data-testid="report-category-options">
+        {item('', t('reports.filter.allF'), 0)}
+        {options.map((c) => item(c.id, c.depth === 1 ? c.category.name : c.label, c.depth))}
+      </div>
     </FilterDropdown>
   );
 }

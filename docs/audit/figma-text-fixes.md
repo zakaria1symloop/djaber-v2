@@ -183,3 +183,5 @@ Applied on 2026-10-11 by script to the Figma file: **95 / 95 rows** (Web V2: 86 
 | Web V2 | SET — Paramètres › Mode de stock (Simple card) | `Pas de variantes ni de prix de revient.` | `Pas d'achats, de caisse ni de prix de revient.` (journey J07r-5, 18/11: simple mode keeps the variants table, J07-8) |
 | Web V2 | GDS-07 — Ventes comptoir (subtitle) | `Mode avancé. Vente directe hors Messenger : décrémente le stock immédiatement, encaisse en caisse, compte dans les revenus.` | `Les ventes faites au comptoir, hors Messenger : le stock sort à la validation et l'argent entre en caisse.` (journey J07r-5: no developer note on a merchant screen) |
 | Web V2 | GDS-06b — Nouvel achat (footer) | `Statuts : brouillon → commandé → partiel → reçu · annulé. Le coût moyen n'est mis à jour qu'à la réception.` | (removed — journey J07r-5, 12 GDS « no static footnote ») |
+| Web V2 | CAT-09 — Product page | Agents & canaux | Agents IA |
+| Web V2 | CAT-09 — Product page | Voir dans Agents IA | Voir les agents IA qui le vendent |

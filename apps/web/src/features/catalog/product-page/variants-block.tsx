@@ -167,6 +167,7 @@ export function VariantsBlock({ product, advanced, canWrite, onAdjust }: { produ
     <Block
       title={t('products.page.variants.title')}
       testId="block-variants"
+      id="variants"
       action={
         canWrite ? (
           <button type="button" className="text-[13px] text-text-secondary hover:text-text-primary" onClick={() => setGenerate(true)}>
