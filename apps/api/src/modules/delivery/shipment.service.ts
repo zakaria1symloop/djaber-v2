@@ -20,7 +20,7 @@ import type { LockedOrder } from '../orders/order-workflow.service';
 import { addressOf, clientRefOf, hasDeliveryAddress } from '../orders/order.presenter';
 import { stopdeskLabels, stopdeskText } from './stopdesk-names';
 import { CourierAdapters } from './adapters/courier-registry';
-import { COURIER_ERROR_CODE, isCourierError, type CreateShipmentInput as AdapterInput } from './adapters/courier-adapter';
+import { COURIER_ERROR_CODE, isCourierError, type CreateShipmentInput as AdapterInput, PROVIDER_NAMES, type CourierProvider } from './adapters/courier-adapter';
 import { CourierAccountService } from './courier-account.service';
 import { CourierLimiter } from './courier-limiter';
 import { ShipmentEffects } from './shipment-effects.service';
@@ -338,7 +338,9 @@ export class ShipmentService implements OnModuleInit {
       }
       return this.sendFailed(claimed, encodeShipmentError(COURIER_ERROR_CODE[e.kind], e.kind === 'validation' ? e.field : null, e.message));
     }
-    return this.sendSucceeded(claimed.id, result, account.displayName);
+    // Houssem courier test 23/11 (CMD-1019): the customer read « suivi 16-… (zr-api) » — the shop's own label of its account. The
+    // customer text names the delivery company (« ZR Express »)
+    return this.sendSucceeded(claimed.id, result, PROVIDER_NAMES[account.provider as CourierProvider] ?? account.displayName);
   }
 
   private async retryLater(s: Shipment): Promise<'queued' | 'failed'> {
