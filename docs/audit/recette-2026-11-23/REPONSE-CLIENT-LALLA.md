@@ -126,6 +126,6 @@ Rien : toutes les lignes de la feuille ont été reprises le 24/11 (tableau en t
 
 | N° | État |
 |---|---|
-| 4 / 27 | Temps de réponse : 5,7 à 7,2 s mesurés le 24/11 sur des messages courts. Il se décompose ainsi : 1,5 à 2 s pour que Facebook nous remette le message, le délai de l’agent (3 s comptées depuis l’envoi du client, pour regrouper ses messages), 2 à 3,5 s de réponse de l’IA, moins d’1 s d’envoi. Le réglage « 3 s » est donc une attente de regroupement, pas le temps total ; avec un délai de 0 ou 1 s, la réponse arrive en 5 à 6 s. |
+| 4 / 27 | Temps de réponse : 5,7 à 7,2 s mesurés le 24/11 sur des messages courts. Il se décompose ainsi : 1,5 à 2 s pour que Facebook nous remette le message, le délai de l’agent (3 s comptées depuis l’envoi du client, pour regrouper ses messages), 2 à 3,5 s de réponse de l’IA, moins d’1 s d’envoi. Le réglage « 3 s » est donc une attente de regroupement, pas le temps total ; avec un délai réglé à 0 s, la réponse devrait arriver en 5 à 6 s environ (estimation à partir de ces mesures, non mesurée). |
 | 61 / 91 | Plusieurs agents sur une même page : non prévu. Une page a un seul agent ; pour vendre plusieurs catégories sur la même page, un seul agent avec ces catégories (ou tout le catalogue). |
 | 97 | Un administrateur peut acheter un pack de crédits et payer une facture ; il ne peut pas changer ni résilier le forfait (boutons grisés, vu le 24/11). Les rôles sont ainsi définis aujourd’hui ; réserver l’achat de packs au propriétaire est une décision à prendre. |
