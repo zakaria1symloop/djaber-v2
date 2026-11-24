@@ -84,7 +84,11 @@ export const productWhere = (q: Partial<ProductsQuery>): Prisma.Sql => {
 
   // client list L60 (Boutique de Lalla 22/11): « Utilisé par un agent » was empty — it only read the one-by-one links, while most
   // agents sell the whole catalogue or some categories. Same scope as `agentProductScope` (an archived product is sold by none).
-  const sellingAgent = Prisma.sql`SELECT 1 FROM "Agent" a WHERE a."workspaceId" = p."workspaceId" AND a."deletedAt" IS NULL AND p."deletedAt" IS NULL AND (
+  // Houssem live 24/11 UX-086: the filter listed 32 products, 4 refused and 16 waiting for their first review among them — an agent
+  // only sells what the AI may show (04 §12, `CatalogueService` VISIBLE): an active product that is approved, or changed since its
+  // last approved version. The others belong to « Aucun agent ».
+  const sellingAgent = Prisma.sql`SELECT 1 FROM "Agent" a WHERE a."workspaceId" = p."workspaceId" AND a."deletedAt" IS NULL AND p."deletedAt" IS NULL AND p."isActive"
+    AND (p."moderationStatus"::text IN ('approved', 'not_required') OR (p."moderationStatus"::text = 'pending' AND p."approvedSnapshot" IS NOT NULL AND p."approvedSnapshot" <> 'null'::jsonb)) AND (
     (a."sellAllProducts" AND a."catalogScope"::text = 'all')
     OR (a."sellAllProducts" AND a."catalogScope"::text = 'categories' AND p."categoryId"::text = ANY(a."scopeCategoryIds"))
     OR EXISTS (SELECT 1 FROM "AgentProduct" ap WHERE ap."productId" = p."id" AND ap."agentId" = a."id" AND (NOT a."sellAllProducts" OR a."catalogScope"::text = 'categories')))`;

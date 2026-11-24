@@ -171,6 +171,11 @@ describe('"Agents qui le vendent" (GET /agents?productId=)', () => {
     const all = await linkedAgent(owner.workspaceId, [], { name: 'Tout' } as never);
     expect(await ids(`agentId=${all.id}`)).toEqual(['Bougie', 'Robe lin', 'Sac paille']);
     expect(await ids('noAgent=1')).toEqual([]);
+    // Houssem live 24/11 UX-086: a refused product and one waiting for its first review are sold by no agent, even one that sells everything
+    await db.product.update({ where: { id: free.id }, data: { moderationStatus: 'rejected' } });
+    await db.$executeRaw`UPDATE "Product" SET "moderationStatus" = 'pending', "approvedSnapshot" = NULL WHERE "id" = ${sac.id}::uuid`;
+    expect(await ids(`agentId=${all.id}`)).toEqual(['Robe lin']);
+    expect(await ids('noAgent=1')).toEqual(['Bougie', 'Sac paille']);
     expect(free.id).toBeTruthy();
     expect(robe.id).toBeTruthy();
   });
