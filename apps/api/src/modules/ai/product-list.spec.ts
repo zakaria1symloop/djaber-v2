@@ -69,7 +69,7 @@ describe('UX-080 the product list the customer asks for', () => {
 
   it('the added sentence follows the language of the reply', () => {
     const left = facts('واش عندكم').listable!.filter((p) => ['Recette H-26 à refuser', 'Satin dress'].includes(p.name));
-    expect(alsoSentence(left, 'ar')).toBe('وعندنا ثاني: Recette H-26 à refuser بـ 1 000 دج وSatin dress ابتداء من 2 000 دج.');
+    expect(alsoSentence(left, 'ar')).toBe('وعندنا ثاني: Recette H-26 à refuser بـ 1 000 دج و Satin dress ابتداء من 2 000 دج.');
     expect(alsoSentence(left, 'arabizi')).toBe('3andna tani: Recette H-26 à refuser b 1 000 DA w Satin dress men 2 000 DA.');
     expect(alsoSentence(left, 'en')).toBe('We also have: Recette H-26 à refuser at 1 000 DA and Satin dress from 2 000 DA.');
     expect(splitSentences(alsoSentence(left, 'fr'))).toHaveLength(1);
@@ -91,5 +91,22 @@ describe('UX-080 live 23/11: a product named without the part of its name in bra
     const f = facts('quels produits vous avez', 'fr', { products });
     const reply = 'Voici ce qu’on propose :\n- QA 23/11 photos : 5 000 DA\n- Satin dress : 2 000 DA\nQuelque chose vous plaît ?';
     expect(enforceReply(reply, checkReply(reply, f), f, { hasCards: false }).reply).toBe('Voici ce qu’on propose :\n- QA 23/11 photos : 5 000 DA\n- Satin dress : 2 000 DA\nOn a aussi : Website Development (تصميم وتطوير مواقع إلكترونية) à 30 000 DA.\nQuelque chose vous plaît ?');
+  });
+});
+
+describe('UX-080 live 24/11: a reply that is itself the list counts as one, whatever the wording of the question', () => {
+  it('the question typed backwards: the sold-beyond-stock product stays in the list, and the products left out are added', () => {
+    const f = facts('؟ مكدنع يللا تاجتنملا يهام', 'ar');
+    const reply = 'هاذي المنتجات اللي عندنا: QA 23/11 photos بـ 5 000 دج، Recette H-22 produit B بـ 2 000 دج، Satin dress بـ 2 000 دج. واش حبيت حاجة منهم؟';
+    expect(unavailableOffers(splitSentences(reply), f)).toEqual([]);
+    const v = checkReply(reply, f);
+    expect(v.map((x) => x.rule)).toEqual(['list_incomplete']);
+    const fixed = enforceReply(reply, v, f, { hasCards: false }).reply;
+    expect(fixed).toContain('Recette H-26 à refuser');
+    expect(fixed).toContain('Website Development');
+    expect(checkReply(fixed, f).map((x) => x.rule)).toEqual([]);
+  });
+  it('two products named for a question that is no list request stay as they are', () => {
+    expect(checkReply('On a QA 23/11 photos à 5 000 DA et Satin dress à 2 000 DA.', facts('je cherche un cadeau'))).toEqual([]);
   });
 });

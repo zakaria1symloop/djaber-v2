@@ -596,9 +596,11 @@ export function checkReply(reply: string, facts: GuardFacts): GuardViolation[] {
   if (greetingOnly(facts.customerText)) for (const i of greetingPushes(parts)) out.push({ rule: 'greeting_push', sentence: i });
   // UX-080: « quels produits vous avez ? » answered with a list that leaves products out (H-07: 7 named, 3 forgotten — a service, a product
   // sold beyond its stock, a product whose name put the model off): the server adds them
-  if (facts.listable?.length && listAsked(facts.customerText)) {
+  if (facts.listable?.length) {
     const missing = listMissing(reply, facts.listable);
-    if (missing.length && facts.listable.length - missing.length >= 2) out.push({ rule: 'list_incomplete', sentence: 0 });
+    const named = facts.listable.length - missing.length;
+    // asked for in words, or a reply that is itself the list (three or more of the shop's products, at least half of them)
+    if (missing.length && ((listAsked(facts.customerText) && named >= 2) || (named >= 3 && named * 2 >= facts.listable.length))) out.push({ rule: 'list_incomplete', sentence: 0 });
   }
   // journey retest R5-1: an out-of-stock product is never offered (N7: « … ou notre parfum Oud 50 ml » to « lunettes de soleil ? »)
   if (facts.unavailable?.length || facts.zeroStock?.length) for (const i of unavailableOffers(parts, facts)) out.push({ rule: 'unavailable_offer', sentence: i });
@@ -695,7 +697,7 @@ export const listMissing = (text: string, listable: NonNullable<GuardFacts['list
 const ALSO: Record<'fr' | 'en' | 'ar' | 'arabizi', { lead: string; at: (name: string, price: string) => string; from: (name: string, price: string) => string; join: string; last: string; cur: string }> = {
   fr: { lead: 'On a aussi', at: (n, p) => `${n} à ${p}`, from: (n, p) => `${n} à partir de ${p}`, join: ', ', last: ' et ', cur: 'DA' },
   en: { lead: 'We also have', at: (n, p) => `${n} at ${p}`, from: (n, p) => `${n} from ${p}`, join: ', ', last: ' and ', cur: 'DA' },
-  ar: { lead: 'وعندنا ثاني', at: (n, p) => `${n} بـ ${p}`, from: (n, p) => `${n} ابتداء من ${p}`, join: '، ', last: ' و', cur: 'دج' },
+  ar: { lead: 'وعندنا ثاني', at: (n, p) => `${n} بـ ${p}`, from: (n, p) => `${n} ابتداء من ${p}`, join: '، ', last: ' و ', cur: 'دج' },
   arabizi: { lead: '3andna tani', at: (n, p) => `${n} b ${p}`, from: (n, p) => `${n} men ${p}`, join: ', ', last: ' w ', cur: 'DA' },
 };
 /** UX-080: « On a aussi : A à 1 500 DA, B à partir de 2 000 DA et C à 30 000 DA. » — the products a list left out, in the reply's language. */
@@ -712,13 +714,17 @@ export const alsoSentence = (missing: NonNullable<GuardFacts['listable']>, lang:
  * sentence before), when the customer's message does not name that product — an offer or a suggestion of it. The names of the
  * other products are taken out first (« montre » of an in-stock « Montre connectée »).
  */
-export const unavailableOffers = (parts: string[], facts: Pick<GuardFacts, 'unavailable' | 'available' | 'customerText' | 'zeroStock' | 'customerHistory'>): number[] => {
+export const unavailableOffers = (parts: string[], facts: Pick<GuardFacts, 'unavailable' | 'available' | 'customerText' | 'zeroStock' | 'customerHistory' | 'listable'>): number[] => {
   const asked = ` ${plainWords(facts.customerText ?? '')} `;
   const notAsked = (k: string, said: string) => !said.includes(` ${k} `) && !said.includes(` ${k.split(' ')[0]} `);
   // journey retest R17-3 (18/11): a product at stock 0 sold beyond its stock is no offer only when the customer asked for it (now or earlier)
   const ever = ` ${plainWords([facts.customerHistory ?? '', facts.customerText ?? ''].join(' '))} `;
   // UX-080 (client list L55 / L93): … and when they ask what the shop sells — the list names every product that can be ordered
-  const keys = [...(facts.unavailable ?? []).filter((k) => notAsked(k, asked)), ...(listAsked(facts.customerText) ? [] : (facts.zeroStock ?? []).filter((k) => notAsked(k, ever)))];
+  // Houssem live 24/11 (H-07 10:30, the question typed backwards « ؟ مكدنع يللا تاجتنملا يهام »): the model answered with the list, the
+  // question was not read as a list request, and a corrective turn took the product sold beyond its stock out (9.7 s) — a reply that
+  // names three or more of the shop's orderable products IS the list of what the shop sells
+  const isList = listAsked(facts.customerText) || (!!facts.listable?.length && facts.listable.length - listMissing(parts.join(' '), facts.listable).length >= 3);
+  const keys = [...(facts.unavailable ?? []).filter((k) => notAsked(k, asked)), ...(isList ? [] : (facts.zeroStock ?? []).filter((k) => notAsked(k, ever)))];
   if (!keys.length) return [];
   const others = [...(facts.available ?? [])].filter((o) => !(facts.zeroStock ?? []).includes(o)).sort((a, b) => b.length - a.length);
   const out: number[] = [];
