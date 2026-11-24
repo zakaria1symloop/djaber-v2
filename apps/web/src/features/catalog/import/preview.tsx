@@ -7,7 +7,7 @@ import { Check } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useLocaleCode, useT, type TFunction } from '@/lib/i18n';
 import { Money, Num } from '../ui';
-import { fileExtension, formatFileSize, IMPORT_PAGE_SIZE, IMPORT_TABS, invalidRows, newCategoryNames, windowRows, type ImportTab } from './logic';
+import { fileExtension, formatFileSize, IMPORT_PAGE_SIZE, IMPORT_TABS, invalidRows, newCategoryNames, windowRows, type ImportTab, skuAlreadyThere } from './logic';
 
 /**
  * "SKU déjà utilisé." (`error.<CODE>` or a `validation.*` key, with the row params). Retest 11/11 UX-054: the reason
@@ -23,6 +23,9 @@ export function FileCard({ result, size, onChangeFile, onEditMapping, busy }: { 
   const t = useT();
   const locale = useLocaleCode();
   const mapped = IMPORT_FIELDS.filter((f) => !!result.mapping?.[f]);
+  // client list L78 (Houssem live 24/11): the shop's own exported file came back « 0 valid · 51 in error — SKU already used »; the way
+  // out (« update the existing products ») was only in « Modifier le mappage ». The preview says it, with the button.
+  const existing = result.updateExisting ? 0 : skuAlreadyThere(result.rows);
   return (
     <Card className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3" data-testid="import-file">
       <span className="rounded-[4px] border border-line-edge px-2 py-1 ts-label-meta uppercase text-text-secondary">{fileExtension(result.fileName) || 'csv'}</span>
@@ -51,6 +54,14 @@ export function FileCard({ result, size, onChangeFile, onEditMapping, busy }: { 
           </Button>
         ) : null}
       </div>
+      {existing > 0 && onEditMapping ? (
+        <p className="basis-full text-[13px] text-accent-starred" data-testid="import-existing-hint">
+          {t('import.existing.hint', { count: existing })}{' '}
+          <button type="button" className="underline underline-offset-2 hover:text-text-primary" onClick={onEditMapping} disabled={busy}>
+            {t('import.file.editMapping')}
+          </button>
+        </p>
+      ) : null}
     </Card>
   );
 }

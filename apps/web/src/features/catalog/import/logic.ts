@@ -209,3 +209,6 @@ export function importTemplateCsv(locale: string): string {
   const lines = [IMPORT_FIELDS.map((f) => csvCell(TEMPLATE_HEADERS[l][f])).join(';'), ...TEMPLATE_ROWS[l].map((r) => IMPORT_FIELDS.map((f) => csvCell(r[f] ?? '')).join(';'))];
   return `${BOM}${lines.join('\r\n')}\r\n`;
 }
+
+/** Rows refused only because their SKU is already in the catalogue (client list L78: the shop's own export imported back). */
+export const skuAlreadyThere = (rows: readonly { errors: readonly { code: string }[] }[]): number => rows.filter((r) => r.errors.some((e) => e.code === 'PRODUCT_SKU_ALREADY_EXISTS')).length;

@@ -3267,6 +3267,7 @@
  "import.field.sellOutOfStock": "Accepter les commandes en rupture (oui / non)",
  "import.file.change": "Changer de fichier",
  "import.file.columns": "Colonnes détectées :",
+ "import.existing.hint": "{count, plural, one {# ligne porte} other {# lignes portent}} un SKU déjà présent dans votre catalogue. Pour les mettre à jour au lieu de les refuser, cochez « Mettre à jour les produits existants » :",
  "import.file.editMapping": "Modifier le mappage",
  "import.file.rows": "{count, plural, one {# ligne} other {# lignes}}",
  "import.footer.note": "{count, plural, =0 {Aucune ligne en erreur} one {La ligne en erreur sera ignorée} other {Les # lignes en erreur seront ignorées}} · mouvement « entrée · import » pour chaque stock > 0",

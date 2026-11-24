@@ -14,6 +14,7 @@ import {
   mappingPayload,
   missingRequiredFields,
   newCategoryNames,
+  skuAlreadyThere,
   stepOfPhase,
   windowRows,
 } from './logic';
@@ -182,5 +183,13 @@ describe('example file (tester report 2026-10-20)', () => {
     expect(lines[1]).toContain(';robe, kabyle, fête;');
     expect(importTemplateCsv('en').split(/\r\n/)[0]).toContain('Name;Variant;Variant SKU;Description');
     expect(importTemplateCsv('ar').split(/\r\n/)[0]).toContain('الاسم');
+  });
+});
+
+// client list L78 (Houssem live 24/11): the shop's own export imported back — the preview counts the rows refused for a SKU already there
+describe('skuAlreadyThere', () => {
+  it('counts the rows whose SKU is already in the catalogue, and only those', () => {
+    const rows = [{ errors: [{ code: 'PRODUCT_SKU_ALREADY_EXISTS' }] }, { errors: [{ code: 'validation.old_price' }] }, { errors: [] }, { errors: [{ code: 'validation.price' }, { code: 'PRODUCT_SKU_ALREADY_EXISTS' }] }];
+    expect(skuAlreadyThere(rows)).toBe(2);
   });
 });

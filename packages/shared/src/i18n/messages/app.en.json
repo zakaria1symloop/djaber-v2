@@ -3267,6 +3267,7 @@
  "import.field.sellOutOfStock": "Accept orders when out of stock (yes / no)",
  "import.file.change": "Change file",
  "import.file.columns": "Detected columns:",
+ "import.existing.hint": "{count, plural, one {# row has} other {# rows have}} a SKU that is already in your catalogue. To update them instead of refusing them, tick “Update existing products”:",
  "import.file.editMapping": "Edit mapping",
  "import.file.rows": "{count, plural, one {# row} other {# rows}}",
  "import.footer.note": "{count, plural, =0 {No row in error} one {The row in error will be skipped} other {The # rows in error will be skipped}} · “in · import” movement for each stock > 0",

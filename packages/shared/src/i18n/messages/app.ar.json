@@ -3267,6 +3267,7 @@
  "import.field.sellOutOfStock": "قبول الطلبات عند نفاد المخزون (نعم / لا)",
  "import.file.change": "تغيير الملف",
  "import.file.columns": "الأعمدة المكتشفة:",
+ "import.existing.hint": "{count, plural, one {سطر واحد يحمل} other {# أسطر تحمل}} رمز SKU موجودًا في الكتالوغ. لتحديثها بدل رفضها، فعّل «تحديث المنتجات الموجودة»:",
  "import.file.editMapping": "تعديل المطابقة",
  "import.file.rows": "{count, plural, zero {# سطر} one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}}",
  "import.footer.note": "{count, plural, =0 {لا توجد أسطر بها أخطاء} one {سيُتجاهل السطر الخاطئ} two {سيُتجاهل السطران الخاطئان} few {ستُتجاهل # أسطر خاطئة} many {سيُتجاهل # سطرًا خاطئًا} other {سيُتجاهل # سطر خاطئ}} · حركة « دخول · استيراد » لكل مخزون > 0",
