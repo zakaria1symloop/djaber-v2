@@ -3271,6 +3271,7 @@
  "import.file.editMapping": "Modifier le mappage",
  "import.file.rows": "{count, plural, one {# ligne} other {# lignes}}",
  "import.footer.note": "{count, plural, =0 {Aucune ligne en erreur} one {La ligne en erreur sera ignorée} other {Les # lignes en erreur seront ignorées}} · mouvement « entrée · import » pour chaque stock > 0",
+ "import.footer.noteUpdate": "{count, plural, =0 {Aucune ligne en erreur} one {La ligne en erreur sera ignorée} other {Les # lignes en erreur seront ignorées}} · nouveaux produits : mouvement « entrée · import » pour chaque stock > 0 · produits existants : le stock du fichier remplace le stock actuel (aucun mouvement s’il est identique)",
  "import.mapping.context": "Import {type} · {count, plural, one {# ligne} other {# lignes}} · détection automatique",
  "import.mapping.duplicate": "Une colonne du fichier ne peut alimenter qu’un seul champ : {columns}.",
  "import.mapping.ignore": "— ignorer",

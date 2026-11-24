@@ -3271,6 +3271,7 @@
  "import.file.editMapping": "Edit mapping",
  "import.file.rows": "{count, plural, one {# row} other {# rows}}",
  "import.footer.note": "{count, plural, =0 {No row in error} one {The row in error will be skipped} other {The # rows in error will be skipped}} · “in · import” movement for each stock > 0",
+ "import.footer.noteUpdate": "{count, plural, =0 {No row in error} one {The row in error will be skipped} other {The # rows in error will be skipped}} · new products: “in · import” movement for each stock > 0 · existing products: the stock of the file replaces the current stock (no movement when it is the same)",
  "import.mapping.context": "{type} import · {count, plural, one {# row} other {# rows}} · automatic detection",
  "import.mapping.duplicate": "A file column can feed only one field: {columns}.",
  "import.mapping.ignore": "— ignore",

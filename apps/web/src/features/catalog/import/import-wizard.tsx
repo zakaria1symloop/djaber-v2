@@ -19,7 +19,7 @@ import { useSession, useWorkspaceId } from '@/lib/session';
 import { catalogApi, catalogKeys, useCatalogRefresh, useCategories, useModerationSummary } from '../api';
 import { flattenCategories } from '../contracts';
 import { Num } from '../ui';
-import { buildErrorsCsv, checkImportFile, IMPORT_ACCEPT, IMPORT_TABS, importableCount, importPhase, type ImportTab, importTemplateCsv, invalidRows, stepOfPhase } from './logic';
+import { buildErrorsCsv, checkImportFile, IMPORT_ACCEPT, IMPORT_TABS, importableCount, importPhase, importProductCount, type ImportTab, importTemplateCsv, invalidRows, stepOfPhase } from './logic';
 import { MappingDialog } from './mapping-dialog';
 import { describeRowError, FileCard, PreviewRows, PreviewTiles } from './preview';
 import { uuid } from '@/lib/uuid';
@@ -210,7 +210,7 @@ export function ImportWizard() {
           <PreviewRows result={result} tab={tab} onTabChange={(k) => setUrl({ tab: k === 'errors' ? null : k })} existingCategories={existingCategories} />
           {commitError ? <FormAlert>{commitError}</FormAlert> : null}
           <div className="sticky -bottom-6 z-10 -mx-4 -mb-6 flex flex-wrap items-center justify-end gap-x-2 gap-y-2 border-t border-line-hairline bg-ink-base px-4 py-3 md:-mx-8 md:px-8" data-testid="import-footer" data-sticky-footer>
-            <p className="ts-label-meta me-auto min-w-0 basis-72 uppercase text-text-muted">{t('import.footer.note', { count: result.totals.invalid })}</p>
+            <p className="ts-label-meta me-auto min-w-0 basis-72 uppercase text-text-muted">{t((result.totals.update ?? 0) > 0 ? 'import.footer.noteUpdate' : 'import.footer.note', { count: result.totals.invalid })}</p>
             <Button variant="ghost" onClick={() => downloadErrors(job.data)} disabledReason={invalidRows(result.rows).length ? undefined : t('import.errors.none')}>
               {t('import.errors.download')}
             </Button>
@@ -218,7 +218,7 @@ export function ImportWizard() {
               {t('action.back')}
             </Button>
             <Button variant="primary" onClick={onCommit} loading={commit.isPending} disabledReason={usable === 0 ? t('import.commit.none') : undefined} data-testid="import-commit">
-              {t('import.commit', { count: usable })}
+              {t('import.commit', { count: importProductCount(result.totals) })}
             </Button>
           </div>
         </>

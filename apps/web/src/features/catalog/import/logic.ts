@@ -152,6 +152,14 @@ export function newCategoryNames(rows: readonly ImportPreviewRow[], existing: re
 
 /** Rows that will be written. Rows over the plan limit are already reported as errors (`PLAN_LIMIT`), so not in `valid`. */
 export const importableCount = (totals: Pick<ImportPreviewResult['totals'], 'valid'>): number => Math.max(0, totals.valid ?? 0);
+/**
+ * Products the import will write — the button's count. A file with variants has more valid rows than products (Houssem live 24/11, L78:
+ * « Import 51 products » for 32 products); `create` / `update` count products, older previews only have `valid`.
+ */
+export const importProductCount = (totals: Pick<ImportPreviewResult['totals'], 'valid'> & Partial<Pick<ImportPreviewResult['totals'], 'create' | 'update'>>): number => {
+  const products = (totals.create ?? 0) + (totals.update ?? 0);
+  return products > 0 ? products : importableCount(totals);
+};
 
 /* ---------- error report (client side) ---------- */
 export const BOM = String.fromCharCode(0xfeff);

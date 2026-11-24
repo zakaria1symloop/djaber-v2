@@ -10,6 +10,7 @@ import {
   formatFileSize,
   importableCount,
   importPhase,
+  importProductCount,
   importTemplateCsv,
   mappingPayload,
   missingRequiredFields,
@@ -191,5 +192,15 @@ describe('skuAlreadyThere', () => {
   it('counts the rows whose SKU is already in the catalogue, and only those', () => {
     const rows = [{ errors: [{ code: 'PRODUCT_SKU_ALREADY_EXISTS' }] }, { errors: [{ code: 'validation.old_price' }] }, { errors: [] }, { errors: [{ code: 'validation.price' }, { code: 'PRODUCT_SKU_ALREADY_EXISTS' }] }];
     expect(skuAlreadyThere(rows)).toBe(2);
+  });
+});
+
+// Houssem live 24/11 (L78): the button said « Import 51 products » for a file of 32 products with their variants
+describe('importProductCount', () => {
+  it('counts products, not rows, and falls back to the valid rows of an older preview', () => {
+    expect(importProductCount({ valid: 51, create: 0, update: 32 })).toBe(32);
+    expect(importProductCount({ valid: 12, create: 10, update: 2 })).toBe(12);
+    expect(importProductCount({ valid: 7 })).toBe(7);
+    expect(importProductCount({ valid: 0, create: 0, update: 0 })).toBe(0);
   });
 });
