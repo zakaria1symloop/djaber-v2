@@ -102,6 +102,8 @@ describe('invitations', () => {
     expect(user.lastWorkspaceId).toBe(owner.workspaceId);
     expect((await invitee.get('/workspace').expect(200)).body.data.id).toBe(owner.workspaceId);
     expect((await invitee.post(`/invitations/${inv.token}/accept`).expect(410)).body.error.code).toBe('INVITATION_EXPIRED');
+    // Houssem live 24/11 (B2): the page says « déjà acceptée », not « expirée ou révoquée » — the reason travels in `details`
+    expect((await anonymous(app).get(`/invitations/${inv.token}`).expect(410)).body.error).toMatchObject({ code: 'INVITATION_EXPIRED', details: { reason: 'accepted' } });
     expect(await eventually(() => db.auditLog.findFirst({ where: { workspaceId: owner.workspaceId, action: 'invitation.accept' } }))).toBeTruthy();
 
     // sign-up with an invitation for another address is refused

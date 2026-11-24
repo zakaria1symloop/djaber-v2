@@ -1699,6 +1699,8 @@
  "auth.invitation.badge": "INVITATION · {role}",
  "auth.invitation.description": "{inviter} invites you as {role}: {roleDescription}. The invitation expires in {days} days.",
  "auth.invitation.emailFixed": "EMAIL (SET BY THE INVITATION)",
+ "auth.invitation.accepted.description": "This invitation was already used: you are a member of the shop. Sign in with your e-mail to open it.",
+ "auth.invitation.accepted.title": "Invitation already accepted",
  "auth.invitation.expired.description": "This invitation has expired (7 days) or was revoked. Ask for a new invitation.",
  "auth.invitation.expired.title": "Invitation expired",
  "auth.invitation.loading": "Invitation",

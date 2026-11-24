@@ -49,6 +49,8 @@
 "auth.forgot.title",
 "auth.invitation.accept",
 "auth.invitation.accepted",
+"auth.invitation.accepted.description",
+"auth.invitation.accepted.title",
 "auth.invitation.acceptedReadOnly",
 "auth.invitation.alreadyMember",
 "auth.invitation.badge",

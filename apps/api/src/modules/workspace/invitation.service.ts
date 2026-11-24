@@ -199,7 +199,10 @@ export class InvitationService {
       }),
     );
     if (!inv || inv.workspace.deletedAt) throw notFound();
-    if (inv.acceptedAt || inv.expiresAt <= new Date()) throw new AppException('INVITATION_EXPIRED');
+    // Houssem live 24/11 (B2): the link of an invitation already accepted read « expirée (7 jours) ou révoquée » — the same code, with
+    // the reason in `details` so the page can say « déjà acceptée : connectez-vous »
+    if (inv.acceptedAt) throw new AppException('INVITATION_EXPIRED', {}, {}, { reason: 'accepted' });
+    if (inv.expiresAt <= new Date()) throw new AppException('INVITATION_EXPIRED');
     return inv;
   }
 

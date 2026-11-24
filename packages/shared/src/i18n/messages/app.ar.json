@@ -1699,6 +1699,8 @@
  "auth.invitation.badge": "دعوة · {role}",
  "auth.invitation.description": "{inviter} يدعوك بصفة {role}: {roleDescription}. تنتهي الدعوة بعد {days, plural, one {يوم واحد} two {يومين} few {# أيام} many {# يومًا} other {# يوم}}.",
  "auth.invitation.emailFixed": "البريد الإلكتروني (محدد في الدعوة)",
+ "auth.invitation.accepted.description": "تم استعمال هذه الدعوة من قبل: أنت عضو في المتجر. سجّل الدخول ببريدك الإلكتروني لفتحه.",
+ "auth.invitation.accepted.title": "تم قبول الدعوة مسبقًا",
  "auth.invitation.expired.description": "انتهت صلاحية هذه الدعوة (7 أيام) أو أُلغيت. اطلب دعوة جديدة.",
  "auth.invitation.expired.title": "انتهت صلاحية الدعوة",
  "auth.invitation.loading": "دعوة",
