@@ -1,6 +1,47 @@
-# Djaber — réponse à la liste de recette (Boutique de Lalla, feuille du 22/11) — état au 23/11 au soir
+# Djaber — réponse à la liste de recette (Boutique de Lalla, feuille du 22/11) — état au 24/11 au soir
 
 Chaque ligne de votre feuille (n° = ligne). « Corrigé 23/11 » = corrigé et mis en ligne aujourd'hui, vérifié par nos tests ; « Vérifié 23/11 » = retesté en conditions réelles (Messenger) par notre testeur avec preuve ; « Déjà présent » = la fonction existe, voici où la trouver ; « Fonctionnement prévu » = comportement voulu, avec l'explication.
+
+## Revu à la main le 24/11 — chaque ligne encore « Nég » de votre feuille
+
+Le 24/11, notre testeur a repris une par une, sur la version en ligne, toutes les lignes que vous aviez marquées non résolues. Une ligne n’est comptée ici que s’il l’a vue fonctionner lui-même, avec une preuve (capture d’écran, commande ou message daté). Les captures sont dans le dossier de preuves du 24/11.
+
+| N° | Résultat vu le 24/11 |
+|---|---|
+| 2 | Étiquettes des tableaux et du détail de commande lisibles. |
+| 4 / 27 | Temps de réponse mesuré sur 5 messages : 7,1 · 7,2 · 5,7 · 6,6 · 7,1 s (9,5 s en moyenne le matin). Corrigé le 24/11 : le délai de l’agent est compté depuis l’envoi du message par le client, et non depuis sa réception. Voir « Reste ouvert ». |
+| 7 | Deux pages Facebook cochées ensemble : les deux sont connectées. |
+| 19 | « Définir comme principale » : la photo 2 devient la principale sur la fiche, dans la liste et dans la carte Messenger. |
+| 21 | « Remplir avec l’IA » : à la limite, le message dit « 3 analyses maximum par jour », sans code technique, avec « Saisir à la main ». |
+| 26 | Chat de test : « ما هي المنتجات المتوفرة من فضلك » reçoit une réponse en arabe avec les produits. |
+| 44 | La variante commandée est écrite sous le produit, dans le détail et dans la liste des commandes. |
+| 51 | Commande d’un service : ni wilaya ni adresse demandées ; la commande se confirme sans adresse, la fiche dit « Service — sans livraison » et propose « Marquer terminée ». |
+| 55 / 93 | « Quels produits vous avez ? » : tous les produits commandables sont cités avec leur prix. |
+| 56 | Photo envoyée par le client : les photos n° 3 et n° 4 d’un produit sont reconnues (corrigé le 24/11). |
+| 57 | Le texte du mode simple ne dit plus qu’il n’y a pas de variantes. |
+| 58 | « Gérer les variantes » ouvre la fiche sur le tableau des variantes. |
+| 60 | Filtre « Utilisé par un agent » : 13 produits vendus ; « Aucun agent » : les produits refusés ou jamais validés (corrigé le 24/11). |
+| 61 / 91 | Une page ne peut avoir qu’un seul agent : l’écran le dit, et propose de déplacer la page vers l’autre agent. L’agent de la page répond à chaque message. Voir « Reste ouvert ». |
+| 65 / 66 | Catégorie et seuil d’alerte affichés sur la fiche produit. |
+| 67 / 68 | « Agents IA » et « Voir les agents IA qui le vendent ». |
+| 69 | Un produit d’une autre catégorie ajouté à un agent « par catégories » reste lié et est vendu par cet agent. L’onglet Connaissances de l’agent l’indique maintenant (« + 1 produit ajouté un par un »). |
+| 71 | Produit renommé, en attente de validation : l’IA continue de vendre la version validée. La liste des produits l’affiche maintenant « PROPOSÉ » (elle disait « exclu ») avec la raison. |
+| 73 | Un produit archivé se retrouve dans Filtres › Statut › « Archivé » et se restaure avec son stock. |
+| 74 | Motif « Alimentation (réception) » en tête de liste. |
+| 75 | Stock à −15 : « Entrée » +20 puis « Définir » 10 acceptés. Corrigé le 24/11 : on peut aussi désactiver « Accepter les commandes en rupture » sur un produit dont le stock est négatif. |
+| 76 | Sortie manuelle au-delà du stock : refusée avec une phrase claire, et un bouton « Forcer (stock négatif) ». |
+| 77 | Export : suivi du stock, vente en rupture, description, poids, mots-clés ; chaque produit suivi de ses variantes. |
+| 78 | Ré-import du fichier exporté, avec « Mettre à jour les produits existants » : 51 lignes valides, 0 en erreur, stock inchangé. Corrigé le 24/11 : sans l’option, l’aperçu explique comment mettre à jour ; un ancien prix incohérent ne bloque plus. |
+| 80 | Commande importée datée du 15/11/2026, la date du fichier. |
+| 81 | Une commande importée s’annule. |
+| 82 | Analyse d’une page : terminée, 3 publications lues, 3 produits détectés, aucun code d’erreur. Les produits déjà au catalogue sont marqués « Existe déjà » (corrigé le 24/11). |
+| 85 / 87 | Filtres des rapports : toute la liste s’ouvre, le produit choisi est affiché et filtre le rapport. |
+| 86 | Une recommandation ignorée se retrouve dans « Historique ». |
+| 90 | Changement d’adresse d’une commande : l’IA reprend la commande, demande seulement la nouvelle adresse, envoie le nouveau récapitulatif. |
+| 95 | Commande de 3 pour un stock de 1 : refusée avec « Stock insuffisant pour … », puis confirmée après réapprovisionnement. Le message « Ajustez le stock par variante » n’apparaît plus. |
+| S2 | Super admin › Modération › « Rejetés » : les produits refusés par l’IA sont listés avec la raison. |
+
+Autres corrections du 24/11 issues de ces tests : l’agent ne répond plus « Oui, on a … » en proposant un autre produit quand on lui demande un produit qu’il ne vend pas ; le message d’un colis refusé par le transporteur dit quel champ corriger ; un lien d’invitation déjà utilisé dit « Invitation déjà acceptée » ; la page Produits ne se dédouble plus (deux barres de défilement).
 
 ## Corrigé et mis en ligne le 23/11
 
@@ -77,12 +118,14 @@ Chaque ligne de votre feuille (n° = ligne). « Corrigé 23/11 » = corrigé et 
 | 86 | Une recommandation « ignorée » reste visible dans l'onglet « Historique » (ou le filtre Statut › « Ignorée »). |
 | 81 | Une commande importée s'annule normalement ; si elle n'a pas de commune, c'est sa **confirmation** qui est bloquée (adresse incomplète) — complétez la commune puis confirmez. |
 
-## Reste à tester (testeur, 24/11)
+## Reste à tester
 
-7 (deux pages à la fois — limite Facebook de création de pages côté testeur), 61 / 91 (deux agents sur la même page), 95 (commande au-delà du stock puis réapprovisionnement), 97 (un administrateur ne peut pas acheter de pack), 21 (« Remplir avec l’IA » 4 fois), et la revérification des points 51, 55 / 93 et 90 corrigés le 23/11 au soir.
+Rien : toutes les lignes de la feuille ont été reprises le 24/11 (tableau en tête de ce document).
 
 ## Reste ouvert
 
 | N° | État |
 |---|---|
-| 4 / 27 | Temps de réponse : ramené de 8–12 s à 3–7 s sur la plupart des messages ; certains messages (longue conversation, photo) prennent encore 9–11 s. |
+| 4 / 27 | Temps de réponse : 5,7 à 7,2 s mesurés le 24/11 sur des messages courts. Il se décompose ainsi : 1,5 à 2 s pour que Facebook nous remette le message, le délai de l’agent (3 s comptées depuis l’envoi du client, pour regrouper ses messages), 2 à 3,5 s de réponse de l’IA, moins d’1 s d’envoi. Le réglage « 3 s » est donc une attente de regroupement, pas le temps total ; avec un délai de 0 ou 1 s, la réponse arrive en 5 à 6 s. |
+| 61 / 91 | Plusieurs agents sur une même page : non prévu. Une page a un seul agent ; pour vendre plusieurs catégories sur la même page, un seul agent avec ces catégories (ou tout le catalogue). |
+| 97 | Un administrateur peut acheter un pack de crédits et payer une facture ; il ne peut pas changer ni résilier le forfait (boutons grisés, vu le 24/11). Les rôles sont ainsi définis aujourd’hui ; réserver l’achat de packs au propriétaire est une décision à prendre. |
