@@ -1,5 +1,6 @@
 // M4 — FL-01 steps 6–15 end to end: inbound webhook (fake Meta) → gates → batching → `ai-reply` job → AiRun with tool
 // replay → reply through the outbox → credits. AT ids from 13-acceptance-tests.md. The AI adapter is the scriptable fake.
+import sharp from 'sharp';
 import { VISION_CANDIDATES } from '../../src/modules/ai/ai.constants';
 import { VisionService } from '../../src/modules/ai/vision.service';
 import { formatMoney, getMessages } from '@djaber/shared';
@@ -972,6 +973,33 @@ describe('providers, credits', () => {
     expect((match[0]!.messages[0] as any).content.filter((p: any) => p.type === 'image')).toHaveLength(3);
     expect((fakeAi(app).callsOf('reply')[0]!.messages.at(-1) as any).content).toContain('photo shows: "a red toy car on a table"');
     expect(t.runs[0]).toMatchObject({ status: 'ok', creditsCharged: 5 });
+  });
+  it('client list L56 (Houssem live 23–24/11, UX-077 / UX-085): a customer photo that IS one of the product’s pictures — its 3rd one, re-encoded and resized as Messenger does — is matched on the picture itself, with no vision call', async () => {
+    const s = await shop();
+    // three real pictures on the product (shapes, not a flat colour); the 3rd one is what the customer sends back
+    const shot = (seed: number) => {
+      const r = (n: number) => Math.abs(Math.sin(seed * 12.9898 + n * 78.233) * 43758.5453) % 1;
+      const shapes = Array.from({ length: 8 }, (_, i) => `<rect x="${r(i) * 700}" y="${r(i + 20) * 500}" width="${80 + r(i + 40) * 300}" height="${60 + r(i + 60) * 240}" fill="rgb(${Math.floor(r(i + 80) * 255)},${Math.floor(r(i + 100) * 255)},${Math.floor(r(i + 120) * 255)})"/>`);
+      return sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="900" height="700"><rect width="100%" height="100%" fill="rgb(${Math.floor(r(1) * 255)},${Math.floor(r(2) * 255)},${Math.floor(r(3) * 255)})"/>${shapes.join('')}</svg>`)).jpeg({ quality: 92 }).toBuffer();
+    };
+    const pictures = await Promise.all([shot(31), shot(32), shot(33)]);
+    for (const [i, buffer] of pictures.entries()) await upload(s.owner, app, `/products/${s.robe.id}/images`, 'file', [{ buffer, name: `robe-${i + 1}.jpg`, type: 'image/jpeg' }]).expect(201);
+    await s.owner.post(`/products/${s.robe.id}/submit-changes`, {}).expect(200);
+    await drain(app, s.owner.workspaceId);
+    const url = 'https://fake.meta.local/photo-robe-3.jpg';
+    fakeMeta(app).setMedia(url, await sharp(pictures[2]!).resize(480).jpeg({ quality: 60 }).toBuffer(), 'image/jpeg');
+    await resetAi();
+    const t = await turn(s, newSender(), { attachments: [{ type: 'image', payload: { url } }] });
+    expect(fakeAi(app).callsOf('vision_describe')).toHaveLength(0);
+    expect(fakeAi(app).callsOf('vision_match')).toHaveLength(0);
+    expect((fakeAi(app).callsOf('reply')[0]!.messages.at(-1) as any).content).toContain(`"productId":"${s.robe.id}"`);
+    expect(t.runs[0]).toMatchObject({ status: 'ok' });
+    // another picture (none of the shop's) still goes to the vision model
+    const other = 'https://fake.meta.local/photo-autre.jpg';
+    fakeMeta(app).setMedia(other, await shot(77), 'image/jpeg');
+    await resetAi();
+    await turn(s, newSender(), { attachments: [{ type: 'image', payload: { url: other } }] });
+    expect(fakeAi(app).callsOf('vision_match').length + fakeAi(app).callsOf('vision_describe').length).toBeGreaterThan(0);
   });
   it('AT-AI-08 / AT-BIL-03 photo of a catalogue product ⇒ 2-pass vision, match ≥ 0.7, card, 5 credits reserved then debited; unknown photo ⇒ confirmation question, no price; provider error ⇒ reservation released', async () => {
     VisionService.onePassMax = 0; // the two-pass path (a catalogue too large for one call)

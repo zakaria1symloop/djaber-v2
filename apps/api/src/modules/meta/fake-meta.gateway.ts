@@ -234,10 +234,18 @@ export class FakeMetaGateway implements MetaGateway {
     return [...(this.pageIdsByAsid.get(appScopedUserId) ?? [])];
   }
 
+  /** bytes a test serves for a media URL (a customer photo that is one of the shop's own pictures) */
+  private readonly media = new Map<string, MetaDownload>();
+  setMedia(url: string, body: Buffer, mime: string): void {
+    this.media.set(url, { body, mime });
+  }
+
   /** Media "download": a generated picture / tiny payload for fake URLs; any other host is refused (no network here). */
   async download(url: string): Promise<MetaDownload> {
     this.record('download', { url });
     if (!url.startsWith(`${FAKE_MEDIA_HOST}/`)) throw new MetaError('network', 'fake adapter: external media is never fetched');
+    const served = this.media.get(url);
+    if (served) return served;
     if (/\.(mp3|m4a|ogg|aac)(\?|$)/.test(url)) return { body: Buffer.from('fake-audio'), mime: 'audio/mpeg' };
     if (/\.(mp4|mov)(\?|$)/.test(url)) return { body: Buffer.from('fake-video'), mime: 'video/mp4' };
     if (/\.pdf(\?|$)/.test(url)) return { body: Buffer.from('%PDF-1.4 fake'), mime: 'application/pdf' };

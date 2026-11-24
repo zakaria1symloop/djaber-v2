@@ -3,6 +3,7 @@
 //     agent's scope; (2) the model compares the photo with ≤ 10 candidate primary images → { productId, confidence }.
 //   caption at upload (CAT-02, `media / caption-image`) and "create from photo" (CAT-07, `POST /products/ai-fill`):
 //     the two providers of the catalogue module, bound here to the AI port (carry-over of M2).
+import { imageSignature, SAME_IMAGE_MARGIN, SAME_IMAGE_MAX, signatureDistance } from './image-hash';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { CREDIT_COST } from '@djaber/shared';
@@ -70,6 +71,9 @@ const PRODUCT = 'You help a shop owner create a product from photos. Reply as JS
 // R23 (22/11): the Claude 5 models think inside max_tokens — at the default effort the describe call spent its 400 tokens
 // thinking and answered nothing (no description, so no match: « je n'arrive pas à confirmer la photo »). Room for both.
 export const VISION_MAX_TOKENS = 1500;
+/** Products (most recently updated first) and pictures per product whose own pictures are compared with a customer photo. */
+export const SAME_IMAGE_PRODUCTS = 150;
+export const SAME_IMAGE_PER_PRODUCT = 6;
 export const PRODUCT_VISION_MAX_TOKENS = 2500;
 
 @Injectable()
@@ -119,9 +123,45 @@ export class VisionService {
    * AI-06. `image` = the customer photo as stored by the `media` job. Provider failures propagate (`AiProviderError`):
    * the reply run then follows F-6 and nothing is charged.
    */
+  /** signature of a stored product picture by its storage key (a key's content never changes); null = unreadable or flat */
+  private readonly signatures = new Map<string, Buffer | null>();
+
+  /**
+   * Client list L56 (Houssem live 23–24/11, UX-077 / UX-085: pictures n° 3 and n° 4 of a product answered « nous ne vendons pas ça »):
+   * the customer photo IS one of the shop's product pictures — matched on the picture itself, with no AI call. One product ⇒ a sure
+   * match; the same picture on several products ⇒ unsure between them; no such picture ⇒ null (the AI passes follow).
+   */
+  private async sameImage(agent: AgentScope, body: Buffer): Promise<VisionNote | null> {
+    const photo = await imageSignature(body);
+    if (!photo) return null;
+    const products = await this.catalogue.withImages(agent, SAME_IMAGE_PRODUCTS);
+    const pictures = products.flatMap((p) => (p.imageKeys?.length ? p.imageKeys : p.imageKey ? [p.imageKey] : []).slice(0, SAME_IMAGE_PER_PRODUCT).map((key) => ({ p, key })));
+    const unknown = [...new Set(pictures.map((x) => x.key).filter((k) => !this.signatures.has(k)))];
+    if (this.signatures.size + unknown.length > 20_000) this.signatures.clear();
+    for (let i = 0; i < unknown.length; i += 12) {
+      await Promise.all(unknown.slice(i, i + 12).map(async (key) => this.signatures.set(key, await this.storage.get(key).then((file) => imageSignature(file.body), () => null))));
+    }
+    const best = new Map<string, { p: CatalogueProduct; d: number }>();
+    for (const { p, key } of pictures) {
+      const h = this.signatures.get(key);
+      if (!h) continue;
+      const d = signatureDistance(photo, h);
+      if (d <= SAME_IMAGE_MAX + SAME_IMAGE_MARGIN && d < (best.get(p.id)?.d ?? Number.POSITIVE_INFINITY)) best.set(p.id, { p, d });
+    }
+    const ranked = [...best.values()].sort((a, b) => a.d - b.d);
+    const first = ranked[0];
+    if (!first || first.d > SAME_IMAGE_MAX) return null;
+    const close = ranked.filter((x) => x.d <= first.d + SAME_IMAGE_MARGIN);
+    if (close.length > 1) return { kind: 'unsure', candidates: close.slice(0, 3).map((x) => x.p.name) };
+    return { kind: 'match', productId: first.p.id, confidence: 0.99, name: first.p.name, alternatives: [] };
+  }
+
   async analyse(agent: AgentScope, image: { body: Buffer; mime: string } | null): Promise<VisionResult> {
     const usage: AiUsage = { inputTokens: 0, outputTokens: 0 };
     if (!image || !image.body.length || image.body.length > VISION_MAX_BYTES) return { note: { kind: 'unavailable' }, matched: false, usage };
+    // the shop's own picture: no AI call
+    const same = await this.sameImage(agent, image.body).catch(() => null);
+    if (same) return { note: same, matched: true, usage };
     const photo: AiPart = { type: 'image', image: image.body, mime: image.mime };
     // a small catalogue (every pictured product fits in one call): one call gives the match and what the photo shows
     const pictured = await this.catalogue.withImages(agent, VISION_CANDIDATES + 1);
