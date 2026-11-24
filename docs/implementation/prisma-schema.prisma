@@ -2871,6 +2871,8 @@ model Order {
   communeText        String?
   address            String?
   isStopdesk         Boolean            @default(false)
+  /// an order that is not delivered: every item is a service (CAT-11) — no wilaya / address, no courier (24/11 UX-084)
+  noDelivery         Boolean            @default(false)
   stopdeskId         String?
   subtotal           Int
   discount           Int                @default(0)

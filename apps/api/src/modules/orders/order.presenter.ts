@@ -96,7 +96,7 @@ const sourceOf = (o: OrderListRow): SourceBadge => {
 };
 
 /** Live state of an order for the status machine (`activeShipment` = the latest parcel not cancelled / failed / returned). */
-export const stateOf = (o: Pick<Order, 'status' | 'deliveryStatus' | 'confirmationStatus' | 'wilayaId' | 'communeId' | 'communeText' | 'address' | 'isStopdesk' | 'stopdeskId'>, activeShipment: { provider: string; status: string } | null | undefined): OrderState => ({
+export const stateOf = (o: Pick<Order, 'status' | 'deliveryStatus' | 'confirmationStatus' | 'wilayaId' | 'communeId' | 'communeText' | 'address' | 'isStopdesk' | 'stopdeskId'> & Partial<Pick<Order, 'noDelivery'>>, activeShipment: { provider: string; status: string } | null | undefined): OrderState => ({
   status: o.status,
   confirmationStatus: o.confirmationStatus,
   deliveryStatus: o.deliveryStatus,
@@ -106,8 +106,9 @@ export const stateOf = (o: Pick<Order, 'status' | 'deliveryStatus' | 'confirmati
 });
 
 /** 04 §1.6 confirm fields: wilaya + commune + (address ≥ 10 or a stop-desk). */
-export const hasDeliveryAddress = (o: Pick<Order, 'wilayaId' | 'communeId' | 'communeText' | 'address' | 'isStopdesk' | 'stopdeskId'>) =>
-  !!o.wilayaId && (!!o.communeId || !!o.communeText?.trim()) && (o.isStopdesk ? true : (o.address ?? '').trim().length >= 10);
+// Houssem live 24/11 UX-084: an order that is not delivered (services only) needs no address — it is confirmed, prepared and closed without one
+export const hasDeliveryAddress = (o: Pick<Order, 'wilayaId' | 'communeId' | 'communeText' | 'address' | 'isStopdesk' | 'stopdeskId'> & Partial<Pick<Order, 'noDelivery'>>) =>
+  o.noDelivery === true || (!!o.wilayaId && (!!o.communeId || !!o.communeText?.trim()) && (o.isStopdesk ? true : (o.address ?? '').trim().length >= 10));
 
 const allowed = (permission: MerchantPermission) => can(TenantContext.get().role, permission);
 type Reason = string | Refusal | null | undefined;
@@ -128,7 +129,7 @@ const act = (key: string, permission: MerchantPermission, o: { reason?: Reason; 
 const PRIMARY: Partial<Record<OrderStatusName, string>> = { new: 'confirm', confirmed: 'prepare', preparing: 'ship_manual', shipped: 'deliver' };
 
 /** `actions` of a row / the order page, in menu order (primary first). */
-export const orderActions = (o: Pick<Order, 'status' | 'deliveryStatus' | 'confirmationStatus' | 'paymentStatus' | 'conversationId' | 'wilayaId' | 'communeId' | 'communeText' | 'address' | 'isStopdesk' | 'stopdeskId' | 'total' | 'amountPaid'>, activeShipment: { provider: string; status: string } | null | undefined, ctx: Pick<PresentCtx, 'hasCourier' | 'onlinePayment'>): ActionDescriptor[] => {
+export const orderActions = (o: Pick<Order, 'status' | 'deliveryStatus' | 'confirmationStatus' | 'paymentStatus' | 'conversationId' | 'wilayaId' | 'communeId' | 'communeText' | 'address' | 'isStopdesk' | 'stopdeskId' | 'total' | 'amountPaid'> & Partial<Pick<Order, 'noDelivery'>>, activeShipment: { provider: string; status: string } | null | undefined, ctx: Pick<PresentCtx, 'hasCourier' | 'onlinePayment'>): ActionDescriptor[] => {
   const state = stateOf(o, activeShipment);
   const role = TenantContext.get().role;
   const terminal = isTerminal(o.status);
@@ -137,7 +138,9 @@ export const orderActions = (o: Pick<Order, 'status' | 'deliveryStatus' | 'confi
   const notAllowed = (to: OrderStatusName): Refusal => ({ code: 'ORDER_INVALID_TRANSITION', params: { from: o.status, to } });
   // with an active courier account the primary of a confirmed / preparing order is "Envoyer au transporteur"
   const courierPrimary = (o.status === 'confirmed' || o.status === 'preparing') && !activeShipment && !!ctx.hasCourier;
-  const primaryKey = courierPrimary ? 'send_courier' : PRIMARY[o.status];
+  // UX-084: an order that is not delivered has no parcel — after the confirmation its next step is « done » (delivered)
+  const noDelivery = o.noDelivery === true;
+  const primaryKey = noDelivery && (o.status === 'confirmed' || o.status === 'preparing') ? 'deliver' : courierPrimary ? 'send_courier' : PRIMARY[o.status];
   const confirm = t('confirmed');
   const list = [
     act('confirm', 'orders.write', { reason: o.status === 'new' ? (confirm?.code === 'ORDER_ADDRESS_REQUIRED' ? null : confirm) : notAllowed('confirmed'), primary: primaryKey === 'confirm', shortcut: 'Enter' }),
@@ -167,7 +170,9 @@ export const orderActions = (o: Pick<Order, 'status' | 'deliveryStatus' | 'confi
     // fully paid, refunded); « Paiement verrouillé (commande clôturée) » only for a closed order
     act('payment_link', 'orders.money', { reason: !ctx.onlinePayment ? 'FEATURE_DISABLED' : paymentLinkRefusal(o) }),
     act('refund', 'orders.money', { reason: refundRefusal(o) }),
-  ].filter((a): a is ActionDescriptor => !!a);
+  ]
+    .filter((a): a is ActionDescriptor => !!a)
+    .filter((a) => !(noDelivery && (a.key === 'send_courier' || a.key === 'ship_manual' || a.key === 'edit_address')));
   return [...list.filter((a) => a.primary), ...list.filter((a) => !a.primary)];
 };
 
@@ -286,6 +291,7 @@ export const presentOrder = (o: OrderDetailRow, extras: DetailExtras, ctx: Prese
     clientPhone: o.clientPhone,
     clientPhone2: o.clientPhone2,
     address: addressOf(o, ctx.locale, extras.stopdeskName ?? null),
+    noDelivery: o.noDelivery,
     items: o.items.map((i) => {
       const stock = i.variant ? i.variant.stock : i.product.trackStock ? (i.product.stock ?? 0) : null;
       return {

@@ -4434,6 +4434,7 @@
  "orders.page.editContact": "تعديل جهة الاتصال",
  "orders.page.history": "السجل",
  "orders.page.home": "إلى المنزل",
+ "orders.page.noDelivery": "خدمة — بدون توصيل",
  "orders.page.itemsNote": "يُعدَّل المخزون المحجوز عند الحفظ (حركات «خروج» / «إرجاع»).",
  "orders.page.margin": "الهامش {amount}",
  "orders.page.misses": "{count, plural, zero {لا مكالمة دون رد} one {مكالمة واحدة دون رد} two {مكالمتان دون رد} few {# مكالمات دون رد} many {# مكالمة دون رد} other {# مكالمة دون رد}}",

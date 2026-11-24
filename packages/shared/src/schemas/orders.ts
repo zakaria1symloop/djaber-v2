@@ -483,6 +483,8 @@ export type OrderView = Omit<OrderListItemView, 'items'> & {
   clientPhone: string;
   clientPhone2: string | null;
   address: AddressView | null;
+  /** an order that is not delivered (services only): no address, no parcel (24/11 UX-084) */
+  noDelivery: boolean;
   items: OrderItemView[];
   subtotal: number;
   discount: number;

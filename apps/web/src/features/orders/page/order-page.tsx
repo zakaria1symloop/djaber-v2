@@ -204,10 +204,13 @@ export function OrderPage({ id }: { id: string }) {
             saving={saving === 'items'}
             error={error?.part === 'items' ? error.message : null}
           />
-          <div className="grid gap-5 md:grid-cols-2">
-            <div id="delivery" className="flex min-w-0 scroll-mt-6 flex-col [&>*]:flex-1">
-              <OrderDeliveryBlock order={order} onSend={() => actions.run('send', order)} onShip={() => actions.run('ship', order)} parcels={parcels} />
-            </div>
+          {/* tester log 24/11 UX-084: an order that is not delivered (services only) has no parcel block */}
+          <div className={order.noDelivery ? 'grid gap-5' : 'grid gap-5 md:grid-cols-2'}>
+            {order.noDelivery ? null : (
+              <div id="delivery" className="flex min-w-0 scroll-mt-6 flex-col [&>*]:flex-1">
+                <OrderDeliveryBlock order={order} onSend={() => actions.run('send', order)} onShip={() => actions.run('ship', order)} parcels={parcels} />
+              </div>
+            )}
             <div id="payment" className="flex min-w-0 scroll-mt-6 flex-col [&>*]:flex-1">
               <PaymentBlock order={order} onRecord={() => actions.run('payment', order)} onLink={() => actions.run('payment_link', order)} onRefund={() => actions.run('refund', order)} />
             </div>

@@ -4434,6 +4434,7 @@
  "orders.page.editContact": "Edit contact",
  "orders.page.history": "HISTORY",
  "orders.page.home": "HOME",
+ "orders.page.noDelivery": "Service — no delivery",
  "orders.page.itemsNote": "The reserved stock is adjusted on save (\"out\" / \"return\" movements).",
  "orders.page.margin": "margin {amount}",
  "orders.page.misses": "{count, plural, one {# call without answer} other {# calls without answer}}",

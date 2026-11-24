@@ -408,6 +408,7 @@ export class OrderService implements OnModuleInit {
             clientPhone2: req.secondPhone,
             // UX-082: an order of services is not delivered (wilayaId 0 from the AI tool)
             wilayaId: req.wilayaId || null,
+            noDelivery: !req.wilayaId,
             communeId: commune?.id ?? null,
             communeText: commune ? null : req.communeName,
             address: req.address,

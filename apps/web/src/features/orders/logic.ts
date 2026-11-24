@@ -120,7 +120,9 @@ export function itemsSummary(items: OrderListItem['items']): { first: string; mo
 export const isReadOnly = (status: OrderStatus): boolean => ORDER_READ_ONLY_STATUSES.includes(status);
 
 /** 04 §1.6: confirming needs the wilaya, the commune and an address (or a stop-desk). */
-export function addressMissing(o: Pick<Order, 'address'>): boolean {
+export function addressMissing(o: Pick<Order, 'address'> & { noDelivery?: boolean }): boolean {
+  // UX-084: an order that is not delivered (services only) has no address to give
+  if (o.noDelivery) return false;
   const a = o.address;
   if (!a || !a.wilayaId) return true;
   if (!a.communeId && !a.communeText) return true;

@@ -385,6 +385,18 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     // the order page and the list read an AI order without delivery
     expect((await s.owner.get(`/orders/${placed.orderId}`).expect(200)).body.data).toMatchObject({ number: 'CMD-1001', total: 30000 });
     await s.owner.get('/orders').expect(200);
+    // Houssem live 24/11 UX-084: it is an order that is not delivered — confirmed and closed without an address, no courier action
+    const view = (await s.owner.get(`/orders/${placed.orderId}`).expect(200)).body.data;
+    expect(view).toMatchObject({ noDelivery: true, address: null });
+    const keys = view.actions.map((a: any) => a.key);
+    expect(keys).toContain('confirm');
+    expect(keys).not.toContain('send_courier');
+    expect(keys).not.toContain('ship_manual');
+    const confirmed = (await s.owner.post(`/orders/${placed.orderId}/status`, { to: 'confirmed', version: view.version }).set({ 'Idempotency-Key': `confirm-${placed.orderId}` }).expect(200)).body.data;
+    expect(confirmed).toMatchObject({ status: 'confirmed' });
+    expect(confirmed.actions.find((a: any) => a.primary)).toMatchObject({ key: 'deliver', enabled: true });
+    await s.owner.post(`/orders/${placed.orderId}/status`, { to: 'delivered', version: confirmed.version }).set({ 'Idempotency-Key': `deliver-${placed.orderId}` }).expect(200);
+    expect(await db.order.findUniqueOrThrow({ where: { id: placed.orderId } })).toMatchObject({ status: 'delivered', noDelivery: true });
     const confirmation = done.out.map((m) => m.text).join('\n');
     expect(confirmation).toContain('CMD-1001');
     expect(confirmation).toContain('Total : 30 000 DA.');

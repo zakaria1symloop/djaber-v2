@@ -140,7 +140,7 @@ export function ClientBlock({
                 <MonoChip className="mt-1.5">{a.isStopdesk ? t('common.stopdesk') : t('orders.page.home')}</MonoChip>
               </>
             ) : (
-              <p className="mt-1 text-[13px] text-accent-starred">{t('orders.confirm.noAddress')}</p>
+              <p className={order.noDelivery ? 'mt-1 text-[13px] text-text-secondary' : 'mt-1 text-[13px] text-accent-starred'}>{t(order.noDelivery ? 'orders.page.noDelivery' : 'orders.confirm.noAddress')}</p>
             )}
           </div>
           <div className="min-w-0">

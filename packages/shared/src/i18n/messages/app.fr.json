@@ -4434,6 +4434,7 @@
  "orders.page.editContact": "Modifier le contact",
  "orders.page.history": "HISTORIQUE",
  "orders.page.home": "À DOMICILE",
+ "orders.page.noDelivery": "Service — sans livraison",
  "orders.page.itemsNote": "Le stock réservé est ajusté à l'enregistrement (mouvements « sortie » / « retour »).",
  "orders.page.margin": "marge {amount}",
  "orders.page.misses": "{count, plural, one {# appel sans réponse} other {# appels sans réponse}}",
