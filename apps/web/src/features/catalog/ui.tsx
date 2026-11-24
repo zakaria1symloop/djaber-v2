@@ -83,8 +83,11 @@ export function ModerationPill({ status, long }: { status: ModerationStatus | st
  * Djaber — waiting, refused, contested. Report 12/11 (« casque »: IA « EXCLU » + « CONTESTATION » after « Ajouter à un
  * agent », read as a bug): the screens now say it.
  */
-export type AiExclusion = 'archived' | 'inactive' | 'pending' | 'changes_requested' | 'rejected' | 'appealed';
+export type AiExclusion = 'archived' | 'inactive' | 'pending' | 'changes_requested' | 'rejected' | 'appealed' | 'old_version';
 export function aiExclusion(p: { aiState?: string; archived?: boolean; isActive?: boolean; moderation?: { status: string; changesRequested?: boolean } | null }): AiExclusion | null {
+  // client list L71 (Houssem live 24/11): a change waiting for Djaber's review — the AI keeps selling the last validated version
+  // (04 §12 « Changed product »); the pill stays PROPOSÉ and says which version
+  if (p.aiState === 'proposed') return ['pending', 'changes_requested'].includes(moderationPillStatus(p.moderation) ?? '') ? 'old_version' : null;
   if (p.aiState !== 'excluded') return null;
   if (p.archived) return 'archived';
   if (p.isActive === false) return 'inactive';

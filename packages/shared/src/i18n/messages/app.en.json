@@ -6483,6 +6483,7 @@
  "adminMod.filter.type.category": "Categories",
  "adminMod.filter.type.agent_name": "AI agent names",
  "adminMod.filter.type.agent_prompt": "AI agent prompts",
+ "products.ai.excludedWhy.old_version": "Change waiting for Djaber’s review: meanwhile the AI sells the last approved version",
  "products.ai.excludedWhy.pending": "Waiting for Djaber's review: the AI offers it once approved",
  "products.ai.excludedWhy.rejected": "Refused by Djaber: the AI does not offer it (edit and resubmit it, or appeal)",
  "products.ai.excludedWhy.appealed": "Appeal in progress: the AI offers it if Djaber accepts it",

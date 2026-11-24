@@ -15,9 +15,13 @@ export const LIST_INCLUDE = {
 } satisfies Prisma.ProductInclude;
 export type ProductListRow = Prisma.ProductGetPayload<{ include: typeof LIST_INCLUDE }>;
 
-/** Customer-visible and proposed by the AI: active, live, and validated (04 §12 "Visibility while pending"). */
-export const isProposed = (p: { isActive: boolean; deletedAt: Date | null; moderationStatus: string }) =>
-  p.isActive && !p.deletedAt && (p.moderationStatus === 'approved' || p.moderationStatus === 'not_required');
+/**
+ * Customer-visible and proposed by the AI: active, live, and validated (04 §12 "Visibility while pending") — or waiting for the
+ * review of a change while its last approved version stays on sale (client list L71, Houssem live 24/11: « Satin dress » renamed,
+ * pending, still sold by the AI at its approved title, and the products list said « exclu de l'IA »).
+ */
+export const isProposed = (p: { isActive: boolean; deletedAt: Date | null; moderationStatus: string; approvedSnapshot?: unknown }) =>
+  p.isActive && !p.deletedAt && (p.moderationStatus === 'approved' || p.moderationStatus === 'not_required' || (p.moderationStatus === 'pending' && p.approvedSnapshot !== null && p.approvedSnapshot !== undefined));
 
 export const moderationPill = (p: Pick<ProductListRow, 'moderationStatus' | 'currentModeration'>): ProductModerationPill => ({
   status: p.moderationStatus,

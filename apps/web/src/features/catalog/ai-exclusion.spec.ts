@@ -17,3 +17,12 @@ describe('aiExclusion', () => {
     expect(aiExclusion({ aiState: 'excluded' })).toBeNull();
   });
 });
+
+// client list L71 (Houssem live 24/11): a renamed product waits for the review while the AI sells its approved version
+describe('aiExclusion — a proposed product whose change waits for the review', () => {
+  it('says « old version » while pending, nothing once validated', () => {
+    expect(aiExclusion({ aiState: 'proposed', isActive: true, moderation: { status: 'pending' } })).toBe('old_version');
+    expect(aiExclusion({ aiState: 'proposed', isActive: true, moderation: { status: 'approved' } })).toBeNull();
+    expect(aiExclusion({ aiState: 'proposed', isActive: true, moderation: null })).toBeNull();
+  });
+});

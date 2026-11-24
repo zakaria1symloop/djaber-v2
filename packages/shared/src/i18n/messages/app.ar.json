@@ -6483,6 +6483,7 @@
  "adminMod.filter.type.category": "الفئات",
  "adminMod.filter.type.agent_name": "أسماء وكلاء الذكاء الاصطناعي",
  "adminMod.filter.type.agent_prompt": "تعليمات وكلاء الذكاء الاصطناعي",
+ "products.ai.excludedWhy.old_version": "تعديل في انتظار مراجعة Djaber: الذكاء الاصطناعي يبيع آخر نسخة موافق عليها في الأثناء",
  "products.ai.excludedWhy.pending": "في انتظار مراجعة Djaber: سيقترحه الذكاء الاصطناعي بعد قبوله",
  "products.ai.excludedWhy.rejected": "رفضه Djaber: لا يقترحه الذكاء الاصطناعي (عدّله وأعد إرساله، أو قدّم طعنًا)",
  "products.ai.excludedWhy.appealed": "طعن قيد المراجعة: سيقترحه الذكاء الاصطناعي إذا قبله Djaber",

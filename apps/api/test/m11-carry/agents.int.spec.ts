@@ -176,6 +176,14 @@ describe('"Agents qui le vendent" (GET /agents?productId=)', () => {
     await db.$executeRaw`UPDATE "Product" SET "moderationStatus" = 'pending', "approvedSnapshot" = NULL WHERE "id" = ${sac.id}::uuid`;
     expect(await ids(`agentId=${all.id}`)).toEqual(['Robe lin']);
     expect(await ids('noAgent=1')).toEqual(['Bougie', 'Sac paille']);
+    // client list L71 (Houssem live 24/11): a product whose change waits for the review keeps its approved version on sale — the list
+    // says « proposé par l'IA », not « exclu »; one waiting for its first review, or refused, stays « exclu »
+    const state = async (id: string) => (await owner.get(`/products/${id}`).expect(200)).body.data.aiState;
+    expect(await state(sac.id)).toBe('excluded');
+    expect(await state(free.id)).toBe('excluded');
+    await db.product.update({ where: { id: robe.id }, data: { moderationStatus: 'pending', approvedSnapshot: { title: 'Robe lin', price: 1000 } } });
+    expect(await state(robe.id)).toBe('proposed');
+    expect(await ids(`agentId=${all.id}`)).toEqual(['Robe lin']);
     expect(free.id).toBeTruthy();
     expect(robe.id).toBeTruthy();
   });
