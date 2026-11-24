@@ -231,7 +231,7 @@ export class InboundProcessor implements OnModuleInit {
    */
   private async afterInbound(channel: Channel, s: Stored, unsupportedOnly: boolean) {
     let conv = s.conversation;
-    const message = await prisma.message.findFirst({ where: { id: s.messageId }, select: { text: true, attachments: true, createdAt: true } });
+    const message = await prisma.message.findFirst({ where: { id: s.messageId }, select: { text: true, attachments: true, createdAt: true, sentAt: true } });
     // A3 + retest 12/11: a thread the AI handed off (its failure, or a rule while nobody of the team answered) goes back to
     // the AI with this customer message — a greeting starts a new conversation (ConversationService.resumeAfterHandoff)
     if (!s.blocked && conv.status === 'needs_human' && (await this.conversations.resumeAfterHandoff(conv.id, message?.text ?? null, new Date(), message?.createdAt))) conv = { ...conv, status: 'active', aiPaused: false };
@@ -272,7 +272,7 @@ export class InboundProcessor implements OnModuleInit {
       }
     }
     // a voice note is answered once its transcript exists: the reply job is parked (≤ 30 s) and released by `media / transcribe`
-    const scheduled = await this.batching.schedule({ workspaceId: channel.workspaceId, conversationId: conv.id, messageId: s.messageId, delaySec: hasAudio ? VOICE_WAIT_S : agent.responseDelaySec, burst: guard.burst });
+    const scheduled = await this.batching.schedule({ workspaceId: channel.workspaceId, conversationId: conv.id, messageId: s.messageId, delaySec: hasAudio ? VOICE_WAIT_S : agent.responseDelaySec, burst: guard.burst, sentAt: hasAudio ? null : message?.sentAt });
     if (scheduled) {
       const auth = this.tokens.auth(channel);
       // typing indicator at the start of the window (best effort)

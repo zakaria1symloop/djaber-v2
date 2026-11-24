@@ -66,7 +66,9 @@ describe('FL-01 — reply turn', () => {
     const sender = newSender();
     const { conversation, message } = await receive(app, s.page, sender, { text: 'Bonjour, combien la robe satin ?' });
     const job = await replyJob(app, conversation.id);
-    expect(job!.opts.delay).toBe(3000); // agent.responseDelaySec
+    // agent.responseDelaySec (3 s), counted from the customer's send time (L4 / L27, 24/11)
+    expect(job!.opts.delay).toBeGreaterThanOrEqual(1000);
+    expect(job!.opts.delay).toBeLessThanOrEqual(3000);
     expect(job!.data).toMatchObject({ workspaceId: s.owner.workspaceId, conversationId: conversation.id, batchKey: message!.id });
     expect(await aiMessages(conversation.id)).toHaveLength(0); // nothing leaves before the window closes
 

@@ -222,7 +222,9 @@ describe('MSG-05 batching hook and MSG-09 unsupported media', () => {
       expect(a.message!.id).not.toBe(first.message!.id);
       const mine = (await queue.getJobs(['delayed', 'waiting', 'active'])).filter((j) => j.data.conversationId === first.conversation.id);
       expect(mine).toHaveLength(1);
-      expect(job!.opts.delay).toBe(3000); // agent.responseDelaySec default
+      // agent.responseDelaySec default (3 s), counted from the customer's send time (L4 / L27, 24/11)
+      expect(job!.opts.delay).toBeGreaterThanOrEqual(1000);
+      expect(job!.opts.delay).toBeLessThanOrEqual(3000);
       expect(meta.callsOf('senderAction').slice(typing).every((c) => c.args.action === 'typing_on' && c.args.recipientId === sender)).toBe(true);
       expect(meta.callsOf('senderAction').length - typing).toBe(3);
 
