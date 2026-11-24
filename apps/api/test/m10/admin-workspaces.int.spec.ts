@@ -104,6 +104,18 @@ describe('ADM-02 workspaces list & detail', () => {
     expect((await lastAudit('workspace.update', owner.workspaceId))!.reason).toBe(REASON);
   });
 
+  it('Houssem live 24/11 UX-083: a shop on the Free plan has no trial or period to extend — the action is greyed with PLAN_IS_FREE and the route answers 422 PLAN_IS_FREE (it said 409 « Changed meanwhile, please reload. »)', async () => {
+    const owner = await asOwner(app);
+    const sa = await asPlatform(app);
+    const free = await db.plan.findUniqueOrThrow({ where: { slug: 'free' } });
+    const sub = await db.subscription.findFirstOrThrow({ where: { workspaceId: owner.workspaceId } });
+    await db.subscription.update({ where: { id: sub.id }, data: { planId: free.id, status: 'active', billingCycle: 'none', provider: 'none', trialEndsAt: null } });
+    const refused = await sa.post(`/admin/workspaces/${owner.workspaceId}/extend`, { days: 7, reason: REASON }).expect(422);
+    expect(refused.body.error.code).toBe('PLAN_IS_FREE');
+    const row = (await sa.get(`/admin/workspaces?planSlug=free&pageSize=100`).expect(200)).body.data.find((w: any) => w.id === owner.workspaceId);
+    expect(row.actions.find((a: any) => a.key === 'extend_trial')).toMatchObject({ enabled: false, reasonCode: 'PLAN_IS_FREE' });
+    expect(row.actions.find((a: any) => a.key === 'change_plan')).toMatchObject({ enabled: true });
+  });
   it('tester report 22/10 UX-020: extending a trial tells the Owner (notification subscription.trial_extended, in-app + e-mail)', async () => {
     const owner = await asOwner(app);
     const sa = await asPlatform(app);

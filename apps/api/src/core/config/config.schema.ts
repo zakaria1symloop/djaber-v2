@@ -84,6 +84,8 @@ export const ConfigSchema = z.object({
   // UX-066 (23/11, replies 10–12 s on Messenger): `off` sends the chat steps of Claude 5 models (purpose `reply`) without thinking
   // (`thinking: {type: "disabled"}`, accepted at effort low); `low` keeps adaptive thinking at effort low (the 22/11 setting)
   AI_REPLY_THINKING: z.enum(['low', 'off']).default('low'),
+  // on = the whole tool list on every Anthropic chat step, so the prompt cache is re-read (off: only the tools the step offers)
+  AI_STABLE_TOOLS: z.enum(['on', 'off']).default('off'),
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   GOOGLE_AI_API_KEY: z.string().optional(),

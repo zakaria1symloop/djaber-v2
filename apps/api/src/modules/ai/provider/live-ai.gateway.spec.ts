@@ -241,6 +241,28 @@ describe('LiveAiGateway.generate — Anthropic, Google, Groq', () => {
     expect(net.calls.at(-1)!.json.system).toEqual([{ type: 'text', text: SYSTEM }]);
   });
 
+  it('24/11 prompt cache (re-read on 10 of 60 first steps): AI_STABLE_TOOLS=on sends the whole tool list of the turn on an Anthropic step; a call to a tool the step does not offer comes back rejected, never as a call; off keeps the offered tools only', async () => {
+    const ORDER_TOOL: AiToolDef = { name: 'create_order', description: 'Places an order', parameters: { type: 'object', properties: {} } };
+    const stable = new LiveAiGateway({ stableTools: true });
+    expectHost('api.anthropic.com').reply({
+      json: {
+        id: 'msg_stable_1', type: 'message', role: 'assistant', model: 'claude-haiku-5-5', stop_reason: 'tool_use', usage: { input_tokens: 9, output_tokens: 5 },
+        content: [{ type: 'tool_use', id: 'toolu_1', name: 'create_order', input: {} }, { type: 'tool_use', id: 'toolu_2', name: 'search_products', input: { query: 'robe' } }],
+      },
+    });
+    const r = await stable.generate(request('anthropic', 'claude-haiku-5-5', { tools: [SEARCH_TOOL], allTools: [SEARCH_TOOL, ORDER_TOOL] }));
+    expect(net.calls.at(-1)!.json.tools.map((t: { name: string }) => t.name)).toEqual(['search_products', 'create_order']);
+    expect(r.toolCalls.map((c) => c.name)).toEqual(['search_products']);
+    expect(r.rejectedToolCalls?.map((c) => c.name)).toEqual(['create_order']);
+    // a step that offers no tool sends none, whatever the turn's list
+    expectHost('api.anthropic.com').reply({ json: { id: 'msg_stable_2', type: 'message', role: 'assistant', model: 'claude-haiku-5-5', content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', usage: { input_tokens: 9, output_tokens: 1 } } });
+    await stable.generate(request('anthropic', 'claude-haiku-5-5', { allTools: [SEARCH_TOOL, ORDER_TOOL] }));
+    expect(net.calls.at(-1)!.json.tools).toBeUndefined();
+    // off (the default): only the tools the step offers
+    expectHost('api.anthropic.com').reply({ json: { id: 'msg_stable_3', type: 'message', role: 'assistant', model: 'claude-haiku-5-5', content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', usage: { input_tokens: 9, output_tokens: 1 } } });
+    await gateway.generate(request('anthropic', 'claude-haiku-5-5', { tools: [SEARCH_TOOL], allTools: [SEARCH_TOOL, ORDER_TOOL] }));
+    expect(net.calls.at(-1)!.json.tools.map((t: { name: string }) => t.name)).toEqual(['search_products']);
+  });
   it('22/11 slow replies: a Claude 5 chat step asks for effort low; Claude 4.x and the other purposes keep the model default', async () => {
     const ok = (id: string) => ({ json: { id, type: 'message', role: 'assistant', model: 'claude-haiku-5-5', content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', usage: { input_tokens: 9, output_tokens: 1 } } });
     expectHost('api.anthropic.com').reply(ok('msg_e1'));

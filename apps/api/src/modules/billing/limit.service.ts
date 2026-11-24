@@ -102,7 +102,15 @@ export class LimitService {
 
     // --- agents ------------------------------------------------------------------------------------------------------------
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspaceId} || ':agents-limit', 0))`;
-    const counted = await tx.agent.findMany({ where: { deletedAt: null, status: { in: ['active', 'paused'] }, OR: [{ pausedReason: null }, { pausedReason: { not: 'plan' } }] }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
+    const byAge = await tx.agent.findMany({ where: { deletedAt: null, status: { in: ['active', 'paused'] }, OR: [{ pausedReason: null }, { pausedReason: { not: 'plan' } }] }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
+    // Houssem live 24/11 (H-07, trial over ⇒ Free: 1 page, 1 agent): the oldest agent — active, on no page — kept the only slot and the agent
+    // answering on the page that stayed connected was paused: the shop's AI went silent although its plan allowed one page and one agent.
+    // The slots go first to the active agents that answer on a page still connected, then to the other active agents, then to the agents
+    // the shop paused itself; oldest first within each group.
+    const livePages = (await tx.channel.findMany({ where: { parentChannelId: null, status: { in: [...SLOT] } }, select: { id: true } })).map((c) => c.id);
+    const answering = new Set(livePages.length && byAge.length ? (await tx.agentChannel.findMany({ where: { agentId: { in: byAge.map((a) => a.id) }, channel: { OR: [{ id: { in: livePages } }, { parentChannelId: { in: livePages } }] } }, select: { agentId: true } })).map((l) => l.agentId) : []);
+    const rank = (a: (typeof byAge)[number]) => (a.status !== 'active' ? 2 : answering.has(a.id) ? 0 : 1);
+    const counted = byAge.map((a, i) => ({ a, i })).sort((x, y) => rank(x.a) - rank(y.a) || x.i - y.i).map((x) => x.a);
     const fitAgents = keep(plan.maxAgents, counted.length);
     for (const a of counted.slice(fitAgents).filter((x) => x.status === 'active')) {
       const row = await tx.agent.update({ where: { id: a.id }, data: { status: 'paused', pausedReason: 'plan', version: { increment: 1 } } });

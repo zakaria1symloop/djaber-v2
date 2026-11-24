@@ -26,6 +26,12 @@ export type AiGenerateRequest = {
   system: string;
   messages: AiMessage[];
   tools?: AiToolDef[];
+  /**
+   * Every tool of the turn, in a fixed order, whatever this step offers (`tools`). With `AI_STABLE_TOOLS=on` the live Anthropic
+   * adapter sends this list instead of `tools`, so the cached start of the request (tools, then the system prefix) is the same on
+   * every step and every turn; a call to a tool that is not in `tools` comes back in `rejectedToolCalls`, as before.
+   */
+  allTools?: AiToolDef[];
   temperature?: number;
   maxTokens?: number;
   /** per model call (`AiRoute.timeoutSec`) */

@@ -28,6 +28,12 @@ export type LiveAiGatewayOptions = {
   fetch?: typeof fetch;
   /** `AI_REPLY_THINKING`: `off` = chat steps (purpose `reply`) of Claude 5 models without thinking */
   replyThinking?: 'low' | 'off';
+  /**
+   * `AI_STABLE_TOOLS`: `on` = Anthropic calls carry the whole tool list of the turn on every step (measured live 23–24/11: the prompt
+   * cache was re-read on 10 of 60 first steps and ~7 000 tokens re-written on the others, because the tool list — the first part of
+   * the cached prefix — changes with what each message may use)
+   */
+  stableTools?: boolean;
 };
 
 /** SDK retries on retryable API errors (429, 5xx, connection): 2 for a model step (04 §6), 1 for a transcription. */
@@ -302,7 +308,10 @@ export class LiveAiGateway implements AiGateway {
     const rejected: AiGenerateResult['rejectedToolCalls'] = [];
     let answer: unknown = null;
     try {
-      const tools = toTools(req.tools);
+      // AI_STABLE_TOOLS: the whole tool list of the turn, so the cached prefix does not change with the tools this step offers
+      const stable = provider === 'anthropic' && this.options.stableTools === true && !!req.tools?.length && !!req.allTools?.length;
+      const offered = new Set((req.tools ?? []).map((t) => t.name));
+      const tools = toTools(stable ? req.allTools : req.tools);
       // full-test 15/11 proposal 13 (18 255 input tokens for one turn of a 10-product shop): Anthropic caches the stable
       // start of the system prompt (identity → catalogue, ≥ ~1 000 tokens) — the next turns of the conversation re-read it
       // from the cache; the rest of the system prompt (order state, language guess…) follows as a second block
@@ -339,9 +348,13 @@ export class LiveAiGateway implements AiGateway {
         this.noTemperature.add(modelKey);
         return run(true);
       });
+      const calls = res.toolCalls.map((c) => ({ id: c.toolCallId, name: c.toolName, args: (c.args ?? {}) as Record<string, unknown> }));
+      // a tool sent only to keep the prefix stable is not offered on this step: its call is handed back as rejected, never run
+      const notOffered = stable ? calls.filter((c) => !offered.has(c.name)) : [];
       return {
         text: res.text,
-        toolCalls: res.toolCalls.map((c) => ({ id: c.toolCallId, name: c.toolName, args: (c.args ?? {}) as Record<string, unknown> })),
+        toolCalls: notOffered.length ? calls.filter((c) => offered.has(c.name)) : calls,
+        ...(notOffered.length ? { rejectedToolCalls: notOffered } : {}),
         usage: { inputTokens: count(res.usage.promptTokens), outputTokens: count(res.usage.completionTokens) },
         ...cacheOf(res.providerMetadata),
         finishReason: res.finishReason,

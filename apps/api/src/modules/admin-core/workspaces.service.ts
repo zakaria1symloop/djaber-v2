@@ -186,13 +186,13 @@ export class AdminWorkspacesService {
         conversations30d: convs.find((c) => c.workspaceId === id)?._count._all ?? 0,
         createdAt: w.createdAt.toISOString(),
         lastActivityAt: iso(activity.find((a) => a.workspaceId === id)?.at ?? null),
-        actions: this.actions(w, sub?.status ?? null, actor),
+        actions: this.actions(w, sub?.status ?? null, actor, (sub?.plan.slug ?? 'free') === 'free'),
       });
     }
     return out;
   }
 
-  private actions(w: { status: string }, subStatus: string | null, actor: AdminActor): ActionDescriptor[] {
+  private actions(w: { status: string }, subStatus: string | null, actor: AdminActor, onFree = false): ActionDescriptor[] {
     const r = actor.platformRole;
     const a = (key: string, perm: Parameters<typeof canPlatform>[1], extra: { enabled?: boolean; reasonCode?: string } = {}): ActionDescriptor => {
       const allowed = canPlatform(r, perm);
@@ -206,7 +206,9 @@ export class AdminWorkspacesService {
       a('change_plan', 'admin.workspaces.write', { enabled: !deleting, reasonCode: 'WORKSPACE_DELETION_SCHEDULED' }),
       a('add_credits', 'admin.workspaces.credits', { enabled: !deleting, reasonCode: 'WORKSPACE_DELETION_SCHEDULED' }),
       a('remove_credits', 'admin.billing.write', { enabled: !deleting, reasonCode: 'WORKSPACE_DELETION_SCHEDULED' }),
-      a('extend_trial', 'admin.workspaces.write', { enabled: !deleting && (subStatus === 'trial' || subStatus === 'active' || subStatus === 'dunning'), reasonCode: deleting ? 'WORKSPACE_DELETION_SCHEDULED' : STATE_REFUSED }),
+      // Houssem live 24/11 UX-083: on a shop already back on the Free plan « Extend trial » was offered and answered « Changed meanwhile,
+      // please reload. » — there is no trial or paid period to extend: the action is greyed with its reason (the way back is « Change plan »)
+      a('extend_trial', 'admin.workspaces.write', { enabled: !deleting && !onFree && (subStatus === 'trial' || subStatus === 'active' || subStatus === 'dunning'), reasonCode: deleting ? 'WORKSPACE_DELETION_SCHEDULED' : onFree ? 'PLAN_IS_FREE' : STATE_REFUSED }),
       // ADMIN-04 (02 §3.5 `/admin/workspaces`): DLG « Niveau de confiance » → `POST /admin/workspaces/:id/trust-level`
       a('trust_level', 'admin.moderation.write'),
       w.status === 'suspended' ? a('reactivate', 'admin.workspaces.write') : a('suspend', 'admin.workspaces.write', { enabled: !deleting, reasonCode: 'WORKSPACE_DELETION_SCHEDULED' }),
@@ -438,7 +440,8 @@ export class AdminWorkspacesService {
     const reason = requireReason(input.reason);
     await this.wsOr404(id);
     const sub = await prisma.subscription.findFirst({ where: { workspaceId: id, status: { in: [...CURRENT_STATUSES] } }, include: { plan: true } });
-    if (!sub || sub.plan.slug === 'free') throw new AppException('CONFLICT', {}, {}, { reason: 'NO_SUBSCRIPTION' });
+    if (sub?.plan.slug === 'free') throw new AppException('PLAN_IS_FREE');
+    if (!sub) throw new AppException('CONFLICT', {}, {}, { reason: 'NO_SUBSCRIPTION' });
     const base = sub.trialEndsAt ?? sub.currentPeriodEnd;
     const until = input.until ? new Date(`${input.until}T23:59:59+01:00`) : new Date(base.getTime() + input.days! * DAY);
     if (until <= base) throw new AppException('VALIDATION_ERROR', {}, { until: 'validation.range' });

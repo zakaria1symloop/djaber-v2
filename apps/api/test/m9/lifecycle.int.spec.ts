@@ -94,6 +94,28 @@ describe('02 §5 single rule', () => {
 });
 
 describe('dunning R-J (D49)', () => {
+  it('Houssem live 24/11 (H-07, trial over ⇒ Free): the agent slot goes to the agent that answers on the page still connected — not to an older agent on no page, nor to one the shop paused itself', async () => {
+    const owner = await asOwner(app);
+    await makePaid(app, owner.workspaceId, 'pro', 'monthly');
+    const [page1, page2] = await channels(owner.workspaceId, 2);
+    const [oldest, byHand, seller] = await agents(owner.workspaceId, 3);
+    // the oldest agent is active on no page; the 2nd was paused by the shop; the newest answers on Page 1
+    await db.agent.update({ where: { id: byHand!.id }, data: { status: 'paused', pausedReason: 'manual' } });
+    await db.agentChannel.create({ data: { agentId: seller!.id, channelId: page1!.id } });
+    await owner.post('/billing/cancel', {}).expect(200);
+    await setPeriod(app, owner.workspaceId, new Date(Date.now() - 60_000));
+    await runExpiry(app);
+    expect((await currentSubOf(owner.workspaceId)).plan.slug).toBe('free');
+    const state = async (id: string) => {
+      const a = await db.agent.findUniqueOrThrow({ where: { id } });
+      return [a.status, a.pausedReason];
+    };
+    expect(await db.channel.findUniqueOrThrow({ where: { id: page1!.id } })).toMatchObject({ status: 'active' });
+    expect(await db.channel.findUniqueOrThrow({ where: { id: page2!.id } })).toMatchObject({ status: 'paused', pausedReason: 'plan' });
+    expect(await state(seller!.id)).toEqual(['active', null]);
+    expect(await state(oldest!.id)).toEqual(['paused', 'plan']);
+    expect(await state(byHand!.id)).toEqual(['paused', 'manual']);
+  });
   it('AT-BIL-10 J−7 upcoming invoice + subscription.expiring → J0 dunning + invoice.unpaid (paid limits kept) → J+3 → J+7 expired ⇒ free (never suspended, nothing deleted); paying the unpaid invoice ⇒ active, new period, pauses lifted', async () => {
     const owner = await asOwner(app);
     const end = new Date(Date.now() + 6 * DAY);

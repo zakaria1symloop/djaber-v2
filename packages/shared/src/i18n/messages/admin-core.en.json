@@ -1309,6 +1309,7 @@
  "admin.reason.ACCOUNT_OWNS_WORKSPACE": "This user owns “{workspace}”: transfer the ownership or delete the workspace first.",
  "admin.reason.AUTH_USER_BLOCKED": "Account blocked: unblock it first.",
  "admin.reason.ACCOUNT_DELETION_PENDING": "This account's deletion is already scheduled.",
+ "admin.reason.PLAN_IS_FREE": "Free plan: there is no trial or paid period to extend. Use “Change plan”.",
  "admin.reason.WORKSPACE_DELETION_SCHEDULED": "Workspace deletion scheduled: cancel it first.",
  "admin.reason.TICKET_CLOSED": "Ticket closed: reopen it first.",
  "admin.reason.CMS_LOCALE_MISSING": "The French text is missing: write it first.",

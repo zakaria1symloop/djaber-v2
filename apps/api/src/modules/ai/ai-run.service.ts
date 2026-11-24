@@ -956,7 +956,9 @@ export class AiRunService implements OnModuleInit {
     const greetOnly = greetingOnly(said) && !yesOrder;
     const withheld = (name: string) =>
       (name === 'handoff_to_human' && (noHandoff || !reasons.length)) || (name === 'create_order' && (noPhone || noPlace || noStreet || noAddressHere || !!takesGone || greetOnly)) || (name === 'cancel_order' && noCancel) || (name === 'lookup_order' && (noLookup || confirmingYes)) || (name === 'add_faq_candidate' && noFaq);
-    const defs = (await this.tools.defsFor(req.toolCtx.workspaceId)).filter((d) => !withheld(d.name)).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
+    // every tool of the turn, in its fixed order (AI_STABLE_TOOLS: sent on each step so the cached prefix stays the same)
+    const allDefs = await this.tools.defsFor(req.toolCtx.workspaceId);
+    const defs = allDefs.filter((d) => !withheld(d.name)).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
     // journey retest R1-1: the model still called the withheld tool (the prompt describes it) and the SDK refused the whole
     // step — 5 of 59 turns of a shop with handoff rules ended in 503. The note says it is not available for this message
     // (after the cached start of the system prompt, so the cache is kept).
@@ -1518,7 +1520,7 @@ export class AiRunService implements OnModuleInit {
       try {
         res = await this.routing.call(
           'text',
-          (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose: 'reply', system, ...(req.prompt.cachePrefix ? { systemCachePrefix: req.prompt.cachePrefix } : {}), messages, tools: offerTools ? stepDefs : undefined, temperature: req.temperature, maxTokens: req.maxTokens, timeoutMs: Math.max(1000, Math.min(timeoutMs, left)) }),
+          (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose: 'reply', system, ...(req.prompt.cachePrefix ? { systemCachePrefix: req.prompt.cachePrefix } : {}), messages, tools: offerTools ? stepDefs : undefined, ...(offerTools ? { allTools: allDefs } : {}), temperature: req.temperature, maxTokens: req.maxTokens, timeoutMs: Math.max(1000, Math.min(timeoutMs, left)) }),
           { only: (m) => m.supportsTools, prefer: model?.id },
         );
       } catch (e) {
@@ -1534,7 +1536,7 @@ export class AiRunService implements OnModuleInit {
       // journey retest R1-1: a call to a tool this step did not offer is never run — the model is told and answers
       const offered = new Set(stepDefs.map((d) => d.name));
       // journey retest R20-1 (18/11): a search for a placeholder (A3 T1 `search_products {«noop»}`, run) is a call to no tool either
-      const stray = offerTools ? [...(res.value.rejectedToolCalls ?? []), ...res.value.toolCalls.filter((c) => !offered.has(canonicalTool(c.name)) || placeholderCall(c))] : [];
+      const stray = offerTools ? [...(res.value.rejectedToolCalls ?? []), ...res.value.toolCalls.filter((c) => !offered.has(canonicalTool(c.name)) || placeholderCall(c) || (canonicalTool(c.name) === 'handoff_to_human' && typeof c.args?.reason === 'string' && !reasons.includes(c.args.reason)))] : [];
       if (stray.length) steps[steps.length - 1]!.stray = stray.map((c) => canonicalTool(c.name));
       // journey retest R19-1 (18/11): the reply a stray step answers with itself — its own readable text, else (a create_order this message
       // cannot make yet, a message asking nothing) the server's question for the field that is missing

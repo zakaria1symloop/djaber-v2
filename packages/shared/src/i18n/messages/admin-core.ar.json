@@ -1309,6 +1309,7 @@
  "admin.reason.ACCOUNT_OWNS_WORKSPACE": "هذا المستخدم يملك «{workspace}»: انقل الملكية أو احذف المساحة أولًا.",
  "admin.reason.AUTH_USER_BLOCKED": "الحساب محظور: ألغِ الحظر أولًا.",
  "admin.reason.ACCOUNT_DELETION_PENDING": "حذف هذا الحساب مبرمج بالفعل.",
+ "admin.reason.PLAN_IS_FREE": "الخطة المجانية: لا توجد فترة تجريبية ولا فترة مدفوعة للتمديد. استعمل «تغيير الخطة».",
  "admin.reason.WORKSPACE_DELETION_SCHEDULED": "حذف المساحة مبرمج: ألغِه أولًا.",
  "admin.reason.TICKET_CLOSED": "التذكرة مغلقة: أعد فتحها أولًا.",
  "admin.reason.CMS_LOCALE_MISSING": "النص الفرنسي ناقص: اكتبه أولًا.",

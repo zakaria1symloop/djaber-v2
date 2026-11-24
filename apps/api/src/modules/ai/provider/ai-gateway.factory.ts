@@ -5,7 +5,7 @@ import type { AiGateway } from './ai.gateway';
 import { FakeAiGateway } from './fake-ai.gateway';
 import { LiveAiGateway } from './live-ai.gateway';
 
-type AiEnv = Pick<AppConfig, 'NODE_ENV' | 'AI_DRIVER' | 'AI_ALLOW_LIVE'> & Partial<Pick<AppConfig, 'AI_REPLY_THINKING'>>;
+type AiEnv = Pick<AppConfig, 'NODE_ENV' | 'AI_DRIVER' | 'AI_ALLOW_LIVE'> & Partial<Pick<AppConfig, 'AI_REPLY_THINKING' | 'AI_STABLE_TOOLS'>>;
 
 export const createAiGateway = (env: AiEnv): AiGateway => {
   if (env.AI_DRIVER !== 'live') return new FakeAiGateway();
@@ -13,5 +13,5 @@ export const createAiGateway = (env: AiEnv): AiGateway => {
   if (local && !env.AI_ALLOW_LIVE) {
     throw new Error('AI_DRIVER=live is refused in development / test: set AI_DRIVER=fake (or AI_ALLOW_LIVE=true if you really mean to call the AI providers)');
   }
-  return new LiveAiGateway({ replyThinking: env.AI_REPLY_THINKING ?? 'low' });
+  return new LiveAiGateway({ replyThinking: env.AI_REPLY_THINKING ?? 'low', stableTools: env.AI_STABLE_TOOLS === 'on' });
 };

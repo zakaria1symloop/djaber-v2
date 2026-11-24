@@ -1309,6 +1309,7 @@
  "admin.reason.ACCOUNT_OWNS_WORKSPACE": "Cet utilisateur possède « {workspace} » : transférez la propriété ou supprimez l'espace d'abord.",
  "admin.reason.AUTH_USER_BLOCKED": "Compte bloqué : débloquez-le d'abord.",
  "admin.reason.ACCOUNT_DELETION_PENDING": "La suppression de ce compte est déjà programmée.",
+ "admin.reason.PLAN_IS_FREE": "Plan gratuit : il n’y a ni essai ni période payée à prolonger. Utilisez « Changer de plan ».",
  "admin.reason.WORKSPACE_DELETION_SCHEDULED": "Suppression de l'espace programmée : annulez-la d'abord.",
  "admin.reason.TICKET_CLOSED": "Ticket clôturé : rouvrez-le d'abord.",
  "admin.reason.CMS_LOCALE_MISSING": "Le texte français manque : rédigez-le d'abord.",
