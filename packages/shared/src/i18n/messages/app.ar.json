@@ -888,6 +888,8 @@
  "agents.catalog.description": "مصدر واحد: منتجاتك (السعر، المخزون، المتغيرات في الوقت الحقيقي). لا سعر مختلق أبدًا.",
  "agents.catalog.missingVariants": "عرض المتغيرات الناقصة",
  "agents.catalog.missingVariants.hint": "«المقاس M نفد، بقي S و L»",
+ "agents.catalog.extraProducts": "{count, plural, one {+ منتج واحد مضاف يدويًا} two {+ منتجان مضافان يدويًا} few {+ # منتجات مضافة يدويًا} many {+ # منتجًا مضافًا يدويًا} other {+ # منتج مضاف يدويًا}} (صفحة المنتجات › «إضافة إلى وكيل»): هذا الوكيل يبيعها أيضًا مهما كانت فئتها.",
+ "agents.catalog.extraProducts.see": "عرض منتجات هذا الوكيل",
  "agents.catalog.noCategory": "لا توجد فئة بعد.",
  "agents.catalog.outOfStock": "المنتجات النافدة",
  "agents.catalog.outOfStock.hint": "اقتراح بديل من الفئة نفسها بدل «غير متوفر»",

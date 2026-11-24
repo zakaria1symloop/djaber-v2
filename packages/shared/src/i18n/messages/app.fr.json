@@ -888,6 +888,8 @@
  "agents.catalog.description": "Source unique : vos produits (prix, stock, variantes en temps réel). Jamais de prix inventé.",
  "agents.catalog.missingVariants": "Afficher les variantes manquantes",
  "agents.catalog.missingVariants.hint": "« la taille M est épuisée, il reste S et L »",
+ "agents.catalog.extraProducts": "{count, plural, one {+ # produit ajouté un par un} other {+ # produits ajoutés un par un}} (page Produits › « Ajouter à un agent ») : cet agent les vend aussi, quelle que soit leur catégorie.",
+ "agents.catalog.extraProducts.see": "Voir les produits de cet agent",
  "agents.catalog.noCategory": "Aucune catégorie pour l'instant.",
  "agents.catalog.outOfStock": "Produits en rupture",
  "agents.catalog.outOfStock.hint": "proposer une alternative de la même catégorie plutôt que « indisponible »",

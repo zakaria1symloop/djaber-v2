@@ -888,6 +888,8 @@
  "agents.catalog.description": "Single source: your products (price, stock, variants in real time). Never an invented price.",
  "agents.catalog.missingVariants": "Show missing variants",
  "agents.catalog.missingVariants.hint": "\"size M is sold out, S and L remain\"",
+ "agents.catalog.extraProducts": "{count, plural, one {+ # product added one by one} other {+ # products added one by one}} (Products page › “Add to an agent”): this agent sells them too, whatever their category.",
+ "agents.catalog.extraProducts.see": "See this agent’s products",
  "agents.catalog.noCategory": "No category yet.",
  "agents.catalog.outOfStock": "Out-of-stock products",
  "agents.catalog.outOfStock.hint": "suggest an alternative of the same category rather than \"unavailable\"",

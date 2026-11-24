@@ -197,7 +197,7 @@ export function AgentConfiguration() {
       {error ? <FormAlert>{error}</FormAlert> : null}
 
       {tab === 'identity' ? <IdentityFields {...section} badge={badge('identity')} /> : null}
-      {tab === 'knowledge' ? <KnowledgeFields {...section} badge={badge('knowledge')} agentId={agent.id} productCount={draft.catalogScope === 'all' ? agent.productCount : null} hasInsights={agent.pendingInsights > 0 && can('insights.manage')} /> : null}
+      {tab === 'knowledge' ? <KnowledgeFields {...section} badge={badge('knowledge')} agentId={agent.id} extraProducts={agent.productIds?.length ?? 0} productCount={draft.catalogScope === 'all' ? agent.productCount : null} hasInsights={agent.pendingInsights > 0 && can('insights.manage')} /> : null}
       {tab === 'behaviour' ? <BehaviourFields {...section} badge={badge('behaviour')} /> : null}
       {tab === 'channels' ? <ChannelsFields lead agentId={agent.id} agentName={agent.name} readOnly={!manage} /> : null}
 

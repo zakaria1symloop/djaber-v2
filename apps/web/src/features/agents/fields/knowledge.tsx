@@ -27,7 +27,7 @@ const FAQ_FILE_MAX = 5 * 1024 * 1024;
 const FAQ_FILE_TYPES = /\.(docx|txt|md|csv)$/i;
 const SOURCE_TONE: Record<FaqSource, 'neutral' | 'info' | 'success'> = { manual: 'neutral', page_extraction: 'info', ai_suggested: 'success', file_import: 'neutral' };
 
-export function KnowledgeFields({ draft: d, set, errors, readOnly, badge, inTunnel, agentId, productCount, hasInsights }: SectionProps & { agentId: string | null; productCount?: number | null; hasInsights?: boolean }) {
+export function KnowledgeFields({ draft: d, set, errors, readOnly, badge, inTunnel, agentId, productCount, hasInsights, extraProducts }: SectionProps & { agentId: string | null; productCount?: number | null; hasInsights?: boolean; /** products linked one by one (« Ajouter à un agent ») */ extraProducts?: number | null }) {
   const t = useT();
   const categories = useCategories();
   const flat = flattenCategories(categories.data ?? []);
@@ -91,6 +91,20 @@ export function KnowledgeFields({ draft: d, set, errors, readOnly, badge, inTunn
             {errors.scopeCategoryIds ? (
               <p role="alert" className="mt-2 text-[12px] text-accent-alert">
                 {issueText(t, errors.scopeCategoryIds)}
+              </p>
+            ) : null}
+            {/* client list L69 (Houssem live 24/11): a product of another category added with « Ajouter à un agent » is sold by the agent — the tab did not say it */}
+            {agentId && (extraProducts ?? 0) > 0 ? (
+              <p className="mt-2 text-[13px] text-text-secondary" data-testid="scope-extra-products">
+                {t('agents.catalog.extraProducts', { count: extraProducts ?? 0 })}
+                {inTunnel ? null : (
+                  <>
+                    {' '}
+                    <Link href={`/products?agentId=${agentId}`} className="text-accent-inbound underline underline-offset-2">
+                      {t('agents.catalog.extraProducts.see')}
+                    </Link>
+                  </>
+                )}
               </p>
             ) : null}
           </div>
