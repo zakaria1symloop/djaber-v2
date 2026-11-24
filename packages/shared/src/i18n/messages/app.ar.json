@@ -4818,6 +4818,7 @@
  "products.form.dirty.name": "الاسم",
  "products.form.dirty.oldPrice": "السعر القديم",
  "products.form.dirty.price": "سعر البيع",
+ "products.form.dirty.sellOutOfStock": "الطلبات عند نفاد المخزون",
  "products.form.dirty.sku": "SKU",
  "products.form.dirty.stock": "المخزون الأولي",
  "products.form.dirty.trackStock": "تتبّع المخزون",

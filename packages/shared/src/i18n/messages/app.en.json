@@ -4818,6 +4818,7 @@
  "products.form.dirty.name": "name",
  "products.form.dirty.oldPrice": "old price",
  "products.form.dirty.price": "selling price",
+ "products.form.dirty.sellOutOfStock": "orders when out of stock",
  "products.form.dirty.sku": "SKU",
  "products.form.dirty.stock": "opening stock",
  "products.form.dirty.trackStock": "stock tracking",

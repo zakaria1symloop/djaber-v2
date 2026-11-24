@@ -4818,6 +4818,7 @@
  "products.form.dirty.name": "nom",
  "products.form.dirty.oldPrice": "ancien prix",
  "products.form.dirty.price": "prix de vente",
+ "products.form.dirty.sellOutOfStock": "commandes en rupture",
  "products.form.dirty.sku": "SKU",
  "products.form.dirty.stock": "stock initial",
  "products.form.dirty.trackStock": "suivi du stock",

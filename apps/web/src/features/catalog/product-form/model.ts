@@ -163,11 +163,14 @@ const variantRowSchema = z.object({
   sku: text(productSku, true),
   price: digits(productPrice, true),
   costPrice: digits(productCost),
-  stock: digits(stockQty),
+  // UX-089 (Houssem live 24/11, client list L75): the stock of a saved row is read-only here and may be below zero (orders taken
+  // at zero stock) — it is checked only on a new row (superRefine of the form)
+  stock: z.string(),
   minStock: digits(stockQty),
   isActive: z.boolean(),
   attributes: z.record(z.string()),
 });
+const stockIssue = (s: string): string | null => (s === '' ? null : firstIssue(stockQty, Number(s)));
 
 /** `create`: the SKU may stay empty (server generates `PRD-XXXXXX`) and a tracked product without variants needs its opening stock. */
 export const productFormSchema = (mode: 'create' | 'edit') =>
@@ -188,7 +191,9 @@ export const productFormSchema = (mode: 'create' | 'edit') =>
       costPrice: digits(productCost),
       trackStock: z.boolean(),
       sellOutOfStock: z.boolean(),
-      stock: digits(stockQty),
+      // on edit the stock is read-only (« le stock ne bouge que par ajustement ») and may be below zero: a product at −15 could not
+      // have « accepter les commandes en rupture » switched off (« Validation : 1 erreur — stock initial », UX-089)
+      stock: mode === 'create' ? digits(stockQty) : z.string(),
       minStock: digits(stockQty),
       categoryId: z.string(),
       unitId: z.string(),
@@ -198,6 +203,10 @@ export const productFormSchema = (mode: 'create' | 'edit') =>
     })
     .superRefine((v, ctx) => {
       if (mode === 'create' && v.trackStock && v.variants.length === 0 && v.stock === '') ctx.addIssue({ code: 'custom', path: ['stock'], message: 'validation.required' });
+      v.variants.forEach((row, i) => {
+        const message = mode === 'edit' && row.id ? null : stockIssue(row.stock);
+        if (message) ctx.addIssue({ code: 'custom', path: ['variants', i, 'stock'], message });
+      });
       // journey J02r-1: a product sold by variant has no base / old price field (its variants carry the prices)
       const byVariant = v.trackStock && v.variants.length > 0;
       if (!byVariant && v.price === '') ctx.addIssue({ code: 'custom', path: ['price'], message: 'validation.required' });

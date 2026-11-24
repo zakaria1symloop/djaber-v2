@@ -96,6 +96,14 @@ describe('form schema (shared primitives, validation.* keys)', () => {
   it('edit: SKU required, stock never required', () => {
     expect(issues('edit', filled({ sku: ' ', stock: '' }))).toEqual({ sku: 'validation.required' });
   });
+  // UX-089 (Houssem live 24/11, client list L75): a product at −15 (orders taken at zero stock) could not be saved — « Validation : 1 erreur —
+  // stock initial » on a field that is read-only on edit
+  it('edit: a stock below zero is never an error (read-only: it only moves through adjustments); create still refuses it', () => {
+    expect(issues('edit', filled({ sku: 'A-1', stock: '-15', sellOutOfStock: false }))).toEqual({});
+    expect(issues('edit', filled({ sku: 'A-1', stock: '', variants: [emptyVariantRow({ id: 'v1', name: 'S', price: '100', stock: '-3' })] }))).toEqual({});
+    expect(Object.keys(issues('edit', filled({ sku: 'A-1', stock: '', variants: [emptyVariantRow({ name: 'S', price: '100', stock: '-3' })] })))).toEqual(['variants.0.stock']);
+    expect(Object.keys(issues('create', filled({ stock: '-15' })))).toEqual(['stock']);
+  });
   it('limits: name 255, description 5000, keywords 30 × 50, weight range', () => {
     expect(issues('create', filled({ name: 'x'.repeat(256) }))).toEqual({ name: 'validation.length' });
     expect(issues('create', filled({ description: 'x'.repeat(5001) }))).toEqual({ description: 'validation.length' });
