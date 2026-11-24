@@ -1649,7 +1649,19 @@ export class AiRunService implements OnModuleInit {
           continue;
         }
       }
-      if (!serverReply && res.value.toolCalls.length && offerTools) {
+      // Houssem live 24/11 (H-07 11:58 « montre-moi le QA 23/11 photos »: 4 model calls, 15 s — the complete answer came WITH the 1st
+      // step's get_product, then twice more with the same call): a step that already carries its answer and only asks get_product for
+      // products the prompt's CATALOGUE describes gains nothing from running it (name, price, stock word and variants are in the prompt,
+      // the photos go out with productCards / productPhotos) — the answer is taken as it is, the calls are not run.
+      const answerInHand = ((): boolean => {
+        if (serverReply || !offerTools || stray.length || !res.value.toolCalls.length) return false;
+        const listed = new Set(req.guard?.catalogueIds ?? []);
+        if (!listed.size || !res.value.toolCalls.every((c) => canonicalTool(c.name) === 'get_product' && typeof c.args?.productId === 'string' && listed.has(c.args.productId))) return false;
+        const own = parseReplyOutput(res.value.text ?? '');
+        return own.ok && own.value.status === 'OK' && own.value.reply.trim().length > 0;
+      })();
+      if (answerInHand) steps[steps.length - 1]!.next = 'answer_in_hand';
+      if (!serverReply && res.value.toolCalls.length && offerTools && !answerInHand) {
         toolRounds++;
         const calls = res.value.toolCalls;
         messages.push({ role: 'assistant', content: res.value.text ?? '', toolCalls: calls });

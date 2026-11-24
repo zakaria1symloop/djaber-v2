@@ -974,6 +974,21 @@ describe('providers, credits', () => {
     expect((fakeAi(app).callsOf('reply')[0]!.messages.at(-1) as any).content).toContain('photo shows: "a red toy car on a table"');
     expect(t.runs[0]).toMatchObject({ status: 'ok', creditsCharged: 5 });
   });
+  it('Houssem live 24/11 (« montre-moi le QA 23/11 photos »: 4 model calls, 15 s): a step that carries its whole answer with a get_product of a catalogue product is final — one model call, the call is not run; a search still runs', async () => {
+    const s = await shop();
+    await resetAi();
+    const answer = JSON.stringify({ reply: 'Voici la Robe satin bordeaux, à 4 500 DA, disponible.', status: 'OK', intent: 'INFO', productCards: [s.robe.id], recommendations: [], confidence: 0.9 });
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'get_product', args: { productId: s.robe.id } }], text: answer }, { reply: 'ne doit pas être demandé', intent: 'INFO' });
+    const t = await turn(s, newSender(), { text: 'montrez-moi la robe satin bordeaux' });
+    expect(fakeAi(app).callsOf('reply')).toHaveLength(1);
+    expect(t.runs[0]!.toolCalls).toHaveLength(0);
+    expect(t.out.map((m) => m.text).join(' ')).toContain('Voici la Robe satin bordeaux');
+    // a search (its result is not in the prompt) still runs, and the model is asked again
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'search_products', args: { query: 'robe' } }], text: answer }, { reply: 'Nous avons la Robe satin bordeaux.', intent: 'INFO' });
+    await turn(s, newSender(), { text: 'vous avez des robes ?' });
+    expect(fakeAi(app).callsOf('reply').length).toBeGreaterThan(1);
+  });
   it('client list L56 (Houssem live 23–24/11, UX-077 / UX-085): a customer photo that IS one of the product’s pictures — its 3rd one, re-encoded and resized as Messenger does — is matched on the picture itself, with no vision call', async () => {
     const s = await shop();
     // three real pictures on the product (shapes, not a flat colour); the 3rd one is what the customer sends back

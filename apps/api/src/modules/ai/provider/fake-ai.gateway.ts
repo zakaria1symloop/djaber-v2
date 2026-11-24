@@ -27,7 +27,7 @@ export type FakeStep =
   | { reply: string; status?: 'OK' | 'UNCLEAR' | 'UNKNOWN' | 'HANDOFF'; statusDetail?: string; evidence?: string; intent?: string; productCards?: string[]; recommendations?: { sourceId: string; recommendedId: string }[]; confidence?: number; language?: string; customer?: Record<string, string> }
   | { object: unknown }
   | { text: string }
-  | { toolCalls: { name: string; args: Record<string, unknown>; id?: string }[] }
+  | { toolCalls: { name: string; args: Record<string, unknown>; id?: string }[]; /** what the model wrote with its calls (often its whole JSON answer) */ text?: string }
   | { error: AiErrorKind }
   | { delayMs: number; then: FakeStep };
 export type FakeScript = FakeStep | ((req: AiGenerateRequest) => FakeStep | undefined);
@@ -218,7 +218,7 @@ export class FakeAiGateway implements AiGateway {
     const input = approxTokens(req.system) + req.messages.reduce((n, m) => n + approxTokens(typeof (m as { content?: unknown }).content === 'string' ? ((m as { content: string }).content) : JSON.stringify((m as { result?: unknown }).result ?? '')), 0);
     if ('toolCalls' in step) {
       const toolCalls: AiToolCallRequest[] = step.toolCalls.map((c, i) => ({ id: c.id ?? `call_${this.calls.length}_${i}`, name: c.name, args: c.args }));
-      return { text: '', toolCalls, usage: { inputTokens: input, outputTokens: 12 * toolCalls.length }, finishReason: 'tool-calls' };
+      return { text: step.text ?? '', toolCalls, usage: { inputTokens: input, outputTokens: 12 * toolCalls.length }, finishReason: 'tool-calls' };
     }
     const text =
       'text' in step
