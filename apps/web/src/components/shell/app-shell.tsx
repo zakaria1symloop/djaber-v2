@@ -90,7 +90,10 @@ export function AppShell({
           </header>
           <BannerStack banners={banners ?? []} dismissLabel={t('action.close')} />
           <ShortcutsDialog />
-          <main id="main" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto px-4 py-6 focus:outline-none md:px-8">
+          {/* UX-091 (Houssem live 24/11): « relative » — the hidden texts for screen readers (.sr-only, position: absolute) of a long table
+              were placed against the window, not against this scrolling area: Produits (50 rows) made the whole window 1 886 px tall —
+              two scroll bars, the sidebar sliding away */}
+          <main id="main" tabIndex={-1} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-6 focus:outline-none md:px-8">
             {children}
           </main>
         </div>
