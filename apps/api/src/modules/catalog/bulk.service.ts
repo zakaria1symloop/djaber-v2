@@ -119,7 +119,9 @@ export class BulkService {
       const data = { price: p.price, newPrice, belowCost, variants: variantPrices.map(({ cost: _cost, ...v }) => v) };
       if (input.preview) return data;
       if (newPrice !== p.price) {
-        await tx.product.update({ where: { id }, data: { price: newPrice, version: { increment: 1 } } });
+        // Houssem live 24/11 (client list L78): « Recette Sac en cuir » at 4 000 DA with an old price of 3 500 DA — the bulk price change kept
+        // the crossed-out price below the new price; the exported file then failed its own import (« the old price must be higher »)
+        await tx.product.update({ where: { id }, data: { price: newPrice, ...(p.oldPrice !== null && p.oldPrice <= newPrice ? { oldPrice: null } : {}), version: { increment: 1 } } });
         if (needsReview(p, { ...p, price: newPrice })) await this.moderation.submit(tx, id, 'update');
       }
       for (const v of variantPrices) if (v.newPrice !== v.price) await tx.productVariant.update({ where: { id: v.id }, data: { price: v.newPrice } });

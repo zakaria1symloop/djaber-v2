@@ -376,6 +376,7 @@ export class ImportService implements OnModuleInit {
       if (mapped('category')) data.categoryId = categoryId(r.values);
       if (mapped('unit')) data.unitId = unitId(r.values);
       if (mapped('oldPrice')) data.oldPrice = num(r.values.oldPrice);
+      else if (before.oldPrice !== null && before.oldPrice <= num(r.values.price)!) data.oldPrice = null;
       if (mapped('costPrice')) data.costPrice = num(r.values.costPrice);
       if (mapped('minStock')) data.minStock = num(r.values.minStock) ?? 0;
       if (mapped('weightGrams')) data.weightGrams = num(r.values.weightGrams);

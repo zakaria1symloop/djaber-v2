@@ -524,7 +524,7 @@ export class ProductService implements OnModuleInit {
         const base = { sku: p.sku, name: p.name, category: p.category?.name ?? '', unit: unitOf(p.unit, locale)?.abbreviation ?? '' };
         const list = p.hasVariants ? (byProduct.get(p.id) ?? []) : [];
         const product = { trackStock: p.trackStock, sellOutOfStock: p.trackStock && p.sellOutOfStock, description: p.description ?? '', weightGrams: p.weightGrams, keywords: p.keywords.join(', ') };
-        rows.push({ ...base, variant: '', variantSku: '', price: p.price, oldPrice: p.oldPrice, cost: p.costPrice, stock: p.trackStock && !list.length ? p.stock : null, min: p.minStock, active: p.isActive, product });
+        rows.push({ ...base, variant: '', variantSku: '', price: p.price, oldPrice: p.oldPrice !== null && p.oldPrice > p.price ? p.oldPrice : null, cost: p.costPrice, stock: p.trackStock && !list.length ? p.stock : null, min: p.minStock, active: p.isActive, product });
         for (const v of list) rows.push({ ...base, variant: v.name, variantSku: v.sku ?? '', price: v.price, oldPrice: null, cost: v.costPrice, stock: p.trackStock ? v.stock : null, min: v.minStock, active: v.isActive });
       }
     }
