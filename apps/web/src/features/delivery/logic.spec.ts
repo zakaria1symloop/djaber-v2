@@ -240,11 +240,12 @@ describe('courierRefusalText', () => {
   it('a refused phone: which field, where to fix it (the order page: the dialog has no phone field), then the courier text', () => {
     const r = courierRefusalText(t, { code: 'COURIER_VALIDATION', message: 'must be a valid international phone number.', field: 'phone' });
     expect(r.short).toBe('send.refusedField(send.field.phone)');
+    expect(r.block).toBe('send.refusedField(send.field.phone) send.refusedHintPhone');
     expect(r.long).toBe('send.refusedField(send.field.phone) send.refusedFixPhone send.courierSaid(must be a valid international phone number.)');
   });
   it('another field is fixed in the dialog; no field ⇒ the courier sentence as before; another error keeps its own text', () => {
     expect(courierRefusalText(t, { code: 'COURIER_VALIDATION', message: 'Unknown district', field: 'communeId' }).long).toBe('send.refusedField(send.field.commune) send.refusedFix send.courierSaid(Unknown district)');
-    expect(courierRefusalText(t, { code: 'COURIER_VALIDATION', message: 'Refused', field: 'other' })).toEqual({ short: 'Refused', long: 'send.courierRefused(Refused)' });
-    expect(courierRefusalText(t, { code: 'COURIER_UNAVAILABLE', message: null })).toEqual({ short: 'error.COURIER_UNAVAILABLE()', long: 'error.COURIER_UNAVAILABLE()' });
+    expect(courierRefusalText(t, { code: 'COURIER_VALIDATION', message: 'Refused', field: 'other' })).toEqual({ short: 'Refused', long: 'send.courierRefused(Refused)', block: 'Refused' });
+    expect(courierRefusalText(t, { code: 'COURIER_UNAVAILABLE', message: null })).toEqual({ short: 'error.COURIER_UNAVAILABLE()', long: 'error.COURIER_UNAVAILABLE()', block: 'error.COURIER_UNAVAILABLE()' });
   });
 });

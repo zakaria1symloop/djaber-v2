@@ -190,16 +190,17 @@ type Translate = (key: string, params?: Record<string, string | number>) => stri
  * shop's words — which field, where to fix it — and the courier's own sentence is only the detail. `short` = one line for a row or a
  * block; `long` = the dialog banner.
  */
-export function courierRefusalText(t: Translate, e: { code?: string | null; message?: string | null; field?: unknown } | null | undefined): { short: string; long: string } {
+export function courierRefusalText(t: Translate, e: { code?: string | null; message?: string | null; field?: unknown } | null | undefined): { short: string; long: string; block: string } {
   const code = e?.code ?? 'COURIER_VALIDATION';
   const raw = (e?.message ?? '').trim();
   const fallback = raw || t(`error.${code}`, { message: '' });
-  if (code !== 'COURIER_VALIDATION') return { short: fallback, long: fallback };
+  if (code !== 'COURIER_VALIDATION') return { short: fallback, long: fallback, block: fallback };
   const f = courierErrorField(e?.field);
-  if (!f) return { short: fallback, long: t('send.courierRefused', { message: fallback }) };
+  if (!f) return { short: fallback, long: t('send.courierRefused', { message: fallback }), block: fallback };
   const short = t('send.refusedField', { field: t(`send.field.${f}`) });
   const fix = t(f === 'phone' ? 'send.refusedFixPhone' : 'send.refusedFix');
-  return { short, long: [short, fix, raw ? t('send.courierSaid', { message: raw }) : ''].filter(Boolean).join(' ') };
+  // `block`: the order page's delivery block (it has its own « nothing was created at the courier » line)
+  return { short, long: [short, fix, raw ? t('send.courierSaid', { message: raw }) : ''].filter(Boolean).join(' '), block: `${short} ${t(f === 'phone' ? 'send.refusedHintPhone' : 'send.refusedHint')}` };
 }
 
 /** Field of the dialog that a `COURIER_VALIDATION { field }` error points at (05-integrations §2.1 CourierError.field). */

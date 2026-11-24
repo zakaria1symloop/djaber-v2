@@ -5889,6 +5889,8 @@
  "send.refusedField": "Le transporteur a refusé le colis : {field} non valide.",
  "send.refusedFix": "Corrigez ci-dessus puis renvoyez. La commande reste confirmée, rien n’a été créé chez le transporteur.",
  "send.refusedFixPhone": "Corrigez le téléphone du client sur la page de la commande, puis renvoyez. La commande reste confirmée, rien n’a été créé chez le transporteur.",
+ "send.refusedHint": "Corrigez-le avec « Corriger et renvoyer ».",
+ "send.refusedHintPhone": "Corrigez le téléphone du client sur cette commande, puis « Corriger et renvoyer ».",
  "send.done": "#{number} envoyée · suivi {tracking}",
  "send.field.address": "adresse",
  "send.field.cod": "montant COD",

@@ -136,7 +136,7 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
             )}
             {active.deliveryAttempts > 0 ? <span className="ts-label-micro text-text-muted">{t('delivery.row.attempt', { n: active.deliveryAttempts, max: MAX_ATTEMPTS })}</span> : null}
           </div>
-          {active.error ? <p className="text-[13px] text-accent-alert">{courierRefusalText(t, active.error).short}</p> : null}
+          {active.error ? <p className="text-[13px] text-accent-alert">{courierRefusalText(t, active.error).block}</p> : null}
           {fixable ? <p className="ts-label-micro !normal-case text-text-muted">{t('parcel.nothingCreated')}</p> : null}
           {active.deliveryAttempts >= MAX_ATTEMPTS ? <p className="ts-label-micro !normal-case text-accent-starred">{t('tracking.panel.proposeReturn', { max: MAX_ATTEMPTS })}</p> : null}
         </div>

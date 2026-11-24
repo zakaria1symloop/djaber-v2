@@ -48,7 +48,8 @@ export type VisionResult = { note: VisionNote; /** pass 2 answered: the image cr
 const seenText = (s?: string) => (s?.trim() ? ` — photo shows: "${s.trim().replace(/"/g, "'").slice(0, 160)}"` : '');
 export const visionNoteText = (n: VisionNote): string =>
   n.kind === 'match'
-    ? `IMAGE RESULT: ${JSON.stringify({ productId: n.productId, confidence: n.confidence, name: n.name })}`
+    ? // Houssem live 24/11 (photo n° 4, 13:19): the match was known and the model still called get_product first (a 2nd model call, 2.6 s)
+      `IMAGE RESULT: ${JSON.stringify({ productId: n.productId, confidence: n.confidence, name: n.name })} — this product is in the CATALOGUE: answer from its line (price, stock, variants) and show it with productCards; no get_product call is needed`
     : n.kind === 'unsure'
       ? `IMAGE RESULT: unsure${n.candidates.length ? ` (closest products: ${n.candidates.join(', ')})` : ' (no product of the shop looks like it)'}${seenText(n.seen)}`
       : n.kind === 'multiple'

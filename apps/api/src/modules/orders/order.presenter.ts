@@ -172,7 +172,7 @@ export const orderActions = (o: Pick<Order, 'status' | 'deliveryStatus' | 'confi
     act('refund', 'orders.money', { reason: refundRefusal(o) }),
   ]
     .filter((a): a is ActionDescriptor => !!a)
-    .filter((a) => !(noDelivery && (a.key === 'send_courier' || a.key === 'ship_manual' || a.key === 'edit_address')));
+    .filter((a) => !(noDelivery && (a.key === 'send_courier' || a.key === 'ship_manual' || a.key === 'edit_address' || a.key === 'prepare')));
   return [...list.filter((a) => a.primary), ...list.filter((a) => !a.primary)];
 };
 

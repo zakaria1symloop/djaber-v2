@@ -395,6 +395,7 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const confirmed = (await s.owner.post(`/orders/${placed.orderId}/status`, { to: 'confirmed', version: view.version }).set({ 'Idempotency-Key': `confirm-${placed.orderId}` }).expect(200)).body.data;
     expect(confirmed).toMatchObject({ status: 'confirmed' });
     expect(confirmed.actions.find((a: any) => a.primary)).toMatchObject({ key: 'deliver', enabled: true });
+    expect(confirmed.actions.map((a: any) => a.key)).not.toContain('prepare');
     await s.owner.post(`/orders/${placed.orderId}/status`, { to: 'delivered', version: confirmed.version }).set({ 'Idempotency-Key': `deliver-${placed.orderId}` }).expect(200);
     expect(await db.order.findUniqueOrThrow({ where: { id: placed.orderId } })).toMatchObject({ status: 'delivered', noDelivery: true });
     const confirmation = done.out.map((m) => m.text).join('\n');
