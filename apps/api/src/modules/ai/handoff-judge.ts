@@ -140,6 +140,8 @@ export const productAsk = (evidence: string, message: string): boolean => {
 /** Words that ask for the team (a person, the seller, a call) — fr / en / darija / arabizi / Arabic script, folded. */
 const ASKS_TEAM =
   /human|humain|conseill|responsable|personne|quelqu|parler|appel|rappel|telephon|vendeu|proprietaire|gerant|operat|equipe|service client|someone|somebody|person|real|staff|team|representative|talk|speak|call|manager|agent|bnadem|nhder|nehder|nahder|kalem|kelem|klem|3ayet|3eyet|a3yet|انسان|مسؤول|شخص|نهدر|تهدر|نتكلم|تكلم|كلم|اتصل|عيط|موظف|بشر|صاحب المحل|البائع/;
+/** The message asks for the team itself (a person, a call) — not only for a change of an order. */
+export const asksTeam = (text: string): boolean => ASKS_TEAM.test(foldText(text).replace(/[’‘`]/g, "'"));
 /** A cancellation or a change of an order asked in words. */
 const ORDER_CHANGE = /annul|cancel|batel|btel|modifi|chang|bedel|beddel|ألغ|الغ|بطل|بدل/;
 /** A refund asked in words. */

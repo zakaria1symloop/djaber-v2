@@ -18,7 +18,7 @@ import { AI_GATEWAY, AiProviderError, type AiGateway, type AiMessage, type AiToo
 import { RoutingService, type RoutedModel } from './routing.service';
 import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } from './structured-output';
 import { absentFields, canonicalTool, TOOL_DEFS, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
-import { allowedHandoffReasons, complaintIn, establishedReasons, HANDOFF_REFUSED_MARK, productAsk, fieldOnlyMessage, handoffReason, handoffRefusedInstruction, judgeHandoff, messageHandoffReasons, orderDetailsMessage, orderStatusAsk, placeCandidate, type HandoffRefusal } from './handoff-judge';
+import { allowedHandoffReasons, complaintIn, establishedReasons, HANDOFF_REFUSED_MARK, productAsk, fieldOnlyMessage, handoffReason, handoffRefusedInstruction, judgeHandoff, messageHandoffReasons, orderDetailsMessage, orderStatusAsk, placeCandidate, type HandoffRefusal, asksTeam } from './handoff-judge';
 import { offCatalogueWords, productNamedIn, productsNamedIn, productWanted, productWords } from './product-named';
 import { AUTO_FIX_RULES, checkReply, enforceReply, feeSentence, FIELD_QUESTIONS, greetingOnly, guardInstruction, numbersIn, orderClaimsIn, owedQuotes, quoteFacts, stripMarkdown, withToolResults, type CataloguePrice, type CatalogueStock, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
 import { asksDelivery, asksSomething, blockedOrderText, confirmRequest, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, serverRecapAsked, withoutRecapClaims } from './tools/order-confirmation-text';
@@ -1392,7 +1392,13 @@ export class AiRunService implements OnModuleInit {
       const calls = executed.map((t) => ({ name: canonicalTool(t.name), result: t.result }));
       if (confirmationNow() || blockedOrderText(calls, textLang)) return true;
       // (nor when the message carries a request only the team answers — a person, a refund, a complaint, a keyword: the model's answer decides)
-      if (forcedHandoff || !recapNow() || reasons.some((r) => TEAM_REASONS.has(r))) return false;
+      // Houssem live 24/11 (R1 « je veux changer l'adresse de ma commande CMD-1021 : … »: 4 model calls, 6.2 s, 47 000 input tokens — the recap
+      // of the replacing order came from the 1st call, then a 2nd create_order (not offered), a lookup_order and a text nobody reads): a
+      // change of an order is « customer_request » for the handoff judge, but once the recap of the order that replaces it is there the
+      // request is answered — unless the message asks for the team itself
+      const recap = recapNow();
+      const changeAnswered = !!recap?.replaces && !asksTeam(said ?? '');
+      if (forcedHandoff || !recap || reasons.some((r) => TEAM_REASONS.has(r) && !(changeAnswered && r === 'customer_request'))) return false;
       const t = said ?? '';
       if (photoAsked(t)) return false;
       if (!asksSomething(t)) return true;

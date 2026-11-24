@@ -346,6 +346,8 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     const asked = await turn(s, sender, 'je veux changer l’adresse de ma commande CMD-1001 : Cité 500 logements, bâtiment 2');
     expect(lastResult(asked.runs)).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recap: { clientName: 'Amine Benali', clientPhone: old.clientPhone, replaces: 'CMD-1001' } });
     expect(asked.out.map((m) => m.text).join('\n')).toContain('500 logements');
+    // 24/11: the recap of the replacing order ends the turn — one model call (it took four: a 2nd create_order, a lookup_order, a text)
+    expect(fakeAi(app).callsOf('reply')).toHaveLength(1);
     await resetAi();
     fakeAi(app).script('reply', { toolCalls: [{ ...change, id: 'call_addr' }] }, { reply: 'C’est modifié.', intent: 'SALE' });
     const done = await turn(s, sender, 'oui');
