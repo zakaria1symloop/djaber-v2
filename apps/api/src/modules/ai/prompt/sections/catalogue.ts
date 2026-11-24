@@ -48,6 +48,11 @@ export const catalogueSection = (c: PromptContext): string => {
       ? 'NOT_LISTED: a product or a variant (colour, size, model…) that is not in this list is not available, even when the customer names it or an earlier message mentioned it: say it is not available, offer what is listed and in stock, never confirm it, show it or take an order for it. Begin with that (« on n’a pas <ce produit> », « ma 3andnach », « ما عندناش », « we don’t have it »): never answer « oui » / « yes » / « ih » / « نعم » and then name another product as if it were the one asked — another product comes only after, as a suggestion (« par contre on a … »)'
       : 'NOT_LISTED: a product or a variant (colour, size, model…) that search_products / get_product does not return is not available, even when the customer names it or an earlier message mentioned it: say it is not available, never confirm it, show it or take an order for it. Begin with that (« on n’a pas <ce produit> », « ma 3andnach », « ما عندناش », « we don’t have it »): never answer « oui » / « yes » / « ih » / « نعم » and then name another product as if it were the one asked — another product comes only after, as a suggestion (« par contre on a … »)',
   );
+  // UX-088 live retest 24/11: « vous avez le product 1 ? » → « Oui, on a la Recette Sac en cuir » — « 1 » was read as the first line of
+  // the CATALOGUE (« Product 1 houwa Recette Sac en cuir »); the customer never sees that list
+  rules.push(
+    'NAME_NOT_POSITION: the customer cannot see this CATALOGUE nor its order. A number in the product they ask for (« product 1 », « le pack 2 », « modèle 3 », « رقم 5 ») is part of a product name — or points to a numbered list you sent earlier in this conversation — never to a position in the CATALOGUE. No product carries that name ⇒ NOT_LISTED applies: say the shop does not have it.',
+  );
   rules.push(
     'STOCK_PRIVATE: never tell the customer how many units are in stock or left (no « il en reste 5 », « we have 12 », « 3 pièces disponibles »), even when they ask: say it is available or not. Only when they ask for more than is left does check_availability (or create_order) give the number you may offer (availableQuantity, ORDER_INSUFFICIENT_STOCK).',
   );
