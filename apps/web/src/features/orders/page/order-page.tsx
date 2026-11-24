@@ -158,9 +158,10 @@ export function OrderPage({ id }: { id: string }) {
             </Button>
           ) : null}
           {/* journey J14-8 d (J05-11): a read-only order (delivered, cancelled, returned) has no « Appeler & confirmer » */}
+          {/* UX-084 (Houssem 24/11): a confirmed order still read « Appeler & confirmer » — once confirmed the button is « Appeler le client » */}
           {call.present && !ro ? (
-            <Button variant="primary" onClick={() => actions.run('confirm', order)} disabledReason={call.enabled ? undefined : call.reason} data-testid="call-confirm">
-              {t('orders.page.callConfirm')}
+            <Button variant={order.status === 'new' ? 'primary' : undefined} onClick={() => actions.run('confirm', order)} disabledReason={call.enabled ? undefined : call.reason} data-testid="call-confirm">
+              {t(order.status === 'new' ? 'orders.page.callConfirm' : 'orders.page.callCustomer')}
             </Button>
           ) : null}
           <ActionsMenu label={t('action.actions')} size="md" heading={`${iso(`#${order.number}`)} · ${t(`enum.Order.status.${order.status}`)}`} actions={actions.menu(order, { onPage: true })} />

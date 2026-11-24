@@ -188,6 +188,7 @@ export const presentOrderListItem = (o: OrderListRow, ctx: PresentCtx): OrderLis
   return {
     id: o.id,
     number: o.number,
+    noDelivery: o.noDelivery === true,
     orderedAt: o.orderedAt.toISOString(),
     client: clientRefOf({ ...o.client, name: o.clientName || o.client.name }, ctx.blocked(o.clientId, o.client.phone ?? o.clientPhone)),
     source: sourceOf(o),
@@ -291,7 +292,6 @@ export const presentOrder = (o: OrderDetailRow, extras: DetailExtras, ctx: Prese
     clientPhone: o.clientPhone,
     clientPhone2: o.clientPhone2,
     address: addressOf(o, ctx.locale, extras.stopdeskName ?? null),
-    noDelivery: o.noDelivery,
     items: o.items.map((i) => {
       const stock = i.variant ? i.variant.stock : i.product.trackStock ? (i.product.stock ?? 0) : null;
       return {

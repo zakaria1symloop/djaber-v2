@@ -396,6 +396,9 @@ describe('create_order (04-ai-pipeline §4.2)', () => {
     expect(confirmed).toMatchObject({ status: 'confirmed' });
     expect(confirmed.actions.find((a: any) => a.primary)).toMatchObject({ key: 'deliver', enabled: true });
     expect(confirmed.actions.map((a: any) => a.key)).not.toContain('prepare');
+    // the orders table knows it too: its row menu says « Marquer terminée (service rendu) », not « auto-livraison / COD »
+    const listed = (await s.owner.get('/orders').expect(200)).body.data.find((o: any) => o.id === placed.orderId);
+    expect(listed).toMatchObject({ noDelivery: true });
     await s.owner.post(`/orders/${placed.orderId}/status`, { to: 'delivered', version: confirmed.version }).set({ 'Idempotency-Key': `deliver-${placed.orderId}` }).expect(200);
     expect(await db.order.findUniqueOrThrow({ where: { id: placed.orderId } })).toMatchObject({ status: 'delivered', noDelivery: true });
     const confirmation = done.out.map((m) => m.text).join('\n');

@@ -23,7 +23,7 @@ import { SendToCourierDialog } from '@/features/delivery/send-dialog';
 import type { ShipmentErrorView } from '@djaber/shared';
 
 export type OrderDialogKind = 'confirm' | 'log_call' | 'callback' | 'cancel' | 'status' | 'deliver' | 'return' | 'delete' | 'payment' | 'assign' | 'address' | 'ship' | 'send' | 'payment_link' | 'refund';
-type OrderLike = Pick<OrderListItem, 'id' | 'number' | 'status' | 'version' | 'actions' | 'conversationId' | 'client' | 'assignee'>;
+type OrderLike = Pick<OrderListItem, 'id' | 'number' | 'status' | 'version' | 'actions' | 'conversationId' | 'client' | 'assignee'> & { noDelivery?: boolean };
 
 /** Status targets of "Changer le statut" (04 §1.2), cancellation having its own dialog. */
 export const statusTargets = (status: OrderStatus): OrderStatus[] => ORDER_STATUSES.filter((to) => to !== 'cancelled' && canTransition(status, to));
@@ -39,7 +39,8 @@ export function orderMenuActions(o: OrderLike, run: (kind: OrderDialogKind | 'co
     [ORDER_ACTION.prepare]: { label: t('action.prepare'), onSelect: () => run('prepare', o), hint: t('orders.menu.hint.prepare') },
     [ORDER_ACTION.sendToCourier]: { label: t('action.sendToCourier'), onSelect: () => run('send', o), hint: t('orders.menu.hint.dialog') },
     [ORDER_ACTION.shipManual]: { label: t('orders.menu.shipManual'), onSelect: () => run('ship', o), hint: t('orders.menu.hint.tracking') },
-    [ORDER_ACTION.deliver]: { label: t('orders.menu.deliver'), onSelect: () => run('deliver', o), hint: t('orders.menu.hint.cod') },
+    // UX-084 (Houssem 24/11): a service order is not « delivered (self-delivery) / COD » — it is done, and the rest is collected
+    [ORDER_ACTION.deliver]: { label: t(o.noDelivery ? 'orders.menu.deliverService' : 'orders.menu.deliver'), onSelect: () => run('deliver', o), hint: t(o.noDelivery ? 'orders.menu.hint.collect' : 'orders.menu.hint.cod') },
     [ORDER_ACTION.changeStatus]: { label: t('dialog.changeStatus.title'), onSelect: () => run('status', o) },
     [ORDER_ACTION.return]: { label: t('action.markReturned'), onSelect: () => run('return', o) },
     [ORDER_ACTION.openConversation]: { label: t('action.openConversation').replace(/^💬\s*/, ''), onSelect: () => nav(`/inbox/${o.conversationId}`), hint: t('orders.menu.hint.inbox'), hidden: !o.conversationId },

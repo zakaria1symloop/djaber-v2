@@ -335,9 +335,9 @@ export function DeliverDialog({ order, open, onClose, onDone }: Props) {
     <Dialog
       open={open}
       onOpenChange={(o) => !o && !s.busy && onClose()}
-      title={t('dialog.markDelivered.title')}
+      title={t(order.noDelivery ? 'orders.deliver.titleService' : 'dialog.markDelivered.title')}
       // journey J05r-10: « le transporteur ne remonte pas le statut » only when a courier carries the parcel
-      description={t(order.shipments.some((x) => x.provider !== 'manual' && ACTIVE_SHIPMENT_STATUSES.includes(x.status)) ? 'orders.deliver.context' : 'orders.deliver.contextSelf', { number: order.number })}
+      description={t(order.noDelivery ? 'orders.deliver.contextService' : order.shipments.some((x) => x.provider !== 'manual' && ACTIVE_SHIPMENT_STATUSES.includes(x.status)) ? 'orders.deliver.context' : 'orders.deliver.contextSelf', { number: order.number })}
       closeLabel={t('action.close')}
       size="md"
       footer={<DialogFooter onClose={onClose} busy={s.busy} onSubmit={() => void submit()} label={t('orders.deliver.submit')} />}
