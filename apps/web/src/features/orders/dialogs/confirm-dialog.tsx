@@ -13,7 +13,7 @@ import { useSession } from '@/lib/session';
 import { ORDER_ACTION } from '../action-keys';
 import { ordersApi } from '../api';
 import { ORDER_NO_ANSWER_PROPOSAL_AT, type Order } from '../contracts';
-import { addressMissing, algiersTime, confirmChecks, newestFirst, unansweredCalls } from '../logic';
+import { addressMissing, algiersTime, confirmChecks, newestFirst, shortStockNames, unansweredCalls } from '../logic';
 import { CallResultPill } from '../ui';
 import { useDialogSubmit, useOnOpen, type DialogBaseProps } from './common';
 import { emptyOutcome, OutcomeFields, outcomeErrors, type OutcomeValue } from './outcome';
@@ -65,6 +65,9 @@ export function ConfirmOrderDialog({ order, open, onClose, onDone, onAddress, on
   });
   const missing = addressMissing(order);
   const checks = confirmChecks(order);
+  // client list L95 (Houssem live 24/11): « la commande peut être confirmée. Le stock est déjà réservé. » above the refusal « Stock
+  // insuffisant pour … » — a line the stock no longer covers is said before the confirmation, with the way out
+  const short = order.status === 'new' ? shortStockNames(order.items) : [];
   const errors = touched ? outcomeErrors(outcome) : {};
   const s = useDialogSubmit(async () => {
     await ordersApi.logCall(order.id, { result: outcome.result!, callbackAt: outcome.callbackAt ?? undefined, notes: outcome.notes.trim() || undefined });
@@ -215,13 +218,14 @@ export function ConfirmOrderDialog({ order, open, onClose, onDone, onAddress, on
             <OutcomeFields value={outcome} onChange={setOutcome} disabled={s.busy} errors={{ result: errors.result && t(errors.result), callbackAt: errors.callbackAt && t(errors.callbackAt, { min: '', max: '' }) }} />
             {outcome.result === 'picked_up' ? (
               <ChecksNote
-                tone={missing ? 'danger' : 'success'}
+                tone={missing || short.length ? 'danger' : 'success'}
                 items={[
                   { label: t('orders.confirm.check.address'), ok: checks.address },
                   { label: t('orders.confirm.check.wilaya'), ok: checks.wilaya },
                   { label: t('orders.confirm.check.phone'), ok: checks.phone },
+                  { label: t('orders.confirm.check.stock'), ok: short.length === 0 },
                 ]}
-                text={missing ? t('orders.confirm.checksMissing') : t('orders.confirm.checksOk')}
+                text={missing ? t('orders.confirm.checksMissing') : short.length ? t('orders.confirm.checksStock', { products: short.join(', ') }) : t('orders.confirm.checksOk')}
               />
             ) : null}
             {outcome.result === 'no_answer' && order.callAttempts + 1 >= ORDER_NO_ANSWER_PROPOSAL_AT ? <FormAlert tone="warning">{t('orders.call.thirdNoAnswer')}</FormAlert> : null}

@@ -2,34 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseListState, serializeListState } from '@/lib/list-state';
 import type { BulkResponse, OrderListItem } from './contracts';
 import { activeChips, ORDERS_LIST, ordersQuery, periodOf, tabCountsQuery } from './list/spec';
-import {
-  historyParams,
-  algiersTime,
-  isIsoInstant,
-  draftChanged,
-  orderAnchor,
-  actorKind,
-  addressMissing,
-  algiersInstant,
-  callbackPresets,
-  confirmationPillParams,
-  confirmChecks,
-  courierShort,
-  deliveryPill,
-  effectiveDateError,
-  historyReason,
-  historyValue,
-  isoToLocalInput,
-  isReadOnly,
-  itemsSummary,
-  localInputToIso,
-  mergeRetry,
-  paymentError,
-  shortName,
-  sourceDetail,
-  sourceSplit,
-  unansweredCalls,
-} from './logic';
+import { historyParams, algiersTime, isIsoInstant, draftChanged, orderAnchor, actorKind, addressMissing, algiersInstant, callbackPresets, confirmationPillParams, confirmChecks, courierShort, deliveryPill, effectiveDateError, historyReason, historyValue, isoToLocalInput, isReadOnly, itemsSummary, localInputToIso, mergeRetry, paymentError, shortName, sourceDetail, sourceSplit, unansweredCalls, shortStockNames } from './logic';
 import { statusTargets } from './use-order-actions';
 
 const params = (qs: string) => new URLSearchParams(qs);
@@ -288,5 +261,20 @@ describe('journey J08r-5 — items editor fee follows the grid like the server',
     expect(itemsEditorFee(300, { deliveryFee: 300 }, q(500), q(0))).toEqual({ fee: 300, requoted: false });
     expect(itemsEditorFee(0, { deliveryFee: 0, feeTouched: true }, q(0), q(500))).toEqual({ fee: 0, requoted: false });
     expect(itemsEditorFee(0, { deliveryFee: 0 }, undefined, q(500))).toEqual({ fee: 0, requoted: false });
+  });
+});
+
+// client list L95 (Houssem live 24/11): the confirm dialog said « le stock est déjà réservé » above « Stock insuffisant »
+describe('shortStockNames', () => {
+  it('names the lines the stock no longer covers, with their variant', () => {
+    const items = [
+      { productName: 'Satin dress', variantName: 'red', stockWarning: 'insufficient' },
+      { productName: 'Sac', variantName: null, stockWarning: 'last_unit' },
+      { productName: 'Bougie', variantName: null, stockWarning: 'insufficient' },
+      { productName: 'Robe', variantName: 'M', stockWarning: 'backorder' },
+      { productName: 'Savon', variantName: null, stockWarning: null },
+    ];
+    expect(shortStockNames(items)).toEqual(['Satin dress · red', 'Bougie']);
+    expect(shortStockNames([])).toEqual([]);
   });
 });

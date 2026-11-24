@@ -276,3 +276,7 @@ export function itemsEditorFee(saved: number, draft: { deliveryFee: number; feeT
   if (!before || !after || !before.wilayaServed || !after.wilayaServed || before.fee !== saved) return { fee: saved, requoted: false };
   return { fee: after.fee, requoted: after.fee !== saved };
 }
+
+/** Names of the order lines the current stock no longer covers (« Robe · rouge ») — the confirmation will be refused for them (L95). */
+export const shortStockNames = (items: readonly { productName: string; variantName: string | null; stockWarning: string | null }[]): string[] =>
+  items.filter((i) => i.stockWarning === 'insufficient').map((i) => (i.variantName ? `${i.productName} · ${i.variantName}` : i.productName));
