@@ -121,6 +121,7 @@ UI behaviour legend: **inline** (field), **toast** (transient, auto-dismiss 5 s,
 | 409 | `CLIENT_PHONE_EXISTS` {clientName} | Numéro déjà utilisé par {clientName}. | الرقم مستخدم من {clientName}. | Number already used by {clientName}. | inline + "use existing" action | pick existing |
 | 422 | `ORDER_INVALID_TRANSITION` {from, to} | Passage {from} → {to} impossible. | الانتقال {from} → {to} غير ممكن. | Transition {from} → {to} not allowed. | toast (action normally hidden) | reload |
 | 422 | `ORDER_TERMINAL` | Commande clôturée. | الطلب مغلق. | Order is closed. | read-only state | — |
+| 422 | `ORDER_LINE_VARIANT_MISSING` {product} | « {product} » a maintenant des variantes : modifiez la commande et choisissez la variante de cette ligne. | «{product}» له الآن متغيّرات: عدّل الطلب واختر متغيّر هذا السطر. | “{product}” now has variants: edit the order and choose the variant of this line. | dialog | edit the order (client list L95, 24/11) |
 | 422 | `ORDER_INSUFFICIENT_STOCK` {product, available} | Stock insuffisant pour {product} ({available}). | المخزون غير كافٍ لـ {product} ({available}). | Insufficient stock for {product} ({available}). | inline on line | adjust |
 | 422 | `ORDER_ADDRESS_REQUIRED` | Adresse et wilaya requises pour confirmer. | العنوان والولاية مطلوبان للتأكيد. | Address and wilaya required before confirming. | dialog state "address missing" | fill |
 | 422 | `ORDER_DELETE_DELIVERED` | Commande livrée : non supprimable. | طلب مُسلَّم: لا يمكن حذفه. | Delivered order can't be deleted. | toast | mark returned instead |

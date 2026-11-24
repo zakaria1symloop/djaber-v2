@@ -398,6 +398,23 @@ describe('status machine and effects (04 §1.2, §3)', () => {
 });
 
 describe('calls, callback, address, assignment, payments (04 §1.3, §1.4, §21)', () => {
+  it('client list L95 (Boutique de Lalla 22/11): a product that got variants after the order ⇒ the confirmation says to choose the variant of the line (it said « Ajustez le stock par variante »); once the line has its variant the order is confirmed', async () => {
+    const owner = await shop();
+    const { order, product } = await newOrder(owner);
+    const name = (await db.product.findUniqueOrThrow({ where: { id: product.id } })).name;
+    // the shop turns the product into a product with variants, and restocks the variant
+    await db.product.update({ where: { id: product.id }, data: { hasVariants: true } });
+    const variant = await db.productVariant.create({ data: { workspaceId: owner.workspaceId, productId: product.id, name: 'Taille M', price: 4500, stock: 10 } });
+    const refused = await status(owner, order, 'confirmed').expect(422);
+    expect(refused.body.error).toMatchObject({ code: 'ORDER_LINE_VARIANT_MISSING', params: { product: name } });
+    expect(refused.body.error.message).toContain(name);
+    expect(await db.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ status: 'new' });
+    // the line gets its variant (Modifier la commande) ⇒ confirmed, the variant's stock is taken
+    const edited = (await owner.patch(`/orders/${order.id}`, { items: [{ productId: product.id, variantId: variant.id, quantity: 1 }], version: order.version }).expect(200)).body.data;
+    await status(owner, edited, 'confirmed').expect(200);
+    expect((await db.productVariant.findUniqueOrThrow({ where: { id: variant.id } })).stock).toBe(9);
+  });
+
   it('AT-ORD-03 call "rejected" on new ⇒ cancelled + stock restored + cash removed; on shipped ⇒ logged, unchanged, warning', async () => {
     const owner = await shop();
     const { order, product } = await newOrder(owner, { amountPaid: 300 });

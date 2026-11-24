@@ -56,6 +56,13 @@ export class OrderEffects implements OnModuleInit {
     // takes first in a stable order (product id) so two orders never lock the same rows in opposite orders
     deltas.sort((a, b) => a.productId.localeCompare(b.productId) || (a.variantId ?? '').localeCompare(b.variantId ?? ''));
     for (const d of deltas) {
+      // client list L95 (Boutique de Lalla 22/11: « j'arrive pas à confirmer la commande… Erreur → Ajustez le stock par variante »): the
+      // product of a line got variants after the order was taken, so the line names none — the stock writer's own message said nothing of
+      // the order. The confirmation is refused with what to do: edit the order and choose the variant of that line.
+      if (!d.variantId && d.delta < 0) {
+        const p = await tx.product.findFirst({ where: { id: d.productId }, select: { name: true, hasVariants: true, trackStock: true } });
+        if (p?.trackStock && p.hasVariants) throw new AppException('ORDER_LINE_VARIANT_MISSING', { product: p.name }, {}, { productId: d.productId });
+      }
       await this.stock.move(tx, {
         productId: d.productId,
         variantId: d.variantId,

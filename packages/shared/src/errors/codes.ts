@@ -142,6 +142,7 @@ export const ERROR_CODES = {
   ORDER_DELETE_DELIVERED: { status: 422, params: [] },
   ORDER_INSUFFICIENT_STOCK: { status: 422, params: ["product","available"] },
   ORDER_INVALID_TRANSITION: { status: 422, params: ["from","to"] },
+  ORDER_LINE_VARIANT_MISSING: { status: 422, params: ["product"] },
   ORDER_NOTHING_TO_REFUND: { status: 422, params: [] },
   ORDER_PAYMENT_LOCKED: { status: 422, params: [] },
   ORDER_TERMINAL: { status: 422, params: [] },

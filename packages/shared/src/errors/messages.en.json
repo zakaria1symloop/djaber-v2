@@ -143,6 +143,7 @@
   "ORDER_DELETE_DELIVERED": "Delivered order can't be deleted.",
   "ORDER_INSUFFICIENT_STOCK": "Insufficient stock for {product} ({available}).",
   "ORDER_INVALID_TRANSITION": "Transition {from} → {to} not allowed.",
+  "ORDER_LINE_VARIANT_MISSING": "“{product}” now has variants: edit the order and choose the variant of this line.",
   "ORDER_NOTHING_TO_REFUND": "No payment to refund.",
   "ORDER_PAYMENT_LOCKED": "Payment locked (closed order).",
   "ORDER_TERMINAL": "Order is closed.",

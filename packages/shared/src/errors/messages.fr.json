@@ -143,6 +143,7 @@
   "ORDER_DELETE_DELIVERED": "Commande livrée : non supprimable.",
   "ORDER_INSUFFICIENT_STOCK": "Stock insuffisant pour {product} ({available}).",
   "ORDER_INVALID_TRANSITION": "Passage {from} → {to} impossible.",
+  "ORDER_LINE_VARIANT_MISSING": "« {product} » a maintenant des variantes : modifiez la commande et choisissez la variante de cette ligne.",
   "ORDER_NOTHING_TO_REFUND": "Aucun paiement à rembourser.",
   "ORDER_PAYMENT_LOCKED": "Paiement verrouillé (commande clôturée).",
   "ORDER_TERMINAL": "Commande clôturée.",
