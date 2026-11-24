@@ -4,7 +4,7 @@
 // States: idle · PERMISSION REQUISE (+ Reconnecter) · EN COURS (job progress) · AUCUN PRODUIT · TERMINÉ (review grid
 // with NOUVEAU / EXISTE DÉJÀ / PRIX MANQUANT, validation price > 0 and stock > 0) · importing · done counts ·
 // partial failure (retry the remaining) · ÉCHEC · rate-limited (3 analyses / day, free).
-import { formatNumber } from '@djaber/shared';
+import { formatDate, formatNumber, type AppLocale } from '@djaber/shared';
 import type { AnalysisDto, AnalysisItem } from '@djaber/shared';
 import { Button, Card, Checkbox, cn, FormAlert, Input, Ltr, MiniField, MoneyInput, MonoChip, NumberInput, Pill, ProgressBar, Skeleton, toast, type Tone } from '@djaber/ui';
 import { useQueryClient } from '@tanstack/react-query';
@@ -16,7 +16,7 @@ import { flattenCategories } from '@/features/catalog/contracts';
 import { reasonText } from '@/lib/actions';
 import { ApiError } from '@/lib/api';
 import { errorMessage, fieldError } from '@/lib/forms';
-import { useT } from '@/lib/i18n';
+import { useLocaleCode, useT } from '@/lib/i18n';
 import { isJobFinished, useJob } from '@/lib/jobs';
 import { useSession, useWorkspaceId } from '@/lib/session';
 import {
@@ -222,6 +222,7 @@ function Review({ channelId, dto, rerun }: { channelId: string; dto: AnalysisDto
 
   const imported = useMemo(() => new Set(Object.keys(outcome.created)), [outcome.created]);
   const counts = summaryCounts(dto);
+  const locale = useLocaleCode() as AppLocale;
   const seconds = durationSeconds(dto.startedAt, dto.finishedAt);
   const selected = selectedKeys(items, edits, imported);
   const invalid = invalidSelected(items, edits, imported);
@@ -273,6 +274,8 @@ function Review({ channelId, dto, rerun }: { channelId: string; dto: AnalysisDto
         <span className="min-w-0 flex-1">
           {t('channels.analysis.done.summary', { posts: counts.posts, detected: counts.detected, duplicates: counts.duplicates })}
           {seconds !== null ? ` · ${t('channels.analysis.done.duration', { seconds })}` : ''}
+          {/* UX-090: an older result is shown again when the page is reopened — say from when it is */}
+          {dto.finishedAt ? ` · ${t('channels.analysis.done.on', { date: formatDate(dto.finishedAt, locale) })}` : ''}
         </span>
         {rerun}
       </Card>
@@ -394,6 +397,7 @@ function ItemCard({
   // a missing price is shown at once on a selected row (PRIX MANQUANT); the other fields after a first attempt
   const issues = edit.selected && !created ? rowIssues(edit) : {};
   const priceIssue = issues.price && (showIssues || status === 'price_missing') ? issues.price : undefined;
+  const [imageGone, setImageGone] = useState(false);
   return (
     <li
       data-testid="analysis-item"
@@ -404,8 +408,9 @@ function ItemCard({
     >
       <div className="flex items-start gap-3">
         <Checkbox className="mt-1" checked={edit.selected} disabled={locked} onChange={(e) => onChange({ selected: e.target.checked })} aria-label={t('channels.analysis.item.select', { name: edit.name || item.name })} />
-        {item.imageUrl ? (
-          <img src={item.imageUrl} alt="" loading="lazy" className="size-14 shrink-0 rounded-[6px] object-cover" />
+        {item.imageUrl && !imageGone ? (
+          // the post picture is a Facebook link that expires after some days: an old result shows the placeholder, not a broken image
+          <img src={item.imageUrl} alt="" loading="lazy" className="size-14 shrink-0 rounded-[6px] object-cover" onError={() => setImageGone(true)} />
         ) : (
           <span aria-hidden className="flex size-14 shrink-0 items-center justify-center rounded-[6px] bg-ink-raised text-text-muted">
             <ImageOff className="size-4" />

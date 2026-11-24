@@ -2098,6 +2098,7 @@
  "channels.analysis.deselectDuplicates": "Désélectionner les doublons",
  "channels.analysis.done.duration": "terminé en {seconds} s",
  "channels.analysis.done.label": "TERMINÉ",
+ "channels.analysis.done.on": "analyse du {date}",
  "channels.analysis.done.summary": "{posts} publications lues · {detected, plural, =0 {aucun produit détecté} one {# produit détecté} other {# produits détectés}} · {duplicates, plural, =0 {aucun ne ressemble à un produit existant} one {# ressemble à un produit existant} other {# ressemblent à des produits existants}}",
  "channels.analysis.empty.description": "Aucune publication ne ressemble à un produit — essayez avec plus de publications ou ajoutez manuellement.",
  "channels.analysis.empty.label": "AUCUN PRODUIT",

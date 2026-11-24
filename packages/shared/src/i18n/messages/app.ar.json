@@ -2098,6 +2098,7 @@
  "channels.analysis.deselectDuplicates": "إلغاء تحديد المكررات",
  "channels.analysis.done.duration": "اكتمل في {seconds} ث",
  "channels.analysis.done.label": "اكتمل",
+ "channels.analysis.done.on": "تحليل يوم {date}",
  "channels.analysis.done.summary": "{posts} منشورًا مقروءًا · {detected, plural, zero {لا منتج مكتشف} one {منتج واحد مكتشف} two {منتجان مكتشفان} few {# منتجات مكتشفة} many {# منتجًا مكتشفًا} other {# منتج مكتشف}} · {duplicates, plural, zero {لا يشبه أي منها منتجًا موجودًا} one {واحد يشبه منتجًا موجودًا} two {اثنان يشبهان منتجات موجودة} few {# تشبه منتجات موجودة} many {# تشبه منتجات موجودة} other {# تشبه منتجات موجودة}}",
  "channels.analysis.empty.description": "لا يوجد منشور يشبه منتجًا — جرّب بمنشورات أكثر أو أضف يدويًا.",
  "channels.analysis.empty.label": "لا منتجات",

@@ -407,7 +407,10 @@ export class PageService implements OnModuleInit {
         error = 'INTERNAL';
       }
     }
-    return { state, jobId: job?.id ?? null, progress: job?.progress ?? 0, postsTotal: r.postsTotal ?? 0, postsDone: r.postsDone ?? 0, items: r.items ?? [], startedAt: job?.createdAt.toISOString() ?? null, finishedAt: job && state !== 'running' ? job.updatedAt.toISOString() : null, runsLeftToday, error };
+    // UX-090 (Houssem live 24/11, client list L82): the analysis of 09/11 was shown again with its 3 products « NEW » although they
+    // had been imported from it since — the flags of a stored result are those of the day it ran
+    const items = state === 'done' && r.items?.length ? await this.flagExisting(channelId, r.items.map((i) => ({ ...i }))) : (r.items ?? []);
+    return { state, jobId: job?.id ?? null, progress: job?.progress ?? 0, postsTotal: r.postsTotal ?? 0, postsDone: r.postsDone ?? 0, items, startedAt: job?.createdAt.toISOString() ?? null, finishedAt: job && state !== 'running' ? job.updatedAt.toISOString() : null, runsLeftToday, error };
   }
 
   /** `jobs / page-analysis` — resumable: the cursor and the items found so far are kept in `Job.result`. */
@@ -457,12 +460,18 @@ export class PageService implements OnModuleInit {
       }
       // products the catalogue already has are flagged, not hidden: a post imported before (A1, tester report 2026-10-20:
       // a page analysed again created its products again), else the same or a very close name
-      const existing = await prisma.product.findMany({ where: { deletedAt: null }, select: { id: true, name: true } });
-      const imported = await this.importedPosts(channelId);
-      const live = new Set(existing.map((p) => p.id));
-      for (const i of items) i.duplicateOf = (imported.get(i.postId) && live.has(imported.get(i.postId)!) ? imported.get(i.postId)! : null) ?? existing.find((p) => sameProductName(p.name, i.name))?.id ?? null;
+      await this.flagExisting(channelId, items);
       return { result: { channelId, cursor: null, items, postsDone: done, postsTotal: done } };
     });
+  }
+
+  /** Sets `duplicateOf` on each item: the product imported from its post, else a live product with the same or a very close name. */
+  private async flagExisting(channelId: string, items: AnalysisItem[]): Promise<AnalysisItem[]> {
+    const existing = await prisma.product.findMany({ where: { deletedAt: null }, select: { id: true, name: true } });
+    const imported = await this.importedPosts(channelId);
+    const live = new Set(existing.map((p) => p.id));
+    for (const i of items) i.duplicateOf = (imported.get(i.postId) && live.has(imported.get(i.postId)!) ? imported.get(i.postId)! : null) ?? existing.find((p) => sameProductName(p.name, i.name))?.id ?? null;
+    return items;
   }
 
   /**

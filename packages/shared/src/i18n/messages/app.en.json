@@ -2098,6 +2098,7 @@
  "channels.analysis.deselectDuplicates": "Deselect duplicates",
  "channels.analysis.done.duration": "finished in {seconds} s",
  "channels.analysis.done.label": "DONE",
+ "channels.analysis.done.on": "analysed on {date}",
  "channels.analysis.done.summary": "{posts} posts read · {detected, plural, =0 {no product detected} one {# product detected} other {# products detected}} · {duplicates, plural, =0 {none looks like an existing product} one {# looks like an existing product} other {# look like existing products}}",
  "channels.analysis.empty.description": "No post looks like a product — try with more posts or add products manually.",
  "channels.analysis.empty.label": "NO PRODUCT",
