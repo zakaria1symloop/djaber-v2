@@ -58,7 +58,7 @@ import { BulkSendDialog, BulkSendResults, type SendTarget } from './bulk-send';
 import { COURIER_PROVIDERS, FAILURE_REASONS, type DeliveryRow } from './contracts';
 import { wilayaLabel } from './geo';
 import { PrintLabelsDialog } from './labels';
-import { daysSince, shipmentStatusKey, withCourierSetup } from './logic';
+import { courierRefusalText, daysSince, shipmentStatusKey, withCourierSetup } from './logic';
 import { currentTab, DELIVERY_LIST, DELIVERY_TAB_LIST, deliveryChips, LAST_ERRORS, LAST_EVENTS, panelFilterCount, SHIPMENT_FILTER_STATUSES, shipmentsQuery } from './overview-spec';
 import { TrackingPanel } from './tracking-panel';
 import { ParcelActionsMenu, parcelOfRow, useParcelActions } from './use-parcel-actions';
@@ -207,7 +207,7 @@ export function DeliveryOverviewPage() {
                   {t('enum.Shipment.status.failed')}
                 </Pill>
               )}
-              {code ? <span className="ts-label-micro !normal-case text-accent-alert">{sh.error?.message ? sh.error.message : reasonText(t, code)}</span> : null}
+              {code ? <span className="ts-label-micro !normal-case text-accent-alert">{sh.error?.message ? courierRefusalText(t, sh.error).short : reasonText(t, code)}</span> : null}
             </div>
           );
         }

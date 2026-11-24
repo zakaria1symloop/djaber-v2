@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseListState } from '@/lib/list-state';
 import { foldGeo, geoFilter, timelineOrder } from './logic';
-import { bulkRowState, courierErrorField, credentialErrors, daysLabel, daysSince, deliveryBlockState,isHttpsUrl, parcelSteps, parseWeight, shipmentStatusKey, shipmentTone, syncUntil, syncWait, waitLabel, withCourierSetup, withSyncWait } from './logic';
+import { bulkRowState, courierErrorField, courierRefusalText, credentialErrors, daysLabel, daysSince, deliveryBlockState,isHttpsUrl, parcelSteps, parseWeight, shipmentStatusKey, shipmentTone, syncUntil, syncWait, waitLabel, withCourierSetup, withSyncWait } from './logic';
 import { currentTab, DELIVERY_LIST, deliveryChips, panelFilterCount, shipmentsQuery, TAB_PRESETS } from './overview-spec';
 
 const params = (q: string) => new URLSearchParams(q);
@@ -231,5 +231,20 @@ describe('journey 16/11 J05-3 / J05-17 — geo search and parcel timeline', () =
     const e = (mappedStatus: string, at: string) => ({ mappedStatus, at });
     const rows = [e('returned', '2026-11-16T16:30:40.000Z'), e('sent', '2026-11-16T16:30:20.000Z'), e('delivered', '2026-11-16T16:30:00.000Z'), e('in_transit', '2026-11-16T16:10:00.000Z')];
     expect(timelineOrder(rows).map((x) => x.mappedStatus)).toEqual(['returned', 'delivered', 'sent', 'in_transit']);
+  });
+});
+
+// tester log 23/11 UX-074: a courier refusal that names a field is said in the shop's words; the courier's sentence is the detail
+describe('courierRefusalText', () => {
+  const t = (key: string, p: Record<string, string | number> = {}) => `${key}${Object.keys(p).length ? `(${Object.values(p).join('|')})` : ''}`;
+  it('a refused phone: which field, where to fix it (the order page: the dialog has no phone field), then the courier text', () => {
+    const r = courierRefusalText(t, { code: 'COURIER_VALIDATION', message: 'must be a valid international phone number.', field: 'phone' });
+    expect(r.short).toBe('send.refusedField(send.field.phone)');
+    expect(r.long).toBe('send.refusedField(send.field.phone) send.refusedFixPhone send.courierSaid(must be a valid international phone number.)');
+  });
+  it('another field is fixed in the dialog; no field ⇒ the courier sentence as before; another error keeps its own text', () => {
+    expect(courierRefusalText(t, { code: 'COURIER_VALIDATION', message: 'Unknown district', field: 'communeId' }).long).toBe('send.refusedField(send.field.commune) send.refusedFix send.courierSaid(Unknown district)');
+    expect(courierRefusalText(t, { code: 'COURIER_VALIDATION', message: 'Refused', field: 'other' })).toEqual({ short: 'Refused', long: 'send.courierRefused(Refused)' });
+    expect(courierRefusalText(t, { code: 'COURIER_UNAVAILABLE', message: null })).toEqual({ short: 'error.COURIER_UNAVAILABLE()', long: 'error.COURIER_UNAVAILABLE()' });
   });
 });

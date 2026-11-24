@@ -23,7 +23,7 @@ import { CourierDialog } from './couriers';
 import type { ShipmentErrorView } from '@djaber/shared';
 import type { CourierAccount, Shipment } from './contracts';
 import { CommuneCombobox, StopdeskCombobox, WilayaCombobox } from './geo';
-import { courierErrorField, daysLabel, parseWeight } from './logic';
+import { courierErrorField, courierRefusalText, daysLabel, parseWeight } from './logic';
 
 type Draft = { courierId: string | null; wilayaId: number | null; communeId: number | null; communeText: string | null; isStopdesk: boolean; stopdeskId: string | null; address: string; cod: string; weight: string; content: string };
 type FieldKey = 'courier' | 'wilaya' | 'commune' | 'stopdesk' | 'address' | 'cod' | 'weight' | 'content' | 'phone';
@@ -90,7 +90,7 @@ export function SendToCourierDialog({
     setTouched(false);
     const e = initialError ?? null;
     const msg = e ? (e.message ?? t(`error.${e.code}`, { message: '' })) : '';
-    setBanner(e ? { tone: 'danger', text: e.code === 'COURIER_VALIDATION' ? t('send.courierRefused', { message: msg }) : msg } : null);
+    setBanner(e ? { tone: 'danger', text: e.code === 'COURIER_VALIDATION' ? courierRefusalText(t, e).long : msg } : null);
     const f = e ? courierErrorField(e.field) : null;
     setFields(e && f ? { [f]: msg } : {});
     setPendingId(null);
@@ -126,7 +126,7 @@ export function SendToCourierDialog({
       const code = err?.code ?? parcel.lastError ?? 'COURIER_UNAVAILABLE';
       if (code === 'COURIER_UNAVAILABLE' && parcel.status === 'pending') return; // queued: shown below, retries running
       const f = courierErrorField(err?.field);
-      setBanner({ tone: 'danger', text: t('send.courierRefused', { message: err?.message ?? t(`error.${code}`, { message: '' }) }) });
+      setBanner({ tone: 'danger', text: courierRefusalText(t, { code: 'COURIER_VALIDATION', message: err?.message ?? t(`error.${code}`, { message: '' }), field: err?.field }).long });
       if (f) setFields({ [f]: `${err?.message ?? t(`error.${code}`, { message: '' })}` });
       setPendingId(null);
       void refresh({ orderId: order.id });
@@ -199,7 +199,7 @@ export function SendToCourierDialog({
         }
         const f = courierErrorField((e.body.params as Record<string, unknown>)?.field ?? (e.body.details as { field?: string } | null)?.field);
         if (e.code === 'COURIER_VALIDATION') {
-          setBanner({ tone: 'danger', text: t('send.courierRefused', { message: String(e.body.params?.message ?? e.message) }) });
+          setBanner({ tone: 'danger', text: courierRefusalText(t, { code: 'COURIER_VALIDATION', message: String(e.body.params?.message ?? e.message), field: (e.body.params as Record<string, unknown>)?.field ?? (e.body.details as { field?: string } | null)?.field }).long });
           if (f) map[f] = e.message;
         } else if (e.code === 'COURIER_UNAVAILABLE') {
           setBanner({ tone: 'warning', text: errorMessage(e, t) });

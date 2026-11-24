@@ -17,7 +17,7 @@ import { useLocaleCode, useT } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 import { relativeTime } from '@/lib/time';
 import { SHIPMENT_ACTION } from './action-keys';
-import { algiersClock, deliveryBlockState, shipmentStatusKey, shipmentTone, timelineOrder, waitLabel, withCourierSetup } from './logic';
+import { algiersClock, courierRefusalText, deliveryBlockState, shipmentStatusKey, shipmentTone, timelineOrder, waitLabel, withCourierSetup } from './logic';
 import { timelineMeta } from './tracking-panel';
 import { parcelOfShipment, type useParcelActions } from './use-parcel-actions';
 import { docRef } from '@/lib/format-message';
@@ -119,7 +119,7 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
       {handled ? (
         <div className="flex flex-col gap-1 rounded-card border border-line-hairline p-3" data-testid="parcel-handled">
           <p className="text-[13px] text-text-secondary">{t(`parcel.handled.${handled}`)}</p>
-          {active?.error ? <p className="ts-label-micro !normal-case text-text-muted">{active.error.message ?? t(`error.${active.error.code}`, { message: '' })}</p> : null}
+          {active?.error ? <p className="ts-label-micro !normal-case text-text-muted">{courierRefusalText(t, active.error).short}</p> : null}
         </div>
       ) : null}
       {openFailure && active ? (
@@ -136,7 +136,7 @@ export function OrderDeliveryBlock({ order, onSend, onShip, parcels }: { order: 
             )}
             {active.deliveryAttempts > 0 ? <span className="ts-label-micro text-text-muted">{t('delivery.row.attempt', { n: active.deliveryAttempts, max: MAX_ATTEMPTS })}</span> : null}
           </div>
-          {active.error ? <p className="text-[13px] text-accent-alert">{`${active.error.message ?? t(`error.${active.error.code}`, { message: '' })}`}</p> : null}
+          {active.error ? <p className="text-[13px] text-accent-alert">{courierRefusalText(t, active.error).short}</p> : null}
           {fixable ? <p className="ts-label-micro !normal-case text-text-muted">{t('parcel.nothingCreated')}</p> : null}
           {active.deliveryAttempts >= MAX_ATTEMPTS ? <p className="ts-label-micro !normal-case text-accent-starred">{t('tracking.panel.proposeReturn', { max: MAX_ATTEMPTS })}</p> : null}
         </div>

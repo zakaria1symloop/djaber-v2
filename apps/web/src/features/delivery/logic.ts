@@ -183,6 +183,25 @@ export function credentialErrors(fields: CredentialField[], values: Record<strin
 }
 
 /* ---------- send dialog ---------- */
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+/**
+ * tester log 23/11 UX-074 (« Courier: "Phone_Number1 must be a valid international phone number. [Index: {CollectionIndex}]". Fix it
+ * above then resend. » — the courier's English sentence, and no phone field in the dialog): a refusal that names a field is said in the
+ * shop's words — which field, where to fix it — and the courier's own sentence is only the detail. `short` = one line for a row or a
+ * block; `long` = the dialog banner.
+ */
+export function courierRefusalText(t: Translate, e: { code?: string | null; message?: string | null; field?: unknown } | null | undefined): { short: string; long: string } {
+  const code = e?.code ?? 'COURIER_VALIDATION';
+  const raw = (e?.message ?? '').trim();
+  const fallback = raw || t(`error.${code}`, { message: '' });
+  if (code !== 'COURIER_VALIDATION') return { short: fallback, long: fallback };
+  const f = courierErrorField(e?.field);
+  if (!f) return { short: fallback, long: t('send.courierRefused', { message: fallback }) };
+  const short = t('send.refusedField', { field: t(`send.field.${f}`) });
+  const fix = t(f === 'phone' ? 'send.refusedFixPhone' : 'send.refusedFix');
+  return { short, long: [short, fix, raw ? t('send.courierSaid', { message: raw }) : ''].filter(Boolean).join(' ') };
+}
+
 /** Field of the dialog that a `COURIER_VALIDATION { field }` error points at (05-integrations §2.1 CourierError.field). */
 export function courierErrorField(field: unknown): 'commune' | 'address' | 'wilaya' | 'phone' | 'weight' | 'cod' | 'stopdesk' | null {
   const f = typeof field === 'string' ? field : '';
