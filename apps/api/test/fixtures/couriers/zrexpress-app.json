@@ -421,6 +421,34 @@
         "pdf": true
       }
     },
+    "rates_origin_400": {
+      "request": {
+        "method": "GET",
+        "url": "https://api.zrexpress.app/api/v1/delivery-pricing/rates?fromTerritoryId=w-16"
+      },
+      "response": {
+        "status": 400,
+        "json": {
+          "title": "Bad Request",
+          "detail": "fromTerritoryId is not a valid origin",
+          "status": 400
+        }
+      }
+    },
+    "rates_refused_400": {
+      "request": {
+        "method": "GET",
+        "url": "https://api.zrexpress.app/api/v1/delivery-pricing/rates"
+      },
+      "response": {
+        "status": 400,
+        "json": {
+          "title": "Bad Request",
+          "detail": "No price list for this tenant",
+          "status": 400
+        }
+      }
+    },
     "rates_origin_404": {
       "request": {
         "method": "GET",

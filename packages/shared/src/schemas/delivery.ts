@@ -606,11 +606,11 @@ export type DeliveryOverviewView = {
 export const RatesQuerySchema = z.object({ courierAccountId: id, wilayaId: wilayaId.optional(), stopdesk: flag.optional() }).strict();
 export type RatesQuery = z.infer<typeof RatesQuerySchema>;
 export type CourierRateView = { wilayaId: number; homePrice: number | null; stopdeskPrice: number | null; price: number | null; fetchedAt: string };
-export type CourierRatesView = { courierAccountId: string; provider: CourierProviderName; rates: CourierRateView[]; fetchedAt: string | null; stale: boolean; refreshing: boolean; supported: boolean };
+export type CourierRatesView = { courierAccountId: string; provider: CourierProviderName; rates: CourierRateView[]; fetchedAt: string | null; stale: boolean; refreshing: boolean; supported: boolean; /** UX-101: the last fetch failed or gave no price — nothing is being fetched, the screen says so instead of waiting */ failed?: boolean };
 /** `POST /delivery/fees/copy-from-courier { courierAccountId, wilayaIds?, dryRun? }` ("copier les tarifs du transporteur dans ma grille", diff preview with `dryRun`). */
 export const CopyFeesFromCourierSchema = z.object({ courierAccountId: id, wilayaIds: z.array(z.number().int().min(1).max(WILAYA_COUNT)).max(WILAYA_COUNT).optional(), dryRun: z.boolean().default(false) }).strict();
 export type CopyFeesFromCourierInput = z.infer<typeof CopyFeesFromCourierSchema>;
-export type CopyFeesDiffView = { rows: { wilayaId: number; nameFr: string; before: { homePrice: number; stopdeskPrice: number }; after: { homePrice: number; stopdeskPrice: number }; changed: boolean }[]; missing: number[]; written: number; dryRun: boolean; refreshing: boolean };
+export type CopyFeesDiffView = { rows: { wilayaId: number; nameFr: string; before: { homePrice: number; stopdeskPrice: number }; after: { homePrice: number; stopdeskPrice: number }; changed: boolean }[]; missing: number[]; written: number; dryRun: boolean; refreshing: boolean; /** UX-101: the courier did not give its prices (see `CourierRatesView.failed`) */ failed?: boolean };
 
 // --- public tracking (06 §12, `/s/[code]`) -------------------------------------------------------------------------------
 /**

@@ -295,9 +295,13 @@ export class ZrExpressAppAdapter implements CourierAdapter {
     const geo = await this.territories(c);
     const from = geo.wilayaByCode.get(fromWilayaId);
     let res = checkStatus(await this.call(c, 'GET', `/delivery-pricing/rates${from ? `?fromTerritoryId=${encodeURIComponent(from.id)}` : ''}`));
-    // no price list assigned to that origin ⇒ the tenant's default one
-    if (res.status === 404 && from) res = checkStatus(await this.call(c, 'GET', '/delivery-pricing/rates'));
-    if (res.status >= 400) throw new CourierError('unavailable', `rates: HTTP ${res.status}`);
+    // no price list assigned to that origin (404) or the origin filter refused (400, live 25/11) ⇒ the tenant's default list
+    if ((res.status === 404 || res.status === 400) && from) res = checkStatus(await this.call(c, 'GET', '/delivery-pricing/rates'));
+    if (res.status >= 400) {
+      const b = obj(res.json);
+      const said = [b.title, b.detail, b.message, b.error].map((x) => (typeof x === 'string' ? x : '')).filter(Boolean).join(' — ').slice(0, 200);
+      throw new CourierError('unavailable', `rates: HTTP ${res.status}${said ? ` (${said})` : ''}`);
+    }
     const rows = (obj(res.json).rates ?? []) as Row[];
     const price = (list: Row[], type: string) => {
       const p = list.find((x) => normalizeRaw(str(x.deliveryType)) === type);

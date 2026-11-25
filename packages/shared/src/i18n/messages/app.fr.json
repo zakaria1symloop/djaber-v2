@@ -2973,6 +2973,7 @@
  "fees.copy.applySome": "Appliquer {count, plural, one {# ligne} other {# lignes}}",
  "fees.copy.description": "Aperçu des différences (domicile / bureau) avant d'écrire dans votre grille.",
  "fees.copy.done": "{count, plural, one {# wilaya mise à jour} other {# wilayas mises à jour}} depuis {courier}",
+ "fees.copy.failed": "{courier} n’a pas renvoyé ses tarifs. Réessayez dans quelques minutes ; si cela continue, vérifiez le compte transporteur ou saisissez vos prix à la main.",
  "fees.copy.missing": "{count, plural, one {# wilaya sans tarif chez ce transporteur (inchangée).} other {# wilayas sans tarif chez ce transporteur (inchangées).}}",
  "fees.copy.note": "Le client paie toujours votre grille : les prix copiés deviennent vos prix.",
  "fees.copy.refreshing": "Récupération des tarifs {courier}… (quelques secondes)",

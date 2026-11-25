@@ -86,6 +86,8 @@ export function CopyRatesDialog({ open, couriers, onClose }: { open: boolean; co
           </div>
         ) : diff.isError ? (
           <FormAlert>{refusal(diff.error, t)}</FormAlert>
+        ) : diff.data?.failed ? (
+          <FormAlert>{t('fees.copy.failed', { courier: courier?.displayName ?? '' })}</FormAlert>
         ) : diff.data?.refreshing ? (
           <p role="status" className="ts-label-meta text-text-muted">
             {t('fees.copy.refreshing', { courier: courier?.displayName ?? '' })}

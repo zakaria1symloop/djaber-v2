@@ -2973,6 +2973,7 @@
  "fees.copy.applySome": "Apply {count, plural, one {# row} other {# rows}}",
  "fees.copy.description": "Preview of the differences (home / office) before writing to your grid.",
  "fees.copy.done": "{count, plural, one {# wilaya updated} other {# wilayas updated}} from {courier}",
+ "fees.copy.failed": "{courier} did not send its prices. Try again in a few minutes; if it continues, check the courier account or enter your prices by hand.",
  "fees.copy.missing": "{count, plural, one {# wilaya without a rate at this courier (unchanged).} other {# wilayas without a rate at this courier (unchanged).}}",
  "fees.copy.note": "The customer always pays your grid: copied prices become your prices.",
  "fees.copy.refreshing": "Fetching {courier} rates… (a few seconds)",

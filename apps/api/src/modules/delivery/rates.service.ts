@@ -15,8 +15,16 @@ import { isCourierError } from './adapters/courier-adapter';
 import { normalizeRaw } from './adapters/status-maps';
 import { CourierAccountService } from './courier-account.service';
 import { CourierLimiter } from './courier-limiter';
+import { RedisService } from '../../core/redis/redis.provider';
 
 const TTL_MS = 3_600_000;
+/**
+ * UX-101 (courier audit 25/11): ZR refused its price list (HTTP 400) and « Copier depuis un transporteur » stayed on
+ * « Récupération des tarifs… » for ever, because a failed fetch left no trace. A failed or empty fetch is now remembered
+ * for this long: the screens stop waiting and say the courier gave nothing; a new try is queued once it is over.
+ */
+const FAILED_TTL_S = 600;
+const failedKey = (courierAccountId: string) => `rates:failed:${courierAccountId}`;
 
 type Rate = { wilayaId: number; home: number | null; stopdesk: number | null };
 /**
@@ -42,7 +50,12 @@ export class RatesService implements OnModuleInit {
     private readonly outbox: OutboxService,
     private readonly registry: ProcessorRegistry,
     private readonly audit: AuditService,
+    private readonly redis: RedisService,
   ) {}
+
+  private async failed(courierAccountId: string): Promise<boolean> {
+    return (await this.redis.client.exists(failedKey(courierAccountId))) === 1;
+  }
 
   onModuleInit() {
     this.registry.register('courier', 'fetch-rates', (data: { courierAccountId: string; workspaceId: string }) => this.fetch(data), { concurrency: 2 });
@@ -90,7 +103,8 @@ export class RatesService implements OnModuleInit {
   }
 
   private async refresh(courierAccountId: string) {
-    const bucket = Math.floor(Date.now() / TTL_MS);
+    // one try per failure window: a fetch that failed can be tried again without waiting for the hour
+    const bucket = Math.floor(Date.now() / (FAILED_TTL_S * 1000));
     await prisma.$transaction((db) => this.queueOutbox.add(db as Tx, 'courier', 'fetch-rates', { courierAccountId, workspaceId: TenantContext.workspaceId() }, `rates:${courierAccountId}:${bucket}`, { attempts: 2, backoff: { type: 'fixed', delay: 60_000 } }));
   }
 
@@ -102,15 +116,17 @@ export class RatesService implements OnModuleInit {
     const rows = supported ? await prisma.courierRateCache.findMany({ where: { courierAccountId: a.id, ...(q.wilayaId ? { wilayaId: q.wilayaId } : {}) }, orderBy: { wilayaId: 'asc' } }) : [];
     const fetchedAt = rows.length ? new Date(Math.min(...rows.map((r) => r.fetchedAt.getTime()))) : null;
     const stale = supported && (!fetchedAt || Date.now() - fetchedAt.getTime() > TTL_MS || (!q.wilayaId && rows.length < WILAYA_COUNT));
-    if (stale) await this.refresh(a.id);
+    const failed = stale && (await this.failed(a.id));
+    if (stale && !failed) await this.refresh(a.id);
     return {
       courierAccountId: a.id,
       provider: a.provider,
       rates: rows.map((r) => ({ wilayaId: r.wilayaId, homePrice: r.homePrice, stopdeskPrice: r.stopdeskPrice, price: q.stopdesk ? r.stopdeskPrice : r.homePrice, fetchedAt: r.fetchedAt.toISOString() })),
       fetchedAt: fetchedAt?.toISOString() ?? null,
       stale,
-      refreshing: stale,
+      refreshing: stale && !failed,
       supported,
+      ...(failed ? { failed: true } : {}),
     };
   }
 
@@ -136,10 +152,17 @@ export class RatesService implements OnModuleInit {
           }
         }
       } catch (e) {
+        await this.redis.client.set(failedKey(a.id), isCourierError(e) ? e.kind : 'error', 'EX', FAILED_TTL_S);
         if (isCourierError(e) && e.kind !== 'unavailable') return;
         throw e;
       }
       rates = expandCourierRates(rates);
+      if (!rates.length) {
+        // the courier answered with no price at all: nothing to wait for either
+        await this.redis.client.set(failedKey(a.id), 'empty', 'EX', FAILED_TTL_S);
+        return;
+      }
+      await this.redis.client.del(failedKey(a.id));
       const now = new Date();
       await prisma.$transaction(async (db) => {
         const tx = db as Tx;
@@ -198,8 +221,11 @@ export class RatesService implements OnModuleInit {
       const t = TenantContext.get();
       await this.audit.write({ workspaceId, actorType: 'user', actorId: t.userId ?? null, actorRole: t.role ?? null, action: 'delivery.fees.copy_from_courier', entity: 'DeliveryFeeRule', entityId: null, after: { courierAccountId: a.id, wilayaIds: rows.filter((x) => x.changed).map((x) => x.wilayaId) } });
     }
-    const refreshing = missing.length > 0 && this.adapters.get(a.provider, a.baseUrl).capabilities.rates;
+    // a wilaya the courier does not price stays « missing » once the list is in the cache: only an empty cache is waited for
+    const wanting = missing.length > 0 && cache.length === 0 && this.adapters.get(a.provider, a.baseUrl).capabilities.rates;
+    const failed = wanting && (await this.failed(a.id));
+    const refreshing = wanting && !failed;
     if (refreshing) await this.refresh(a.id);
-    return { rows, missing, written, dryRun: input.dryRun, refreshing };
+    return { rows, missing, written, dryRun: input.dryRun, refreshing, ...(failed ? { failed: true } : {}) };
   }
 }

@@ -147,6 +147,20 @@ describe('courier accounts (DLV-03)', () => {
 });
 
 describe('courier rates (DLV-07)', () => {
+  // UX-101 (courier audit 25/11): ZR refused its price list and « Copier depuis un transporteur » waited for ever
+  it('UX-101 the courier refuses its price list ⇒ the screens stop waiting: failed, not refreshing', async () => {
+    const owner = await asOwner(app);
+    await seedFees(app, owner.workspaceId);
+    const zr = await addCourier(owner, 'zrexpress');
+    fakeCourier(app).failNext('rates', 'auth');
+    expect((await owner.get(`/delivery/rates?courierAccountId=${zr.id}`).expect(200)).body.data).toMatchObject({ refreshing: true, rates: [] });
+    await drain(app, owner.workspaceId);
+    const after = (await owner.get(`/delivery/rates?courierAccountId=${zr.id}`).expect(200)).body.data;
+    expect(after).toMatchObject({ refreshing: false, failed: true, rates: [] });
+    const dry = (await owner.post('/delivery/fees/copy-from-courier', { courierAccountId: zr.id, dryRun: true }).expect(200)).body.data;
+    expect(dry).toMatchObject({ refreshing: false, failed: true, written: 0 });
+  });
+
   it('rates come from the worker (cache 1 h): refreshing first, then 69 rows (59–69 at the parent rate); copy into the grid with a dry-run diff', async () => {
     const owner = await asOwner(app);
     await seedFees(app, owner.workspaceId);

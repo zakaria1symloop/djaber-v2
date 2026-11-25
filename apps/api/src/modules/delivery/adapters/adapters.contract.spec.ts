@@ -181,6 +181,15 @@ describe('ZR Express new platform (05-integrations §2.2b)', () => {
     ]);
     r.done();
   });
+  // UX-101 (live 25/11): ZR answered 400 to the origin filter and the price list never arrived
+  it('rates: a 400 on the origin filter falls back to the default list; a refusal keeps the words of ZR', async () => {
+    const r = replay(f, 'territories', 'territories_p2', 'rates_origin_400', 'rates');
+    expect(await new ZrExpressAppAdapter(r.transport).getAllRates(f.credentials, 16)).toHaveLength(2);
+    r.done();
+    const refused = replay(f, 'territories', 'territories_p2', 'rates_origin_400', 'rates_refused_400');
+    await expect(new ZrExpressAppAdapter(refused.transport).getAllRates(f.credentials, 16)).rejects.toMatchObject({ kind: 'unavailable', message: 'rates: HTTP 400 (Bad Request — No price list for this tenant)' });
+    refused.done();
+  });
   it('registry: a ZR account on api.zrexpress.app gets the new-platform adapter (fake driver too, with its capabilities)', () => {
     const live = createCourierAdapters({ NODE_ENV: 'production', COURIER_DRIVER: 'live', COURIER_ALLOW_LIVE: false }, async () => {
       throw new Error('no network in unit tests');
