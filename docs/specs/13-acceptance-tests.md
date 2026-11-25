@@ -505,6 +505,32 @@ One scenario per rule; IDs `AT-<area>-nn`. Columns: scenario (Given / When / The
 | AT-ST-13 | RTL: AR frames of Home, Inbox, Orders list v2, New order, Product form match snapshots; numbers, phones, SKUs stay LTR; Changa applied to Body AR | 12 §0, 08 §7.10 | E |
 | AT-ST-14 | Responsive: Orders list at 1024 (icon sidebar, hidden columns) and 390 (cards, bottom-sheet actions, no multi-select); Home / Inbox / Order page checked at 1024 | 08 §7.10, LST-05 | E |
 
+## Recette of 22–24/11/2026 — regression tests
+
+Each fix of the recette has a test named after the client row (`L<n>`) or the tester log (`UX-<n>`) in its comment. They run with `pnpm test` (unit) and `pnpm test:int` (integration).
+
+| Ref | Test file |
+|---|---|
+| L55 / L93 / UX-080 — product list | `apps/api/src/modules/ai/product-list.spec.ts` |
+| UX-079 — greeting only | `apps/api/src/modules/ai/greeting-push.spec.ts` |
+| L56 / UX-085 — same picture | `apps/api/src/modules/ai/image-hash.spec.ts`, `apps/api/test/m4/pipeline.int.spec.ts` |
+| French verbs in the language detection | `apps/api/src/modules/ai/language-french-verbs.spec.ts` |
+| UX-088 — NOT_LISTED / NAME_NOT_POSITION | prompt snapshots in `apps/api/src/modules/ai/prompt/` |
+| L4 / L27 — reply window from the send time | `apps/api/src/modules/messaging/batching.spec.ts`, `apps/api/test/m3/messages.int.spec.ts`, `apps/api/test/m4/pipeline.int.spec.ts` |
+| Stable tool list, answer in hand | `apps/api/src/modules/ai/provider/live-ai.gateway.spec.ts`, `apps/api/test/m4/pipeline.int.spec.ts` |
+| UX-081, UX-082 / UX-084 — own orders, service order | `apps/api/test/m5/ai-orders.int.spec.ts` |
+| L95 — variant missing on a line | `apps/api/test/m5/orders.int.spec.ts`; confirm dialog: `apps/web/src/features/orders/logic.spec.ts` |
+| UX-074 / UX-075 — courier refusal, tracking link | `apps/api/test/m6/shipments.int.spec.ts`, `apps/web/src/features/delivery/logic.spec.ts` |
+| UX-078, agent slots on a downgrade | `apps/api/test/m9/` (billing, lifecycle) |
+| UX-083 — Extend trial on Free | `apps/api/test/m10/admin-workspaces.int.spec.ts` |
+| UX-086 / L60 / L71 — agent filter, aiState | `apps/api/test/m11-carry/agents.int.spec.ts`, `apps/web/src/features/catalog/ai-exclusion.spec.ts` |
+| L78 — old price, import preview | `apps/api/test/m2/categories.int.spec.ts`, `apps/web/src/features/catalog/import/logic.spec.ts` |
+| UX-089 — product form at a negative stock | `apps/web/src/features/catalog/product-form/model.spec.ts` |
+| UX-090 — page analysis flags | `apps/api/test/m4/playground-pages.int.spec.ts` |
+| B2 — invitation already accepted | `apps/api/test/m1/members.int.spec.ts` |
+
+Not covered by an automated test: UX-091 (shell layout, seen fixed by the tester on 24/11) and the live measures of L4 / L27.
+
 ---
 
 All questions are closed: `../audit/decisions-log-2026-10-11.md`.

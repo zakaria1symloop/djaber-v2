@@ -365,3 +365,23 @@ Full-test 15/11 public: an unknown URL shows the public 404 (header, search, Acc
 ## 28. Mobile parity additions
 
 Blocking "Mise à jour requise" screen (`426 APP_UPDATE_REQUIRED {minVersion, storeUrl, message}` from `GET /app/version` or any call, store button) · recommended-update banner (dismissible 7 d) · legal re-acceptance interstitial (`GET /legal/pending`, `POST /legal/accept { key, version }`) · IAP purchase states (store sheet, "validation du reçu…" = `POST /credits/packs/iap/validate`, crédité, `IAP_RECEIPT_INVALID` / `IAP_STORE_UNAVAILABLE` retry, "Restaurer les achats", refund banner) · plan page read-only "Le changement de plan et le paiement se font sur le web" · help center WebView + native ticket form with photo · block / report from the conversation menu · maintenance screen (`503 MAINTENANCE_MODE`, automatic retry every 60 s) · offline banner (read cache, no queued mutation) · session expired · workspace suspended · push pre-prompt · biometrics (offer after first login, each cold start, 3 failures ⇒ password) · deep links `djaber://` + the web path of 03 §15 · account deletion from Settings (password + 2FA; `ACCOUNT_OWNS_WORKSPACE` blocked). Frame names and rules: [14-mobile-app.md](14-mobile-app.md) §3 (`V2 — Système — …` frames).
+
+## 29. Recette of 22–24/11/2026 — screen states added
+
+| Screen | State / text |
+|---|---|
+| Products list | AI column: PROPOSÉ with the note « Modification en attente de validation Djaber : l’IA vend la dernière version validée en attendant » for a product whose change waits for the review; EXCLU with its reason otherwise. Filter « Utilisé par un agent » / « Aucun agent » as in 03 (L60). |
+| Product form (edit) | The stock is read-only and never an error, below zero included; the unsaved-changes bar names « commandes en rupture » when that option changed. |
+| Product page | « Définir comme principale » under each photo; category in Informations; alert threshold in Stock; block « Agents IA » with « Voir les agents IA qui le vendent ». |
+| Import products — preview | File card: « N lignes portent un SKU déjà présent dans votre catalogue. Pour les mettre à jour au lieu de les refuser, cochez « Mettre à jour les produits existants » : Modifier le mappage » when that option is off. Footer on an update: « … nouveaux produits : mouvement « entrée · import » pour chaque stock > 0 · produits existants : le stock du fichier remplace le stock actuel (aucun mouvement s’il est identique) ». Button « Importer N produits » counts products. |
+| Agent — Knowledge tab | Under the categories of an agent « by categories »: « + N produits ajoutés un par un (page Produits › « Ajouter à un agent ») : cet agent les vend aussi, quelle que soit leur catégorie. Voir les produits de cet agent ». |
+| Page analysis | Summary « TERMINÉ · N publications lues · N produits détectés · … · analyse du <date> »; a product already in the catalogue: « EXISTE DÉJÀ »; an expired post picture: placeholder. |
+| Order page | `noDelivery`: « Service — sans livraison », no address and no parcel block. Header button « Appeler & confirmer » (new) / « Appeler le client » (after). Delivery block of a refused parcel: the refusal in the shop’s words + where to fix it. |
+| Order — row menu and dialogs | `noDelivery`: « Marquer terminée (service rendu) · encaisse le reste »; dialog « Marquer terminée — #N · service sans livraison : confirmez que le service est rendu et le montant encaissé ». |
+| Confirm order dialog | Check line « Stock » (red when a line is no longer covered) with the sentence of 03 L95; the green « la commande peut être confirmée. Le stock est déjà réservé. » only when every check passes. |
+| Send to courier dialog · Delivery overview | Refusal: « Le transporteur a refusé le colis : <champ> non valide. » + where to fix + « Message du transporteur : « … » » (dialog); first sentence only (overview). |
+| Checkout return | « ANNULÉ — Paiement annulé — Vous avez annulé le paiement. Rien n’a été débité ni modifié. » with the retry actions. |
+| Invitation page | « Invitation déjà acceptée » (link already used) · « Invitation expirée » (7 days or revoked) · « Invitation invalide » (unknown token). |
+| Settings › Members › roles | Admin: « peut acheter des packs de crédits et payer les factures ; ne change pas le plan ». Plan change / renewal buttons greyed for the Admin. |
+| Super Admin › Workspaces | « Prolonger l’essai / la période » greyed with its reason on a Free-plan shop. |
+| Shell | One scroll bar: the page area scrolls, the sidebar keeps the full height (UX-091). |

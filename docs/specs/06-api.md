@@ -547,3 +547,21 @@ GET /track/:publicToken (public, no auth) → parcel status page { orderNumber, 
 POST /track/:publicToken/report (public "Signaler ce vendeur" on the tracking page: { reason: ReportReason, details?, email? } → Report { reporterKind=end_customer, type=merchant, targetWorkspaceId }; ABUSE_REPORT_RATE_LIMITED 3/h/IP; `POST /safety/reports` stays the authenticated merchant route of §8.3)
 GET /agent-test/:token (shared playground; AGENT_TEST_LINK_EXPIRED after 24 h) → { agentName, avatarUrl, expiresAt } + POST /agent-test/:token/messages { text, turnKey? } → { reply, cards[] } (same `turnKey` ⇒ same turn, R10-1; web route `/agent-test/[token]`, rate limit 60/h per token)
 ```
+
+## Recette of 22–24/11/2026 — API changes
+
+| Route / type | Change |
+|---|---|
+| `OrderListItemView`, `OrderView` | `noDelivery: boolean` — an order that is not delivered (services only). Its `actions` carry no `prepare`, `send_courier`, `ship_manual`, `edit_address`; primary action `deliver` once confirmed. |
+| `POST /orders/:id/status` | `ORDER_ADDRESS_REQUIRED` does not apply to a `noDelivery` order. 422 `ORDER_LINE_VARIANT_MISSING {product}` when a line’s product has variants and the line has none. |
+| `OrderItemView.stockWarning` | `insufficient` drives the « Stock » check of the confirm dialog. |
+| `ProductListItem.aiState`, `stockDetail.availableForAi`, card preview `visibleToCustomers` | `proposed` / visible also for a `pending` product that has an approved version. |
+| `GET /products?agentId=` / `?noAgent=1` | « sold by an agent » = in the agent’s scope and showable by the AI (03 L60). |
+| `POST /products/bulk/price`, product import (update) | Clear `oldPrice` when the new price reaches it. Products export never writes an old price ≤ price. |
+| `GET /channels/:id/analysis` | `items[].duplicateOf` is recomputed on read for a finished result. |
+| `GET /invitations/:token`, `POST /invitations/:token/accept` | 410 `INVITATION_EXPIRED` carries `details: { reason: "accepted" }` for an invitation already accepted. |
+| `GET /billing/checkout/return` | `failureReason`: `canceled`, the bank’s reason, or `null` — never `PAYMENT_FAILED`. |
+| `POST /admin/workspaces/:id/extend` | 422 `PLAN_IS_FREE` on a Free-plan workspace; the `extend_trial` action is disabled with that reason. |
+| `AgentDto.productIds` | Used by the Knowledge tab for the products added one by one. |
+| Shipment `error` | `{ code: COURIER_VALIDATION, field, message }`: `field` names the refused field (phone, commune, address, wilaya, weight, cod, stopdesk). |
+| Config | `AI_STABLE_TOOLS` (`on` / `off`, default `off`), `AI_REPLY_THINKING` (`low` / `off`, default `low`), `PAYMENT_DRIVER`, `CHARGILY_MODE`. |

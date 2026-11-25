@@ -147,3 +147,17 @@ Source: `../figma-gap-review.md` (D36–D42) and `../figma-coverage-matrix.md` �
 | D71 | **Manual billing payments**: recorded by platform finance only (`BillingProvider.manual`, methods `manual_transfer` / `manual_ccp` / `manual_cash`, reference, date, proof upload); amount = remaining ⇒ invoice `paid`; amount < remaining ⇒ `200 ⚠ INVOICE_PARTIAL_PAYMENT {remaining}`; amount > remaining ⇒ `422 VALIDATION_ERROR` on `amount`. No credit notes in v2 (`Invoice.creditNote` does not exist). | 04 §14, 06 §8.11 | ADM-05, DLG Platform admin |
 
 There are no open questions. The former list at the end of `13-acceptance-tests.md` is closed item by item in `../audit/decisions-log-2026-10-11.md`.
+
+## Recette of 22–24/11/2026
+
+The corrections and improvements of the recette (client list of Boutique de Lalla, tester logs UX-066…UX-093) are written in `03-functional-modules.md` (last section), `12-screen-states.md` §29, `06-api.md` (last section), `13-acceptance-tests.md` (regression tests) and in the rows of `04-business-rules.md` they change. The reply to the client is `../audit/recette-2026-11-23/REPONSE-CLIENT-LALLA.md`.
+
+Owner decisions left open by the recette:
+
+| Point | To decide |
+|---|---|
+| L97 | Credit-pack purchase by an Admin: keep (02 §3) or reserve to the Owner. |
+| Chargily | Djaber’s own Chargily account and live mode (production runs the test mode of another account). |
+| Services « à partir de » | How a service priced « à partir de » is quoted and ordered by the AI. |
+| « Nous vous appelons pour confirmer » | Whether this sentence still goes out when the parcel is sent to the courier automatically. |
+| L61 / L91 | Several agents on one page is not planned; confirm the answer to the client (one agent, several categories). |

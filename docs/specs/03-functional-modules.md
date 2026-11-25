@@ -530,3 +530,124 @@ Rules: object not found ⇒ "Introuvable" page with back; object in another work
 | ADM | 15-item admin menu (Vue d'ensemble, Espaces, Utilisateurs, Modération, Signalements, Support, Plans, Abonnements & factures, Crédits & promos, Fournisseurs IA, Préréglages, Contenu, Journal d'audit, Tâches & santé, Paramètres plateforme) + "← Retour à mon espace"; overview alerts (AI error rate, IG review backlog, workspaces at 100 % credits, queue delays, expired courier keys), top workspaces, AI cost per model, trials expiring; workspace actions: open, impersonate, change plan (now / next period, prorata), add credits, extend trial / period (+7 d, +30 d, date), suspend (`SuspendReason ∈ fraud|unpaid|content|owner_request|other`; e-mail), reactivate, schedule deletion, create workspace for a client (name, owner e-mail, offered months, initial credits, invitation, assisted onboarding flag); user actions: resend verification (10 min cooldown), reset password, disable 2FA (verified ticket, reason), revoke sessions, promote (2FA), block (`AUTH_USER_BLOCKED`, reason), schedule deletion; `User.platformRole`, `User.status active|blocked|deletion_scheduled`; subscriptions page with dunning states (`DunningStage ∈ d_minus_7|d0|d_plus_3|expired`), manual payment dialog (`POST /admin/invoices/:id/mark-paid`: method `manual_transfer|manual_ccp|manual_cash`, reference, amount, date, proof; partial ⇒ `200 ⚠ INVOICE_PARTIAL_PAYMENT {remaining}`), actions (invoices, mark paid, resend reminder, extend period `POST /admin/workspaces/:id/extend { days|until, reason }`, change plan/cycle, discount % or DA for n periods, cancel at period end / immediately); AI routing table per capability (primary, fallback, real cost, credits, margin, state) and pricing calculator (USD→DA, credit price, avg tokens, target margin, recommendation); CMS entry types (announcements with window + channels + target, legal, help, e-mails, plan texts, default system messages), AI translation from FR, `CMS_LOCALE_MISSING` unless "replier sur FR"; audit log filters (actor, action, target type, workspace, period, impersonation) with before/after diff, signed CSV / JSON export (job, link 24 h, export itself logged), 24-month retention. | ADM-01…09, ADM-17, DLG Platform admin |
 | NTF | Types added by Figma (all in the §15 table, which is the only list): `order.callback_due`, `order.status_changed`, `order.assigned`, `conversation.assigned`, `channel.approved`, `product.approved`, `product.rejected`, `product.changes_requested`, `moderation.appeal_result`, `report.resolved`, `customer.auto_blocked`, `support.reply`, `credits.pack_purchased`, `credits.negative`, `invoice.unpaid`, `workspace.suspended`, `workspace.reactivated`, `workspace.deletion_scheduled`, `account.deletion_confirmed` (e-mail), `member.role_changed`, `agent.preset_update_available`, `app.update_required`, `app.update_recommended`, `legal.reacceptance_required`, `platform.announcement`, `job.failed`. Notification page groups the filter by family (Commandes — AI orders, callback reminders, assignments and status changes of any order, journey J05r-7 —, À traiter, Problèmes IA, Stock, Colis, Paiements, Pages, Crédits & plan, Membres, Intégrations, Tâches, + Validation produits, Sécurité, Support). Preferences table rows per family with in-app / e-mail / push / sound; the PUSH column is greyed with "Push : notifications de l'application mobile, bientôt disponible." while the mobile apps are not published (values kept, editable from the mobile app later; no web push). | NTF-01, ANA-01b, SET |
 | ANA-01 | Home "À traiter" card types: COLIS · STOCK · PAGE · INSIGHT · CONVERSATION · RAPPEL · TÂCHE; handled cards greyed 24 h with "fait par …"; sort urgency then age (oldest first, then key; STOCK age = since the movement that brought the line to its threshold / 0, UX-062); max 8 + "Tout voir" = one "+ n …" link per hidden kind to the page that lists them all (12 §18, UX-065); line under the Revenue tile = "n commandes livrées · n ventes" (UX-063); banner "Reprendre la configuration : étape n / 6". | ANA-01b |
+
+# Recette of 22–24/11/2026 — rules added by the client's list (Boutique de Lalla) and the tester logs UX-066…UX-093
+
+These rules are in force on the live version (branch `deploy/tester-fixes-2026-10-22`). They complete the rows above; where a row above already says the same thing, both agree. Client rows are cited as `L<n>` (row of her sheet), tester logs as `UX-<n>`. The day-by-day detail (what was seen, what changed) is in `../implementation/assumptions-log.md`.
+
+## AUTH · SET — session, invitation, roles
+
+| Ref | Rule |
+|---|---|
+| L03 | The web client renews the access token 60 s before it ends and when the tab comes back. A refresh that fails without a refusal (network, 5xx, 429) is retried (1.5 s, then 4 s) and never ends the session; only a refused refresh cookie shows « Session expirée ». |
+| B2 | The link of an invitation that was already accepted answers 410 `INVITATION_EXPIRED` with `details.reason = "accepted"`; the page reads « Invitation déjà acceptée — Cette invitation a déjà été utilisée : vous faites partie de la boutique. Connectez-vous avec votre e-mail pour l’ouvrir. ». An expired or revoked invitation keeps « Invitation expirée ». |
+| L97 | Roles (02 §3, unchanged): an Admin buys credit packs, pays invoices and edits the billing info (`billing.write`); only the Owner changes, cancels or renews the plan (`billing.plan`, buttons greyed for the Admin). Settings › Members › « Voir les rôles » says it: Admin « peut acheter des packs de crédits et payer les factures ; ne change pas le plan ». **Open owner decision:** the client expects pack purchase for the Owner only. |
+
+## CHN — pages
+
+| Ref | Rule |
+|---|---|
+| L61 / L91 | A page has one agent. Linking a page that already has an agent moves it (dialog « Déplacer … vers … ? », reversible from the agent page); the agent of the page answers every message. Several agents on one page (one per category) is not supported: one agent with those categories, or the whole catalogue. |
+| L82 / UX-090 | Page analysis (« Extraire le catalogue de la page », Connected pages › page card › Actions): an unreadable post is skipped, never an `AI_PROVIDER_ERROR` for the run. `GET /channels/:id/analysis` flags `duplicateOf` of a finished result against the catalogue **of now** (the product imported from that post, else a live product with the same or a very close name), so a result opened again later shows « EXISTE DÉJÀ » for what was imported since. The summary gives the date of the analysis (« analyse du <date> »). Post pictures are Facebook links that expire: an expired one shows the placeholder; « Relancer » refreshes them. |
+
+## MSG · AI — reply turn
+
+| Ref | Rule |
+|---|---|
+| L4 / L27 | The agent’s `responseDelaySec` window runs from the moment the customer **sent** the message (Meta timestamp): the delivery time is taken off the wait, with a minimum of 1 s after reception so a message sent right behind is still grouped. Voice notes (30 s wait for the transcript) and the abuse-guard window (10 s) are unchanged. Measured 24/11 with a 3 s delay: replies 5.7–7.2 s after the customer’s send = Meta inbound 1.5–2 s + wait ≈ 1.3 s + AI run 2.2–3.4 s + send < 1 s. The setting is a grouping wait, not the total reply time. |
+| UX-066 | A plain-text answer of a turn that used no order tool is sent as it is (no format retry). `AiRun.meta.steps[].bad` keeps the parser reason and the first 160 characters of a refused answer. |
+| R1 | A change of an order ends on the recap of the replacing order (one model call) unless the message also asks for the team. |
+| 24/11 | A step that already carries a valid answer and only calls `get_product` for products of the prompt’s CATALOGUE is final: the calls are not run (`answer_in_hand`). After a call to a made-up tool with nothing to run, the next step is asked without tools (L92). |
+| 24/11 | `AI_STABLE_TOOLS` (`on` / `off`, default `off`; `on` in production): every Anthropic step that offers tools carries the whole tool list of the turn in a fixed order, so the prompt cache is re-read across turns; a call to a tool the step does not offer is handled as a stray call. |
+| 23/11 | Models: text route `claude-sonnet-5-5`, fallback `claude-haiku-5-5`; vision `claude-haiku-5-5`; transcription `whisper-large-v3` (Groq). `AI_REPLY_THINKING` (`low` / `off`, default `low`) sets the reasoning effort of the reply. A turn that fails on the provider (no credit, 4xx / 5xx) hands the conversation to the team (`ai_error`). |
+
+## AI — language
+
+| Ref | Rule |
+|---|---|
+| L41 | The agent answers in the language of the customer’s message: French, darija in Latin letters (arabizi), Arabic script, English. One neutral word (« oui », « merci », « Bonsoir », a product name) keeps the language of the conversation. |
+| 23/11 | A sentence of 3 or more Latin words with no Arabic letter after an Arabic-script conversation switches the language. Arabic « want / see / photos / products » words (حبيت، نشوف، وريني، صور، تصاور، منتجات…) mark an Arabic message, so an Arabic reply is never rewritten into French (L28). |
+| 24/11 | Everyday French verbs and pronouns (moi, montre, envoie, donne, voir, cherche, besoin, changer, modifier…) mark French: « montre-moi <product> » is French whatever the product name. |
+| UX-077 | In French the agent says « vous », and « tu » only to a customer who says « tu » first, then for the whole conversation. |
+
+## AI — catalogue answers
+
+| Ref | Rule |
+|---|---|
+| L55 / L93 / UX-080 | « Quels produits vous avez ? » (fr / en / arabizi / Arabic): with a full catalogue of 2–15 orderable products, every product in stock, every service and every product sold beyond its stock is named with its price (prompt rule PRODUCT_LIST; guard rule `list_incomplete` adds the ones left out without a model turn). A reply that names 3 or more orderable products is treated as that list whatever the wording of the question. A product is named by its name, its name without the part in brackets, or that part. |
+| R17-3 | ALTERNATIVES_IN_STOCK covers only what the agent suggests on its own: never an out-of-stock product, nor one sold beyond its stock (L94). |
+| UX-088 | A product or variant that is not in the agent’s catalogue is not available: the answer **begins** by saying so (« on n’a pas <ce produit> », « ma 3andnach », « ما عندناش »), never « oui » followed by another product; another product comes only after, as a suggestion (rule NOT_LISTED). A number in the product asked for (« product 1 », « le pack 2 ») is part of a name, never a position in the catalogue (rule NAME_NOT_POSITION). |
+| UX-079 | A message that is only a greeting (« slt », « cc », « bjr », « salam », « hello », ≤ 8 words) gets a greeting and « comment puis-je vous aider ? »: no price, no reservation offer (guard rule `greeting_push`), and `create_order` is not offered on that turn — an open recap is not sent again on « salut ». A « oui » to a waiting recap is not a greeting. |
+| 23/11 | The worth of a product comes from its description only: no origin, craftsmanship, durability or sizing advice that is not written there. |
+| L45 | A product sold beyond its stock is orderable; the longer delay is said in the recap and the confirmation, not at each message. When every unit of the order is beyond the stock: « La commande peut prendre un peu plus de temps à être livrée. ». |
+
+## AI — photos and voice
+
+| Ref | Rule |
+|---|---|
+| L28–L30 | A product asked for with its photos is sent as its gallery (all approved pictures); a product sent as a gallery is not sent again as a card. Photos arrive below the text (never « au-dessus »). A product without picture: the agent says the shop has none for now. |
+| L56 / UX-085 | A customer photo that **is** one of the shop’s product pictures is matched on the picture itself before any AI call (signature of 24 × 24 grey pixels, mean difference ≤ 14 with a margin of 6 over the next product; up to 150 products × 6 pictures): one product ⇒ match at 0.99, several ⇒ unsure. Otherwise a shop whose pictured products fit in one call is matched in one vision call against up to 3 pictures per product; larger catalogues keep describe-then-match. |
+| 23/11 | When the photo is not a product of the shop the agent says what the photo shows, then names the closest products or says the shop does not sell it. After a match the product is answered from the catalogue (no `get_product`). |
+| L59 | Voice notes: a transcript in a language not spoken here is asked again as Arabic; an Arabic reading gets two more readings (Arabic and French with a darija prompt) and the text model rebuilds the sentence (`voice_fix`, with the shop’s 40 most recent product names as vocabulary); « UNCLEAR » or a failure keeps the best single reading. French and English speech is kept as heard. |
+| 23/11 | The numbers written in a product name (« QA 23/11 photos ») are never a quantity. |
+
+## AI — orders
+
+| Ref | Rule |
+|---|---|
+| UX-081 / L90 | The customer’s own orders are those of their client record **and those placed in this very conversation** (lookup, cancel, change). `lookup_order` gives the items and, for an order of the conversation, its delivery details and whether it can be changed. A `create_order` that replaces an order keeps what the customer did not change (items, name, phone, place): a change of address asks only the new address, sends the new recap, and is never handed to the team. |
+| L37 / L38 | A change of quantity makes a new recap; once confirmed, the old order is cancelled and replaced — one active order, stock reserved once. |
+| 23/11 | A customer who asks for another order of the same content gets a new recap (« nouvelle commande », « طلبية جديدة »…); a repeated « oui » with no new recap stays refused (`ORDER_ALREADY_PLACED`). |
+| 23/11 | While a recap waits: an empty reply sends the recap again; « donne-moi le récap » sends it again when the agent’s last message was not that recap. Never silence. |
+| L39 | A quantity above the agent’s limit is handed to the team with the reason; a new quantity within the limit in the customer’s next message gives the thread back to the agent. A member’s pause still holds. |
+| L40 | Stop-desk: the agent asks the commune only (no pick-up point list) and applies the stop-desk fee of the grid. |
+| L42 | « Alger », « الجزائر », « الجزائر العاصمة » or « 16 » are wilaya 16 (L31). |
+| L51 / UX-082 / UX-084 | An order whose every item is a service is **not delivered**: the agent needs the name, the phone and the items only — no wilaya, commune, address, stop-desk or delivery fee; the recap and the confirmation carry no delivery line and « Total : X DA. ». The order is stored with `noDelivery = true` (see ORD below). |
+| L88 / L89 | « Où est ma commande ? » finds the order with the phone number. « Annuler ma commande CMD-… » cancels that order only; an order of another customer or conversation is « introuvable ». |
+
+## CAT — products
+
+| Ref | Rule |
+|---|---|
+| L19 | « Définir comme principale » under each photo of the product page; the main photo is the one of the lists and of the Messenger card. Photo actions are always visible on touch screens. |
+| L58 / L65 / L66 / L67 / L68 | « Gérer les variantes » opens the product page at its variants table. The product page shows the category (Informations) and the alert threshold (Stock). Its block is titled « Agents IA », with « Voir les agents IA qui le vendent ». |
+| L69 / L60 / UX-086 | An agent « by categories » sells its categories **plus** the products added to it one by one (« Ajouter à un agent »); its Knowledge tab says « + N produits ajoutés un par un … Voir les produits de cet agent ». The filter « Utilisé par un agent » lists a product that is inside an agent’s scope **and** that the AI may show (active; approved, or changed since its last approved version); a refused product, one waiting for its first review and an inactive one are under « Aucun agent ». |
+| L71 | A product whose change waits for the review keeps its last approved version on sale: `aiState = proposed` (pill PROPOSÉ with « Modification en attente de validation Djaber : l’IA vend la dernière version validée en attendant »), `availableForAi` and the card preview follow. First review pending or refused stays « exclu ». |
+| L73 | Products › Filtres › Statut › « Archivé » lists the archived products; « Restaurer » brings one back with its stock. |
+| L74 / L75 / L76 / UX-089 | Stock adjustment: reason « Alimentation (réception) » first. An adjustment is refused below 0 only when it lowers the stock; a stock already below 0 is always refilled by « Entrée » or « Définir ». A manual « Sortie » beyond the stock is refused with « Stock insuffisant : … n’a que N unités. Réduisez la quantité ou choisissez « Définir ». » and offers « Forcer (stock négatif) ». « Accepter les commandes en rupture » switches off at any stock, below zero included: the product form never validates the stock on edit (read-only there). |
+| L77 / L78 | Export ↔ import round trip: the export writes the product line then its variants with the same SKU, with stock tracking, sell out of stock, description, weight and keywords. The same file imports back: rows of one SKU = product + variants, all or nothing per product. With « Mettre à jour les produits existants » off, rows refused for an existing SKU are counted in the preview with a link to the option. With it on, existing products are updated: the file’s stock replaces the current stock (no movement when identical), no product is created twice. The button counts products, not rows. |
+| L78 | Old price: a price change that gives no old price (bulk price change, import without the column) and reaches the old price clears it; the export never writes an old price at or under the price. |
+| L21 | « Remplir avec l’IA »: 3 analyses per day; at the limit the dialog says the daily maximum is reached, greys « Analyser » and offers the manual entry — no technical code. |
+
+## ORD — orders
+
+| Ref | Rule |
+|---|---|
+| UX-084 | An order with `noDelivery = true`: page « Service — sans livraison », no address block, no courier block; confirmed and closed without an address; no `prepare`, `send_courier`, `ship_manual`, `edit_address`; after the confirmation the primary action is « Marquer terminée (service rendu) — encaisse le reste » (status `delivered`). |
+| L44 | The ordered variant is written on its own line under the product name, in the order detail and in the orders table. |
+| L95 | Confirm dialog: checks Adresse · Wilaya · Téléphone · **Stock**. A line the stock no longer covers shows « stock insuffisant pour <lignes> : réapprovisionnez-le (Produits › Ajuster le stock) ou réduisez la quantité avant de confirmer. »; the confirmation is refused with « Stock insuffisant pour <produit · variante> (N). » and passes after the restock. A line whose product got variants after the order was taken: `ORDER_LINE_VARIANT_MISSING` « « <produit> » a maintenant des variantes : modifiez la commande et choisissez la variante de cette ligne. ». |
+| L80 / L81 | Order import: optional « Date » column (Excel date, dd/mm/yyyy [hh:mm], yyyy-mm-dd [hh:mm], Algiers time); unreadable or later than now = row error; without it, today. An imported order is cancelled like any other; without a commune it cannot be confirmed (`ORDER_ADDRESS_REQUIRED`). |
+| UX-084 | Order page header: « Appeler & confirmer » (primary) while the order is `new`, « Appeler le client » afterwards. |
+
+## DLV — delivery
+
+| Ref | Rule |
+|---|---|
+| UX-074 | A courier refusal that names a field is said in the shop’s words: « Le transporteur a refusé le colis : téléphone non valide. » + where to fix it (the order page for the phone, the send dialog for the other fields) + the courier’s own sentence as the detail. The order’s delivery block says « … Corrigez le téléphone du client sur cette commande, puis « Corriger et renvoyer ». ». ZR Express reasons are read in every shape (never « [object Object] »), without ZR’s unfilled templates. |
+| UX-075 | The customer’s « en route » message names the delivery company (ZR Express, Yalidine, EcoTrack), never the shop’s account label, and its `{tracking}` is « <number> — <public tracking page> » for a parcel sent to a courier. |
+
+## BIL · ADM — billing and admin
+
+| Ref | Rule |
+|---|---|
+| 24/11 | Plan downgrade: the agent slots go first to the active agents that answer on a page still connected, then to the other active agents, then to those the shop paused itself; oldest first in each group (02 §5). |
+| UX-078 | A checkout the payer cancelled returns `failureReason = canceled`; the return page shows « ANNULÉ — Paiement annulé — Vous avez annulé le paiement. Rien n’a été débité ni modifié. ». A bank refusal shows the bank’s reason when the gateway gives one, never the code `PAYMENT_FAILED`. |
+| UX-083 | Super Admin › Workspaces: « Prolonger l’essai / la période » is greyed on a Free-plan shop with « Plan gratuit : il n’y a ni essai ni période payée à prolonger. Utilisez « Changer de plan ». » (`PLAN_IS_FREE`, 422 on the route); available on a trial or a paid plan. |
+| 23/11 | Payments go through Chargily Pay (`PAYMENT_DRIVER=chargily`); production currently runs the **test** mode of another account, so the payee name on Chargily’s page is not Djaber’s. Going live = Djaber’s own Chargily key and `CHARGILY_MODE=live` (open owner decision). |
+
+## Web — shell
+
+| Ref | Rule |
+|---|---|
+| UX-091 | The page area of the shell (`<main>`, the scrolling element) is the containing block of its children (`position: relative`): the screen-reader texts of a long table never make the window taller than the screen. |
+| L02 | Small labels of the tables and of the order detail are 10–11 px (not 8–9 px grey). |
