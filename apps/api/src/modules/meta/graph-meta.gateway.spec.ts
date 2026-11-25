@@ -83,7 +83,7 @@ describe('OAuth — Facebook (05 §1.5)', () => {
   });
 
   it('/me/accounts is paginated and capped; pages keep their token, tasks and picture', async () => {
-    net.reply({ json: fx.accountsPage1 }, { json: fx.accountsPage2 });
+    net.reply({ json: fx.accountsPage1 }, { json: fx.accountsPage2 }, { json: { data: { is_valid: true } } });
     const pages = await graph.listPages(fx.TOKENS.longUser);
     expect(path(net.calls[0]!.url)).toBe('https://graph.facebook.com/v21.0/me/accounts');
     expect(q(net.calls[0]!.url)).toEqual({ fields: 'id,name,access_token,tasks,picture{url}', limit: '100', access_token: fx.TOKENS.longUser });
@@ -97,8 +97,50 @@ describe('OAuth — Facebook (05 §1.5)', () => {
 
   it('a `paging.next` that leaves the Graph host is not followed', async () => {
     net.reply({ json: { ...fx.accountsPage1, paging: { next: 'https://evil.example/steal?access_token=x' } } });
+    net.reply({ json: { data: {} } }); // the token's grants: nothing more
     expect(await graph.listPages(fx.TOKENS.longUser)).toHaveLength(2);
-    expect(net.calls).toHaveLength(1);
+    expect(net.calls).toHaveLength(2);
+    expect(path(net.calls[1]!.url)).toBe('https://graph.facebook.com/v21.0/debug_token');
+  });
+
+  // Client (Boutique de Lalla) 25/11: several pages ticked in the Facebook window, one page connected.
+  it('pages ticked in the window but left out of /me/accounts are read through the token grants', async () => {
+    const one = { data: [{ id: '104455667788990', name: 'Boutique Yasmine', access_token: fx.TOKENS.page, tasks: ['MESSAGING'], picture: { data: { url: 'https://scontent.xx.fbcdn.net/v/p1.jpg' } } }] };
+    const grants = {
+      data: {
+        is_valid: true,
+        granular_scopes: [
+          { scope: 'pages_show_list', target_ids: ['104455667788990', '204455667788991', '304455667788992'] },
+          { scope: 'pages_messaging', target_ids: ['104455667788990', '204455667788991'] },
+          { scope: 'instagram_basic', target_ids: ['17841400000000001'] }, // an Instagram account, not a page
+          { scope: 'pages_read_engagement' }, // « all current and future pages »: no ids
+        ],
+      },
+    };
+    net.reply(
+      { json: one },
+      { json: grants },
+      { json: { id: '204455667788991', name: 'Page du portefeuille', access_token: 'EAAB-page-token-b', picture: { data: { url: 'https://scontent.xx.fbcdn.net/v/pb.jpg' } } } },
+      { status: 400, json: { error: { message: 'Unsupported get request', type: 'GraphMethodException', code: 100 } } },
+      { json: { id: '304455667788992', name: 'Page sans accès' } },
+    );
+    const pages = await graph.listPages(fx.TOKENS.longUser);
+    expect(q(net.calls[1]!.url)).toEqual({ input_token: fx.TOKENS.longUser, access_token: `${APP.appId}|${APP.appSecret}` });
+    expect(net.calls.slice(2).map((c) => [path(c.url), q(c.url).fields])).toEqual([
+      ['https://graph.facebook.com/v21.0/204455667788991', 'id,name,access_token,picture{url}'],
+      ['https://graph.facebook.com/v21.0/304455667788992', 'id,name,access_token,picture{url}'],
+      ['https://graph.facebook.com/v21.0/304455667788992', 'id,name'],
+    ]);
+    expect(pages).toEqual([
+      { id: '104455667788990', name: 'Boutique Yasmine', accessToken: fx.TOKENS.page, tasks: ['MESSAGING'], pictureUrl: 'https://scontent.xx.fbcdn.net/v/p1.jpg', followersCount: null },
+      { id: '204455667788991', name: 'Page du portefeuille', accessToken: 'EAAB-page-token-b', tasks: ['MESSAGING'], pictureUrl: 'https://scontent.xx.fbcdn.net/v/pb.jpg', followersCount: null, via: 'grant' },
+      { id: '304455667788992', name: 'Page sans accès', accessToken: null, tasks: [], pictureUrl: null, followersCount: null, via: 'grant' },
+    ]);
+  });
+
+  it('the grants cannot be read ⇒ the /me/accounts list is kept as it is', async () => {
+    net.reply({ json: { data: [{ id: '104455667788990', name: 'Boutique Yasmine', access_token: fx.TOKENS.page, tasks: ['MESSAGING'] }] } }, { status: 500, json: { error: { message: 'An unknown error occurred', code: 1 } } });
+    expect(await graph.listPages(fx.TOKENS.longUser)).toHaveLength(1);
   });
 
   it('linked Instagram business account of a page', async () => {

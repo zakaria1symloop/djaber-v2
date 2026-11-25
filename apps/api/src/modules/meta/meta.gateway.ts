@@ -9,6 +9,11 @@ export type MetaChannelAuth = { platform: MetaPlatform; externalId: string; toke
 export type MetaPage = {
   id: string;
   name: string;
+  /**
+   * client 25/11: the page was ticked in the Facebook window but Meta left it out of `/me/accounts` (a page held through a
+   * business portfolio) — it was found through the token's granted pages and read one by one.
+   */
+  via?: 'grant';
   accessToken: string | null;
   tasks: string[];
   pictureUrl: string | null;

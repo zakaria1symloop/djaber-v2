@@ -122,7 +122,61 @@ export class GraphMetaGateway implements MetaGateway {
     });
     return { accessToken: String(long.access_token), expiresInSec: typeof long.expires_in === 'number' ? long.expires_in : null, scopes: [] };
   }
+  /**
+   * Client (Boutique de Lalla) 25/11: « quand on sélectionne plusieurs pages dans la fenêtre Facebook, seule la première est
+   * ajoutée ». Every connection of hers brought back one page: `/me/accounts` leaves out the pages a person holds through a
+   * business portfolio (known Meta behaviour, it would need the reviewed `business_management` permission), although they are
+   * ticked in the window. The token itself says which pages were granted (`debug_token` › `granular_scopes[].target_ids`): the
+   * ones missing from the list are read one by one with the user token. A page that cannot be read still comes back, without
+   * a token, so that the report shows it instead of nothing. Any failure here keeps the `/me/accounts` list as it is.
+   */
   async listPages(userToken: string): Promise<MetaPage[]> {
+    const pages = await this.accountPages(userToken);
+    if (pages.length >= MAX_PAGES) return pages;
+    let granted: Map<string, Set<string>>;
+    try {
+      granted = await this.grantedPages(userToken);
+    } catch {
+      return pages;
+    }
+    const known = new Set(pages.map((p) => p.id));
+    for (const [id, scopes] of granted) {
+      if (known.has(id)) continue;
+      if (pages.length >= MAX_PAGES) break;
+      pages.push(await this.grantedPage(id, scopes, userToken));
+    }
+    return pages;
+  }
+  /** Page id → the `pages_*` permissions the person granted for it (the Instagram permissions target accounts, not pages). */
+  private async grantedPages(userToken: string): Promise<Map<string, Set<string>>> {
+    const b = await this.get(this.fb('/debug_token'), { input_token: userToken, access_token: `${this.o.appId}|${this.o.appSecret}` });
+    const out = new Map<string, Set<string>>();
+    const scopes = (b.data as Json | undefined)?.granular_scopes;
+    for (const g of (Array.isArray(scopes) ? scopes : []) as Json[]) {
+      const scope = String(g.scope ?? '');
+      if (!scope.startsWith('pages_') || !Array.isArray(g.target_ids)) continue;
+      for (const raw of g.target_ids) {
+        const id = String(raw);
+        if (!/^\d{1,32}$/.test(id)) continue;
+        out.set(id, (out.get(id) ?? new Set<string>()).add(scope));
+      }
+    }
+    return out;
+  }
+  private async grantedPage(id: string, scopes: Set<string>, userToken: string): Promise<MetaPage> {
+    // `tasks` only exists on `/me/accounts`: messaging is taken from the permission granted for this very page
+    const tasks = scopes.has('pages_messaging') ? ['MESSAGING'] : [];
+    for (const fields of ['id,name,access_token,picture{url}', 'id,name']) {
+      try {
+        const p = await this.get(this.fb(`/${id}`), { fields, access_token: userToken });
+        return { id, name: String(p.name ?? id), accessToken: typeof p.access_token === 'string' && p.access_token ? p.access_token : null, tasks, pictureUrl: p.picture?.data?.url ?? null, followersCount: null, via: 'grant' };
+      } catch {
+        // next, smaller, set of fields
+      }
+    }
+    return { id, name: id, accessToken: null, tasks, pictureUrl: null, followersCount: null, via: 'grant' };
+  }
+  private async accountPages(userToken: string): Promise<MetaPage[]> {
     const pages: MetaPage[] = [];
     let body = await this.get(this.fb('/me/accounts'), { fields: 'id,name,access_token,tasks,picture{url}', limit: '100', access_token: userToken });
     for (;;) {

@@ -160,6 +160,9 @@ export class ConnectService {
   private async connectFacebook(code: string, userId: string): Promise<ConnectReportPage[]> {
     const user = await this.meta.exchangeFacebookCode(code, this.redirectUri('facebook'));
     const pages = await this.meta.listPages(user.accessToken);
+    // client 25/11 (« seule la première page est ajoutée »): how many pages Meta listed, and how many more the grant gave back
+    const recovered = pages.filter((p) => p.via === 'grant');
+    this.log.log({ listed: pages.length - recovered.length, recovered: recovered.length, recoveredWithoutToken: recovered.filter((p) => !p.accessToken).length }, 'facebook pages of the connection');
     const out: ConnectReportPage[] = [];
     for (const page of pages) {
       const row = (status: ConnectReportPage['status'], codeOf: ConnectReportCode | null, channel?: Channel, reconnected = false, otherWorkspaceName?: string | null): ConnectReportPage => ({
