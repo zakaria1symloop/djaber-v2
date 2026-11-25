@@ -12,6 +12,7 @@ import {
   type MerchantPermission,
 } from '@djaber/shared';
 import {
+  Button,
   buttonClass,
   ChecklistRow,
   HomeEmptyCard,
@@ -328,6 +329,10 @@ function PageCard({ page: p, products }: { page: HomePageCardView; products: num
   const locale = useLocaleCode();
   const state = agentState(p);
   const cta = agentCta(p);
+  // UX-102 (tester 25/11): an Operator saw « Régénérer » as a normal button and landed on « accès refusé » — the agent
+  // actions of the card (link, finish, resume, regenerate) are the Owner's / Admins' (`agents.manage`): greyed with the reason
+  const { can } = useSession();
+  const mayAgent = can('agents.manage');
   const btn = buttonClass({ size: 'sm', className: 'w-full' });
   return (
     <HomePageCard
@@ -372,10 +377,14 @@ function PageCard({ page: p, products }: { page: HomePageCardView; products: num
           ),
         title: t(`home.pages.agent.${state}`, { name: p.agent?.name ?? '' }),
         meta: p.agent ? p.agent.name : t('home.pages.agent.noneHint'),
-        action: (
+        action: mayAgent ? (
           <Link href={cta.href} className={buttonClass({ size: 'sm', variant: 'primary' })} data-testid="home-page-agent-cta">
             {t(cta.labelKey)}
           </Link>
+        ) : (
+          <Button size="sm" variant="primary" disabledReason={t('actions.reason.ownerAndAdmins')} data-testid="home-page-agent-cta">
+            {t(cta.labelKey)}
+          </Button>
         ),
       }}
       actions={
