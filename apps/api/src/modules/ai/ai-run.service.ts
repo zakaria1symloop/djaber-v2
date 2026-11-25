@@ -705,7 +705,8 @@ export type TurnRequest = {
  */
 // journey retest R19-1 (18/11): `stray` — the tools it asked that the step did not offer (R19 counted 27 such calls and could not tell which
 // tools); an empty `steps` list is a turn the server answered with no model call (a plain yes to the recap shown)
-export type TurnStep = { ms: number; calls?: string[]; stray?: string[]; next?: string; cacheRead?: number; cacheWrite?: number; outTok?: number; bad?: string };
+/** `at`: ms since the turn began when this model call started (L4 / L27, 25/11: what the turn spends before and between its model calls) */
+export type TurnStep = { ms: number; at?: number; calls?: string[]; stray?: string[]; next?: string; cacheRead?: number; cacheWrite?: number; outTok?: number; bad?: string };
 type TurnBase = { tools: ExecutedTool[]; usage: AiUsage; model: RoutedModel | null; usedFallback: boolean; steps?: TurnStep[] };
 export type TurnResult =
   | (TurnBase & { ok: true; output: AiReplyOutput; model: RoutedModel; forcedHandoff: string | null; repaired: boolean; salvaged?: boolean; /** retest 12/11: a handoff of the model was refused by the server this turn (handoff-judge) */ handoffRefused?: HandoffRefusal; /** §4.3: the reply guard found something (and what was done) */ guard?: GuardOutcome })
@@ -812,7 +813,7 @@ export class AiRunService implements OnModuleInit {
    */
   async turn(req: TurnRequest): Promise<TurnResult> {
     const steps: TurnStep[] = [];
-    const r = await this.modelLoop(req, steps);
+    const r = await this.modelLoop(req, steps, Date.now());
     return { ...r, steps };
   }
 
@@ -844,7 +845,7 @@ export class AiRunService implements OnModuleInit {
     return last.role === 'user' ? 'guard' : 'other';
   }
 
-  private async modelLoop(req: TurnRequest, steps: TurnStep[]): Promise<TurnResult> {
+  private async modelLoop(req: TurnRequest, steps: TurnStep[], turnStart = Date.now()): Promise<TurnResult> {
     const usage: AiUsage = { inputTokens: 0, outputTokens: 0 };
     const messages: AiMessage[] = [...req.prompt.messages];
     // full-test 15/11 AI-CHAT-07: no handoff tool on a message that is only an order field (refused every time, 5–10 s each)
@@ -1544,7 +1545,7 @@ export class AiRunService implements OnModuleInit {
         if (e instanceof AiProviderError) return guardFallback() ?? { ok: false, kind: 'provider', error: providerErrorLabel(e), tools: executed, usage, model, usedFallback };
         throw e;
       }
-      steps.push({ ms: Date.now() - stepStart, ...(res.value.toolCalls.length ? { calls: res.value.toolCalls.map((c) => canonicalTool(c.name)) } : {}), ...(res.value.cache ? { cacheRead: res.value.cache.read, cacheWrite: res.value.cache.write } : {}), outTok: res.value.usage.outputTokens });
+      steps.push({ ms: Date.now() - stepStart, at: stepStart - turnStart, ...(res.value.toolCalls.length ? { calls: res.value.toolCalls.map((c) => canonicalTool(c.name)) } : {}), ...(res.value.cache ? { cacheRead: res.value.cache.read, cacheWrite: res.value.cache.write } : {}), outTok: res.value.usage.outputTokens });
       model = res.model;
       usedFallback ||= res.usedFallback;
       usage.inputTokens += res.value.usage.inputTokens;
