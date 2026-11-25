@@ -36,7 +36,7 @@ export const productBlock = (p: CatalogueProduct, n: number, descriptionMax: num
 export const catalogueSection = (c: PromptContext): string => {
   const { catalogue } = c;
   const head = catalogue.full
-    ? `CATALOGUE (${catalogue.count} products — the complete list; never mention a product, a variant, a price or a stock that is not below; a product listed here needs no search_products call)`
+    ? `CATALOGUE (${catalogue.count} products — the complete list; never mention a product, a variant, a price or a stock that is not below; a product listed here needs no search_products, get_product or check_availability call — its line already gives the price, the stock word, the variants and the photos: answer from it at once. check_availability is only for a quantity of 2 or more)`
     : `CATALOGUE: ${catalogue.count} products. Use search_products before naming any product.`;
   const blocks = catalogue.products.map((p, i) => productBlock(p, i + 1, c.descriptionMax));
   const sentence = c.workspace.systemMessages.out_of_stock?.[systemLocale(c.lang, c.locale)] ?? c.workspace.systemMessages.out_of_stock?.fr ?? '';
