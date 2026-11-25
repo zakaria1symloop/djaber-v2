@@ -157,7 +157,7 @@ Owner decisions left open by the recette:
 | Point | To decide |
 |---|---|
 | L97 | Credit-pack purchase by an Admin: keep (02 §3) or reserve to the Owner. |
-| Chargily | Djaber’s own Chargily account and live mode (production runs the test mode of another account). |
+| Chargily | Djaber’s own Chargily account and live mode (production runs the test mode of another account). **DECIDED 25/11/2026 (owner):** the client opens the Chargily Pay merchant account herself (Chargily verifies the account holder, so it must be in the client company’s name) and hands over the API keys; asked of the client’s project manager on 25/11. Until the verified account and its keys arrive, production stays in test mode. The keys go only into the server’s environment file (variables of `.env.example`), never into a tracked file, a log or a chat. |
 | Services « à partir de » | How a service priced « à partir de » is quoted and ordered by the AI. |
 | « Nous vous appelons pour confirmer » | Whether this sentence still goes out when the parcel is sent to the courier automatically. |
 | L61 / L91 | Several agents on one page is not planned; confirm the answer to the client (one agent, several categories). |
