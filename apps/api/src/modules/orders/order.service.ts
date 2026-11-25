@@ -185,7 +185,8 @@ export class OrderService implements OnModuleInit {
     const w = new Map(wilayas.map((x) => [x.id, x]));
     const c = new Map(communes.map((x) => [x.id, x]));
     // journey 16/11 J05-17: the stop-desk word of the screens (common.stopdesk)
-    const relay = locale === 'ar' ? 'مكتب الاستلام' : locale === 'en' ? 'stopdesk' : 'stop-desk';
+    // Houssem 25/11 (UX-059 retest): the English history read « Sétif · stopdesk » — the screens write « stop-desk » in English too
+    const relay = locale === 'ar' ? 'مكتب الاستلام' : 'stop-desk';
     const text = (a: (typeof all)[number] | null) => {
       if (!a) return null;
       const where = a.isStopdesk ? [relay, a.stopdeskId ? (desks.get(a.stopdeskId)?.name ?? null) : null].filter(Boolean).join(' ') : a.address;
