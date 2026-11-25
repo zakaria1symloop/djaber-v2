@@ -253,7 +253,14 @@ export class ReplyProcessor implements OnModuleInit {
     // journey 16/11 J05-8: a turn with no clue (phone number, name) keeps the conversation's language, Arabic script included
     // journey 16/11 J04-2: the first message with no clue takes the shop's language (agent default, else workspace), not English
     const lang: AiLanguage = turnLanguage(batch.plain, ctx.lastLanguage as AiLanguage | undefined, { agentDefault: agent.defaultLanguage, workspaceLocale: TenantContext.get().locale });
-    await this.typing(conv.channel, conv.externalSenderId);
+    // client list L4 / L27 (25/11): the « typing » call to Meta was awaited before anything else (a network round trip per reply); it
+    // is best effort and already sent when the message arrived — it now runs beside the turn
+    void this.typing(conv.channel, conv.externalSenderId);
+    // where the time of a reply goes, in ms since the run started (AiRun.meta.timing): `start` = when this stage began (job pick-up,
+    // batch, credits), then the end of each stage; the model time itself is in `steps[].ms`
+    const t0 = run.startedAt.getTime();
+    const timing: Record<string, number> = { start: Date.now() - t0 };
+    const mark = (stage: string) => void (timing[stage] = Date.now() - t0);
 
     // --- vision (AI-06): notes are kept on the run so a retry does not pay the provider twice ---------------------------------
     const stored = ((run.meta as RunMeta | null)?.vision ?? {}) as Record<string, VisionNote>;
@@ -285,6 +292,7 @@ export class ReplyProcessor implements OnModuleInit {
     if (visionMatched) await this.credits.settle(ref, 'image_recognition', { amount: CREDIT_COST.image });
     else if (batch.hasAudio) await this.credits.settle(ref, 'voice_transcription', { amount: CREDIT_COST.voice });
 
+    mark('vision');
     // --- prompt ----------------------------------------------------------------------------------------------------------------
     const noteLines = batch.images.map((img) => `[image]\n${visionNoteText(notes[`${img.messageId}:${img.index}`] ?? { kind: 'unavailable' })}`);
     const batchText = [batch.text, ...noteLines].filter(Boolean).join('\n');
@@ -307,6 +315,7 @@ export class ReplyProcessor implements OnModuleInit {
     // journey re-run J04r-1 (18/11): a message's text and its voice transcript are two lines too — no number runs from one into the other
     const customerHistory = [...customerRows].reverse().map((m) => [m.text ?? '', m.transcript ?? ''].filter((x) => x.trim()).join('\n')).join('\n');
 
+    mark('prompt');
     // --- model loop ------------------------------------------------------------------------------------------------------------
     const turn = await this.runs.turn({
       runId: run.id,
@@ -324,7 +333,8 @@ export class ReplyProcessor implements OnModuleInit {
       await this.fail(conv, agent, run, turn, turn.error, batch);
       return 'failed';
     }
-    return this.finalize(conv, agent, run, ref, batch, turn, { lang, outOfHours: turnCtx.prompt.outOfHours, matchedIds });
+    mark('turn');
+    return this.finalize(conv, agent, run, ref, batch, turn, { lang, outOfHours: turnCtx.prompt.outOfHours, matchedIds, timing });
   }
 
   /** F-6 with retries left ⇒ the job is retried (the run and its reservation stay); last attempt ⇒ final failure. */
@@ -370,7 +380,7 @@ export class ReplyProcessor implements OnModuleInit {
     ref: { id: string; workspaceId: string; agentId: string; conversationId: string; channelId: string },
     batch: Batch,
     turn: Extract<TurnResult, { ok: true }>,
-    o: { lang: AiLanguage; outOfHours: boolean; matchedIds: string[] },
+    o: { lang: AiLanguage; outOfHours: boolean; matchedIds: string[]; timing?: Record<string, number> },
   ): Promise<ReplyOutcome> {
     const out = turn.output;
     const blocked = await this.blockedWord(conv.workspaceId, out.reply);
@@ -430,7 +440,7 @@ export class ReplyProcessor implements OnModuleInit {
       // the run is closed first: a second execution of the same batch stops here and stores nothing
       const closed = await this.runs.finish(
         run.id,
-        { status, turn, intent: intentOf(out.intent), confidence: out.confidence, startedAt: run.startedAt, flags: [...(blocked ? ['blocked_word'] : []), ...(turn.salvaged ? ['format_salvaged'] : []), ...(turn.handoffRefused ? ['handoff_refused'] : []), ...guardFlags(turn.guard)], meta: { language: out.language ?? o.lang, cardsSent: cards.length, handoff: status === 'handoff', ...(turn.guard ? { guard: turn.guard } : {}) } },
+        { status, turn, intent: intentOf(out.intent), confidence: out.confidence, startedAt: run.startedAt, flags: [...(blocked ? ['blocked_word'] : []), ...(turn.salvaged ? ['format_salvaged'] : []), ...(turn.handoffRefused ? ['handoff_refused'] : []), ...guardFlags(turn.guard)], meta: { language: out.language ?? o.lang, cardsSent: cards.length, handoff: status === 'handoff', ...(turn.guard ? { guard: turn.guard } : {}), ...(o.timing ? { timing: { ...o.timing, finalize: Date.now() - run.startedAt.getTime() } } : {}) } },
         tx,
       );
       if (!closed) return 'noop';
