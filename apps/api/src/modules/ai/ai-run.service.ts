@@ -1221,7 +1221,7 @@ export class AiRunService implements OnModuleInit {
           for (const product of this.saleProductsOf(req, output, text, [...new Set([...executed.filter((t) => ['search_products', 'get_product', 'check_availability'].includes(canonicalTool(t.name))).flatMap((t) => productIdsOf(t.result)), ...knownLooked])], quotedSubtotals())) text = withPlaceFacts(text, [], product, textLang);
         // journey retest R15-4 (18/11): the asked price of an out-of-stock product is given with « pas disponible » (N5 T1)
         const gone = new Set(req.guard?.unavailableNames ?? []);
-        text = withAskedPrice(text, req.toolCtx.customerText, (req.guard?.cataloguePrices ?? []).filter((p) => gone.has(p.name)), textLang);
+        text = withAskedPrice(text, req.toolCtx.customerText, (req.guard?.cataloguePrices ?? []).filter((p) => gone.has(p.name)), textLang, req.guard?.cataloguePrices ?? []);
         // journey retest R16-4 (18/11): the stop-desk offered once; no question that sounds like a booking before any recap (« تحب نحجزلك
         // واحد؟ ») — the next missing field instead
         // journey retest R17-4 (18/11): the family in Arabic script / arabizi / French, and a clause saying it is booked / prepared / noted

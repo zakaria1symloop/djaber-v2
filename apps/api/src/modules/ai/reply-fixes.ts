@@ -620,9 +620,12 @@ const UNAVAILABLE_PRICE: Record<Loc, (name: string, price: string) => string> = 
  * price and names an out-of-stock catalogue product whose price the reply does not give, the reply's sentence naming that product
  * (else a new first sentence) says its price and that it is not available.
  */
-export const withAskedPrice = (reply: string, customerText: string | undefined, unavailable: readonly { id: string; name: string; price: number; variants: { price: number }[] }[], lang: AiLanguage | string | undefined): string => {
+export const withAskedPrice = (reply: string, customerText: string | undefined, unavailable: readonly { id: string; name: string; price: number; variants: { price: number }[] }[], lang: AiLanguage | string | undefined, catalogue: readonly { id: string; name: string }[] = []): string => {
   if (!customerText || !unavailable.length || !priceAsked(customerText)) return reply;
-  const p = productNamedIn(customerText, unavailable);
+  // UX-095 live retest 25/11: « شحال السوم تاع Recette Sac en cuir » (in stock) ⇒ « Recette H-22 produit B بـ 2 000 دج، بصح ماهوش متوفر » —
+  // the message was read against the out-of-stock products only. The product is the one the whole catalogue gives for the message.
+  const best = catalogue.length ? productNamedIn(customerText, catalogue) : null;
+  const p = catalogue.length ? (unavailable.find((u) => u.id === best?.id) ?? null) : productNamedIn(customerText, unavailable);
   if (!p) return reply;
   const prices = [...new Set([p.price, ...p.variants.map((v) => v.price)].filter((x) => x > 0))];
   if (prices.length !== 1) return reply;

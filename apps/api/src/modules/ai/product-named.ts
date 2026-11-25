@@ -75,15 +75,28 @@ export function productNamedIn<P extends NamedProduct>(text: string, products: r
   const said = new Set(productWords(text));
   if (!said.size) return null;
   const padded = ` ${articleless(foldText(text))} `;
+  // Houssem live 25/11 UX-096: products that share their first word (« Recette Sac en cuir », « Recette H-22 produit B » — in a real
+  // shop « Robe lin », « Robe satin ») — the first of the list was returned for a text naming another one in full. A product named
+  // by words that are all among the words another product is named by is left out; the first of those that remain is returned.
+  const hits: { p: P; words: Set<string> }[] = [];
   for (const p of products) {
     const words = productWords(p.name);
-    if (words.length && (said.has(words[0]!) || words.filter((w) => said.has(w)).length >= 2)) return p;
+    const own = new Set(words.filter((w) => said.has(w)));
+    if (words.length && (said.has(words[0]!) || own.size >= 2)) {
+      hits.push({ p, words: own });
+      continue;
+    }
     for (const k of p.keywords ?? []) {
       const key = articleless(foldText(k));
-      if (key.replace(/\s/g, '').length >= 3 && padded.includes(` ${key} `)) return p;
+      if (key.replace(/\s/g, '').length >= 3 && padded.includes(` ${key} `)) {
+        hits.push({ p, words: new Set([`key:${p.id}`]) });
+        break;
+      }
     }
   }
-  return null;
+  if (hits.length < 2) return hits[0]?.p ?? null;
+  const fewer = (a: Set<string>, b: Set<string>) => a.size < b.size && [...a].every((w) => b.has(w));
+  return (hits.find((h) => !hits.some((o) => o !== h && fewer(h.words, o.words))) ?? hits[0]!).p;
 }
 
 /**

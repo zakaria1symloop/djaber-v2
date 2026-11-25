@@ -108,8 +108,9 @@ describe('J08v-2 (Minor) — every product the first message names gets its pric
     const FOUL = p('x-foulard', 'Foulard soie', 1200);
     expect(productsNamedIn('je veux 1 tapis berbère et 1 porte-clés', SHOP).map((x) => x.name)).toEqual([TAPIS.name, PORTE.name]);
     expect(productsNamedIn('1 lampe en cuivre et 2 foulards soie', SHOP).map((x) => x.name)).toEqual([LAMPE.name, FOULARD.name]);
-    // « tapis berbère » is not « Tapis de prière » (first word only) — productNamedIn alone took the first of the catalogue
-    expect(productNamedIn('je veux un tapis berbère', [PRIERE, BERBERE])).toBe(PRIERE);
+    // « tapis berbère » is not « Tapis de prière » (first word only) — since 25/11 (UX-096) productNamedIn gives the product named by the most
+    // words too, whatever the order of the catalogue
+    expect(productNamedIn('je veux un tapis berbère', [PRIERE, BERBERE])).toBe(BERBERE);
     expect(productsNamedIn('je veux un tapis berbère', [PRIERE, BERBERE])).toEqual([BERBERE]);
     expect(productsNamedIn('un foulard soie', [HIJAB, FOUL])).toEqual([FOUL]);
     // « un tapis » names both the same way: none (the caller keeps its single-product rule)
