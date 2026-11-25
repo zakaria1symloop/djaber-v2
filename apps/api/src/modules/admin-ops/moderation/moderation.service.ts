@@ -1,6 +1,8 @@
 // ADM-10 — moderation queue, decisions, appeals, rules, stats (03 §23 MOD-06…10, 04 §12, D36; 06 §8.11).
 // Decisions run across workspaces (platform route); each product write is scoped to its workspace by `workspaceId` filters.
 import { Injectable } from '@nestjs/common';
+import { viewerLocale } from '../../../core/i18n/viewer-locale';
+import { autoRejectedIn } from '../../catalog/moderation-message';
 import { createHash } from 'node:crypto';
 import { prisma, Prisma, TenantContext, type ModerationItem, type Tx } from '@djaber/db';
 import {
@@ -137,7 +139,8 @@ export class ModerationService {
       reviewer: toUserRef(r.reviewer),
       decision: r.decision,
       reasonTemplateKey: r.reasonTemplateKey,
-      merchantMessage: r.merchantMessage,
+      // UX-099: the system's own refusal sentence in the moderator's language (a moderator's message stays as written)
+      merchantMessage: r.reviewerId ? r.merchantMessage : autoRejectedIn(r.merchantMessage, viewerLocale()),
       rejectedFields: r.rejectedFields,
       submittedAt: r.submittedAt.toISOString(),
       decidedAt: iso(r.decidedAt),

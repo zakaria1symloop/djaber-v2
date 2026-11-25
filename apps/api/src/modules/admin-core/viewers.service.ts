@@ -1,6 +1,8 @@
 // ADM-17 read-only viewers (conversations, products — PII masked, every open audited `viewer.open`, unmask super_admin
 // only `viewer.unmask`) and D21-bis read-only impersonation sessions (30 min, super_admin + support).
 import { Injectable } from '@nestjs/common';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
+import { autoRejectedIn } from '../catalog/moderation-message';
 import {
   IMPERSONATION_MINUTES,
   textIn,
@@ -128,7 +130,7 @@ export class AdminViewersService {
       category: p.category?.name ?? null,
       images: p.images.map((i) => ({ url: i.url, flag: i.moderationFlag })),
       variants: p.variants.map((v) => ({ id: v.id, name: v.name, sku: v.sku, price: v.price, stock: v.stock })),
-      moderationHistory: p.moderationItems.map((m) => ({ at: (m.decidedAt ?? m.submittedAt).toISOString(), status: m.status, decision: m.decision, note: m.merchantMessage })),
+      moderationHistory: p.moderationItems.map((m) => ({ at: (m.decidedAt ?? m.submittedAt).toISOString(), status: m.status, decision: m.decision, note: m.reviewerId ? m.merchantMessage : autoRejectedIn(m.merchantMessage, viewerLocale()) })),
     };
   }
 
