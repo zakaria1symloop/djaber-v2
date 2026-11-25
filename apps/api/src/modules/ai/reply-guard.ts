@@ -395,6 +395,19 @@ export const greetingOnly = (text: string | undefined): boolean => {
   }
   return greeted;
 };
+// Houssem live 25/11 UX-095 (voice note « شحال السوم تاع Recette Sac en cuir » ⇒ a full order recap with the customer's saved name,
+// phone and address): a message that only asks a price starts no order
+const PRICE_ASK = /(?<![\p{L}\p{N}])(?:ch7al|chhal|ch7el|chehal|chhel|bch7al|bchhal|combien(?!\s+d(?:e\b|'))|prix|tarif|tarifs|soum|souma|essouma|thaman|taman|price|cost|costs|how much)(?![\p{L}\p{N}])|شحال|بشحال|قداش|بقداش|السوم|السومه|سومه|الثمن|ثمن|السعر|سعر|بكم/u;
+const ORDER_INTENT = /(?<![\p{L}\p{N}])(?:commande|commander|commandez|ncommandi|ncomandi|nkomandi|nkoumandi|veux|voudrais|prends|prendre|bghit|nbghi|n7eb|nheb|7ab|7abit|habit|nechri|nchri|nachri|nachrih|nediha|reserve|reserver|reservez|order|buy|want|take|confirme|confirmer|valide)(?![\p{L}\p{N}])|نطلب|نكوموندي|نكمندي|بغيت|نحب|حاب|حابه|نشري|نديها|اطلب|احجز|نحجز|طلبيه|طلبيتي|أكد|اكد/u;
+/** UX-095: the message only asks how much something costs — no word of ordering, no phone number, no « oui ». */
+export const priceQuestionOnly = (text: string | undefined): boolean => {
+  const t = lightFold((text ?? '').trim()).normalize('NFD').replace(/[\u0300-\u036f]/g, '').normalize('NFC');
+  if (!t || t.split(/\s+/).length > 14) return false;
+  // a « oui … » answers the recap that waits, whatever it asks next (« oui merci, c'est livré en combien de jours ? »)
+  if (/^(?:oui|ouais|ok|okay|d'accord|daccord|yes|ih|iyh|wah|نعم|ايه|واه)(?![\p{L}\p{N}])/u.test(t)) return false;
+  if (!PRICE_ASK.test(t) || ORDER_INTENT.test(t)) return false;
+  return !/\d{8,}/.test(t.replace(/[\s.-]/g, ''));
+};
 /** UX-079: a sentence that offers to sell — an amount, or a word of ordering / reserving / delivering. */
 const PUSH_RE = /r[eé]serv|commande|commander|order|livraison|deliver|shipping|tawsil|twassel|nreserv|n7ajz|na7jez|n7jz|ncommand|توصيل|طلبي|الطلب|كوموند|نحجز|احجز|حجز/u;
 export const greetingPushes = (parts: string[]): number[] => parts.map((s, i) => (moneyAmounts(foldGuard(s)).length || PUSH_RE.test(foldGuard(s)) || PUSH_RE.test(s.toLowerCase()) ? i : -1)).filter((i) => i >= 0);

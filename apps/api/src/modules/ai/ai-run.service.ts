@@ -20,7 +20,7 @@ import { FORMAT_REMINDER, parseReplyOutput, salvageReply, type AiReplyOutput } f
 import { absentFields, canonicalTool, TOOL_DEFS, ToolRegistry, type ToolRunContext } from './tools/tool-registry';
 import { allowedHandoffReasons, complaintIn, establishedReasons, HANDOFF_REFUSED_MARK, productAsk, fieldOnlyMessage, handoffReason, handoffRefusedInstruction, judgeHandoff, messageHandoffReasons, orderDetailsMessage, orderStatusAsk, placeCandidate, type HandoffRefusal, asksTeam } from './handoff-judge';
 import { offCatalogueWords, productNamedIn, productsNamedIn, productWanted, productWords } from './product-named';
-import { AUTO_FIX_RULES, checkReply, enforceReply, feeSentence, FIELD_QUESTIONS, greetingOnly, guardInstruction, numbersIn, orderClaimsIn, owedQuotes, quoteFacts, stripMarkdown, withToolResults, type CataloguePrice, type CatalogueStock, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
+import { AUTO_FIX_RULES, checkReply, enforceReply, feeSentence, FIELD_QUESTIONS, greetingOnly, guardInstruction, priceQuestionOnly, numbersIn, orderClaimsIn, owedQuotes, quoteFacts, stripMarkdown, withToolResults, type CataloguePrice, type CatalogueStock, type GuardFacts, type GuardOutcome, type GuardViolation } from './reply-guard';
 import { asksDelivery, asksSomething, blockedOrderText, confirmRequest, deliveryAnswer, orderConfirmationText, pendingRecap, recapReply, serverRecapAsked, withoutRecapClaims } from './tools/order-confirmation-text';
 import { asksCancel, cancelAsked, cancelledAsked, cancelledNumber, confirmation, lastCancelled, phonesIn, placedNumbers, recapPending, recapYesArgs } from './tools/order-confirmation';
 import { matchWilaya, namedVariant } from './tools/tool-registry';
@@ -65,6 +65,9 @@ export const NO_ADDRESS_NOTE =
  * Houssem live 23/11 (H-07 13:42 « salut » ⇒ the recap of an order left open 20 minutes earlier, no greeting; UX-079 « slt » ⇒ an offer to
  * reserve): on a message that is only a greeting, create_order is not offered — the model called it again for the earlier cart.
  */
+/** Houssem live 25/11 UX-095: told to the model on a message that only asks a price (create_order is not offered). */
+export const PRICE_QUESTION_NOTE =
+  "PRICE QUESTION: the customer's message only asks how much something costs, so create_order is not available in this turn. Give the price (and whether it is available) from the CATALOGUE, then ask in one short question whether they want to order — no recap, no order, even when their name, phone and address are already known.";
 export const GREETING_ONLY_NOTE =
   "GREETING ONLY: the customer's message is only a greeting, so create_order is not available in this turn. Greet back in a few words and ask what they are looking for — no product, no price, no recap, no offer to order or reserve.";
 /**
@@ -960,8 +963,10 @@ export class AiRunService implements OnModuleInit {
     const substituteTaken = offeredNow.length === 1 && takesUnavailable ? offeredNow[0]!.name : null;
     // UX-079: a message that is only a greeting starts no order (a « oui » to a waiting recap is no greeting)
     const greetOnly = greetingOnly(said) && !yesOrder;
+    // UX-095: a message that only asks a price starts no order either (the customer's saved details made a recap of it)
+    const priceOnly = !greetOnly && !yesOrder && priceQuestionOnly(said);
     const withheld = (name: string) =>
-      (name === 'handoff_to_human' && (noHandoff || !reasons.length)) || (name === 'create_order' && (noPhone || noPlace || noStreet || noAddressHere || !!takesGone || greetOnly)) || (name === 'cancel_order' && noCancel) || (name === 'lookup_order' && (noLookup || confirmingYes)) || (name === 'add_faq_candidate' && noFaq);
+      (name === 'handoff_to_human' && (noHandoff || !reasons.length)) || (name === 'create_order' && (noPhone || noPlace || noStreet || noAddressHere || !!takesGone || greetOnly || priceOnly)) || (name === 'cancel_order' && noCancel) || (name === 'lookup_order' && (noLookup || confirmingYes)) || (name === 'add_faq_candidate' && noFaq);
     // every tool of the turn, in its fixed order (AI_STABLE_TOOLS: sent on each step so the cached prefix stays the same)
     const allDefs = await this.tools.defsFor(req.toolCtx.workspaceId);
     const defs = allDefs.filter((d) => !withheld(d.name)).map((d) => (d.name === 'handoff_to_human' ? handoffDefWith(d, reasons) : d));
@@ -1066,7 +1071,7 @@ export class AiRunService implements OnModuleInit {
     };
     // journey re-run J04r-4 (18/11): the customer writes Modern Standard Arabic (no darija word in their Arabic-script messages)
     const msa = req.guard?.lang === 'ar' && msaRegister(req.toolCtx.customerHistory ?? req.toolCtx.customerText);
-    const system = [req.prompt.system, ...(msa ? [MSA_NOTE] : []), ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(greetOnly ? [GREETING_ONLY_NOTE] : []), ...(serviceTaken && !greetOnly ? [SERVICE_ORDER_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noStreet ? [NO_STREET_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : []), ...(knownNote ? [knownNote] : []), ...(recapReady ? [RECAP_READY_NOTE] : []), ...(takesGone ? [takesUnavailableNote(takesGone)] : []), ...(substituteTaken ? [takesSubstituteNote(substituteTaken)] : [])].join('\n\n');
+    const system = [req.prompt.system, ...(msa ? [MSA_NOTE] : []), ...(fieldOnly ? [FIELD_ONLY_NOTE] : []), ...(orderDetails ? [ORDER_DETAILS_NOTE] : []), ...(noPhone ? [NO_PHONE_NOTE] : []), ...(greetOnly ? [GREETING_ONLY_NOTE] : []), ...(priceOnly ? [PRICE_QUESTION_NOTE] : []), ...(serviceTaken && !greetOnly ? [SERVICE_ORDER_NOTE] : []), ...(noPlace ? [NO_PLACE_NOTE] : noStreet ? [NO_STREET_NOTE] : noAddress ? [NO_ADDRESS_NOTE] : []), ...(knownNote ? [knownNote] : []), ...(recapReady ? [RECAP_READY_NOTE] : []), ...(takesGone ? [takesUnavailableNote(takesGone)] : []), ...(substituteTaken ? [takesSubstituteNote(substituteTaken)] : [])].join('\n\n');
     // journey retest R7-5: run once, when the answer to a delivery question comes without any quote_delivery of the turn
     let serverQuoted = false;
     // journey retest R14-2: the server's quote for the fees of a « home or stop-desk? » question (not a delivery question)
@@ -1252,7 +1257,7 @@ export class AiRunService implements OnModuleInit {
       const answer = r.kept === 'server' ? deliveryAnswer([...reused.map((t) => ({ name: canonicalTool(t.name), result: t.result })), ...calls], req.toolCtx.customerText ?? '', textLang) : null;
       // journey retest R13-5 (18/11): a recap of another product than the out-of-stock one the customer asked for says so first (N5 T2
       // « je le prends » ⇒ the Coffret's recap, the Parfum Oud out of stock)
-      const swap = substitutionLine(recap.items, req.toolCtx.customerHistory ?? req.toolCtx.customerText ?? '', req.guard?.unavailableNames ?? [], r.text, textLang);
+      const swap = substitutionLine(recap.items, req.toolCtx.customerHistory ?? req.toolCtx.customerText ?? '', req.guard?.unavailableNames ?? [], r.text, textLang, (req.guard?.cataloguePrices ?? []).map((p) => p.name));
       return { ...plain, reply: withPhotoAnswer(output, [swap, answer, r.text].filter(Boolean).join('\n\n')) };
     };
     // journey retest R16-4 (18/11): one space between words, whatever wrote the text (C2 « smahli 3lik  3la had lmochkil »)

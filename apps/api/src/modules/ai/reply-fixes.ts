@@ -3,7 +3,7 @@
 // « Oui, je suis là ! » / « Vous êtes toujours là ? » (R7-3). Pure.
 import { formatMoney } from '@djaber/shared';
 import { serverTextLanguage, type AiLanguage } from './language';
-import { productNamedIn, productWanted } from './product-named';
+import { productNamedIn, productsNamedIn, productWanted } from './product-named';
 import { FIELD_QUESTIONS, foldGuard, numbersIn, PHOTO_WORD, splitSentences, type CataloguePrice, type QuoteFact } from './reply-guard';
 import { customerOwnName } from './tools/tool-registry';
 
@@ -654,15 +654,25 @@ const SUBSTITUTE: Record<Loc, (gone: string, instead: string, many: boolean) => 
  * » ⇒ the Coffret's recap with no word of the change. Only when the customer's latest message naming a product named an out-of-stock
  * one (`unavailableNames`) that the recap does not hold, and the reply does not already name it. Null otherwise.
  */
-export const substitutionLine = (recapItems: readonly { name?: unknown }[], history: string, unavailableNames: readonly string[], reply: string, lang: AiLanguage | string | undefined): string | null => {
+export const substitutionLine = (recapItems: readonly { name?: unknown }[], history: string, unavailableNames: readonly string[], reply: string, lang: AiLanguage | string | undefined, catalogueNames: readonly string[] = []): string | null => {
   const items = recapItems.map((i) => (typeof i.name === 'string' ? i.name : '')).filter(Boolean);
   if (!items.length || !unavailableNames.length) return null;
   const inRecap = items.map((name, k) => ({ id: `r${k}`, name }));
   const gone = unavailableNames.map((name, k) => ({ id: `u${k}`, name })).filter((u) => !items.some((n) => foldGuard(n) === foldGuard(u.name)));
+  // Houssem live 25/11 UX-096: « شحال السوم تاع Recette Sac en cuir » (in stock), then an order of « Satin dress » ⇒ « Le produit Recette
+  // H-22 produit B n'est pas disponible… à la place… » — the line was read against the out-of-stock products only, and one of them
+  // shares the first word of the product really named. The products of the whole catalogue are read together: the line names the
+  // one it names by the most words, and an available product named is no out-of-stock product asked for.
+  const known = new Set([...inRecap, ...gone].map((p) => foldGuard(p.name)));
+  const others = catalogueNames.filter((n) => !known.has(foldGuard(n))).map((name, k) => ({ id: `c${k}`, name }));
+  const all = [...inRecap, ...gone, ...others];
   for (const line of history.split(/\n+/).map((l) => l.trim()).filter(Boolean).reverse()) {
     if (productNamedIn(line, inRecap)) return null;
-    const asked = productNamedIn(line, gone);
+    const named = productsNamedIn(line, all);
+    const asked = named.find((p) => p.id.startsWith('u')) ?? (others.length ? null : productNamedIn(line, gone));
     if (asked) return productNamedIn(reply, [asked]) ? null : SUBSTITUTE[locOf(lang)](asked.name, items.join(', '), items.length > 1);
+    // the latest product the customer named is another one that is on sale: nothing was replaced
+    if (named.length) return null;
   }
   return null;
 };
