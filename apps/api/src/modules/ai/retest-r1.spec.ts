@@ -120,7 +120,7 @@ describe('R1-6 / R1-7 — the server recap is the recap', () => {
     const arabizi = orderRecapText(r, 'arabizi');
     expect(arabizi.split('\n')[0]).toBe('Hada récap ta3 la commande:');
     expect(arabizi).toContain('Ktebli « ih » bach nconfirmi la commande');
-    expect(orderRecapText(pendingRecap(calls(recapResult({ isStopdesk: true, deliveryFee: 450, total: 7950, address: null }) as never))!, 'en')).toContain('- Stop-desk delivery (Constantine): 450 DA');
+    expect(orderRecapText(pendingRecap(calls(recapResult({ isStopdesk: true, deliveryFee: 450, total: 7950, address: null }) as never))!, 'en')).toContain('- Delivery to the office (Constantine): 450 DA');
     expect(orderRecapText(pendingRecap(calls(recapResult({ replaces: 'TEST-6619' }) as never))!, 'fr')).toContain('Elle remplacera la commande TEST-6619.');
   });
   it('a model recap — missing lines, with a translated name, or whole (journey retest R4-3) — is replaced by the server recap', () => {

@@ -94,12 +94,12 @@ describe('R18-1 (Minor) — a message naming a served wilaya no turn quoted gets
 
   it('PG1 T1 exact text: the arabizi fees with the free threshold of Oran (600 DA under 20 000 DA)', async () => {
     const { r } = await turnOf('slm, ana f Oran, Bir El Djir', 'arabizi', [{ reply: 'Salam, marhba bik! Ahlan bik f Oran. Wach men produit t7ebb tchri lyoum ?', intent: 'GREETING' }]);
-    expect(r.output.reply).toBe('Salam, marhba bik! Ahlan bik f Oran. Tawsil: 600\u00a0DA (batel men 20\u00a0000\u00a0DA) l dar, wela 400\u00a0DA f stop-desk ila t7ebb. Wach men produit t7ebb tchri lyoum ?');
+    expect(r.output.reply).toBe('Salam, marhba bik! Ahlan bik f Oran. Tawsil: 600\u00a0DA (batel men 20\u00a0000\u00a0DA) l dar, wela 400\u00a0DA f l bureau ila t7ebb. Wach men produit t7ebb tchri lyoum ?');
   });
 
   it('PF1 T1 exact text (fr)', async () => {
     const { r } = await turnOf("Bonjour, j'habite à Sétif, El Eulma", 'fr', [{ reply: "Bonjour ! Qu'est-ce qui vous intéresse aujourd'hui ?", intent: 'GREETING' }]);
-    expect(r.output.reply).toBe("Bonjour ! Livraison : 650\u00a0DA à domicile, ou 350\u00a0DA en stop-desk si vous préférez. Qu'est-ce qui vous intéresse aujourd'hui ?");
+    expect(r.output.reply).toBe("Bonjour ! Livraison : 650\u00a0DA à domicile, ou 350\u00a0DA au bureau du transporteur si vous préférez. Qu'est-ce qui vous intéresse aujourd'hui ?");
   });
 
   it('a wilaya that is not served ⇒ « we don’t deliver there », in the customer’s script; already said ⇒ not twice', async () => {
@@ -116,7 +116,7 @@ describe('R18-1 (Minor) — a message naming a served wilaya no turn quoted gets
   it('a field answer naming the place, the reply asking another field ⇒ quoted (F1-like « Sétif, El Eulma »)', async () => {
     const { r, execute } = await turnOf('Sétif, El Eulma', 'fr', [{ reply: 'Merci ! Quel est votre nom ?', intent: 'SALE' }], { history: ['Je voudrais le hijab soie'] });
     expect(execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 19 }, expect.anything());
-    expect(r.output.reply).toBe('Merci ! Livraison : 650\u00a0DA à domicile, ou 350\u00a0DA en stop-desk si vous préférez. Quel est votre nom ?');
+    expect(r.output.reply).toBe('Merci ! Livraison : 650\u00a0DA à domicile, ou 350\u00a0DA au bureau du transporteur si vous préférez. Quel est votre nom ?');
   });
 
   it('a street given already ⇒ the home fee alone (no stop-desk offered after an address)', async () => {
@@ -172,7 +172,7 @@ describe('R18-3 (Minor) — fewer model steps: no corrective turn for a missing 
   it('F1b T2-like: the model quoted Sétif and gave no fee ⇒ the server writes the fee sentence, no corrective model turn', async () => {
     const { r, gateway } = await turnOf('c’est combien la livraison à Sétif ?', 'fr', [{ toolCalls: [{ name: 'quote_delivery', args: { wilayaId: 19 } }] }, { reply: 'Bien sûr ! Vous préférez quel article ?', intent: 'INFO' }]);
     expect(gateway.calls).toHaveLength(2);
-    expect(plain(r.output.reply)).toBe('Livraison à Sétif : 650 DA à domicile, 350 DA en stop-desk. Bien sûr ! Vous préférez quel article ?');
+    expect(plain(r.output.reply)).toBe('Livraison à Sétif : 650 DA à domicile, 350 DA au bureau. Bien sûr ! Vous préférez quel article ?');
     expect(r.guard).toMatchObject({ violations: [{ rule: 'fee_missing' }], retried: false });
     // the model calls of the turn are kept (time, tools, why another call followed)
     expect(r.steps?.map((s) => [s.calls ?? [], s.next ?? null])).toEqual([[['quote_delivery'], 'tools'], [[], null]]);

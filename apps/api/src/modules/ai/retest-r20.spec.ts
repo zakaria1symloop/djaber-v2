@@ -111,26 +111,26 @@ describe('R20-2 (Minor) — a quote run in a turn reaches the reply; a delivery 
     expect(gateway.calls).toHaveLength(2);
     expect(ran(execute, 'quote_delivery')).toHaveLength(1);
     const recap = orderRecapText(pendingRecap([{ name: 'create_order', result: N3_RECAP }])!, 'arabizi');
-    expect(r.output.reply).toBe(`Ih, nwasslou l Constantine, f 2 l 5 ayam. L dar: 700\u00a0DA, f stop-desk: 450\u00a0DA.\n\n${recap}`);
+    expect(r.output.reply).toBe(`Ih, nwasslou l Constantine, f 2 l 5 ayam. L dar: 700\u00a0DA, f l bureau: 450\u00a0DA.\n\n${recap}`);
     // R19's answer: « Ih, nwasslou l Constantine, f 2 l 5 ayam. » — the stop-desk fee never said
-    expect(plain(r.output.reply)).toContain('f stop-desk: 450 DA');
+    expect(plain(r.output.reply)).toContain('f l bureau: 450 DA');
   });
 
   it('the model made no quote: the server quotes the recap’s wilaya (no model call) and the answer still carries both fees', async () => {
     const { r, gateway, execute } = await turnOf(N3_T2, 'arabizi', [{ toolCalls: [{ name: 'create_order', args: N3_CALL }] }, { reply: 'Ih !', intent: 'SALE' }], { history: [N3_T1], assistant: [T1_REPLY], order: N3_RECAP, products: J03 });
     expect(gateway.calls).toHaveLength(1);
     expect(ran(execute, 'quote_delivery').map((c) => c[1])).toEqual([{ wilayaId: 25 }]);
-    expect(r.output.reply.startsWith('Ih, nwasslou l Constantine, f 2 l 5 ayam. L dar: 700\u00a0DA, f stop-desk: 450\u00a0DA.\n\nHada récap')).toBe(true);
+    expect(r.output.reply.startsWith('Ih, nwasslou l Constantine, f 2 l 5 ayam. L dar: 700\u00a0DA, f l bureau: 450\u00a0DA.\n\nHada récap')).toBe(true);
   });
 
   it('deliveryAnswer in every script; a stop-desk recap gives the home fee from the quote; no delivery question ⇒ nothing', () => {
     const quote = { name: 'quote_delivery', result: quoteOf({ wilayaId: 25 }) };
     const call = { name: 'create_order', result: N3_RECAP };
-    expect(deliveryAnswer([quote, call], 'Vous livrez à Constantine ? cité 1000 logements bloc 5', 'fr')).toBe('Oui, on livre à Constantine, en 2 à 5 jours. À domicile : 700\u00a0DA, en stop-desk : 450\u00a0DA.');
-    expect(deliveryAnswer([quote, call], 'واش توصلو لقسنطينة ؟', 'ar')).toBe('إيه، نوصلو ل\u0640قسنطينة، من 2 إلى 5 أيام. للدار: 700\u00a0دج، لنقطة الاستلام (stop-desk): 450\u00a0دج.');
-    expect(deliveryAnswer([quote, call], 'Do you deliver to Constantine?', 'en')).toBe('Yes, we deliver to Constantine in 2 to 5 days. Home delivery: 700\u00a0DA, stop-desk: 450\u00a0DA.');
+    expect(deliveryAnswer([quote, call], 'Vous livrez à Constantine ? cité 1000 logements bloc 5', 'fr')).toBe('Oui, on livre à Constantine, en 2 à 5 jours. À domicile : 700\u00a0DA, au bureau : 450\u00a0DA.');
+    expect(deliveryAnswer([quote, call], 'واش توصلو لقسنطينة ؟', 'ar')).toBe('إيه، نوصلو ل\u0640قسنطينة، من 2 إلى 5 أيام. للدار: 700\u00a0دج، للمكتب: 450\u00a0دج.');
+    expect(deliveryAnswer([quote, call], 'Do you deliver to Constantine?', 'en')).toBe('Yes, we deliver to Constantine in 2 to 5 days. Home delivery: 700\u00a0DA, to the office: 450\u00a0DA.');
     const stop = { name: 'create_order', result: { ...N3_RECAP, recap: { ...N3_RECAP.recap, isStopdesk: true, deliveryFee: 450, address: null } } };
-    expect(deliveryAnswer([quote, stop], N3_T2, 'arabizi')).toBe('Ih, nwasslou l Constantine, f 2 l 5 ayam. L dar: 700\u00a0DA, f stop-desk: 450\u00a0DA.');
+    expect(deliveryAnswer([quote, stop], N3_T2, 'arabizi')).toBe('Ih, nwasslou l Constantine, f 2 l 5 ayam. L dar: 700\u00a0DA, f l bureau: 450\u00a0DA.');
     // a quote of another wilaya gives nothing of its own: the recap's fee only
     expect(deliveryAnswer([{ name: 'quote_delivery', result: quoteOf({ wilayaId: 9 }) }, call], N3_T2, 'arabizi')).toBe('Ih, nwasslou l Constantine, f 2 l 5 ayam. L dar: 700\u00a0DA.');
     expect(deliveryAnswer([quote, call], 'El Khroub, cité 1000 logements bloc 5', 'arabizi')).toBeNull();
@@ -144,7 +144,7 @@ describe('R20-2 (Minor) — a quote run in a turn reaches the reply; a delivery 
     expect(gateway.calls).toHaveLength(2);
     expect(ran(execute, 'quote_delivery').map((c) => (c[1] as { wilayaId: number }).wilayaId)).toEqual([16]);
     expect(r.guard?.retried).toBe(true);
-    expect(r.output.reply).toBe("Merci Amina ! Robe kabyle brodée taille M disponible, 4\u00a0900\u00a0DA. L dar: 400\u00a0DA, f stop-desk: 250\u00a0DA. Wach l'adresse ta3ek f Bab Ezzouar (rue, cité, numéro ta3 dar wela blassa ma3roufa 9rib) ? Wela t7ebb stop-desk ?");
+    expect(r.output.reply).toBe("Merci Amina ! Robe kabyle brodée taille M disponible, 4\u00a0900\u00a0DA. L dar: 400\u00a0DA, f l bureau: 250\u00a0DA. Wach l'adresse ta3ek f Bab Ezzouar (rue, cité, numéro ta3 dar wela blassa ma3roufa 9rib) ? Wela t7ebb stop-desk ?");
   });
 
   it('F5 T1 (the same message, the rewrite keeps one question): the fees once, as in R20', async () => {

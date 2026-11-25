@@ -273,7 +273,7 @@ describe('EcoTrack (05-integrations §2.3; checked 26/10 against the reference c
     });
     const eco = new EcotrackAdapter(r.transport);
     expect(await eco.getRates(creds, 16, 31)).toEqual({ home: 650, stopdesk: null });
-    expect(await eco.listStopdesks(creds, 16)).toEqual([{ id: '16027', name: 'Stop-desk Bab Ezzouar', wilayaId: 16, communeName: 'Bab Ezzouar', address: null }]);
+    expect(await eco.listStopdesks(creds, 16)).toEqual([{ id: '16027', name: 'Bureau Bab Ezzouar', wilayaId: 16, communeName: 'Bab Ezzouar', address: null }]);
     expect((await eco.getLabel(creds, 'ECO-1')).pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     await expect(eco.cancel(creds, 'ECO-1')).rejects.toMatchObject({ kind: 'cancel_not_allowed', code: 'COURIER_CANCEL_NOT_ALLOWED' });
     expect(await eco.cancel(creds, 'ECO-1')).toEqual({ ok: true, rawStatus: 'Supprimé' });

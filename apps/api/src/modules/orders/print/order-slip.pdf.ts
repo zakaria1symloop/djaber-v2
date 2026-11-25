@@ -239,21 +239,21 @@ type LabelKey =
 const LABELS: Record<SlipLang, Record<LabelKey, string>> = {
   fr: {
     title: 'Bon de commande', client: 'Client', name: 'Nom', phone: 'Téléphone', phone2: 'Téléphone 2', delivery: 'Livraison',
-    home: 'À domicile', wilaya: 'Wilaya', commune: 'Commune', address: 'Adresse', stopdesk: 'Point relais',
+    home: 'À domicile', wilaya: 'Wilaya', commune: 'Commune', address: 'Adresse', stopdesk: 'Bureau',
     item: 'Article', qty: 'Qté', price: 'Prix', total: 'Total', subtotal: 'Sous-total', discount: 'Remise',
     deliveryFee: 'Livraison', paid: 'Déjà payé', collect: 'À encaisser', payment: 'Paiement', note: 'Note',
     tracking: 'Suivi', continued: 'suite',
   },
   ar: {
     title: 'وصل الطلبية', client: 'الزبون', name: 'الاسم', phone: 'الهاتف', phone2: 'الهاتف 2', delivery: 'التوصيل',
-    home: 'إلى المنزل', wilaya: 'الولاية', commune: 'البلدية', address: 'العنوان', stopdesk: 'نقطة الاستلام',
+    home: 'إلى المنزل', wilaya: 'الولاية', commune: 'البلدية', address: 'العنوان', stopdesk: 'المكتب',
     item: 'المنتج', qty: 'الكمية', price: 'السعر', total: 'المجموع', subtotal: 'المجموع الفرعي', discount: 'التخفيض',
     deliveryFee: 'التوصيل', paid: 'المدفوع مسبقا', collect: 'المبلغ المطلوب', payment: 'الدفع', note: 'ملاحظة',
     tracking: 'التتبع', continued: 'تابع',
   },
   en: {
     title: 'Order slip', client: 'Customer', name: 'Name', phone: 'Phone', phone2: 'Phone 2', delivery: 'Delivery',
-    home: 'Home delivery', wilaya: 'Wilaya', commune: 'Commune', address: 'Address', stopdesk: 'Pickup point',
+    home: 'Home delivery', wilaya: 'Wilaya', commune: 'Commune', address: 'Address', stopdesk: 'Office',
     item: 'Item', qty: 'Qty', price: 'Price', total: 'Total', subtotal: 'Subtotal', discount: 'Discount',
     deliveryFee: 'Delivery', paid: 'Already paid', collect: 'To collect', payment: 'Payment', note: 'Note',
     tracking: 'Tracking', continued: 'continued',

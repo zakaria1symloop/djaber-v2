@@ -94,7 +94,7 @@ describe('AiRunService.turn — reply guard', () => {
     gateway.script('reply', { toolCalls: [{ name: 'quote_delivery', args: { wilayaName: 'Sétif' } }] }, { reply: 'Merci 3la sbr ! Goulli-li wach t7ebb.', intent: 'INFO' }, { reply: 'Tawsil l Sétif 650 DA l dar, 350 DA f stop-desk.', intent: 'INFO' });
     const t = await svc.turn(req(facts({ lang: 'arabizi', customerText: 'ch7al tawsil l setif ?' }), 'ch7al tawsil l setif ?'));
     expect(t).toMatchObject({ ok: true, guard: { violations: [{ rule: 'fee_missing' }], retried: false, action: 'stripped' } });
-    expect(t.ok && t.output.reply).toMatch(/^Tawsil l Sétif: 650\sDA l dar, 350\sDA f stop-desk\. Merci 3la sbr ! Goulli-li wach t7ebb\.$/u);
+    expect(t.ok && t.output.reply).toMatch(/^Tawsil l Sétif: 650\sDA l dar, 350\sDA f l bureau\. Merci 3la sbr ! Goulli-li wach t7ebb\.$/u);
     expect(gateway.calls).toHaveLength(2);
     const h = setup(setif);
     h.gateway.script('reply', { toolCalls: [{ name: 'quote_delivery', args: { wilayaName: 'Sétif' } }] }, { reply: 'Je transmets à un collègue.', status: 'HANDOFF', statusDetail: 'customer_request', evidence: 'parler à un humain', intent: 'OTHER' });

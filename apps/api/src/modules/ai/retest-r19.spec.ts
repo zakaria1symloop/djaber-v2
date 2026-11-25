@@ -220,7 +220,7 @@ describe('R19-1 (Minor) — a tool not offered costs no extra model call when th
     const { r, gateway } = await turnOf(said, 'arabizi', [{ toolCalls: [CALL] }, { reply: 'Ih !', intent: 'SALE' }], { order: recap });
     expect(gateway.calls).toHaveLength(1);
     // (journey retest R20-2: with both fees — the server quotes the recap's wilaya, no model call)
-    expect(r.output.reply.startsWith('Ih, nwasslou l Blida, f 2 l 5 ayam. L dar: 450\u00a0DA, f stop-desk: 300\u00a0DA.\n\nHada récap')).toBe(true);
+    expect(r.output.reply.startsWith('Ih, nwasslou l Blida, f 2 l 5 ayam. L dar: 450\u00a0DA, f l bureau: 300\u00a0DA.\n\nHada récap')).toBe(true);
     expect(deliveryAnswer([{ name: 'create_order', result: recap }], 'vous livrez à Boufarik ?', 'fr')).toBe('Oui, on livre à Boufarik. À domicile : 450\u00a0DA.');
   });
 
@@ -242,14 +242,14 @@ describe('R19-1 (Minor) — a tool not offered costs no extra model call when th
     expect(execute.mock.calls.map((c) => c[0])).toEqual(['quote_delivery']);
     const text = plain(r.output.reply);
     // the price, then both fees, then the one address question (the facts before the question)
-    expect(text).toBe('Djellaba homme بـ 7 500 دج. للدار: 450 دج، لنقطة الاستلام (stop-desk): 300 دج. عطيني العنوان تاعك (الشارع، الحي، رقم الدار)، ولا تحب ستوب ديسك ؟');
+    expect(text).toBe('Djellaba homme بـ 7 500 دج. للدار: 450 دج، للمكتب: 300 دج. عطيني العنوان تاعك (الشارع، الحي، رقم الدار)، ولا تحب التوصيل للمكتب ؟');
     expect(r.output.productCards).toEqual([DJELLABA.id]);
   });
 
   it('PG1b T2 (arabizi) and N4 T3 (the wilaya missing): the field the message lacks is asked by the server', async () => {
     const pg1b = await turnOf('nheb tapis de prière wahed, smiti Nadia Kaci 0661234568', 'arabizi', [{ toolCalls: [{ name: 'create_order', args: { clientName: 'Nadia Kaci', clientPhone: '0661234568', wilayaId: 31, items: [{ productId: TAPIS.id, quantity: 1 }] } }] }, { reply: 'Saha.', intent: 'SALE' }], { history: ['slm, ana f Oran, Bir El Djir'], assistant: ['Ahlan bik !'] });
     expect(pg1b.gateway.calls).toHaveLength(1);
-    expect(plain(pg1b.r.output.reply)).toBe("Tapis de prière b 2 800 DA. L dar: 600 DA, f stop-desk: 400 DA. A3tini l'adresse ta3ek (rue, cité, numéro ta3 dar), wela t7ebb stop-desk ?");
+    expect(plain(pg1b.r.output.reply)).toBe("Tapis de prière b 2 800 DA. L dar: 600 DA, f l bureau: 400 DA. A3tini l'adresse ta3ek (rue, cité, numéro ta3 dar), wela t7ebb tawsil l bureau ?");
     const n4 = await turnOf('0661234567', 'fr', [{ toolCalls: [{ name: 'create_order', args: { clientName: 'سمير بن علي', clientPhone: '0661234567' } }] }, { reply: 'Merci.', intent: 'SALE' }], { history: ['Bonjour, je veux le tapis de prière', 'سمير بن علي'], assistant: ['Le Tapis de prière — 2800 DA. Quel est votre nom ?', 'Merci سمير. Votre numéro ?'] });
     expect(n4.gateway.calls).toHaveLength(1);
     expect(n4.r.output.reply).toBe('Dans quelle wilaya êtes-vous ?');
@@ -375,12 +375,12 @@ describe('R19-3 (Cosmetic) — wording', () => {
     const blida = quoteFacts([{ name: 'quote_delivery', result: quoteOf({ wilayaId: 9 }) }]);
     // PG2 T2: « واش العنوان تاعك في بوفاريك؟ » then the mode question
     const pg2 = 'صحيت يا سمير. Djellaba homme — 7500 دج. واش العنوان تاعك في بوفاريك؟ عطيني الشارع والحي ورقم الدار، ولا تحب نوصلوها لنقطة الاستلام (stop-desk)؟';
-    expect(plain(withModeFees(pg2, blida, 'ar'))).toBe('صحيت يا سمير. Djellaba homme — 7500 دج. للدار: 450 دج، لنقطة الاستلام (stop-desk): 300 دج. واش العنوان تاعك في بوفاريك؟ عطيني الشارع والحي ورقم الدار، ولا تحب نوصلوها لنقطة الاستلام (stop-desk)؟');
+    expect(plain(withModeFees(pg2, blida, 'ar'))).toBe('صحيت يا سمير. Djellaba homme — 7500 دج. للدار: 450 دج، للمكتب: 300 دج. واش العنوان تاعك في بوفاريك؟ عطيني الشارع والحي ورقم الدار، ولا تحب نوصلوها لنقطة الاستلام (stop-desk)؟');
     // PF1 T2: the fees written first, then the price line ⇒ the price goes before them
     const pf1 = 'Merci Karim. À domicile : 650 DA, en stop-desk : 350 DA. Quelle est votre adresse exacte (rue, cité, numéro de bâtiment) pour la livraison à domicile, ou préférez-vous le stop-desk ?';
     expect(plain(withPlaceFacts(pf1, [], { name: 'Sac à main cuir', variant: 'Marron', price: 6900 }, 'fr'))).toBe('Merci Karim. Sac à main cuir (Marron) : 6 900 DA. À domicile : 650 DA, en stop-desk : 350 DA. Quelle est votre adresse exacte (rue, cité, numéro de bâtiment) pour la livraison à domicile, ou préférez-vous le stop-desk ?');
     // one question: unchanged placement
-    expect(plain(withPlaceFacts('Merci. Votre adresse ?', blida, null, 'fr'))).toBe('Merci. Livraison : 450 DA à domicile, ou 300 DA en stop-desk si vous préférez. Votre adresse ?');
+    expect(plain(withPlaceFacts('Merci. Votre adresse ?', blida, null, 'fr'))).toBe('Merci. Livraison : 450 DA à domicile, ou 300 DA au bureau du transporteur si vous préférez. Votre adresse ?');
   });
 
   it('every server amount as formatMoney writes it (« 20 000 DA »)', () => {
@@ -388,7 +388,7 @@ describe('R19-3 (Cosmetic) — wording', () => {
     expect(amountText(7500, 'ar')).toBe('7\u00a0500\u00a0دج');
     expect(amountText(650, 'arabizi')).toBe('650\u00a0DA');
     const oran = quoteFacts([{ name: 'quote_delivery', result: quoteOf({ wilayaId: 31 }) }]);
-    expect(plain(withPlaceFacts('Saha. Wach men produit t7ebb ?', oran, null, 'arabizi'))).toBe('Saha. Tawsil: 600 DA (batel men 20 000 DA) l dar, wela 400 DA f stop-desk ila t7ebb. Wach men produit t7ebb ?');
+    expect(plain(withPlaceFacts('Saha. Wach men produit t7ebb ?', oran, null, 'arabizi'))).toBe('Saha. Tawsil: 600 DA (batel men 20 000 DA) l dar, wela 400 DA f l bureau ila t7ebb. Wach men produit t7ebb ?');
     expect(plain(withPlaceFacts('Merci. Votre adresse ?', oran, null, 'fr'))).toContain('600 DA (gratuite dès 20 000 DA) à domicile');
   });
 

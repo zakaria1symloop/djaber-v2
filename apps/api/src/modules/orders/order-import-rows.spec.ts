@@ -79,6 +79,10 @@ describe('order import rows', () => {
     const iso = (s: string) => parseOrderDate(s)?.toISOString() ?? null;
     it('auto-maps the « Date » column of our export (fr / ar / en) and the usual names', () => {
       expect(autoMapOrders(['N°', 'Date', 'Heure', 'Client', 'Téléphone', 'Wilaya', 'Adresse / stop-desk', 'Articles (nom × qté × prix)'])).toMatchObject({ orderedAt: 'Date', clientName: 'Client', address: 'Adresse / stop-desk' });
+      // owner decision 25/11: the export header is now « Adresse / bureau » (« Address / office », « العنوان / المكتب »); older files keep importing
+      expect(autoMapOrders(['N°', 'Date', 'Client', 'Téléphone', 'Wilaya', 'Adresse / bureau', 'Articles (nom × qté × prix)'])).toMatchObject({ clientName: 'Client', address: 'Adresse / bureau' });
+      expect(autoMapOrders(['No.', 'Date', 'Client', 'Phone', 'Wilaya', 'Address / office'])).toMatchObject({ address: 'Address / office' });
+      expect(autoMapOrders(['التاريخ', 'العميل', 'الهاتف', 'العنوان / المكتب'])).toMatchObject({ address: 'العنوان / المكتب' });
       expect(autoMapOrders(['التاريخ', 'العميل', 'الهاتف'])).toMatchObject({ orderedAt: 'التاريخ', clientName: 'العميل', phone: 'الهاتف' });
       expect(autoMapOrders(['Order date', 'Client'])).toMatchObject({ orderedAt: 'Order date' });
       expect(autoMapOrders(['Date de commande'])).toEqual({ orderedAt: 'Date de commande' });

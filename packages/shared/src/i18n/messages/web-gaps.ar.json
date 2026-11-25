@@ -115,7 +115,7 @@
  "orders.history.field.address": "العنوان",
  "orders.payment.method.cod": "الدفع عند الاستلام",
  "orders.print.homeAt": "المنزل: {address}",
- "orders.print.relay": "نقطة الاستلام: {name}",
+ "orders.print.relay": "المكتب: {name}",
  "public.deletion.export.ready": "تنزيل بياناتي",
  "public.deletion.export.readyNote": "الملف جاهز · الرابط صالح حتى {date}",
  "public.deletion.export.readyShort": "الملف جاهز",

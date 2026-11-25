@@ -38,9 +38,9 @@ export const quoteFee = (rule: Rule | null, o: { wilayaId: number; isStopdesk: b
 /** Words of the fee note per app language (UX-046, 10/11: the note stayed in French on the Arabic and English pages). */
 // journey 16/11 J05-17: the stop-desk word of the screens (« Stop-desk », common.stopdesk), not « point relais »
 const FEE_NOTE = {
-  fr: { grid: (w: string, m: string, b: number) => `GRILLE ${w} · ${m} ${b}`, home: 'DOMICILE', stopdesk: 'STOP-DESK', free: 'OFFERTE', changed: 'MODIFIÉ', notServed: 'NON DESSERVIE', arrow: '→' },
-  en: { grid: (w: string, m: string, b: number) => `${w} FEE GRID · ${m} ${b}`, home: 'HOME', stopdesk: 'STOPDESK', free: 'FREE', changed: 'CHANGED', notServed: 'NOT SERVED', arrow: '→' },
-  ar: { grid: (w: string, m: string, b: number) => `شبكة رسوم ${w} · ${m} ${b}`, home: 'توصيل للمنزل', stopdesk: 'مكتب الاستلام', free: 'مجاني', changed: 'معدَّل', notServed: 'غير مخدومة', arrow: '←' },
+  fr: { grid: (w: string, m: string, b: number) => `GRILLE ${w} · ${m} ${b}`, home: 'DOMICILE', stopdesk: 'BUREAU', free: 'OFFERTE', changed: 'MODIFIÉ', notServed: 'NON DESSERVIE', arrow: '→' },
+  en: { grid: (w: string, m: string, b: number) => `${w} FEE GRID · ${m} ${b}`, home: 'HOME', stopdesk: 'OFFICE', free: 'FREE', changed: 'CHANGED', notServed: 'NOT SERVED', arrow: '→' },
+  ar: { grid: (w: string, m: string, b: number) => `شبكة رسوم ${w} · ${m} ${b}`, home: 'توصيل للمنزل', stopdesk: 'المكتب', free: 'مجاني', changed: 'معدَّل', notServed: 'غير مخدومة', arrow: '←' },
 } as const;
 
 /**

@@ -221,6 +221,8 @@ describe('R6-5 — no probe calls', () => {
     expect(noAddressYet({ customerHistory: f1b })).toBe(true);
     expect(noAddressYet({ customerHistory: `${f1b}\nCité 500 logements bloc 12` })).toBe(false);
     expect(noAddressYet({ customerHistory: `${f1b}\nf stop desk` })).toBe(false);
+    // owner decision 25/11: the same choice in the words of the screens (« bureau », « المكتب », « office »)
+    for (const said of ['l bureau', 'livraison au bureau svp', 'للمكتب', 'في المكتب', 'to the office please']) expect(noAddressYet({ customerHistory: `${f1b}\n${said}` })).toBe(false);
     expect(noAddressYet({ customerHistory: 'السلام، نحب جلابة رجالي، سمير بن علي 0661234567، قسنطينة، الخروب، حي 1000 مسكن عمارة 5' })).toBe(false);
     expect(noAddressYet({ customerHistory: f1b, orderHistory: [{ name: 'create_order', result: recapResult(), at: new Date() }] })).toBe(false);
     expect(noAddressYet({})).toBe(false);

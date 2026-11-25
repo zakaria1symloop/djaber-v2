@@ -283,13 +283,13 @@ describe('R7-5 — « Vous livrez à Blida ? » gives the fee', () => {
     const r = await svc.turn(turnReq(F12_C, F12_C, { guard: facts(F12_C) }));
     expect(execute).toHaveBeenCalledWith('quote_delivery', { wilayaId: 9 }, expect.anything());
     expect(gateway.calls).toHaveLength(1);
-    expect(r.ok && r.output.reply).toMatch(/^Bonsoir ! Livraison à Blida : 450\sDA à domicile, 300\sDA en stop-desk\. Oui, on livre à Blida\./u);
+    expect(r.ok && r.output.reply).toMatch(/^Bonsoir ! Livraison à Blida : 450\sDA à domicile, 300\sDA au bureau\. Oui, on livre à Blida\./u);
     expect(r.ok && r.tools.map((t) => t.name)).toEqual(['quote_delivery']);
   });
   it('the fee sentence goes after the greeting (the corrective turn of another rule giving none either)', async () => {
     const { svc } = setup({ reply: F12_AI }, { reply: F12_AI });
     const r = await svc.turn(turnReq(F12_C, F12_C, { guard: facts(F12_C) }));
-    expect(r.ok && r.output.reply).toMatch(/^Bonsoir ! Livraison à Blida : 450\sDA à domicile, 300\sDA en stop-desk\. Oui, on livre à Blida\./u);
+    expect(r.ok && r.output.reply).toMatch(/^Bonsoir ! Livraison à Blida : 450\sDA à domicile, 300\sDA au bureau\. Oui, on livre à Blida\./u);
   });
   it('the model called quote_delivery, or the message names no wilaya ⇒ the server runs nothing', async () => {
     const a = setup({ toolCalls: [{ name: 'quote_delivery', args: { wilayaName: 'Blida' } }] }, { reply: 'Oui, on livre à Blida : 450 DA à domicile, 300 DA en stop-desk.' });
@@ -305,7 +305,7 @@ describe('R7-5 — « Vous livrez à Blida ? » gives the fee', () => {
     const v = checkReply(F12_AI, f);
     expect(v.map((x) => x.rule)).toEqual(['fee_missing']);
     expect(enforceReply(F12_AI, v, f, { hasCards: false }).reply).toMatch(/^Bonsoir ! Livraison à Blida : 450\sDA/u);
-    expect(enforceReply('Oui, on livre à Blida.', v, f, { hasCards: false }).reply).toMatch(/^Livraison à Blida : 450\sDA à domicile, 300\sDA en stop-desk\. Oui, on livre à Blida\.$/u);
+    expect(enforceReply('Oui, on livre à Blida.', v, f, { hasCards: false }).reply).toMatch(/^Livraison à Blida : 450\sDA à domicile, 300\sDA au bureau\. Oui, on livre à Blida\.$/u);
   });
   it('the prompt: a delivery question is answered with quote_delivery (fee and delay)', () => {
     expect(deliverySection({ workspace: { freeDeliveryThreshold: null, senderWilaya: null } } as never)).toContain('A question whether you deliver to a place (« vous livrez à Blida ? »');

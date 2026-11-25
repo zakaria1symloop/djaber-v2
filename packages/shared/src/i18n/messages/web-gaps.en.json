@@ -115,7 +115,7 @@
  "orders.history.field.address": "Address",
  "orders.payment.method.cod": "COD",
  "orders.print.homeAt": "Home: {address}",
- "orders.print.relay": "Pickup point: {name}",
+ "orders.print.relay": "Office: {name}",
  "public.deletion.export.ready": "Download my data",
  "public.deletion.export.readyNote": "File ready · link valid until {date}",
  "public.deletion.export.readyShort": "File ready",

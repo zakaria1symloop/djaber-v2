@@ -194,6 +194,9 @@ describe('R17-1 (Major) — off_catalogue needs product words the catalogue has 
     expect(offCatalogueWords('slm, ana f Bab Ezzouar', (t) => withoutPlaceNames(idx, t))).toEqual([]);
     expect(offCatalogueWords('السلام عليكم، انا ساكن في سطيف', (t) => withoutPlaceNames(idx, t))).toEqual([]);
     expect(offCatalogueWords('Bonjour, je suis Karim Haddad')).toEqual([]);
+    // owner decision 25/11: « bureau » / « المكتب » name the delivery mode, not a product the shop lacks
+    expect(offCatalogueWords("Bonjour, j'habite à Sétif, livraison au bureau", (t) => withoutPlaceNames(idx, t))).toEqual([]);
+    expect(offCatalogueWords('التوصيل للمكتب')).toEqual([]);
     expect(offCatalogueWords('Vous réparez les téléphones portables ?')).toContain('portable');
     expect(placeOnlyMessage(idx, PF1_T1)).toBe(true);
     expect(placeCandidate(PF1_T1)).toBe(true);
@@ -247,7 +250,7 @@ describe('R17-1 (Major) — off_catalogue needs product words the catalogue has 
     const r = await new AiRunService(gateway, routing as never, tools, {} as never, {} as never, {} as never).turn(req);
     if (!r.ok) throw new Error('turn failed');
     expect(r.output.status).toBe('HANDOFF');
-    expect(r.output.reply.replace(/[\u00a0\u202f\u2009]/gu, ' ')).toMatch(/^Livraison à Sétif : 650 DA à domicile, 350 DA en stop-desk\. /u);
+    expect(r.output.reply.replace(/[\u00a0\u202f\u2009]/gu, ' ')).toMatch(/^Livraison à Sétif : 650 DA à domicile, 350 DA au bureau\. /u);
   });
 
   it('PF1 T2: no create_order on a message that cannot hold an address yet (no address word, no digit beyond the phone); the price goes before the mode question', async () => {

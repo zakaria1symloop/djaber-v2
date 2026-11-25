@@ -115,7 +115,7 @@
  "orders.history.field.address": "Adresse",
  "orders.payment.method.cod": "COD",
  "orders.print.homeAt": "Domicile : {address}",
- "orders.print.relay": "Point relais : {name}",
+ "orders.print.relay": "Bureau : {name}",
  "public.deletion.export.ready": "Télécharger mes données",
  "public.deletion.export.readyNote": "Fichier prêt · lien valable jusqu’au {date}",
  "public.deletion.export.readyShort": "Fichier prêt",

@@ -86,8 +86,8 @@ describe('R16-1 (Minor) — asked facts survive the guard: every quoted wilaya k
     if (!r.ok) throw new Error('turn failed');
     expect(execute.mock.calls.map((c) => c[0])).toEqual(['quote_delivery', 'quote_delivery', 'quote_delivery']);
     expect(r.guard).toMatchObject({ retried: true, action: 'stripped' });
-    expect(plain(r.output.reply)).toContain('Tawsil l Sétif: 650 DA l dar, 350 DA f stop-desk.');
-    expect(plain(r.output.reply)).toContain('Tawsil l Oran: 400 DA f stop-desk.');
+    expect(plain(r.output.reply)).toContain('Tawsil l Sétif: 650 DA l dar, 350 DA f l bureau.');
+    expect(plain(r.output.reply)).toContain('Tawsil l Oran: 400 DA f l bureau.');
     expect(r.output.reply).toMatch(/Illizi/u);
     // journey retest R17-5: a delivery-only question gets no closing offer of the products (« T7ebb nwarrik wach kayen 3andna ? » goes)
     expect(r.output.reply).not.toMatch(/nwarrik|kayen 3andna/u);
@@ -115,7 +115,7 @@ describe('R16-1 (Minor) — asked facts survive the guard: every quoted wilaya k
     const quotes = quoteFacts([{ name: 'quote_delivery', result: BLIDA }]);
     const f = { ...facts('vous livrez à Blida ?'), quotes };
     const e = enforceReply('Livraison à Blida 450 DA (quote_delivery). Autre chose ?', [{ rule: 'technical_leak', sentence: 0, kind: 'tool' }], f, { hasCards: false });
-    expect(plain(e.reply)).toBe('Livraison à Blida : 450 DA à domicile, 300 DA en stop-desk. Autre chose ?');
+    expect(plain(e.reply)).toBe('Livraison à Blida : 450 DA à domicile, 300 DA au bureau. Autre chose ?');
   });
 
   it('withAskedFacts: an asked price / stock answer / not-served wilaya the rewrite dropped comes back; nothing when the text keeps it', () => {
@@ -330,6 +330,13 @@ describe('R16-4 (Cosmetic) — narrow wording fixes', () => {
     const one = 'À domicile : 650 DA, en stop-desk : 350 DA. Quelle est votre adresse, ou préférez-vous le stop-desk ?';
     expect(withOneStopdeskOffer(one)).toBe(one);
     expect(withOneStopdeskOffer('On peut aussi vous livrer en stop-desk.')).toBe('On peut aussi vous livrer en stop-desk.');
+    // owner decision 25/11: the same with the words the server now writes (« au bureau », « l bureau »)
+    expect(withOneStopdeskOffer('Livraison : 650 DA à domicile, ou 350 DA au bureau du transporteur si vous préférez. Quelle est votre adresse de livraison (rue, cité) ? Si vous préférez, on peut aussi vous livrer au bureau.')).toBe(
+      'Livraison : 650 DA à domicile, ou 350 DA au bureau du transporteur si vous préférez. Quelle est votre adresse de livraison (rue, cité) ?',
+    );
+    expect(withOneStopdeskOffer('Tawsil: 650 DA l dar, wela 350 DA f l bureau ila t7ebb. Nqedrou nwasslouha l bureau tani.')).toBe('Tawsil: 650 DA l dar, wela 350 DA f l bureau ila t7ebb.');
+    expect(withArabiziWords('Livraison au bureau: 350 DA.', 'arabizi')).toBe('Tawsil l bureau: 350 DA.');
+    expect(withArabiziWords('Livraison en stop-desk: 350 DA.', 'arabizi')).toBe('Tawsil l bureau: 350 DA.');
     expect(withSingleSpaces("Salam, smahli 3lik  3la had lmochkil. L'équipe ta3 lboutique rah tchouf m3ak le remboursement.")).toBe("Salam, smahli 3lik 3la had lmochkil. L'équipe ta3 lboutique rah tchouf m3ak le remboursement.");
     expect(withSingleSpaces('Total : 7 550 DA\n- 1 × Sac')).toBe('Total : 7 550 DA\n- 1 × Sac');
   });

@@ -76,7 +76,7 @@ describe('Google Sheets row (GSH-03 / GSH-04 / GSH-06)', () => {
     const row = sheetsRowOf(order, label);
     expect(row).toHaveLength(SHEETS_COLUMNS.length);
     expect(row).toEqual(['CMD-1001', '2026-10-06 23:58', 'Boutique Amel (IG)', 'Yacine', "'0555123456", 'Alger', 'Bab Ezzouar', 'Cité 200', 'Robe M ×2; Sac ×1', 9000, 600, 9600, 'method:cash', 'status:confirmed', 'courier:yalidine', 'YAL-1', 'source:ai', 'o-1']);
-    expect(sheetsRowOf({ ...order, channel: null, shipment: null, isStopdesk: true, stopdeskName: 'Agence Hydra' }, label).slice(0, 16)).toEqual(expect.arrayContaining(['—', 'Stop-desk Agence Hydra', '']));
+    expect(sheetsRowOf({ ...order, channel: null, shipment: null, isStopdesk: true, stopdeskName: 'Agence Hydra' }, label).slice(0, 16)).toEqual(expect.arrayContaining(['—', 'Bureau Agence Hydra', '']));
     expect(algiersStamp(new Date('2026-12-31T23:30:00Z'))).toBe('2027-01-01 00:30');
   });
   it('filters: empty = all; channels and sources narrow', () => {

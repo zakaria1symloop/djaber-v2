@@ -35,9 +35,9 @@ export const LABEL_SIZES: Record<LabelFormat, [number, number]> = { a6: [105 * M
 
 type LabelKey = 'to' | 'from' | 'cod' | 'stopdesk' | 'home' | 'items' | 'order' | 'tracking' | 'scan';
 const T: Record<LabelLang, Record<LabelKey, string>> = {
-  fr: { to: 'Destinataire', from: 'Expéditeur', cod: 'À encaisser', stopdesk: 'Point relais', home: 'À domicile', items: 'Contenu', order: 'Commande', tracking: 'Suivi', scan: 'Scannez pour suivre le colis' },
-  ar: { to: 'المرسل إليه', from: 'المرسل', cod: 'المبلغ المطلوب', stopdesk: 'نقطة الاستلام', home: 'إلى المنزل', items: 'المحتوى', order: 'الطلب', tracking: 'التتبع', scan: 'امسح لتتبع الطرد' },
-  en: { to: 'Recipient', from: 'Sender', cod: 'To collect', stopdesk: 'Pickup point', home: 'Home delivery', items: 'Content', order: 'Order', tracking: 'Tracking', scan: 'Scan to track the parcel' },
+  fr: { to: 'Destinataire', from: 'Expéditeur', cod: 'À encaisser', stopdesk: 'Bureau', home: 'À domicile', items: 'Contenu', order: 'Commande', tracking: 'Suivi', scan: 'Scannez pour suivre le colis' },
+  ar: { to: 'المرسل إليه', from: 'المرسل', cod: 'المبلغ المطلوب', stopdesk: 'المكتب', home: 'إلى المنزل', items: 'المحتوى', order: 'الطلب', tracking: 'التتبع', scan: 'امسح لتتبع الطرد' },
+  en: { to: 'Recipient', from: 'Sender', cod: 'To collect', stopdesk: 'Office', home: 'Home delivery', items: 'Content', order: 'Order', tracking: 'Tracking', scan: 'Scan to track the parcel' },
 };
 
 /** QR code of `text` drawn as vector squares (no image), `size` points wide, top-left at (x, y). */

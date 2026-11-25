@@ -24,7 +24,7 @@ const ENGLISH_WORDS = ['the', 'is', 'are', 'you', 'do', 'have', 'how', 'much', '
 const NEUTRAL_WORDS = new Set([
   // journey retest R3-1: place names whose « kh » / « ch » read as darija (« El Khroub », « Khenchela », « Ksar El Boukhari »)
   'khroub', 'khenchela', 'khemis', 'boukhari', 'kherrata', 'mechria', 'cherchell', 'chlef', 'chelghoum', 'bouchegouf', 'ouled',
-  'cité', 'cite', 'logements', 'logement', 'lgts', 'bloc', 'villa', 'rue', 'lotissement', 'lot', 'résidence', 'residence', 'bâtiment', 'batiment', 'bt', 'quartier', 'hay', 'numéro', 'numero', 'centre', 'ville', 'wilaya', 'commune', 'daira', 'stop', 'desk', 'stopdesk', 'route', 'avenue', 'bd', 'boulevard', 'el', 'ben', 'bir', 'ain', 'aïn', 'sidi', 'oued', 'bab', 'août', 'aout', 'sétif', 'médéa', 'béjaïa', 'béjaia', 'tébessa', 'saïda', 'béchar', 'témouchent', 'réghaïa', 'chéraga', 'défla']);
+  'cité', 'cite', 'logements', 'logement', 'lgts', 'bloc', 'villa', 'rue', 'lotissement', 'lot', 'résidence', 'residence', 'bâtiment', 'batiment', 'bt', 'quartier', 'hay', 'numéro', 'numero', 'centre', 'ville', 'wilaya', 'commune', 'daira', 'stop', 'desk', 'stopdesk', 'bureau', 'office', 'route', 'avenue', 'bd', 'boulevard', 'el', 'ben', 'bir', 'ain', 'aïn', 'sidi', 'oued', 'bab', 'août', 'aout', 'sétif', 'médéa', 'béjaïa', 'béjaia', 'tébessa', 'saïda', 'béchar', 'témouchent', 'réghaïa', 'chéraga', 'défla']);
 
 // journey retest R3-1: a typographic apostrophe (« l’adresse ») is a straight one — a lone « l » is a darija particle
 const words = (text: string) => text.toLowerCase().replace(/[’‘`]/g, "'").split(/[^a-z0-9à-ÿ']+/i).filter(Boolean);
@@ -97,7 +97,7 @@ export const detectLanguage = (text: string | null | undefined, previous?: AiLan
  */
 const ARABIC_COMMON = /(?<!\p{L})[وفب]?(?:ال)?(?:عليكم|شكرا|شكراً|مرسي|صحيت|صحا|بارك|نعم|ايه|إيه|أيه|ايوه|لا|ممكن|فضلك|اسمي|إسمي|سميتي|انا|أنا|عندي|عندكم|عندك|حاجة|مرحبا|صباح|مساء|هذا|هذه|اريد|أريد|ابغي|عطيني|اعطيني|أعطيني|ابعث|ابعثلي|سعر|ثمن|توصيل|طلبية|طلب|نطلب|نشري|شري|كيف|بلاصة|نتا|نتي|انتم|كم|حبيت|حبيتي|تحب|تحبي|نشوف|شوف|نشوفو|وريني|صور|صورة|صوره|تصاور|تصويرة|فيديو|منتجات|منتوج|منتوجات)(?!\p{L})|(?<!عبد\s*)(?<!\p{L})[وفب]?(?:ال)?سلام(?!\p{L})/u;
 /** Arabic-script words of an address or a name that are no clue either (« حي 1000 مسكن عمارة 5 », « بن »). */
-const ARABIC_VALUE_WORDS = new Set(['حي', 'مسكن', 'مساكن', 'عمارة', 'عماره', 'رقم', 'شارع', 'نهج', 'طريق', 'بلدية', 'بلديه', 'ولاية', 'ولايه', 'دائرة', 'فيلا', 'قرب', 'بجانب', 'مقابل', 'في', 'و', 'بن', 'ابن', 'بنت', 'عبد', 'ستوب', 'ديسك']);
+const ARABIC_VALUE_WORDS = new Set(['حي', 'مسكن', 'مساكن', 'عمارة', 'عماره', 'رقم', 'شارع', 'نهج', 'طريق', 'بلدية', 'بلديه', 'ولاية', 'ولايه', 'دائرة', 'فيلا', 'قرب', 'بجانب', 'مقابل', 'في', 'و', 'بن', 'ابن', 'بنت', 'عبد', 'ستوب', 'ديسك', 'مكتب', 'المكتب', 'للمكتب']);
 /**
  * journey retest R4-2: a message whose Arabic-script words are only a value — a name typed in Arabic script (« سمير بن علي »,
  * « smiti وليد بوزيد »), a place, an address: at most 4 such words, none a word of the language. The French customer of N4 and

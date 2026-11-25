@@ -795,7 +795,7 @@ export const FIELD_QUESTIONS: Record<string, Record<'fr' | 'en' | 'ar' | 'arabiz
   clientPhone: { fr: 'Quel est votre numéro de téléphone ? (ex : 0555123456)', en: 'What is your phone number? (e.g. 0555123456)', ar: 'عطيني رقم الهاتف تاعك (مثال: 0555123456)', arabizi: 'A3tini numéro ta3ek (ex: 0555123456)' },
   wilayaId: { fr: 'Dans quelle wilaya êtes-vous ?', en: 'Which wilaya are you in?', ar: 'واش من ولاية ؟', arabizi: 'Wach men wilaya ?' },
   communeName: { fr: 'Dans quelle commune êtes-vous ?', en: 'Which commune are you in?', ar: 'واش من بلدية ؟', arabizi: 'Wach men commune (baladiya) ?' },
-  address: { fr: 'Quelle est votre adresse (rue, cité, numéro), ou préférez-vous le stop-desk ?', en: 'What is your address (street, building, number), or would you rather use a stop-desk?', ar: 'عطيني العنوان تاعك (الشارع، الحي، رقم الدار)، ولا تحب ستوب ديسك ؟', arabizi: "A3tini l'adresse ta3ek (rue, cité, numéro ta3 dar), wela t7ebb stop-desk ?" },
+  address: { fr: 'Quelle est votre adresse (rue, cité, numéro), ou préférez-vous la livraison au bureau du transporteur ?', en: "What is your address (street, building, number), or would you rather collect it at the courier's office?", ar: 'عطيني العنوان تاعك (الشارع، الحي، رقم الدار)، ولا تحب التوصيل للمكتب ؟', arabizi: "A3tini l'adresse ta3ek (rue, cité, numéro ta3 dar), wela t7ebb tawsil l bureau ?" },
 };
 /** journey retest R14-4: whether the customer wants the product, when the reply's own question was dropped. */
 const WANT_QUESTION: Record<'fr' | 'en' | 'ar' | 'arabizi', string> = { fr: 'Souhaitez-vous passer commande ?', en: 'Would you like to order it?', ar: 'تحب تطلب ؟', arabizi: 'T7ebb tcommandi ?' };
@@ -834,7 +834,7 @@ export function guardInstruction(violations: GuardViolation[], facts: GuardFacts
   if (rules.includes('self_name')) lines.push(facts.agentName ? `- YOUR NAME is "${facts.agentName}": never give yourself another name.` : "- YOU HAVE NO PERSONAL NAME: never give yourself one; if asked, you are the shop's assistant.");
   if (rules.includes('language_switch')) lines.push(`- LANGUAGE: the customer writes ${LANGUAGE_NAMES[facts.lang] ?? facts.lang}. Rewrite "reply" in that language and script, as they write it (never switch on your own)${facts.lang === 'arabizi' ? ' — every sentence, a list of sizes or prices too (product names stay as written)' : ''}.`);
   if (rules.includes('moroccan_darija'))
-    lines.push('- ALGERIAN DARIJA: the shop is Algerian. Replace the Moroccan / Tunisian words (chno, ach, dyal, walakin, daba, issa, nqdar / tanqdar / kanqdar / tandir, bghit / bghiti, chi / chi hadja, ma kaynch / ma kaynach, wakha, mezyan, barcha, taw / tawa, mta3 / mta3ek, شنو, ديال, دابا, بغيت, شي حاجة, ملي, فماش, برشا, تو / توا, متاع / متاعك, موش, صيفط / sifet / sift / sift-li) with Algerian ones (wach, ta3 / ta3ek / تاع / تاعك, bessah / بصح, dork / درك, nqder, t7ebb / تحب, hadja / حاجة, makach / ماكانش, mlih, ki / كي, bezzaf / بزاف, ab3at / ab3atli / ابعث); the street is « الشارع » / « rue » (never « نهار » / « nhar », « day »), show a product « nwarrik » (never « nchouf »). « chhal / ch7al / شحال » means « how much »: never for « what » or « which » (never « ch7al men wilaya ? ») — « wach smitek ? », « a3tini numéro ta3ek », « wach men wilaya ? », « a3tini l\'adresse (rue, cité…) », « t7ebb nwasslouha l dar wela f stop-desk ? ».');
+    lines.push('- ALGERIAN DARIJA: the shop is Algerian. Replace the Moroccan / Tunisian words (chno, ach, dyal, walakin, daba, issa, nqdar / tanqdar / kanqdar / tandir, bghit / bghiti, chi / chi hadja, ma kaynch / ma kaynach, wakha, mezyan, barcha, taw / tawa, mta3 / mta3ek, شنو, ديال, دابا, بغيت, شي حاجة, ملي, فماش, برشا, تو / توا, متاع / متاعك, موش, صيفط / sifet / sift / sift-li) with Algerian ones (wach, ta3 / ta3ek / تاع / تاعك, bessah / بصح, dork / درك, nqder, t7ebb / تحب, hadja / حاجة, makach / ماكانش, mlih, ki / كي, bezzaf / بزاف, ab3at / ab3atli / ابعث); the street is « الشارع » / « rue » (never « نهار » / « nhar », « day »), show a product « nwarrik » (never « nchouf »). « chhal / ch7al / شحال » means « how much »: never for « what » or « which » (never « ch7al men wilaya ? ») — « wach smitek ? », « a3tini numéro ta3ek », « wach men wilaya ? », « a3tini l\'adresse (rue, cité…) », « t7ebb nwasslouha l dar wela l bureau ? ».');
   if (rules.includes('false_confession'))
     lines.push(`- ORDER PLACED: order ${(facts.ordersPlaced ?? []).join(', ')} was placed with the details the customer gave in this conversation. Never say you invented them, that it was a mistake, that it does not exist or that nothing was ordered; never offer to cancel it unless the customer asks.`);
   if (rules.includes('contradicts_customer')) {
@@ -911,10 +911,10 @@ export const feeSentence = (q: QuoteFact, lang: AiLanguage, shopLocale?: GuardFa
   const stop = q.isStopdesk ? q.fee : q.stopdeskFee;
   const da = (n: number) => (loc === 'ar' ? formatMoney(n).replace(/DA$/, 'دج') : formatMoney(n));
   const T = {
-    fr: { home: (n: number) => (n ? `${da(n)} à domicile` : 'gratuite à domicile'), stop: (n: number) => `${da(n)} en stop-desk`, lead: `Livraison${w ? ` à ${w}` : ''} : ` },
-    en: { home: (n: number) => (n ? `${da(n)} to your door` : 'free to your door'), stop: (n: number) => `${da(n)} at a stop-desk`, lead: `Delivery${w ? ` to ${w}` : ''}: ` },
-    arabizi: { home: (n: number) => (n ? `${da(n)} l dar` : 'batel l dar'), stop: (n: number) => `${da(n)} f stop-desk`, lead: `Tawsil${w ? ` l ${w}` : ''}: ` },
-    ar: { home: (n: number) => (n ? `${da(n)} للدار` : 'مجاني للدار'), stop: (n: number) => `${da(n)} في نقطة الاستلام`, lead: `التوصيل${w ? ` لـ${w}` : ''}: ` },
+    fr: { home: (n: number) => (n ? `${da(n)} à domicile` : 'gratuite à domicile'), stop: (n: number) => `${da(n)} au bureau`, lead: `Livraison${w ? ` à ${w}` : ''} : ` },
+    en: { home: (n: number) => (n ? `${da(n)} to your door` : 'free to your door'), stop: (n: number) => `${da(n)} to the office`, lead: `Delivery${w ? ` to ${w}` : ''}: ` },
+    arabizi: { home: (n: number) => (n ? `${da(n)} l dar` : 'batel l dar'), stop: (n: number) => `${da(n)} f l bureau`, lead: `Tawsil${w ? ` l ${w}` : ''}: ` },
+    ar: { home: (n: number) => (n ? `${da(n)} للدار` : 'مجاني للدار'), stop: (n: number) => `${da(n)} للمكتب`, lead: `التوصيل${w ? ` لـ${w}` : ''}: ` },
   }[loc];
   const parts = [...(home !== null ? [T.home(home)] : []), ...(stop !== null ? [T.stop(stop)] : [])];
   return `${T.lead}${parts.join(loc === 'ar' ? '، ' : ', ')}.`;

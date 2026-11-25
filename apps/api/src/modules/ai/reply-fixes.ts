@@ -175,7 +175,7 @@ const ARABIZI_FOR: [RegExp, (m: string, ...g: string[]) => string][] = [
   [/(?<![\p{L}])lel\s+f[êe]tes(?![\p{L}])/giu, () => 'l l3rass w lmounasabat'],
   [/(?<![\p{L}\p{N}])(\d+)\s*(?:à|a|-)\s*(\d+)\s+jours(?![\p{L}])/giu, (_m, a: string, b: string) => `${a} l ${b} ayam`],
   [/(?<![\p{L}])livraison\s+(?:[aà]\s+)?domicile(?![\p{L}])/giu, (m) => (m[0] === 'L' ? 'Tawsil l dar' : 'tawsil l dar')],
-  [/(?<![\p{L}])livraison\s+(?:en\s+|f\s+)?stop[- ]?desk(?![\p{L}])/giu, (m) => (m[0] === 'L' ? 'Tawsil l stop-desk' : 'tawsil l stop-desk')],
+  [/(?<![\p{L}])livraison\s+(?:en\s+|f\s+|au\s+|l\s+)?(?:stop[- ]?desk|bureau)(?![\p{L}])/giu, (m) => (m[0] === 'L' ? 'Tawsil l bureau' : 'tawsil l bureau')],
   [/(?<![\p{L}])t7ebb?\s+n(?:chouf|warrik)\s+wach\s+men\s+([\p{L}'’-]+)\s+t7ebb?(?:ou|i)?\s*([?؟])/giu, (m, what: string, mark: string) => `${m[0] === 'T' ? 'W' : 'w'}ach men ${what} t7ebb ${mark}`],
   // journey retest R15-4 (18/11): French left inside arabizi — P2 T1 « Lmqasat li kaynin sont S et M a 4900 DA, et XL a 5200 DA »,
   // « parfaite pour l3rass »; F5 T1 « rani ndir lek la robe … » (« I am making it for you » for a product not yet ordered); F3 T1 « Bach
@@ -265,10 +265,10 @@ const HOME_FEE: Record<Loc, (fee: string) => string> = {
   en: (f) => `Home delivery is ${f}.`,
 };
 const STOP_FEE: Record<Loc, (fee: string) => string> = {
-  fr: (f) => `En stop-desk, c'est ${f}.`,
-  ar: (f) => `ولا لنقطة الاستلام (stop-desk) ب\u0640 ${f}.`,
-  arabizi: (f) => `Wela f stop-desk b ${f}.`,
-  en: (f) => `Stop-desk delivery is ${f}.`,
+  fr: (f) => `Au bureau, c'est ${f}.`,
+  ar: (f) => `ولا للمكتب ب\u0640 ${f}.`,
+  arabizi: (f) => `Wela f l bureau b ${f}.`,
+  en: (f) => `Delivery to the office is ${f}.`,
 };
 /**
  * journey retest R13-6 (18/11): an answer that gives one delivery fee of a wilaya while this turn's quote_delivery gave both (home
@@ -313,7 +313,7 @@ export const homeFreeClaim = (sentence: string, q: Pick<QuoteFact, 'freeFrom'>):
 
 /** A word of home delivery / of the stop-desk (folded text). */
 const HOME_WORD = /(?<![\p{L}])(?:domicile|adresse|address|[وفب]?(?:ال)?عنوان(?:ك)?|a\s+la\s+maison|chez\s+vous|l\s*dar|ldar|l\s+bit|home|door|(?:[وفب]?(?:لل|ل|ال))(?:دار|بيت|منزل|دوميسيل))(?![\p{L}])/u;
-const STOP_WORD = /(?<![\p{L}])(?:stop\s*-?\s*desk|stopdesk|point\s+(?:de\s+)?relais|bureau\s+(?:de\s+)?(?:livraison|la\s+societe)|[وفب]?(?:ل|ال|لل)?(?:نقطه\s+(?:ال)?استلام|ستوب\s*ديسك|مكتب))(?![\p{L}])/u;
+const STOP_WORD = /(?<![\p{L}])(?:stop\s*-?\s*desk|stopdesk|point\s+(?:de\s+)?relais|bureau\s+(?:de\s+)?(?:livraison|la\s+societe)|bureau\s+du\s+transporteur|livraison\s+bureau|(?:au|en|le|l|f|fel|fil|lel)\s+bureau(?!\s+(?:de\s+(?:la\s+)?)?(?:poste|tabac|change))|(?:the|courier's|courier|an?)\s+offices?(?!\s+(?:chair|desk|table|furniture|supplies))|[وفب]?(?:ل|ال|لل)?(?:نقطه\s+(?:ال)?استلام|ستوب\s*ديسك|مكتب))(?![\p{L}])/u;
 /**
  * journey retest R14-2 (18/11): a sentence of the reply that asks the customer to choose home delivery (or their address) or the stop-desk
  * (both named, as a question or with « ou / wela / ولا / or ») — the server's own address question too — F1b T2 « … préférez-vous être livré à domicile (il me faut alors votre rue ou
@@ -325,10 +325,10 @@ export const modeQuestionAt = (reply: string): number =>
     return HOME_WORD.test(f) && STOP_WORD.test(f) && (/[?؟]/.test(s) || /(?<![\p{L}])(?:ou|wela|wla|walla|ولا|او|أو|or)(?![\p{L}])/u.test(f));
   });
 const MODE_FEES: Record<Loc, (home: string, stop: string | null) => string> = {
-  fr: (h, s) => `À domicile : ${h}${s ? `, en stop-desk : ${s}` : ''}.`,
-  ar: (h, s) => `للدار: ${h}${s ? `، لنقطة الاستلام (stop-desk): ${s}` : ''}.`,
-  arabizi: (h, s) => `L dar: ${h}${s ? `, f stop-desk: ${s}` : ''}.`,
-  en: (h, s) => `Home delivery: ${h}${s ? `, stop-desk: ${s}` : ''}.`,
+  fr: (h, s) => `À domicile : ${h}${s ? `, au bureau : ${s}` : ''}.`,
+  ar: (h, s) => `للدار: ${h}${s ? `، للمكتب: ${s}` : ''}.`,
+  arabizi: (h, s) => `L dar: ${h}${s ? `, f l bureau: ${s}` : ''}.`,
+  en: (h, s) => `Home delivery: ${h}${s ? `, to the office: ${s}` : ''}.`,
 };
 const FREE_HOME: Record<Loc, string> = { fr: 'gratuite', ar: 'مجانية', arabizi: 'batel', en: 'free' };
 /**
@@ -542,10 +542,10 @@ export const handoffSystemLineShown = (lang: AiLanguage | string | undefined, ou
 const ADDRESS_ASK = /(?<![\p{L}])(?:adresse|address|[وفب]?(?:ال)?عنوان(?:ك)?)(?![\p{L}])/u;
 export const asksAddress = (reply: string): boolean => splitSentences(reply).some((s) => /[?؟]/u.test(s) && ADDRESS_ASK.test(foldGuard(s)));
 const PLACE_FEES: Record<Loc, (home: string, stop: string | null) => string> = {
-  fr: (h, s) => (s ? `Livraison : ${h} à domicile, ou ${s} en stop-desk si vous préférez.` : `Livraison à domicile : ${h}.`),
-  ar: (h, s) => (s ? `التوصيل: ${h} للدار، ولا ${s} لنقطة الاستلام (stop-desk) إذا تحب.` : `التوصيل للدار: ${h}.`),
-  arabizi: (h, s) => (s ? `Tawsil: ${h} l dar, wela ${s} f stop-desk ila t7ebb.` : `Tawsil l dar: ${h}.`),
-  en: (h, s) => (s ? `Delivery: ${h} to your door, or ${s} at a stop-desk if you prefer.` : `Home delivery: ${h}.`),
+  fr: (h, s) => (s ? `Livraison : ${h} à domicile, ou ${s} au bureau du transporteur si vous préférez.` : `Livraison à domicile : ${h}.`),
+  ar: (h, s) => (s ? `التوصيل: ${h} للدار، ولا ${s} للمكتب إذا تحب.` : `التوصيل للدار: ${h}.`),
+  arabizi: (h, s) => (s ? `Tawsil: ${h} l dar, wela ${s} f l bureau ila t7ebb.` : `Tawsil l dar: ${h}.`),
+  en: (h, s) => (s ? `Delivery: ${h} to your door, or ${s} to the courier's office if you prefer.` : `Home delivery: ${h}.`),
 };
 const PRODUCT_PRICE: Record<Loc, (name: string, price: string) => string> = {
   fr: (n, p) => `${n} : ${p}.`,

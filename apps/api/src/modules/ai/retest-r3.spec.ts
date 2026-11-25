@@ -167,7 +167,7 @@ describe('R3-5 — natural arabizi for the order questions', () => {
     const s = languageSection({ lang: 'arabizi' } as never);
     expect(s).toContain('« Wach smitek ? »');
     expect(s).toContain('« Wach men wilaya ? »');
-    expect(s).toContain('« T7ebb nwasslouha l dar wela f stop-desk ? »');
+    expect(s).toContain('« T7ebb nwasslouha l dar wela l bureau ? »');
     expect(s).toContain('tawa / tawwa');
   });
 });

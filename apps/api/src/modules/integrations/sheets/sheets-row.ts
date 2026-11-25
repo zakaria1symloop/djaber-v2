@@ -42,7 +42,7 @@ export const sheetsRowOf = (o: SheetsOrder, label: Labeler): SheetCell[] => {
     wilaya: o.wilaya?.nameFr ?? '',
     // journey J05v-3: the display form of the screens (the stored name stays the matching key)
     commune: communeDisplayName(o.commune?.nameFr ?? o.communeText, o.wilaya) ?? '',
-    address: o.isStopdesk ? `Stop-desk ${o.stopdeskName ?? ''}`.trim() : (o.address ?? ''),
+    address: o.isStopdesk ? `Bureau ${o.stopdeskName ?? ''}`.trim() : (o.address ?? ''),
     items: o.items.map((i) => `${i.productName}${i.variantName ? ` ${i.variantName}` : ''} ×${i.quantity}`).join('; '),
     subtotal: o.subtotal,
     fee: o.deliveryFee,

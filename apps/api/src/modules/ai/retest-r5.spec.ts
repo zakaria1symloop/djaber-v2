@@ -141,7 +141,7 @@ describe('R5-4 — a street address means home delivery', () => {
     const s = orderRulesSection({ agent: { orderFields: [], maxQtyPerOrder: null, maxAmountPerOrder: null, riskyClientBehavior: null }, catalogue: { products: [] }, chosen: null, customer: null } as never);
     expect(s).toContain('A street address the customer gave (street, cité, building, villa, bloc, landmark) means HOME delivery: never ask « home or stop-desk? » then');
     expect(s).toContain('a bare yes (« oui », « ih ») to « home or stop-desk? » chooses neither');
-    expect(languageSection({ lang: 'arabizi' } as never)).toContain('« T7ebb nwasslouha l dar wela f stop-desk ? » (only when no street address was given)');
+    expect(languageSection({ lang: 'arabizi' } as never)).toContain('« T7ebb nwasslouha l dar wela l bureau ? » (only when no street address was given)');
   });
 });
 
@@ -158,9 +158,9 @@ describe('R5-5 — a delivery question is answered in words, not only through th
   const N3_T3 = 'khouya twasslou l Constantine ? ana f El Khroub, cité 1000 logements bloc 5';
   // (journey retest R20-2: and the home and stop-desk fees — of this turn's quote, else the recap's own fee)
   it('N3 T3: the answer in the turn language, with the delay of this turn’s quote', () => {
-    expect(deliveryAnswer([quote, recapCall], N3_T3, 'arabizi')).toBe('Ih, nwasslou l Constantine, f 2 l 5 ayam. L dar: 700\u00a0DA, f stop-desk: 450\u00a0DA.');
-    expect(deliveryAnswer([quote, recapCall], 'Vous livrez à Constantine ? Samira Benali, El Khroub, cité 1000 logements bloc 5', 'fr')).toBe('Oui, on livre à Constantine, en 2 à 5 jours. À domicile : 700\u00a0DA, en stop-desk : 450\u00a0DA.');
-    expect(deliveryAnswer([quote, recapCall], 'واش توصلو لقسنطينة ؟ الخروب، حي 1000 مسكن', 'ar')).toBe('إيه، نوصلو ل\u0640قسنطينة، من 2 إلى 5 أيام. للدار: 700\u00a0دج، لنقطة الاستلام (stop-desk): 450\u00a0دج.');
+    expect(deliveryAnswer([quote, recapCall], N3_T3, 'arabizi')).toBe('Ih, nwasslou l Constantine, f 2 l 5 ayam. L dar: 700\u00a0DA, f l bureau: 450\u00a0DA.');
+    expect(deliveryAnswer([quote, recapCall], 'Vous livrez à Constantine ? Samira Benali, El Khroub, cité 1000 logements bloc 5', 'fr')).toBe('Oui, on livre à Constantine, en 2 à 5 jours. À domicile : 700\u00a0DA, au bureau : 450\u00a0DA.');
+    expect(deliveryAnswer([quote, recapCall], 'واش توصلو لقسنطينة ؟ الخروب، حي 1000 مسكن', 'ar')).toBe('إيه، نوصلو ل\u0640قسنطينة، من 2 إلى 5 أيام. للدار: 700\u00a0دج، للمكتب: 450\u00a0دج.');
     // (journey retest R19-1: the place the customer asked about — the commune here)
     expect(deliveryAnswer([recapCall], 'Do you deliver to El Khroub?', 'en')).toBe('Yes, we deliver to El Khroub. Home delivery: 700\u00a0DA.');
     expect(bad(deliveryAnswer([quote, recapCall], N3_T3, 'arabizi')!)).toBe(false);
@@ -183,10 +183,10 @@ describe('R5-5 — a delivery question is answered in words, not only through th
       return r.ok ? r.output.reply : '';
     };
     const server = orderRecapText(pendingRecap([recapCall])!, 'fr');
-    expect(await run('')).toBe(`Oui, on livre à Constantine, en 2 à 5 jours. À domicile : 700\u00a0DA, en stop-desk : 450\u00a0DA.\n\n${server}`);
+    expect(await run('')).toBe(`Oui, on livre à Constantine, en 2 à 5 jours. À domicile : 700\u00a0DA, au bureau : 450\u00a0DA.\n\n${server}`);
     // journey retest R19-1 (18/11): one delivery question to the recap's place — the server's answer and the recap end the turn, no model
     // step after the recap call (its lead-in is not asked for)
-    expect(await run('Oui, on livre bien à Constantine !')).toBe(`Oui, on livre à Constantine, en 2 à 5 jours. À domicile : 700\u00a0DA, en stop-desk : 450\u00a0DA.\n\n${server}`);
+    expect(await run('Oui, on livre bien à Constantine !')).toBe(`Oui, on livre à Constantine, en 2 à 5 jours. À domicile : 700\u00a0DA, au bureau : 450\u00a0DA.\n\n${server}`);
   });
 });
 

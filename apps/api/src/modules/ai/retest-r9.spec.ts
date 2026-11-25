@@ -136,7 +136,7 @@ describe('R9-1 (Major) — N18: a Latin name in an Arabic-script conversation ke
     expect(systemLocale('mixed', 'ar', null)).toBe('ar');
     expect(systemLocale('mixed', 'fr', 'fr')).toBe('fr');
     const f = facts('mixed', 'x', { shopLocale: 'ar' });
-    expect(feeSentence({ wilaya: 'قسنطينة', isStopdesk: false, fee: 700, free: false, stopdeskFee: 450 }, f.lang, f.shopLocale).replace(/\s/g, ' ')).toBe('التوصيل لـقسنطينة: 700 دج للدار، 450 دج في نقطة الاستلام.');
+    expect(feeSentence({ wilaya: 'قسنطينة', isStopdesk: false, fee: 700, free: false, stopdeskFee: 450 }, f.lang, f.shopLocale).replace(/\s/g, ' ')).toBe('التوصيل لـقسنطينة: 700 دج للدار، 450 دج للمكتب.');
     expect(enforceReply('Problème technique.', [{ rule: 'invented_problem', sentence: 0 }], { ...f, missingField: 'communeName' }, { hasCards: false }).reply).toMatch(/[؀-ۿ]/);
     expect(blockedOrderText([{ name: 'create_order', result: { ok: false, error: { code: 'CUSTOMER_BLOCKED' } } }], serverTextLanguage('mixed', 'ar'))).toBe('ما نقدرش نأكد هذي الطلبية هنا، الفريق تاع المحل راح يتكفل بيها.');
   });

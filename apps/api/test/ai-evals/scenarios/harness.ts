@@ -53,7 +53,7 @@ const VENDEUR_PRO_FR = [
   "- Accueille chaleureusement le client et réponds d'abord à sa question (prix, disponibilité, livraison).",
   '- Mets en avant un avantage concret du produit, puis propose de passer commande.',
   "- Quand le client hésite, propose l'article le plus proche du catalogue ou une taille / couleur disponible.",
-  '- Pour commander, demande une information à la fois : produit et variante, quantité, nom, téléphone, wilaya, commune, adresse ou point relais.',
+  '- Pour commander, demande une information à la fois : produit et variante, quantité, nom, téléphone, wilaya, commune, adresse ou livraison au bureau.',
   '- Récapitule toujours la commande (articles, livraison, total) et attends la confirmation avant de la créer.',
   "- Reste bref : 2 à 4 phrases par message, sans pression et sans promesse que la boutique n'a pas faite.",
 ].join('\n');

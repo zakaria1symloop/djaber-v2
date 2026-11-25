@@ -515,6 +515,36 @@ export function ProductForm(props: Props) {
 
       <form id="product-form" onSubmit={submit} noValidate aria-busy={saving} className="grid items-start gap-5 lg:grid-cols-3" data-mode={mode}>
         <div className="flex min-w-0 flex-col gap-5 lg:col-span-2">
+          {/* owner 25/11: « people will not understand the difference — they think a service is added with the add-product page ».
+              The new-product form asks first what is sold; « service » is the product without stock (`trackStock = false`, CAT-11),
+              the same switch as « Suivre le stock » of the stock block */}
+          {mode === 'create' ? (
+            <div role="radiogroup" aria-label={t('products.form.kind.label')} className="grid gap-3 sm:grid-cols-2" data-testid="product-kind">
+              {(['product', 'service'] as const).map((k) => {
+                const active = (k === 'product') === values.trackStock;
+                const blocked = k === 'service' && values.variants.length > 0;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    data-kind={k}
+                    disabled={locked || blocked}
+                    title={blocked ? t('products.form.stock.trackLocked') : undefined}
+                    onClick={() => form.setValue('trackStock', k === 'product', { shouldDirty: true, shouldValidate: true })}
+                    className={cn(
+                      'rounded-card border p-3 text-start transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+                      active ? 'border-white bg-ink-raised' : 'border-line-edge bg-ink-surface hover:text-text-primary',
+                    )}
+                  >
+                    <span className="block text-[14px] font-medium">{t(`products.form.kind.${k}`)}</span>
+                    <span className="mt-1 block text-[13px] text-text-secondary">{t(`products.form.kind.${k}Hint`)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           <Section title={t('products.form.info.title')} name="info">
             <Field label={t('common.name')} htmlFor="name" required error={err('name')}>
               <Input id="name" dir="auto" maxLength={255} disabled={locked} aria-invalid={!!errors.name} className={tint('name')} {...form.register('name')} />

@@ -48,9 +48,9 @@ const NOT_PRODUCT = new Set(
   [
     'bonjour', 'bjr', 'bonsoir', 'bsr', 'salut', 'slt', 'coucou', 'hello', 'hey', 'salem', 'salamou', 'assalam', 'alikoum', 'alaykoum', 'ahla', 'ahlan', 'marhba', 'marhaba', 'sbah', 'khir', 'lkhir', 'labas', 'khouya', 'khoya', 'khti', 'madame', 'monsieur',
     'habite', 'habitons', 'habitez', 'suis', 'sommes', 'reside', 'vis', 'live', 'living', 'from', 'ana', 'nseken', 'nskon', 'saken', 'sakna', 'sakin', 'appelle', 'nom', 'name', 'smiti', 'smitek', 'ismi', 'esmi',
-    'livrer', 'livrez', 'livraison', 'livre', 'livrees', 'deliver', 'delivery', 'tawsil', 'twasslou', 'nwasslou', 'domicile', 'stop', 'desk', 'adresse', 'address', 'cite', 'rue', 'bloc', 'quartier', 'logements', 'villa', 'wilaya', 'commune', 'centre', 'ville',
+    'livrer', 'livrez', 'livraison', 'livre', 'livrees', 'deliver', 'delivery', 'tawsil', 'twasslou', 'nwasslou', 'domicile', 'stop', 'desk', 'bureau', 'office', 'adresse', 'address', 'cite', 'rue', 'bloc', 'quartier', 'logements', 'villa', 'wilaya', 'commune', 'centre', 'ville',
     'telephone', 'numero', 'phone', 'tel', 'merci', 'thanks', 'ok', 'daccord', 'parfait', 'super', 'bien', 'aussi', 'chez', 'ici', 'vers', 'region',
-    'مرحبا', 'اهلا', 'اهلين', 'صباح', 'مساء', 'الخير', 'انا', 'ساكن', 'ساكنه', 'نسكن', 'اسمي', 'سميتي', 'التوصيل', 'توصلو', 'ولايه', 'بلديه', 'حي', 'شارع', 'العنوان', 'رقم', 'الهاتف', 'شكرا', 'صحيت', 'خويا', 'اختي',
+    'مرحبا', 'اهلا', 'اهلين', 'صباح', 'مساء', 'الخير', 'انا', 'ساكن', 'ساكنه', 'نسكن', 'اسمي', 'سميتي', 'التوصيل', 'توصلو', 'المكتب', 'ولايه', 'بلديه', 'حي', 'شارع', 'العنوان', 'رقم', 'الهاتف', 'شكرا', 'صحيت', 'خويا', 'اختي',
   ].map((w) => stem(articleless(foldText(w)))),
 );
 /**

@@ -9,6 +9,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { prisma, TenantContext, type ModerationItem, type ModerationSource, type Prisma, type Tx } from '@djaber/db';
 import type { ModerationAiFlagView, ModerationDetailView } from '@djaber/shared';
 import { AppException, notFound, validationError } from '../../core/errors/app.exception';
+import { viewerLocale } from '../../core/i18n/viewer-locale';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { originSessionId } from '../../core/tenancy/tenant.guard';
 import { OutboxService } from '../../core/outbox/outbox.service';
@@ -18,6 +19,7 @@ import { algiersClock, algiersDay } from '../../core/time/algiers';
 import { AdminNotifier } from '../notifications/admin-notifier.service';
 import { NotificationProducer } from '../notifications/notification.producer';
 import { imageToken } from './approved-content';
+import { autoRejectedIn } from './moderation-message';
 import { ModerationPrescreenService, type BannedHit, type PrescreenResult } from './moderation-prescreen.service';
 
 export type ModeratedFields = { name: string; description: string | null; categoryId: string | null; price: number };
@@ -472,7 +474,7 @@ export class ModerationHookService implements OnModuleInit {
     const history: ModerationDetailView['history'] = [];
     for (const i of items) {
       history.push({ at: i.submittedAt.toISOString(), status: 'pending', actor: 'merchant', note: i.source });
-      if (i.decidedAt) history.push({ at: i.decidedAt.toISOString(), status: i.status === 'appealed' || i.status === 'appeal_rejected' ? 'rejected' : i.status, actor: i.reviewerId ? 'moderator' : 'system', note: i.merchantMessage });
+      if (i.decidedAt) history.push({ at: i.decidedAt.toISOString(), status: i.status === 'appealed' || i.status === 'appeal_rejected' ? 'rejected' : i.status, actor: i.reviewerId ? 'moderator' : 'system', note: i.reviewerId ? i.merchantMessage : autoRejectedIn(i.merchantMessage, viewerLocale()) });
       if (i.appeal) {
         history.push({ at: i.appeal.submittedAt.toISOString(), status: 'appealed', actor: 'merchant', note: i.appeal.message });
         if (i.appeal.decidedAt) history.push({ at: i.appeal.decidedAt.toISOString(), status: i.appeal.decision === 'overturned' ? 'approved' : 'appeal_rejected', actor: 'moderator', note: i.appeal.decisionNote });
@@ -487,7 +489,8 @@ export class ModerationHookService implements OnModuleInit {
       submittedAt: current.submittedAt.toISOString(),
       decidedAt: current.decidedAt ? current.decidedAt.toISOString() : null,
       decision: current.decision,
-      merchantMessage: current.merchantMessage,
+      // UX-099: the system's own refusal sentence in the reader's language (a moderator's message stays as written)
+      merchantMessage: current.reviewerId ? current.merchantMessage : autoRejectedIn(current.merchantMessage, viewerLocale()),
       rejectedFields: current.rejectedFields,
       rules: current.reasonTemplateKey ? [current.reasonTemplateKey] : [],
       history,

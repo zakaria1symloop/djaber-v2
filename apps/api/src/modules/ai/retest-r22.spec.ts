@@ -166,6 +166,9 @@ describe('R22-1 (Major) — a bare quantity above the max while a product is bei
       expect([s, bareQuantity(s)]).toEqual([s, null]);
     expect(otherFieldAsked('Quelle pointure vous faut-il ?')).toBe(true);
     expect(otherFieldAsked('واش من ولاية ؟')).toBe(true);
+    // owner decision 25/11: the delivery-mode question in the new words
+    expect(otherFieldAsked('T7ebb nwasslouha l dar wela l bureau ?')).toBe(true);
+    expect(otherFieldAsked('تحب نوصلوها للدار ولا للمكتب ؟')).toBe(true);
     expect(otherFieldAsked(Q3_AI)).toBe(false);
     expect(otherFieldAsked('Voulez-vous passer commande ?')).toBe(false);
     const none = () => false;
@@ -249,8 +252,8 @@ describe('R22-4 (Cosmetic) — wording', () => {
     expect(r.output.reply).toContain('TEST-4234');
   });
 
-  it('C4 T4: « نقطة الاستلام (نقطة الاستلام) » ⇒ one term; other brackets stay', () => {
-    expect(withMsaWording('التوصيل إلى وهران: 600 دج للتوصيل للمنزل، أو 400 دج إلى نقطة الاستلام (ستوب ديسك).')).toBe('التوصيل إلى وهران: 600 دج للتوصيل للمنزل، أو 400 دج إلى نقطة الاستلام.');
+  it('C4 T4: « المكتب (المكتب) » ⇒ one term; other brackets stay', () => {
+    expect(withMsaWording('التوصيل إلى وهران: 600 دج للتوصيل للمنزل، أو 400 دج إلى المكتب (ستوب ديسك).')).toBe('التوصيل إلى وهران: 600 دج للتوصيل للمنزل، أو 400 دج إلى المكتب.');
     expect(withMsaWording('أو 400 دج إلى نقطة الاستلام (stop-desk).')).toBe('أو 400 دج إلى نقطة الاستلام (stop-desk).');
   });
 

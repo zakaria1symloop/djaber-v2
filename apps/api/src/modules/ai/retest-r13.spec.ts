@@ -360,8 +360,8 @@ describe('R13-6 (Cosmetic) — both fees, darija words, arabizi closing', () => 
   it('withBothFees: F1b T2 gets the home fee before the stop-desk sentence; a home-only answer gets the stop-desk; both given / stop-desk quote ⇒ unchanged', () => {
     const f1b = 'Parfait Karim, je note le Sac à main cuir Marron (1 pièce). Pour la livraison à domicile à El Eulma, donnez-moi votre adresse (rue, cité ou repère). Sinon, on peut aussi la livrer en stop-desk à 350 DA.';
     expect(withBothFees(f1b, setif, 'fr')).toBe('Parfait Karim, je note le Sac à main cuir Marron (1 pièce). Pour la livraison à domicile à El Eulma, donnez-moi votre adresse (rue, cité ou repère). La livraison à domicile est à 650\u00a0DA. Sinon, on peut aussi la livrer en stop-desk à 350 DA.');
-    expect(withBothFees('Ih, nwasslou l Sétif: 650 DA l dar. Wach smitek ?', setif, 'arabizi')).toBe('Ih, nwasslou l Sétif: 650 DA l dar. Wela f stop-desk b 350\u00a0DA. Wach smitek ?');
-    expect(withBothFees('التوصيل لسطيف ب\u0640 650 دج.', setif, 'ar')).toBe('التوصيل لسطيف ب\u0640 650 دج. ولا لنقطة الاستلام (stop-desk) ب\u0640 350\u00a0دج.');
+    expect(withBothFees('Ih, nwasslou l Sétif: 650 DA l dar. Wach smitek ?', setif, 'arabizi')).toBe('Ih, nwasslou l Sétif: 650 DA l dar. Wela f l bureau b 350\u00a0DA. Wach smitek ?');
+    expect(withBothFees('التوصيل لسطيف ب\u0640 650 دج.', setif, 'ar')).toBe('التوصيل لسطيف ب\u0640 650 دج. ولا للمكتب ب\u0640 350\u00a0دج.');
     const f9 = 'Sétif: 650 DA l dar, wela 350 DA f stop-desk, ywasel f 2 l 5 ayam. Oran stop-desk: 400 DA, ywasel f 2 l 5 ayam.';
     expect(withBothFees(f9, [...setif, ...oranDesk], 'arabizi')).toBe(f9);
     expect(withBothFees('Merci Karim ! Votre numéro ?', setif, 'fr')).toBe('Merci Karim ! Votre numéro ?');

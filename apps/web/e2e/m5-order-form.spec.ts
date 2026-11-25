@@ -101,7 +101,7 @@ test('AT-ORD-09 fee: grid 400, free from 5 000 DA, stop-desk, wilaya not served,
   // back to Alger, stop-desk, then the Admin override
   await pickCombo(page, 'wilayaId', '16 ·');
   await pickCombo(page, 'communeId', commune16.nameFr);
-  await page.getByRole('radio', { name: 'Stop-desk' }).click();
+  await page.getByRole('radio', { name: 'Bureau' }).click();
   await page.getByTestId('fee-override').click();
   await page.locator('#feeOverride').fill('300');
   await expect(page.getByTestId('fee-title')).toHaveText('Frais de livraison client : 300 DA');

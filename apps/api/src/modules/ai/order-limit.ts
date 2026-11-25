@@ -115,7 +115,7 @@ export function bareQuantity(text: string, productWords: readonly string[] = [])
 }
 
 /** A question of the AI's last message asking another field than a quantity — a size, a colour, the wilaya, the phone, a day, an order number. */
-const OTHER_FIELD = /(?<![\p{L}])(?:taille|tailles|pointure|pointures|size|sizes|couleur|couleurs|colou?rs?|wilaya|wilayas|commune|ville|adresse|address|numero|telephone|phone|tel|nom|name|smitek|smiytek|esmek|jour|date|day|heure|hour|time|creneau|wa9tach|waqtach|code|reference|ref|stop\s*desk|domicile|home|مقاس|المقاس|قياس|نمره|لون|اللون|ولايه|الولايه|بلديه|البلديه|عنوان|العنوان|رقم|هاتف|الهاتف|تيليفون|سميتك|اسمك|نهار|يوم|وقت|وقتاش|ساعه)(?![\p{L}])/u;
+const OTHER_FIELD = /(?<![\p{L}])(?:taille|tailles|pointure|pointures|size|sizes|couleur|couleurs|colou?rs?|wilaya|wilayas|commune|ville|adresse|address|numero|telephone|phone|tel|nom|name|smitek|smiytek|esmek|jour|date|day|heure|hour|time|creneau|wa9tach|waqtach|code|reference|ref|stop\s*desk|bureau|office|domicile|home|مكتب|المكتب|للمكتب|مقاس|المقاس|قياس|نمره|لون|اللون|ولايه|الولايه|بلديه|البلديه|عنوان|العنوان|رقم|هاتف|الهاتف|تيليفون|سميتك|اسمك|نهار|يوم|وقت|وقتاش|ساعه)(?![\p{L}])/u;
 export const otherFieldAsked = (lastAi: string | null | undefined): boolean =>
   !!lastAi && lastAi.split(/(?<=[.!?؟\n])/u).some((s) => /[?؟]/u.test(s) && OTHER_FIELD.test(foldBase(s).replace(/[^\p{L}\p{N}]+/gu, ' ')));
 

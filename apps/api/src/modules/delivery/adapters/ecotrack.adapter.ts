@@ -132,7 +132,7 @@ export class EcotrackAdapter implements CourierAdapter {
     const wanted = new Set([input.communeCode ?? '', input.communeName].map((n) => normalizeRaw(n).replace(/ /g, '')).filter(Boolean));
     const list = await this.communesOf(c, input.wilayaId).catch(() => [] as { name: string; code: string; desk: boolean }[]);
     const commune = list.find((x) => wanted.has(normalizeRaw(x.name).replace(/ /g, '')) || (!!x.code && x.code === input.stopdeskId));
-    if (input.isStopdesk && !input.stopdeskId && !commune?.desk) throw new CourierError('validation', 'Pas de stop-desk pour cette commune', 'stopdesk');
+    if (input.isStopdesk && !input.stopdeskId && !commune?.desk) throw new CourierError('validation', 'Pas de bureau pour cette commune', 'stopdesk');
     const params = {
       reference: input.orderNumber,
       nom_client: input.recipient.name,
@@ -223,7 +223,7 @@ export class EcotrackAdapter implements CourierAdapter {
 
   /** Stop-desks = the tenant's communes flagged `has_stop_desk`; the desk id sent back is the commune's `code_postal`. */
   async listStopdesks(c: AnyCredentials, wilayaId: number): Promise<Stopdesk[]> {
-    return (await this.communesOf(c, wilayaId)).filter((x) => x.desk && x.code).map((x) => ({ id: x.code, name: `Stop-desk ${x.name}`, wilayaId, communeName: x.name, address: null }));
+    return (await this.communesOf(c, wilayaId)).filter((x) => x.desk && x.code).map((x) => ({ id: x.code, name: `Bureau ${x.name}`, wilayaId, communeName: x.name, address: null }));
   }
 
   async getLabel(c: AnyCredentials, trackingNumber: string) {

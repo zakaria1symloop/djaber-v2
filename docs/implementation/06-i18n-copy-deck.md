@@ -275,7 +275,7 @@
 | common.commune | COMMUNE | | |
 | common.address | ADRESSE | | |
 | common.home | Domicile | | |
-| common.stopdesk | Stop-desk | | |
+| common.stopdesk | Bureau | | |
 | common.tags | TAGS | | |
 | common.total | TOTAL | | |
 | common.subtotal | Sous-total | | |

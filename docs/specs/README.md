@@ -161,3 +161,7 @@ Owner decisions left open by the recette:
 | Services « à partir de » | How a service priced « à partir de » is quoted and ordered by the AI. |
 | « Nous vous appelons pour confirmer » | Whether this sentence still goes out when the parcel is sent to the courier automatically. |
 | L61 / L91 | Several agents on one page is not planned; confirm the answer to the client (one agent, several categories). |
+
+## Wording decision of 25/11/2026
+
+The delivery mode named stop-desk in the code and the courier APIs is written « bureau » in French, « المكتب » in Arabic, « bureau » in darija (Latin letters) and « office » in English on every screen and in every message to a customer. Customers who write or say « stop desk » are still understood. Identifiers (`isStopdesk`, `stopdeskId`, i18n keys) keep their names.
