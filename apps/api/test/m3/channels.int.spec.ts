@@ -180,6 +180,14 @@ describe('CHN-01/02/05/10 per-page report', () => {
     const refused = await callback(app, 'facebook', { code: first.code, state: first.state });
     expect(refused.pages).toEqual([expect.objectContaining({ status: 'skipped', code: 'PAGE_ALREADY_CONNECTED_ELSEWHERE', channelId: null })]);
     expect(await db.channel.count({ where: { workspaceId: b.workspaceId } })).toBe(0);
+    // client 25/11: someone else's shop is never named; a shop the same person belongs to is (« votre boutique … »)
+    expect(refused.pages[0]?.otherWorkspaceName ?? null).toBeNull();
+    await db.membership.create({ data: { workspaceId: a.workspaceId, userId: b.userId, role: 'admin' } });
+    const again = await startConnect(b);
+    meta.setPages(again.seed, [page(pageA.externalId)]);
+    const named = await callback(app, 'facebook', { code: again.code, state: again.state });
+    expect(named.pages[0]).toMatchObject({ code: 'PAGE_ALREADY_CONNECTED_ELSEWHERE', otherWorkspaceName: (await db.workspace.findUniqueOrThrow({ where: { id: a.workspaceId } })).name });
+    await db.membership.deleteMany({ where: { workspaceId: a.workspaceId, userId: b.userId } });
 
     // A disconnects (the admin force-release of M10 ends in the same state): the page is free, A keeps its history
     await a.delete(`/channels/${pageA.id}`).expect(200);

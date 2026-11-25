@@ -448,6 +448,8 @@ const rowNote = (t: TFunction, p: ConnectReportPage, limit: PlanLimit): ReactNod
   const kind = reportRowKind(p);
   if (kind === 'connected') return t(p.reconnected ? 'channels.report.note.reconnected' : 'channels.report.note.connected');
   const code = p.code ?? '';
+  // client 25/11: the page is in another shop of the same person — say which one
+  if (code === 'PAGE_ALREADY_CONNECTED_ELSEWHERE' && p.otherWorkspaceName) return t('channels.report.note.elsewhereOwn', { shop: p.otherWorkspaceName });
   const key = `error.${code}`;
   const text = kind === 'limit' ? t('channels.report.note.limit', { current: limit.current, limit: limit.limit }) : t.has(key) ? t(key, { current: limit.current, limit: limit.limit, resource: '' }) : t(`channels.report.note.${kind}`);
   // UX-059: the sentence only, never the code before it

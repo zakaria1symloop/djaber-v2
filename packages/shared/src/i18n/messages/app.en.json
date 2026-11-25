@@ -2311,6 +2311,7 @@
  "channels.report.found": "{count, plural, =0 {No page found} one {# page found} other {# pages found}} on the Meta account",
  "channels.report.note.connected": "webhooks subscribed",
  "channels.report.note.ignored": "page skipped",
+ "channels.report.note.elsewhereOwn": "Page already connected to your shop “{shop}”. Open that shop, disconnect the page there, then connect it here.",
  "channels.report.note.limit": "pages ({current}/{limit}) · move to the next plan",
  "channels.report.note.pending": "enabled automatically after approval",
  "channels.report.note.reconnected": "already connected · token updated",

@@ -21,7 +21,7 @@ import { ChannelEvents, ChannelTokens, pageSlots } from './channel.util';
 
 type State = { w: string; u: string; p: ChannelPlatform; n: string; e: number; r?: string };
 type CallbackQuery = { code?: string; state?: string; error?: string; error_reason?: string; error_description?: string };
-type Upserted = { channel: Channel; reconnected: boolean } | { skipped: ConnectReportCode };
+type Upserted = { channel: Channel; reconnected: boolean } | { skipped: ConnectReportCode; otherWorkspaceName?: string | null };
 
 const nonceKey = (n: string) => `oauth:nonce:${n}`;
 const reportKey = (id: string) => `connect:report:${id}`;
@@ -162,7 +162,7 @@ export class ConnectService {
     const pages = await this.meta.listPages(user.accessToken);
     const out: ConnectReportPage[] = [];
     for (const page of pages) {
-      const row = (status: ConnectReportPage['status'], codeOf: ConnectReportCode | null, channel?: Channel, reconnected = false): ConnectReportPage => ({
+      const row = (status: ConnectReportPage['status'], codeOf: ConnectReportCode | null, channel?: Channel, reconnected = false, otherWorkspaceName?: string | null): ConnectReportPage => ({
         externalId: page.id,
         name: page.name,
         platform: 'facebook',
@@ -171,6 +171,7 @@ export class ConnectService {
         code: codeOf,
         channelId: channel?.id ?? null,
         reconnected,
+        ...(otherWorkspaceName ? { otherWorkspaceName } : {}),
       });
       if (!page.accessToken) {
         out.push(row('skipped', 'PAGE_ACCESS_TOKEN_MISSING'));
@@ -182,7 +183,7 @@ export class ConnectService {
       }
       const res = await this.upsert({ platform: 'facebook', externalId: page.id, name: page.name, avatarUrl: page.pictureUrl, followersCount: page.followersCount, token: page.accessToken, tokenExpiresAt: null, scopes: this.facebookScopes(), parentChannelId: null, userId });
       if ('skipped' in res) {
-        out.push(row('skipped', res.skipped));
+        out.push(row('skipped', res.skipped, undefined, false, res.otherWorkspaceName));
         continue;
       }
       const subscribed = await this.subscribe(res.channel);
@@ -208,7 +209,7 @@ export class ConnectService {
     const name = ig.username ? `@${ig.username}` : (ig.name ?? parent.name);
     const base = { externalId: ig.id, name, platform: 'instagram' as const, avatarUrl: ig.pictureUrl };
     const res = await this.upsert({ platform: 'instagram', externalId: ig.id, name, avatarUrl: ig.pictureUrl, followersCount: ig.followersCount ?? null, token: pageToken, tokenExpiresAt: null, scopes: ['instagram_basic', 'instagram_manage_messages'], parentChannelId: parent.id, userId });
-    if ('skipped' in res) return { ...base, status: 'skipped', code: res.skipped, channelId: null, reconnected: false };
+    if ('skipped' in res) return { ...base, status: 'skipped', code: res.skipped, channelId: null, reconnected: false, ...(res.otherWorkspaceName ? { otherWorkspaceName: res.otherWorkspaceName } : {}) };
     const pending = res.channel.status === 'pending_review';
     return { ...base, status: pending ? 'pending_review' : 'connected', code: pending ? 'PAGE_INSTAGRAM_PENDING_APPROVAL' : null, channelId: res.channel.id, reconnected: res.reconnected };
   }
@@ -238,7 +239,7 @@ export class ConnectService {
       parentChannelId: null,
       userId,
     });
-    if ('skipped' in res) return [{ ...base, status: 'skipped', code: res.skipped, channelId: null, reconnected: false }];
+    if ('skipped' in res) return [{ ...base, status: 'skipped', code: res.skipped, channelId: null, reconnected: false, ...(res.otherWorkspaceName ? { otherWorkspaceName: res.otherWorkspaceName } : {}) }];
     const subscribed = await this.subscribe(res.channel);
     const pending = res.channel.status === 'pending_review';
     return [
@@ -273,7 +274,12 @@ export class ConnectService {
     // a page belongs to one workspace globally: look across workspaces
     const elsewhere = await TenantContext.runSystem(() => prisma.channel.findUnique({ where: { platform_externalId: { platform: p.platform, externalId: p.externalId } } }));
     if (elsewhere && elsewhere.workspaceId !== workspaceId) {
-      if (elsewhere.status !== 'disconnected') return { skipped: 'PAGE_ALREADY_CONNECTED_ELSEWHERE' };
+      if (elsewhere.status !== 'disconnected') {
+        // client 25/11: she owns both shops and read « connectée à un autre espace » without knowing which one — the shop is named
+        // when the person connecting is a member of it too (someone else's shop is never named)
+        const own = await TenantContext.runSystem(() => prisma.membership.findFirst({ where: { workspaceId: elsewhere.workspaceId, userId: p.userId }, select: { workspace: { select: { name: true } } } }));
+        return { skipped: 'PAGE_ALREADY_CONNECTED_ELSEWHERE', otherWorkspaceName: own?.workspace.name ?? null };
+      }
       // disconnected over there: the page is free again; that workspace keeps its history under a retired id
       await TenantContext.runSystem(() => this.channels.releaseExternalId(prisma, elsewhere));
     }

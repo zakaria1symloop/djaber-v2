@@ -2311,6 +2311,7 @@
  "channels.report.found": "{count, plural, =0 {لم يُعثر على صفحات} zero {لم يُعثر على صفحات} one {صفحة واحدة} two {صفحتان} few {# صفحات} many {# صفحة} other {# صفحة}} في حساب ميتا",
  "channels.report.note.connected": "تم الاشتراك في الويب هوك",
  "channels.report.note.ignored": "تم تجاهل الصفحة",
+ "channels.report.note.elsewhereOwn": "الصفحة مرتبطة بمتجرك «{shop}». افتح ذلك المتجر وافصل الصفحة منه، ثم أعد ربطها هنا.",
  "channels.report.note.limit": "الصفحات ({current}/{limit}) · انتقل إلى الخطة الأعلى",
  "channels.report.note.pending": "تُفعَّل تلقائيًا بعد الموافقة",
  "channels.report.note.reconnected": "مرتبطة مسبقًا · تم تحديث الرمز",

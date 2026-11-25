@@ -126,6 +126,11 @@ export type ConnectReportPage = {
   channelId: string | null;
   /** true when the page was already connected to this workspace (token refreshed, no duplicate — FL-05 F-6) */
   reconnected: boolean;
+  /**
+   * client 25/11 (« la 3ème page ne se connecte pas »): with `PAGE_ALREADY_CONNECTED_ELSEWHERE`, the name of the shop that holds
+   * the page — only when the person connecting is a member of that shop too (never the name of someone else's shop).
+   */
+  otherWorkspaceName?: string | null;
 };
 export type ConnectReport = {
   id: string;

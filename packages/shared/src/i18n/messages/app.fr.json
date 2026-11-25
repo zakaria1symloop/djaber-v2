@@ -2311,6 +2311,7 @@
  "channels.report.found": "{count, plural, =0 {Aucune page trouvée} one {# page trouvée} other {# pages trouvées}} sur le compte Meta",
  "channels.report.note.connected": "webhooks abonnés",
  "channels.report.note.ignored": "page ignorée",
+ "channels.report.note.elsewhereOwn": "Page déjà connectée à votre boutique « {shop} ». Ouvrez cette boutique, déconnectez-y la page, puis reconnectez-la ici.",
  "channels.report.note.limit": "pages ({current}/{limit}) · passez au plan supérieur",
  "channels.report.note.pending": "activée automatiquement après approbation",
  "channels.report.note.reconnected": "déjà connectée · jeton mis à jour",
