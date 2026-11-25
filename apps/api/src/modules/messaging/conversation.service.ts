@@ -59,6 +59,15 @@ export const AI_ERROR_RETRY_AFTER_MS = 2 * 60_000;
 /** Retest 12/11: a thread the AI handed off, left unanswered by the team this long, goes back to the AI with the next customer message. */
 export const HANDOFF_IDLE_RESUME_MS = 30 * 60_000;
 /**
+ * Client (Boutique de Lalla) 25/11: « agent actif, page connectée, mais il ne répond pas » — the AI had been paused on her
+ * conversations for 9 days (a member's pause, a manual hand-off, the pause of the agent) and such a pause never ended. It now
+ * ends when the customer writes again and nobody of the team has written in that conversation for this long.
+ */
+export const MEMBER_PAUSE_IDLE_MS = 24 * 3_600_000;
+/** The moment a member's pause counts from: the latest of the pause itself, the hand-off, the team's last message, the AI's last message. */
+export const memberPauseSince = (ctx: ConversationContext, lastTeamAt: Date | null, lastAiAt: Date | null): number =>
+  Math.max(ctx.aiPausedAt ? Date.parse(ctx.aiPausedAt) || 0 : 0, ctx.handoffAt ? Date.parse(ctx.handoffAt) || 0 : 0, lastTeamAt?.getTime() ?? 0, lastAiAt?.getTime() ?? 0);
+/**
  * Handoffs the next customer message never undoes: decided by a member (`manual`, AGV-07 pause), the flood guard, the
  * credits / quota gate (the AI cannot answer until they are back) or a blocked / risky customer the shop sends to the team.
  */
@@ -314,6 +323,7 @@ export class ConversationService implements OnModuleInit {
     if (aiPaused !== c.aiPaused) {
       data.aiPaused = aiPaused;
       ctx.aiPausedById = aiPaused ? (t.userId ?? null) : null;
+      ctx.aiPausedAt = aiPaused ? new Date().toISOString() : null;
     }
     // retest 12/11 (« once confused it keeps behaving abnormally »): given back to the AI (« Reprendre l'IA »), the next
     // customer message starts afresh for the model (RESUMED note in its history, unclear streak reset)
@@ -528,6 +538,7 @@ export class ConversationService implements OnModuleInit {
         if (!fresh.aiPaused) {
           patch.aiPaused = true;
           ctx.aiPausedById = t.userId ?? null;
+          ctx.aiPausedAt = new Date().toISOString();
           changed = true;
         }
       } else if (fresh.status === 'needs_human') {
@@ -600,6 +611,34 @@ export class ConversationService implements OnModuleInit {
       const context: ConversationContext = { ...ctx, handoffAt: null, handoffReason: null, handoffRemindedAt: null, handoffMessageSentAt: null, aiPausedById: null, aiUnavailable: null, unclearStreak: 0, ...(ctx.handoffReason !== 'ai_error' ? { resumedAt: (messageAt ?? now).toISOString() } : {}) };
       const updated = await tx.conversation.update({ where: { id: c.id }, data: { status: 'active', aiPaused: false, version: { increment: 1 }, context: context as Prisma.InputJsonValue } });
       await this.outbound.addThreadEvent(tx, updated, 'ai_resumed', { reason: ctx.handoffReason });
+      await this.emitUpdated(tx, updated);
+      return true;
+    });
+  }
+
+  /**
+   * Client 25/11: gives the thread back to the AI when the pause was put by the team (a member's pause on the conversation, a
+   * manual reply, a hand-off by hand, the pause of the agent) and nobody of the team has written for `MEMBER_PAUSE_IDLE_MS`.
+   * The pauses the system decided (abuse guard, credits, quota, risky customer) and the hand-offs the AI decided keep their own
+   * rules (`resumeAfterHandoff`). Returns true when the AI may answer this message.
+   */
+  async resumeAfterIdlePause(conversationId: string, now = new Date(), messageAt?: Date): Promise<boolean> {
+    return prisma.$transaction(async (db) => {
+      const tx = db as Tx;
+      const c = await tx.conversation.findFirst({ where: { id: conversationId, deletedAt: null } });
+      if (!c) return false;
+      const ctx = contextOf(c);
+      const byTeam = c.status === 'needs_human' ? ctx.handoffReason === 'manual' : c.status === 'active' && c.aiPaused;
+      if (!byTeam) return false;
+      const [team, ai] = await Promise.all([
+        tx.message.findFirst({ where: { conversationId: c.id, author: 'human' }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+        tx.message.findFirst({ where: { conversationId: c.id, author: 'ai' }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+      ]);
+      const since = memberPauseSince(ctx, team?.createdAt ?? null, ai?.createdAt ?? null);
+      if (!since || now.getTime() - since < MEMBER_PAUSE_IDLE_MS) return false;
+      const context: ConversationContext = { ...ctx, handoffAt: null, handoffReason: null, handoffRemindedAt: null, handoffMessageSentAt: null, aiPausedById: null, aiPausedAt: null, pausedWithAgent: null, aiUnavailable: null, unclearStreak: 0, resumedAt: (messageAt ?? now).toISOString() };
+      const updated = await tx.conversation.update({ where: { id: c.id }, data: { status: 'active', aiPaused: false, version: { increment: 1 }, context: context as Prisma.InputJsonValue } });
+      await this.outbound.addThreadEvent(tx, updated, 'ai_resumed', { reason: 'manual' });
       await this.emitUpdated(tx, updated);
       return true;
     });

@@ -24,6 +24,8 @@ export type ConversationContext = {
   handoffRemindedAt?: string | null;
   handoffMessageSentAt?: string | null;
   aiPausedById?: string | null;
+  /** client 25/11: when a member (or a manual reply) paused the AI on this thread — the pause ends after `MEMBER_PAUSE_IDLE_MS` without a team message */
+  aiPausedAt?: string | null;
   /** client 25/11: the thread was handed to the team by the PAUSE of this agent (`at` = that hand-off's `handoffAt`) — its resume gives it back */
   pausedWithAgent?: { id: string; at: string } | null;
   lastDirection?: 'in' | 'out';

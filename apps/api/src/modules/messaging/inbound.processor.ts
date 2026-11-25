@@ -235,6 +235,8 @@ export class InboundProcessor implements OnModuleInit {
     // A3 + retest 12/11: a thread the AI handed off (its failure, or a rule while nobody of the team answered) goes back to
     // the AI with this customer message — a greeting starts a new conversation (ConversationService.resumeAfterHandoff)
     if (!s.blocked && conv.status === 'needs_human' && (await this.conversations.resumeAfterHandoff(conv.id, message?.text ?? null, new Date(), message?.createdAt))) conv = { ...conv, status: 'active', aiPaused: false };
+    // client 25/11: a pause the team put ends by itself once nobody of the team has written for 24 h and the customer comes back
+    if (!s.blocked && (conv.status === 'needs_human' || conv.aiPaused) && (await this.conversations.resumeAfterIdlePause(conv.id, new Date(), message?.createdAt))) conv = { ...conv, status: 'active', aiPaused: false };
     if (s.blocked || conv.status === 'needs_human' || conv.aiPaused) return;
     const link = await prisma.agentChannel.findUnique({ where: { channelId: channel.id }, include: { agent: { select: { id: true, status: true, deletedAt: true, responseDelaySec: true, imageRecognition: true, voiceTranscription: true } } } });
     if (!link || link.agent.status !== 'active' || link.agent.deletedAt) return;
@@ -331,7 +333,7 @@ export class InboundProcessor implements OnModuleInit {
         data: {
           ...(newer ? { lastMessageAt: p.at, lastMessagePreview: previewOf(message) } : {}),
           ...(pause ? { aiPaused: true, version: { increment: 1 } } : {}),
-          context: { ...contextOf(conv), lastDirection: 'out', ...(pause ? { aiPausedById: null } : {}) } as Prisma.InputJsonValue,
+          context: { ...contextOf(conv), lastDirection: 'out', ...(pause ? { aiPausedById: null, aiPausedAt: p.at.toISOString() } : {}) } as Prisma.InputJsonValue,
         },
       });
       for (let index = 0; index < attachments.length; index++) {

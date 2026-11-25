@@ -233,6 +233,16 @@ describe('MSG-05 batching hook and MSG-09 unsupported media', () => {
       await job!.remove();
       await receive(app, channel, sender, { text: 'allo ?' });
       expect(await queue.getJob(jobId(`ai:${first.conversation.id}`))).toBeUndefined();
+      // client (Boutique de Lalla) 25/11: a pause the team put ends once nobody of the team has written for 24 h — paused an hour ago
+      // it holds, paused 25 hours ago the customer's next message is answered again
+      const pausedAt = (hoursAgo: number) => db.conversation.update({ where: { id: first.conversation.id }, data: { aiPaused: true, context: { aiPausedById: owner.userId, aiPausedAt: new Date(Date.now() - hoursAgo * 3_600_000).toISOString() } } });
+      await pausedAt(1);
+      await receive(app, channel, sender, { text: 'vous êtes là ?' });
+      expect(await queue.getJob(jobId(`ai:${first.conversation.id}`))).toBeUndefined();
+      await pausedAt(25);
+      await receive(app, channel, sender, { text: 'bonjour, je reviens' });
+      expect(await queue.getJob(jobId(`ai:${first.conversation.id}`))).toBeDefined();
+      expect(await db.conversation.findUniqueOrThrow({ where: { id: first.conversation.id } })).toMatchObject({ status: 'active', aiPaused: false });
       const noAgent = await asOwner(app);
       const bare = await connectedPage(noAgent, app);
       const lone = await receive(app, bare, newSender(), { text: 'Salam' });

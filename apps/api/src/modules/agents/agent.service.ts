@@ -645,7 +645,7 @@ export class AgentService implements OnModuleInit {
         const handoffAt = new Date().toISOString();
         const moved = await tx.conversation.update({
           where: { id: c.id },
-          data: { status: 'needs_human', aiPaused: true, version: { increment: 1 }, context: { ...contextOf(c), handoffAt, handoffReason: 'manual', handoffRemindedAt: null, aiPausedById: userId, pausedWithAgent: { id, at: handoffAt } } as Prisma.InputJsonValue },
+          data: { status: 'needs_human', aiPaused: true, version: { increment: 1 }, context: { ...contextOf(c), handoffAt, handoffReason: 'manual', handoffRemindedAt: null, aiPausedById: userId, aiPausedAt: handoffAt, pausedWithAgent: { id, at: handoffAt } } as Prisma.InputJsonValue },
         });
         await this.conversations.emitUpdated(tx, moved);
         // once per thread (and never twice in 24 h if the AI already sent it outside the business hours)
