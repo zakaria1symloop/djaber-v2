@@ -1,6 +1,6 @@
 // owner 23/11 (« my voice notes are not well understood »): the speech model is poor at Algerian darija. An Arabic reading (or a
 // language nobody speaks here) gets two more readings of the same audio, then the text model works out what was said.
-import { spokenHere, TranscriptionService, voiceFixLine } from './transcription.service';
+import { sameReading, spokenHere, TranscriptionService, voiceFixLine } from './transcription.service';
 
 describe('voice notes: darija is rebuilt from several readings', () => {
   it('reads the languages spoken here (names or codes); no language given is trusted', () => {
@@ -52,12 +52,41 @@ describe('voice notes: darija is rebuilt from several readings', () => {
     expect(await down.svc.transcribe(Buffer.from('x'), 'audio/mp4')).toMatchObject({ text: 'واش كاين', language: 'ar' });
   });
 
-  it('French / English speech is kept as heard: one call, no repair', async () => {
-    for (const language of ['French', 'en']) {
-      const { svc, heard, gateway } = service({ text: 'bonjour, vous avez des robes ?', language });
-      expect((await svc.transcribe(Buffer.from('x'), 'audio/mp4')).text).toBe('bonjour, vous avez des robes ?');
-      expect(heard).toHaveLength(1);
-      expect(gateway.generate).not.toHaveBeenCalled();
-    }
+  it('English speech is kept as heard: one call, no repair', async () => {
+    const { svc, heard, gateway } = service({ text: 'hello, do you have dresses?', language: 'en' });
+    expect((await svc.transcribe(Buffer.from('x'), 'audio/mp4')).text).toBe('hello, do you have dresses?');
+    expect(heard).toHaveLength(1);
+    expect(gateway.generate).not.toHaveBeenCalled();
+  });
+
+  // Houssem live 25/11 UX-097: 6 of 9 voice notes wrong — darija mixed with French heard as « French »
+  it('plain French: the reading with the darija hint says the same words ⇒ kept as heard, no repair', async () => {
+    const { svc, heard, gateway } = service({ text: 'Bonjour, vous avez des robes ?', language: 'French' }, { darija: 'بونجور فو زافي دي روب', french: 'bonjour vous avez des robes' });
+    expect(await svc.transcribe(Buffer.from('x'), 'audio/mp4')).toMatchObject({ text: 'Bonjour, vous avez des robes ?', language: 'French' });
+    expect(heard).toHaveLength(3);
+    expect(gateway.generate).not.toHaveBeenCalled();
+  });
+
+  it('darija heard as French: the readings disagree ⇒ rebuilt with the shop\'s product names', async () => {
+    const { svc, gateway } = service({ text: 'Brice, commande 1, Satan, dresse rouge.', language: 'French' }, { darija: 'بغيت نكوموندي واحد ساتان دراس روج', french: 'bghit ncommandi wa7ed satin dress rouge', fix: 'بغيت نكوموندي واحد Satin dress rouge' });
+    const r = await svc.transcribe(Buffer.from('x'), 'audio/mp4', { productNames: ['Satin dress', 'Recette Sac en cuir'] });
+    expect(r).toMatchObject({ text: 'بغيت نكوموندي واحد Satin dress rouge', language: 'ar' });
+    const sent = String((gateway.generate.mock.calls[0] as unknown as [{ messages: { content: string }[] }])[0].messages[0]!.content);
+    expect(sent).toContain('Brice, commande 1');
+    expect(sent).toContain('Satin dress');
+    // the repair unavailable: the note stays as heard
+    const down = service({ text: 'Les raisons, oran, oran.', language: 'fr' }, { darija: 'ليفريزون لوهران', french: 'livraison l Oran', fix: new Error('down') });
+    expect(await down.svc.transcribe(Buffer.from('x'), 'audio/mp4')).toMatchObject({ text: 'Les raisons, oran, oran.', language: 'fr' });
+    // rebuilt as a French sentence: the note is French
+    const fr = service({ text: 'Les raisons, oran, oran.', language: 'fr' }, { darija: 'ليفريزون لوهران', french: 'livraison a Oran', fix: 'livraison à Oran ?' });
+    expect(await fr.svc.transcribe(Buffer.from('x'), 'audio/mp4')).toMatchObject({ text: 'livraison à Oran ?', language: 'fr' });
+  });
+
+  it('sameReading: same words whatever the case, the accents and the punctuation', () => {
+    expect(sameReading('Bonjour, vous avez des robes ?', 'bonjour vous avez des robes')).toBe(true);
+    expect(sameReading('Combien coûte la livraison à Oran ?', 'combien coute la livraison a oran')).toBe(true);
+    expect(sameReading('Les raisons, oran, oran.', 'livraison l Oran')).toBe(false);
+    expect(sameReading('Brice, commande 1, Satan, dresse rouge.', 'bghit ncommandi wa7ed satin dress rouge')).toBe(false);
+    expect(sameReading('', 'x')).toBe(false);
   });
 });
