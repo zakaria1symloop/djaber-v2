@@ -40,6 +40,8 @@ export type ToolRunContext = {
   customerHistory?: string;
   /** full-test 15/11 proposal 9: an order is being taken (the customer chose a product, `context.chosen`) */
   ordering?: boolean;
+  /** client list L51 (live 25/11): the products of the order being taken (`context.chosen`), then the ones last shown to the customer — most recent first */
+  takenIds?: string[];
   /** journey retest R4-1: the server reasons the earlier tool results of this turn established (handoff-judge `establishedReasons`) */
   established?: string[];
   /** Houssem live 23/11: the AI's last message was the server recap (its request to answer yes) — else a recap that waits is shown again */

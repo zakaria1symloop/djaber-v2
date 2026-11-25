@@ -281,6 +281,8 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       // journey retest R1-1: a failed turn has no `chosen` — it no longer erases the product chosen before it
       const previousRun = await prisma.aiRun.findFirst({ where: { agentId: agent.id, batchKey: d.sessionId, id: { not: run.id }, status: { notIn: ['running', 'error'] } }, orderBy: { startedAt: 'desc' }, select: { meta: true } });
       const chosen = ((previousRun?.meta as { chosen?: ChosenItem[] | null } | null)?.chosen ?? null) as ChosenItem[] | null;
+      // L51: the products of the cards of the previous turn (the live path keeps them in the conversation context, `lastProductIds`)
+      const shownBefore = ((previousRun?.meta as { shown?: string[] } | null)?.shown ?? []).filter((x): x is string => typeof x === 'string');
       // journey 16/11 J03-13: as live (reply.processor `oncePer24h`), the out-of-hours text once per session per 24 h
       const oohBefore = (previousRun?.meta as { outOfHoursAt?: string } | null)?.outOfHoursAt ?? null;
       const turnCtx = await this.context.load(agent, { text: said, lastProductIds: matched, lang, chosen });
@@ -295,7 +297,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         prompt,
         // retest 12/11: the same handoff check as the live replies (handoff-judge)
         // journey retest R1-5: an order is being taken once a product is chosen or a recap was shown
-        toolCtx: { workspaceId: agent.workspaceId, agent, conversationId: null, clientId: null, channelId: null, runId: run.id, dryRun: true, customerText: said, orderHistory, customerHistory: [...messages.filter((m) => m.role === 'user').map((m) => m.text), said].join('\n'), ordering: !!chosen?.length || !!latestRecap(orderHistory) },
+        toolCtx: { workspaceId: agent.workspaceId, agent, conversationId: null, clientId: null, channelId: null, runId: run.id, dryRun: true, customerText: said, orderHistory, customerHistory: [...messages.filter((m) => m.role === 'user').map((m) => m.text), said].join('\n'), ordering: !!chosen?.length || !!latestRecap(orderHistory), takenIds: [...(chosen ?? []).map((c) => c.productId), ...matched, ...shownBefore] },
         temperature: turnCtx.temperature,
         maxTokens: turnCtx.maxTokens,
         deadline: Date.now() + RUN_BUDGET_MS,
@@ -351,7 +353,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
         promptSections: prompt.sections.map((s) => ({ key: s.key, chars: s.text.length })),
         systemMessages,
       };
-      const meta: RunMeta & { chosen?: ChosenItem[] | null; outOfHoursAt?: string } = { ...(oohNow ? { outOfHoursAt: new Date().toISOString() } : oohBefore ? { outOfHoursAt: oohBefore } : {}), language: dto.language, cardsSent: cards.length, handoff, chosen: nextChosen(chosen, out.cart, placedThisTurn(result.tools.map((t) => ({ name: canonicalTool(t.name), result: t.result })))), turn: { messages, reply, status, statusDetail: dto.statusDetail, cards: cards.map((c) => c.productId), toolCalls: dto.toolCalls.map((t) => ({ name: t.name, args: t.args })) }, ...(result.guard ? { guard: result.guard } : {}) };
+      const meta: RunMeta & { chosen?: ChosenItem[] | null; outOfHoursAt?: string; shown?: string[] } = { ...(oohNow ? { outOfHoursAt: new Date().toISOString() } : oohBefore ? { outOfHoursAt: oohBefore } : {}), language: dto.language, cardsSent: cards.length, shown: cards.length ? cards.map((c) => c.productId) : shownBefore, handoff, chosen: nextChosen(chosen, out.cart, placedThisTurn(result.tools.map((t) => ({ name: canonicalTool(t.name), result: t.result })))), turn: { messages, reply, status, statusDetail: dto.statusDetail, cards: cards.map((c) => c.productId), toolCalls: dto.toolCalls.map((t) => ({ name: t.name, args: t.args })) }, ...(result.guard ? { guard: result.guard } : {}) };
       await this.runs.finish(run.id, { status: status === 'OK' ? 'ok' : status === 'UNCLEAR' ? 'unclear' : status === 'UNKNOWN' ? 'unknown' : 'handoff', turn: result, intent: dto.intent, confidence: out.confidence, startedAt: run.startedAt, meta, flags: guardFlags(result.guard) });
       return dto;
     } catch (e) {

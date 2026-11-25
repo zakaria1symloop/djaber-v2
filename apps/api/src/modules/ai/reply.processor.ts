@@ -312,7 +312,7 @@ export class ReplyProcessor implements OnModuleInit {
       runId: run.id,
       prompt,
       // retest 12/11: a handoff is checked against the customer's words of this batch (handoff-judge)
-      toolCtx: { workspaceId: conv.workspaceId, agent, conversationId: conv.id, clientId: conv.clientId, channelId: conv.channelId, runId: run.id, dryRun: false, customerText: batch.plain, unclearStreak: ctx.unclearStreak ?? 0, orderHistory, customerHistory, ordering: !!ctx.chosen?.length || !!latestRecap(orderHistory) },
+      toolCtx: { workspaceId: conv.workspaceId, agent, conversationId: conv.id, clientId: conv.clientId, channelId: conv.channelId, runId: run.id, dryRun: false, customerText: batch.plain, unclearStreak: ctx.unclearStreak ?? 0, orderHistory, customerHistory, ordering: !!ctx.chosen?.length || !!latestRecap(orderHistory), takenIds: [...(ctx.chosen ?? []).map((c) => c.productId), ...matchedIds, ...(ctx.lastProductIds ?? [])] },
       temperature: turnCtx.temperature,
       maxTokens: turnCtx.maxTokens,
       deadline,

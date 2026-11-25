@@ -74,10 +74,16 @@ export const GREETING_ONLY_NOTE =
 export const SERVICE_ORDER_NOTE =
   'SERVICE ORDER: the product the customer takes is a service — it is not delivered. Its order needs only their name and phone: never ask a wilaya, a commune, an address or a delivery mode, never give a delivery fee or delay. Once the name and the phone are known, call create_order with them and the item (no wilayaId): the platform sends the recap.';
 /** UX-082: the product the customer takes (the latest CATALOGUE product their messages name) is a service (no stock tracking). */
-export const takesService = (history: string, catalogue: readonly CataloguePrice[], stock: readonly CatalogueStock[] | undefined): boolean => {
+export const takesService = (history: string, catalogue: readonly CataloguePrice[], stock: readonly CatalogueStock[] | undefined, takenIds: readonly string[] = []): boolean => {
+  const service = (id: string | undefined) => !!id && stock?.find((x) => x.id === id)?.stock === null;
   const name = takenName(history, catalogue);
-  const id = name ? catalogue.find((p) => p.name === name)?.id : undefined;
-  return !!id && stock?.find((x) => x.id === id)?.stock === null;
+  if (name) return service(catalogue.find((p) => p.name === name)?.id);
+  // client list L51, live 25/11: « je veux votre service de création de site web » names no product of the CATALOGUE — after the name and
+  // the phone the agent asked « Dans quelle wilaya êtes-vous ? ». The product chosen earlier (or the last one shown) decides; a shop
+  // that sells only services never delivers
+  const taken = takenIds.find((id) => catalogue.some((p) => p.id === id));
+  if (taken) return service(taken);
+  return catalogue.length > 0 && catalogue.every((p) => service(p.id));
 };
 export const NO_PLACE_NOTE =
   'NO WILAYA YET: the customer has not named their wilaya (nor a commune or an address) in this conversation, so create_order is not available in this turn. Answer the customer and ask the next missing order field (the wilaya once the product, the name and the phone are known) — never a recap, never a default wilaya.';
@@ -888,7 +894,7 @@ export class AiRunService implements OnModuleInit {
     // customer's messages (and no recap yet) the model is told to ask for the address rather than call it (F1b: « Sétif, El
     // Eulma » ⇒ `create_order` without an address, refused)
     // UX-082: an order of a service has no delivery — nothing about an address or a wilaya is withheld or asked for it
-    const serviceTaken = takesService(req.toolCtx.customerHistory ?? req.toolCtx.customerText ?? '', req.guard?.cataloguePrices ?? [], req.guard?.catalogueStock);
+    const serviceTaken = takesService(req.toolCtx.customerHistory ?? req.toolCtx.customerText ?? '', req.guard?.cataloguePrices ?? [], req.guard?.catalogueStock, req.toolCtx.takenIds);
     const noAddress = !noPhone && !serviceTaken && noAddressYet(req.toolCtx);
     // journey retest R7-4: and with no wilaya either (none named, no commune of one, none known of the customer) it is not
     // offered at all — such a call can only be refused (F1b T1 `wilayaId 1`)
