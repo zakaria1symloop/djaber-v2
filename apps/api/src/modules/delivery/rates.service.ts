@@ -40,6 +40,14 @@ export const expandCourierRates = (rates: Rate[]): Rate[] => {
   return [...rates, ...extra];
 };
 
+/**
+ * Live ZR price list 25/11: Illizi, Tindouf, Bordj Badji Mokhtar and Djanet come back « home 0 DA, pickup 10 DA » — the
+ * courier's way of writing a wilaya it does not serve. A price of 0 is not a price, and a row whose home price is 0 is not
+ * served at all: copied as it is, it would have made the delivery free in the merchant's grid.
+ */
+export const realRate = <T extends { home: number | null; stopdesk: number | null }>(r: T): T =>
+  r.home === 0 ? { ...r, home: null, stopdesk: null } : { ...r, home: r.home !== null && r.home > 0 ? r.home : null, stopdesk: r.stopdesk !== null && r.stopdesk > 0 ? r.stopdesk : null };
+
 @Injectable()
 export class RatesService implements OnModuleInit {
   constructor(
@@ -121,7 +129,10 @@ export class RatesService implements OnModuleInit {
     return {
       courierAccountId: a.id,
       provider: a.provider,
-      rates: rows.map((r) => ({ wilayaId: r.wilayaId, homePrice: r.homePrice, stopdeskPrice: r.stopdeskPrice, price: q.stopdesk ? r.stopdeskPrice : r.homePrice, fetchedAt: r.fetchedAt.toISOString() })),
+      rates: rows.map((r) => {
+        const real = realRate({ home: r.homePrice, stopdesk: r.stopdeskPrice });
+        return { wilayaId: r.wilayaId, homePrice: real.home, stopdeskPrice: real.stopdesk, price: q.stopdesk ? real.stopdesk : real.home, fetchedAt: r.fetchedAt.toISOString() };
+      }),
       fetchedAt: fetchedAt?.toISOString() ?? null,
       stale,
       refreshing: stale && !failed,
@@ -156,7 +167,7 @@ export class RatesService implements OnModuleInit {
         if (isCourierError(e) && e.kind !== 'unavailable') return;
         throw e;
       }
-      rates = expandCourierRates(rates);
+      rates = expandCourierRates(rates.map(realRate));
       if (!rates.length) {
         // the courier answered with no price at all: nothing to wait for either
         await this.redis.client.set(failedKey(a.id), 'empty', 'EX', FAILED_TTL_S);
@@ -188,7 +199,8 @@ export class RatesService implements OnModuleInit {
       prisma.deliveryFeeRule.findMany({ where: { wilayaId: { in: wanted } } }),
       prisma.wilaya.findMany({ where: { id: { in: wanted } }, select: { id: true, nameFr: true } }),
     ]);
-    const rate = new Map(cache.map((c) => [c.wilayaId, c]));
+    // rows cached before the rule above may still hold a 0
+    const rate = new Map(cache.map((c) => [c.wilayaId, { ...c, ...(({ home, stopdesk }) => ({ homePrice: home, stopdeskPrice: stopdesk }))(realRate({ home: c.homePrice, stopdesk: c.stopdeskPrice })) }]));
     const rule = new Map(rules.map((r) => [r.wilayaId, r]));
     const names = new Map(wilayas.map((w) => [w.id, w.nameFr]));
     const rows: CopyFeesDiffView['rows'] = [];
