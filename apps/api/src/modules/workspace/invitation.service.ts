@@ -65,7 +65,7 @@ export class InvitationService {
 
   /** `GET /workspace/invitations` — pending invitations (expired ones stay listed so they can be resent or revoked). */
   async list() {
-    const rows = await prisma.invitation.findMany({ where: { acceptedAt: null }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
+    const rows = await prisma.invitation.findMany({ where: { acceptedAt: null, revokedAt: null }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
     return rows.map(toInvitationDto);
   }
 
@@ -77,7 +77,7 @@ export class InvitationService {
     const inv = await prisma.$transaction(async (tx) => {
       const [existingMember, pending, members, workspace, inviter] = await Promise.all([
         tx.membership.findFirst({ where: { user: { email: input.email } } }),
-        tx.invitation.findFirst({ where: { email: input.email, acceptedAt: null } }),
+        tx.invitation.findFirst({ where: { email: input.email, acceptedAt: null, revokedAt: null } }),
         tx.membership.count(),
         tx.workspace.findUniqueOrThrow({ where: { id: t.workspaceId } }),
         tx.user.findUniqueOrThrow({ where: { id: t.userId! } }),
@@ -87,7 +87,7 @@ export class InvitationService {
       if (pending) await tx.invitation.delete({ where: { id: pending.id } });
       const max = t.limits.maxMembers;
       if (max !== -1) {
-        const open = await tx.invitation.count({ where: { acceptedAt: null, expiresAt: { gt: now } } });
+        const open = await tx.invitation.count({ where: { acceptedAt: null, revokedAt: null, expiresAt: { gt: now } } });
         if (members + open >= max) throw new AppException('PLAN_LIMIT', { resource: 'members', limit: max, current: members + open });
       }
       const row = await tx.invitation.create({
@@ -128,7 +128,7 @@ export class InvitationService {
   }
 
   private async pendingById(tx: Tx, id: string) {
-    const inv = await tx.invitation.findFirst({ where: { id, acceptedAt: null } });
+    const inv = await tx.invitation.findFirst({ where: { id, acceptedAt: null, revokedAt: null } });
     if (!inv) throw notFound();
     return inv;
   }
@@ -173,7 +173,8 @@ export class InvitationService {
     const t = TenantContext.get();
     const inv = await prisma.$transaction(async (tx) => {
       const current = await this.pendingById(tx, id);
-      await tx.invitation.delete({ where: { id } });
+      // UX-103 (tester 25/11): the revoked link read « Invitation invalide » because the row was gone — it is kept, marked revoked
+      await tx.invitation.update({ where: { id }, data: { revokedAt: new Date() } });
       return current;
     });
     await this.audit.write({
@@ -202,6 +203,7 @@ export class InvitationService {
     // Houssem live 24/11 (B2): the link of an invitation already accepted read « expirée (7 jours) ou révoquée » — the same code, with
     // the reason in `details` so the page can say « déjà acceptée : connectez-vous »
     if (inv.acceptedAt) throw new AppException('INVITATION_EXPIRED', {}, {}, { reason: 'accepted' });
+    if (inv.revokedAt) throw new AppException('INVITATION_EXPIRED', {}, {}, { reason: 'revoked' });
     if (inv.expiresAt <= new Date()) throw new AppException('INVITATION_EXPIRED');
     return inv;
   }

@@ -1704,6 +1704,8 @@
  "auth.invitation.expired.description": "انتهت صلاحية هذه الدعوة (7 أيام) أو أُلغيت. اطلب دعوة جديدة.",
  "auth.invitation.expired.title": "انتهت صلاحية الدعوة",
  "auth.invitation.loading": "دعوة",
+ "auth.invitation.revoked.description": "ألغى المتجر هذه الدعوة. اطلب دعوة جديدة من الشخص الذي دعاك.",
+ "auth.invitation.revoked.title": "تم إلغاء الدعوة",
  "auth.invitation.loginWith": "تسجيل الدخول بـ {email}",
  "auth.invitation.mismatch.description": "هذه الدعوة موجهة إلى {email}. أنت متصل بـ {current}: سجّل الخروج ثم استخدم {email}.",
  "auth.invitation.mismatch.title": "الدعوة موجهة إلى بريد آخر",

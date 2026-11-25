@@ -1704,6 +1704,8 @@
  "auth.invitation.expired.description": "This invitation has expired (7 days) or was revoked. Ask for a new invitation.",
  "auth.invitation.expired.title": "Invitation expired",
  "auth.invitation.loading": "Invitation",
+ "auth.invitation.revoked.description": "The shop cancelled this invitation. Ask the person who invited you for a new one.",
+ "auth.invitation.revoked.title": "Invitation cancelled",
  "auth.invitation.loginWith": "Sign in with {email}",
  "auth.invitation.mismatch.description": "This invitation is for {email}. You are signed in as {current}: sign out, then use {email}.",
  "auth.invitation.mismatch.title": "Invitation for another email",

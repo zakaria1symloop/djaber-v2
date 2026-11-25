@@ -66,6 +66,8 @@
 "auth.invitation.mismatch.description",
 "auth.invitation.mismatch.title",
 "auth.invitation.noWorkspace",
+"auth.invitation.revoked.description",
+"auth.invitation.revoked.title",
 "auth.invitation.role.admin",
 "auth.invitation.role.operator",
 "auth.invitation.role.owner",

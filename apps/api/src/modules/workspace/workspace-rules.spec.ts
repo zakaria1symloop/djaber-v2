@@ -55,7 +55,7 @@ describe('workspace defaults', () => {
 
   it('invitation: resend is available 60 s after the last send', () => {
     const sent = new Date('2026-10-11T10:00:00.000Z');
-    const dto = toInvitationDto({ id: 'i', workspaceId: 'w', email: 'a@b.dz', role: 'operator', tokenHash: 'h', invitedById: 'u', expiresAt: new Date('2026-10-18T10:00:00.000Z'), acceptedAt: null, lastSentAt: sent, createdAt: sent });
+    const dto = toInvitationDto({ id: 'i', workspaceId: 'w', email: 'a@b.dz', role: 'operator', tokenHash: 'h', invitedById: 'u', expiresAt: new Date('2026-10-18T10:00:00.000Z'), acceptedAt: null, revokedAt: null, lastSentAt: sent, createdAt: sent });
     expect(dto).toEqual({ id: 'i', email: 'a@b.dz', role: 'operator', sentAt: '2026-10-11T10:00:00.000Z', expiresAt: '2026-10-18T10:00:00.000Z', resendAvailableAt: '2026-10-11T10:01:00.000Z' });
     expect(JSON.stringify(dto)).not.toContain('tokenHash');
   });

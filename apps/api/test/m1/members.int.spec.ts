@@ -179,7 +179,11 @@ describe('invitations', () => {
 
     await owner.delete(`/workspace/invitations/${inv.id}`).expect(204);
     await owner.delete(`/workspace/invitations/${inv.id}`).expect(404);
-    await anonymous(app).get(`/invitations/${fresh}`).expect(404);
+    // UX-103: the revoked link says « revoked » (410), not « unknown link » (404); it is out of the list and can be invited again
+    expect((await anonymous(app).get(`/invitations/${fresh}`).expect(410)).body.error).toMatchObject({ code: 'INVITATION_EXPIRED', details: { reason: 'revoked' } });
+    expect((await owner.get('/workspace/invitations').expect(200)).body.data.some((i: any) => i.id === inv.id)).toBe(false);
+    await owner.post(`/workspace/invitations/${inv.id}/resend`).expect(404);
+    await owner.post('/workspace/invitations', { email: inv.email, role: 'operator' }).expect(201);
     for (const action of ['invitation.resend', 'invitation.revoke']) {
       expect(await eventually(() => db.auditLog.findFirst({ where: { workspaceId: owner.workspaceId, action, entityId: inv.id } }))).toBeTruthy();
     }

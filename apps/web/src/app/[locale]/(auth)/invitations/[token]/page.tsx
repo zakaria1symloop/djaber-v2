@@ -93,11 +93,14 @@ export default function InvitationPage() {
     const invalid = e instanceof ApiError && e.status === 404;
     const expired = invalid || (e instanceof ApiError && (e.code === 'INVITATION_EXPIRED' || e.status === 410));
     // an invitation already accepted (its link opened again) is not « expired »: the member signs in
-    const accepted = !invalid && e instanceof ApiError && (e.body.details as { reason?: string } | null)?.reason === 'accepted';
+    const reason = !invalid && e instanceof ApiError ? (e.body.details as { reason?: string } | null)?.reason : undefined;
+    const accepted = reason === 'accepted';
+    // UX-103: revoked by the shop — said as such
+    const revoked = reason === 'revoked';
     return (
       <AuthCard
-        title={invalid ? t('auth.invitation.invalid.title') : accepted ? t('auth.invitation.accepted.title') : expired ? t('auth.invitation.expired.title') : t('state.list.error.title')}
-        description={invalid ? t('auth.invitation.invalid.description') : accepted ? t('auth.invitation.accepted.description') : expired ? t('auth.invitation.expired.description') : errorMessage(e, t)}
+        title={invalid ? t('auth.invitation.invalid.title') : accepted ? t('auth.invitation.accepted.title') : revoked ? t('auth.invitation.revoked.title') : expired ? t('auth.invitation.expired.title') : t('state.list.error.title')}
+        description={invalid ? t('auth.invitation.invalid.description') : accepted ? t('auth.invitation.accepted.description') : revoked ? t('auth.invitation.revoked.description') : expired ? t('auth.invitation.expired.description') : errorMessage(e, t)}
         footer={<AuthLink href={status === 'authenticated' ? '/home' : '/login'}>{status === 'authenticated' ? t('action.backHome') : t('auth.backToLogin')}</AuthLink>}
       >
         {expired ? null : <Button onClick={() => inv.refetch()}>{t('action.retry')}</Button>}
