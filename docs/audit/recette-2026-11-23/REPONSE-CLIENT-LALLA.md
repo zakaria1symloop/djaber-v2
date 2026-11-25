@@ -15,7 +15,7 @@ Le 24/11, notre testeur a repris une par une, sur la version en ligne, toutes le
 | 21 | « Remplir avec l’IA » : à la limite de 3 analyses par jour, le message le dit clairement, sans code technique, et propose la saisie à la main. |
 | 26 | Chat de test : « ما هي المنتجات المتوفرة من فضلك » reçoit une réponse en arabe avec les produits. |
 | 44 | La variante commandée est écrite sous le produit, dans le détail et dans la liste des commandes. |
-| 51 | Commande d’un service : ni wilaya ni adresse demandées ; la commande se confirme sans adresse, la fiche dit « Service — sans livraison » et propose « Marquer terminée ». |
+| 51 | Commande d’un service : l’agent demande seulement le nom et le téléphone — ni quantité, ni wilaya, ni adresse ; la commande se confirme sans adresse, la fiche dit « Service — sans livraison » et propose « Marquer terminée ». Revérifié le 25/11, y compris quand le client ne cite pas le nom exact du service. |
 | 55 / 93 | « Quels produits vous avez ? » : tous les produits commandables sont cités avec leur prix. |
 | 56 | Photo envoyée par le client : les photos n° 3 et n° 4 d’un produit sont reconnues (corrigé le 24/11). |
 | 57 | Le texte du mode simple ne dit plus qu’il n’y a pas de variantes. |
