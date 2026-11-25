@@ -589,6 +589,14 @@ export class ClientService implements OnModuleInit {
     const rows = await prisma.client.findMany({ where, orderBy: this.orderBy(q.sort), take: 50_000 });
     const h = HEADERS[locale] ?? HEADERS.fr;
     type R = (typeof rows)[number];
+    // Houssem live 25/11 UX-094: the list shows BLOQUÉ / RISQUE / FIABLE on each client and the export had no such column — the
+    // same pill as the list (`clientPillOf`), written in words; « à compléter » and « nouveau » are not a risk and stay empty
+    const delivered = new Map((await prisma.order.groupBy({ by: ['clientId'], where: { status: 'delivered' }, _count: { _all: true } })).map((d) => [d.clientId, d._count._all]));
+    const RISK_LABEL = { blocked: ['enum.Client', 'blocked'], risk: ['enum.Client.riskLevel', 'high'], reliable: ['enum.Client.riskLevel', 'normal'] } as const;
+    const riskCell = (r: R): string => {
+      const pill = this.pill(r, index.has({ clientId: r.id, channelId: '', externalSenderId: '' }, r.phone), delivered.get(r.id) ?? 0);
+      return pill === 'blocked' || pill === 'risk' || pill === 'reliable' ? exportLabel(locale, RISK_LABEL[pill][0], RISK_LABEL[pill][1]) : '';
+    };
     return {
       sheetName: h.sheet,
       fileName: `clients-${algiersDay()}`,
@@ -601,6 +609,7 @@ export class ClientService implements OnModuleInit {
         { header: h.orders, value: (r: R) => r.orderCount },
         { header: h.spent, value: (r: R) => r.totalSpent },
         { header: h.lastOrder, value: (r: R) => exportDateTime(r.lastOrderAt) },
+        { header: h.risk, value: riskCell },
         { header: h.tags, value: (r: R) => r.tags.join(', ') },
       ],
     };
@@ -608,7 +617,7 @@ export class ClientService implements OnModuleInit {
 }
 
 const HEADERS = {
-  fr: { sheet: 'Clients', name: 'Nom', phone: 'Téléphone', email: 'E-mail', source: 'Source', orders: 'Commandes + ventes', spent: 'Dépensé (DA)', lastOrder: 'Dernière commande', tags: 'Étiquettes' },
-  en: { sheet: 'Clients', name: 'Name', phone: 'Phone', email: 'E-mail', source: 'Source', orders: 'Orders + sales', spent: 'Spent (DA)', lastOrder: 'Last order', tags: 'Tags' },
-  ar: { sheet: 'العملاء', name: 'الاسم', phone: 'الهاتف', email: 'البريد الإلكتروني', source: 'المصدر', orders: 'الطلبات + المبيعات', spent: 'المصروف (DA)', lastOrder: 'آخر طلب', tags: 'الوسوم' },
+  fr: { sheet: 'Clients', name: 'Nom', phone: 'Téléphone', email: 'E-mail', source: 'Source', orders: 'Commandes + ventes', spent: 'Dépensé (DA)', lastOrder: 'Dernière commande', risk: 'Risque', tags: 'Étiquettes' },
+  en: { sheet: 'Clients', name: 'Name', phone: 'Phone', email: 'E-mail', source: 'Source', orders: 'Orders + sales', spent: 'Spent (DA)', lastOrder: 'Last order', risk: 'Risk', tags: 'Tags' },
+  ar: { sheet: 'العملاء', name: 'الاسم', phone: 'الهاتف', email: 'البريد الإلكتروني', source: 'المصدر', orders: 'الطلبات + المبيعات', spent: 'المصروف (DA)', lastOrder: 'آخر طلب', risk: 'الخطر', tags: 'الوسوم' },
 } as const;

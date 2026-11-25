@@ -651,3 +651,12 @@ These rules are in force on the live version (branch `deploy/tester-fixes-2026-1
 |---|---|
 | UX-091 | The page area of the shell (`<main>`, the scrolling element) is the containing block of its children (`position: relative`): the screen-reader texts of a long table never make the window taller than the screen. |
 | L02 | Small labels of the tables and of the order detail are 10–11 px (not 8–9 px grey). |
+
+## 25/11/2026 — additions (tester day 3)
+
+| Ref | Rule |
+|---|---|
+| L51 | The order of a service asks the name and the phone only — no quantity, wilaya or address — also when the customer does not name the product (« je veux votre service de création de site web »): the product named by the customer decides first, else the product chosen earlier in the conversation, else the one last shown; a shop that sells only services never delivers. |
+| L4 / L27 | The reply does not wait for Meta’s « typing » call. Each reply records where its time went in `AiRun.meta.timing` (ms since the run started: `start`, `vision`, `prompt`, `turn`, `finalize`; the model time is in `steps[].ms`). |
+| UX-094 | Clients export: column « Risque » between « Dernière commande » and « Étiquettes », with the pill of the list in words — BLOQUÉ, RISQUE, FIABLE; empty for a client that is none of them. « Étiquettes » holds the client’s own tags only. |
+| N2 | Public « Supprimer mon compte »: every request shows the same neutral sentence (« Si un compte existe pour <e-mail>, un e-mail a été envoyé… »), whether or not a link is already pending — the page never reveals that an address has an account; one e-mail per address. |

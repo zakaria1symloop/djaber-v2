@@ -1,4 +1,5 @@
 // M5 — clients (CLI-01…05, 03 §37 CLI) and the fee grid (DLV-01/02/09). AT ids from 13-acceptance-tests.md.
+import request from 'supertest';
 import { asAdmin, asOperator, asOwner } from '../support/actors';
 import { createTestApp, type TestApp } from '../support/app';
 import { drain, jobOf } from '../support/m2';
@@ -215,6 +216,24 @@ describe('clients', () => {
     const r = await owner.get('/clients/export?format=csv').expect(202);
     await drain(app, owner.workspaceId);
     expect(await jobOf(owner, r.body.data.jobId)).toMatchObject({ status: 'done', result: { kind: 'clients', rows: 1, format: 'csv' } });
+    // Houssem live 25/11 UX-094: the list shows RISQUE / FIABLE on each client and the export had no such column
+    const risky = (await owner.post('/clients', { name: 'Export Risque', phone: phone() }).expect(201)).body.data;
+    await owner.post(`/clients/${risky.id}/risk`, { riskLevel: 'high' }).expect(200);
+    const again = await owner.get('/clients/export?format=csv').set('Accept-Language', 'fr').expect(202);
+    await drain(app, owner.workspaceId);
+    const url = new URL((await jobOf(owner, again.body.data.jobId)).resultUrl);
+    const file = (await request(app.http()).get(`${url.pathname}${url.search}`).buffer(true).parse((res, cb) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => cb(null, Buffer.concat(chunks)));
+    }).expect(200)).body as Buffer;
+    const { parseCsv } = await import('../../src/modules/jobs/table-file');
+    const [head, ...lines] = parseCsv(file.toString('utf8'));
+    const col = head!.indexOf('Risque');
+    expect(col).toBeGreaterThan(0);
+    const riskOf = (name: string) => lines.find((l) => l[0] === name)?.[col];
+    expect(riskOf('Export Risque')).toMatch(/risque/i);
+    expect(riskOf('Export Un')).toBe(''); // no order yet: neither risky nor reliable
   });
 });
 
