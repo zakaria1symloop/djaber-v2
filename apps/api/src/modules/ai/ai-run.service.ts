@@ -326,7 +326,11 @@ export const productPrice = (p: CataloguePrice, said: string, output: Pick<AiRep
 export const namedWhole = (text: string, name: string): boolean => {
   const n = productWords(name);
   if (!n.length) return false;
-  return ` ${productWords(text).join(' ')} `.includes(` ${n.join(' ')} `);
+  if (!` ${productWords(text).join(' ')} `.includes(` ${n.join(' ')} `)) return false;
+  // live 25/11: « Which product are you looking at? » named « product 1 » (the words of a name leave its numbers out) and the reply opened
+  // with « product 1: 2 000 DA. » — a name that carries numbers (« Pack 2 », « QA 23/11 photos ») is named only with them
+  const said = new Set(text.match(/\d+/g) ?? []);
+  return (name.match(/\d+/g) ?? []).every((d) => said.has(d));
 };
 /** Words of no weight in a product search (folded). */
 const SEARCH_FILLERS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'un', 'une', 'en', 'et', 'au', 'aux', 'pour', 'avec', 'the', 'of', 'and', 'for', 'with', 'ta3', 'el', 'al', 'dyal']);
