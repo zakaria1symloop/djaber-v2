@@ -35,7 +35,7 @@ import { CatalogueService } from './catalogue.service';
 import { InsightService } from './insight.service';
 import { systemLang, turnLanguage, type AiLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
-import { guardFactsOf } from './reply-guard';
+import { FIELD_QUESTIONS, guardFactsOf, SAFE_SENTENCES } from './reply-guard';
 import { handoffSystemLineShown } from './reply-fixes';
 import { AiProviderError } from './provider/ai.gateway';
 import { canonicalTool } from './tools/tool-registry';
@@ -59,6 +59,25 @@ const mediaPending = (b: Batch) => b.messages.some((m) => attachmentsOf(m).some(
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const CARD_NAMES = (m: Message) => ((m.payload as { cards?: { name: string }[] } | null)?.cards ?? []).map((c) => c.name).join(', ');
+
+/**
+ * Houssem live 25/11 UX-098 (voice note « بغيت نكوموندي واحد satin dress روج »: `create_order {}` refused for its missing fields, then an
+ * empty reply — the customer got no answer). What is sent instead of silence: the question for the first order field the refused
+ * create_order lacked and the conversation does not know yet, else « which product, and your wilaya? ».
+ */
+export const silentTurnText = (tools: readonly { name: string; result: unknown }[], known: ConversationContext['customer'], lang: string): string => {
+  const loc = (['fr', 'en', 'ar', 'arabizi'] as const).find((l) => l === lang) ?? 'fr';
+  const have: Record<string, string | undefined> = { clientName: known?.name, clientPhone: known?.phone, wilayaId: known?.wilaya, communeName: known?.commune, address: known?.address };
+  for (const t of [...tools].reverse()) {
+    if (t.name !== 'create_order') continue;
+    const fields = (t.result as { error?: { fields?: unknown } } | null)?.error?.fields;
+    if (!Array.isArray(fields)) continue;
+    const next = ['clientName', 'clientPhone', 'wilayaId', 'communeName', 'address'].find((f) => fields.includes(f) && !have[f]?.trim());
+    if (next) return FIELD_QUESTIONS[next]![loc];
+    break;
+  }
+  return SAFE_SENTENCES.which[loc];
+};
 
 /** A4: non-empty values of this turn over the stored ones. */
 export const mergeCustomer = (stored: ConversationContext['customer'], turn: ConversationContext['customer']): ConversationContext['customer'] => {
@@ -415,8 +434,10 @@ export class ReplyProcessor implements OnModuleInit {
       ? pendingRecap(turn.tools.map((t) => (t.name === 'create_order' && t.result && typeof t.result === 'object' ? { name: t.name, result: { ...(t.result as object), recapToShow: true } } : { name: t.name, result: t.result })))
       : null;
     if (silentRecap) this.log.warn({ runId: run.id }, 'empty reply while a recap waits: the recap is sent again');
-    else if (!blocked && !out.reply.trim() && !cards.length && out.status !== 'HANDOFF' && !turn.forcedHandoff) this.log.warn({ runId: run.id }, 'empty reply: nothing sent');
-    const replyText = blocked ? '' : silentRecap ? orderRecapText(silentRecap, o.lang) : out.reply.trim();
+    // UX-098: nor in any other case — a turn that would send nothing asks the next order field (or what the customer wants)
+    const silent = !silentRecap && !blocked && !out.reply.trim() && !cards.length && out.status !== 'HANDOFF' && !turn.forcedHandoff;
+    if (silent) this.log.warn({ runId: run.id }, 'empty reply: the next question is sent instead');
+    const replyText = blocked ? '' : silentRecap ? orderRecapText(silentRecap, o.lang) : silent ? silentTurnText(turn.tools.map((t) => ({ name: canonicalTool(t.name), result: t.result })), mergeCustomer(contextOf(conv).customer, out.customer), o.lang) : out.reply.trim();
 
     return prisma.$transaction(async (db): Promise<ReplyOutcome> => {
       const tx = db as Tx;
