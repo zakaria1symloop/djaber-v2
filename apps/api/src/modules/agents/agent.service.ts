@@ -645,7 +645,7 @@ export class AgentService implements OnModuleInit {
         const handoffAt = new Date().toISOString();
         const moved = await tx.conversation.update({
           where: { id: c.id },
-          data: { status: 'needs_human', aiPaused: true, version: { increment: 1 }, context: { ...contextOf(c), handoffAt, handoffReason: 'manual', handoffRemindedAt: null, aiPausedById: userId } as Prisma.InputJsonValue },
+          data: { status: 'needs_human', aiPaused: true, version: { increment: 1 }, context: { ...contextOf(c), handoffAt, handoffReason: 'manual', handoffRemindedAt: null, aiPausedById: userId, pausedWithAgent: { id, at: handoffAt } } as Prisma.InputJsonValue },
         });
         await this.conversations.emitUpdated(tx, moved);
         // once per thread (and never twice in 24 h if the AI already sent it outside the business hours)
@@ -666,6 +666,21 @@ export class AgentService implements OnModuleInit {
       if (a.pausedReason === 'plan') await this.assertSlot(tx, id);
       const updated = await tx.agent.update({ where: { id }, data: { status: 'active', isActive: true, pausedReason: null, modelId, version: { increment: 1 } } });
       await this.emit(tx, updated);
+      // client (Boutique de Lalla) 25/11: « agent actif, page connectée, mais il ne répond pas » — pausing an agent hands its open threads
+      // to the team, and resuming it gave none back. The threads this agent's pause handed off come back to the AI with it, unless a
+      // member answered meanwhile or the thread was handed off again since (another `handoffAt`).
+      const handed = await tx.conversation.findMany({ where: { channelId: { in: a.channels.map((c) => c.channelId) }, status: 'needs_human', deletedAt: null, context: { path: ['pausedWithAgent', 'id'], equals: id } } });
+      for (const c of handed) {
+        const ctx = contextOf(c);
+        if (!ctx.pausedWithAgent || ctx.handoffAt !== ctx.pausedWithAgent.at) continue;
+        if (await tx.message.count({ where: { conversationId: c.id, author: 'human', createdAt: { gt: new Date(ctx.pausedWithAgent.at) } } })) continue;
+        const back = await tx.conversation.update({
+          where: { id: c.id },
+          data: { status: 'active', aiPaused: false, version: { increment: 1 }, context: { ...ctx, handoffAt: null, handoffReason: null, handoffRemindedAt: null, handoffMessageSentAt: null, aiPausedById: null, pausedWithAgent: null } as Prisma.InputJsonValue },
+        });
+        await this.outbound.addThreadEvent(tx, back, 'ai_resumed', { reason: 'manual' });
+        await this.conversations.emitUpdated(tx, back);
+      }
     });
     return this.get(id, locale);
   }

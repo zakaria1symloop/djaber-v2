@@ -24,6 +24,8 @@ export type ConversationContext = {
   handoffRemindedAt?: string | null;
   handoffMessageSentAt?: string | null;
   aiPausedById?: string | null;
+  /** client 25/11: the thread was handed to the team by the PAUSE of this agent (`at` = that hand-off's `handoffAt`) — its resume gives it back */
+  pausedWithAgent?: { id: string; at: string } | null;
   lastDirection?: 'in' | 'out';
   lastSystemTextAt?: Record<string, string>;
   displayName?: string | null;

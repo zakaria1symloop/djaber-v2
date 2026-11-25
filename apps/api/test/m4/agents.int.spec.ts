@@ -213,7 +213,11 @@ describe('activation, plan limit, pause, delete', () => {
     // a paused agent does not answer
     const silent = await receive(app, p1!, newSender(), { text: 'Bonjour' });
     expect(await answer(app, owner.workspaceId, silent.conversation.id)).toBeNull();
+    // client 25/11 (« agent actif, page connectée, il ne répond pas »): the thread handed to the team by the pause comes back with the resume
+    const handed = await db.conversation.findFirstOrThrow({ where: { workspaceId: owner.workspaceId, status: 'needs_human' } });
+    expect(handed).toMatchObject({ aiPaused: true });
     expect((await owner.post(`/agents/${a.id}/resume`).expect(200)).body.data).toMatchObject({ status: 'active', pausedReason: null });
+    expect(await db.conversation.findUniqueOrThrow({ where: { id: handed.id } })).toMatchObject({ status: 'active', aiPaused: false });
 
     await owner.post(`/agents/${a.id}/faq`, { question: 'Livrez-vous à Oran ?', answer: 'Oui, en 3 jours.' }).expect(201);
     const copy = (await owner.post(`/agents/${a.id}/duplicate`).expect(201)).body.data;
