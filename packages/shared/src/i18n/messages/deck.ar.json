@@ -240,6 +240,7 @@
  "customer.unavailable": "عذرًا، المساعد غير متاح حاليًا. سيرد عليك أحد أفراد الفريق قريبًا. 🙏",
  "customer.unsupportedMedia": "لا أستطيع قراءة هذا النوع من الرسائل. أرسل نصًا أو صورة 😊",
  "customer.voiceFailed": "لم أتمكن من سماع رسالتك الصوتية، هل يمكنك كتابتها؟",
+ "customer.voiceUnclear": "لم أفهم رسالتك الصوتية جيدًا. هل يمكنك إعادتها ببطء أو كتابتها؟",
  "customer.welcome": "مرحبًا 👋 أهلًا بك في {shop}! كيف يمكنني مساعدتك؟",
  "dialog.addCourier.title": "إضافة شركة توصيل",
  "dialog.adjustStock.title": "تعديل المخزون",

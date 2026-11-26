@@ -240,6 +240,7 @@
  "customer.unavailable": "Désolé, notre assistant est momentanément indisponible. Un membre de l'équipe vous répondra bientôt. 🙏",
  "customer.unsupportedMedia": "Je ne peux pas lire ce type de message. Envoyez-moi un texte ou une photo 😊",
  "customer.voiceFailed": "Je n'ai pas réussi à écouter votre vocal, pouvez-vous l'écrire ?",
+ "customer.voiceUnclear": "Je n’ai pas bien compris votre message vocal. Pouvez-vous le redire plus lentement, ou l’écrire ?",
  "customer.welcome": "Bonjour 👋 Bienvenue chez {shop} ! Comment puis-je vous aider ?",
  "dialog.addCourier.title": "Ajouter un transporteur",
  "dialog.adjustStock.title": "Ajuster le stock",

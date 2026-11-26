@@ -7,6 +7,7 @@
  "customer.unavailable": "Sorry, our assistant is temporarily unavailable. A team member will reply soon. 🙏",
  "customer.unsupportedMedia": "I can't read this type of message. Please send text or a photo 😊",
  "customer.voiceFailed": "I couldn't hear your voice note, could you type it?",
+ "customer.voiceUnclear": "I didn’t quite understand your voice note. Could you say it again more slowly, or type it?",
  "customer.welcome": "Hello 👋 Welcome to {shop}! How can I help you?",
  "enum.Client.placeholder": "To complete"
 }

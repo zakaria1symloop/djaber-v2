@@ -29,6 +29,19 @@ describe('a voice note heard as English', () => {
     expect(prompt).toContain('Bab Ezzouar');
     expect(prompt).toContain('Places of delivery');
   });
+  // owner 26/11: « he has to tell the client "I didn't understand you", better than respond with something that doesn't meet the ask »
+  it('readings that do not agree and a repair that cannot tell ⇒ the note is not understood (no guess is kept)', async () => {
+    const s = service({ text: "Al Jai, that's the war.", language: 'english' }, { ar: 'الجيد بزور', fr: 'La j’ai, bas des ours' }, null);
+    const r = await s.svc.transcribe(AUDIO, 'audio/mp4', { conversationLanguage: 'ar' });
+    expect(r).toMatchObject({ unclear: true });
+  });
+  it('a repair that is unavailable keeps the best reading (a provider failure is not « not understood »)', async () => {
+    const s = service({ text: 'واش كاين', language: 'arabic' }, { ar: 'واش كاين عندكم', fr: 'wach kayen' }, null);
+    s.generate.mockRejectedValueOnce(new Error('provider down'));
+    const r = await s.svc.transcribe(AUDIO, 'audio/mp4', { conversationLanguage: 'ar' });
+    expect('unclear' in r && r.unclear).toBeFalsy();
+    expect(r.text).toBeTruthy();
+  });
   it('real English said twice the same way stays as heard', async () => {
     const s = service({ text: 'Do you deliver to Oran?', language: 'english' }, { ar: 'دو يو دليفر', fr: 'Do you deliver to Oran ?' }, null);
     expect((await s.svc.transcribe(AUDIO, 'audio/mp4', { conversationLanguage: 'ar' })).text).toBe('Do you deliver to Oran?');
