@@ -386,6 +386,11 @@ describe('tools', () => {
     fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args: base }] }, { reply: 'Bab Ezzouar à Alger, ou Oran ?', status: 'OK', intent: 'SALE' });
     const garbled = await turn(s, sender, { text: 'الجيد بزور' });
     expect(garbled.runs.at(-1)!.toolCalls.map((c) => c.result as any)[0]).toMatchObject({ ok: false, error: { code: 'VALIDATION', field: 'communeName', placeConflict: { wilayaId: 31, communeOfWilayaId: 16 } } });
+    // tester 09:57: the answer is the commune alone (« باب الزوار ») — it is in its own wilaya: the recap is Alger's
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args: base }] }, { reply: 'Voici le récapitulatif.', status: 'OK', intent: 'SALE' });
+    const communeOnly = await turn(s, sender, { text: 'باب الزوار' });
+    expect(communeOnly.runs.at(-1)!.toolCalls.filter((c) => c.name === 'create_order').map((c) => c.result as any)[0]).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recap: { deliveryFee: 400, wilaya: expect.stringMatching(/Alger/) } });
     // the customer names the commune's own wilaya: the order is prepared with it at once, whatever wilaya the model still sends
     await resetAi();
     fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args: base }] }, { reply: 'Voici le récapitulatif.', status: 'OK', intent: 'SALE' });

@@ -18,10 +18,10 @@ import { RoutingService } from './routing.service';
 type TranscribeJob = { workspaceId: string; messageId: string };
 export type TranscribeOutcome = 'done' | 'failed' | 'too_long' | 'noop';
 
-const DARIJA_HINT_AR = 'تسجيل صوتي بالدارجة الجزائرية مع كلمات فرنسية: واش كاين عندكم، شحال السومة، نحب نكوموندي، les produits، la livraison، الطلبية تاعي، وين راهي.';
-const DARIJA_HINT_FR = 'Message vocal en darija algérienne mélangée au français : wach kayen 3andkom, ch7al el prix, nheb ncommandi, les produits, la livraison, la commande ta3i, win rahi.';
+const DARIJA_HINT_AR = 'تسجيل صوتي بالدارجة الجزائرية مع كلمات فرنسية: واش كاين عندكم، شحال السومة، نحب نكوموندي، les produits، la livraison، الطلبية تاعي، وين راهي، التوصيل لوهران، الجزائر العاصمة، سطيف، قسنطينة، البليدة، عنابة.';
+const DARIJA_HINT_FR = 'Message vocal en darija algérienne mélangée au français : wach kayen 3andkom, ch7al el prix, nheb ncommandi, les produits, la livraison, la commande ta3i, win rahi, livraison l Oran, Alger, Sétif, Constantine, Blida, Annaba.';
 const VOICE_FIX =
-  'You repair automatic transcriptions of customer voice notes sent to an Algerian online shop. The customer speaks Algerian darija, often mixed with French. You receive several automatic readings of the SAME short voice note (speech recognition is poor at darija: it rewrites it into standard Arabic or French and mishears words — « السومة » (the price) heard as « السيارة », « produits » as « برودوي »). Work out what the customer most probably said, reading the versions phonetically and against each other, in a shop context (products, price, delivery, order, photos). Never add a request, a product, a number or a name that no reading carries. A product name of the shop is written only when a reading clearly sounds like it (same sounds, same numbers): otherwise keep the words as heard, never another name of the list. Algerian wording only (« تاع », never « ديال »). Reply with ONE line only: the message in Algerian darija written in Arabic script, French words kept in Latin letters — no comment, no explanation, no translation, no quotes. When the readings agree that the customer spoke plain French, reply with that French sentence as it is. If the readings are too different to tell what was said, reply exactly: UNCLEAR';
+  'You repair automatic transcriptions of customer voice notes sent to an Algerian online shop. The customer speaks Algerian darija, often mixed with French. You receive several automatic readings of the SAME short voice note (speech recognition is poor at darija: it rewrites it into standard Arabic or French and mishears words — « السومة » (the price) heard as « السيارة », « produits » as « برودوي »). Work out what the customer most probably said, reading the versions phonetically and against each other, in a shop context (products, price, delivery, order, photos). Never add a request, a product, a number or a name that no reading carries. A product name of the shop is written only when a reading clearly sounds like it (same sounds, same numbers): otherwise keep the words as heard, never another name of the list. Customers name the place of delivery: an Algerian wilaya or commune. Speech recognition turns these names into common words (« Oran » into « orange », « Alger » into « الجيد », « Bab Ezzouar » into « بزور »): when a reading sounds like a place of the list given with the readings, write that place, in the spelling of the list; never a place no reading sounds like. Algerian wording only (« تاع », never « ديال »). Reply with ONE line only: the message in Algerian darija written in Arabic script, French words kept in Latin letters — no comment, no explanation, no translation, no quotes. When the readings agree that the customer spoke plain French, reply with that French sentence as it is. If the readings are too different to tell what was said, reply exactly: UNCLEAR';
 /** The repaired sentence of the model's answer: its last line; nothing when it says UNCLEAR or wrote an explanation only. */
 export const voiceFixLine = (text: string | null | undefined): string | null => {
   const line = (text ?? '').split('\n').map((l) => l.trim()).filter(Boolean).pop() ?? '';
@@ -64,7 +64,7 @@ export class TranscriptionService implements OnModuleInit {
   }
 
   /** Transcribes an audio buffer through the transcription route (primary, then fallback). */
-  async transcribe(audio: Buffer, mime: string, o: { productNames?: readonly string[] } = {}) {
+  async transcribe(audio: Buffer, mime: string, o: { productNames?: readonly string[]; placeNames?: readonly string[] } = {}) {
     const r = await this.routing.call('transcription', (m, timeoutMs) => this.gateway.transcribe({ model: m.ref, audio, mime, timeoutMs }));
     const first = { ...r.value, model: r.model, usedFallback: r.usedFallback };
     // English speech is read well as it is
@@ -86,11 +86,23 @@ export class TranscriptionService implements OnModuleInit {
     const readings = [spokenHere(r.value.language) ? r.value.text.trim() : '', darija, french].filter(Boolean);
     if (readings.length < 2) return base;
     const fixed = await this.routing
-      .call('text', (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose: 'voice_fix', system: VOICE_FIX, messages: [{ role: 'user', content: [...readings.map((t, i) => `Reading ${i + 1}: ${t}`), ...(o.productNames?.length ? [`Product names of this shop the customer may be saying (keep a name as the shop writes it): ${o.productNames.slice(0, 40).join(' · ')}`] : [])].join('\n') }], maxTokens: 800, timeoutMs }))
+      .call('text', (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose: 'voice_fix', system: VOICE_FIX, messages: [{ role: 'user', content: [...readings.map((t, i) => `Reading ${i + 1}: ${t}`), ...(o.productNames?.length ? [`Product names of this shop the customer may be saying (keep a name as the shop writes it): ${o.productNames.slice(0, 40).join(' · ')}`] : []), ...(o.placeNames?.length ? [`Places of delivery the customer may be naming (wilayas, then the communes this customer used before): ${o.placeNames.slice(0, 90).join(' · ')}`] : [])].join('\n') }], maxTokens: 800, timeoutMs }))
       .then((x) => voiceFixLine(x.value.text), (e) => (this.log.warn({ err: String(e) }, 'voice note repair unavailable'), null));
     if (!fixed) return base;
     // a note heard as French and rebuilt with no Arabic letter is French
     return { ...base, text: fixed, language: heardFrench && !/[\u0600-\u06ff]/.test(fixed) ? first.language : 'ar' };
+  }
+
+  /** The 58 historical wilayas in French, then the communes this customer already gave (addresses, orders). */
+  async placeNames(clientId: string | null): Promise<string[]> {
+    const wilayas = (await prisma.wilaya.findMany({ where: { id: { lte: 58 } }, select: { nameFr: true }, orderBy: { id: 'asc' } })).map((w) => w.nameFr);
+    if (!clientId) return wilayas;
+    const [addresses, orders] = await Promise.all([
+      prisma.clientAddress.findMany({ where: { clientId }, select: { communeText: true, commune: { select: { nameFr: true } } }, take: 10 }),
+      prisma.order.findMany({ where: { clientId }, select: { communeText: true, commune: { select: { nameFr: true } } }, orderBy: { createdAt: 'desc' }, take: 10 }),
+    ]);
+    const communes = [...addresses, ...orders].map((x) => (x.communeText ?? x.commune?.nameFr ?? '').trim()).filter(Boolean);
+    return [...wilayas, ...new Set(communes)];
   }
 
   async process(d: TranscribeJob): Promise<TranscribeOutcome> {
@@ -115,7 +127,9 @@ export class TranscriptionService implements OnModuleInit {
           else {
             // Houssem live 23/11: « ch7al el prix ta3 QA 23/11 photos » came back as gibberish — the shop's product names help the repair
             const productNames = (await prisma.product.findMany({ where: { deletedAt: null, isActive: true }, select: { name: true }, orderBy: { updatedAt: 'desc' }, take: 40 })).map((p) => p.name);
-            const r = await this.transcribe(file.body, file.mime || audio.mime || 'audio/mp4', { productNames });
+            // UX-104 (tester 26/11): « Oran » heard as « orange », « Alger, Bab Ezzouar » as « الجيد بزور » — the wilayas, and the
+            // communes of this customer's earlier addresses and orders, help the repair the same way
+            const r = await this.transcribe(file.body, file.mime || audio.mime || 'audio/mp4', { productNames, placeNames: await this.placeNames(conv.clientId) });
             if ((r.durationSec ?? 0) > VOICE_MAX_SECONDS) outcome = 'too_long';
             else if (r.text.trim()) {
               transcript = r.text.trim().slice(0, 4000);

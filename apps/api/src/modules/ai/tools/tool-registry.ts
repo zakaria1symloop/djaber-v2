@@ -978,12 +978,18 @@ export class ToolRegistry {
       const other = communeOfOtherWilaya(await prisma.commune.findMany({ select: { nameFr: true, nameAr: true, wilayaId: true } }), place.id, d.communeName);
       // the pair stands only when the customer, already asked about it, names the order's wilaya again in THIS message
       // (retest 26/11: the answer came back as « الجيد بزور » and the same pair went through)
-      const confirmed = other !== null && [place.nameFr, place.nameAr].some((n) => placeWritten(ctx.customerText ?? '', n)) && (await this.placeConflictAsked(ctx, place.id, d.communeName));
+      const saysWilaya = [place.nameFr, place.nameAr].some((n) => placeWritten(ctx.customerText ?? '', n));
+      const asked = other !== null && (await this.placeConflictAsked(ctx, place.id, d.communeName));
+      const confirmed = other !== null && saysWilaya && asked;
       if (other !== null && !confirmed) {
         const its = await prisma.wilaya.findUnique({ where: { id: other }, select: { nameFr: true, nameAr: true } });
         const own = its?.nameFr ?? 'another wilaya';
         // the customer names the commune's own wilaya in this message: that is the wilaya of the order
-        const named = !!its && [its.nameFr, its.nameAr].some((n) => placeWritten(ctx.customerText ?? '', n));
+        // (tester 09:57: asked « quelle wilaya et quelle commune ? », the answer was « باب الزوار » alone — the commune they name, with
+        // no word of the other wilaya, is in its own wilaya)
+        const communeRow = (await prisma.commune.findMany({ where: { wilayaId: other }, select: { nameFr: true, nameAr: true } })).find((c) => samePlace(c.nameFr, d.communeName!) || samePlace(c.nameAr, d.communeName!));
+        const saysCommune = asked && !saysWilaya && [d.communeName, communeRow?.nameFr, communeRow?.nameAr].some((n) => !!n && placeWritten(ctx.customerText ?? '', n));
+        const named = (!!its && [its.nameFr, its.nameAr].some((n) => placeWritten(ctx.customerText ?? '', n))) || saysCommune;
         // …and the order is prepared with it at once (no extra turn for the customer)
         if (named && !placeFixed) return this.prepareOrder({ ...args, wilayaId: other }, ctx, true);
         return fail({

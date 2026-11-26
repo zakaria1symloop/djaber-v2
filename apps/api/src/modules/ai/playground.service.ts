@@ -245,7 +245,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       } else if (last.audioUploadId && agent.voiceTranscription) {
         const audio = await this.upload(last.audioUploadId, 'audio');
         if (audio) {
-          const tr = await this.transcription.transcribe(audio.body, audio.mime);
+          const tr = await this.transcription.transcribe(audio.body, audio.mime, { placeNames: await this.transcription.placeNames(null) });
           hasAudio = true;
           said = [said, tr.text.trim()].filter(Boolean).join('\n');
           if (last.text.trim()) lines.push(last.text.trim());
