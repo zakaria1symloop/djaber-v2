@@ -376,7 +376,7 @@ export class FakeAiGateway implements AiGateway {
     // quotes the customer in `evidence`, never the platform's note, and the handoff judge compares the two
     const said = user
       .split('\n')
-      .map((l) => l.replace(/^\[voice note transcript\]:\s*/i, ''))
+      .map((l) => l.replace(/^\[voice note transcript[^\]]*\]:\s*/i, ''))
       .filter((l) => !/^\[image\]|^IMAGE RESULT:/.test(l) && l !== RESUMED_NOTE && l !== NEW_VISIT_NOTE)
       .join(' ')
       .trim();

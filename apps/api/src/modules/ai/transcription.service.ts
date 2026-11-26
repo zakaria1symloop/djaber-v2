@@ -3,7 +3,7 @@
 // Success ⇒ `Message.transcript` and the reply job is released at once; failure of both ⇒ FL-01 F-5: the fixed text
 // `voiceFailed` once per conversation per 24 h and no credits. Safe to run twice (`transcriptStatus`).
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { prisma, TenantContext, type Tx } from '@djaber/db';
+import { prisma, TenantContext, type Tx, type Prisma } from '@djaber/db';
 import { OutboxService } from '../../core/outbox/outbox.service';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { StorageService } from '../../core/storage/storage.service';
@@ -21,12 +21,14 @@ export type TranscribeOutcome = 'done' | 'failed' | 'unclear' | 'too_long' | 'no
 const DARIJA_HINT_AR = 'تسجيل صوتي بالدارجة الجزائرية مع كلمات فرنسية: واش كاين عندكم، شحال السومة، نحب نكوموندي، les produits، la livraison، الطلبية تاعي، وين راهي، التوصيل لوهران، الجزائر العاصمة، سطيف، قسنطينة، البليدة، عنابة.';
 const DARIJA_HINT_FR = 'Message vocal en darija algérienne mélangée au français : wach kayen 3andkom, ch7al el prix, nheb ncommandi, les produits, la livraison, la commande ta3i, win rahi, livraison l Oran, Alger, Sétif, Constantine, Blida, Annaba.';
 const VOICE_FIX =
-  'You repair automatic transcriptions of customer voice notes sent to an Algerian online shop. The customer speaks Algerian darija, often mixed with French. You receive several automatic readings of the SAME short voice note (speech recognition is poor at darija: it rewrites it into standard Arabic or French and mishears words — « السومة » (the price) heard as « السيارة », « produits » as « برودوي »). Work out what the customer most probably said, reading the versions phonetically and against each other, in a shop context (products, price, delivery, order, photos). Never add a request, a product, a number or a name that no reading carries. A product name of the shop is written only when a reading clearly sounds like it (same sounds, same numbers): otherwise keep the words as heard, never another name of the list. Customers name the place of delivery: an Algerian wilaya or commune. Speech recognition turns these names into common words (« Oran » into « orange », « Alger » into « الجيد », « Bab Ezzouar » into « بزور »): when a reading sounds like a place of the list given with the readings, write that place, in the spelling of the list; never a place no reading sounds like. Algerian wording only (« تاع », never « ديال »). Reply with ONE line only: the message in Algerian darija written in Arabic script, French words kept in Latin letters — no comment, no explanation, no translation, no quotes. When the readings agree that the customer spoke plain French, reply with that French sentence as it is. If the readings are too different to tell what was said, reply exactly: UNCLEAR';
+  'You repair automatic transcriptions of customer voice notes sent to an Algerian online shop. The customer speaks Algerian darija, often mixed with French. You receive several automatic readings of the SAME short voice note (speech recognition is poor at darija: it rewrites it into standard Arabic or French and mishears words — « السومة » (the price) heard as « السيارة », « produits » as « برودوي »). Work out what the customer most probably said, reading the versions phonetically and against each other, in a shop context (products, price, delivery, order, photos). Never add a request, a product, a number or a name that no reading carries. A product name of the shop is written only when a reading clearly sounds like it (same sounds, same numbers): otherwise keep the words as heard, never another name of the list. Customers name the place of delivery: an Algerian wilaya or commune. Speech recognition turns these names into common words (« Oran » into « orange », « Alger » into « الجيد », « Bab Ezzouar » into « بزور »): when a reading sounds like a place of the list given with the readings, write that place, in the spelling of the list; never a place no reading sounds like. Algerian wording only (« تاع », never « ديال »). Reply with ONE line only: the message in Algerian darija written in Arabic script, French words kept in Latin letters — no comment, no explanation, no translation, no quotes. When the readings agree that the customer spoke plain French, reply with that French sentence as it is. If the readings are too different to tell what was said, reply exactly: UNCLEAR. When you can tell the gist but you are not sure of an important word — the readings disagree on the product, the place, the number, or on whether it is a question or a request, or a word appears in one reading only — start your line with « ? » followed by a space: the customer will be asked to confirm. Never add a word (« now », « today », a quantity) that the readings do not share.';
 /** Owner 26/11: the repair judged the readings too different to tell what was said — the customer is told, nothing is guessed. */
 export const voiceFixUnclear = (text: string | null | undefined): boolean => /^["'«\s]*unclear\.?["'»\s]*$/i.test((text ?? '').split('\n').map((l) => l.trim()).filter(Boolean).pop() ?? '');
+/** UX-106: the repair is not sure of an important word (its line starts with « ? ») — the agent confirms before acting. */
+export const voiceFixUncertain = (text: string | null | undefined): boolean => /^["'«\s]*[?؟]/.test((text ?? '').split('\n').map((l) => l.trim()).filter(Boolean).pop() ?? '');
 /** The repaired sentence of the model's answer: its last line; nothing when it says UNCLEAR or wrote an explanation only. */
 export const voiceFixLine = (text: string | null | undefined): string | null => {
-  const line = (text ?? '').split('\n').map((l) => l.trim()).filter(Boolean).pop() ?? '';
+  const line = ((text ?? '').split('\n').map((l) => l.trim()).filter(Boolean).pop() ?? '').replace(/^(["'«\s]*)[?؟]\s*/, '$1');
   const clean = line.replace(/^["'«\s]+|["'»\s]+$/g, '');
   return !clean || /^unclear\.?$/i.test(clean) || clean.length > 400 ? null : clean;
 };
@@ -92,15 +94,16 @@ export class TranscriptionService implements OnModuleInit {
     const base = spokenHere(r.value.language) ? first : { ...first, text: darija || first.text, language: 'ar' };
     const readings = [spokenHere(r.value.language) ? r.value.text.trim() : '', darija, french].filter(Boolean);
     if (readings.length < 2) return base;
+    let uncertain = false;
     const fixed = await this.routing
       .call('text', (m, timeoutMs) => this.gateway.generate({ model: m.ref, purpose: 'voice_fix', system: VOICE_FIX, messages: [{ role: 'user', content: [...readings.map((t, i) => `Reading ${i + 1}: ${t}`), ...(o.productNames?.length ? [`Product names of this shop the customer may be saying (keep a name as the shop writes it): ${o.productNames.slice(0, 40).join(' · ')}`] : []), ...(o.placeNames?.length ? [`Places of delivery the customer may be naming (wilayas, then the communes this customer used before): ${o.placeNames.slice(0, 90).join(' · ')}`] : [])].join('\n') }], maxTokens: 800, timeoutMs }))
-      .then((x) => (voiceFixUnclear(x.value.text) ? UNCLEAR : voiceFixLine(x.value.text)), (e) => (this.log.warn({ err: String(e) }, 'voice note repair unavailable'), null));
+      .then((x) => ((uncertain = voiceFixUncertain(x.value.text)), voiceFixUnclear(x.value.text) ? UNCLEAR : voiceFixLine(x.value.text)), (e) => (this.log.warn({ err: String(e) }, 'voice note repair unavailable'), null));
     // owner 26/11 (« he has to tell the client "I didn't understand you" »): the readings do not agree and the repair cannot tell
     // what was said — the note is not understood, rather than answered on the best guess
     if (fixed === UNCLEAR) return { ...base, unclear: true };
     if (!fixed) return base;
     // a note heard as French and rebuilt with no Arabic letter is French
-    return { ...base, text: fixed, language: heardFrench && !/[\u0600-\u06ff]/.test(fixed) ? (heardEnglish ? 'fr' : first.language) : 'ar' };
+    return { ...base, text: fixed, ...(uncertain ? { uncertain: true } : {}), language: heardFrench && !/[\u0600-\u06ff]/.test(fixed) ? (heardEnglish ? 'fr' : first.language) : 'ar' };
   }
 
   /** The 58 historical wilayas in French, then the communes this customer already gave (addresses, orders). */
@@ -130,6 +133,7 @@ export class TranscriptionService implements OnModuleInit {
 
       let outcome: TranscribeOutcome = 'failed';
       let transcript: string | null = null;
+      let uncertainReading = false;
       if (audio.storageKey && !audio.error) {
         try {
           const file = await this.storage.get(audio.storageKey);
@@ -145,6 +149,7 @@ export class TranscriptionService implements OnModuleInit {
             else if (r.text.trim()) {
               transcript = r.text.trim().slice(0, 4000);
               outcome = 'done';
+              uncertainReading = 'uncertain' in r && r.uncertain === true;
             }
           }
         } catch (e) {
@@ -154,7 +159,7 @@ export class TranscriptionService implements OnModuleInit {
 
       const stored = await prisma.$transaction(async (db) => {
         const tx = db as Tx;
-        const r = await tx.message.updateMany({ where: { id: m.id, OR: [{ transcriptStatus: null }, { transcriptStatus: 'pending' }] }, data: { transcript, transcriptStatus: outcome === 'done' ? 'done' : outcome === 'too_long' ? 'too_long' : 'failed' } });
+        const r = await tx.message.updateMany({ where: { id: m.id, OR: [{ transcriptStatus: null }, { transcriptStatus: 'pending' }] }, data: { transcript, ...(uncertainReading ? { payload: { ...((m.payload as Record<string, unknown> | null) ?? {}), transcriptUncertain: true } as Prisma.InputJsonValue } : {}), transcriptStatus: outcome === 'done' ? 'done' : outcome === 'too_long' ? 'too_long' : 'failed' } });
         if (!r.count) return false;
         await this.outbox.ws(tx, `ws:${d.workspaceId}`, 'message.updated', { id: m.id, conversationId: m.conversationId, messageId: m.id, deliveryStatus: m.deliveryStatus, transcript, transcriptStatus: outcome === 'done' ? 'done' : outcome === 'unclear' ? 'failed' : outcome }, `message.updated:${m.id}:stt`);
         // F-5 / "> 2 min": fixed platform texts, once per conversation per 24 h, never charged

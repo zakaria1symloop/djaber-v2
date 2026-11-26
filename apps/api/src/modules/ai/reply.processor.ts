@@ -148,7 +148,8 @@ export class ReplyProcessor implements OnModuleInit {
       attachmentsOf(m).forEach((a, index) => {
         if (a.type === 'audio' && m.transcript?.trim()) {
           hasAudio = true;
-          lines.push(`[voice note transcript]: ${m.transcript.trim()}`);
+          // UX-106: an uncertain reading is said to the model, which confirms what it understood before acting on it
+          lines.push(`[voice note transcript${(m.payload as { transcriptUncertain?: unknown } | null)?.transcriptUncertain === true ? ' — uncertain reading' : ''}]: ${m.transcript.trim()}`);
           plain.push(m.transcript.trim());
         }
         // FL-01 step 7: with image recognition off the images are dropped and the text is answered alone

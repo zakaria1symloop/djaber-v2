@@ -1,6 +1,6 @@
 // Tester live 26/11 10:08: « Alger, Bab Ezzouar » said in an Arabic conversation was heard as English (« Al Jai, that's the war. »)
 // and kept as it was; the turn was unclear and the conversation became English.
-import { TranscriptionService } from './transcription.service';
+import { TranscriptionService, voiceFixLine, voiceFixUncertain } from './transcription.service';
 
 const service = (first: { text: string; language: string }, hinted: Record<string, string>, fix: string | null) => {
   const transcribe = jest.fn(async (req: { language?: string }) => (req.language ? { text: hinted[req.language] ?? '', language: req.language, durationSec: 3 } : { ...first, durationSec: 3 }));
@@ -46,5 +46,25 @@ describe('a voice note heard as English', () => {
     const s = service({ text: 'Do you deliver to Oran?', language: 'english' }, { ar: 'دو يو دليفر', fr: 'Do you deliver to Oran ?' }, null);
     expect((await s.svc.transcribe(AUDIO, 'audio/mp4', { conversationLanguage: 'ar' })).text).toBe('Do you deliver to Oran?');
     expect(s.generate).not.toHaveBeenCalled();
+  });
+});
+
+// UX-106 (tester 26/11 10:41): notes said very fast were « understood » with a word he never said (« دابا »)
+describe('an uncertain reading', () => {
+  it('the repair line that starts with « ? » is uncertain; the mark is not part of the sentence', () => {
+    expect(voiceFixUncertain('? livraison l Oran')).toBe(true);
+    expect(voiceFixUncertain('؟ التوصيل لوهران')).toBe(true);
+    expect(voiceFixLine('? livraison l Oran')).toBe('livraison l Oran');
+    expect(voiceFixLine('« ? التوصيل لوهران »')).toBe('التوصيل لوهران');
+    expect(voiceFixUncertain('livraison l Oran ch7al ?')).toBe(false);
+    expect(voiceFixLine('livraison l Oran ch7al ?')).toBe('livraison l Oran ch7al ?');
+  });
+  it('transcribe carries the mark with the repaired text', async () => {
+    const s = service({ text: 'ليفريزون وهران', language: 'arabic' }, { ar: 'التوصيل لوهران دابا', fr: 'livraison Oran' }, '? livraison l Oran');
+    expect(await s.svc.transcribe(AUDIO, 'audio/mp4', { conversationLanguage: 'ar' })).toMatchObject({ text: 'livraison l Oran', uncertain: true });
+    const sure = service({ text: 'ليفريزون وهران شحال', language: 'arabic' }, { ar: 'التوصيل لوهران شحال', fr: 'livraison Oran ch7al' }, 'التوصيل لـ Oran شحال؟');
+    const r = await sure.svc.transcribe(AUDIO, 'audio/mp4', { conversationLanguage: 'ar' });
+    expect(r.text).toBe('التوصيل لـ Oran شحال؟');
+    expect('uncertain' in r && r.uncertain).toBeFalsy();
   });
 });
