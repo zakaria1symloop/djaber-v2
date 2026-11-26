@@ -4,6 +4,7 @@
 // tiles and to the reports (AT-ORD-10): Revenue = Σ completed sales (soldAt) + Σ delivered orders (deliveredAt).
 import { Injectable } from '@nestjs/common';
 import {
+  autonomyPct,
   DEAD_STOCK_DAYS,
   type AnalyticsAgentsView,
   type AnalyticsChannelsView,
@@ -381,7 +382,8 @@ export class AnalyticsService {
       prisma.agentInsight.count({ where: { status: 'pending' } }),
       prisma.agentInsight.count({ where: { status: 'resolved', resolvedAt: { gte: ctx.range.gte, lt: ctx.range.lt } } }),
     ]);
-    const autonomy = (a: { conv: number; handoffs: number } | undefined) => (a && a.conv ? pct(a.conv - a.handoffs, a.conv) : null);
+    // owner 26/11: the one formula of « Autonomie de l'IA » (`@djaber/shared` `autonomyPct`), with the decimal this tab shows
+    const autonomy = (a: { conv: number; handoffs: number } | undefined) => (a ? autonomyPct(a.conv, a.handoffs, 1) : null);
     const avgAutonomy = (m: DayMetrics | null) => {
       if (!m) return null;
       const vals = Object.values(m.agents).map(autonomy).filter((v): v is number => v !== null);

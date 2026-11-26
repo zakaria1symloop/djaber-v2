@@ -16,7 +16,7 @@ import { relativeTime } from '@/lib/time';
 import { useAgent } from '../api';
 import type { Agent } from '../contracts';
 import { cardState, enabledCapabilities, draftFromAgent, noChannelText, resumePath } from '../logic';
-import { AgentStatusPill, channelLabel } from '../ui';
+import { AgentAutonomy, AgentStatusPill, channelLabel } from '../ui';
 import { useAgentActions, type AgentActions } from '../use-agent-actions';
 
 type Ctx = { agent: Agent; actions: AgentActions };
@@ -133,6 +133,8 @@ export function AgentShell({ id, children }: { id: string; children: ReactNode }
             {noChannelText(t, a.status)}
           </Banner>
         ) : null}
+        {/* owner 26/11: « Autonomie de l'IA » at the top of the agent page, on every tab */}
+        <AgentAutonomy agent={a} />
         <nav aria-label={t('agents.page.tabs')} className="flex flex-wrap gap-1.5">
           {tabs.map((tab) => {
             const href = `${base}${tab.path}`;

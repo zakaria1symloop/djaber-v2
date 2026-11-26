@@ -6936,5 +6936,18 @@
  "agents.turnStatus.ok": "Answered",
  "agents.turnStatus.unclear": "Unclear message",
  "agents.turnStatus.unknown": "Unanswered question",
- "agents.turnStatus.handoff": "Handed to the team"
+ "agents.turnStatus.handoff": "Handed to the team",
+ "agents.autonomy.label": "AI autonomy",
+ "agents.autonomy.hint": "Share of conversations the AI handled without asking the team to step in, over the last {days} days.",
+ "agents.autonomy.detail": "{conversations, plural, one {# conversation} other {# conversations}} in {days} days, {handoffs, plural, =0 {none handed to the team} one {# handed to the team} other {# handed to the team}}",
+ "agents.autonomy.none": "No conversation yet",
+ "agents.learning.pending": "{count, plural, one {# team reply to review} other {# team replies to review}}",
+ "agents.learning.title": "Team replies to review",
+ "agents.learning.description": "The agent handed the conversation over and your team answered. Approve an answer so the agent gives it itself next time; until it is approved, the agent does not use it.",
+ "agents.learning.answerFor": "Proposed answer for: {question}",
+ "agents.learning.approve": "Approve",
+ "agents.learning.ignore": "Ignore",
+ "agents.learning.approved": "Answer approved: the agent now uses it.",
+ "agents.learning.ignored": "Suggestion ignored.",
+ "agents.faq.source.human_reply": "LEARNT FROM A TEAM REPLY"
 }

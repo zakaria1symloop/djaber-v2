@@ -2,6 +2,7 @@
 // disable · enable · disconnect, `needs_reconnect` on a Meta token error, App Review status. Nothing here calls Meta from
 // an HTTP handler: Meta work is queued (CLAUDE.md rule 4) and done by channel-jobs.service.ts.
 import { Inject, Injectable } from '@nestjs/common';
+import { autonomyPct } from '@djaber/shared';
 import type {
   ActionDescriptor,
   AppReviewStatusView,
@@ -212,7 +213,8 @@ export class ChannelService {
       children: children.map(channelRef),
       lastHistorySyncJobId: lastJob?.id ?? null,
       aiOrders30d,
-      aiResolutionPct30d: r && r.total ? Math.round(((r.total - r.handed) * 1000) / r.total) / 10 : null,
+      // owner 26/11: the one formula of « Autonomie de l'IA » (`@djaber/shared` `autonomyPct`), with the decimal this tile shows
+      aiResolutionPct30d: r ? autonomyPct(r.total, r.handed, 1) : null,
     };
   }
 

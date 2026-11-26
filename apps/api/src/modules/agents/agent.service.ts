@@ -7,6 +7,9 @@ import {
   AGENT_DEFAULT_STYLE,
   AGENT_INSTRUCTIONS_MAX,
   AGENT_TONE_OF_PERSONALITY,
+  AUTONOMY_DAYS,
+  agentAutonomy,
+  autonomyPct,
   type ActionDescriptor,
   type AgentDto,
   type AgentMetrics,
@@ -50,6 +53,7 @@ import {
   DEFAULT_ORDER_FIELDS,
   diffSnapshots,
   EMPTY_METRICS,
+  LEARNING_PENDING,
   merchantInstructions,
   normalizeHandoffRules,
   normalizeOrderFields,
@@ -145,24 +149,26 @@ export class AgentService implements OnModuleInit {
     return row;
   }
 
-  /** AGT-09 figures of several agents over a period, in a handful of grouped queries. */
+  /**
+   * AGT-09 figures of several agents over a period, in a handful of grouped queries.
+   *
+   * Owner decision 26/11 (« Autonomie de l'IA »): `handoffs` = the conversations of the period where the AI asked a person to step
+   * in — a reply run that ended `handoff` (the model's decision or a server rule of the turn: limits, risky customer, third unclear
+   * message, blocked word), the definition Statistiques and the page overview already used. `handledWithoutHuman` is the rest.
+   * It used to be « not in the queue now and no team message since the start of the period »: a member who took a thread by hand
+   * (`manual`), the pause of the agent, or a member who simply answered counted against the AI, and a thread the AI handed off then
+   * got back counted for it; `handoffs` counted runs (several per conversation) and the `unknown` turns, which no longer hand off.
+   */
   private async metricsOf(agentIds: string[], from: Date, to: Date): Promise<Map<string, AgentMetrics & { aiMessages: number; handoffs: number }>> {
     const out = new Map<string, AgentMetrics & { aiMessages: number; handoffs: number }>();
     if (!agentIds.length) return out;
     const ids = Prisma.join(agentIds.map((id) => Prisma.sql`${id}::uuid`));
     const workspaceId = TenantContext.workspaceId();
-    const [runs, human, orders, reactions, messages] = await Promise.all([
+    const [runs, orders, reactions, messages] = await Promise.all([
       prisma.$queryRaw<{ agentId: string; conversations: bigint; avg: number | null; p95: number | null; credits: bigint | null; handoffs: bigint }[]>`
         SELECT "agentId", count(DISTINCT "conversationId") AS conversations, avg("latencyMs")::float AS avg, percentile_cont(0.95) WITHIN GROUP (ORDER BY "latencyMs")::float AS p95,
-               sum("creditsCharged") AS credits, count(*) FILTER (WHERE "status" IN ('handoff','unknown')) AS handoffs
+               sum("creditsCharged") AS credits, count(DISTINCT "conversationId") FILTER (WHERE "status" = 'handoff') AS handoffs
         FROM "AiRun" WHERE "workspaceId" = ${workspaceId}::uuid AND "kind" = 'reply' AND "agentId" IN (${ids}) AND "startedAt" >= ${from} AND "startedAt" < ${to} GROUP BY "agentId"`,
-      prisma.$queryRaw<{ agentId: string; n: bigint }[]>`
-        SELECT r."agentId", count(DISTINCT r."conversationId") AS n
-        FROM "AiRun" r JOIN "Conversation" c ON c."id" = r."conversationId"
-        WHERE r."workspaceId" = ${workspaceId}::uuid AND r."kind" = 'reply' AND r."agentId" IN (${ids}) AND r."startedAt" >= ${from} AND r."startedAt" < ${to}
-          AND c."status" <> 'needs_human'
-          AND NOT EXISTS (SELECT 1 FROM "Message" m WHERE m."conversationId" = c."id" AND m."author" = 'human' AND m."createdAt" >= ${from})
-        GROUP BY r."agentId"`,
       prisma.order.groupBy({ by: ['agentId', 'status'], where: { agentId: { in: agentIds }, source: 'ai', orderedAt: { gte: from, lt: to } }, _count: { _all: true } }),
       prisma.$queryRaw<{ agentId: string; likes: bigint; votes: bigint }[]>`
         SELECT r."agentId", count(*) FILTER (WHERE m."customerReaction" = 'like') AS likes, count(*) AS votes
@@ -178,9 +184,11 @@ export class AgentService implements OnModuleInit {
       const total = mine.reduce((n, o) => n + o._count._all, 0);
       const confirmed = mine.filter((o) => !['new', 'cancelled'].includes(o.status)).reduce((n, o) => n + o._count._all, 0);
       const react = reactions.find((x) => x.agentId === id);
+      const conversations = Number(r?.conversations ?? 0);
+      const handoffs = Math.min(Number(r?.handoffs ?? 0), conversations);
       out.set(id, {
-        conversations: Number(r?.conversations ?? 0),
-        handledWithoutHuman: Number(human.find((x) => x.agentId === id)?.n ?? 0),
+        conversations,
+        handledWithoutHuman: conversations - handoffs,
         orders: total,
         confirmedPct: total ? Math.round((confirmed / total) * 100) : 0,
         delivered: mine.filter((o) => o.status === 'delivered').reduce((n, o) => n + o._count._all, 0),
@@ -189,7 +197,7 @@ export class AgentService implements OnModuleInit {
         credits: Number(r?.credits ?? 0),
         satisfaction: react && Number(react.votes) > 0 ? { score: Math.round((Number(react.likes) / Number(react.votes)) * 100) / 100, votes: Number(react.votes) } : null,
         aiMessages: Number(messages.find((x) => x.agentId === id)?.n ?? 0),
-        handoffs: Number(r?.handoffs ?? 0),
+        handoffs,
       });
     }
     return out;
@@ -213,9 +221,11 @@ export class AgentService implements OnModuleInit {
     if (!rows.length) return [];
     const ids = rows.map((r) => r.id);
     const t = TenantContext.get();
-    const [metrics, pending, presetVersions, products] = await Promise.all([
-      this.metricsOf(ids, new Date(Date.now() - 30 * DAY), new Date()),
+    const [metrics, pending, learning, presetVersions, products] = await Promise.all([
+      this.metricsOf(ids, new Date(Date.now() - AUTONOMY_DAYS * DAY), new Date()),
       prisma.agentInsight.groupBy({ by: ['agentId'], where: { agentId: { in: ids }, status: 'pending' }, _count: { _all: true } }),
+      // owner 26/11: the suggestions learnt from the team's replies that wait for the shop's review (one query for the whole list)
+      prisma.agentFaq.groupBy({ by: ['agentId'], where: { agentId: { in: ids }, ...LEARNING_PENDING }, _count: { _all: true } }),
       prisma.agentPreset.findMany({ where: { id: { in: rows.map((r) => r.presetId).filter((x): x is string => !!x) } }, select: { id: true, currentVersion: true } }),
       o.productIds ? prisma.agentProduct.findMany({ where: { agentId: { in: ids } }, select: { agentId: true, productId: true } }) : Promise.resolve([]),
     ]);
@@ -224,6 +234,7 @@ export class AgentService implements OnModuleInit {
     const slotFree = !rows.some((r) => r.status === 'paused' && r.pausedReason === 'plan') || t.limits.maxAgents < 0 || (await this.slotHolders()) < t.limits.maxAgents;
     return rows.map((a, i) => {
       const current = presetVersions.find((p) => p.id === a.presetId)?.currentVersion ?? null;
+      const m = metrics.get(a.id) ?? { ...EMPTY_METRICS, aiMessages: 0, handoffs: 0 };
       return {
         id: a.id,
         name: a.name,
@@ -254,7 +265,9 @@ export class AgentService implements OnModuleInit {
         scheduledActivateAt: a.scheduledActivateAt?.toISOString() ?? null,
         wizardStep: a.wizardStep,
         wizard: wizardOf(a, { avatarUrl: a.avatar?.url ?? null, faqCount: a._count.faqs }),
-        metrics30d: (({ aiMessages: _m, handoffs: _h, ...m }) => m)(metrics.get(a.id) ?? { ...EMPTY_METRICS, aiMessages: 0, handoffs: 0 }),
+        metrics30d: (({ aiMessages: _m, handoffs: _h, ...rest }) => rest)(m),
+        autonomy: agentAutonomy(m.conversations, m.handoffs),
+        learningPending: learning.find((l) => l.agentId === a.id)?._count._all ?? 0,
         pendingInsights: pending.find((p) => p.agentId === a.id)?._count._all ?? 0,
         version: a.version,
         createdAt: a.createdAt.toISOString(),
@@ -696,8 +709,9 @@ export class AgentService implements OnModuleInit {
       const copy = await tx.agent.create({
         data: { ...rest, name: `${a.name} ${this.i18n.t(locale, agentTextKey('copySuffix'))}`.slice(0, 100), status: 'draft', isActive: false, pausedReason: null, wizardStep: 1, policies: json(policies), capabilities: json(capabilities), orderFields: json(orderFields), handoffRules: json(handoffRules), businessHours: json(businessHours) },
       });
-      const [faqs, products] = await Promise.all([tx.agentFaq.findMany({ where: { agentId: id, source: { not: 'ai_suggested' } } }), tx.agentProduct.findMany({ where: { agentId: id } })]);
-      if (faqs.length) await tx.agentFaq.createMany({ data: faqs.map((f) => ({ workspaceId: f.workspaceId, agentId: copy.id, question: f.question, answer: f.answer, source: f.source, sortOrder: f.sortOrder, isActive: f.isActive })) });
+      // (a suggestion learnt from the team that still waits for its review stays with the agent it was learnt for; an approved one is an entry like the others)
+      const [faqs, products] = await Promise.all([tx.agentFaq.findMany({ where: { agentId: id, source: { not: 'ai_suggested' }, NOT: LEARNING_PENDING } }), tx.agentProduct.findMany({ where: { agentId: id } })]);
+      if (faqs.length) await tx.agentFaq.createMany({ data: faqs.map((f) => ({ workspaceId: f.workspaceId, agentId: copy.id, question: f.question, answer: f.answer, source: f.source, sortOrder: f.sortOrder, isActive: f.isActive, sourceConversationId: f.sourceConversationId })) });
       if (products.length) await tx.agentProduct.createMany({ data: products.map((p) => ({ agentId: copy.id, productId: p.productId })) });
       await this.recordVersion(tx, copy.id, 'manual', { note: `duplicate:${id}` });
       await this.moderation.syncAgentName(tx, copy.id);
@@ -774,8 +788,8 @@ export class AgentService implements OnModuleInit {
   /** `GET /agents/:id/export` — the configuration as JSON (no secret, no id of another workspace's data). */
   async export(id: string, locale: string) {
     const dto = await this.get(id, locale);
-    const faqs = await prisma.agentFaq.findMany({ where: { agentId: id, source: { not: 'ai_suggested' } }, orderBy: { sortOrder: 'asc' }, select: { question: true, answer: true, source: true, isActive: true } });
-    const { metrics30d: _m, actions: _a, pendingInsights: _p, ...config } = dto;
+    const faqs = await prisma.agentFaq.findMany({ where: { agentId: id, source: { not: 'ai_suggested' }, NOT: LEARNING_PENDING }, orderBy: { sortOrder: 'asc' }, select: { question: true, answer: true, source: true, isActive: true } });
+    const { metrics30d: _m, autonomy: _au, learningPending: _l, actions: _a, pendingInsights: _p, ...config } = dto;
     return { exportedAt: new Date().toISOString(), agent: config, faqs };
   }
 
@@ -819,6 +833,6 @@ export class AgentService implements OnModuleInit {
     const from = q.from ? algiersDayStart(q.from) : new Date(to.getTime() - 30 * DAY);
     if (from >= to) throw validationError({ from: 'validation.date' });
     const m = (await this.metricsOf([id], from, to)).get(id)!;
-    return { ...m, from: from.toISOString(), to: to.toISOString(), resolutionRate: m.conversations ? Math.round((m.handledWithoutHuman / m.conversations) * 100) : 0, lastActiveAt: a.lastActiveAt?.toISOString() ?? null };
+    return { ...m, from: from.toISOString(), to: to.toISOString(), resolutionRate: autonomyPct(m.conversations, m.handoffs) ?? 0, lastActiveAt: a.lastActiveAt?.toISOString() ?? null };
   }
 }

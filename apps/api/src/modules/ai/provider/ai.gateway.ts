@@ -18,7 +18,7 @@ export type AiMessage =
 export type AiToolDef = { name: string; description: string; parameters: Record<string, unknown> };
 
 /** What the call is for: routes the fake adapter's default answers and labels metrics; never changes the live request. */
-export type AiPurpose = 'reply' | 'vision_describe' | 'vision_match' | 'caption' | 'product_vision' | 'page_post' | 'agent_generation' | 'faq_extract' | 'voice_fix';
+export type AiPurpose = 'reply' | 'vision_describe' | 'vision_match' | 'caption' | 'product_vision' | 'page_post' | 'agent_generation' | 'faq_extract' | 'voice_fix' | 'faq_learn';
 
 export type AiGenerateRequest = {
   model: AiModelRef;

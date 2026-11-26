@@ -12,11 +12,13 @@ import { algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
 import { InsightService } from '../ai/insight.service';
 import { channelRef } from '../channels/channel.service';
 import type { UploadedFile } from '../uploads/image-upload.service';
-import { compileInstructions, merchantInstructions } from './agent.presenter';
+import { compileInstructions, LEARNING_PENDING, merchantInstructions } from './agent.presenter';
 import { AgentService } from './agent.service';
 
 const FAQ_FILE_MAX_BYTES = 5 * 1024 * 1024;
-const faqDto = (f: AgentFaq): AgentFaqDto => ({ id: f.id, question: f.question, answer: f.answer, source: f.source, askedCount: f.askedCount, sortOrder: f.sortOrder, isActive: f.isActive, createdAt: f.createdAt.toISOString() });
+const faqDto = (f: AgentFaq): AgentFaqDto => ({ id: f.id, question: f.question, answer: f.answer, source: f.source, askedCount: f.askedCount, sortOrder: f.sortOrder, isActive: f.isActive, sourceConversationId: f.sourceConversationId, createdAt: f.createdAt.toISOString() });
+/** Suggestions (the AI's unanswered questions, the entries learnt from the team that wait for a review) sit after the entries, out of their order. */
+const NOT_A_SUGGESTION = { source: { not: 'ai_suggested' }, NOT: LEARNING_PENDING } as const satisfies Prisma.AgentFaqWhereInput;
 
 /** "Q: … / A: …" pairs (also "Question:" / "Réponse:" / "س:" / "ج:"), or a question line ending with "?" followed by its answer. */
 export const parseFaqText = (text: string): { question: string; answer: string }[] => {
@@ -106,7 +108,7 @@ export class KnowledgeService {
   async addFaqs(tx: Tx, agentId: string, workspaceId: string, items: { question: string; answer: string }[], source: FaqSource) {
     if (!items.length) return [];
     await this.assertFaqRoom(tx, agentId, items);
-    const last = await tx.agentFaq.aggregate({ where: { agentId, source: { not: 'ai_suggested' } }, _max: { sortOrder: true } });
+    const last = await tx.agentFaq.aggregate({ where: { agentId, ...NOT_A_SUGGESTION }, _max: { sortOrder: true } });
     let order = (last._max.sortOrder ?? -1) + 1;
     return tx.agentFaq.createManyAndReturn({ data: items.map((f) => ({ workspaceId, agentId, question: f.question, answer: f.answer, source, sortOrder: order++, isActive: true })) });
   }
@@ -129,7 +131,15 @@ export class KnowledgeService {
       const isActive = input.isActive ?? (f.source === 'ai_suggested' && !f.isActive && !!input.answer ? true : f.isActive);
       if (isActive && !next.answer.trim()) throw validationError({ answer: 'validation.required' });
       if (isActive) await this.assertFaqRoom(tx, agentId, [next], f.id);
-      return faqDto(await tx.agentFaq.update({ where: { id: f.id }, data: { ...next, isActive, sortOrder: input.sortOrder ?? f.sortOrder } }));
+      // owner 26/11 — « Approuver » (`{ isActive: true }`, the answer possibly edited) on a suggestion learnt from the team: it
+      // becomes an entry like the others, placed after them (the limits above are the existing ones). Editing its texts alone
+      // keeps it a suggestion: only the approval makes the agent use it.
+      let sortOrder = input.sortOrder ?? f.sortOrder;
+      if (isActive && !f.isActive && f.source === 'human_reply' && input.sortOrder === undefined) {
+        const last = await tx.agentFaq.aggregate({ where: { agentId, ...NOT_A_SUGGESTION }, _max: { sortOrder: true } });
+        sortOrder = (last._max.sortOrder ?? -1) + 1;
+      }
+      return faqDto(await tx.agentFaq.update({ where: { id: f.id }, data: { ...next, isActive, sortOrder } }));
     });
   }
 

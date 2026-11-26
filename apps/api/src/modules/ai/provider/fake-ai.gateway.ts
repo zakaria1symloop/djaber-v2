@@ -357,6 +357,17 @@ export class FakeAiGateway implements AiGateway {
           },
         };
       }
+      case 'faq_learn': {
+        // owner 26/11 (the agent learns from the team's replies): the last question of the customer and the team's first answer,
+        // unless that answer is a call-back or about an order — plumbing for the dev UI, not model quality
+        const input = readInput<{ messages: { from: 'customer' | 'team'; text: string }[] }>(req);
+        const lines = input?.messages ?? [];
+        const question = [...lines].reverse().find((m) => m.from === 'customer' && /[?؟]/.test(m.text))?.text.trim();
+        const answer = lines.find((m) => m.from === 'team')?.text.trim();
+        if (!question || !answer) return { object: { learn: false, reason: 'no question or no answer' } };
+        if (/rappel|contacte|commande|colis|rembours|order|parcel|refund|طلب/i.test(`${question} ${answer}`)) return { object: { learn: false, reason: 'about this customer' } };
+        return { object: { learn: true, question: question.slice(0, 300), answer: answer.slice(0, 600) } };
+      }
       default:
         return { text: '' };
     }

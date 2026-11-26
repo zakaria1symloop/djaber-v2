@@ -341,6 +341,8 @@ export class InboundProcessor implements OnModuleInit {
       }
       await this.outbound.emitCreated(tx, message, updated);
       if (pause) await this.conversations.emitUpdated(tx, updated);
+      // owner 26/11: an answer typed in the Page inbox / Instagram app to a thread the AI handed off teaches the agent too
+      if (p.text?.trim()) await this.conversations.queueLearning(tx, conv);
       return 'stored';
     });
   }

@@ -31,6 +31,7 @@ import type { BulkResult, CursorPage } from '../../core/http/pagination';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { OutboxService } from '../../core/outbox/outbox.service';
 import { ProcessorRegistry } from '../../core/queue/processor.registry';
+import { QueueOutbox } from '../../core/queue/queue.outbox';
 import { can } from '../../core/rbac/permission-matrix';
 import { algiersDayEnd, algiersDayStart } from '../../core/time/algiers';
 import { NotificationProducer } from '../notifications/notification.producer';
@@ -38,6 +39,7 @@ import { contextOf, conversationHead, conversationInclude, messageInclude, prese
 import { OutboundSendService } from './outbound-send.service';
 import { BlockIndex, SafetyService } from './safety.service';
 import { isGreetingOnly } from './greeting';
+import { LEARN_DELAY_MS, LEARN_JOB, LEARN_QUEUE, learnableHandoffAt, learnJobId, type LearnJob } from './learning-trigger';
 import { decideWindow, withinWindow } from './window-rules';
 
 type Changes = { status?: ConversationStatus; aiPaused?: boolean; assigneeId?: string | null };
@@ -89,6 +91,7 @@ export class ConversationService implements OnModuleInit {
     private readonly outbound: OutboundSendService,
     private readonly safety: SafetyService,
     private readonly credits: CreditService,
+    private readonly queue: QueueOutbox,
   ) {}
 
   onModuleInit() {
@@ -549,11 +552,31 @@ export class ConversationService implements OnModuleInit {
       }
       if (changed) patch.version = { increment: 1 };
       patch.context = ctx as Prisma.InputJsonValue;
+      // owner 26/11: a member answers a thread the AI handed off — the exchange is read later to propose an FAQ entry
+      // (`fresh` = the state before this reply: with the auto-pause off the reply itself gives the thread back to the AI;
+      // a picture alone teaches nothing and does not use the hand-off's only job)
+      if (text) await this.queueLearning(tx, fresh);
       const out = await this.outbound.store(tx, id, { author: 'human', kind: 'human', text, attachments, payload, authorUserId: t.userId ?? null }, { patch });
       if (changed || fresh.unreadCount > 0) await this.emitUpdated(tx, out.conversation);
       return out.message;
     });
     return presentMessage(message, c.agent);
+  }
+
+  /**
+   * Owner decision 26/11 (« let the AI learn from human intervention »): a team member answers a conversation the AI handed off
+   * (`needs_human`, any reason but `manual`) ⇒ the job `jobs / learn-from-reply` is queued in the caller's transaction, delayed
+   * 10 minutes, once per hand-off (`learn:<conversationId>:<handoffAt>` — a second reply is a no-op on the outbox key).
+   * Nothing for a hand-off by hand, a thread a member only paused, or a page without an agent. Returns true when queued.
+   */
+  async queueLearning(tx: Tx, c: Pick<Conversation, 'id' | 'workspaceId' | 'channelId' | 'status' | 'context'>): Promise<boolean> {
+    const handoffAt = learnableHandoffAt(c);
+    if (!handoffAt) return false;
+    const link = await tx.agentChannel.findUnique({ where: { channelId: c.channelId }, select: { agent: { select: { deletedAt: true } } } });
+    if (!link || link.agent.deletedAt) return false;
+    const data: LearnJob = { workspaceId: c.workspaceId, conversationId: c.id, handoffAt };
+    await this.queue.add(tx, LEARN_QUEUE, LEARN_JOB, data, learnJobId(c.id, handoffAt), { delay: LEARN_DELAY_MS, attempts: 3, backoff: { type: 'exponential', delay: 60_000 } });
+    return true;
   }
 
   // --- notes (INB-06) ---------------------------------------------------------------------------------------------------

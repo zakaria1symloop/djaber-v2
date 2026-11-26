@@ -79,7 +79,7 @@ export const agentsApi = {
   runScenarios: (id: string) => api<JobRef>(`/agents/${id}/test-scenarios`, { method: 'POST', body: {} }),
   faq: (id: string) => api<AgentFaq[]>(`/agents/${id}/faq`),
   addFaq: (id: string, b: { question: string; answer: string }) => api<AgentFaq>(`/agents/${id}/faq`, { method: 'POST', body: b }),
-  updateFaq: (id: string, fid: string, b: { question: string; answer: string }) => api<AgentFaq>(`/agents/${id}/faq/${fid}`, { method: 'PATCH', body: b }),
+  updateFaq: (id: string, fid: string, b: { question?: string; answer?: string; isActive?: boolean }) => api<AgentFaq>(`/agents/${id}/faq/${fid}`, { method: 'PATCH', body: b }),
   removeFaq: (id: string, fid: string) => api<null>(`/agents/${id}/faq/${fid}`, { method: 'DELETE' }),
   extractFaq: (id: string, channelId: string) => api<JobRef>(`/agents/${id}/faq/extract`, { method: 'POST', body: { channelId } }),
   /** `POST /agents/:id/faq/import` (TXT / MD / CSV / DOCX ≤ 5 MB, M11) → `{ created, skipped }` answered at once (no job) */

@@ -6936,5 +6936,18 @@
  "agents.turnStatus.ok": "Répondu",
  "agents.turnStatus.unclear": "Message peu clair",
  "agents.turnStatus.unknown": "Question sans réponse",
- "agents.turnStatus.handoff": "Transmis à l'équipe"
+ "agents.turnStatus.handoff": "Transmis à l'équipe",
+ "agents.autonomy.label": "Autonomie de l'IA",
+ "agents.autonomy.hint": "Part des conversations que l'IA a menées sans demander à l'équipe d'intervenir, sur les {days} derniers jours.",
+ "agents.autonomy.detail": "{conversations, plural, one {# conversation} other {# conversations}} sur {days} jours, {handoffs, plural, =0 {aucune passée à l'équipe} one {# passée à l'équipe} other {# passées à l'équipe}}",
+ "agents.autonomy.none": "Pas encore de conversation",
+ "agents.learning.pending": "{count, plural, one {# réponse de l'équipe à valider} other {# réponses de l'équipe à valider}}",
+ "agents.learning.title": "Réponses de l'équipe à valider",
+ "agents.learning.description": "L'agent a passé la main et votre équipe a répondu. Approuvez une réponse pour que l'agent la donne lui-même la prochaine fois ; tant qu'elle n'est pas approuvée, il ne l'utilise pas.",
+ "agents.learning.answerFor": "Réponse proposée pour : {question}",
+ "agents.learning.approve": "Approuver",
+ "agents.learning.ignore": "Ignorer",
+ "agents.learning.approved": "Réponse approuvée : l'agent l'utilise désormais.",
+ "agents.learning.ignored": "Suggestion ignorée.",
+ "agents.faq.source.human_reply": "APPRIS D'UNE RÉPONSE DE L'ÉQUIPE"
 }

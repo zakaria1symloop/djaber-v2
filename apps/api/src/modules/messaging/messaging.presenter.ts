@@ -23,6 +23,8 @@ export type ConversationContext = {
   handoffAt?: string | null;
   handoffRemindedAt?: string | null;
   handoffMessageSentAt?: string | null;
+  /** owner 26/11: the `handoffAt` of the last hand-off the `learn-from-reply` job read (never read twice; kept when the AI resumes) */
+  learnedHandoffAt?: string | null;
   aiPausedById?: string | null;
   /** client 25/11: when a member (or a manual reply) paused the AI on this thread — the pause ends after `MEMBER_PAUSE_IDLE_MS` without a team message */
   aiPausedAt?: string | null;
