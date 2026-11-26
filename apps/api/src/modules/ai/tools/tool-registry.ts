@@ -879,7 +879,7 @@ export class ToolRegistry {
   }
 
   /** Validation, catalogue check and limits of `create_order` (04 §5, FL-02); the write itself is the `OrderTools` port. */
-  async prepareOrder(args: Record<string, unknown>, ctx: ToolRunContext): Promise<{ ok: true; request: CreateOrderRequest; draft: string; core?: string; beyondStock?: { name: string; quantity: number }[]; beyondAll?: boolean; noDelivery?: boolean } | { ok: false; result: ToolResult }> {
+  async prepareOrder(args: Record<string, unknown>, ctx: ToolRunContext, placeFixed = false): Promise<{ ok: true; request: CreateOrderRequest; draft: string; core?: string; beyondStock?: { name: string; quantity: number }[]; beyondAll?: boolean; noDelivery?: boolean } | { ok: false; result: ToolResult }> {
     const fail = (result: ToolResult) => ({ ok: false as const, result });
     // journey retest R8-1 (17/11): a bare « oui » to the pending server recap confirms THAT recap — the order is the one the
     // server built for it (stored with the recap), whatever the confirming call left out (N5 T3: no commune, no address,
@@ -976,12 +976,22 @@ export class ToolRegistry {
     // (the other wilayas are only read when the commune is not one of this wilaya)
     if (!noDelivery && place && d.communeName && !place.communes.some((c) => samePlace(c.nameFr, d.communeName!) || samePlace(c.nameAr, d.communeName!))) {
       const other = communeOfOtherWilaya(await prisma.commune.findMany({ select: { nameFr: true, nameAr: true, wilayaId: true } }), place.id, d.communeName);
-      if (other !== null && !(await this.placeConflictAsked(ctx, place.id, d.communeName))) {
-        const its = await prisma.wilaya.findUnique({ where: { id: other }, select: { nameFr: true } });
+      // the pair stands only when the customer, already asked about it, names the order's wilaya again in THIS message
+      // (retest 26/11: the answer came back as « الجيد بزور » and the same pair went through)
+      const confirmed = other !== null && [place.nameFr, place.nameAr].some((n) => placeWritten(ctx.customerText ?? '', n)) && (await this.placeConflictAsked(ctx, place.id, d.communeName));
+      if (other !== null && !confirmed) {
+        const its = await prisma.wilaya.findUnique({ where: { id: other }, select: { nameFr: true, nameAr: true } });
+        const own = its?.nameFr ?? 'another wilaya';
+        // the customer names the commune's own wilaya in this message: that is the wilaya of the order
+        const named = !!its && [its.nameFr, its.nameAr].some((n) => placeWritten(ctx.customerText ?? '', n));
+        // …and the order is prepared with it at once (no extra turn for the customer)
+        if (named && !placeFixed) return this.prepareOrder({ ...args, wilayaId: other }, ctx, true);
         return fail({
           ok: false,
-          error: { code: 'VALIDATION', field: 'communeName', missing: true, placeConflict: { wilayaId: place.id, communeName: d.communeName, communeOfWilaya: its?.nameFr ?? String(other) } },
-          say: `Not done: « ${d.communeName} » is a commune of ${its?.nameFr ?? 'another wilaya'}, not of ${place.nameFr}. Never mix an address of an earlier order with the wilaya of a delivery-price question. Ask the customer, in one question, where this order is delivered: the wilaya and the commune. Do not confirm anything yet.`,
+          error: { code: 'VALIDATION', field: 'communeName', missing: true, placeConflict: { wilayaId: place.id, communeName: d.communeName, communeOfWilaya: own, communeOfWilayaId: other } },
+          say: named
+            ? `Not done: « ${d.communeName} » is a commune of ${own} and the customer has just written ${own}: call create_order again with wilayaId ${other} (${own}), not ${place.nameFr}.`
+            : `Not done: « ${d.communeName} » is a commune of ${own}, not of ${place.nameFr}. Never mix an address of an earlier order with the wilaya of a delivery-price question, and never guess. Ask the customer one closed question: is this order delivered to ${d.communeName} in ${own}, or to ${place.nameFr} (then: which commune)? Do not confirm anything yet.`,
         });
       }
     }
