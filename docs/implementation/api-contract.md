@@ -579,3 +579,10 @@ type AdminCmsQuery = Paging & { type?: CmsType[]; status?: CmsStatus[]; missingL
 | Config | `AI_STABLE_TOOLS` (`on` / `off`, default `off`), `AI_REPLY_THINKING` (`low` / `off`, default `low`), `PAYMENT_DRIVER`, `CHARGILY_MODE`. |
 
 Same table as `../specs/06-api.md` (last section); the names above are the contract.
+
+## Changes of 26/11/2026 — the agent learns from the team (owner decision)
+
+- `AgentDto` (list and detail): `autonomy: { pct: number | null; conversations: number; handoffs: number; days: 30 }` and `learningPending: number` (FAQ suggestions learnt from the team, waiting for a review).
+- `AgentFaqDto.source` gains `human_reply`; new field `sourceConversationId: string | null`. A `human_reply` entry with `isActive: false` is a suggestion: approved by `PATCH /agents/:id/faq/:fid { isActive: true, answer? }` (permission `agents.manage`; `AGENT_FAQ_LIMIT` applies at that moment), ignored by `DELETE /agents/:id/faq/:fid`.
+- `AgentMetricsDto.handoffs` / `resolutionRate`, analytics `autonomyPct`, channel `aiResolutionPct30d`: now counted per conversation (a conversation with at least one AI turn that ended in a hand-off), `unknown` turns and hand-offs by a member no longer count (`packages/shared/src/autonomy.ts`).
+- Job `learn-from-reply` (queue of the jobs, id `learn:<conversationId>:<handoffAt>`, delay 10 min), queued through the outbox in the transaction of the member's message.

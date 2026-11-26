@@ -19,13 +19,13 @@ import { useSession, useWorkspaceId } from '@/lib/session';
 import { agentKeys, agentsApi, useAgentFaq } from '../api';
 import type { AgentFaq, FaqSource } from '../contracts';
 import { FAQ_MAX_CHARS, FAQ_MAX_ENTRIES, POLICY_KEYS } from '../contracts';
-import { POLICY_MAX } from '../logic';
+import { POLICY_MAX, splitFaq } from '../logic';
 import { issueText, type SectionProps } from './identity';
 
 const FAQ_FILE_MAX = 5 * 1024 * 1024;
 // M11: Word (.docx) and text files; PDF is refused by the API (no PDF text extractor — carry-over kept open)
 const FAQ_FILE_TYPES = /\.(docx|txt|md|csv)$/i;
-const SOURCE_TONE: Record<FaqSource, 'neutral' | 'info' | 'success'> = { manual: 'neutral', page_extraction: 'info', ai_suggested: 'success', file_import: 'neutral' };
+const SOURCE_TONE: Record<FaqSource, 'neutral' | 'info' | 'success'> = { manual: 'neutral', page_extraction: 'info', ai_suggested: 'success', file_import: 'neutral', human_reply: 'info' };
 
 export function KnowledgeFields({ draft: d, set, errors, readOnly, badge, inTunnel, agentId, productCount, hasInsights, extraProducts }: SectionProps & { agentId: string | null; productCount?: number | null; hasInsights?: boolean; /** products linked one by one (« Ajouter à un agent ») */ extraProducts?: number | null }) {
   const t = useT();
@@ -154,7 +154,9 @@ export function FaqSection({ agentId, readOnly, hasInsights }: { agentId: string
   const [error, setError] = useState<string | null>(null);
   // a FAQ row is deleted at once on the server (not part of "Annuler les modifications"): asked first
   const [toRemove, setToRemove] = useState<AgentFaq | null>(null);
-  const rows = q.data ?? [];
+  // owner 26/11: the suggestions learnt from the team's replies wait in their own block — they are not entries yet (not used
+  // by the agent, not counted in the limits)
+  const { entries: rows, suggestions } = splitFaq(q.data ?? []);
   const chars = rows.reduce((n, r) => n + r.question.length + r.answer.length, 0);
   const full = rows.length >= FAQ_MAX_ENTRIES || chars >= FAQ_MAX_CHARS;
   // the page is read with its token: only a live page can be read (paused, to reconnect, pending ⇒ not offered)
@@ -241,6 +243,18 @@ export function FaqSection({ agentId, readOnly, hasInsights }: { agentId: string
       }
       data-section="faq"
     >
+      {agentId ? (
+        <LearningSuggestions
+          agentId={agentId}
+          rows={suggestions}
+          readOnly={readOnly}
+          onChanged={() => {
+            // the FAQ, and the agent itself (its count of replies to review, on the page and on the list)
+            void qc.invalidateQueries({ queryKey: agentKeys.one(ws, agentId) });
+            void qc.invalidateQueries({ queryKey: agentKeys.list(ws) });
+          }}
+        />
+      ) : null}
       {!agentId ? (
         <p className="text-[13px] text-text-muted">{t('agents.faq.needsDraft')}</p>
       ) : q.isError ? (
@@ -300,6 +314,85 @@ export function FaqSection({ agentId, readOnly, hasInsights }: { agentId: string
       />
       <ExtractDialog open={extract} pages={pages.map((p) => ({ id: p.id, name: p.name }))} pending={busy === 'extract'} onClose={() => setExtract(false)} onStart={(id) => void startExtract(id)} />
     </FormSection>
+  );
+}
+
+/**
+ * Owner decision 26/11 — the agent learns from the team's replies. After a hand-off of the AI answered by a member, the
+ * general question and the team's answer are proposed here: badge « Appris d'une réponse de l'équipe », the proposed answer
+ * editable, « Approuver » (it becomes an entry the agent uses, counted in the limits — the limit error is the FAQ's),
+ * « Ignorer » (deleted), « Voir la conversation » while that conversation exists. Errors stay inline, the text typed is kept.
+ */
+function LearningSuggestions({ agentId, rows, readOnly, onChanged }: { agentId: string; rows: AgentFaq[]; readOnly?: boolean; onChanged: () => void }) {
+  const t = useT();
+  const { can } = useSession();
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  if (!rows.length) return null;
+  const answerOf = (r: AgentFaq) => answers[r.id] ?? r.answer;
+  const run = async (r: AgentFaq, kind: 'approve' | 'ignore') => {
+    setBusy(`${kind}:${r.id}`);
+    setErrors(({ [r.id]: _gone, ...rest }) => rest);
+    try {
+      if (kind === 'approve') await agentsApi.updateFaq(agentId, r.id, { isActive: true, answer: answerOf(r).trim() });
+      else await agentsApi.removeFaq(agentId, r.id);
+      toast({ tone: 'success', message: t(kind === 'approve' ? 'agents.learning.approved' : 'agents.learning.ignored') });
+      onChanged();
+    } catch (e) {
+      const field = e instanceof ApiError ? e.body.fields.answer : undefined;
+      setErrors((old) => ({ ...old, [r.id]: fieldError(t, field, { max: 2000 }) ?? errorMessage(e, t) }));
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <section aria-labelledby="faq-learning-title" data-testid="faq-learning" className="flex flex-col gap-3 rounded-card border border-accent-inbound/40 bg-ink-surface p-3">
+      <div>
+        <h3 id="faq-learning-title" className="ts-title">
+          {t('agents.learning.title')} <Ltr className="ts-label-meta text-text-muted">{formatNumber(rows.length)}</Ltr>
+        </h3>
+        <p className="mt-1 text-[13px] text-text-secondary">{t('agents.learning.description')}</p>
+      </div>
+      <ul className="flex flex-col gap-3">
+        {rows.map((r) => (
+          <li key={r.id} data-suggestion={r.id} className="flex flex-col gap-2 rounded-card border border-line-edge bg-ink-base p-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <MonoChip tone="info">{t('agents.faq.source.human_reply')}</MonoChip>
+              {r.sourceConversationId && can('inbox.read') ? (
+                <Link href={`/inbox/${r.sourceConversationId}`} className="ts-label-meta text-accent-inbound hover:underline" data-testid="faq-learning-conversation">
+                  {t('agents.insights.seeConversation')}
+                </Link>
+              ) : null}
+            </div>
+            <p dir="auto" className="text-[14px]" data-testid="faq-learning-question">
+              {r.question}
+            </p>
+            <Textarea
+              dir="auto"
+              rows={3}
+              maxLength={2000}
+              value={answerOf(r)}
+              disabled={readOnly || busy !== null}
+              aria-label={t('agents.learning.answerFor', { question: r.question })}
+              aria-invalid={!!errors[r.id] || undefined}
+              onChange={(e) => setAnswers((old) => ({ ...old, [r.id]: e.target.value }))}
+            />
+            {errors[r.id] ? <FormAlert>{errors[r.id]}</FormAlert> : null}
+            {readOnly ? null : (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="primary" size="sm" onClick={() => void run(r, 'approve')} loading={busy === `approve:${r.id}`} disabled={busy !== null} disabledReason={answerOf(r).trim() ? undefined : fieldError(t, 'validation.required')} data-testid="faq-learning-approve">
+                  {t('agents.learning.approve')}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => void run(r, 'ignore')} loading={busy === `ignore:${r.id}`} disabled={busy !== null} data-testid="faq-learning-ignore">
+                  {t('agents.learning.ignore')}
+                </Button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

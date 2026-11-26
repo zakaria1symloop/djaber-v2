@@ -462,6 +462,8 @@ enum FaqSource {
   page_extraction
   ai_suggested
   file_import
+  /// owner 26/11: learnt from a team member's reply after a hand-off of the AI — a suggestion until the shop approves it
+  human_reply
 }
 
 enum AgentTone {
@@ -1947,6 +1949,7 @@ model Conversation {
   orders    Order[]
   recoEvents RecommendationEvent[]
   reports   Report[]
+  learnedFaqs AgentFaq[] @relation("FaqSourceConversation")
 
   @@unique([channelId, externalSenderId])
   @@index([workspaceId, status, lastMessageAt])
@@ -2414,13 +2417,17 @@ model AgentFaq {
   askedCount  Int?
   sortOrder   Int       @default(0)
   isActive    Boolean   @default(true)
+  /// owner 26/11 (`source = human_reply`): the conversation whose team reply this entry was learnt from (« Voir la conversation »)
+  sourceConversationId String? @db.Uuid
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  sourceConversation Conversation? @relation("FaqSourceConversation", fields: [sourceConversationId], references: [id], onDelete: SetNull)
 
   @@index([agentId, sortOrder])
+  @@index([sourceConversationId])
 }
 
 // =============================================================================

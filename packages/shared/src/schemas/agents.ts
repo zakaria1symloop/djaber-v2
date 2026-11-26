@@ -1,6 +1,7 @@
 // Agents & AI (03 §6–§7, api-contract §3.4 + §3.10, 06 "Agents & AI" + §8.7, 04-ai-pipeline).
 // One source for the API (nestjs-zod DTOs) and the web. Field names = contract names. Messages = i18n keys.
 import { z } from 'zod';
+import type { AgentAutonomy } from '../autonomy';
 import {
   AgentStatusValues,
   AgentToneValues,
@@ -396,6 +397,10 @@ export type AgentDto = {
   wizardStep: number | null;
   wizard: AgentWizardFields | null;
   metrics30d: AgentMetrics;
+  /** owner decision 26/11 — « Autonomie de l'IA » over the last 30 days (`autonomyPct`, `../autonomy`) */
+  autonomy: AgentAutonomy;
+  /** owner decision 26/11 — FAQ suggestions learnt from the team's replies, waiting for the shop's review (`source = human_reply`, inactive) */
+  learningPending: number;
   pendingInsights: number;
   version: number;
   createdAt: string;
@@ -423,7 +428,14 @@ export type AgentVersionDiffDto = { version: number; against: number; changes: {
 /** `count` (−1 = unlimited) and `total` (policies n / 4) are shown beside the label (full-test 15/11 AGENTS-09). */
 export type AgentReadinessCheck = { key: string; ok: boolean; label: string; count?: number; total?: number; link?: string; blocking?: boolean };
 export type AgentReadinessDto = { ready: boolean; checks: AgentReadinessCheck[] };
-export type AgentFaqDto = { id: string; question: string; answer: string; source: 'manual' | 'page_extraction' | 'ai_suggested' | 'file_import'; askedCount: number | null; sortOrder: number; isActive: boolean; createdAt: string };
+/**
+ * `human_reply` (owner 26/11): learnt from a team member's reply after a hand-off of the AI. While `isActive` is false it is a
+ * suggestion — not in the prompt, not counted in the FAQ limits — that the shop approves (`PATCH { isActive: true }`) or ignores
+ * (`DELETE`); `sourceConversationId` = the conversation it comes from (null once that conversation is deleted, and for every other source).
+ */
+export type AgentFaqDto = { id: string; question: string; answer: string; source: 'manual' | 'page_extraction' | 'ai_suggested' | 'file_import' | 'human_reply'; askedCount: number | null; sortOrder: number; isActive: boolean; sourceConversationId: string | null; createdAt: string };
+/** A suggestion learnt from the team, still waiting for the shop's review. */
+export const isLearningSuggestion = (f: Pick<AgentFaqDto, 'source' | 'isActive'>): boolean => f.source === 'human_reply' && !f.isActive;
 /** journey 16/11 J03-11: the card the customer gets (messaging `productCards`): lowest variant price, `priceMax` of the range, promotion `oldPrice`. */
 export type PlaygroundCard = { productId: string; name: string; price: number; priceMax?: number; oldPrice?: number; imageUrl: string | null; variantLabel?: string | null };
 export type PlaygroundToolCall = { name: string; args: unknown; result: unknown; simulated: boolean };

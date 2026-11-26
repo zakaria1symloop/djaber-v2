@@ -6936,5 +6936,18 @@
  "agents.turnStatus.ok": "تمت الإجابة",
  "agents.turnStatus.unclear": "رسالة غير واضحة",
  "agents.turnStatus.unknown": "سؤال بلا إجابة",
- "agents.turnStatus.handoff": "حُوِّل إلى الفريق"
+ "agents.turnStatus.handoff": "حُوِّل إلى الفريق",
+ "agents.autonomy.label": "استقلالية الذكاء الاصطناعي",
+ "agents.autonomy.hint": "نسبة المحادثات التي أدارها الذكاء الاصطناعي دون أن يطلب تدخّل الفريق، خلال آخر {days} يومًا.",
+ "agents.autonomy.detail": "{conversations, plural, one {محادثة واحدة} two {محادثتان} few {# محادثات} many {# محادثةً} other {# محادثة}} خلال {days} يومًا، {handoffs, plural, =0 {لم تُحوَّل أي منها إلى الفريق} one {واحدة حُوِّلت إلى الفريق} two {اثنتان حُوِّلتا إلى الفريق} few {# حُوِّلت إلى الفريق} many {# حُوِّلت إلى الفريق} other {# حُوِّلت إلى الفريق}}",
+ "agents.autonomy.none": "لا توجد محادثات بعد",
+ "agents.learning.pending": "{count, plural, one {ردّ واحد من الفريق بانتظار الاعتماد} two {ردّان من الفريق بانتظار الاعتماد} few {# ردود من الفريق بانتظار الاعتماد} many {# ردًّا من الفريق بانتظار الاعتماد} other {# ردّ من الفريق بانتظار الاعتماد}}",
+ "agents.learning.title": "ردود الفريق بانتظار الاعتماد",
+ "agents.learning.description": "حوّل الوكيل المحادثة إلى فريقك فأجاب عنها. اعتمد الإجابة ليقدّمها الوكيل بنفسه في المرة القادمة؛ وما دامت غير معتمدة فلن يستخدمها.",
+ "agents.learning.answerFor": "الإجابة المقترحة عن: {question}",
+ "agents.learning.approve": "اعتماد",
+ "agents.learning.ignore": "تجاهل",
+ "agents.learning.approved": "تم اعتماد الإجابة: سيستخدمها الوكيل من الآن.",
+ "agents.learning.ignored": "تم تجاهل الاقتراح.",
+ "agents.faq.source.human_reply": "مُستفاد من ردّ الفريق"
 }

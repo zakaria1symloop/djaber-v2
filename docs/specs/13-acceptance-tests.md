@@ -505,6 +505,17 @@ One scenario per rule; IDs `AT-<area>-nn`. Columns: scenario (Given / When / The
 | AT-ST-13 | RTL: AR frames of Home, Inbox, Orders list v2, New order, Product form match snapshots; numbers, phones, SKUs stay LTR; Changa applied to Body AR | 12 §0, 08 §7.10 | E |
 | AT-ST-14 | Responsive: Orders list at 1024 (icon sidebar, hidden columns) and 390 (cards, bottom-sheet actions, no multi-select); Home / Inbox / Order page checked at 1024 | 08 §7.10, LST-05 | E |
 
+## The agent learns from the team — owner decision 26/11/2026 (`apps/api/test/m4/learning.int.spec.ts`)
+
+| AT | Expected |
+|---|---|
+| AT-LRN-01 | AI hand-off → team reply → one job per hand-off (10 min) → one `human_reply` suggestion, inactive, not in the prompt; the job run twice stores nothing more |
+| AT-LRN-02 | nothing is queued for a hand-off by hand, a thread a member paused, a picture alone, or a page without an agent |
+| AT-LRN-03 | `learn: false`, a malformed answer, personal data, a provider failure ⇒ no suggestion; a question the agent already has ⇒ its `askedCount` + 1 |
+| AT-LRN-04 | an answer typed in the Page inbox (echo) to a hand-off of the AI teaches the agent too |
+| AT-LRN-05 | « Approuver » (answer edited) makes it an entry the agent uses, counted in the limits; « Ignorer » deletes it; operator 403; another workspace 404 |
+| AT-LRN-06 | the list and the detail carry `autonomy` (30 days) and `learningPending`; a thread the team took by hand does not count against the AI; the agent metrics tell the same number |
+
 ## Recette of 22–24/11/2026 — regression tests
 
 Each fix of the recette has a test named after the client row (`L<n>`) or the tester log (`UX-<n>`) in its comment. They run with `pnpm test` (unit) and `pnpm test:int` (integration).

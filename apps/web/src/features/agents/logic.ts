@@ -1,7 +1,7 @@
 // Pure logic of the agents module: the wizard draft (03 §30 AGV-02), per-step validation and checklist, the diff
 // between two drafts (dirty sections of AGT-04, merge by section after a 409), the business-hours model, the credit
 // estimate of the summary rail, and the view models of a playground turn and of a tool call (AGT-07).
-import { AGENT_CARD_TEMPLATE_MAX, AGENT_CLOSING_MAX, AGENT_DEFAULT_MAX_AMOUNT, AGENT_DEFAULT_STYLE, AGENT_TONE_OF_PERSONALITY, AGENT_HANDOFF_KEYWORDS_MAX, AGENT_NAME_MAX, AGENT_POLICY_MAX, AGENT_RESPONSE_DELAY_MAX_S, CREDIT_COST, formatNumber } from '@djaber/shared';
+import { AGENT_CARD_TEMPLATE_MAX, AGENT_CLOSING_MAX, AGENT_DEFAULT_MAX_AMOUNT, AGENT_DEFAULT_STYLE, AGENT_TONE_OF_PERSONALITY, AGENT_HANDOFF_KEYWORDS_MAX, AGENT_NAME_MAX, AGENT_POLICY_MAX, AGENT_RESPONSE_DELAY_MAX_S, autonomyPct, autonomyTone, CREDIT_COST, formatNumber, isLearningSuggestion, type AgentAutonomy, type AgentFaqDto } from '@djaber/shared';
 import type {
   Agent,
   AgentLanguage,
@@ -520,8 +520,29 @@ export const cardState = (a: Pick<Agent, 'status' | 'pausedReason'>): AgentCardS
 /** `maxAgents` counts active + paused agents; drafts never count (AGT-01). */
 export const limitReached = (planLimit: { limit: number; current: number } | null | undefined): boolean => !!planLimit && planLimit.limit >= 0 && planLimit.current >= planLimit.limit;
 export const countedAgents = (rows: Pick<Agent, 'status'>[]): number => rows.filter((a) => a.status !== 'draft').length;
-/** "87 %" of conversations handled without a human. */
-export const handledPct = (m: { conversations: number; handledWithoutHuman: number }): number | null => (m.conversations > 0 ? Math.round((m.handledWithoutHuman * 100) / m.conversations) : null);
+/** "87 %" of conversations handled without a human — the formula of « Autonomie de l'IA » (`@djaber/shared` `autonomyPct`). */
+export const handledPct = (m: { conversations: number; handledWithoutHuman: number }): number | null => autonomyPct(m.conversations, m.conversations - m.handledWithoutHuman);
+
+/* ---------- « Autonomie de l'IA » and what the agent learnt from the team (owner decision 26/11) ---------- */
+export type AutonomyView = {
+  /** « 92 % », or « — » while the agent had no conversation */
+  value: string;
+  /** ≥ 90 success · 70–89 warning · < 70 danger · nothing yet neutral */
+  tone: ReturnType<typeof autonomyTone>;
+  /** « 46 conversations sur 30 jours, 4 passées à l'équipe » / « Pas encore de conversation » */
+  detailKey: 'agents.autonomy.detail' | 'agents.autonomy.none';
+  params: { conversations: number; handoffs: number; days: number };
+};
+/** Null for an agent read without the figure (a cached page of before the release, a partial WS update). */
+export const autonomyView = (a: AgentAutonomy | null | undefined): AutonomyView | null =>
+  a ? { value: a.pct === null ? '—' : `${a.pct} %`, tone: autonomyTone(a.pct), detailKey: a.pct === null ? 'agents.autonomy.none' : 'agents.autonomy.detail', params: { conversations: a.conversations, handoffs: a.handoffs, days: a.days } } : null;
+/** The Knowledge tab of the agent, where the team's replies are reviewed. */
+export const knowledgeHref = (agentId: string): string => `/agents/${agentId}/configuration?section=knowledge`;
+/** The FAQ as the Knowledge tab shows it: the suggestions learnt from the team that wait for a review, apart from the entries. */
+export const splitFaq = <T extends Pick<AgentFaqDto, 'source' | 'isActive'>>(rows: readonly T[]): { entries: T[]; suggestions: T[] } => ({
+  entries: rows.filter((r) => !isLearningSuggestion(r)),
+  suggestions: rows.filter((r) => isLearningSuggestion(r)),
+});
 export const creditsPerConv = (m: { conversations: number; credits: number }): number | null => (m.conversations > 0 ? Math.round((m.credits * 10) / m.conversations) / 10 : null);
 
 /**

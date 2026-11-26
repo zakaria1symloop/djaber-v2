@@ -25,7 +25,7 @@ import type { Agent, AgentInsight } from './contracts';
 import { LANGUAGES } from './contracts';
 import { isAlreadyResolved, ignoreInsight, ResolveInsightDialog } from './insights/resolve-dialog';
 import { cardState, limitReached, noChannelText, stepSlug } from './logic';
-import { AgentStatusPill, ChannelChips, InsightTypePill, ModelBadge } from './ui';
+import { AgentAutonomy, AgentStatusPill, ChannelChips, InsightTypePill, ModelBadge } from './ui';
 import { useAgentActions, type AgentActions } from './use-agent-actions';
 
 /** `GET /agents` parameters (06 §10 "Agents", api-contract §4 `AgentsQuery`). */
@@ -358,6 +358,8 @@ function AgentCard({ agent: a, actions, selecting, selected, onToggle }: { agent
           </div>
         </div>
         {a.description ? <p className="text-[13px] text-text-secondary">{a.description}</p> : null}
+        {/* owner 26/11: how much the AI handles alone, and the team's replies it can learn from (a draft never answered anyone) */}
+        {draft ? null : <AgentAutonomy agent={a} />}
         <div className="grid grid-cols-3 gap-2">
           <div className={tile}>
             <div className="ts-numeral-m">

@@ -7,6 +7,11 @@ export const DEFAULT_CAPABILITIES: AgentCapabilities = { replyText: true, imageR
 export const DEFAULT_ORDER_FIELDS: AgentOrderField[] = ORDER_FIELD_KEYS.map((key) => ({ key, required: key !== 'phone2' && key !== 'note', locked: ORDER_FIELDS_LOCKED.includes(key) }));
 export const DEFAULT_HANDOFF_RULES: AgentHandoffRule[] = HANDOFF_RULE_KINDS.map((kind) => ({ kind, enabled: true }));
 export const EMPTY_METRICS: AgentMetrics = { conversations: 0, handledWithoutHuman: 0, orders: 0, confirmedPct: 0, delivered: 0, avgLatencyMs: 0, p95LatencyMs: 0, credits: 0, satisfaction: null };
+/**
+ * Owner decision 26/11: an FAQ entry learnt from a team member's reply that still waits for the shop's review. Like a pending
+ * `ai_suggested` row it is a suggestion: not in the prompt (inactive), not counted in the FAQ limits, not copied, not exported.
+ */
+export const LEARNING_PENDING = { source: 'human_reply', isActive: false } as const satisfies Prisma.AgentFaqWhereInput;
 
 const obj = <T>(v: unknown, fallback: T): T => (v && typeof v === 'object' && !Array.isArray(v) ? (v as T) : fallback);
 const arr = <T>(v: unknown, fallback: T[]): T[] => (Array.isArray(v) ? (v as T[]) : fallback);

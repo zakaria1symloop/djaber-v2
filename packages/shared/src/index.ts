@@ -8,3 +8,4 @@ export * from './geo';
 export * from './i18n/messages';
 export * from './i18n/stored-text';
 export * from './permissions';
+export * from './autonomy';

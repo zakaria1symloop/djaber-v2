@@ -230,7 +230,7 @@ These columns exist on **Agent** (schema) and are snapshotted in `AgentVersion.s
 
 | Entity | Fields | Notes |
 |---|---|---|
-| **AgentFaq** | workspaceId→, agentId→, question, answer, source(manual/page_extraction/ai_suggested/file_import), askedCount?, sortOrder, isActive | ≤ 50 entries / 20 000 chars per agent `[FIG AGT-02 step 2]`; "Résoudre l'insight → Créer une FAQ" creates a row |
+| **AgentFaq** | workspaceId→, agentId→, question, answer, source(manual/page_extraction/ai_suggested/file_import/human_reply), askedCount?, sortOrder, isActive, sourceConversationId?→Conversation (SET NULL; `human_reply` only — owner 26/11) | ≤ 50 entries / 20 000 chars per agent `[FIG AGT-02 step 2]`; "Résoudre l'insight → Créer une FAQ" creates a row |
 
 ## 16. Saved views & user preferences **(D42)**
 
