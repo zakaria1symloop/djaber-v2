@@ -9,7 +9,7 @@ import { ProcessorRegistry } from '../../core/queue/processor.registry';
 import { StorageService } from '../../core/storage/storage.service';
 import { TenantResolver } from '../../core/tenancy/tenant.resolver';
 import { BatchingService } from '../messaging/batching.service';
-import { attachmentsOf } from '../messaging/messaging.presenter';
+import { attachmentsOf, contextOf } from '../messaging/messaging.presenter';
 import { OutboundSendService } from '../messaging/outbound-send.service';
 import { VOICE_MAX_BYTES, VOICE_MAX_SECONDS } from './ai.constants';
 import { AI_GATEWAY, AiProviderError, type AiGateway } from './provider/ai.gateway';
@@ -64,12 +64,15 @@ export class TranscriptionService implements OnModuleInit {
   }
 
   /** Transcribes an audio buffer through the transcription route (primary, then fallback). */
-  async transcribe(audio: Buffer, mime: string, o: { productNames?: readonly string[]; placeNames?: readonly string[] } = {}) {
+  async transcribe(audio: Buffer, mime: string, o: { productNames?: readonly string[]; placeNames?: readonly string[]; conversationLanguage?: string | null } = {}) {
     const r = await this.routing.call('transcription', (m, timeoutMs) => this.gateway.transcribe({ model: m.ref, audio, mime, timeoutMs }));
     const first = { ...r.value, model: r.model, usedFallback: r.usedFallback };
-    // English speech is read well as it is
-    const heardFrench = /^(fr|french)$/i.test((r.value.language ?? '').trim());
-    if (/^(en|english)$/i.test((r.value.language ?? '').trim()) || !r.value.text.trim()) return first;
+    // English speech is read well as it is — when the customer writes English. Tester 26/11: « Alger, Bab Ezzouar » said in an Arabic
+    // conversation came back « Al Jai, that's the war. » (heard as English): there it is rebuilt like a note heard as French
+    const heardEnglish = /^(en|english)$/i.test((r.value.language ?? '').trim());
+    const otherLanguage = !!o.conversationLanguage && o.conversationLanguage !== 'en';
+    const heardFrench = /^(fr|french)$/i.test((r.value.language ?? '').trim()) || (heardEnglish && otherLanguage);
+    if ((heardEnglish && !otherLanguage) || !r.value.text.trim()) return first;
     // owner 23/11 (« my voice notes are not well understood »): the speech model is poor at Algerian darija — it rewrites it into standard
     // Arabic, loses the French words and mishears (« السومة » → « السيارة », a 3-second note read as « Azerbaijani »). Arabic (or a language
     // nobody speaks here) ⇒ two more readings of the same audio (Arabic with a darija hint, French with a darija hint), then the text
@@ -90,7 +93,7 @@ export class TranscriptionService implements OnModuleInit {
       .then((x) => voiceFixLine(x.value.text), (e) => (this.log.warn({ err: String(e) }, 'voice note repair unavailable'), null));
     if (!fixed) return base;
     // a note heard as French and rebuilt with no Arabic letter is French
-    return { ...base, text: fixed, language: heardFrench && !/[\u0600-\u06ff]/.test(fixed) ? first.language : 'ar' };
+    return { ...base, text: fixed, language: heardFrench && !/[\u0600-\u06ff]/.test(fixed) ? (heardEnglish ? 'fr' : first.language) : 'ar' };
   }
 
   /** The 58 historical wilayas in French, then the communes this customer already gave (addresses, orders). */
@@ -129,7 +132,7 @@ export class TranscriptionService implements OnModuleInit {
             const productNames = (await prisma.product.findMany({ where: { deletedAt: null, isActive: true }, select: { name: true }, orderBy: { updatedAt: 'desc' }, take: 40 })).map((p) => p.name);
             // UX-104 (tester 26/11): « Oran » heard as « orange », « Alger, Bab Ezzouar » as « الجيد بزور » — the wilayas, and the
             // communes of this customer's earlier addresses and orders, help the repair the same way
-            const r = await this.transcribe(file.body, file.mime || audio.mime || 'audio/mp4', { productNames, placeNames: await this.placeNames(conv.clientId) });
+            const r = await this.transcribe(file.body, file.mime || audio.mime || 'audio/mp4', { productNames, placeNames: await this.placeNames(conv.clientId), conversationLanguage: contextOf(conv).lastLanguage ?? null });
             if ((r.durationSec ?? 0) > VOICE_MAX_SECONDS) outcome = 'too_long';
             else if (r.text.trim()) {
               transcript = r.text.trim().slice(0, 4000);

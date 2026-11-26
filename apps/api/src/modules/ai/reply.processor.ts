@@ -484,7 +484,9 @@ export class ReplyProcessor implements OnModuleInit {
       const latest = await tx.conversation.findFirstOrThrow({ where: { id: conv.id } });
       const context: ConversationContext = {
         ...contextOf(latest),
-        lastLanguage: o.lang,
+        // tester 26/11 10:08: a voice note heard as English gibberish (« Al Jai, that's the war. ») made the whole conversation English —
+        // a message nobody understood says nothing about the customer's language
+        lastLanguage: out.status === 'UNCLEAR' ? (contextOf(latest).lastLanguage ?? o.lang) : o.lang,
         lastProductIds: [...new Set([...cards, ...o.matchedIds, ...toolProducts, ...(contextOf(latest).lastProductIds ?? [])])].slice(0, LAST_PRODUCTS_MAX),
         unclearStreak: out.status === 'UNCLEAR' ? streak : 0,
         aiUnavailable: null,

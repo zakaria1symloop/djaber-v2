@@ -1163,7 +1163,7 @@ export class ToolRegistry {
     // Houssem live 23/11 (H-07 13:21–13:24): the recap shown a few messages earlier was never shown again — « donne moi le recap » got
     // « le récapitulatif juste au-dessus » then « il arrive juste après », and nothing came. When the AI's last message is not that recap,
     // the platform sends it again
-    if (said === 'unclear' && ctx.recapShownLast === false)
+    if (said === 'unclear' && (ctx.recapShownLast === false || (!!latestAny && latestAny.draft !== draft)))
       return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft, core }, recap, recapToShow: true, draftOrder, say: 'Nothing is ordered yet. The platform sends this recap to the customer again right after your reply, with the request to answer yes: write no recap of your own — "reply" only answers anything else the customer asked in this message, in one short sentence, or stays empty. Do not call create_order again in this turn.' });
     if (said === 'unclear') return fail({ ok: false, error: { code: 'CONFIRMATION_REQUIRED', draft, core }, recap, draftOrder, say: 'The customer has not clearly confirmed this recap yet: nothing is ordered. Answer their message, then ask them to reply « oui » to confirm the order (or say what to change).' });
     // 04 §21: `phoneConfirmed` counts only once the tool asked the customer to re-confirm this number
