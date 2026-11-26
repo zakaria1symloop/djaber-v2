@@ -34,6 +34,7 @@ import { AiRunService, guardFlags, intentOf, type RunMeta, type TurnResult } fro
 import { CatalogueService } from './catalogue.service';
 import { InsightService } from './insight.service';
 import { allowedReplyLanguage, systemLang, turnLanguage, type AiLanguage } from './language';
+import { dropWrongPlacePairs, type PlaceRow, type WilayaRow } from './place-pairs';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
 import { FIELD_QUESTIONS, guardFactsOf, SAFE_SENTENCES } from './reply-guard';
 import { handoffSystemLineShown } from './reply-fixes';
@@ -65,6 +66,16 @@ const CARD_NAMES = (m: Message) => ((m.payload as { cards?: { name: string }[] }
  * empty reply — the customer got no answer). What is sent instead of silence: the question for the first order field the refused
  * create_order lacked and the conversation does not know yet, else « which product, and your wilaya? ».
  */
+/** The communes and wilayas (reference data), read once per worker process. */
+let placesOnce: Promise<{ communes: PlaceRow[]; wilayas: WilayaRow[] }> | null = null;
+const places = () =>
+  (placesOnce ??= Promise.all([prisma.commune.findMany({ select: { nameFr: true, nameAr: true, wilayaId: true } }), prisma.wilaya.findMany({ select: { id: true, nameFr: true, nameAr: true } })])
+    .then(([communes, wilayas]) => ({ communes, wilayas }))
+    .catch((e) => {
+      placesOnce = null;
+      throw e;
+    }));
+
 export const silentTurnText = (tools: readonly { name: string; result: unknown }[], known: ConversationContext['customer'], lang: string): string => {
   const loc = (['fr', 'en', 'ar', 'arabizi'] as const).find((l) => l === lang) ?? 'fr';
   const have: Record<string, string | undefined> = { clientName: known?.name, clientPhone: known?.phone, wilayaId: known?.wilaya, communeName: known?.commune, address: known?.address };
@@ -88,6 +99,17 @@ export const mergeCustomer = (stored: ConversationContext['customer'], turn: Con
 
 @Injectable()
 export class ReplyProcessor implements OnModuleInit {
+  /** UX-104: the reply text without a commune / wilaya pair that does not exist (any failure keeps the text as written). */
+  private async withRightPlaces(text: string): Promise<string> {
+    if (!text.includes('(')) return text;
+    try {
+      const p = await places();
+      return dropWrongPlacePairs(text, p.communes, p.wilayas);
+    } catch {
+      return text;
+    }
+  }
+
   private readonly log = new Logger(ReplyProcessor.name);
   constructor(
     private readonly registry: ProcessorRegistry,
@@ -439,7 +461,8 @@ export class ReplyProcessor implements OnModuleInit {
     // UX-098: nor in any other case — a turn that would send nothing asks the next order field (or what the customer wants)
     const silent = !silentRecap && !blocked && !out.reply.trim() && !cards.length && out.status !== 'HANDOFF' && !turn.forcedHandoff;
     if (silent) this.log.warn({ runId: run.id }, 'empty reply: the next question is sent instead');
-    const replyText = blocked ? '' : silentRecap ? orderRecapText(silentRecap, o.lang) : silent ? silentTurnText(turn.tools.map((t) => ({ name: canonicalTool(t.name), result: t.result })), mergeCustomer(contextOf(conv).customer, out.customer), o.lang) : out.reply.trim();
+    // UX-104 reopened (tester 15:16): « لوهران (Bab Ezzouar) » in the model's own sentence — a wrong commune / wilaya pair is removed
+    const replyText = blocked ? '' : silentRecap ? orderRecapText(silentRecap, o.lang) : silent ? silentTurnText(turn.tools.map((t) => ({ name: canonicalTool(t.name), result: t.result })), mergeCustomer(contextOf(conv).customer, out.customer), o.lang) : await this.withRightPlaces(out.reply.trim());
 
     return prisma.$transaction(async (db): Promise<ReplyOutcome> => {
       const tx = db as Tx;
