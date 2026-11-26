@@ -315,6 +315,19 @@ export const samePlace = (a: string, b: string): boolean => {
   const y = placeFold(b);
   return !!x && !!y && (x === y || articleless(x) === articleless(y));
 };
+/**
+ * UX-104 (tester live 26/11): « livraison l Oran ch7al ? » then « bghit ncommandi… » — the recap read « Bab Ezzouar, Oran »,
+ * with Oran's fee: the commune of the customer's earlier order (Alger) kept under the wilaya of a price question. The wilaya
+ * the commune really belongs to, when it is none of the order's wilaya and it is a commune of another one; else null
+ * (a commune of this wilaya, or a locality of no list: the customer's own word is kept).
+ */
+export const communeOfOtherWilaya = (communes: { nameFr: string; nameAr: string; wilayaId: number }[], wilayaId: number, given: string | null | undefined): number | null => {
+  const g = (given ?? '').trim();
+  if (!g) return null;
+  const hits = communes.filter((c) => samePlace(c.nameFr, g) || samePlace(c.nameAr, g));
+  if (!hits.length || hits.some((c) => c.wilayaId === wilayaId)) return null;
+  return hits[0]!.wilayaId;
+};
 /** journey retest R12-1: the customer's text names this place — as whole words, any punctuation of any script, articles or not. */
 export const placeWritten = (text: string, name: string): boolean => {
   const n = placeFold(name);
@@ -959,6 +972,19 @@ export class ToolRegistry {
     // journey retest R4-6: « Nadia Kaci, 0661234568 ou 0770998877 » — the other number is kept as the second phone (the model
     // asked which one to keep, then dropped 0770998877 without an answer), unless the customer said one replaces the other
     if (!phone2 && ctx.customerHistory !== undefined && phone2Field(ctx.agent)) phone2 = otherPhoneGiven(ctx.customerHistory, phone);
+    // UX-104: a commune of another wilaya is a contradiction — asked once, never mixed (see communeOfOtherWilaya)
+    // (the other wilayas are only read when the commune is not one of this wilaya)
+    if (!noDelivery && place && d.communeName && !place.communes.some((c) => samePlace(c.nameFr, d.communeName!) || samePlace(c.nameAr, d.communeName!))) {
+      const other = communeOfOtherWilaya(await prisma.commune.findMany({ select: { nameFr: true, nameAr: true, wilayaId: true } }), place.id, d.communeName);
+      if (other !== null && !(await this.placeConflictAsked(ctx, place.id, d.communeName))) {
+        const its = await prisma.wilaya.findUnique({ where: { id: other }, select: { nameFr: true } });
+        return fail({
+          ok: false,
+          error: { code: 'VALIDATION', field: 'communeName', missing: true, placeConflict: { wilayaId: place.id, communeName: d.communeName, communeOfWilaya: its?.nameFr ?? String(other) } },
+          say: `Not done: « ${d.communeName} » is a commune of ${its?.nameFr ?? 'another wilaya'}, not of ${place.nameFr}. Never mix an address of an earlier order with the wilaya of a delivery-price question. Ask the customer, in one question, where this order is delivered: the wilaya and the commune. Do not confirm anything yet.`,
+        });
+      }
+    }
     if (!noDelivery && !d.isStopdesk && (d.address ?? '').length < 10) return fail(invalid('address', EXAMPLES.address));
     // journey retest R2-2: « Adresse : Bab Ezzouar, Alger » — a home address that is only the commune / wilaya name
     if (!d.isStopdesk && place && placeOnlyAddress(d.address ?? '', [place.nameFr, place.nameAr, ...place.communes.flatMap((c) => [c.nameFr, c.nameAr]), ...(d.communeName ? [d.communeName] : [])], place.id))
@@ -1186,6 +1212,19 @@ export class ToolRegistry {
     if (!ctx.clientId) return false;
     const [address, order] = await Promise.all([prisma.clientAddress.findFirst({ where: { clientId: ctx.clientId, wilayaId: place.id }, select: { id: true } }), prisma.order.findFirst({ where: { clientId: ctx.clientId, wilayaId: place.id }, select: { id: true } })]);
     return !!address || !!order;
+  }
+
+  /**
+   * UX-104: the customer was already asked about this very pair (a locality of the wilaya that bears the name of a commune of
+   * another one): their answer stands — the question is put once per conversation, never in a loop.
+   */
+  private async placeConflictAsked(ctx: ToolRunContext, wilayaId: number, communeName: string): Promise<boolean> {
+    if (!ctx.conversationId) return false;
+    const calls = await prisma.aiToolCall.findMany({ where: { name: 'create_order', aiRun: { conversationId: ctx.conversationId }, aiRunId: { not: ctx.runId } }, orderBy: { id: 'desc' }, take: 12, select: { result: true } });
+    return calls.some((c) => {
+      const pc = (c.result as { error?: { placeConflict?: { wilayaId?: unknown; communeName?: unknown } } } | null)?.error?.placeConflict;
+      return !!pc && pc.wilayaId === wilayaId && typeof pc.communeName === 'string' && samePlace(pc.communeName, communeName);
+    });
   }
 
   /** The number of the order a `create_order` of this very run already placed, else null. */

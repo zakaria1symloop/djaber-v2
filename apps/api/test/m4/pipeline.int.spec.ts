@@ -371,6 +371,22 @@ describe('tools', () => {
     expect(r[0]).toMatchObject({ ok: true, wilayaName: 'Bou Saâda' });
   });
 
+  // UX-104 (tester live 26/11): « livraison l Oran ch7al ? » then an order — the recap read « Bab Ezzouar, Oran »
+  it('UX-104 a commune of another wilaya is never mixed with the order wilaya: asked once, then the customer answer stands', async () => {
+    const s = await shop({ maxQtyPerOrder: 3 });
+    await feeRule(s.owner.workspaceId, 31, 600, 400);
+    const base = { clientName: 'Amine Benali', clientPhone: '0555123456', wilayaId: 31, communeName: 'Bab Ezzouar', address: 'Cité 500 logements bâtiment 2', items: [{ productId: s.robe.id, quantity: 1 }], customerConfirmed: false };
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args: base }] }, { reply: 'La livraison, c’est pour quelle wilaya et quelle commune ?', status: 'OK', intent: 'SALE' });
+    const sender = newSender();
+    const first = await turn(s, sender, { text: 'Amine Benali, 0555123456, Oran, Bab Ezzouar, cité 500 logements bâtiment 2' });
+    expect(first.runs[0]!.toolCalls.map((c) => c.result as any)[0]).toMatchObject({ ok: false, error: { code: 'VALIDATION', field: 'communeName', placeConflict: { wilayaId: 31, communeName: 'Bab Ezzouar', communeOfWilaya: 'Alger' } } });
+    // the customer says it again: their word stands (a locality of Oran may bear that name) — the recap comes, no second question
+    await resetAi();
+    fakeAi(app).script('reply', { toolCalls: [{ name: 'create_order', args: base }] }, { reply: 'Voici le récapitulatif.', status: 'OK', intent: 'SALE' });
+    const second = await turn(s, sender, { text: 'oui, Oran, Bab Ezzouar' });
+    expect(second.runs.at(-1)!.toolCalls.map((c) => c.result as any)[0]).toMatchObject({ ok: false, error: { code: 'CONFIRMATION_REQUIRED' }, recap: { deliveryFee: 600 } });
+  });
+
   it('AT-AI-04 order capture up to `create_order`: invalid phone re-asked, phone normalised, fee from the grid, limits, 1 credit for the text and 0 for the order (the order row itself: test/m5/ai-orders)', async () => {
     const s = await shop({ maxQtyPerOrder: 3 });
     await feeRule(s.owner.workspaceId, 16, 400, 300);
