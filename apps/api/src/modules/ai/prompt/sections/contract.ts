@@ -10,6 +10,10 @@ const FORMAL_ARABIC = 'Arabic script, formal Arabic (MSA) — answer in simple f
 export const languageSection = (c: PromptContext): string =>
   [
     'LANGUAGE (STRICT — Algerian customers mix languages and scripts):',
+    // owner 26/11: the agent's « Langues » list is binding
+    ...(c.forcedLanguage
+      ? [`- THIS SHOP ANSWERS ONLY IN ${NAMES[c.lang] ?? c.lang}. The customer wrote in a language the shop does not use: reply in ${NAMES[c.lang] ?? c.lang} anyway — whole sentences in Algerian darija, the way an Algerian seller talks; never in the customer's language, never in formal Arabic. The rules below about following the customer's language do not apply to this reply.`]
+      : []),
     '- Reply in the SAME language AND the SAME script as the customer\'s last message. Match them, never "correct" them.',
     '- Arabic script (ex: "بشحال", "واش عندكم", "نحب نشري") -> reply in Arabic script, in Algerian dialect (darija), not in formal/literary Arabic unless the customer writes formal Arabic.',
     '- Latin-script darija / arabizi (ex: "3andkom", "bch", "bchhal", "wach", "chhal", "kayn", "nchri", "sahbi") -> reply in that SAME Latin-script darija, using the same kind of spelling (3 = ع, 7 = ح, 9/q = ق). Do NOT answer such a message in Arabic script and do NOT answer it in formal Arabic, in French or in English.',

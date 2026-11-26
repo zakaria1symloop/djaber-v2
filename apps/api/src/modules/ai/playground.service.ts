@@ -20,7 +20,7 @@ import { JobService } from '../jobs/job.service';
 import { GUARD_EARLIER_TOOL_CALLS, plannedCost, RUN_BUDGET_MS } from './ai.constants';
 import { AiRunService, guardFlags, intentOf, type RunMeta } from './ai-run.service';
 import { CatalogueService } from './catalogue.service';
-import { conversationLanguage, languageSwitched, systemLocale, turnLanguage, type AiLanguage } from './language';
+import { allowedReplyLanguage, conversationLanguage, languageSwitched, systemLocale, turnLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
 import { latestRecap, nextChosen, orderHistoryOf, placedThisTurn, type ChosenItem } from './tools/order-confirmation';
 import { canonicalTool } from './tools/tool-registry';
@@ -275,7 +275,8 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       // journey 16/11 J04-2: a first message with no clue (« Bonsoir » had none) takes the shop's language, not English
       const shop = { agentDefault: agent.defaultLanguage, workspaceLocale: TenantContext.get().locale };
       const previous = conversationLanguage(messages.slice(0, start).filter((m) => m.role === 'user').map((m) => m.text), shop);
-      const lang: AiLanguage = turnLanguage(said, previous, shop);
+      // owner 26/11: the agent's « Langues » list is binding, in the test chat too
+      const { lang, forced: forcedLanguage } = allowedReplyLanguage(turnLanguage(said, previous, shop), agent.languages, agent.defaultLanguage);
       const history: HistoryMessage[] = messages.slice(0, start).map((m) => ({ author: m.role === 'user' ? 'customer' : 'ai', text: m.text }));
       // full-test 15/11 AI-CHAT-05: what the customer chose in the earlier turns of the session (CURRENT ORDER), as on Messenger
       // journey retest R1-1: a failed turn has no `chosen` — it no longer erases the product chosen before it
@@ -285,7 +286,7 @@ export class PlaygroundService implements OnModuleInit, OnModuleDestroy {
       const shownBefore = ((previousRun?.meta as { shown?: string[] } | null)?.shown ?? []).filter((x): x is string => typeof x === 'string');
       // journey 16/11 J03-13: as live (reply.processor `oncePer24h`), the out-of-hours text once per session per 24 h
       const oohBefore = (previousRun?.meta as { outOfHoursAt?: string } | null)?.outOfHoursAt ?? null;
-      const turnCtx = await this.context.load(agent, { text: said, lastProductIds: matched, lang, chosen });
+      const turnCtx = await this.context.load(agent, { text: said, lastProductIds: matched, lang, forcedLanguage, chosen });
       const prompt = PromptBuilder.build(turnCtx.prompt, history, lines.join('\n') || said, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });
       // §4.3: the same reply guard as the live replies (the earlier turns of the session give their fees / totals)
       const earlier = await prisma.aiToolCall.findMany({ where: { executedAt: { not: null }, aiRun: { agentId: agent.id, batchKey: d.sessionId, id: { not: run.id } } }, orderBy: { executedAt: 'desc' }, take: GUARD_EARLIER_TOOL_CALLS, select: { result: true, name: true, args: true, executedAt: true } });

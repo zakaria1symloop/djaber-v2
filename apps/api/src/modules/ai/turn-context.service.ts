@@ -50,7 +50,7 @@ export class TurnContextService {
     return next;
   }
 
-  async load(agent: Agent, o: { text: string; lastProductIds?: string[]; lang: AiLanguage; unclearStreak?: number; now?: Date; clientId?: string | null; customer?: PromptContext['customer']; chosen?: PromptContext['chosen'] }): Promise<TurnContext> {
+  async load(agent: Agent, o: { text: string; lastProductIds?: string[]; lang: AiLanguage; forcedLanguage?: boolean; unclearStreak?: number; now?: Date; clientId?: string | null; customer?: PromptContext['customer']; chosen?: PromptContext['chosen'] }): Promise<TurnContext> {
     const now = o.now ?? new Date();
     const [ws, faqs, catalogue, model, client] = await Promise.all([
       prisma.workspace.findUniqueOrThrow({ where: { id: TenantContext.workspaceId() }, select: { name: true, locale: true, freeDeliveryThreshold: true, systemMessages: true, senderWilaya: { select: { nameFr: true } } } }),
@@ -71,7 +71,8 @@ export class TurnContextService {
         faqs: faqs.filter((f) => f.answer.trim()),
         catalogue,
         lang: o.lang,
-        ...(o.lang === 'ar' && formalArabic(o.text) ? { formalArabic: true } : {}),
+        ...(o.lang === 'ar' && !o.forcedLanguage && formalArabic(o.text) ? { formalArabic: true } : {}),
+        ...(o.forcedLanguage ? { forcedLanguage: true } : {}),
         // journey retest R2-5: an arabizi customer of a darija shop gets the Arabic system texts
         locale: systemLocale(o.lang, ws.locale as AppLocale, agent.defaultLanguage),
         now,

@@ -79,7 +79,7 @@ export const merchantInstructions = (stored: string): string => {
 };
 export const compileInstructions = (a: Pick<Agent, 'languages' | 'defaultLanguage' | 'tone' | 'formality' | 'emojiLevel'>, merchantText: string): string => {
   const lines: string[] = [];
-  if (a.languages.length) lines.push(`- Languages the shop answers in: ${a.languages.map((l) => LANG[l] ?? l).join(', ')}${a.defaultLanguage ? `; when the customer language is unclear use ${LANG[a.defaultLanguage] ?? a.defaultLanguage}` : ''}. The LANGUAGE rule below still decides the language of each reply.`);
+  if (a.languages.length) lines.push(`- Languages the shop answers in: ${a.languages.map((l) => LANG[l] ?? l).join(', ')}${a.defaultLanguage ? `; when the customer language is unclear use ${LANG[a.defaultLanguage] ?? a.defaultLanguage}` : ''}. The shop answers ONLY in these languages: a customer who writes another one is answered in the first allowed one the LANGUAGE rule gives (Algerian darija by default).`);
   if (a.tone) lines.push(`- Tone: ${TONE[a.tone] ?? a.tone}.`);
   if (a.formality) lines.push(`- Form of address: ${FORMALITY[a.formality] ?? a.formality}.`);
   if (a.emojiLevel) lines.push(`- Emojis: ${EMOJI[a.emojiLevel] ?? a.emojiLevel}.`);

@@ -68,3 +68,12 @@ describe('an uncertain reading', () => {
     expect('uncertain' in r && r.uncertain).toBeFalsy();
   });
 });
+
+// UX-107 (tester 26/11 11:16): clear voice notes were marked « uncertain » and every reply asked for a confirmation
+describe('the uncertain mark needs readings that disagree', () => {
+  it('two readings that say the same words ⇒ not uncertain, even when the repair line starts with « ? »', async () => {
+    const s = service({ text: 'livraison Oran ch7al', language: 'french' }, { ar: 'ليفريزون وهران شحال', fr: 'livraison Oran ch7al' }, '? livraison l Oran ch7al ?');
+    const r = await s.svc.transcribe(AUDIO, 'audio/mp4', { conversationLanguage: 'ar' });
+    expect('uncertain' in r && r.uncertain).toBeFalsy();
+  });
+});

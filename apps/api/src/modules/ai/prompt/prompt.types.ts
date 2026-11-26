@@ -35,6 +35,8 @@ export type PromptContext = {
   lang: AiLanguage;
   /** journey 16/11 J04-3: the customer's message is formal Arabic (MSA), not darija */
   formalArabic?: boolean;
+  /** owner 26/11: the customer writes a language the shop did not tick — `lang` is the shop's language, not theirs */
+  forcedLanguage?: boolean;
   locale: AppLocale;
   now: Date;
   outOfHours: boolean;

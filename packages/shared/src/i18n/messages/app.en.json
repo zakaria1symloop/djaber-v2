@@ -1182,7 +1182,7 @@
  "agents.language.tag.kabyle": "kabyle",
  "agents.language.tag.mixed": "mixed",
  "agents.languages.default": "DEFAULT LANGUAGE (WHEN UNDETERMINED)",
- "agents.languages.description": "The agent detects the customer's language; tick the ones it may use.",
+ "agents.languages.description": "The agent answers in the customer’s language among the ticked ones. A customer who writes in another language gets the answer in Algerian darija. Tick only « Darija » and « Arabizi » for it to always speak Algerian.",
  "agents.languages.title": "Languages & tone",
  "agents.limit.createDraft": "Create a draft",
  "agents.limit.description": "Your plan does not allow activating one more agent. You can prepare a draft: it does not count and can be activated after a plan change or after deleting an agent.",

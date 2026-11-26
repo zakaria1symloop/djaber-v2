@@ -33,7 +33,7 @@ import { AI_ERROR_ALERT_FAILURES, AI_ERROR_ALERT_WINDOW_S, GUARD_EARLIER_TOOL_CA
 import { AiRunService, guardFlags, intentOf, type RunMeta, type TurnResult } from './ai-run.service';
 import { CatalogueService } from './catalogue.service';
 import { InsightService } from './insight.service';
-import { systemLang, turnLanguage, type AiLanguage } from './language';
+import { allowedReplyLanguage, systemLang, turnLanguage, type AiLanguage } from './language';
 import { PromptBuilder, type HistoryMessage } from './prompt/prompt-builder';
 import { FIELD_QUESTIONS, guardFactsOf, SAFE_SENTENCES } from './reply-guard';
 import { handoffSystemLineShown } from './reply-fixes';
@@ -272,7 +272,8 @@ export class ReplyProcessor implements OnModuleInit {
     const ctx = contextOf(conv);
     // journey 16/11 J05-8: a turn with no clue (phone number, name) keeps the conversation's language, Arabic script included
     // journey 16/11 J04-2: the first message with no clue takes the shop's language (agent default, else workspace), not English
-    const lang: AiLanguage = turnLanguage(batch.plain, ctx.lastLanguage as AiLanguage | undefined, { agentDefault: agent.defaultLanguage, workspaceLocale: TenantContext.get().locale });
+    // owner 26/11: the agent's « Langues » list is binding (allowedReplyLanguage)
+    const { lang, forced: forcedLanguage } = allowedReplyLanguage(turnLanguage(batch.plain, ctx.lastLanguage as AiLanguage | undefined, { agentDefault: agent.defaultLanguage, workspaceLocale: TenantContext.get().locale }), agent.languages, agent.defaultLanguage);
     // client list L4 / L27 (25/11): the « typing » call to Meta was awaited before anything else (a network round trip per reply); it
     // is best effort and already sent when the message arrived — it now runs beside the turn
     void this.typing(conv.channel, conv.externalSenderId);
@@ -317,7 +318,7 @@ export class ReplyProcessor implements OnModuleInit {
     const noteLines = batch.images.map((img) => `[image]\n${visionNoteText(notes[`${img.messageId}:${img.index}`] ?? { kind: 'unavailable' })}`);
     const batchText = [batch.text, ...noteLines].filter(Boolean).join('\n');
     const matchedIds = Object.values(notes).flatMap((n) => (n.kind === 'match' ? [n.productId] : []));
-    const turnCtx = await this.context.load(agent, { text: batch.plain, lastProductIds: [...matchedIds, ...(ctx.lastProductIds ?? [])], lang, unclearStreak: ctx.unclearStreak ?? 0, clientId: conv.clientId, customer: ctx.customer, chosen: ctx.chosen ?? null });
+    const turnCtx = await this.context.load(agent, { text: batch.plain, lastProductIds: [...matchedIds, ...(ctx.lastProductIds ?? [])], lang, forcedLanguage, unclearStreak: ctx.unclearStreak ?? 0, clientId: conv.clientId, customer: ctx.customer, chosen: ctx.chosen ?? null });
     const history = await this.history(conv, batch.messages[0]!.createdAt);
     const lead = history.resumed ? RESUMED_NOTE : history.newVisit ? NEW_VISIT_NOTE : null;
     const prompt = PromptBuilder.build(turnCtx.prompt, history.messages, lead ? `${lead}\n${batchText}` : batchText, { contextTokens: turnCtx.model.contextTokens, maxTokens: turnCtx.maxTokens });

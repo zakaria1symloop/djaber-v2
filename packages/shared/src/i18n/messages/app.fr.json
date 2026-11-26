@@ -1182,7 +1182,7 @@
  "agents.language.tag.kabyle": "kabyle",
  "agents.language.tag.mixed": "mixte",
  "agents.languages.default": "LANGUE PAR DÉFAUT (SI INDÉTERMINÉE)",
- "agents.languages.description": "L'agent détecte la langue du client ; cochez celles qu'il peut utiliser.",
+ "agents.languages.description": "L'agent répond dans la langue du client parmi celles cochées. Un client qui écrit dans une autre langue reçoit la réponse en darija algérienne. Ne cochez que « Darija » et « Arabizi » pour qu'il parle toujours algérien.",
  "agents.languages.title": "Langues & ton",
  "agents.limit.createDraft": "Créer un brouillon",
  "agents.limit.description": "Votre plan ne permet pas d'activer un agent de plus. Vous pouvez préparer un brouillon : il ne compte pas et s'activera après un changement de plan ou la suppression d'un agent.",

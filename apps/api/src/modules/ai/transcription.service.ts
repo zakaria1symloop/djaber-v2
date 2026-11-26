@@ -103,7 +103,9 @@ export class TranscriptionService implements OnModuleInit {
     if (fixed === UNCLEAR) return { ...base, unclear: true };
     if (!fixed) return base;
     // a note heard as French and rebuilt with no Arabic letter is French
-    return { ...base, text: fixed, ...(uncertain ? { uncertain: true } : {}), language: heardFrench && !/[\u0600-\u06ff]/.test(fixed) ? (heardEnglish ? 'fr' : first.language) : 'ar' };
+    // UX-107 (tester 11:16): clear notes were marked uncertain too — the mark stands only when no two readings say the same words
+    const agree = readings.some((x, i) => readings.slice(i + 1).some((y) => sameReading(x, y)));
+    return { ...base, text: fixed, ...(uncertain && !agree ? { uncertain: true } : {}), language: heardFrench && !/[\u0600-\u06ff]/.test(fixed) ? (heardEnglish ? 'fr' : first.language) : 'ar' };
   }
 
   /** The 58 historical wilayas in French, then the communes this customer already gave (addresses, orders). */
