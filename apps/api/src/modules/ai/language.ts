@@ -212,13 +212,15 @@ export const turnLanguage = (text: string | null | undefined, previous: AiLangua
  * Owner 26/11 (« force the AI to talk Algerian, or let the choice to the client »): the agent's « Langues » list (wizard) is
  * binding — it said « cochez celles qu'il peut utiliser » but the reply followed the customer whatever the list. A customer
  * language the shop did not tick is answered in Algerian darija: Arabic script, or arabizi when only arabizi is ticked; then the
- * agent's default language, then the first one ticked. An empty list (older agents) keeps following the customer.
+ * agent's default language, then the first one ticked. An empty list (older agents) keeps following the customer, and so does
+ * a list with neither « Darija » nor « Arabizi » (the rule only forces TOWARD Algerian: a client's agent with « Français » alone
+ * ticked was answering her Arabic messages in Arabic and would have switched to French in the middle of her test).
  * `darija` ticked allows the Arabic script (`ar`); `ar` (formal Arabic) allows it too; `mixed` needs French.
  */
 export const allowedReplyLanguage = (lang: AiLanguage, languages: readonly string[] | null | undefined, defaultLanguage?: string | null): { lang: AiLanguage; forced: boolean } => {
   const list = (languages ?? []).filter((l) => l !== 'kabyle');
-  if (!list.length) return { lang, forced: false };
   const has = (l: string) => list.includes(l);
+  if (!has('darija') && !has('arabizi')) return { lang, forced: false };
   const ok = lang === 'ar' ? has('darija') || has('ar') : lang === 'arabizi' ? has('arabizi') : lang === 'mixed' ? has('fr') : has(lang);
   if (ok) return { lang, forced: false };
   const asAi = (l: string | null | undefined): AiLanguage | null => (l === 'darija' || l === 'ar' ? 'ar' : l === 'arabizi' ? 'arabizi' : l === 'fr' ? 'fr' : l === 'en' ? 'en' : null);

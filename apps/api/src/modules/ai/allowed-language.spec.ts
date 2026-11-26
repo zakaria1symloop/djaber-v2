@@ -25,9 +25,13 @@ describe('allowedReplyLanguage', () => {
     expect(allowedReplyLanguage('en', ['darija'], null)).toEqual({ lang: 'ar', forced: true });
   });
 
-  it('a French-only shop answers an Arabic-script customer in French (the default, then the first ticked)', () => {
-    expect(allowedReplyLanguage('ar', ['fr'], 'fr')).toEqual({ lang: 'fr', forced: true });
-    expect(allowedReplyLanguage('arabizi', ['fr', 'en'], null)).toEqual({ lang: 'fr', forced: true });
+  it('a list with neither Darija nor Arabizi keeps following the customer (the rule only forces toward Algerian)', () => {
+    expect(allowedReplyLanguage('ar', ['fr'], 'fr')).toEqual({ lang: 'ar', forced: false });
+    expect(allowedReplyLanguage('arabizi', ['fr', 'en'], null)).toEqual({ lang: 'arabizi', forced: false });
+    expect(allowedReplyLanguage('arabizi', ['fr', 'ar', 'en'], 'fr')).toEqual({ lang: 'arabizi', forced: false });
+  });
+  it('Darija with French ticked: an English customer is answered in darija (English is not ticked)', () => {
+    expect(allowedReplyLanguage('en', ['darija', 'fr'], 'darija')).toEqual({ lang: 'ar', forced: true });
   });
 
   it('an empty list (agents made before the setting mattered) and Kabyle alone keep following the customer', () => {
