@@ -72,7 +72,13 @@ export const parseLearnAnswer = (raw: string, o: { names?: readonly (string | nu
 };
 
 /** A question as it is compared: case, accents (and Arabic marks), punctuation and repeated spaces ignored. */
-export const foldQuestion = (question: string): string => foldText(question).replace(/\s+/g, ' ');
+/** Question openers that do not change the question (« Est-ce que vous livrez … » = « Vous livrez … », tester 26/11). */
+const OPENERS = /^(?:est ce que|est ce qu|est ce|est-ce que|est-ce qu|do you|is it true that|wach|wech|هل|واش|وش)\s+/;
+export const foldQuestion = (question: string): string => {
+  let q = foldText(question).replace(/\s+/g, ' ').trim();
+  for (let i = 0; i < 2; i++) q = q.replace(OPENERS, '');
+  return q;
+};
 
 /** The entry (any source, active or not) that already asks this question, once folded. */
 export const sameQuestion = <T extends { question: string }>(existing: readonly T[], question: string): T | null => {

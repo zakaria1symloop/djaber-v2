@@ -218,6 +218,20 @@ describe('the agent learns from the team\'s replies', () => {
     expect((await faqsOf(s.agent.id)).map((f) => [f.source, f.askedCount])).toEqual([['manual', 2]]);
   });
 
+  // tester 26/11 14:34: the AI also recorded the question it could not answer (`add_faq_candidate`) in the turn of the hand-off
+  it('AT-LRN-07 the open question the AI recorded is filled by the team answer: it becomes the suggestion to approve, never a lost answer', async () => {
+    const s = await shop();
+    const open = await db.agentFaq.create({ data: { workspaceId: s.owner.workspaceId, agentId: s.agent.id, question: 'Est-ce que vous livrez le vendredi ?', answer: '', source: 'ai_suggested', isActive: false, askedCount: 1, sortOrder: 1000 } });
+    const c = await handedOff(s);
+    await reply(s.owner, c.id, { text: 'Oui, nous livrons du samedi au jeudi, et le vendredi matin uniquement.' }).expect(201);
+    fakeAi(app).script('faq_learn', { object: { learn: true, question: 'Vous livrez le vendredi ?', answer: 'Oui, du samedi au jeudi, et le vendredi matin uniquement.' } });
+    await work(app, [s.owner.workspaceId]);
+    const rows = await faqsOf(s.agent.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: open.id, source: 'human_reply', isActive: false, answer: 'Oui, du samedi au jeudi, et le vendredi matin uniquement.', sourceConversationId: c.id, askedCount: 2 });
+    expect((await getAgent(s.owner, s.agent.id)).learningPending).toBe(1);
+  });
+
   it('AT-LRN-04 an answer typed in the Page inbox (echo) to a hand-off of the AI teaches the agent too', async () => {
     const s = await shop();
     const c = await handedOff(s);

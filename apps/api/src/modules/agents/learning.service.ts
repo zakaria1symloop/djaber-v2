@@ -101,7 +101,13 @@ export class LearningService implements OnModuleInit {
       await this.mark(tx, conv.id, conv.workspaceId, d.handoffAt);
       if (!answer.learn) return 'declined';
       // a question the agent already has (any source, used or waiting) is not proposed again: one more customer asked it
-      const same = sameQuestion(await tx.agentFaq.findMany({ where: { agentId: agent.id }, select: { id: true, question: true, askedCount: true } }), answer.question);
+      const same = sameQuestion(await tx.agentFaq.findMany({ where: { agentId: agent.id }, select: { id: true, question: true, answer: true, source: true, isActive: true, askedCount: true } }), answer.question);
+      // tester 26/11 14:34: the AI recorded the question it could not answer (`add_faq_candidate`, no answer) in the same turn as the
+      // hand-off — the team's answer fills that open question (it becomes the suggestion to approve) instead of being lost
+      if (same && same.source === 'ai_suggested' && !same.isActive && !same.answer.trim()) {
+        await tx.agentFaq.update({ where: { id: same.id }, data: { answer: answer.answer, source: 'human_reply', sourceConversationId: conv.id, askedCount: (same.askedCount ?? 0) + 1 } });
+        return 'learned';
+      }
       if (same) {
         await tx.agentFaq.update({ where: { id: same.id }, data: { askedCount: (same.askedCount ?? 0) + 1 } });
         return 'duplicate';
